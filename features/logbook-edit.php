@@ -5,7 +5,8 @@
     $ID = $team ? $_SESSION['INSTANCE_ID'] : $_SESSION['ID'];
     $table = $team ? 'Instances' : 'Users';
 
-    $content = GetCellContent($table, 'Logbook', $ID);
+    $db = new DataBase;
+    $content = $db->GetCellContent($table, 'Logbook', $ID);
     $icon = $team ? '<i class="fas fa-users" style="margin: 0 24px;"></i>' : '';
     $team_txt = $team ? '1' : '0';
     $title_txt = $team ? '-team' : '';

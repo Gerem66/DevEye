@@ -10,7 +10,14 @@
     $instance   = $_SESSION['INSTANCE'];
     $reg_date   = $_SESSION['INSCRIPTION_DATE'];
 
-    $instance_length = GetMembersLength($_SESSION['INSTANCE_ID']);
+    // Get instance length
+    $db = new DataBase;
+    $instance_length = 0;
+    $instanceID = $_SESSION['INSTANCE_ID'];
+    $result = $db->query("SELECT ID FROM `Users` WHERE `InstanceID` = '$instanceID'");
+    if (isset($result)) {
+        $instance_length = $result->num_rows;
+    }
     
     $icon_ok = '<i class="fas fa-check-circle" style="color: green; margin-left: 6px;"></i>';
     $icon_ko = '<i class="fas fa-times-circle" style="color: red; margin-left: 6px;"></i>';

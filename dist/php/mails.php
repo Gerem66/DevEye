@@ -9,7 +9,8 @@
         $newContent = "";
         $ID = $_SESSION['ID'];
         $save_ID = intval($_POST['save']);
-        $content = GetCellContent('Users', 'Mails', $ID);
+        $db = new DataBase;
+        $content = $db->GetCellContent('Users', 'Mails', $ID);
         if ($content) {
             $lines = explode("\n", $content);
             $newMail = [ $_POST['value_title'], $_POST['value_server'], $_POST['value_mail'],
@@ -17,7 +18,7 @@
             if ($save_ID < count($lines)) $lines[$save_ID] = join(',', $newMail);
             else array_push($lines, join(',', $newMail));
             $newContent = join("\n", $lines);
-            SaveCellContent('Users', 'Mails', $ID, $newContent);
+            $db->SaveCellContent('Users', 'Mails', $ID, $newContent);
         }
         exit();
     }
@@ -25,13 +26,14 @@
     function RemoveMailBox() {
         $ID = $_SESSION['ID'];
         $delete_ID = intval($_POST['delete']);
-        $content = GetCellContent('Users', 'Mails', $ID);
+        $db = new DataBase;
+        $content = $db->GetCellContent('Users', 'Mails', $ID);
         if ($content) {
             $lines = explode("\n", $content);
             if ($delete_ID < count($lines)) {
                 unset($lines[$delete_ID]);
                 $newContent = join("\n", $lines);
-                SaveCellContent('Users', 'Mails', $ID, $newContent);
+                $db->SaveCellContent('Users', 'Mails', $ID, $newContent);
             }
         }
         exit();
@@ -58,7 +60,8 @@
     function GetUserMailAccounts() {
         $accounts = [];
         $ID = $_SESSION['ID'];
-        $content = GetCellContent('Users', 'Mails', $ID);
+        $db = new DataBase;
+        $content = $db->GetCellContent('Users', 'Mails', $ID);
         if ($content) {
             $lines = explode("\n", $content);
             for ($i = 0; $i < count($lines); $i++) {
@@ -76,7 +79,8 @@
         for ($acc = 0; $acc < count($accounts); $acc++)
             array_push($content, join(',', $accounts[$acc]));
         $content = join("\n", $content);
-        SaveCellContent('Users', 'Mails', $ID, $content);
+        $db = new DataBase;
+        $db->SaveCellContent('Users', 'Mails', $ID, $content);
     }
 
     function AddMailBoxContent($title, $index, $number, $color) {

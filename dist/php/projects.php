@@ -67,10 +67,11 @@
         }
 
         function AddProjectFromDB($project) {
+            $db = new DataBase;
             $newProject = new Project($project);
 
             if (!isset($this->avatars[$newProject->uid])) {
-                $user = GetRowContent('Users', 'ID', $newProject->uid);
+                $user = $db->GetRowContent('Users', 'ID', $newProject->uid);
                 $user_name = $user['Username'];
                 $user_avatar = $user['Avatar'];
                 $this->avatars[$newProject->uid] = [ $user_name, $user_avatar ];

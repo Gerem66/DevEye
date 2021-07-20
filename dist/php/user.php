@@ -1,15 +1,16 @@
 <?php
 
     function Connect() {
+        $db = new DataBase;
         $username = $_POST['tb_name'];
         $password = $_POST['tb_pass'];
-        $req_user = GetRowContent('Users', 'Username', $username);
+        $req_user = $db->GetRowContent('Users', 'Username', $username);
         if (isset($req_user)) {
             if (password_verify($password, $req_user['Password'])) {
                 $instance = 'Aucune';
                 $instanceID = $req_user['InstanceID'];
                 if ($instanceID > 0) {
-                    $instance = GetCellContent('Instances', 'Name', $instanceID, false);
+                    $instance = $db->GetCellContent('Instances', 'Name', $instanceID, false);
                 }
                 SetUser($req_user['ID'], $req_user['Username'],
                         date('d/m/y - H:i', strtotime($req_user['Created'])),

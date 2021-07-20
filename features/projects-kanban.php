@@ -6,6 +6,7 @@
     $IID = $_SESSION['INSTANCE_ID'];
     $PID = GetPostValue('PID', 'NEW');
     $projects = $_SESSION['PROJECTS'];
+    $db = new DataBase;
 
     if (isset($_POST['save'])) {
         $Name = $_POST['Name'];
@@ -22,11 +23,9 @@
                 (`UserID`, `InstanceID`, `Name`,  `Date`,  `Type`,  `Progress`,  `InstanceMode`,  `Status`,  `Color`,  `Description`) VALUES
                 ('$UID',   '$IID',       '$Name', '$Date', '$Type', '$Progress', '$InstanceMode', '$Status', '$Color', '$Description')";
 
-            $conn = OpenConnection();
-            if ($conn->query($q) === TRUE) {
+            if ($db->query($q) === TRUE) {
                 $PID = $conn->insert_id;
             }
-            $conn->close();
         } else {
             // Update project (save all data)
             $q = "UPDATE `u444572210_oxy`.`Projects` SET
@@ -41,15 +40,14 @@
                 `Color`='$Color',
                 `Description`='$Description' WHERE `ID` = '$PID'";
 
-            $conn = OpenConnection();
-            if ($conn->query($q) === TRUE) {
+            if ($db->query($q) === TRUE) {
                 // C'est ok je crois, et penser à gérer les erreurs (redirection ?)
             }
             $conn->close();
         }
     }
 
-    $content = GetRowContent('Projects', 'ID', $PID);
+    $content = $db->GetRowContent('Projects', 'ID', $PID);
     // Interpréter le content puis l'afficher
 
 ?>

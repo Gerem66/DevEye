@@ -83,14 +83,15 @@
     }
 
     // [Save data &] Get data
+    $db = new DataBase;
     if (isset($_POST['save'], $_POST['tb_content'])) {
         $ID = $team ? $_SESSION['INSTANCE_ID'] : $_SESSION['ID'];
         $table = $team ? 'Instances' : 'Users';
-        SaveCellContent($table, 'Logbook', $ID, $_POST['tb_content']);
+        $db->SaveCellContent($table, 'Logbook', $ID, $_POST['tb_content']);
         $lines = explode("\n", $_POST['tb_content']);
     } else {
-        if ($team) $data = GetCellContent('Instances', 'Logbook', $_SESSION['INSTANCE_ID']);
-        else $data = GetCellContent('Users', 'Logbook', $_SESSION['ID']);
+        if ($team) $data = $db->GetCellContent('Instances', 'Logbook', $_SESSION['INSTANCE_ID']);
+        else $data = $db->GetCellContent('Users', 'Logbook', $_SESSION['ID']);
         $lines = explode("\n", $data);
     }
 
@@ -125,7 +126,7 @@
         // Change square at index
         // Save new text
         // Print OK or nothing
-        SaveCellContent($table, 'Logbook', $ID, join("\n", $lines));
+        $db->SaveCellContent($table, 'Logbook', $ID, join("\n", $lines));
         exit();
     }
 

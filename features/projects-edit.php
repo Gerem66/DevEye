@@ -25,7 +25,8 @@
         $color       = '';
         $description = '';
     } else {
-        $project = GetRowContent('Projects', 'ID', $projectID);
+        $db = new DataBase;
+        $project = $db->GetRowContent('Projects', 'ID', $projectID);
         $pid         = $projectID;
         $name        = $project['Name'];
         $date        = $project['Date'];

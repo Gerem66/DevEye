@@ -39,7 +39,8 @@
     if (isset($_POST['save'])) {
         $ID = $_SESSION['ID'];
         $data = $_POST['save'];
-        SaveCellContent('Users', 'Settings', $ID, $data, false);
+        $db = new DataBase;
+        $db->SaveCellContent('Users', 'Settings', $ID, $data, false);
         $_SESSION['SETTINGS'] = $data;
         $_SESSION['redirect'] = 'settings';
         exit();
@@ -59,7 +60,8 @@
 
         // Save local & external data value
         $_SESSION['DEFAULT_PAGE'] = $data;
-        SaveCellContent('Users', 'DefaultPage', $ID, $data, false);
+        $db = new DataBase;
+        $db->SaveCellContent('Users', 'DefaultPage', $ID, $data, false);
         exit();
     }
 

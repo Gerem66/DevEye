@@ -5,11 +5,12 @@
     $ID = $_SESSION['ID'];
     $IID = $_SESSION['INSTANCE_ID'];
     $projects = new Projects;
+    $db = new DataBase;
 
     // /!\ User sans instance ?
-    //$user_projects = GetRowsContent('Projects', 'UserID', $_SESSION['ID']);
+    //$user_projects = $db->GetRowsContent('Projects', 'UserID', $_SESSION['ID']);
 
-    $inst_projects = GetRowsContent('Projects', 'InstanceID', $IID);
+    $inst_projects = $db->GetRowsContent('Projects', 'InstanceID', $IID);
     $projects->AddProjectsFromDB($inst_projects);
     $projects->SortByDate();
 

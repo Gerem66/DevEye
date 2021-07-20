@@ -3,12 +3,6 @@
     $username = $_SESSION['USERNAME'];
     $team = GetPostValue('team', 0);
 
-    if (isset($_POST['save']) && isset($_POST['tb_content'])) {
-        $ID = $team ? $_SESSION['INSTANCE_ID'] : $_SESSION['ID'];
-        $table = $team ? 'Instances' : 'Users';
-        SaveCellContent($table, 'Passwords', $ID, $_POST['tb_content']);
-    }
-
     function LinesToTable($lines) {
         function OpenSection($title) {
             return '<section class="col-lg-10" style="margin-left: auto;margin-right: auto;">
@@ -70,8 +64,15 @@
         return $content;
     }
 
-    if ($team) $data = GetCellContent('Instances', 'Passwords', $_SESSION['INSTANCE_ID']);
-    else $data = GetCellContent('Users', 'Passwords', $_SESSION['ID']);
+    $db = new DataBase;
+    if (isset($_POST['save']) && isset($_POST['tb_content'])) {
+        $ID = $team ? $_SESSION['INSTANCE_ID'] : $_SESSION['ID'];
+        $table = $team ? 'Instances' : 'Users';
+        $db->SaveCellContent($table, 'Passwords', $ID, $_POST['tb_content']);
+    }
+
+    if ($team) $data = $db->GetCellContent('Instances', 'Passwords', $_SESSION['INSTANCE_ID']);
+    else $data = $db->GetCellContent('Users', 'Passwords', $_SESSION['ID']);
     $lines = explode("\n", $data);
 
     $content = LinesToTable($lines);

@@ -1,9 +1,8 @@
 <?php
 
     function GetLogsList() {
-        $conn = OpenConnection();
-        $result = $conn->query("SELECT * FROM `Logs`");
-        $conn->close();
+        $db = new DataBase;
+        $result = $db->query("SELECT * FROM `Logs`");
 
         $logs = [];
         while ($r = $result->fetch_assoc()) {
