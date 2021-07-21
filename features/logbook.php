@@ -122,10 +122,6 @@
                 $square_nb += 1;
             }
         }
-        // Get old text
-        // Change square at index
-        // Save new text
-        // Print OK or nothing
         $db->SaveCellContent($table, 'Logbook', $ID, join("\n", $lines));
         exit();
     }
