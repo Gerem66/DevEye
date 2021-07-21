@@ -107,6 +107,9 @@
     - Intégration de GHost et GyricsDev
     - Projets, dev du tableau principal + Edit + début kanban
     - LogBook : Cochage des cases en un clic
+* 21/07/21
+    - BDD -> Classe
+    - Avancement des projets (kanban drag&drop + cases cochables)
 
 ## Sources
 * Php : https://www.php.net/

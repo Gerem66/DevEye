@@ -53,3 +53,137 @@ function ProjectSquareClick(element, pid) {
             element.disabled = false;
         });
 }
+
+function OpenCreatePopup() {
+    let popup = document.getElementById('popup-edit-box');
+    popup.classList.add('active');
+
+    let btn_save = document.getElementsByName('save')[0];
+    let btn_back = document.getElementsByName('back')[0];
+
+    btn_save.onclick = () => {  };
+    btn_back.onclick = () => popup.classList.remove('active');
+    popup.onclick = (e) => { if (e.target === popup) popup.classList.remove('active'); }
+}
+
+let init_box;
+let temp_box;
+let ghost_box;
+let lastColumnIndex = -1;
+function Grab(box, ev) {
+    ev.preventDefault();
+
+    if (typeof(temp_box) !== 'undefined') {
+        return;
+    }
+
+    init_box = box;
+    
+    temp_box = init_box.cloneNode(true);
+    temp_box.style.position = 'fixed';
+    temp_box.style.top = (ev.clientY - 24) + 'px';
+    temp_box.style.left = (ev.clientX - 146) + 'px';
+    temp_box.style.width = init_box.clientWidth + 'px';
+    temp_box.style.pointerEvents = 'none';
+    document.body.classList.add('grabbing');
+
+    let parent = box.parentNode.parentNode;
+    let columns = document.getElementsByName('column');
+    for (let i = 0; i < 4; i++) {
+        if (columns[i] == parent) {
+            lastColumnIndex = i;
+            EstimateGhostBox();
+        }
+    }
+
+    init_box.remove();
+    document.getElementById('parent').appendChild(temp_box);
+
+    AddHoverEvents();
+}
+
+function GrabMove(ev) {
+    if (typeof(temp_box) === 'undefined') {
+        return;
+    }
+
+    temp_box.style.top = (ev.clientY - 24) + 'px';
+    temp_box.style.left = (ev.clientX - 146) + 'px';
+}
+
+function Ungrab() {
+    if (typeof(temp_box) === 'undefined') {
+        return;
+    }
+
+    if (lastColumnIndex != -1) {
+        let column = document.getElementsByName('column')[lastColumnIndex];
+        let new_box = init_box.cloneNode(true);
+        new_box.style.position = 'initial';
+        new_box.style.opacity = 1;
+        column.getElementsByClassName('card-body')[0].appendChild(new_box);
+
+        ghost_box.remove();
+        ghost_box = undefined;
+        lastColumnIndex = -1;
+    }
+    temp_box.remove();
+    temp_box = undefined;
+
+    document.body.classList.remove('grabbing');
+
+    RemoveHoverEvents();
+}
+
+function EstimateGhostBox() {
+    if (typeof(ghost_box) !== 'undefined' || lastColumnIndex == -1) {
+        ghost_box.remove();
+    }
+
+    ghost_box = temp_box.cloneNode(true);
+    ghost_box.style.position = 'initial';
+    ghost_box.style.opacity = .5;
+
+    let index = 3;
+    let column = document.getElementsByName('column')[lastColumnIndex];
+    let cbody = column.getElementsByClassName('card-body')[0];
+    if (index < cbody.childNodes.length - 1) {
+        cbody.childNodes[index].insertAdjacentElement('beforebegin', ghost_box);
+    } else {
+        cbody.appendChild(ghost_box);
+    }
+}
+
+function OnColumnHover(index) {
+    if (index != lastColumnIndex) {
+        lastColumnIndex = index;
+        EstimateGhostBox();
+    }
+}
+
+function OnColumn0() { OnColumnHover(0); }
+function OnColumn1() { OnColumnHover(1); }
+function OnColumn2() { OnColumnHover(2); }
+function OnColumn3() { OnColumnHover(3); }
+
+function AddHoverEvents() {
+    document.addEventListener('mousemove', GrabMove);
+    document.addEventListener('mouseup', Ungrab);
+
+    let columns = document.getElementsByName('column');
+    columns[0].addEventListener('mousemove', OnColumn0);
+    columns[1].addEventListener('mousemove', OnColumn1);
+    columns[2].addEventListener('mousemove', OnColumn2);
+    columns[3].addEventListener('mousemove', OnColumn3);
+}
+
+function RemoveHoverEvents() {
+    document.removeEventListener('mousemove', GrabMove);
+    document.removeEventListener('mouseup', Ungrab);
+
+    let columns = document.getElementsByName('column');
+    columns[0].removeEventListener('mousemove', OnColumn0);
+    columns[1].removeEventListener('mousemove', OnColumn1);
+    columns[2].removeEventListener('mousemove', OnColumn2);
+    columns[3].removeEventListener('mousemove', OnColumn3);
+}

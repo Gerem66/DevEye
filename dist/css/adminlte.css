@@ -31267,6 +31267,38 @@ a.text-muted:hover {
   transform: translateX(0);
 }
 
+/* KANBAN - POPUP */
+.kb-popup {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  background: #454d55;
+  opacity: 0;
+  transform: scale(.95);
+  z-index: 100;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  pointer-events: none;
+  transition: opacity 0.3s ease 0s, transform 0.3s ease 0s, margin-left 0.3s ease-in-out !important;
+}
+.kb-popup.active {
+  pointer-events: initial;
+  opacity: 1;
+  transform: scale(1);
+}
+
+.grab {
+  cursor: grab;
+}
+.grabbing * {
+  cursor: grabbing !important;
+}
+
 #main-content {
   transform-origin: 50% 10%;
   transition: transform 0.25s ease 0s;

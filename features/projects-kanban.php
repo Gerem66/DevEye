@@ -81,6 +81,66 @@
 
 ?>
 
+<section id="popup-edit-box" class="kb-popup content-wrapper">
+    <div class="popup-card">
+        <h1 id="popup-title-create">Édition</h1>
+        <input name="tb_id" type="hidden" class="form-control" value="<?= $accounts_length ?>" readonly>
+        <input name="tb_title" type="text" class="form-control" placeholder="Nom du mail" value="">
+
+        <div style="display: inline-flex; width: 30%; margin: 1rem;">
+            <div class="input-group">
+                <input name="tb_server" type="text" class="form-control" placeholder="Serveur" value="">
+                <div class="input-group-prepend">
+                    <button type="button" class="btn bg-<?= $main_color ?> dropdown-toggle" data-toggle="dropdown" aria-expanded="false" style="border-top-right-radius: 0.25rem; border-bottom-right-radius: 0.25rem;"></button>
+                    <ul class="dropdown-menu" style="">
+                        <li class="dropdown-item" onclick="SetServer(1, '{imap.gmail.com:993/imap/ssl/novalidate-cert}');">Google</li>
+                        <li class="dropdown-item" onclick="SetServer(1, '{imap.mail.me.com:993/imap/ssl/novalidate-cert}');">iCloud</li>
+                        <li class="dropdown-item" onclick="SetServer(1, '{imap.outlook.office365.com:993/imap/ssl/novalidate-cert}');">Outlook</li>
+                        <li class="dropdown-item" onclick="SetServer(1, '{imap.mail.yahoo.com:993/imap/ssl/novalidate-cert}');">Yahoo</li>
+                        <li class="dropdown-divider"></li>
+                        <li class="dropdown-item" onclick="SetServer(1);">Clear</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <input name="tb_mail" type="email" class="form-control" placeholder="Adresse Mail" value="">
+
+        <div style="display: inline-flex; width: 30%; margin: 1rem;">
+            <div class="input-group">
+                <input name="tb_password" type="password" class="form-control" placeholder="Mot de passe" value="">
+                <div class="input-group-prepend">
+                    <button type="button" class="btn bg-<?= $main_color ?>" onclick="SwitchPasswordVision(this);" style="border-top-right-radius: 0.25rem; border-bottom-right-radius: 0.25rem; padding: 0; width: 34px"><i class="far fa-eye-slash"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <select name="tb_color" class="form-control custom-select" style="display: inline; width: 30%; margin: 1rem;">
+            <option selected="" disabled="">Sélectionnez une couleur</option>
+            <option class="bg-primary" value="primary" selected>Bleu</option>
+            <option class="bg-secondary" value="secondary">Gris</option>
+            <option class="bg-success" value="success">Vert</option>
+            <option class="bg-info" value="info">Turquoise</option>
+            <option class="bg-danger" value="danger">Rouge</option>
+            <option class="bg-indigo" value="indigo">Indigo</option>
+            <option class="bg-navy" value="navy">Bleu Marine</option>
+            <option class="bg-lightblue" value="lightblue">Bleu clair</option>
+            <option class="bg-teal" value="teal">Vert Clair</option>
+            <option class="bg-cyan" value="cyan">Cyan</option>
+            <option class="bg-yellow" value="yellow">Jaune</option>
+            <option class="bg-orange" value="orange">Orange</option>
+            <option class="bg-light" value="light">Blanc</option>
+        </select>
+        <br />
+        <button name="back" class="btn btn-dark btn-lg" style="margin-top: 24px;">
+            Retour
+        </button>
+        <button name="save" class="btn bg-primary btn-lg" style="margin-top: 24px;">
+            Ajouter
+        </button>
+    </div>
+</section>
+
 <div class="content-wrapper kanban">
     <div class="content-header">
         <div class="container-fluid">
@@ -103,10 +163,10 @@
     </div>
 
     <div class="content pb-3">
-        <div class="container-fluid h-100">
+        <div id="parent" class="container-fluid h-100">
 
 
-            <div class="card card-row card-secondary">
+            <div name="column" class="card card-row card-secondary">
                 <div class="card-header">
                     <h3 class="card-title">Backlog</h3>
                 </div>
@@ -115,7 +175,7 @@
                 </div>
             </div>
 
-            <div class="card card-row card-primary">
+            <div name="column" class="card card-row card-primary">
                 <div class="card-header">
                     <h3 class="card-title">A faire</h3>
                 </div>
@@ -124,7 +184,7 @@
                 </div>
             </div>
 
-            <div class="card card-row card-default">
+            <div name="column" class="card card-row card-default">
                 <div class="card-header bg-info">
                     <h3 class="card-title">En cours</h3>
                 </div>
@@ -133,7 +193,7 @@
                 </div>
             </div>
 
-            <div class="card card-row card-success">
+            <div name="column" class="card card-row card-success">
                 <div class="card-header">
                     <h3 class="card-title">Terminé</h3>
                 </div>

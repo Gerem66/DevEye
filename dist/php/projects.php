@@ -164,12 +164,12 @@
         }
 
         function __AddCard($id, $title, $color, $content) {
-            return "<div class='card card-$color card-outline'>
-                        <div class='card-header'>
+            return "<div class='card card-$color card-outline box'>
+                        <div class='card-header grab' onmousedown='Grab(this.parentNode, event)'>
                             <h5 class='card-title'>$title</h5>
                             <div class='card-tools'>
-                            <a href='#' class='btn btn-tool btn-link'>#$id</a>
-                            <a href='#' class='btn btn-tool'>
+                            #$id
+                            <a class='btn btn-tool a' onclick='OpenCreatePopup()'>
                                 <i class='fas fa-pen'></i>
                             </a>
                             </div>
