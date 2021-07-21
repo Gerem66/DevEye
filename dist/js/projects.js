@@ -1,3 +1,4 @@
+// Edit page
 function SubmitProject(event) {
     let pid = document.getElementById('projectID').value;
     let name = document.getElementById('projectName').value;
@@ -25,4 +26,30 @@ function SubmitProject(event) {
         'Description': description
     };
     LoadPage('projects-kanban', data);
+}
+
+// Kanban
+function ProjectSquareClick(element, pid) {
+    let id = element.id;
+    element.disabled = true;
+
+    let fd = new FormData();
+    fd.append('square_toggle', id);
+    fd.append('PID', pid);
+    params = { method: 'POST', body: fd };
+
+    fetch('./projects-kanban', params)
+        .then(function(response) { return response.text(); })
+        .then(function(content) {
+            if (content != 'OK') {
+                SwitchSquare();
+            }
+        })
+        .catch(function(err) {
+            console.error(err);
+            SwitchSquare();
+        })
+        .finally(function() {
+            element.disabled = false;
+        });
 }

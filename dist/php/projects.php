@@ -119,4 +119,79 @@
         }
     }
 
+    class KanBan {
+        function __construct($pid, $content_text) {
+            $this->pid = $pid;
+            $this->raw_content = $content_text;
+            $this->columns = array(
+                'BACKLOG' => '',
+                'TODO' => '',
+                'INPROGRESS' => '',
+                'FINISHED' => ''
+            );
+            $this->__CalculateContents();
+        }
+
+        function __CalculateContents() {
+            $indexes = [ 'BACKLOG', 'TODO', 'INPROGRESS', 'FINISHED' ];
+            $split_content = explode("---", $this->raw_content);
+            if (count($split_content) != count($indexes)) {
+                return;
+            }
+            # Each column
+            $checkbox_id = 0;
+            for ($i = 0; $i < count($indexes); $i++) {
+                $index = $indexes[$i];
+                # Each block
+                $block = explode("#", $split_content[$i]);
+                for ($b = 1; $b < count($block); $b++) { # Block 0 is empty
+                    $lines = explode("\n", $block[$b]);
+                    # Header
+                    $header = $lines[0];
+                    list($h_id, $h_title, $h_color) = explode("\t", $header);
+                    # Each line
+                    $content = "";
+                    for ($l = 1; $l < count($lines); $l++) { # Line 0 is header
+                        $line = $lines[$l];
+                        $pre = explode(' ', $line)[0];
+                        $rest = substr($line, strlen($pre) + 1);
+                        if ($pre[0] == '[') $content .= $this->__AddCheckbox($checkbox_id++, $rest, strlen($pre) != 2);
+                        else $content .= $this->__AddText($line);
+                    }
+                    $this->columns[$index] .= $this->__AddCard($h_id, $h_title, $h_color, $content);
+                }
+            }
+        }
+
+        function __AddCard($id, $title, $color, $content) {
+            return "<div class='card card-$color card-outline'>
+                        <div class='card-header'>
+                            <h5 class='card-title'>$title</h5>
+                            <div class='card-tools'>
+                            <a href='#' class='btn btn-tool btn-link'>#$id</a>
+                            <a href='#' class='btn btn-tool'>
+                                <i class='fas fa-pen'></i>
+                            </a>
+                            </div>
+                        </div>
+                        <div class='card-body'>
+                            $content
+                        </div>
+                    </div>";
+        }
+
+        function __AddText($text) {
+            return "<p>$text</p>";
+        }
+
+        function __AddCheckbox($id, $title, $checked = false) {
+            $c = $checked ? "checked" : "";
+            $e = "onclick=\"ProjectSquareClick(this, '$this->pid');\"";
+            return "<div class='custom-control custom-checkbox'>
+                        <input id='$id' type='checkbox' class='custom-control-input' $e $c>
+                        <label for='$id' class='custom-control-label'>$title</label>
+                    </div>";
+        }
+    }
+
 ?>
