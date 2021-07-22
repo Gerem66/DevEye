@@ -64,6 +64,10 @@
             }
         }
 
+        function RemoveRow($table, $id) {
+            return $this->query("DELETE FROM `$table` WHERE ID = '$id'");
+        }
+
     }
 
     function AddLog($UID, $description) {

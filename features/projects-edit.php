@@ -57,7 +57,9 @@
         $colors_content .= "<option class='bg-$key' value='$key'$selected>$value</option>";
     }
 
-    $back = $isNew ? "LoadPage('projects')" : "LoadPage('projects-kanban', {'PID': '$projectID'})"
+    $back = $isNew ? "LoadPage('projects')" : "LoadPage('projects-kanban', {'PID': '$projectID'})";
+    $remove_event = "RemoveProject(this, $pid)";
+    $remove_button = $isNew ? "" : '<button type="button" class="btn btn-danger btn-sm col-3 fbtn float-right" onclick="'.$remove_event.'">Supprimer le projet</button>';
 ?>
 
 <form onsubmit="SubmitProject(event)" method="POST" autocomplete="off" class="content-wrapper">
@@ -90,6 +92,7 @@
                         <div class="card card-primary">
                             <div class="card-header">
                                 <h3 class="card-title">Informations du projet</h3>
+                                <?= $remove_button ?>
                             </div>
                             <div class="card-body">
 

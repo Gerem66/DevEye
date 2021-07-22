@@ -58,6 +58,7 @@ function OpenCreatePopup(element) {
     let popup = document.getElementById('popup-edit-box');
     popup.classList.add('active');
 
+    let btn_del = document.getElementsByName('del')[0];
     let btn_save = document.getElementsByName('save')[0];
     let btn_back = document.getElementsByName('back')[0];
 
@@ -91,6 +92,10 @@ function OpenCreatePopup(element) {
             console.error(err);
         });
 
+    btn_del.onclick = () => {
+        let data = { 'PID': pid, 'rem_box': bid };
+        LoadPage('projects-kanban', data);
+    }
     btn_save.onclick = () => {
         let header = [ id, document.getElementById('box-name').value, document.getElementById('box-color').value ];
         let box_content = header.join("\t") + "\n" + document.getElementById('box-body').value;
@@ -276,4 +281,24 @@ function RemoveHoverEvents() {
             cards.children[e].removeEventListener('mousemove', OnBoxHover);
         }
     }
+}
+
+function AddBox(index) {
+    let pid = document.getElementById('PID').value;
+    let data = { 'PID': pid, 'add_box': index };
+    LoadPage('projects-kanban', data);
+}
+
+function RemoveProject(element, pid) {
+    if (typeof(element.sure) === 'undefined') {
+        element.sure = 1;
+        element.textContent = "T'es sûr ?";
+        return;
+    } else if (element.sure == 1) {
+        element.sure = 2;
+        element.textContent = "Sûr sûr, hein ?";
+        return;
+    }
+    let data = { 'RemoveProject': pid };
+    LoadPage('projects', data);
 }

@@ -7,6 +7,12 @@
     $projects = new Projects;
     $db = new DataBase;
 
+    // Remove project
+    if (isset($_POST['RemoveProject'])) {
+        $pid = $_POST['RemoveProject'];
+        $db->RemoveRow('Projects', $pid);
+    }
+
     // /!\ User sans instance ?
     //$user_projects = $db->GetRowsContent('Projects', 'UserID', $_SESSION['ID']);
 

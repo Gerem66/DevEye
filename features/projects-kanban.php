@@ -27,7 +27,7 @@
                     ('$UID',   '$IID',       '$Name', '$Date', '$Type', '$Progress', '$InstanceMode', '$Status', '$Color', '$Description')";
 
                 if ($db->query($q) === TRUE) {
-                    $PID = $conn->insert_id;
+                    $PID = $db->conn->insert_id;
                 }
             } else if (intval($PID) > 0) {
                 // Update project (save all data)
@@ -46,7 +46,12 @@
         }
     }
 
+    $name = $db->GetCellContent('Projects', 'Name', $PID, false);
     $content = $db->GetCellContent('Projects', 'Content', $PID);
+    if ($content == "") {
+        $content = str_repeat('---', 3);
+        $db->SaveCellContent('Projects', 'Content', $PID, $content);
+    }
 
     // Save : Box moved
     if (isset($_POST['BID'])) {
@@ -186,6 +191,71 @@
         }
     }
 
+    // Add new box
+    if (isset($_POST['add_box'])) {
+        $column = $_POST['add_box'];
+        $split_content = explode("---", $content);
+
+        // Get all id
+        $ids = array();
+        for ($i = 0; $i < count($split_content); $i++) {
+            $blocks = explode("#", $split_content[$i]);
+            if ($blocks[0] == "") continue;
+            for ($b = 0; $b < count($blocks); $b++) {
+                $header = explode("\n", $blocks[$b])[0];
+                $id = explode("\t", $header)[0];
+                array_push($ids, $id);
+            }
+        }
+
+        // Define id
+        $id = 1;
+        while (array_search($id, $ids) !== false) {
+            $id++;
+        }
+
+
+        $blocks = explode("#", $split_content[$column]);
+        if ($blocks[0] == "") {
+            $blocks[0] = "$id\tNom par défaut\tprimary\n";
+        } else {
+            array_push($blocks, "$id\tNom par défaut\tprimary\n");
+        }
+        $split_content[$column] = join("#", $blocks);
+        $content = join("---", $split_content);
+        $db->SaveCellContent('Projects', 'Content', $PID, $content);
+    }
+
+    // Remove box
+    if (isset($_POST['rem_box'])) {
+        $bid = $_POST['rem_box'];
+        $curr_box_index = 0;
+        $split_content = explode("---", $content);
+        $removed = false;
+        // Each column
+        for ($i = 0; $i < 4; $i++) {
+            if ($removed) break;
+            $blocks = explode("#", $split_content[$i]);
+            // Each block
+            if ($blocks[0] != "") {
+                for ($b = 0; $b < count($blocks); $b++) {
+                    if ($curr_box_index == $bid) {
+                        // Remove
+                        array_splice($blocks, $b, 1);
+                        $split_content[$i] = join("#", $blocks);
+                        $removed = true;
+                        break;
+                    }
+                    $curr_box_index += 1;
+                }
+            }
+        }
+        if ($removed) {
+            $content = join("---", $split_content);
+            $db->SaveCellContent('Projects', 'Content', $PID, $content);
+        }
+    }
+
     // Reset test content
     if (0) {
         $content = "3	Create Labels	info\n[] Bug\n[] Features\n[] Enhancement\n[] Documentation\n[] Examples#4	Create Issue Template	primary\n[] Bug Report\n[] Feature Request#6	Create PR template	primary#7	Create Actions	light\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---5	Create first milestone	primary---2	Update Readme	danger\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---1	Create repo	primary";
@@ -225,12 +295,11 @@
 
         <br />
 
-        <button name="back" class="btn btn-dark btn-lg" style="margin-top: 24px;">
-            Retour
-        </button>
-        <button name="save" class="btn bg-primary btn-lg" style="margin-top: 24px;">
-            Enregistrer
-        </button>
+        <div class="col-8 card-center">
+            <button name="del" class="btn btn-danger btn-lg float-left" style="margin-top: 24px;">Supprimer</button>
+            <button name="back" class="btn btn-dark btn-lg" style="margin-top: 24px;">Retour</button>
+            <button name="save" class="btn bg-primary btn-lg float-right" style="margin-top: 24px;">Enregistrer</button>
+        </div>
     </div>
 </section>
 
@@ -239,8 +308,9 @@
         <div class="container-fluid">
             <div class="row mb-2">
                 <div class="col-sm-6">
-                    <h1 class="m-0 text">Kanban (<?= $PID ?>)
+                    <h1 class="m-0 text"><?= $name ?>
                         <button type="button" class="btn btn-primary btn-sm col-2 fbtn" onclick="LoadPage('projects-edit', {'PID': '<?= $PID ?>'})">Éditer le projet</button>
+                        <button type="button" class="btn btn-primary btn-sm col-2 fbtn" onclick="LoadPage('projects-changelog', {'PID': '<?= $PID ?>'})">Changelog</button>
                         <button type="button" class="btn btn-primary btn-sm col-2 fbtn" onclick="LoadPage('projects-kanban', {'PID': '<?= $PID ?>'})">[Refresh]</button>
                     </h1>
                 </div>
@@ -262,6 +332,11 @@
             <div name="column" class="card card-row card-secondary">
                 <div class="card-header">
                     <h3 class="card-title">Backlog</h3>
+                    <div class='card-tools'>
+                        <a class='btn btn-tool a' onclick="AddBox(0)">
+                            <i class='fas fa-plus'></i>
+                        </a>
+                    </div>
                 </div>
                 <div class="card-body">
                     <?= $kb->columns['BACKLOG'] ?>
@@ -271,6 +346,11 @@
             <div name="column" class="card card-row card-primary">
                 <div class="card-header">
                     <h3 class="card-title">A faire</h3>
+                    <div class='card-tools'>
+                        <a class='btn btn-tool a' onclick="AddBox(1)">
+                            <i class='fas fa-plus'></i>
+                        </a>
+                    </div>
                 </div>
                 <div class="card-body">
                     <?= $kb->columns['TODO'] ?>
@@ -280,6 +360,11 @@
             <div name="column" class="card card-row card-default">
                 <div class="card-header bg-info">
                     <h3 class="card-title">En cours</h3>
+                    <div class='card-tools'>
+                        <a class='btn btn-tool a' onclick="AddBox(2)">
+                            <i class='fas fa-plus'></i>
+                        </a>
+                    </div>
                 </div>
                 <div class="card-body">
                     <?= $kb->columns['INPROGRESS'] ?>
@@ -289,6 +374,11 @@
             <div name="column" class="card card-row card-success">
                 <div class="card-header">
                     <h3 class="card-title">Terminé</h3>
+                    <div class='card-tools'>
+                        <a class='btn btn-tool a' onclick="AddBox(3)">
+                            <i class='fas fa-plus'></i>
+                        </a>
+                    </div>
                 </div>
                 <div class="card-body">
                     <?= $kb->columns['FINISHED'] ?>
