@@ -167,13 +167,14 @@
 
         function __AddBox($id, $title, $color, $content) {
             return "<div class='card card-$color card-outline box'>
-                        <div class='card-header grab' onmousedown='Grab(this.parentNode, event)'>
+                        <div class='card-header'>
+                            <div class='grab hitbox' onmousedown='Grab(this.parentNode.parentNode, event)'></div>
                             <h5 class='card-title'>$title</h5>
                             <div class='card-tools'>
-                            #$id
-                            <a class='btn btn-tool a' onclick='OpenCreatePopup(event)'>
-                                <i class='fas fa-pen'></i>
-                            </a>
+                                #$id
+                                <a class='btn btn-tool a' onclick='OpenCreatePopup(this.parentNode.parentNode.parentNode)'>
+                                    <i class='fas fa-pen'></i>
+                                </a>
                             </div>
                         </div>
                         <div class='card-body'>

@@ -62,17 +62,17 @@
             for ($i = 0; $i < 4; $i++) {
                 $blocks = explode("#", $split_content[$i]);
                 // Each block
-				if ($blocks[0] != "") {
-					for ($b = 0; $b < count($blocks); $b++) {
-						if ($curr_box_index == $bid) {
-							// Get this box
-							$curr_box_lines = array_splice($blocks, $b, 1)[0];
-							$split_content[$i] = join("#", $blocks);
-							break;
-						}
-						$curr_box_index += 1;
-					}
-				}
+                if ($blocks[0] != "") {
+                    for ($b = 0; $b < count($blocks); $b++) {
+                        if ($curr_box_index == $bid) {
+                            // Get this box
+                            $curr_box_lines = array_splice($blocks, $b, 1)[0];
+                            $split_content[$i] = join("#", $blocks);
+                            break;
+                        }
+                        $curr_box_index += 1;
+                    }
+                }
                 if ($curr_box_lines !== NULL) {
                     break;
                 }
@@ -81,17 +81,17 @@
                 // Add new box
                 $kb_col = $split_content[$col];
                 $kb_blocks = explode("#", $kb_col);
-				if ($kb_blocks[0] == "") {
-					$split_content[$col] = $curr_box_lines;
-				} else {
-					if ($row < 0 || $row == count($kb_blocks)) {
-						array_push($kb_blocks, $curr_box_lines);
-					} else {
-						array_splice($kb_blocks, $row, 0, $curr_box_lines);
-					}
-					$split_content[$col] = join("#", $kb_blocks);
-				}
-				$content = join("---", $split_content);
+                if ($kb_blocks[0] == "") {
+                    $split_content[$col] = $curr_box_lines;
+                } else {
+                    if ($row < 0 || $row == count($kb_blocks)) {
+                        array_push($kb_blocks, $curr_box_lines);
+                    } else {
+                        array_splice($kb_blocks, $row, 0, $curr_box_lines);
+                    }
+                    $split_content[$col] = join("#", $kb_blocks);
+                }
+                $content = join("---", $split_content);
                 $db->SaveCellContent('Projects', 'Content', $PID, $content);
             }
         }
@@ -126,13 +126,73 @@
         exit();
     }
 
-	// Reset test content
-	if (0) {
-		$content = "3	Create Labels	info\n[] Bug\n[] Features\n[] Enhancement\n[] Documentation\n[] Examples#4	Create Issue Template	primary\n[] Bug Report\n[] Feature Request#6	Create PR template	primary#7	Create Actions	light\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---5	Create first milestone	primary---2	Update Readme	danger\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---1	Create repo	primary";
-		$db->SaveCellContent('Projects', 'Content', $PID, $content);
-	}
+    // Get box content
+    if (isset($_POST['get_box'])) {
+        $bid = $_POST['get_box'];
+        $curr_box_lines == NULL;
+        $curr_box_index = 0;
+        $split_content = explode("---", $content);
+        // Each column
+        for ($i = 0; $i < 4; $i++) {
+            if ($curr_box_lines !== NULL) break;
+            $blocks = explode("#", $split_content[$i]);
+            // Each block
+            if ($blocks[0] != "") {
+                for ($b = 0; $b < count($blocks); $b++) {
+                    if ($curr_box_index == $bid) {
+                        // Get this box
+                        $curr_box_lines = array_splice($blocks, $b, 1)[0];
+                        $split_content[$i] = join("#", $blocks);
+                        break;
+                    }
+                    $curr_box_index += 1;
+                }
+            }
+        }
+        echo($curr_box_lines);
+        exit();
+    }
 
-	print_r($content);
+    // Save box content
+    if (isset($_POST['set_box'])) {
+        $bid = $_POST['set_box'];
+        if ($bid >= 0) {
+            $box_content = $_POST['content'];
+            $curr_box_index = 0;
+            $split_content = explode("---", $content);
+            $saved = false;
+            // Each column
+            for ($i = 0; $i < 4; $i++) {
+                if ($saved) break;
+                $blocks = explode("#", $split_content[$i]);
+                // Each block
+                if ($blocks[0] != "") {
+                    for ($b = 0; $b < count($blocks); $b++) {
+                        if ($curr_box_index == $bid) {
+                            // Get this box
+                            $blocks[$b] = $box_content;
+                            $split_content[$i] = join("#", $blocks);
+                            $saved = true;
+                            break;
+                        }
+                        $curr_box_index += 1;
+                    }
+                }
+            }
+            if ($saved) {
+                $content = join("---", $split_content);
+                $db->SaveCellContent('Projects', 'Content', $PID, $content);
+            }
+        }
+    }
+
+    // Reset test content
+    if (0) {
+        $content = "3	Create Labels	info\n[] Bug\n[] Features\n[] Enhancement\n[] Documentation\n[] Examples#4	Create Issue Template	primary\n[] Bug Report\n[] Feature Request#6	Create PR template	primary#7	Create Actions	light\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---5	Create first milestone	primary---2	Update Readme	danger\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---1	Create repo	primary";
+        $db->SaveCellContent('Projects', 'Content', $PID, $content);
+    }
+
+    //print_r($content);
     $kb = new KanBan($PID, $content);
 
 ?>
@@ -141,41 +201,11 @@
 
 <section id="popup-edit-box" class="kb-popup content-wrapper">
     <div class="popup-card">
-        <h1 id="popup-title-create">Édition</h1>
-        <input name="tb_id" type="hidden" class="form-control" value="<?= $accounts_length ?>" readonly>
-        <input name="tb_title" type="text" class="form-control" placeholder="Nom du mail" value="">
-
-        <div style="display: inline-flex; width: 30%; margin: 1rem;">
-            <div class="input-group">
-                <input name="tb_server" type="text" class="form-control" placeholder="Serveur" value="">
-                <div class="input-group-prepend">
-                    <button type="button" class="btn bg-<?= $main_color ?> dropdown-toggle" data-toggle="dropdown" aria-expanded="false" style="border-top-right-radius: 0.25rem; border-bottom-right-radius: 0.25rem;"></button>
-                    <ul class="dropdown-menu" style="">
-                        <li class="dropdown-item" onclick="SetServer(1, '{imap.gmail.com:993/imap/ssl/novalidate-cert}');">Google</li>
-                        <li class="dropdown-item" onclick="SetServer(1, '{imap.mail.me.com:993/imap/ssl/novalidate-cert}');">iCloud</li>
-                        <li class="dropdown-item" onclick="SetServer(1, '{imap.outlook.office365.com:993/imap/ssl/novalidate-cert}');">Outlook</li>
-                        <li class="dropdown-item" onclick="SetServer(1, '{imap.mail.yahoo.com:993/imap/ssl/novalidate-cert}');">Yahoo</li>
-                        <li class="dropdown-divider"></li>
-                        <li class="dropdown-item" onclick="SetServer(1);">Clear</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-        
-        <input name="tb_mail" type="email" class="form-control" placeholder="Adresse Mail" value="">
-
-        <div style="display: inline-flex; width: 30%; margin: 1rem;">
-            <div class="input-group">
-                <input name="tb_password" type="password" class="form-control" placeholder="Mot de passe" value="">
-                <div class="input-group-prepend">
-                    <button type="button" class="btn bg-<?= $main_color ?>" onclick="SwitchPasswordVision(this);" style="border-top-right-radius: 0.25rem; border-bottom-right-radius: 0.25rem; padding: 0; width: 34px"><i class="far fa-eye-slash"></i></button>
-                </div>
-            </div>
-        </div>
-
-        <select name="tb_color" class="form-control custom-select" style="display: inline; width: 30%; margin: 1rem;">
+        <h1 id="box-title">Édition</h1>
+        <input id="box-name" class="form-control" type="text" placeholder="Boxname" value="">
+        <select id="box-color" class="form-control" style="display: inline; width: 30%; margin: 1rem;">
             <option selected="" disabled="">Sélectionnez une couleur</option>
-            <option class="bg-primary" value="primary" selected>Bleu</option>
+            <option class="bg-primary" value="primary">Bleu</option>
             <option class="bg-secondary" value="secondary">Gris</option>
             <option class="bg-success" value="success">Vert</option>
             <option class="bg-info" value="info">Turquoise</option>
@@ -189,12 +219,17 @@
             <option class="bg-orange" value="orange">Orange</option>
             <option class="bg-light" value="light">Blanc</option>
         </select>
+        <div class="col-8 card-center">
+            <textarea id="box-body" class="form-control" style="min-height: 180px; max-height: 500px"></textarea>
+        </div>
+
         <br />
+
         <button name="back" class="btn btn-dark btn-lg" style="margin-top: 24px;">
             Retour
         </button>
         <button name="save" class="btn bg-primary btn-lg" style="margin-top: 24px;">
-            Ajouter
+            Enregistrer
         </button>
     </div>
 </section>

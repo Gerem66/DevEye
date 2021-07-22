@@ -54,16 +54,63 @@ function ProjectSquareClick(element, pid) {
         });
 }
 
-function OpenCreatePopup(ev) {
+function OpenCreatePopup(element) {
     let popup = document.getElementById('popup-edit-box');
     popup.classList.add('active');
 
     let btn_save = document.getElementsByName('save')[0];
     let btn_back = document.getElementsByName('back')[0];
 
-    btn_save.onclick = () => {  };
+    let bid = GetBID(element);
+    let pid = document.getElementById('PID').value;
+
+    let fd = new FormData();
+    fd.append('PID', pid);
+    fd.append('get_box', bid);
+    params = { method: 'POST', body: fd };
+    fetch('./projects-kanban', params)
+        .then(function(response) { return response.text(); })
+        .then(function(content) {
+            let lines = content.split("\n");
+            let header = lines[0].split("\t");
+            id =  header[0];
+            let name =  header[1];
+            let color = header[2];
+            let body = lines.slice(1).join("\n");
+
+            document.getElementById('box-title').textContent = "Box #" + id;
+            document.getElementById('box-name').value = name;
+            document.getElementById('box-body').textContent = body;
+
+            let box_colors = document.getElementById('box-color')
+            for (let i = 1; i < box_colors.children.length; i++) {
+                box_colors.children[i].selected = color.startsWith(box_colors.children[i].value);
+            }
+        })
+        .catch(function(err) {
+            console.error(err);
+        });
+
+    btn_save.onclick = () => {
+        let header = [ id, document.getElementById('box-name').value, document.getElementById('box-color').value ];
+        let box_content = header.join("\t") + "\n" + document.getElementById('box-body').value;
+        let data = { 'PID': pid, 'set_box': bid, 'content': box_content };
+        LoadPage('projects-kanban', data);
+    };
     btn_back.onclick = () => popup.classList.remove('active');
     popup.onclick = (e) => { if (e.target === popup) popup.classList.remove('active'); }
+}
+
+function GetBID(element) {
+    let output;
+    let boxes = document.getElementsByClassName('box');
+    for (let b = 0; b < boxes.length; b++) {
+        if (boxes[b] == element) {
+            output = b;
+            break;
+        }
+    }
+    return output;
 }
 
 let init_box;
@@ -80,14 +127,8 @@ function Grab(box, ev) {
     }
 
     init_box = box;
-    let boxes = document.getElementsByClassName('box');
-    for (let b = 0; b < boxes.length; b++) {
-        if (boxes[b] == init_box) {
-            bid = b;
-            break;
-        }
-    }
-    
+    bid = GetBID(init_box);
+
     temp_box = init_box.cloneNode(true);
     temp_box.style.position = 'fixed';
     temp_box.style.top = (ev.clientY - 24) + 'px';

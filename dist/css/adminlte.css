@@ -31238,6 +31238,14 @@ a.text-muted:hover {
   height: calc(100% - 48px);
   scrollbar-width: thin;
 }
+.grab.hitbox {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 15%;
+  z-index: 1000;
+}
 
 .item-user.active {
   font-weight: bold;

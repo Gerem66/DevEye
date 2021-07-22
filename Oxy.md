@@ -109,7 +109,10 @@
     - LogBook : Cochage des cases en un clic
 * 21/07/21
     - BDD -> Classe
-    - Avancement des projets (kanban drag&drop + cases cochables)
+    - Avancement des projets (kanban début drag&drop + cases cochables)
+* 22/07/21
+    - Projets : Drag&drop terminé (+ sauvegarde)
+    - Debug du bouton edit (blocks)
 
 ## Sources
 * Php : https://www.php.net/
