@@ -48,6 +48,55 @@
 
     $content = $db->GetCellContent('Projects', 'Content', $PID);
 
+    // Save : Box moved
+    if (isset($_POST['BID'])) {
+        $bid = $_POST['BID'];       // Initial position (No) of the box
+        $col = $_POST['column'];    // New column of the box
+        $row = $_POST['row'];       // New row of the box
+        if ($PID != 'NEW' && isset($col, $row)) {
+
+            $curr_box_lines == NULL;
+            $curr_box_index = 0;
+            $split_content = explode("---", $content);
+            // Each column
+            for ($i = 0; $i < 4; $i++) {
+                $blocks = explode("#", $split_content[$i]);
+                // Each block
+				if ($blocks[0] != "") {
+					for ($b = 0; $b < count($blocks); $b++) {
+						if ($curr_box_index == $bid) {
+							// Get this box
+							$curr_box_lines = array_splice($blocks, $b, 1)[0];
+							$split_content[$i] = join("#", $blocks);
+							break;
+						}
+						$curr_box_index += 1;
+					}
+				}
+                if ($curr_box_lines !== NULL) {
+                    break;
+                }
+            }
+            if ($curr_box_lines !== NULL) {
+                // Add new box
+                $kb_col = $split_content[$col];
+                $kb_blocks = explode("#", $kb_col);
+				if ($kb_blocks[0] == "") {
+					$split_content[$col] = $curr_box_lines;
+				} else {
+					if ($row < 0 || $row == count($kb_blocks)) {
+						array_push($kb_blocks, $curr_box_lines);
+					} else {
+						array_splice($kb_blocks, $row, 0, $curr_box_lines);
+					}
+					$split_content[$col] = join("#", $kb_blocks);
+				}
+				$content = join("---", $split_content);
+                $db->SaveCellContent('Projects', 'Content', $PID, $content);
+            }
+        }
+    }
+
     // Save : Switch square
     if (isset($_POST['square_toggle'])) {
         $square_id = $_POST['square_toggle'];
@@ -77,9 +126,18 @@
         exit();
     }
 
+	// Reset test content
+	if (0) {
+		$content = "3	Create Labels	info\n[] Bug\n[] Features\n[] Enhancement\n[] Documentation\n[] Examples#4	Create Issue Template	primary\n[] Bug Report\n[] Feature Request#6	Create PR template	primary#7	Create Actions	light\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---5	Create first milestone	primary---2	Update Readme	danger\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---1	Create repo	primary";
+		$db->SaveCellContent('Projects', 'Content', $PID, $content);
+	}
+
+	print_r($content);
     $kb = new KanBan($PID, $content);
 
 ?>
+
+<input id="PID" value="<?= $PID ?>" style="display: none;">
 
 <section id="popup-edit-box" class="kb-popup content-wrapper">
     <div class="popup-card">

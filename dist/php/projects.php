@@ -138,38 +138,40 @@
             if (count($split_content) != count($indexes)) {
                 return;
             }
-            # Each column
+            // Each column
             $checkbox_id = 0;
             for ($i = 0; $i < count($indexes); $i++) {
                 $index = $indexes[$i];
-                # Each block
-                $block = explode("#", $split_content[$i]);
-                for ($b = 1; $b < count($block); $b++) { # Block 0 is empty
-                    $lines = explode("\n", $block[$b]);
-                    # Header
-                    $header = $lines[0];
-                    list($h_id, $h_title, $h_color) = explode("\t", $header);
-                    # Each line
-                    $content = "";
-                    for ($l = 1; $l < count($lines); $l++) { # Line 0 is header
-                        $line = $lines[$l];
-                        $pre = explode(' ', $line)[0];
-                        $rest = substr($line, strlen($pre) + 1);
-                        if ($pre[0] == '[') $content .= $this->__AddCheckbox($checkbox_id++, $rest, strlen($pre) != 2);
-                        else $content .= $this->__AddText($line);
+                if ($split_content[$i] != "") {
+                    // Each block
+                    $block = explode("#", $split_content[$i]);
+                    for ($b = 0; $b < count($block); $b++) {
+                        $lines = explode("\n", $block[$b]);
+                        // Header
+                        $header = $lines[0];
+                        list($h_id, $h_title, $h_color) = explode("\t", $header);
+                        // Each line
+                        $content = "";
+                        for ($l = 1; $l < count($lines); $l++) { // Line 0 is header
+                            $line = $lines[$l];
+                            $pre = explode(' ', $line)[0];
+                            $rest = substr($line, strlen($pre) + 1);
+                            if ($pre[0] == '[') $content .= $this->__AddCheckbox($checkbox_id++, $rest, strlen($pre) != 2);
+                            else $content .= $this->__AddText($line);
+                        }
+                        $this->columns[$index] .= $this->__AddBox($h_id, $h_title, $h_color, $content);
                     }
-                    $this->columns[$index] .= $this->__AddCard($h_id, $h_title, $h_color, $content);
                 }
             }
         }
 
-        function __AddCard($id, $title, $color, $content) {
+        function __AddBox($id, $title, $color, $content) {
             return "<div class='card card-$color card-outline box'>
                         <div class='card-header grab' onmousedown='Grab(this.parentNode, event)'>
                             <h5 class='card-title'>$title</h5>
                             <div class='card-tools'>
                             #$id
-                            <a class='btn btn-tool a' onclick='OpenCreatePopup()'>
+                            <a class='btn btn-tool a' onclick='OpenCreatePopup(event)'>
                                 <i class='fas fa-pen'></i>
                             </a>
                             </div>

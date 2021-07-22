@@ -54,7 +54,7 @@ function ProjectSquareClick(element, pid) {
         });
 }
 
-function OpenCreatePopup() {
+function OpenCreatePopup(ev) {
     let popup = document.getElementById('popup-edit-box');
     popup.classList.add('active');
 
@@ -69,6 +69,7 @@ function OpenCreatePopup() {
 let init_box;
 let temp_box;
 let ghost_box;
+let bid = -1;
 let lastColumnIndex = -1;
 let lastRowIndex = -1;
 function Grab(box, ev) {
@@ -79,6 +80,13 @@ function Grab(box, ev) {
     }
 
     init_box = box;
+    let boxes = document.getElementsByClassName('box');
+    for (let b = 0; b < boxes.length; b++) {
+        if (boxes[b] == init_box) {
+            bid = b;
+            break;
+        }
+    }
     
     temp_box = init_box.cloneNode(true);
     temp_box.style.position = 'fixed';
@@ -116,22 +124,31 @@ function Ungrab() {
     if (typeof(temp_box) === 'undefined' || typeof(ghost_box) === 'undefined') {
         return;
     }
-
-    if (lastColumnIndex != -1) {
-        let column = document.getElementsByName('column')[lastColumnIndex];
-        let cbody = column.getElementsByClassName('card-body')[0];
-        let new_box = init_box.cloneNode(true);
-        new_box.style.position = 'initial';
-        new_box.style.opacity = 1;
-        cbody.replaceChild(new_box, ghost_box);
-
-        lastColumnIndex = -1;
+    
+    let column = document.getElementsByName('column')[lastColumnIndex];
+    let boxes = column.getElementsByClassName('card-body')[0];
+    for (let i = 0; i < boxes.length; i++) {
+        if (boxes[i] == ghost_box) {
+            lastRowIndex = i;
+        }
     }
+
+    let new_box = init_box.cloneNode(true);
+    new_box.style.position = 'initial';
+    new_box.style.opacity = 1;
+    boxes.replaceChild(new_box, ghost_box);
+
     temp_box.remove();
     temp_box = undefined;
     document.body.classList.remove('grabbing');
 
     RemoveHoverEvents();
+
+    let pid = document.getElementById('PID').value;
+
+    console.log([pid, bid, lastColumnIndex, lastRowIndex]);
+    let data = { 'PID': pid, 'BID': bid, 'column': lastColumnIndex, 'row': lastRowIndex};
+    LoadPage('projects-kanban', data);
 }
 
 function EstimateGhostBox() {

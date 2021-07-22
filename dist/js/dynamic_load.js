@@ -24,7 +24,9 @@ function LoadPage(page, data = null, afterRefresh = false, noLoadPage = false) {
 
     loading = true;
     ClearInterval();
-    PreLoadPage();
+    if (!noLoadPage) {
+        PreLoadPage();
+    }
 
     // Clear active item
     if (last_selected != -1)
@@ -50,8 +52,8 @@ function LoadPage(page, data = null, afterRefresh = false, noLoadPage = false) {
             if (!noLoadPage) {
                 main_content.innerHTML = content;
                 if (typeof(Init) === 'function') Init();
+                main_content.classList.remove('loading');
             }
-            main_content.classList.remove('loading');
 
             // Auto refresh
             if (pagesWithAutoRefresh.includes(page)) {
