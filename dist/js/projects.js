@@ -70,6 +70,7 @@ let init_box;
 let temp_box;
 let ghost_box;
 let lastColumnIndex = -1;
+let lastRowIndex = -1;
 function Grab(box, ev) {
     ev.preventDefault();
 
@@ -112,69 +113,97 @@ function GrabMove(ev) {
 }
 
 function Ungrab() {
-    if (typeof(temp_box) === 'undefined') {
+    if (typeof(temp_box) === 'undefined' || typeof(ghost_box) === 'undefined') {
         return;
     }
 
     if (lastColumnIndex != -1) {
         let column = document.getElementsByName('column')[lastColumnIndex];
+        let cbody = column.getElementsByClassName('card-body')[0];
         let new_box = init_box.cloneNode(true);
         new_box.style.position = 'initial';
         new_box.style.opacity = 1;
-        column.getElementsByClassName('card-body')[0].appendChild(new_box);
+        cbody.replaceChild(new_box, ghost_box);
 
-        ghost_box.remove();
-        ghost_box = undefined;
         lastColumnIndex = -1;
     }
     temp_box.remove();
     temp_box = undefined;
-
     document.body.classList.remove('grabbing');
 
     RemoveHoverEvents();
 }
 
 function EstimateGhostBox() {
-    if (typeof(ghost_box) !== 'undefined' || lastColumnIndex == -1) {
+    if (typeof(temp_box) === 'undefined') {
+        return;
+    }
+
+    if (typeof(ghost_box) !== 'undefined') {
         ghost_box.remove();
+        ghost_box = undefined;
     }
 
     ghost_box = temp_box.cloneNode(true);
     ghost_box.style.position = 'initial';
     ghost_box.style.opacity = .5;
 
-    let index = 3;
+    let index = lastRowIndex;
     let column = document.getElementsByName('column')[lastColumnIndex];
     let cbody = column.getElementsByClassName('card-body')[0];
-    if (index < cbody.childNodes.length - 1) {
-        cbody.childNodes[index].insertAdjacentElement('beforebegin', ghost_box);
+    if (index >= 0 && index < cbody.childElementCount) {
+        cbody.children[index].insertAdjacentElement('beforebegin', ghost_box);
     } else {
         cbody.appendChild(ghost_box);
     }
 }
 
-function OnColumnHover(index) {
+function OnBoxHover(evt) {
+    // Get parent box
+    let parent = evt.currentTarget;
+    while (!parent.classList.contains('box')) {
+        parent = parent.parentNode;
+    }
+
+    // Get position
+    let columns = document.getElementsByName('column');
+    for (let i = 0; i < 4; i++) {
+        let cards = columns[i].getElementsByClassName('card-body')[0];
+        for (let e = 0; e < cards.childElementCount; e++) {
+            let box = cards.children[e];
+            if (box == parent) {
+                if (lastRowIndex != e || lastColumnIndex != i) {
+                    lastRowIndex = e;
+                    lastColumnIndex = i;
+                    EstimateGhostBox();
+                }
+                break;
+            }
+        }
+    }
+}
+
+function OnColumnHover(evt) {
+    let index = evt.currentTarget.index;
     if (index != lastColumnIndex) {
         lastColumnIndex = index;
         EstimateGhostBox();
     }
 }
 
-function OnColumn0() { OnColumnHover(0); }
-function OnColumn1() { OnColumnHover(1); }
-function OnColumn2() { OnColumnHover(2); }
-function OnColumn3() { OnColumnHover(3); }
-
 function AddHoverEvents() {
     document.addEventListener('mousemove', GrabMove);
     document.addEventListener('mouseup', Ungrab);
 
     let columns = document.getElementsByName('column');
-    columns[0].addEventListener('mousemove', OnColumn0);
-    columns[1].addEventListener('mousemove', OnColumn1);
-    columns[2].addEventListener('mousemove', OnColumn2);
-    columns[3].addEventListener('mousemove', OnColumn3);
+    for (let i = 0; i < 4; i++) {
+        columns[i].index = i;
+        columns[i].addEventListener('mousemove', OnColumnHover);
+        let cards = columns[i].getElementsByClassName('card-body')[0];
+        for (let e = 0; e < cards.childElementCount; e++) {
+            cards.children[e].addEventListener('mousemove', OnBoxHover);
+        }
+    }
 }
 
 function RemoveHoverEvents() {
@@ -182,8 +211,11 @@ function RemoveHoverEvents() {
     document.removeEventListener('mouseup', Ungrab);
 
     let columns = document.getElementsByName('column');
-    columns[0].removeEventListener('mousemove', OnColumn0);
-    columns[1].removeEventListener('mousemove', OnColumn1);
-    columns[2].removeEventListener('mousemove', OnColumn2);
-    columns[3].removeEventListener('mousemove', OnColumn3);
+    for (let i = 0; i < 4; i++) {
+        columns[i].removeEventListener('mousemove', OnColumnHover);
+        let cards = columns[i].getElementsByClassName('card-body')[0];
+        for (let e = 0; e < cards.childElementCount; e++) {
+            cards.children[e].removeEventListener('mousemove', OnBoxHover);
+        }
+    }
 }
