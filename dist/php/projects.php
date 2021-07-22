@@ -21,12 +21,12 @@
 
         function toRow() {
             $collab_icon = $this->instanceMode ? "<i class='fas fa-users'></i>" : "";
+            //<td>$this->id</td>
             return "<tr>
-                        <td>$this->id</td>
                         <td>$collab_icon</td>
                         <td>
                             <a>$this->name</a><br>
-                            <small>Créé le $this->date</small>
+                            <small>Commencé le $this->date</small>
                         </td>
                         <td>
                             <ul class='list-inline'>

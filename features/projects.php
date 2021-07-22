@@ -56,7 +56,7 @@
                     <table class="table table-striped projects">
                         <thead>
                             <tr>
-                                <th style="width: 3%">#</th>
+                                <!--th style="width: 3%">#</th-->
                                 <th style="width: 3%"></th>
                                 <th style="width: 20%">Nom du projet</th>
                                 <th style="width: 10%">Créateur</th>
