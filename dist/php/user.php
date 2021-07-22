@@ -18,6 +18,9 @@
                         $instanceID, $instance, $req_user['Avatar'],
                         $req_user['Settings'], $req_user['DefaultPage']);
                 AddLog($_SESSION['ID'], "User connection successfully.");
+                $connected = true;
+            } else {
+                AddLog($req_user['ID'], "User connection failed - wrong password");
             }
         }
     }

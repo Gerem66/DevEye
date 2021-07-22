@@ -19,16 +19,31 @@
     $log = $_GET['login'];
     $pwd = $_GET['pwd'];
     if (isset($log, $pwd)) {
-        $db = new DataBase(false);
-        $decrypt_password = explode("\t", $db->Decrypt(base64_decode($pwd)));
-        if (GetIP() == $decrypt_password[0]) {
-            $_SESSION['POST_DATA']['bt_connect'] = 1;
-            $_SESSION['POST_DATA']['tb_name'] = $log;
-            $_SESSION['POST_DATA']['tb_pass'] = $decrypt_password[1];
-            header('Location: ./accueil');
-            exit();
-        } else {
+        $db = new DataBase;
+        $decrypt_password = null;
+        try {
+            $decrypt_password = explode("\t", $db->Decrypt(base64_decode($pwd)));
+        } catch (Exception $e) {
             $_SESSION['CONNECTED'] = -1;
+            $req_user = $db->GetRowContent('Users', 'Username', $log);
+            if (isset($req_user)) {
+                AddLog($req_user['ID'], "User connection failed - wrong quicklink");
+            }
+        }
+        if ($decrypt_password !== null) {
+            if (GetIP() == $decrypt_password[0]) {
+                $_SESSION['POST_DATA']['bt_connect'] = 1;
+                $_SESSION['POST_DATA']['tb_name'] = $log;
+                $_SESSION['POST_DATA']['tb_pass'] = $decrypt_password[1];
+                header('Location: ./accueil');
+                exit();
+            } else {
+                $_SESSION['CONNECTED'] = -1;
+                $req_user = $db->GetRowContent('Users', 'Username', $log);
+                if (isset($req_user)) {
+                    AddLog($req_user['ID'], "User connection failed - wrong quicklink");
+                }
+            }
         }
     }
 
