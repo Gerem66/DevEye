@@ -113,6 +113,7 @@
 * 22/07/21
     - Projets : Drag&drop terminé (+ sauvegarde)
     - Debug du bouton edit (blocks)
+    - Ajout de la page changelog
 
 ## Sources
 * Php : https://www.php.net/

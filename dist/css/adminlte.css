@@ -31298,6 +31298,7 @@ a.text-muted:hover {
   pointer-events: initial;
   opacity: 1;
   transform: scale(1);
+  z-index: 10000;
 }
 
 .grab {

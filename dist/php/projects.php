@@ -192,7 +192,7 @@
             $e = "onclick=\"ProjectSquareClick(this, '$this->pid');\"";
             return "<div class='custom-control custom-checkbox'>
                         <input id='$id' type='checkbox' class='custom-control-input' $e $c>
-                        <label for='$id' class='custom-control-label'>$title</label>
+                        <label for='$id' class='custom-control-label form-check-label'>$title</label>
                     </div>";
         }
     }
