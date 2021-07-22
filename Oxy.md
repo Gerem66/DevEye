@@ -114,6 +114,7 @@
     - Projets : Drag&drop terminé (+ sauvegarde)
     - Debug du bouton edit (blocks)
     - Ajout de la page changelog
+    - Quicklink
 
 ## Sources
 * Php : https://www.php.net/

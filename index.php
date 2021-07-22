@@ -2,6 +2,7 @@
 
     session_start();
     require("dist/php/user.php");
+    require("dist/php/bdd.php");
 
     // Disconnect
     if (isset($_REQUEST['disconnect'])) {
@@ -18,11 +19,17 @@
     $log = $_GET['login'];
     $pwd = $_GET['pwd'];
     if (isset($log, $pwd)) {
-        $_SESSION['POST_DATA']['bt_connect'] = 1;
-        $_SESSION['POST_DATA']['tb_name'] = $log;
-        $_SESSION['POST_DATA']['tb_pass'] = base64_decode($pwd);
-        header('Location: ./accueil');
-        exit();
+        $db = new DataBase(false);
+        $decrypt_password = explode("\t", $db->Decrypt(base64_decode($pwd)));
+        if (GetIP() == $decrypt_password[0]) {
+            $_SESSION['POST_DATA']['bt_connect'] = 1;
+            $_SESSION['POST_DATA']['tb_name'] = $log;
+            $_SESSION['POST_DATA']['tb_pass'] = $decrypt_password[1];
+            header('Location: ./accueil');
+            exit();
+        } else {
+            $_SESSION['CONNECTED'] = -1;
+        }
     }
 
     // Authentication failed
