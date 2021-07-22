@@ -32,8 +32,6 @@
             } else if (intval($PID) > 0) {
                 // Update project (save all data)
                 $q = "UPDATE `u444572210_oxy`.`Projects` SET
-                    `UserID`='$UID',
-                    `InstanceID`='$IID',
                     `Name`='$Name',
                     `Date`='$Date',
                     `Type`='$Type',
@@ -42,6 +40,9 @@
                     `Status`='$Status',
                     `Color`='$Color',
                     `Description`='$Description' WHERE `ID` = '$PID'";
+                if ($db->query($q) !== TRUE) {
+                    // Manage eventually errors
+                }
             }
         }
     }
@@ -310,7 +311,7 @@
                 <div class="col-sm-6">
                     <h1 class="m-0 text"><?= $name ?>
                         <button type="button" class="btn btn-primary btn-sm col-2 fbtn" onclick="LoadPage('projects-edit', {'PID': '<?= $PID ?>'})">Éditer le projet</button>
-                        <button type="button" class="btn btn-primary btn-sm col-2 fbtn" onclick="LoadPage('projects-changelog', {'PID': '<?= $PID ?>'})">Changelog</button>
+                        <button type="button" class="btn btn-primary btn-sm col-2 fbtn" onclick="LoadPage('projects-changelog', {'PID': '<?= $PID ?>'})">Changelog [TODO]</button>
                         <button type="button" class="btn btn-primary btn-sm col-2 fbtn" onclick="LoadPage('projects-kanban', {'PID': '<?= $PID ?>'})">[Refresh]</button>
                     </h1>
                 </div>

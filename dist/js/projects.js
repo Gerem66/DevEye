@@ -192,7 +192,7 @@ function Ungrab() {
 
     let pid = document.getElementById('PID').value;
 
-    console.log([pid, bid, lastColumnIndex, lastRowIndex]);
+    //console.log([pid, bid, lastColumnIndex, lastRowIndex]);
     let data = { 'PID': pid, 'BID': bid, 'column': lastColumnIndex, 'row': lastRowIndex};
     LoadPage('projects-kanban', data);
 }
