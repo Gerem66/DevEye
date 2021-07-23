@@ -114,7 +114,11 @@
     - Projets : Drag&drop terminé (+ sauvegarde)
     - Debug du bouton edit (blocks)
     - Ajout de la page changelog
-    - Quicklink
+    - User : Quicklink
+- 23/07/21
+    - User : Change password
+    - Améliorations des projects
+    - Déplacements des js + fonction d'initialisations
 
 ## Sources
 * Php : https://www.php.net/
@@ -124,3 +128,8 @@
 JS  : 217
 PHP : 780
 CSS : 83
+### 23/07/21
+JS  : 825
+PHP : 1857
+CSS : 200
+TOT : 2882 (160l/j ou au total 125l/j)
