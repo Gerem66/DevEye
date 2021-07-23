@@ -31377,6 +31377,16 @@ a:not(.nolink), .a {
   margin-left: auto;
   margin-right: auto;
 }
+.btn-vision {
+  width: 34px;
+  padding: 0;
+  border-top-right-radius: 0.25rem !important;
+  border-bottom-right-radius: 0.25rem !important;
+}
+.btn-popup {
+  width: 196px;
+  margin: 24px 12px 0;
+}
 
 /* PROJECTS */
 .flex-center {

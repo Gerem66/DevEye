@@ -12,7 +12,7 @@
         return "<li class='list-group-item'>
                     <i class='nav-icon fas fa-$icon' style='width: 24px; margin-right: 12px;'></i>
                     <b>$title</b>
-                    <div id='$index' name='setting' class='bootstrap-switch bootstrap-switch-wrapper bootstrap-switch-focused bootstrap-switch-animate bootstrap-switch-on float-right' onclick='Switch(this)'>
+                    <div id='$index' name='setting' class='bootstrap-switch bootstrap-switch-wrapper bootstrap-switch-focused bootstrap-switch-animate bootstrap-switch-on float-right'>
                         <div class='bootstrap-switch-container setting-switch $txt_active'>
                             <span class='bootstrap-switch-handle-on bootstrap-switch-primary' style='width: 42px;'>ON</span>
                             <span class='bootstrap-switch-label' style='width: 42px;'>&nbsp;</span>
@@ -100,11 +100,11 @@
                 <div class="card-body box-profile">
                     <div class="row">
                         <div class="col-8">
-                            <select id="options_dp" class="form-control" onchange="SelectNewIndex()">
+                            <select id="options-dp" class="form-control">
                                 <?= $options ?>
                             </select>
                         </div>
-                        <button id="bt-save-dp" type="button" class="btn btn-block bg-success col-4" onclick="SaveDefaultPage();" disabled>Sauvegarder</button>
+                        <button id="bt-save-dp" type="button" class="btn btn-block bg-success col-4" disabled>Sauvegarder</button>
                     </div>
                 </div>
             </div>
@@ -113,7 +113,7 @@
                 <div class="card-header"><h3 class="card-title">Features</h3></div>
                 <div class="card-body box-profile">
                     <?= $content ?>
-                    <button id="bt-save-settings" type="button" class="btn btn-block bg-success col-4" style="margin: 48px auto 12px" onclick="SaveSettings();" disabled>Sauvegarder</button>
+                    <button id="bt-save-settings" type="button" class="btn btn-block bg-success col-4" style="margin: 48px auto 12px" disabled>Sauvegarder</button>
                 </div>
             </div>
 

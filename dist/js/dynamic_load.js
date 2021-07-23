@@ -51,7 +51,7 @@ function LoadPage(page, data = null, afterRefresh = false, noLoadPage = false) {
             loading = false;
             if (!noLoadPage) {
                 main_content.innerHTML = content;
-                if (typeof(Init) === 'function') Init();
+                InitPage(page);
                 main_content.classList.remove('loading');
             }
 
@@ -71,45 +71,14 @@ function LoadPage(page, data = null, afterRefresh = false, noLoadPage = false) {
         });
 }
 
-function SavePasswords(team = 0) {
-    let content = document.getElementById('inputContent').value;
-    LoadPage('passwords', { save: '1', 'team': team, 'tb_content': content});
-}
-function SaveLogbook(team = 0) {
-    let content = document.getElementById('inputContent').value;
-    LoadPage('logbook', { save: '1', 'team': team, 'tb_content': content});
-}
-function SquareClick(element, team = 0) {
-    function SwitchSquare() {
-        element.classList.toggle('fa-square');
-        element.classList.toggle('fa-check-square');
+function InitPage(page) {
+    switch (page) {
+        case 'user': Init_User(); break;
+        case 'projects-edit': Init_Projects_Edit(); break;
+        case 'settings': Init_Settings(); break;
+        //case 'project-kanban': Init_Kanban(); break;
     }
-
-    let id = element.id;
-    SwitchSquare();
-    element.style.color = 'grey';
-
-    let fd = new FormData();
-    fd.append('square_toggle', id);
-    fd.append('team', team);
-    params = { method: 'POST', body: fd };
-
-    fetch('./logbook', params)
-        .then(function(response) { return response.text(); })
-        .then(function(content) {
-            if (content != 'OK') {
-                SwitchSquare();
-            }
-        })
-        .catch(function(err) {
-            console.error(err);
-            SwitchSquare();
-        })
-        .finally(function() {
-            element.style.color = 'white';
-        });
 }
-
 
 // Auto-refresh
 function ClearInterval() {

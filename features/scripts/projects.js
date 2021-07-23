@@ -1,3 +1,20 @@
+function Init_Projects_Edit() {
+    let form = document.getElementsByTagName('form')[0];
+    let bt_rem = document.getElementById('bt-rem-project');
+    let bt_back = document.getElementById('bt-back');
+    
+    let PID = document.getElementById('PID').value;
+
+    if (PID === 'NEW') {
+        bt_back.onclick = () => LoadPage('projects');
+        bt_rem.remove();
+    } else {
+        bt_back.onclick = () => LoadPage('projects-kanban', { 'PID': PID });
+        bt_rem.onclick = () => RemoveProject(bt_rem, PID);
+    }
+    form.onsubmit = (event) => SubmitProject(event);
+}
+
 // Edit page
 function SubmitProject(event) {
     let pid = document.getElementById('projectID').value;

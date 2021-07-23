@@ -15,7 +15,7 @@
 
     // Define project vars
     if ($isNew) {
-        $pid         = 'NEW';
+        $PID         = 'NEW';
         $name        = '';
         $date        = '';
         $type        = '';
@@ -27,7 +27,7 @@
     } else {
         $db = new DataBase;
         $project = $db->GetRowContent('Projects', 'ID', $projectID);
-        $pid         = $projectID;
+        $PID         = $projectID;
         $name        = $project['Name'];
         $date        = $project['Date'];
         $type        = $project['Type'];
@@ -57,19 +57,18 @@
         $colors_content .= "<option class='bg-$key' value='$key'$selected>$value</option>";
     }
 
-    $back = $isNew ? "LoadPage('projects')" : "LoadPage('projects-kanban', {'PID': '$projectID'})";
-    $remove_event = "RemoveProject(this, $pid)";
-    $remove_button = $isNew ? "" : '<button type="button" class="btn btn-danger btn-sm col-3 fbtn float-right" onclick="'.$remove_event.'">Supprimer le projet</button>';
 ?>
 
-<form onsubmit="SubmitProject(event)" method="POST" autocomplete="off" class="content-wrapper">
+<input id="PID" value="<?= $PID ?>" style="display: none;">
+
+<form method="POST" autocomplete="off" class="content-wrapper">
     <div class="content-header">
         <div class="container-fluid">
             <div class="row mb-2">
                 <div class="col-sm-6">
                     <h1 class="m-0 text"><?= $title_txt ?>
                         <button type="submit" class="btn btn-success btn-sm col-2 fbtn">Sauvegarder</button>
-                        <button type="button" class="btn btn-primary btn-sm col-2 fbtn" onclick="<?= $back ?>">Retour</button>
+                        <button id="bt-back" type="button" class="btn btn-primary btn-sm col-2 fbtn">Retour</button>
                     </h1>
                 </div>
                 <div class="col-sm-6">
@@ -92,7 +91,7 @@
                         <div class="card card-primary">
                             <div class="card-header">
                                 <h3 class="card-title">Informations du projet</h3>
-                                <?= $remove_button ?>
+                                <button id="bt-rem-project" type="button" class="btn btn-danger btn-sm col-3 fbtn float-right">Supprimer le projet</button>
                             </div>
                             <div class="card-body">
 
@@ -100,7 +99,7 @@
                                     <div class="form-group col-2">
                                         <!-- ID -->
                                         <label for="projectID">ID</label>
-                                        <input type="text" id="projectID" class="form-control" value="<?= $pid ?>" readonly>
+                                        <input type="text" id="projectID" class="form-control" value="<?= $PID ?>" readonly>
                                     </div>
                                     <div class="form-group col-7">
                                         <!-- Project Name -->

@@ -1,3 +1,15 @@
+function Init_User() {
+    let bt_show_passwords = document.getElementsByName('bt-show-password');
+    for (let i = 0; i < bt_show_passwords.length; i++) {
+        bt_show_passwords[i].onclick = () => SwitchPasswordVision(bt_show_passwords[i]);
+    }
+
+    let bt_open_changepwd = document.getElementById('bt-open-changepwd');
+    let bt_open_quicklink = document.getElementById('bt-open-quicklink');
+    bt_open_changepwd.onclick = OpenChangepasswordPopup;
+    bt_open_quicklink.onclick = OpenQuicklinkPopup;
+}
+
 function OpenChangepasswordPopup() {
     let popup = document.getElementById('popup-changepwd');
     popup.classList.add('active');

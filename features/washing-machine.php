@@ -51,7 +51,6 @@
                         <h3 class="card-title float-right"><?= $table_1_free ?></h3>
                     </div>
                     <div class="card-body p-0">
-                        <!--textarea type="text" rows="20" cols="100"><?= $parsed_tables ?></textarea-->
                         <table class="table table-striped">
                             <thead>
                                 <tr>

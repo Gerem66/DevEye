@@ -1,3 +1,22 @@
+function Init_Settings() {
+    try {
+        let options_dp = document.getElementById('options-dp');
+        let bt_save_dp = document.getElementById('bt-save-dp');
+        let bt_save_settings = document.getElementById('bt-save-settings');
+
+        options_dp.onchange = () => SelectNewIndex();
+        bt_save_dp.onclick = SaveDefaultPage;
+        bt_save_settings.onclick = SaveSettings;
+    } catch {
+        setTimeout(Init_Settings, 100);
+    }
+
+    let settings = document.getElementsByName('setting');
+    for (let i = 0; i < settings.length; i++) {
+        settings[i].onclick = () => Switch(settings[i]);
+    }
+}
+
 function Switch(element) {
     let el_switch = element.getElementsByTagName('div')[0];
     el_switch.classList.toggle('active');
@@ -34,6 +53,6 @@ function SelectNewIndex(disable = false) {
 }
 function SaveDefaultPage() {
     SelectNewIndex(true);
-    let d = document.getElementById('options_dp').value;
+    let d = document.getElementById('options-dp').value;
     LoadPage('settings', { 'save_dp' : d }, false, true);
 }

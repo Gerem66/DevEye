@@ -30,12 +30,12 @@
             $Message = $logs[$c - $i - 1][3];
             $Date = $logs[$c - $i - 1][4];
             $content .=    "<tr>
-                                    <td>$ID</td>
-                                    <td>$UID</td>
-                                    <td>$IP</td>
-                                    <td>$Message</td>
-                                    <td>$Date</td>
-                                </tr>";
+                                <td>$ID</td>
+                                <td>$UID</td>
+                                <td>$IP</td>
+                                <td>$Message</td>
+                                <td>$Date</td>
+                            </tr>";
         }
 
         return $content;

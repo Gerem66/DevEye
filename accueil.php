@@ -66,11 +66,15 @@
     echo('<!-- Bootstrap 4        --><script src="plugins/bootstrap/js/bootstrap.bundle.min.js"></script>');
     echo('<!-- AdminLTE App       --><script src="dist/js/adminlte.min.js"></script>');
     echo('<!-- Dynamic page load  --><script src="dist/js/dynamic_load.js"></script>');
-    echo('<!-- Feature : Mails    --><script src="dist/js/mails.js"></script>');
     echo('<!-- Prevent Resub.     --><script src="dist/js/prevent_resubmission_alert.js"></script>');
-    echo('<!-- Settings           --><script src="dist/js/settings.js"></script>');
-    echo('<!-- Projects           --><script src="dist/js/projects.js"></script>');
-    echo('<!-- User               --><script src="dist/js/user.js"></script>');
+
+    // Features scripts
+    echo('<!-- Mails          --><script src="features/scripts/mails.js"></script>');
+    echo('<!-- Projects       --><script src="features/scripts/projects.js"></script>');
+    echo('<!-- Logbook & pwds --><script src="features/scripts/blocnote.js"></script>');
+    echo('<!-- User           --><script src="features/scripts/user.js"></script>');
+    echo('<!-- Settings       --><script src="features/scripts/settings.js"></script>');
+    echo('<!-- Functions      --><script src="features/scripts/functions.js"></script>');
 
     require("dist/pages/body_end.html");
     echo("<script>LoadPage('$redirect');</script>");

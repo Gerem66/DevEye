@@ -87,7 +87,7 @@
             <div class="input-group">
                 <input name="pwd" type="password" class="form-control" placeholder="Ancien mot de passe">
                 <div class="input-group-prepend">
-                    <button type="button" class="btn bg-primary" onclick="SwitchPasswordVision(this);" style="border-top-right-radius: 0.25rem; border-bottom-right-radius: 0.25rem; padding: 0; width: 34px"><i class="far fa-eye-slash"></i></button>
+                    <button name="bt-show-password" type="button" class="btn bg-primary btn-vision"><i class="far fa-eye-slash"></i></button>
                 </div>
             </div>
         </div>
@@ -96,14 +96,14 @@
             <div class="input-group">
                 <input name="new-pwd" type="password" class="form-control" placeholder="Nouveau mot de passe">
                 <div class="input-group-prepend">
-                    <button type="button" class="btn bg-primary" onclick="SwitchPasswordVision(this);" style="border-top-right-radius: 0.25rem; border-bottom-right-radius: 0.25rem; padding: 0; width: 34px"><i class="far fa-eye-slash"></i></button>
+                    <button name="bt-show-password" type="button" class="btn bg-primary btn-vision"><i class="far fa-eye-slash"></i></button>
                 </div>
             </div>
         </div>
         <br />
         <div class="col-6 card-center">
-            <button name="back" class="btn btn-dark btn-lg" style="width: 196px; margin: 24px 12px 0;">Retour</button>
-            <button name="save" class="btn bg-primary btn-lg" style="width: 196px; margin: 24px 12px 0;">Enregistrer</button>
+            <button name="back" class="btn btn-dark btn-lg btn-popup">Retour</button>
+            <button name="save" class="btn bg-primary btn-lg btn-popup">Enregistrer</button>
         </div>
     </div>
 </section>
@@ -118,14 +118,14 @@
             <div class="input-group">
                 <input name="pwd" type="password" class="form-control" placeholder="Mot de passe">
                 <div class="input-group-prepend">
-                    <button type="button" class="btn bg-primary" onclick="SwitchPasswordVision(this);" style="border-top-right-radius: 0.25rem; border-bottom-right-radius: 0.25rem; padding: 0; width: 34px"><i class="far fa-eye-slash"></i></button>
+                    <button name="bt-show-password" type="button" class="btn bg-primary btn-vision"><i class="far fa-eye-slash"></i></button>
                 </div>
             </div>
         </div>
         <br />
         <div class="col-6 card-center">
-            <button name="back" class="btn btn-dark btn-lg" style="width: 196px; margin: 24px 12px 0;">Retour</button>
-            <button name="save" class="btn bg-primary btn-lg" style="width: 196px; margin: 24px 12px 0;">Enregistrer</button>
+            <button name="back" class="btn btn-dark btn-lg btn-popup">Retour</button>
+            <button name="save" class="btn bg-primary btn-lg btn-popup">Enregistrer</button>
         </div>
     </div>
 </section>
@@ -178,8 +178,8 @@
                                 </li>
                                 <li class="list-group-item">
                                     <b>Mot de passe</b>
-                                    <button class="btn btn-block btn-primary btn-xs float-right" style="width: 160px;" onclick="OpenChangepasswordPopup()">Modifier le mot de passe</button>
-                                    <button class="btn btn-block btn-primary btn-xs float-right" style="width: 100px; margin: 0 12px 0 0;" onclick="OpenQuicklinkPopup()">Lien rapide</button>
+                                    <button id="bt-open-changepwd" class="btn btn-block btn-primary btn-xs float-right" style="width: 160px;">Modifier le mot de passe</button>
+                                    <button id="bt-open-quicklink" class="btn btn-block btn-primary btn-xs float-right" style="width: 100px; margin: 0 12px 0 0;">Lien rapide</button>
                                 </li>
                                 <li class="list-group-item">
                                     <b>Date de création du compte</b><a class="float-right nolink"><?= $reg_date ?></a>
