@@ -11,6 +11,12 @@ function SwitchPasswordVision(element) {
 }
 
 // Auto-refresh
+let timer_seconds_max = 60;
+
+let timer_interval;
+let timer_seconds;
+let timer_element;
+
 function ClearInterval() {
     if (typeof(timer_interval) !== 'undefined') {
         clearInterval(timer_interval);
@@ -23,12 +29,13 @@ function AutoRefresh(page, params) {
         timer_seconds -= 1;
         if (timer_element != null)
             timer_element.innerHTML = timer_seconds;
-        if (timer_seconds == 0)
+        if (timer_seconds == 0) {
             LoadPage(page, params);
+        }
     }
 
     timer_element = document.getElementById('timer');
-    timer_seconds = 60;
+    timer_seconds = timer_seconds_max;
     tick();
     timer_interval = setInterval(tick, 1000);
 }

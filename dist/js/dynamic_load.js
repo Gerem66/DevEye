@@ -3,10 +3,6 @@ let sidebar_items = document.getElementsByName('sidebar-item');
 let last_selected = -1;
 let loading = false;
 
-let timer_interval;
-let timer_seconds;
-let timer_element;
-
 function AsyncLoad() {
     main_content.classList.add('small-loading');
 }
