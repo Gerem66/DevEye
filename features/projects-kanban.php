@@ -243,6 +243,14 @@
         }
     }
 
+    if (isset($_POST['archive'])) {
+        // TODO - Archive
+
+        // Récup & delete les blocks de la dernière colonne
+        // Les ajouter dans les changelogs
+        // Gérer l'affichage des changelogs
+    }
+
     // Reset test content
     if (0) {
         $template_test = "3	Create Labels	info\n[] Bug\n[] Features\n[] Enhancement\n[] Documentation\n[] Examples#4	Create Issue Template	primary\n[] Bug Report\n[] Feature Request#6	Create PR template	primary#7	Create Actions	light\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---5	Create first milestone	primary---2	Update Readme	danger\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---1	Create repo	primary";
@@ -298,9 +306,11 @@
             <div class="row mb-2">
                 <div class="col-sm-6">
                     <h1 class="m-0 text"><?= $project->name ?>
-                        <button type="button" class="btn btn-primary btn-sm col-2 fbtn" onclick="LoadPage('projects-edit', {'PID': '<?= $PID ?>'})">Éditer le projet</button>
-                        <button type="button" class="btn btn-primary btn-sm col-2 fbtn" onclick="LoadPage('projects-changelog', {'PID': '<?= $PID ?>'})">Changelog [TODO]</button>
-                        <button type="button" class="btn btn-primary btn-sm col-2 fbtn" onclick="LoadPage('projects-kanban', {'PID': '<?= $PID ?>'})">[Refresh]</button>
+                        <div class="btn-group" style="margin-left: 48px">
+                            <div class="btn btn-primary fbtn" onclick="LoadPage('projects-edit', {'PID': '<?= $PID ?>'})">Éditer</div>
+                            <div class="btn btn-primary fbtn" onclick="LoadPage('projects-changelog', {'PID': '<?= $PID ?>'})">Changelog</div>
+                            <div class="btn btn-primary fbtn" onclick="LoadPage('projects-kanban', {'PID': '<?= $PID ?>'})">Actualiser</div>
+                        </div>
                     </h1>
                 </div>
                 <div class="col-sm-6">
@@ -322,7 +332,7 @@
                 <div class="card-header">
                     <h3 class="card-title">Backlog</h3>
                     <div class='card-tools'>
-                        <a class='btn btn-tool a' onclick="AddBox(0)">
+                        <a class='btn btn-tool a'>
                             <i class='fas fa-plus'></i>
                         </a>
                     </div>
@@ -336,7 +346,7 @@
                 <div class="card-header">
                     <h3 class="card-title">A faire</h3>
                     <div class='card-tools'>
-                        <a class='btn btn-tool a' onclick="AddBox(1)">
+                        <a class='btn btn-tool a'>
                             <i class='fas fa-plus'></i>
                         </a>
                     </div>
@@ -350,7 +360,7 @@
                 <div class="card-header bg-info">
                     <h3 class="card-title">En cours</h3>
                     <div class='card-tools'>
-                        <a class='btn btn-tool a' onclick="AddBox(2)">
+                        <a class='btn btn-tool a'>
                             <i class='fas fa-plus'></i>
                         </a>
                     </div>
@@ -364,9 +374,7 @@
                 <div class="card-header">
                     <h3 class="card-title">Terminé</h3>
                     <div class='card-tools'>
-                        <a class='btn btn-tool a' onclick="AddBox(3)">
-                            <i class='fas fa-plus'></i>
-                        </a>
+                        <button class="btn btn-tool btn-success btn-sm" style="margin-top:-16px">Archiver</button>
                     </div>
                 </div>
                 <div class="card-body">

@@ -16,7 +16,7 @@
             $this->type = $r[6];
             $this->status = $r[7];
             $this->content = $db->Decrypt($r[8]);
-            $this->changelog = $r[9];
+            $this->changelog = $db->Decrypt($r[9]);
             $this->progress = $r[10];
             $this->color = $r[11];
             $this->date = $r[12];
@@ -38,18 +38,20 @@
             $db->SaveCellContent('Projects', 'Content', $this->id, $this->content);
         }
 
+        function SaveChangelog($db, $newChangelog) {
+            $this->changelog = $newChangelog;
+            $db->SaveCellContent('Projects', 'Changelog', $this->id, $this->changelog);
+        }
+
         function Save($database = null) {
             $db = $database !== null ? $database : new DataBase;
 
-            $encrypt_content = $db->Encrypt($this->content);
             $q = "UPDATE `u444572210_oxy`.`Projects` SET
                 `InstanceMode`='$this->instanceMode',
                 `Name`='$this->name',
                 `Description`='$this->description',
                 `Type`='$this->type',
                 `Status`='$this->status',
-                `Content`='$this->encrypt_content',
-                `Changelog`='$this->changelog',
                 `Progress`='$this->progress',
                 `Color`='$this->color',
                 `Date`='$this->date' WHERE `ID` = '$this->id'";
@@ -234,13 +236,13 @@
         }
 
         function __AddBox($id, $title, $color, $content) {
-            return "<div class='card card-$color card-outline box'>
+            return "<div name='box' class='card card-$color card-outline box'>
                         <div class='card-header'>
-                            <div class='grab hitbox' onmousedown='Grab(this.parentNode.parentNode, event)'></div>
+                            <div class='grab hitbox'></div>
                             <h5 class='card-title'>$title</h5>
                             <div class='card-tools'>
                                 #$id
-                                <a class='btn btn-tool a' onclick='OpenCreatePopup(this.parentNode.parentNode.parentNode)'>
+                                <a class='btn btn-tool a'>
                                     <i class='fas fa-pen'></i>
                                 </a>
                             </div>
@@ -257,9 +259,8 @@
 
         function __AddCheckbox($id, $title, $checked = false) {
             $c = $checked ? "checked" : "";
-            $e = "onclick=\"ProjectSquareClick(this, '$this->pid');\"";
             return "<div class='custom-control custom-checkbox'>
-                        <input id='$id' type='checkbox' class='custom-control-input' $e $c>
+                        <input id='$id' name='checkable' type='checkbox' class='custom-control-input' $c>
                         <label for='$id' class='custom-control-label form-check-label'>$title</label>
                     </div>";
         }

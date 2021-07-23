@@ -75,8 +75,8 @@ function InitPage(page) {
     switch (page) {
         case 'user': Init_User(); break;
         case 'projects-edit': Init_Projects_Edit(); break;
+        case 'projects-kanban': Init_Projects_Kanban(); break;
         case 'settings': Init_Settings(); break;
-        //case 'project-kanban': Init_Kanban(); break;
     }
 }
 

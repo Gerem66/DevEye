@@ -1,22 +1,25 @@
+// Edit
 function Init_Projects_Edit() {
     let form = document.getElementsByTagName('form')[0];
     let bt_rem = document.getElementById('bt-rem-project');
     let bt_back = document.getElementById('bt-back');
     
-    let PID = document.getElementById('PID').value;
+    let pid = document.getElementById('PID').value;
 
-    if (PID === 'NEW') {
+    if (pid === 'NEW') {
         bt_back.onclick = () => LoadPage('projects');
         bt_rem.remove();
     } else {
-        bt_back.onclick = () => LoadPage('projects-kanban', { 'PID': PID });
-        bt_rem.onclick = () => RemoveProject(bt_rem, PID);
+        bt_back.onclick = () => LoadPage('projects-kanban', { 'PID': pid });
+        bt_rem.onclick = () => RemoveProject(bt_rem, pid);
     }
     form.onsubmit = (event) => SubmitProject(event);
 }
 
-// Edit page
 function SubmitProject(event) {
+    event.preventDefault();
+    //return false; // ?
+
     let pid = document.getElementById('projectID').value;
     let name = document.getElementById('projectName').value;
     let date = document.getElementById('inputDate').value;
@@ -27,32 +30,67 @@ function SubmitProject(event) {
     let color = document.getElementById('inputColorStatus').value;
     let description = document.getElementById('inputDescription').value;
 
-    event.preventDefault();
-    //return false; // ?
-
-    let data = {
-        'save': 1,
-        'PID': pid,
-        'Name': name,
-        'Date': date,
-        'Type': type,
-        'Progress': prog,
-        'InstanceMode': inst,
-        'Status': stat,
-        'Color': color,
-        'Description': description
+    let data = { 'save': 1, 'PID': pid,
+        'Name': name, 'Date': date,
+        'Type': type, 'Progress': prog,
+        'InstanceMode': inst, 'Status': stat,
+        'Color': color, 'Description': description
     };
     LoadPage('projects-kanban', data);
 }
 
+function RemoveProject(element, pid) {
+    if (typeof(element.sure) === 'undefined') {
+        element.sure = 1;
+        element.textContent = "T'es sûr ?";
+        return;
+    } else if (element.sure == 1) {
+        element.sure = 2;
+        element.textContent = "Sûr sûr, hein ?";
+        return;
+    }
+    let data = { 'RemoveProject': pid };
+    LoadPage('projects', data);
+}
+
 // Kanban
-function ProjectSquareClick(element, pid) {
+let PID = -1;
+
+function Init_Projects_Kanban() {
+    // Load PID
+    PID = document.getElementById('PID').value;
+
+    // Drag & drop + open edit
+    let boxes = document.getElementsByName('box');
+    for (let i = 0; i < boxes.length; i++) {
+        let grab = boxes[i].getElementsByClassName('grab')[0];
+        let edit = boxes[i].getElementsByClassName('a')[0];
+        grab.onmousedown = (event) => Grab(boxes[i], event);
+        edit.onclick = () => OpenCreatePopup(boxes[i]);
+    }
+
+    // Columns events : Add / Archive
+    let columns = document.getElementsByName('column');
+    for (let i = 0; i < 3; i++) {
+        let plus = columns[i].getElementsByClassName('a')[0];
+        plus.onclick = () => AddBox(i);
+    }
+    columns[3].getElementsByTagName('button')[0].onclick = ArchiveBox;
+
+    // Squares checkable
+    let squares = document.getElementsByName('checkable');
+    for (let i = 0; i < squares.length; i++) {
+        squares[i].onclick = () => ProjectSquareClick(squares[i]);
+    }
+}
+
+function ProjectSquareClick(element) {
     let id = element.id;
     element.disabled = true;
 
     let fd = new FormData();
     fd.append('square_toggle', id);
-    fd.append('PID', pid);
+    fd.append('PID', PID);
     params = { method: 'POST', body: fd };
 
     fetch('./projects-kanban', params)
@@ -80,10 +118,9 @@ function OpenCreatePopup(element) {
     let btn_back = document.getElementsByName('back')[0];
 
     let bid = GetBID(element);
-    let pid = document.getElementById('PID').value;
 
     let fd = new FormData();
-    fd.append('PID', pid);
+    fd.append('PID', PID);
     fd.append('get_box', bid);
     params = { method: 'POST', body: fd };
     fetch('./projects-kanban', params)
@@ -110,13 +147,13 @@ function OpenCreatePopup(element) {
         });
 
     btn_del.onclick = () => {
-        let data = { 'PID': pid, 'rem_box': bid };
+        let data = { 'PID': PID, 'rem_box': bid };
         LoadPage('projects-kanban', data);
     }
     btn_save.onclick = () => {
         let header = [ id, document.getElementById('box-name').value, document.getElementById('box-color').value ];
         let box_content = header.join("\t") + "\n" + document.getElementById('box-body').value;
-        let data = { 'PID': pid, 'set_box': bid, 'content': box_content };
+        let data = { 'PID': PID, 'set_box': bid, 'content': box_content };
         LoadPage('projects-kanban', data);
     };
     btn_back.onclick = () => popup.classList.remove('active');
@@ -215,10 +252,8 @@ function Ungrab() {
 
     RemoveHoverEvents();
 
-    let pid = document.getElementById('PID').value;
-
-    //console.log([pid, bid, lastColumnIndex, lastRowIndex]);
-    let data = { 'PID': pid, 'BID': bid, 'column': lastColumnIndex, 'row': lastRowIndex};
+    //console.log([PID, bid, lastColumnIndex, lastRowIndex]);
+    let data = { 'PID': PID, 'BID': bid, 'column': lastColumnIndex, 'row': lastRowIndex};
     LoadPage('projects-kanban', data);
 }
 
@@ -308,21 +343,11 @@ function RemoveHoverEvents() {
 }
 
 function AddBox(index) {
-    let pid = document.getElementById('PID').value;
-    let data = { 'PID': pid, 'add_box': index };
+    let data = { 'PID': PID, 'add_box': index };
     LoadPage('projects-kanban', data);
 }
 
-function RemoveProject(element, pid) {
-    if (typeof(element.sure) === 'undefined') {
-        element.sure = 1;
-        element.textContent = "T'es sûr ?";
-        return;
-    } else if (element.sure == 1) {
-        element.sure = 2;
-        element.textContent = "Sûr sûr, hein ?";
-        return;
-    }
-    let data = { 'RemoveProject': pid };
-    LoadPage('projects', data);
+function ArchiveBox() {
+    let data = { 'PID': PID, 'archive': '1' };
+    LoadPage('projects-kanban', data);
 }
