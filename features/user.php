@@ -46,7 +46,7 @@
             if (password_verify($password, $req_user['Password'])) {
                 AddLog($_SESSION['ID'], "Quicklink generated.");
                 $encrypt_password = base64_encode($db->Encrypt(GetIP() . "\t" . $password));
-                $link = "https://oxy.geremy.eu?login=$username&pwd=$encrypt_password";
+                $link = "https://geremy.eu/Oxy?login=$username&pwd=$encrypt_password";
             } else {
                 AddLog($_SESSION['ID'], "Quicklink generation failed !");
                 $_status = "FAIL";
