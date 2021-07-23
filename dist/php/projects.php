@@ -1,27 +1,63 @@
 <?php
 
     class Project {
-        function __construct($project) {
-            $this->id = $project[0];
-            $this->uid = $project[1];
-            $this->iid = $project[2];
-            $this->instanceMode = $project[3];
-            $this->name = $project[4];
-            $this->description = $project[5];
-            $this->type = $project[6];
-            $this->status = $project[7];
-            $this->content = $project[8];
-            $this->progress = $project[9];
-            $this->color = $project[10];
-            $this->date = $project[11];
+        function __construct($db, $row) {
+            $this->ExtractDataFromDbRow($db, $row);
+        }
+
+        function ExtractDataFromDbRow($db, $row) {
+            $r = array_values($row);
+            $this->id = $r[0];
+            $this->uid = $r[1];
+            $this->iid = $r[2];
+            $this->instanceMode = $r[3];
+            $this->name = $r[4];
+            $this->description = $r[5];
+            $this->type = $r[6];
+            $this->status = $r[7];
+            $this->content = $db->Decrypt($r[8]);
+            $this->changelog = $r[9];
+            $this->progress = $r[10];
+            $this->color = $r[11];
+            $this->date = $r[12];
 
             //$this->avatar = $avatar;
             //$this->avatarName = $avatarName;
         }
 
-        function toRow() {
+        function Update($database = null) {
+            $db = $database !== null ? $database : new DataBase;
+            $row = $db->GetRowContent('Projects', 'ID', $this->id);
+            if (isset($row)) {
+                ExtractDataFromDbRow($db, $row);
+            }
+        }
+
+        function SaveContent($db, $newContent) {
+            $this->content = $newContent;
+            $db->SaveCellContent('Projects', 'Content', $this->id, $this->content);
+        }
+
+        function Save($database = null) {
+            $db = $database !== null ? $database : new DataBase;
+
+            $q = "UPDATE `u444572210_oxy`.`Projects` SET
+                `InstanceMode`='$this->instanceMode',
+                `Name`='$this->name',
+                `Description`='$this->description',
+                `Type`='$this->type',
+                `Status`='$this->status',
+                `Content`='$this->content',
+                `Changelog`='$this->changelog',
+                `Progress`='$this->progress',
+                `Color`='$this->color',
+                `Date`='$this->date' WHERE `ID` = '$this->id'";
+
+            return $db->query($q);
+        }
+
+        function toHTML() {
             $collab_icon = $this->instanceMode ? "<i class='fas fa-users'></i>" : "";
-            //<td>$this->id</td>
             return "<tr>
                         <td>$collab_icon</td>
                         <td>
@@ -61,14 +97,16 @@
         }
 
         function AddProjectsFromDB($projects) {
-            for ($i = 0; $i < count($projects); $i++) {
-                $this->AddProjectFromDB($projects[$i]);
+            if (isset($projects)) {
+                for ($i = 0; $i < count($projects); $i++) {
+                    $this->AddProjectFromDB($projects[$i]);
+                }
             }
         }
 
-        function AddProjectFromDB($project) {
-            $db = new DataBase;
-            $newProject = new Project($project);
+        function AddProjectFromDB($db_row, $database = null) {
+            $db = $database !== null ? $database : new DataBase;
+            $newProject = new Project($db, $db_row);
 
             if (!isset($this->avatars[$newProject->uid])) {
                 $user = $db->GetRowContent('Users', 'ID', $newProject->uid);
@@ -82,6 +120,35 @@
             $newProject->avatar = $avatar[1];
 
             $this->projects[] = $newProject;
+        }
+
+        function CreateNewProject($db, $UID, $IID, $Name, $Date, $Type, $Progress, $InstanceMode, $Status, $Color, $Description) {
+            $content = $db->Encrypt(str_repeat('---', 3));
+            $q = "INSERT INTO `u444572210_oxy`.`Projects`
+                    (`UserID`, `InstanceID`, `Name`,  `Date`,  `Type`,  `Progress`,  `InstanceMode`,  `Status`, `Content`,   `Color`,  `Description`) VALUES
+                    ('$UID',   '$IID',       '$Name', '$Date', '$Type', '$Progress', '$InstanceMode', '$Status', '$content', '$Color', '$Description')";
+
+            $PID = -1;
+            if ($db->query($q) === TRUE) {
+                $PID = $db->conn->insert_id;
+                $row = $db->GetRowContent('Projects', 'ID', $PID);
+                $this->AddProjectFromDB($row, $db);
+            }
+
+            return $this->GetProjectFromID($PID);
+        }
+
+        function GetProjectFromID($id) {
+            $project = null;
+            if ($id > 0) {
+                for ($i = 0; $i < count($this->projects); $i++) {
+                    if ($this->projects[$i]->id == $id) {
+                        $project = $this->projects[$i];
+                        break;
+                    }
+                }
+            }
+            return $project;
         }
 
         function SortByDate() {
@@ -107,12 +174,12 @@
             $this->projects = $sortedProjects;
         }
 
-        function AllProjectsToTable($ID) {
+        function AllProjectsToTable($UID) {
             $output = "";
             for ($i = 0; $i < count($this->projects); $i++) {
                 $project = $this->projects[$i];
-                if ($project->uid == $ID || $project->instanceMode) {
-                    $output .= $project->toRow();
+                if ($project->uid == $UID || $project->instanceMode) {
+                    $output .= $project->toHTML();
                 }
             }
             return $output;

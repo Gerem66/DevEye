@@ -5,7 +5,8 @@
     $UID = $_SESSION['ID'];
     $IID = $_SESSION['INSTANCE_ID'];
     $PID = GetPostValue('PID', 'NEW');
-    //$projects = $_SESSION['PROJECTS'];
+    $projects = unserialize($_SESSION['PROJECTS']);
+    $project = null;
     $db = new DataBase;
 
     // Save : Settings project (name, date, color, collab, etc)
@@ -21,37 +22,25 @@
 
         if (isset($Name, $Date, $Type, $Progress, $InstanceMode, $Status, $Color, $Description)) {
             if ($PID == 'NEW') {
-                // Add new project in bdd & get new ID
-                $q = "INSERT INTO `u444572210_oxy`.`Projects`
-                    (`UserID`, `InstanceID`, `Name`,  `Date`,  `Type`,  `Progress`,  `InstanceMode`,  `Status`,  `Color`,  `Description`) VALUES
-                    ('$UID',   '$IID',       '$Name', '$Date', '$Type', '$Progress', '$InstanceMode', '$Status', '$Color', '$Description')";
-
-                if ($db->query($q) === TRUE) {
-                    $PID = $db->conn->insert_id;
-                }
+                $project = $projects->CreateNewProject($db, $UID, $IID, $Name, $Date, $Type, $Progress, $InstanceMode, $Status, $Color, $Description);
+                $PID = $project->id;
             } else if (intval($PID) > 0) {
-                // Update project (save all data)
-                $q = "UPDATE `u444572210_oxy`.`Projects` SET
-                    `Name`='$Name',
-                    `Date`='$Date',
-                    `Type`='$Type',
-                    `Progress`='$Progress',
-                    `InstanceMode`='$InstanceMode',
-                    `Status`='$Status',
-                    `Color`='$Color',
-                    `Description`='$Description' WHERE `ID` = '$PID'";
-                if ($db->query($q) !== TRUE) {
-                    // Manage eventually errors
+                $project = $projects->GetProjectFromID($PID);
+                $project->instanceMode = $InstanceMode;
+                $project->name = $Name;
+                $project->description = $Description;
+                $project->type = $Type;
+                $project->status = $Status;
+                $project->progress = $Progress;
+                $project->color = $Color;
+                $project->date = $Date;
+                if ($project->Save($db) === TRUE) {
+                    // Success / Manage eventually errors
                 }
             }
         }
-    }
-
-    $name = $db->GetCellContent('Projects', 'Name', $PID, false);
-    $content = $db->GetCellContent('Projects', 'Content', $PID);
-    if ($content == "") {
-        $content = str_repeat('---', 3);
-        $db->SaveCellContent('Projects', 'Content', $PID, $content);
+    } else {
+        $project = $projects->GetProjectFromID($PID);
     }
 
     // Save : Box moved
@@ -63,7 +52,7 @@
 
             $curr_box_lines == NULL;
             $curr_box_index = 0;
-            $split_content = explode("---", $content);
+            $split_content = explode("---", $project->content);
             // Each column
             for ($i = 0; $i < 4; $i++) {
                 $blocks = explode("#", $split_content[$i]);
@@ -97,8 +86,7 @@
                     }
                     $split_content[$col] = join("#", $kb_blocks);
                 }
-                $content = join("---", $split_content);
-                $db->SaveCellContent('Projects', 'Content', $PID, $content);
+                $project->SaveContent($db, join("---", $split_content));
             }
         }
     }
@@ -107,7 +95,7 @@
     if (isset($_POST['square_toggle'])) {
         $square_id = $_POST['square_toggle'];
         $square_nb = 0;
-        $lines = explode("\n", $content);
+        $lines = explode("\n", $project->content);
         for ($i = 0; $i < count($lines); $i++) {
             $pre = explode(' ', $lines[$i])[0];
             if (strlen($lines[$i]) >= strlen($pre) + 1)
@@ -128,7 +116,8 @@
                 $square_nb += 1;
             }
         }
-        $db->SaveCellContent('Projects', 'Content', $PID, join("\n", $lines));
+        $project->SaveContent($db, join("\n", $lines));
+        $_SESSION['PROJECTS'] = serialize($projects);
         exit();
     }
 
@@ -137,7 +126,7 @@
         $bid = $_POST['get_box'];
         $curr_box_lines == NULL;
         $curr_box_index = 0;
-        $split_content = explode("---", $content);
+        $split_content = explode("---", $project->content);
         // Each column
         for ($i = 0; $i < 4; $i++) {
             if ($curr_box_lines !== NULL) break;
@@ -165,7 +154,7 @@
         if ($bid >= 0) {
             $box_content = $_POST['content'];
             $curr_box_index = 0;
-            $split_content = explode("---", $content);
+            $split_content = explode("---", $project->content);
             $saved = false;
             // Each column
             for ($i = 0; $i < 4; $i++) {
@@ -186,8 +175,7 @@
                 }
             }
             if ($saved) {
-                $content = join("---", $split_content);
-                $db->SaveCellContent('Projects', 'Content', $PID, $content);
+                $project->SaveContent($db, join("---", $split_content));
             }
         }
     }
@@ -195,7 +183,7 @@
     // Add new box
     if (isset($_POST['add_box'])) {
         $column = $_POST['add_box'];
-        $split_content = explode("---", $content);
+        $split_content = explode("---", $project->content);
 
         // Get all id
         $ids = array();
@@ -223,15 +211,14 @@
             array_push($blocks, "$id\tNom par défaut\tprimary\n");
         }
         $split_content[$column] = join("#", $blocks);
-        $content = join("---", $split_content);
-        $db->SaveCellContent('Projects', 'Content', $PID, $content);
+        $project->SaveContent($db, join("---", $split_content));
     }
 
     // Remove box
     if (isset($_POST['rem_box'])) {
         $bid = $_POST['rem_box'];
         $curr_box_index = 0;
-        $split_content = explode("---", $content);
+        $split_content = explode("---", $project->content);
         $removed = false;
         // Each column
         for ($i = 0; $i < 4; $i++) {
@@ -252,19 +239,20 @@
             }
         }
         if ($removed) {
-            $content = join("---", $split_content);
-            $db->SaveCellContent('Projects', 'Content', $PID, $content);
+            $project->SaveContent($db, join("---", $split_content));
         }
     }
 
     // Reset test content
     if (0) {
-        $content = "3	Create Labels	info\n[] Bug\n[] Features\n[] Enhancement\n[] Documentation\n[] Examples#4	Create Issue Template	primary\n[] Bug Report\n[] Feature Request#6	Create PR template	primary#7	Create Actions	light\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---5	Create first milestone	primary---2	Update Readme	danger\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---1	Create repo	primary";
-        $db->SaveCellContent('Projects', 'Content', $PID, $content);
+        $project->content = "3	Create Labels	info\n[] Bug\n[] Features\n[] Enhancement\n[] Documentation\n[] Examples#4	Create Issue Template	primary\n[] Bug Report\n[] Feature Request#6	Create PR template	primary#7	Create Actions	light\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---5	Create first milestone	primary---2	Update Readme	danger\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---1	Create repo	primary";
+        $db->SaveCellContent('Projects', 'Content', $PID, $project->content);
     }
 
-    //print_r($content);
-    $kb = new KanBan($PID, $content);
+    $_SESSION['PROJECTS'] = serialize($projects);
+
+    //print_r($project->content);
+    $kb = new KanBan($PID, $project->content);
 
 ?>
 
@@ -309,7 +297,7 @@
         <div class="container-fluid">
             <div class="row mb-2">
                 <div class="col-sm-6">
-                    <h1 class="m-0 text"><?= $name ?>
+                    <h1 class="m-0 text"><?= $project->name ?>
                         <button type="button" class="btn btn-primary btn-sm col-2 fbtn" onclick="LoadPage('projects-edit', {'PID': '<?= $PID ?>'})">Éditer le projet</button>
                         <button type="button" class="btn btn-primary btn-sm col-2 fbtn" onclick="LoadPage('projects-changelog', {'PID': '<?= $PID ?>'})">Changelog [TODO]</button>
                         <button type="button" class="btn btn-primary btn-sm col-2 fbtn" onclick="LoadPage('projects-kanban', {'PID': '<?= $PID ?>'})">[Refresh]</button>

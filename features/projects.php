@@ -2,9 +2,8 @@
 
     require("dist/php/projects.php");
 
-    $ID = $_SESSION['ID'];
+    $UID = $_SESSION['ID'];
     $IID = $_SESSION['INSTANCE_ID'];
-    $projects = new Projects;
     $db = new DataBase;
 
     // Remove project
@@ -13,16 +12,17 @@
         $db->RemoveRow('Projects', $pid);
     }
 
-    // /!\ User sans instance ?
-    //$user_projects = $db->GetRowsContent('Projects', 'UserID', $_SESSION['ID']);
+    if ($IID <= 0) $self_projects = $db->GetRowsContent('Projects', 'UserID', $UID);
+    else $self_projects = $db->GetRowsContent('Projects', 'InstanceID', $IID);
 
-    $inst_projects = $db->GetRowsContent('Projects', 'InstanceID', $IID);
-    $projects->AddProjectsFromDB($inst_projects);
+    // Define projects and store in session
+    $projects = new Projects;
+    $projects->AddProjectsFromDB($self_projects);
     $projects->SortByDate();
-
-    $_SESSION['PROJECTS'] = $projects;
-
-    $projects_rows = $projects->AllProjectsToTable($ID);
+    $_SESSION['PROJECTS'] = serialize($projects);
+    
+    // Get HTML of projects
+    $projects_html = $projects->AllProjectsToTable($UID);
 
 ?>
 
@@ -56,7 +56,6 @@
                     <table class="table table-striped projects">
                         <thead>
                             <tr>
-                                <!--th style="width: 3%">#</th-->
                                 <th style="width: 3%"></th>
                                 <th style="width: 20%">Nom du projet</th>
                                 <th style="width: 10%">Créateur</th>
@@ -68,7 +67,7 @@
                         </thead>
                         <tbody>
 
-                            <?= $projects_rows ?>
+                            <?= $projects_html ?>
 
                         </tbody>
                     </table>
