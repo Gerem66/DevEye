@@ -49,7 +49,7 @@
                     continue;
                 } else {
                     list($site, $username, $password, $state) = explode(',', $line);
-                    $s = $state == "" ? "<td style='color: #2ecc71;'>Activé</td>" : "<td style='color: #e74c3c;'>$state</td>";
+                    $s = $state == "" ? "<td style='color: #2ecc71;'>Actif</td>" : "<td style='color: #e74c3c;'>$state</td>";
                     $content .= "<tr>
                                     <td>$site</td>
                                     <td>$username</td>
