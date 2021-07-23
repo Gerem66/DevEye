@@ -147,7 +147,15 @@ function Grab(box, ev) {
     for (let i = 0; i < 4; i++) {
         if (columns[i] == parent) {
             lastColumnIndex = i;
+            let col = parent.getElementsByClassName('card-body')[0];
+            for (let r = 0; r < col.childElementCount; r++) {
+                if (col.children[r] == init_box) {
+                    lastRowIndex = r;
+                    break;
+                }
+            }
             EstimateGhostBox();
+            break;
         }
     }
 
@@ -211,11 +219,10 @@ function EstimateGhostBox() {
     ghost_box.style.position = 'initial';
     ghost_box.style.opacity = .5;
 
-    let index = lastRowIndex;
     let column = document.getElementsByName('column')[lastColumnIndex];
     let cbody = column.getElementsByClassName('card-body')[0];
-    if (index >= 0 && index < cbody.childElementCount) {
-        cbody.children[index].insertAdjacentElement('beforebegin', ghost_box);
+    if (lastRowIndex >= 0 && lastRowIndex < cbody.childElementCount) {
+        cbody.children[lastRowIndex].insertAdjacentElement('beforebegin', ghost_box);
     } else {
         cbody.appendChild(ghost_box);
     }
