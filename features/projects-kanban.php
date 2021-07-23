@@ -245,8 +245,8 @@
 
     // Reset test content
     if (0) {
-        $project->content = "3	Create Labels	info\n[] Bug\n[] Features\n[] Enhancement\n[] Documentation\n[] Examples#4	Create Issue Template	primary\n[] Bug Report\n[] Feature Request#6	Create PR template	primary#7	Create Actions	light\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---5	Create first milestone	primary---2	Update Readme	danger\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---1	Create repo	primary";
-        $db->SaveCellContent('Projects', 'Content', $PID, $project->content);
+        $template_test = "3	Create Labels	info\n[] Bug\n[] Features\n[] Enhancement\n[] Documentation\n[] Examples#4	Create Issue Template	primary\n[] Bug Report\n[] Feature Request#6	Create PR template	primary#7	Create Actions	light\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---5	Create first milestone	primary---2	Update Readme	danger\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---1	Create repo	primary";
+        $project->SaveContent($db, $template_test);
     }
 
     $_SESSION['PROJECTS'] = serialize($projects);

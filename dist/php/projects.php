@@ -41,13 +41,14 @@
         function Save($database = null) {
             $db = $database !== null ? $database : new DataBase;
 
+            $encrypt_content = $db->Encrypt($this->content);
             $q = "UPDATE `u444572210_oxy`.`Projects` SET
                 `InstanceMode`='$this->instanceMode',
                 `Name`='$this->name',
                 `Description`='$this->description',
                 `Type`='$this->type',
                 `Status`='$this->status',
-                `Content`='$this->content',
+                `Content`='$this->encrypt_content',
                 `Changelog`='$this->changelog',
                 `Progress`='$this->progress',
                 `Color`='$this->color',
