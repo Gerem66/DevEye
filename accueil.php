@@ -70,6 +70,7 @@
     echo('<!-- Prevent Resub.     --><script src="dist/js/prevent_resubmission_alert.js"></script>');
     echo('<!-- Settings           --><script src="dist/js/settings.js"></script>');
     echo('<!-- Projects           --><script src="dist/js/projects.js"></script>');
+    echo('<!-- User               --><script src="dist/js/user.js"></script>');
 
     require("dist/pages/body_end.html");
     echo("<script>LoadPage('$redirect');</script>");

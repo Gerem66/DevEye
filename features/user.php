@@ -10,6 +10,31 @@
     $instance   = $_SESSION['INSTANCE'];
     $reg_date   = $_SESSION['INSCRIPTION_DATE'];
 
+    if (isset($_POST['changepassword'], $_POST['newpassword'])) {
+        $_status = "FAIL";
+        $password = $_POST['changepassword'];
+        $password_new = $_POST['newpassword'];
+
+        // Check password validity
+        $db = new DataBase;
+        $req_user = $db->GetRowContent('Users', 'Username', $username);
+        if (isset($req_user)) {
+            if (password_verify($password, $req_user['Password'])) {
+                $hash = password_hash($password_new, PASSWORD_BCRYPT);
+                $db->SaveCellContent('Users', 'Password', $req_user['ID'], $hash, false);
+                AddLog($_SESSION['ID'], "Password changed successfully.");
+                $_status = "OK";
+            } else {
+                AddLog($_SESSION['ID'], "Password changing failed (wrong password) !");
+                $_status = "WRONG";
+            }
+        }
+
+        // Return quicklink
+        echo($_status);
+        exit();
+    }
+
     if (isset($_POST['quicklink'])) {
         $_status = "OK";
         $password = $_POST['quicklink'];
@@ -51,14 +76,25 @@
 
 ?>
 
-<section id="popup-quicklink" class="kb-popup content-wrapper">
+<!-- Popup - Change password -->
+<section id="popup-changepwd" class="kb-popup content-wrapper">
     <div class="popup-card">
-        <h1 id="box-title">Entre ton mot de passe</h1>
-        <p>Pour récupérer un lien de connexion rapide</p>
+        <h1 id="box-title">Changer ton mot de passe</h1>
+        <p>Aucune limitation, donc soit sûr de la sécurité de ton mot de passe<br />
+        Conseillé : 12 caractères minimum, avec minuscules/majuscules/chiffres et caractères spéciaux</p>
         <br />
         <div class="col-6 card-center">
             <div class="input-group">
-                <input name="pwd" type="password" class="form-control" placeholder="Mot de passe" value="<?= $password ?>">
+                <input name="pwd" type="password" class="form-control" placeholder="Ancien mot de passe">
+                <div class="input-group-prepend">
+                    <button type="button" class="btn bg-primary" onclick="SwitchPasswordVision(this);" style="border-top-right-radius: 0.25rem; border-bottom-right-radius: 0.25rem; padding: 0; width: 34px"><i class="far fa-eye-slash"></i></button>
+                </div>
+            </div>
+        </div>
+        <br />
+        <div class="col-6 card-center">
+            <div class="input-group">
+                <input name="new-pwd" type="password" class="form-control" placeholder="Nouveau mot de passe">
                 <div class="input-group-prepend">
                     <button type="button" class="btn bg-primary" onclick="SwitchPasswordVision(this);" style="border-top-right-radius: 0.25rem; border-bottom-right-radius: 0.25rem; padding: 0; width: 34px"><i class="far fa-eye-slash"></i></button>
                 </div>
@@ -72,6 +108,29 @@
     </div>
 </section>
 
+<!-- Popup - Quicklink -->
+<section id="popup-quicklink" class="kb-popup content-wrapper">
+    <div class="popup-card">
+        <h1 id="box-title">Entre ton mot de passe</h1>
+        <p>Pour récupérer un lien de connexion rapide</p>
+        <br />
+        <div class="col-6 card-center">
+            <div class="input-group">
+                <input name="pwd" type="password" class="form-control" placeholder="Mot de passe">
+                <div class="input-group-prepend">
+                    <button type="button" class="btn bg-primary" onclick="SwitchPasswordVision(this);" style="border-top-right-radius: 0.25rem; border-bottom-right-radius: 0.25rem; padding: 0; width: 34px"><i class="far fa-eye-slash"></i></button>
+                </div>
+            </div>
+        </div>
+        <br />
+        <div class="col-6 card-center">
+            <button name="back" class="btn btn-dark btn-lg" style="width: 196px; margin: 24px 12px 0;">Retour</button>
+            <button name="save" class="btn bg-primary btn-lg" style="width: 196px; margin: 24px 12px 0;">Enregistrer</button>
+        </div>
+    </div>
+</section>
+
+<!-- Main -->
 <div class="content-wrapper">
     <div class="content-header">
         <div class="container-fluid">
@@ -119,7 +178,7 @@
                                 </li>
                                 <li class="list-group-item">
                                     <b>Mot de passe</b>
-                                    <button class="btn btn-block btn-primary btn-xs float-right" style="width: 160px;">[Modifier le mot de passe]</button>
+                                    <button class="btn btn-block btn-primary btn-xs float-right" style="width: 160px;" onclick="OpenChangepasswordPopup()">Modifier le mot de passe</button>
                                     <button class="btn btn-block btn-primary btn-xs float-right" style="width: 100px; margin: 0 12px 0 0;" onclick="OpenQuicklinkPopup()">Lien rapide</button>
                                 </li>
                                 <li class="list-group-item">
