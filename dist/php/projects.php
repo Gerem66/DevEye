@@ -59,7 +59,7 @@
             return $db->query($q);
         }
 
-        function toHTML() {
+        function getRowHTML() {
             $collab_icon = $this->instanceMode ? "<i class='fas fa-users'></i>" : "";
             return "<tr>
                         <td>$collab_icon</td>
@@ -91,6 +91,10 @@
                         </td>
                     </tr>";
         }
+
+        function getChangelogHTML() {
+            return ChangeLog::ParseToHTML($this->changelog);
+        }
     }
 
     class Projects {
@@ -111,6 +115,7 @@
             $db = $database !== null ? $database : new DataBase;
             $newProject = new Project($db, $db_row);
 
+            // Get avatar if not already loaded
             if (!isset($this->avatars[$newProject->uid])) {
                 $user = $db->GetRowContent('Users', 'ID', $newProject->uid);
                 $user_name = $user['Username'];
@@ -118,6 +123,7 @@
                 $this->avatars[$newProject->uid] = [ $user_name, $user_avatar ];
             }
 
+            // Define avatar in newProject
             $avatar = $this->avatars[$newProject->uid];
             $newProject->avatarName = $avatar[0];
             $newProject->avatar = $avatar[1];
@@ -182,7 +188,7 @@
             for ($i = 0; $i < count($this->projects); $i++) {
                 $project = $this->projects[$i];
                 if ($project->uid == $UID || $project->instanceMode) {
-                    $output .= $project->toHTML();
+                    $output .= $project->getRowHTML();
                 }
             }
             return $output;
@@ -214,22 +220,20 @@
                 $index = $indexes[$i];
                 if ($split_content[$i] != "") {
                     // Each block
-                    $block = explode("#", $split_content[$i]);
-                    for ($b = 0; $b < count($block); $b++) {
-                        $lines = explode("\n", $block[$b]);
-                        // Header
-                        $header = $lines[0];
-                        list($h_id, $h_title, $h_color) = explode("\t", $header);
-                        // Each line
+                    $blocks = explode("#", $split_content[$i]);
+                    for ($b = 0; $b < count($blocks); $b++) {
+                        $parts = explode("\t", $blocks[$b]);
+                        list($_id, $_title, $_color, $_content) = $parts;
+                        $lines = explode("\n", $_content);
                         $content = "";
-                        for ($l = 1; $l < count($lines); $l++) { // Line 0 is header
+                        for ($l = 0; $l < count($lines); $l++) { // Line 0 is header
                             $line = $lines[$l];
                             $pre = explode(' ', $line)[0];
                             $rest = substr($line, strlen($pre) + 1);
                             if ($pre[0] == '[') $content .= $this->__AddCheckbox($checkbox_id++, $rest, strlen($pre) != 2);
                             else $content .= $this->__AddText($line);
                         }
-                        $this->columns[$index] .= $this->__AddBox($h_id, $h_title, $h_color, $content);
+                        $this->columns[$index] .= $this->__AddBox($_id, $_title, $_color, $content);
                     }
                 }
             }
@@ -262,6 +266,71 @@
             return "<div class='custom-control custom-checkbox'>
                         <input id='$id' name='checkable' type='checkbox' class='custom-control-input' $c>
                         <label for='$id' class='custom-control-label form-check-label'>$title</label>
+                    </div>";
+        }
+    }
+
+    class ChangeLog {
+        public static function ParseToHTML($content) {
+            $output = "";
+
+            $blocks = explode("#", $content);
+            for ($b = 0; $b < count($blocks); $b++) {
+                $parts = explode("\t", $blocks[$b]);
+                $type = $parts[0];
+
+                if ($type === 'T') {
+                    // Tag
+                    list($type, $title, $color) = $parts;
+                    $output .= ChangeLog::AddTag($title, $color);
+                } else if ($type === 'B') {
+                    // Box
+                    list($type, $id, $title, $avatar, $avName, $time, $color, $c) = $parts;
+                    $output .= ChangeLog::AddBox($id, $title, $c, $avatar, $avName, $time);
+                }
+            }
+
+            if ($output) $output .= '<div><i class="fas fa-clock bg-gray"></i></div>';
+
+            return $output;
+        }
+
+        private static function AddTag($title, $color) {
+            return "<div class='time-label'>
+                        <span class='bg-$color'>$title</span>
+                    </div>";
+        }
+
+        private static function AddBox($id, $title, $content, $avatar, $avatarName, $date) {
+            $interprated = "";
+            $lines = explode("\n", $content);
+            for ($l = 0; $l < count($lines); $l++) {
+                $line = $lines[$l];
+                $pre = explode(' ', $line)[0];
+                $rest = substr($line, strlen($pre) + 1);
+                if ($pre[0] == '[') $interprated .= ChangeLog::AddCheckbox($rest, strlen($pre) != 2);
+                else $interprated .= "<p>$line</p>";
+            }
+            return "<div name='changelog-block'>
+                        <img class='fas bg-blue' src='dist/img/$avatar' alt='$avatarName' title='$avatarName'></img>
+                        <div class='timeline-item'>
+                            <span class='time'>
+                                <div class='btn-group' style='margin-right: 12px'>
+                                    <button class='btn btn-xs btn-changelog bg-primary' title='Restaurer'><i class='fas fa-sign-out-alt'></i></button>
+                                </div>
+                                #$id <i class='fas fa-clock'></i>$date
+                            </span>
+                            <h3 class='timeline-header'>$title</h3>
+                            <div class='timeline-body'>$interprated</div>
+                        </div>
+                    </div>";
+        }
+
+        private static function AddCheckbox($title, $checked = false) {
+            $c = $checked ? "checked" : "";
+            return "<div class='custom-control custom-checkbox'>
+                        <input name='checkable' type='checkbox' class='custom-control-input' $c disabled>
+                        <label class='custom-control-label form-check-label'>$title</label>
                     </div>";
         }
     }

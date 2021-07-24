@@ -31308,6 +31308,15 @@ a.text-muted:hover {
   cursor: grabbing !important;
 }
 
+.btn-changelog {
+  top: -4px;
+  opacity: 0;
+  transition: opacity .25s ease 0s;
+}
+.timeline-item:hover .btn-changelog {
+  opacity: 1;
+}
+
 #main-content {
   transform-origin: 50% 10%;
   transition: transform 0.25s ease 0s;
@@ -31386,6 +31395,10 @@ a:not(.nolink), .a {
 .btn-popup {
   width: 196px;
   margin: 24px 12px 0;
+}
+.btn-popup-sm {
+  width: 128px;
+  margin: 12px;
 }
 
 /* PROJECTS */

@@ -73,6 +73,16 @@
 * Créer les pages:
     - projects-edit.php
     - projects-kanban.php
+* Sauvegarde des données
+    * Kanban
+        - Blocks : ID\tTitle\tColor\tContent
+    * Changelog
+        - Pour les blocks : B\tID\tTitle\tAvatar\tAvatarNam\tTime\tColor\tContent
+        - Pour les tags   : T\tTitle\tColor
+* Séparateurs :
+    - Données ci-dessus : \t
+    - Séparation des éléments : #
+    - Séparation des colonnes : ---
 ## Changelog
 * 02/07/21
     - Restauration du template

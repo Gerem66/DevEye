@@ -25,11 +25,15 @@
         }
 
         function Encrypt($str) {
-            return openssl_encrypt($str, 'AES-128-ECB', $this->key);
+            $output = "";
+            if ($str) $output = openssl_encrypt($str, 'AES-128-ECB', $this->key);
+            return $output;
         }
     
         function Decrypt($str) {
-            return openssl_decrypt($str, 'AES-128-ECB', $this->key);
+            $output = "";
+            if ($str) $output = openssl_decrypt($str, 'AES-128-ECB', $this->key);
+            return $output;
         }
 
         function GetRowContent($table, $cellSearch, $cellValue) {

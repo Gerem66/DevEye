@@ -1,6 +1,8 @@
 <?php
 
     require("dist/php/projects.php");
+    date_default_timezone_set('Europe/Paris');
+    setlocale(LC_TIME, 'fr_FR.utf8', 'fra');
 
     $UID = $_SESSION['ID'];
     $IID = $_SESSION['INSTANCE_ID'];
@@ -93,31 +95,53 @@
 
     // Save : Switch square
     if (isset($_POST['square_toggle'])) {
+        $result = "";
         $square_id = $_POST['square_toggle'];
         $square_nb = 0;
-        $lines = explode("\n", $project->content);
-        for ($i = 0; $i < count($lines); $i++) {
-            $pre = explode(' ', $lines[$i])[0];
-            if (strlen($lines[$i]) >= strlen($pre) + 1)
-                $l = substr($lines[$i], strlen($pre) + 1);
 
-            if (strlen($pre) < 4 && $pre[0] == '[' && $pre[-1] == ']') {
-                if ($square_nb == $square_id) {
-                    if (strlen($pre) == 2) {
-                        $lines[$i] = "[v] $l";
-                        echo("OK");
+        $columns = explode("---", $project->content);
+        for ($c = 0; $c < count($columns); $c++) {
+            $blocks = explode("#", $columns[$c]);
+            if ($blocks[0] != "") {
+                for ($b = 0; $b < count($blocks); $b++) {
+                    $split_block = explode("\t", $blocks[$b]);
+                    $content = end($split_block);
+                    $lines = explode("\n", $content);
+
+                    for ($i = 0; $i < count($lines); $i++) {
+                        $pre = explode(' ', $lines[$i])[0];
+                        if (strlen($lines[$i]) >= strlen($pre) + 1) {
+                            $l = substr($lines[$i], strlen($pre) + 1);
+                        }
+
+                        if (strlen($pre) < 4 && $pre[0] == '[' && $pre[-1] == ']') {
+                            if ($square_nb == $square_id) {
+                                if (strlen($pre) == 2) {
+                                    $lines[$i] = "[v] $l";
+                                    $result = "OK";
+                                }
+                                else if (strlen($pre) == 3) {
+                                    $lines[$i] = "[] $l";
+                                    $result = "OK";
+                                }
+                                break;
+                            }
+                            $square_nb += 1;
+                        }
                     }
-                    else if (strlen($pre) == 3) {
-                        $lines[$i] = "[] $l";
-                        echo("OK");
-                    }
-                    break;
+
+                    $content = join("\n", $lines);
+                    $split_block[count($split_block) - 1] = $content;
+                    $blocks[$b] = join("\t", $split_block);
+                    if ($result !== "") break;
                 }
-                $square_nb += 1;
+                $columns[$c] = join("#", $blocks);
             }
         }
-        $project->SaveContent($db, join("\n", $lines));
+
+        $project->SaveContent($db, join("---", $columns));
         $_SESSION['PROJECTS'] = serialize($projects);
+        echo($result);
         exit();
     }
 
@@ -205,11 +229,9 @@
 
 
         $blocks = explode("#", $split_content[$column]);
-        if ($blocks[0] == "") {
-            $blocks[0] = "$id\tNom par défaut\tprimary\n";
-        } else {
-            array_push($blocks, "$id\tNom par défaut\tprimary\n");
-        }
+        $newBox_raw = "$id\tNom par défaut\tprimary\t";
+        if ($blocks[0] == "") $blocks[0] = $newBox_raw;
+        else array_push($blocks, $newBox_raw);
         $split_content[$column] = join("#", $blocks);
         $project->SaveContent($db, join("---", $split_content));
     }
@@ -243,17 +265,56 @@
         }
     }
 
+    // Archive
     if (isset($_POST['archive'])) {
-        // TODO - Archive
+        // Empty last column
+        $split_content = explode("---", $project->content);
 
-        // Récup & delete les blocks de la dernière colonne
-        // Les ajouter dans les changelogs
-        // Gérer l'affichage des changelogs
+        if ($split_content[3] !== "") {
+            $blocksToArchive = explode("#", $split_content[3]);
+            $split_content[3] = "";
+            $project->SaveContent($db, join("---", $split_content));
+
+            // Add to changelog
+            $currDate = strftime("%A %e, %B %Y"); // date('D j, Y');
+            $currTime = strftime("%H:%M"); // date('H:i');
+            $changelog = explode("#", $project->changelog);
+
+            // Define index to add
+            $id = 0;
+
+            // Check if already currdate in changelog
+            for ($c = 0; $c < count($changelog); $c++) {
+                if (startsWith($changelog[$c], "T\t$currDate")) {
+                    $id = $c+1;
+                    break;
+                }
+            }
+
+            function AddChangelog($content) {
+                global $id, $changelog;
+                array_splice($changelog, $id, 0, $content);
+                $id++;
+            }
+
+            // Add to top
+            if (!$id) AddChangelog("T\t$currDate\tsuccess");
+            for ($b = 0; $b < count($blocksToArchive); $b++) {
+                $_block = explode("\t", $blocksToArchive[$b]);
+                array_splice($_block, 2, 0, $currTime);
+                array_splice($_block, 2, 0, $_SESSION['USERNAME']);
+                array_splice($_block, 2, 0, $_SESSION['PHOTO']);
+                $newBlock = "B\t" . join("\t", $_block);
+                AddChangelog($newBlock);
+            }
+
+            $project->SaveChangelog($db, join("#", $changelog));
+        }
     }
 
     // Reset test content
     if (0) {
-        $template_test = "3	Create Labels	info\n[] Bug\n[] Features\n[] Enhancement\n[] Documentation\n[] Examples#4	Create Issue Template	primary\n[] Bug Report\n[] Feature Request#6	Create PR template	primary#7	Create Actions	light\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---5	Create first milestone	primary---2	Update Readme	danger\nLorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---1	Create repo	primary";
+        $template_test = "3	Create Labels	info	[] Bug\n[] Features\n[] Enhancement\n[] Documentation\n[] Examples#4	Create Issue Template	primary	[] Bug Report\n[] Feature Request#6	Create PR template	primary	#7	Create Actions	light	Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---5	Create first milestone	primary	---2	Update Readme	danger	Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---1	Create repo	primary	";
         $project->SaveContent($db, $template_test);
     }
 
@@ -293,9 +354,9 @@
         <br />
 
         <div class="col-8 card-center">
-            <button name="del" class="btn btn-danger btn-lg float-left" style="margin-top: 24px;">Supprimer</button>
-            <button name="back" class="btn btn-dark btn-lg" style="margin-top: 24px;">Retour</button>
-            <button name="save" class="btn bg-primary btn-lg float-right" style="margin-top: 24px;">Enregistrer</button>
+            <button name="del" class="btn btn-danger btn-popup-sm float-left" style="margin-top: 24px;">Supprimer</button>
+            <button name="back" class="btn btn-dark btn-popup-sm" style="margin-top: 24px;">Retour</button>
+            <button name="save" class="btn bg-primary btn-popup-sm float-right" style="margin-top: 24px;">Enregistrer</button>
         </div>
     </div>
 </section>
@@ -307,9 +368,10 @@
                 <div class="col-sm-6">
                     <h1 class="m-0 text"><?= $project->name ?>
                         <div class="btn-group" style="margin-left: 48px">
-                            <div class="btn btn-primary fbtn" onclick="LoadPage('projects-edit', {'PID': '<?= $PID ?>'})">Éditer</div>
-                            <div class="btn btn-primary fbtn" onclick="LoadPage('projects-changelog', {'PID': '<?= $PID ?>'})">Changelog</div>
-                            <div class="btn btn-primary fbtn" onclick="LoadPage('projects-kanban', {'PID': '<?= $PID ?>'})">Actualiser</div>
+                            <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects')">Retour</div>
+                            <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects-edit', {'PID': '<?= $PID ?>'})">Éditer</div>
+                            <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects-changelog', {'PID': '<?= $PID ?>'})">Changelog</div>
+                            <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects-kanban', {'PID': '<?= $PID ?>'})">Actualiser</div>
                         </div>
                     </h1>
                 </div>

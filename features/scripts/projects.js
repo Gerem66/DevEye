@@ -75,7 +75,9 @@ function Init_Projects_Kanban() {
         let plus = columns[i].getElementsByClassName('a')[0];
         plus.onclick = () => AddBox(i);
     }
-    columns[3].getElementsByTagName('button')[0].onclick = ArchiveBox;
+
+    let button = columns[3].getElementsByTagName('button')[0];
+    button.onclick = () => ArchiveBox(button);
 
     // Squares checkable
     let squares = document.getElementsByName('checkable');
@@ -97,12 +99,12 @@ function ProjectSquareClick(element) {
         .then(function(response) { return response.text(); })
         .then(function(content) {
             if (content != 'OK') {
-                SwitchSquare();
+                element.checked = !element.checked;
             }
         })
         .catch(function(err) {
             console.error(err);
-            SwitchSquare();
+            element.checked = !element.checked;
         })
         .finally(function() {
             element.disabled = false;
@@ -117,6 +119,7 @@ function OpenCreatePopup(element) {
     let btn_save = document.getElementsByName('save')[0];
     let btn_back = document.getElementsByName('back')[0];
 
+    let id;
     let bid = GetBID(element);
 
     let fd = new FormData();
@@ -126,12 +129,11 @@ function OpenCreatePopup(element) {
     fetch('./projects-kanban', params)
         .then(function(response) { return response.text(); })
         .then(function(content) {
-            let lines = content.split("\n");
-            let header = lines[0].split("\t");
-            id =  header[0];
-            let name =  header[1];
-            let color = header[2];
-            let body = lines.slice(1).join("\n");
+            let parts = content.split("\t");
+            id = parts[0];
+            let name = parts[1];
+            let color = parts[2];
+            let body = parts[3];
 
             document.getElementById('box-title').textContent = "Box #" + id;
             document.getElementById('box-name').value = name;
@@ -151,9 +153,11 @@ function OpenCreatePopup(element) {
         LoadPage('projects-kanban', data);
     }
     btn_save.onclick = () => {
-        let header = [ id, document.getElementById('box-name').value, document.getElementById('box-color').value ];
-        let box_content = header.join("\t") + "\n" + document.getElementById('box-body').value;
-        let data = { 'PID': PID, 'set_box': bid, 'content': box_content };
+        let content_name = document.getElementById('box-name').value;
+        let content_color = document.getElementById('box-color').value;
+        let content_body = document.getElementById('box-body').value;
+        let content = [ id, content_name, content_color, content_body ].join("\t");
+        let data = { 'PID': PID, 'set_box': bid, 'content': content };
         LoadPage('projects-kanban', data);
     };
     btn_back.onclick = () => popup.classList.remove('active');
@@ -347,7 +351,31 @@ function AddBox(index) {
     LoadPage('projects-kanban', data);
 }
 
-function ArchiveBox() {
-    let data = { 'PID': PID, 'archive': '1' };
-    LoadPage('projects-kanban', data);
+function ArchiveBox(button) {
+    if (typeof(button.sure) === 'undefined') {
+        button.sure = 1;
+        button.textContent = "Confirmer ?";
+        setTimeout(() => {
+            if (typeof(button) !== 'undefined') {
+                button.sure = undefined;
+                button.textContent = "Archiver";
+            }
+        }, 10*1000);
+    } else {
+        let data = { 'PID': PID, 'archive': '1' };
+        LoadPage('projects-kanban', data);
+    }
+}
+
+function Init_Projects_Changelog() {
+    PID = document.getElementById('PID').value;
+
+    let blocks = document.getElementsByName('changelog-block');
+    for (let i = 0; i < blocks.length; i++) {
+        let bt_restore = blocks[i].getElementsByTagName('button')[0];
+        bt_restore.onclick = () => {
+            let data = { 'PID': PID, 'restore': i };
+            LoadPage('projects-changelog', data);
+        }
+    }
 }

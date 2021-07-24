@@ -65,6 +65,7 @@ function InitPage(page) {
         case 'user': Init_User(); break;
         case 'projects-edit': Init_Projects_Edit(); break;
         case 'projects-kanban': Init_Projects_Kanban(); break;
+        case 'projects-changelog': Init_Projects_Changelog(); break;
         case 'washing-machine': AutoRefresh(page); break;
         case 'settings': Init_Settings(); break;
     }
