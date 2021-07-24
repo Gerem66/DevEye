@@ -25,13 +25,14 @@
         if (isset($Name, $Date, $Type, $Progress, $InstanceMode, $Status, $Color, $Description)) {
             if ($PID == 'NEW') {
                 $Name = str_replace("'", "\'", $Name);
+                $Description = str_replace("'", "\'", $Description);
                 $project = $projects->CreateNewProject($db, $UID, $IID, $Name, $Date, $Type, $Progress, $InstanceMode, $Status, $Color, $Description);
                 $PID = $project->id;
             } else if (intval($PID) > 0) {
                 $project = $projects->GetProjectFromID($PID);
                 $project->instanceMode = $InstanceMode;
-                $project->name = $Name;
-                $project->description = $Description;
+                $project->name = str_replace("'", "\'", $Name);
+                $project->description = str_replace("'", "\'", $Description);
                 $project->type = $Type;
                 $project->status = $Status;
                 $project->progress = $Progress;
@@ -332,7 +333,7 @@
 
     $_SESSION['PROJECTS'] = serialize($projects);
 
-    print_r($project->content);
+    //print_r($project->content);
     $kb = new KanBan($PID, $project->content);
 
 ?>

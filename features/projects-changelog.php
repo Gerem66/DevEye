@@ -83,7 +83,7 @@
                         <div class="btn-group" style="margin-left: 48px">
                             <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects-kanban', {'PID': '<?= $PID ?>'})">Retour</div>
                             <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects-changelog', {'PID': '<?= $PID ?>'})">Actualiser</div>
-                            <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects-changelog', {'PID': '<?= $PID ?>', 'delete_all': '1'})">Réinitialiser</div>
+                            <!--div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects-changelog', {'PID': '<?= $PID ?>', 'delete_all': '1'})">Réinitialiser</div-->
                         </div>
                     </h1>
                 </div>
