@@ -13,7 +13,7 @@
     }
 
     $_SESSION['FEATURES'] = [
-        AddFeature(2, 'Projets', 'projects', 'project-diagram', false, false),
+        AddFeature(2, 'Projets', 'projects', 'project-diagram'),
         AddFeature(2, 'Mails [lecture]', 'mails', 'envelope', false, false),
         AddFeature(1, 'Journal de bord', 'logbook', 'clipboard-check', true),
         AddFeature(1, 'Mots de passe', 'passwords', 'lock', true),

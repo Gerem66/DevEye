@@ -209,15 +209,26 @@
         $column = $_POST['add_box'];
         $split_content = explode("---", $project->content);
 
-        // Get all id
+        // Get all id - kanban
         $ids = array();
         for ($i = 0; $i < count($split_content); $i++) {
             $blocks = explode("#", $split_content[$i]);
             if ($blocks[0] == "") continue;
             for ($b = 0; $b < count($blocks); $b++) {
-                $header = explode("\n", $blocks[$b])[0];
-                $id = explode("\t", $header)[0];
+                $id = explode("\t", $blocks[$b])[0];
                 array_push($ids, $id);
+            }
+        }
+
+        // Get all id - kanban
+        $split_changelog = explode("#", $project->changelog);
+        if ($split_changelog[0] != "") {
+            for ($i = 0; $i < count($split_changelog); $i++) {
+                $type = explode("\t", $split_changelog[$i])[0];
+                if ($type === "B") {
+                    $id = explode("\t", $split_changelog[$i])[1];
+                    array_push($ids, $id);
+                }
             }
         }
 

@@ -129,6 +129,8 @@
     - User : Change password
     - Améliorations des projects
     - Déplacements des js + fonction d'initialisations
+- 24/07/21
+    - Projects : Dev des changelogs
 
 ## Sources
 * Php : https://www.php.net/
