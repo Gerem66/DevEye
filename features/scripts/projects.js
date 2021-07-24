@@ -153,9 +153,9 @@ function OpenCreatePopup(element) {
         LoadPage('projects-kanban', data);
     }
     btn_save.onclick = () => {
-        let content_name = document.getElementById('box-name').value;
+        let content_name = document.getElementById('box-name').value.replace("\t", "");
         let content_color = document.getElementById('box-color').value;
-        let content_body = document.getElementById('box-body').value;
+        let content_body = document.getElementById('box-body').value.replace("\t", "");
         let content = [ id, content_name, content_color, content_body ].join("\t");
         let data = { 'PID': PID, 'set_box': bid, 'content': content };
         LoadPage('projects-kanban', data);

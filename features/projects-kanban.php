@@ -24,6 +24,7 @@
 
         if (isset($Name, $Date, $Type, $Progress, $InstanceMode, $Status, $Color, $Description)) {
             if ($PID == 'NEW') {
+                $Name = str_replace("'", "\'", $Name);
                 $project = $projects->CreateNewProject($db, $UID, $IID, $Name, $Date, $Type, $Progress, $InstanceMode, $Status, $Color, $Description);
                 $PID = $project->id;
             } else if (intval($PID) > 0) {
@@ -331,7 +332,7 @@
 
     $_SESSION['PROJECTS'] = serialize($projects);
 
-    //print_r($project->content);
+    print_r($project->content);
     $kb = new KanBan($PID, $project->content);
 
 ?>
