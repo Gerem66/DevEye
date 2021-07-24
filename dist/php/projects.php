@@ -11,7 +11,7 @@
             $this->uid = $r[1];
             $this->iid = $r[2];
             $this->instanceMode = $r[3];
-            $this->name = $r[4];
+            $this->name = str_replace("\'", "'", $r[4]);
             $this->description = $r[5];
             $this->type = $r[6];
             $this->status = $r[7];
@@ -46,9 +46,10 @@
         function Save($database = null) {
             $db = $database !== null ? $database : new DataBase;
 
+            $name = str_replace("'", "\'", $this->name);
             $q = "UPDATE `u444572210_oxy`.`Projects` SET
                 `InstanceMode`='$this->instanceMode',
-                `Name`='$this->name',
+                `Name`='$name',
                 `Description`='$this->description',
                 `Type`='$this->type',
                 `Status`='$this->status',
