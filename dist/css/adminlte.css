@@ -17976,6 +17976,10 @@ html.maximized-card {
   font-size: 1.1rem;
   font-weight: 400;
   margin: 0;
+  width: 185px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .card-text {
