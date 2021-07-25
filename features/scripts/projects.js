@@ -86,6 +86,27 @@ function Init_Projects_Kanban() {
     }
 }
 
+function SaveScrollbars() {
+    let columns = document.getElementsByName('column');
+    for (let i = 0; i < 4; i++) {
+        let scrollPos = columns[i].getElementsByClassName('card-body')[0].scrollTop;
+        if (scrollPos) {
+            sessionStorage.setItem('scrollpos' + i, scrollPos);
+        }
+    }
+}
+
+function LoadScrollbars() {
+    let columns = document.getElementsByName('column');
+    for (let i = 0; i < 4; i++) {
+        let scrollPos = sessionStorage.getItem('scrollpos' + i);
+        if (scrollPos) {
+            columns[i].getElementsByClassName('card-body')[0].scrollTo(0, scrollPos);
+            sessionStorage.removeItem('scrollpos');
+        }
+    }
+}
+
 function ProjectSquareClick(element) {
     let id = element.id;
     element.disabled = true;
@@ -150,7 +171,8 @@ function OpenCreatePopup(element) {
 
     btn_del.onclick = () => {
         let data = { 'PID': PID, 'rem_box': bid };
-        LoadPage('projects-kanban', data);
+        SaveScrollbars();
+        LoadPage('projects-kanban', data, false, false, LoadScrollbars);
     }
     btn_save.onclick = () => {
         let content_name = document.getElementById('box-name').value.replace("\t", "");
@@ -158,7 +180,8 @@ function OpenCreatePopup(element) {
         let content_body = document.getElementById('box-body').value.replace("\t", "");
         let content = [ id, content_name, content_color, content_body ].join("\t");
         let data = { 'PID': PID, 'set_box': bid, 'content': content };
-        LoadPage('projects-kanban', data);
+        SaveScrollbars();
+        LoadPage('projects-kanban', data, false, false, LoadScrollbars);
     };
     btn_back.onclick = () => popup.classList.remove('active');
     popup.onclick = (e) => { if (e.target === popup) popup.classList.remove('active'); }
@@ -258,7 +281,8 @@ function Ungrab() {
 
     //console.log([PID, bid, lastColumnIndex, lastRowIndex]);
     let data = { 'PID': PID, 'BID': bid, 'column': lastColumnIndex, 'row': lastRowIndex};
-    LoadPage('projects-kanban', data);
+    SaveScrollbars();
+    LoadPage('projects-kanban', data, false, false, LoadScrollbars);
 }
 
 function EstimateGhostBox() {
@@ -348,7 +372,8 @@ function RemoveHoverEvents() {
 
 function AddBox(index) {
     let data = { 'PID': PID, 'add_box': index };
-    LoadPage('projects-kanban', data);
+    SaveScrollbars();
+    LoadPage('projects-kanban', data, false, false, LoadScrollbars);
 }
 
 function ArchiveBox(button) {
@@ -363,7 +388,8 @@ function ArchiveBox(button) {
         }, 10*1000);
     } else {
         let data = { 'PID': PID, 'archive': '1' };
-        LoadPage('projects-kanban', data);
+        SaveScrollbars();
+        LoadPage('projects-kanban', data, false, false, LoadScrollbars);
     }
 }
 
@@ -375,7 +401,8 @@ function Init_Projects_Changelog() {
         let bt_restore = blocks[i].getElementsByTagName('button')[0];
         bt_restore.onclick = () => {
             let data = { 'PID': PID, 'restore': i };
-            LoadPage('projects-changelog', data);
+            SaveScrollbars();
+            LoadPage('projects-changelog', data, false, false, LoadScrollbars);
         }
     }
 }

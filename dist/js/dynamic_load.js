@@ -13,7 +13,7 @@ function AsyncLoaded() {
 function PreLoadPage() {
     main_content.classList.add('loading');
 }
-function LoadPage(page, data = null, afterRefresh = false, noLoadPage = false) {
+function LoadPage(page, data = null, afterRefresh = false, noLoadPage = false, callback = undefined) {
     if (loading) return;
 
     loading = true;
@@ -56,6 +56,11 @@ function LoadPage(page, data = null, afterRefresh = false, noLoadPage = false) {
                     last_selected = i;
                     break;
                 }
+            }
+        })
+        .finally(function() {
+            if (typeof(callback) === "function") {
+                callback();
             }
         });
 }
