@@ -163,6 +163,7 @@ a {
   color: #4f9df0;
   text-decoration: none;
   background-color: transparent;
+  cursor: pointer;
 }
 
 a:hover {
@@ -170,14 +171,16 @@ a:hover {
   text-decoration: none;
 }
 
-a:not([href]) {
+a:not([href]):not([onclick]) {
   color: inherit;
   text-decoration: none;
+  cursor: default;
 }
 
-a:not([href]):hover {
+a:not([href]):not([onclick]):hover {
   color: inherit;
   text-decoration: none;
+  cursor: default;
 }
 
 pre,
@@ -31336,8 +31339,9 @@ a.text-muted:hover {
   pointer-events: none;
 }
 
-a:not(.nolink), .a {
-  cursor: pointer;
+/*a:not(.nolink),*/
+.a {
+  cursor: pointer !important;
 }
 .fbtn {
   display: inline;

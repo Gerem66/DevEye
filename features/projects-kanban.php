@@ -1,8 +1,6 @@
 <?php
 
     require("dist/php/projects.php");
-    date_default_timezone_set('Europe/Paris');
-    setlocale(LC_TIME, 'fr_FR.utf8', 'fra');
 
     $UID = $_SESSION['ID'];
     $IID = $_SESSION['INSTANCE_ID'];
@@ -42,6 +40,8 @@
                     // Success / Manage eventually errors
                 }
             }
+        } else {
+            die("Invalid POST values");
         }
     } else {
         $project = $projects->GetProjectFromID($PID);
@@ -384,7 +384,7 @@
                             <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects')">Retour</div>
                             <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects-edit', {'PID': '<?= $PID ?>'})">Éditer</div>
                             <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects-changelog', {'PID': '<?= $PID ?>'})">Changelog</div>
-                            <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects-kanban', {'PID': '<?= $PID ?>'})">Actualiser</div>
+                            <!--div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects-kanban', {'PID': '<?= $PID ?>'})">Actualiser</div-->
                         </div>
                     </h1>
                 </div>

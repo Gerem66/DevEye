@@ -1,7 +1,5 @@
 <?php
 
-    date_default_timezone_set('Europe/Paris');
-
     function AddLine($no = '', $state = '', $program = '', $progress = 0, $color = 'primary', $t_start = null, $t_end = null) {
         $time = ($t_start != null && $t_end != null) ? $time = "$t_start / $t_end" : "";
         $badge = ($progress > 0 && $color == 'success') ? "<span class='badge bg-$color'>$progress%</span>" : "";

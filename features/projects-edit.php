@@ -2,8 +2,6 @@
 
     $projectID = GetPostValue('PID', 'NEW');
     $isNew = $projectID == 'NEW';
-    $title_txt = $isNew ? "Création d'un nouveau projet" : "Édition d'un projet";
-    $page_txt = $isNew ? 'New' : 'Edit';
 
     // Define all types
     $types = [ 'Logiciel (PC)', 'Algorithme (Console)', 'Embarqué', 'Application mobile', 'Site Web', 'Embarqué', 'Jeux Vidéo' ];
@@ -38,6 +36,9 @@
         $description = $project['Description'];
     }
 
+    $title_txt = $isNew ? "Création d'un nouveau projet" : $name;
+    $page_txt = $isNew ? 'New' : 'Edit';
+
     // Define content
     $types_content = "";
     $status_content = "";
@@ -67,8 +68,10 @@
             <div class="row mb-2">
                 <div class="col-sm-6">
                     <h1 class="m-0 text"><?= $title_txt ?>
-                        <button type="submit" class="btn btn-success btn-sm col-2 fbtn">Sauvegarder</button>
-                        <button id="bt-back" type="button" class="btn btn-primary btn-sm col-2 fbtn">Retour</button>
+                        <div class="btn-group col-4" style="margin-left: 48px">
+                            <button id="bt-back" type="button" class="btn btn-primary btn-sm col-2 fbtn">Retour</button>
+                            <button type="submit" class="btn btn-success btn-sm col-8 fbtn">Sauvegarder</button>
+                        </div>
                     </h1>
                 </div>
                 <div class="col-sm-6">

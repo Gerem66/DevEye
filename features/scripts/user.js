@@ -83,7 +83,7 @@ function OpenQuicklinkPopup() {
                     tb_password.parentNode.parentNode.innerHTML = "<p>Une erreur est survenue. (" + lines[1] + ")</p>";
                 } else {
                     let quicklink = lines[1];
-                    tb_password.parentNode.parentNode.innerHTML = "<p>Utilisez ce lien pour vous connecter rapidement\
+                    tb_password.parentNode.parentNode.innerHTML = "<p>Utilise ce lien pour te connecter rapidement\
                         (valable uniquement depuis l'adresse IP actuelle) : <br />\
                         <input class=\"form-control\" value=\"" + quicklink + "\" onclick=\"select();document.execCommand('copy');\" readonly></input></p>";
                 }

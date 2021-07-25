@@ -1,6 +1,8 @@
 <?php
 
     session_start();
+    date_default_timezone_set('Europe/Paris');
+    setlocale(LC_TIME, 'fr_FR.utf8', 'fra');
     require("dist/php/bdd.php");
     require("dist/php/user.php");
     require("dist/php/functions.php");

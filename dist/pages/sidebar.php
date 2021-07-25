@@ -38,7 +38,7 @@
 <nav class="main-header navbar navbar-expand navbar-black navbar-dark">
     <ul class="navbar-nav">
         <li class="nav-item">
-            <a class="nav-link" data-widget="pushmenu" role="button"><i class="fas fa-bars"></i></a>
+            <a class="nav-link a" data-widget="pushmenu" role="button"><i class="fas fa-bars"></i></a>
         </li>
     </ul>
     <ul class="navbar-nav ml-auto">
@@ -46,7 +46,7 @@
             <a class="btn" style="width: 128px; background-color: #444;border-radius: 0;" href="http://geremy.eu/Projects"><img src="dist/img/logo.png" style="background-color: #444;" width="36px"></img> Projects</a>
         </li-->
         <li class="nav-item">
-            <a class="nav-link" data-widget="control-sidebar" data-slide="true" role="button"><i class="fas fa-th-large"></i></a>
+            <a class="nav-link a" data-widget="control-sidebar" data-slide="true" role="button"><i class="fas fa-th-large"></i></a>
         </li>
     </ul>
 </nav>

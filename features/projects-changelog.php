@@ -37,7 +37,7 @@
             } else if ($parts[0] === "T") {
                 if (!$tag_is_after_block) {
                     array_splice($changelogs, $i, 1);
-                    break; // One max at time
+                    break; // One max at a time
                 }
                 $tag_is_after_block = false;
             }
