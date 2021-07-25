@@ -69,7 +69,7 @@ function Init_Projects_Kanban() {
         edit.onclick = () => OpenCreatePopup(boxes[i]);
     }
 
-    // Columns events : Add / Archive
+    // Columns events : Add / Archive / Scrollbars
     let columns = document.getElementsByName('column');
     for (let i = 0; i < 3; i++) {
         let plus = columns[i].getElementsByClassName('a')[0];
@@ -90,9 +90,8 @@ function SaveScrollbars() {
     let columns = document.getElementsByName('column');
     for (let i = 0; i < 4; i++) {
         let scrollPos = columns[i].getElementsByClassName('card-body')[0].scrollTop;
-        if (scrollPos) {
-            sessionStorage.setItem('scrollpos' + i, scrollPos);
-        }
+        console.log(scrollPos);
+        sessionStorage.setItem('scrollpos' + i, scrollPos);
     }
 }
 
@@ -100,7 +99,7 @@ function LoadScrollbars() {
     let columns = document.getElementsByName('column');
     for (let i = 0; i < 4; i++) {
         let scrollPos = sessionStorage.getItem('scrollpos' + i);
-        if (scrollPos) {
+        if (typeof(scrollPos) !== 'undefined') {
             columns[i].getElementsByClassName('card-body')[0].scrollTo(0, scrollPos);
             sessionStorage.removeItem('scrollpos');
         }
