@@ -13,13 +13,14 @@
             $this->instanceMode = $r[3];
             $this->name = str_replace("\'", "'", $r[4]);
             $this->description = $r[5];
-            $this->type = $r[6];
-            $this->status = $r[7];
-            $this->content = $db->Decrypt($r[8]);
-            $this->changelog = $db->Decrypt($r[9]);
-            $this->progress = $r[10];
-            $this->color = $r[11];
-            $this->date = $r[12];
+            $this->link = $r[6];
+            $this->type = $r[7];
+            $this->status = $r[8];
+            $this->content = $db->Decrypt($r[9]);
+            $this->changelog = $db->Decrypt($r[10]);
+            $this->progress = $r[11];
+            $this->color = $r[12];
+            $this->date = $r[13];
 
             //$this->avatar = $avatar;
             //$this->avatarName = $avatarName;
@@ -51,6 +52,7 @@
                 `InstanceMode`='$this->instanceMode',
                 `Name`='$name',
                 `Description`='$this->description',
+                `Link`='$this->link',
                 `Type`='$this->type',
                 `Status`='$this->status',
                 `Progress`='$this->progress',
@@ -132,11 +134,11 @@
             $this->projects[] = $newProject;
         }
 
-        function CreateNewProject($db, $UID, $IID, $Name, $Date, $Type, $Progress, $InstanceMode, $Status, $Color, $Description) {
+        function CreateNewProject($db, $UID, $IID, $Name, $Date, $Type, $Progress, $InstanceMode, $Status, $Color, $Link, $Description) {
             $content = $db->Encrypt(str_repeat('---', 3));
             $q = "INSERT INTO `u444572210_oxy`.`Projects`
-                    (`UserID`, `InstanceID`, `Name`,  `Date`,  `Type`,  `Progress`,  `InstanceMode`,  `Status`, `Content`,   `Color`,  `Description`) VALUES
-                    ('$UID',   '$IID',       '$Name', '$Date', '$Type', '$Progress', '$InstanceMode', '$Status', '$content', '$Color', '$Description')";
+                    (`UserID`, `InstanceID`, `Name`,  `Date`,  `Type`,  `Progress`,  `InstanceMode`,  `Status`, `Content`,   `Color`,  `Link`, `Description`) VALUES
+                    ('$UID',   '$IID',       '$Name', '$Date', '$Type', '$Progress', '$InstanceMode', '$Status', '$content', '$Color', '$Link', '$Description')";
 
             $PID = -1;
             if ($db->query($q) === TRUE) {

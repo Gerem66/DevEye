@@ -20,21 +20,22 @@ function SubmitProject(event) {
     event.preventDefault();
     //return false; // ?
 
-    let pid = document.getElementById('projectID').value;
-    let name = document.getElementById('projectName').value;
-    let date = document.getElementById('inputDate').value;
-    let type = document.getElementById('inputType').value;
-    let prog = document.getElementById('inputProgress').value;
-    let inst = document.getElementById('inputInstance').checked ? '1' : '0';
-    let stat = document.getElementById('inputStatus').value;
+    let pid   = document.getElementById('projectID').value;
+    let name  = document.getElementById('projectName').value;
+    let date  = document.getElementById('inputDate').value;
+    let type  = document.getElementById('inputType').value;
+    let prog  = document.getElementById('inputProgress').value;
+    let inst  = document.getElementById('inputInstance').checked ? '1' : '0';
+    let stat  = document.getElementById('inputStatus').value;
     let color = document.getElementById('inputColorStatus').value;
+    let link  = document.getElementById('inputLink').value;
     let description = document.getElementById('inputDescription').value;
 
     let data = { 'save': 1, 'PID': pid,
         'Name': name, 'Date': date,
         'Type': type, 'Progress': prog,
         'InstanceMode': inst, 'Status': stat,
-        'Color': color, 'Description': description
+        'Color': color, 'Link': link, 'Description': description
     };
     LoadPage('projects-kanban', data);
 }
@@ -90,7 +91,6 @@ function SaveScrollbars() {
     let columns = document.getElementsByName('column');
     for (let i = 0; i < 4; i++) {
         let scrollPos = columns[i].getElementsByClassName('card-body')[0].scrollTop;
-        console.log(scrollPos);
         sessionStorage.setItem('scrollpos' + i, scrollPos);
     }
 }
@@ -400,8 +400,7 @@ function Init_Projects_Changelog() {
         let bt_restore = blocks[i].getElementsByTagName('button')[0];
         bt_restore.onclick = () => {
             let data = { 'PID': PID, 'restore': i };
-            SaveScrollbars();
-            LoadPage('projects-changelog', data, false, false, LoadScrollbars);
+            LoadPage('projects-changelog', data, false, false);
         }
     }
 }

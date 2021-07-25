@@ -18,18 +18,18 @@
         $InstanceMode = $_POST['InstanceMode'];
         $Status = $_POST['Status'];
         $Color = $_POST['Color'];
+        $Link = $_POST['Link'];
         $Description = $_POST['Description'];
 
-        if (isset($Name, $Date, $Type, $Progress, $InstanceMode, $Status, $Color, $Description)) {
+        if (isset($Name, $Date, $Type, $Progress, $InstanceMode, $Status, $Color, $Link, $Description)) {
             if ($PID == 'NEW') {
-                $Name = $Name;
-                $Description = $Description;
-                $project = $projects->CreateNewProject($db, $UID, $IID, $Name, $Date, $Type, $Progress, $InstanceMode, $Status, $Color, $Description);
+                $project = $projects->CreateNewProject($db, $UID, $IID, $Name, $Date, $Type, $Progress, $InstanceMode, $Status, $Color, $Link, $Description);
                 $PID = $project->id;
             } else if (intval($PID) > 0) {
                 $project = $projects->GetProjectFromID($PID);
                 $project->instanceMode = $InstanceMode;
                 $project->name = $Name;
+                $project->link = $Link;
                 $project->description = $Description;
                 $project->type = $Type;
                 $project->status = $Status;
@@ -335,6 +335,7 @@
 
     //print_r($project->content);
     $kb = new KanBan($PID, $project->content);
+    $bt_github = startsWith($project->link, "https://github.com/") ? "<i class='fab fa-github a' title='Github' style='margin-left: 24px' onclick=\"window.open('$project->link', '_blank').focus()\"></i>" : "";
 
 ?>
 
@@ -380,12 +381,13 @@
             <div class="row mb-2">
                 <div class="col-sm-6">
                     <h1 class="m-0 text"><?= $project->name ?>
-                        <div class="btn-group" style="margin-left: 48px">
+                        <div class="btn-group" style="margin-top: -6px">
                             <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects')">Retour</div>
                             <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects-edit', {'PID': '<?= $PID ?>'})">Éditer</div>
                             <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects-changelog', {'PID': '<?= $PID ?>'})">Changelog</div>
-                            <!--div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects-kanban', {'PID': '<?= $PID ?>'})">Actualiser</div-->
+                            <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects-kanban', {'PID': '<?= $PID ?>'})">Actualiser</div>
                         </div>
+                        <?= $bt_github ?>
                     </h1>
                 </div>
                 <div class="col-sm-6">

@@ -21,6 +21,7 @@
         $inst        = false;
         $stat        = '';
         $color       = '';
+        $link = '';
         $description = '';
     } else {
         $db = new DataBase;
@@ -33,6 +34,7 @@
         $inst        = $project['InstanceMode'];
         $stat        = $project['Status'];
         $color       = $project['Color'];
+        $link        = $project['Link'];
         $description = $project['Description'];
     }
 
@@ -147,7 +149,7 @@
                                 </div>
 
                                 <div class="row">
-                                    <div class="form-group col-6">
+                                    <div class="form-group col-3">
                                         <!-- Status -->
                                         <label for="inputStatus">Statut</label>
                                         <select id="inputStatus" class="form-control custom-select" required>
@@ -155,7 +157,7 @@
                                             <?= $status_content ?>
                                         </select>
                                     </div>
-                                    <div class="form-group col-6">
+                                    <div class="form-group col-3">
                                         <!-- Color Status -->
                                         <label for="inputColorStatus">Couleur du statut</label>
                                         <select id="inputColorStatus" class="form-control custom-select" required>
@@ -163,7 +165,14 @@
                                             <?= $colors_content ?>
                                         </select>
                                     </div>
+                                    <div class="form-group col-6">
+                                        <!-- Project Name -->
+                                        <label for="inputLink">Lien github</label>
+                                        <input type="text" id="inputLink" class="form-control" value="<?= $link ?>">
+                                    </div>
                                 </div>
+
+                                <!-- Description -->
                                 <label for="inputDescription">Description du projet</label>
                                 <textarea id="inputDescription" class="form-control" rows="8"><?= $description ?></textarea>
                             </div>
