@@ -1,6 +1,6 @@
 <?php
 
-    $grades = [ "Invité", "Utilisateur", "Modérateur", "Développeur" ];
+    $grades = [ "Invité", "Utilisateur", "Modérateur", "Admin" ];
 
     $username   = $_SESSION['USERNAME'];
     $email      = $_SESSION['EMAIL'];
