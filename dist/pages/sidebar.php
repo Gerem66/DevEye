@@ -24,7 +24,7 @@
     // 0 : Invité
     // 1 : Utilisateur
     // 2 : Modérateur
-    // 3 : Développeur
+    // 3 : Admin
 
     $content = "";
     $features = $_SESSION['FEATURES'];
@@ -67,7 +67,7 @@
                 <img src="dist/img/<?= $_SESSION['PHOTO']; ?>" class="img-circle elevation-2" alt="User Image">
             </div>
             <div class="info">
-                <a class="d-block"><?= $_SESSION["USERNAME"] ?></a>
+                <a class="d-block a"><?= $_SESSION["USERNAME"] ?></a>
             </div>
         </div>
 
