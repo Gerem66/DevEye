@@ -8,6 +8,7 @@
     $avatar     = $_SESSION['PHOTO'];
     $status     = $_SESSION['STATUS'];
     $instance   = $_SESSION['INSTANCE'];
+    $instanceID = $_SESSION['INSTANCE_ID'];
     $reg_date   = $_SESSION['INSCRIPTION_DATE'];
 
     if (isset($_POST['changepassword'], $_POST['newpassword'])) {
@@ -60,18 +61,19 @@
     }
 
     // Get instance length
-    $db = new DataBase;
-    $instance_length = 0;
-    $instanceID = $_SESSION['INSTANCE_ID'];
-    $result = $db->query("SELECT ID FROM `Users` WHERE `InstanceID` = '$instanceID'");
-    if (isset($result)) {
-        $instance_length = $result->num_rows;
+    if ($instanceID > 0) {
+        $db = new DataBase;
+        $instance_length = 0;
+        $result = $db->query("SELECT ID FROM `Users` WHERE `InstanceID` = '$instanceID'");
+        if (isset($result)) {
+            $instance_length = $result->num_rows;
+        }
+        $instance .= " ($instance_length membre" . ($instance_length > 1 ? 's)' : ')');
     }
     
     $icon_ok = '<i class="fas fa-check-circle" style="color: green; margin-left: 6px;"></i>';
     $icon_ko = '<i class="fas fa-times-circle" style="color: red; margin-left: 6px;"></i>';
     $status_txt = $grades[$status];
-    $instance_txt = "$instance ($instance_length membre" . ($instance_length > 1 ? 's)' : ')');
     $mailIcon = $email_ok ? $icon_ok : $icon_ko;
 
 ?>
@@ -168,7 +170,7 @@
                                     <b>Niveau d'accès</b><a class="float-right nolink"><?= $status ?></a>
                                 </li>
                                 <li class="list-group-item">
-                                    <b>Instance</b><a class="float-right nolink"><?= $instance_txt ?></a>
+                                    <b>Instance</b><a class="float-right nolink"><?= $instance ?></a>
                                 </li>
                                 <li class="list-group-item">
                                     <b>Adresse Email</b>
