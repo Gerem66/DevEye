@@ -76,6 +76,7 @@
     echo('<!-- Logbook & pwds --><script src="features/scripts/blocnote.js"></script>');
     echo('<!-- User           --><script src="features/scripts/user.js"></script>');
     echo('<!-- Settings       --><script src="features/scripts/settings.js"></script>');
+    echo('<!-- Database       --><script src="features/scripts/database.js"></script>');
     echo('<!-- Functions      --><script src="features/scripts/functions.js"></script>');
 
     require("dist/pages/body_end.html");
