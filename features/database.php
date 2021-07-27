@@ -93,6 +93,12 @@
     tbody td input {
         min-width: calc(256px - 12px);
     }
+    tbody td i {
+        transition: color 0.25s ease 0s;
+    }
+    tbody td i.red {
+        color: red;
+    }
 </style>
 
 <div class="content-wrapper">

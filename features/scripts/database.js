@@ -14,9 +14,9 @@ function Trash_Click(element) {
     if (typeof(element.sure) === 'undefined') {
         element.sure = setTimeout(() => {
             element.sure = undefined;
-            element.style.color = 'white';
+            element.classList.remove('red');
         }, 5000);
-        element.style.color = 'red';
+        element.classList.add('red');
     } else {
         let id = element.getAttribute('idcell');
         let table = element.getAttribute('table');
