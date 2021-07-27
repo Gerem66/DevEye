@@ -26,7 +26,8 @@
             for ($i = 0; $i < count($fields); $i++) {
                 $col = $fields[$i];
                 $content = $u[$col];
-                $table_content .= "<td name='cell' title='$content' idcell='$id' column='$col' dbname='$db_name'>$content</td>";
+                $content_specialchars = str_replace("\n", "\\n", $content);
+                $table_content .= "<td name='cell' title='$content' idcell='$id' column='$col' dbname='$db_name'>$content_specialchars</td>";
             }
             $table_content .= "</tr>";
         }
