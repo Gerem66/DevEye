@@ -40,6 +40,7 @@
 
     $title_txt = $isNew ? "Création d'un nouveau projet" : $name;
     $page_txt = $isNew ? 'New' : 'Edit';
+    $icon_collab = isset($project) && $inst ? "<i class='fas fa-users' style='font-size: 24px;margin: 0 24px'></i>" : "";
 
     // Define content
     $types_content = "";
@@ -69,7 +70,7 @@
         <div class="container-fluid">
             <div class="row mb-2">
                 <div class="col-sm-6">
-                    <h1 class="m-0 text"><?= $title_txt ?>
+                    <h1 class="m-0 text"><?= $icon_collab . $title_txt ?>
                         <div class="btn-group col-4" style="margin-left: 48px">
                             <button id="bt-back" type="button" class="btn btn-primary btn-sm col-2 fbtn">Retour</button>
                             <button type="submit" class="btn btn-success btn-sm col-8 fbtn">Sauvegarder</button>

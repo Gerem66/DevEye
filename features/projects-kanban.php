@@ -335,6 +335,7 @@
 
     //print_r($project->content);
     $kb = new KanBan($PID, $project->content);
+    $icon_collab = $project->instanceMode == '1' ? "<i class='fas fa-users' style='font-size: 24px;margin: 0 24px'></i>" : "";
     $bt_github = startsWith($project->link, "https://github.com/") ? "<i class='fab fa-github a' title='Github' style='margin-left: 24px' onclick=\"window.open('$project->link', '_blank').focus()\"></i>" : "";
 
 ?>
@@ -380,7 +381,7 @@
         <div class="container-fluid">
             <div class="row mb-2">
                 <div class="col-sm-6">
-                    <h1 class="m-0 text"><?= $project->name ?>
+                    <h1 class="m-0 text"><?= $icon_collab . $project->name ?>
                         <div class="btn-group" style="margin-top: -6px;margin-left: 48px">
                             <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects')">Retour</div>
                             <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects-edit', {'PID': '<?= $PID ?>'})">Éditer</div>
