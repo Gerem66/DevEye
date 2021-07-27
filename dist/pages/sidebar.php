@@ -7,7 +7,9 @@
         $settings = $_SESSION['SETTINGS'];
         $enabled = !$canDisable || $settings == -1 || $settings & (1 << $index);
 
-        if ($STATUS < $minLvl || !$enabled) return;
+        if ($STATUS < $minLvl || !$enabled) {
+            return null;
+        }
 
         $a_data = $page != "" ? "class='nav-link' data-page='$page' onclick=\"LoadPage('$page');\"" : "";
         $color = !$finished ? 'style="color: red;"' : '';
@@ -21,16 +23,29 @@
                 </li>";
     }
 
+    function AddItemCategory($name) {
+        return "<li class='nav-header'>$name</li>";
+    }
+
     // Niveaux d'accès :
     // 0 : Invité
     // 1 : Utilisateur
     // 2 : Modérateur
     // 3 : Admin
 
+    $lastCat = "";
     $content = "";
     $features = $_SESSION['FEATURES'];
     for ($i = 0; $i < count($features); $i++) {
-        $content .= AddItemMenu($i, $features[$i]);
+        $feature_content = AddItemMenu($i, $features[$i]);
+        if ($feature_content != null) {
+            $cat = $features[$i]['category'];
+            if ($cat != $lastCat) {
+                $lastCat = $cat;
+                $content .= AddItemCategory($lastCat);
+            }
+            $content .= $feature_content;
+        }
     }
 
 ?>
