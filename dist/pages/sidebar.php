@@ -9,10 +9,11 @@
 
         if ($STATUS < $minLvl || !$enabled) return;
 
+        $a_data = $page != "" ? "class='nav-link' data-page='$page' onclick=\"LoadPage('$page');\"" : "";
         $color = !$finished ? 'style="color: red;"' : '';
         $collabIcon = $collab && $_SESSION['INSTANCE_ID'] > 0 ? "<a onclick=\"LoadPage('$page', {'team': 1});\" class='nav-icon collab' title='Instance'><i class='fas fa-users'></i></a>" : '';
         return "<li class='nav-item'>
-                    <a name='sidebar-item' data-page='$page' onclick=\"LoadPage('$page');\" class='nav-link'>
+                    <a name='sidebar-item' $a_data>
                         <i class='nav-icon fas fa-$icon'></i>
                         <p $color>$title</p>
                         $collabIcon

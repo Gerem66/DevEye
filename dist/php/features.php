@@ -24,7 +24,7 @@
         AddFeature(2, 'Logs', 'logs', 'clipboard-list'),
         AddFeature(1, 'Settings', 'settings', 'cog', false, true, false),
 
-        AddFeature(3, '', 'user', '', false, false, false),
+        AddFeature(3, '', '', '', false, false, false),
         AddFeature(3, 'Base de données', 'database', 'database'),
         AddFeature(3, 'Panneau de contrôle', 'dashboard', 'tachometer-alt', false, false, false),
         AddFeature(3, 'Comptes', 'accounts', 'file-invoice', false, false, false)
