@@ -48,10 +48,11 @@
             $db = $database !== null ? $database : new DataBase;
 
             $name = str_replace("'", "\'", $this->name);
+            $description = str_replace("'", "\'", $this->description);
             $q = "UPDATE `u444572210_oxy`.`Projects` SET
                 `InstanceMode`='$this->instanceMode',
                 `Name`='$name',
-                `Description`='$this->description',
+                `Description`='$description',
                 `Link`='$this->link',
                 `Type`='$this->type',
                 `Status`='$this->status',
