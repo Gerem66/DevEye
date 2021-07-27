@@ -21,7 +21,7 @@
         $inst        = false;
         $stat        = '';
         $color       = '';
-        $link = '';
+        $link        = '';
         $description = '';
     } else {
         $db = new DataBase;

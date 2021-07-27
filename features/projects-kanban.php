@@ -381,7 +381,7 @@
             <div class="row mb-2">
                 <div class="col-sm-6">
                     <h1 class="m-0 text"><?= $project->name ?>
-                        <div class="btn-group" style="margin-top: -6px">
+                        <div class="btn-group" style="margin-top: -6px;margin-left: 48px">
                             <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects')">Retour</div>
                             <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects-edit', {'PID': '<?= $PID ?>'})">Éditer</div>
                             <div class="btn btn-primary btn-sm fbtn" onclick="LoadPage('projects-changelog', {'PID': '<?= $PID ?>'})">Changelog</div>

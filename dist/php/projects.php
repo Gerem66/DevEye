@@ -57,6 +57,7 @@
                 `Status`='$this->status',
                 `Progress`='$this->progress',
                 `Color`='$this->color',
+                `Link`='$this->link',
                 `Date`='$this->date' WHERE `ID` = '$this->id'";
 
             return $db->query($q);
