@@ -4,4 +4,4 @@ RewriteEngine on
 
 # GPanel
 RewriteRule ^accueil$ accueil.php
-RewriteRule ^(user|projects|projects-edit|projects-kanban|projects-changelog|mails|logbook|logbook-edit|passwords|passwords-edit|gyrics|ghost|virtual-machine|washing-machine|logs|settings|database)$ redirect.php?page=$1
+RewriteRule ^(user|projects|projects-edit|projects-kanban|projects-changelog|accounts|mails|logbook|logbook-edit|passwords|passwords-edit|gyrics|ghost|virtual-machine|washing-machine|logs|settings|database)$ redirect.php?page=$1
