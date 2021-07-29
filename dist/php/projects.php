@@ -246,7 +246,7 @@
 
         function __AddBox($id, $title, $color, $content) {
             return "<div name='box' class='card card-$color card-outline box'>
-                        <div class='card-header'>
+                        <div class='card-header' title='$title'>
                             <div class='grab hitbox'></div>
                             <h5 class='card-title'>$title</h5>
                             <div class='card-tools'>
