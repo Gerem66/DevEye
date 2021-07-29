@@ -3,9 +3,11 @@
     session_start();
     date_default_timezone_set('Europe/Paris');
     setlocale(LC_TIME, 'fr_FR.utf8', 'fra');
+
     require("dist/php/bdd.php");
     require("dist/php/user.php");
     require("dist/php/functions.php");
+    require("dist/php/features.php");
 
     // Link connection
     if (isset($_SESSION['POST_DATA'])) {
@@ -51,7 +53,6 @@
     }
 
     // Header
-    require("dist/php/features.php");
     require("dist/pages/body.html");
     require("dist/pages/sidebar.php");
 
