@@ -67,7 +67,7 @@ function Init_Projects_Kanban() {
         let grab = boxes[i].getElementsByClassName('grab')[0];
         let edit = boxes[i].getElementsByClassName('a')[0];
         grab.onmousedown = (event) => Grab(boxes[i], event);
-        edit.onclick = () => OpenCreatePopup(boxes[i]);
+        edit.onclick = () => OpenEditBoxPopup(boxes[i]);
     }
 
     // Columns events : Add / Archive / Scrollbars
@@ -131,7 +131,7 @@ function ProjectSquareClick(element) {
         });
 }
 
-function OpenCreatePopup(element) {
+function OpenEditBoxPopup(element) {
     let popup = document.getElementById('popup-edit-box');
     popup.classList.add('active');
 
