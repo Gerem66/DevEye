@@ -1,10 +1,10 @@
 <?php
 
     class DataBase {
-        function __construct($openConnection = true) {
+        function __construct($openConnection = true, $credentials = NULL) {
             $this->key = 'Bj1<470L:Ddd;jO$';
             $this->conn = NULL;
-            if ($openConnection) $this->OpenConnection();
+            if ($openConnection) $this->OpenConnection($credentials);
         }
 
         function __destruct() {
@@ -13,8 +13,24 @@
             }
         }
 
-        function OpenConnection() {
-            $this->conn = new mysqli('localhost', 'u444572210_oxy_gerem', 'rL:X5gV+fWh1', 'u444572210_oxy');
+        function OpenConnection($credentials = NULL) {
+            if ($credentials != NULL && count($credentials) != 4) {
+                die('Wrong database credentials');
+            }
+
+            if ($credentials == NULL) {
+                $db_host = 'localhost';
+                $db_name = 'u444572210_oxy';
+                $db_user = 'u444572210_oxy_gerem';
+                $db_pass = 'rL:X5gV+fWh1';
+            } else {
+                $db_host = $credentials[0];
+                $db_name = $credentials[1];
+                $db_user = $credentials[2];
+                $db_pass = $credentials[3];
+            }
+
+            $this->conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
             if ($conn->connect_error) {
                 die('Connection failed: ' . $conn->connect_error);
             }

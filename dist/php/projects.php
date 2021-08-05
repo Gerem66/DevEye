@@ -30,7 +30,7 @@
             $db = $database !== null ? $database : new DataBase;
             $row = $db->GetRowContent('Projects', 'ID', $this->id);
             if (isset($row)) {
-                ExtractDataFromDbRow($db, $row);
+                $this->ExtractDataFromDbRow($db, $row);
             }
         }
 
@@ -210,10 +210,10 @@
                 'INPROGRESS' => '',
                 'FINISHED' => ''
             );
-            $this->__CalculateContents();
+            $this->__CalculateDisplayContents();
         }
 
-        function __CalculateContents() {
+        function __CalculateDisplayContents() {
             $indexes = [ 'BACKLOG', 'TODO', 'INPROGRESS', 'FINISHED' ];
             $split_content = explode("---", $this->raw_content);
             if (count($split_content) != count($indexes)) {
@@ -245,7 +245,7 @@
         }
 
         function __AddBox($id, $title, $color, $content) {
-            return "<div name='box' class='card card-$color card-outline box'>
+            return "<div id='$id' name='box' class='card card-$color card-outline box'>
                         <div class='card-header' title='$title'>
                             <div class='grab hitbox'></div>
                             <h5 class='card-title'>$title</h5>
@@ -269,8 +269,8 @@
         function __AddCheckbox($id, $title, $checked = false) {
             $c = $checked ? "checked" : "";
             return "<div class='custom-control custom-checkbox'>
-                        <input id='$id' name='checkable' type='checkbox' class='custom-control-input' $c>
-                        <label for='$id' class='custom-control-label form-check-label'>$title</label>
+                        <input id='check-$id' name='checkable' type='checkbox' class='custom-control-input' $c>
+                        <label for='check-$id' class='custom-control-label form-check-label'>$title</label>
                     </div>";
         }
     }

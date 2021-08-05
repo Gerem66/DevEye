@@ -58,11 +58,13 @@
 <html lang="fr">
     <head>
         <meta charset="utf-8">
-        <title>Oxy - Connexion</title>
+        <title>Oxy Gestion- Connexion</title>
 		<meta http-equiv="X-UA-Compatible" content="IE=edge">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<meta name="author" content="Geremy">
 		<meta name="description" content="Oxy Foo">
+        <meta name="robots" content="noindex">
+        <meta name="googlebot" content="noindex">
         
         <!-- Icon                         --><link rel="icon" href="dist/img/logo.png">
         <!-- Font Awesome                 --><link rel="stylesheet" href="plugins/fontawesome-free/css/all.min.css">

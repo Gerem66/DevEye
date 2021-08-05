@@ -68,6 +68,7 @@ function LoadPage(page, data = null, afterRefresh = false, noLoadPage = false, c
 function InitPage(page) {
     switch (page) {
         case 'user': Init_User(); break;
+        case 'dashboard': Init_Dashboard(); break;
         case 'projects-edit': Init_Projects_Edit(); break;
         case 'projects-kanban': Init_Projects_Kanban(); break;
         case 'projects-changelog': Init_Projects_Changelog(); break;

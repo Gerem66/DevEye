@@ -85,6 +85,40 @@ function Init_Projects_Kanban() {
     for (let i = 0; i < squares.length; i++) {
         squares[i].onclick = () => ProjectSquareClick(squares[i]);
     }
+
+    // Auto refresh
+    Refresh_kanban_loop();
+}
+
+function Refresh_kanban_loop() {
+    // Clear interval
+    let columns = document.getElementsByName('column');
+    if (columns.length != 4) {
+        return;
+    }
+
+    // Check if new data
+    let fd = new FormData();
+    fd.append('PID', PID);
+    fd.append('refresh', '1');
+    let params = { method: 'POST', body: fd };
+
+    fetch('./projects-kanban', params)
+        .then(function(response) { return response.text(); })
+        .then(function(content) {
+            if (content != '' && content != 'OK') {
+                let popup = document.getElementById('popup-edit-box');
+
+                if (!popup.classList.contains('active')) {
+                    LoadPage('projects-kanban', { 'PID': PID });
+                }
+                //main_content.innerHTML = content;
+                //Init_Projects_Kanban();
+            }
+        })
+        .finally(function() {
+            setTimeout(Refresh_kanban_loop, 1000);
+        });
 }
 
 function SaveScrollbars() {
@@ -107,12 +141,31 @@ function LoadScrollbars() {
 }
 
 function ProjectSquareClick(element) {
-    let id = element.id;
+    //let id = element.id.split('-')[0]; // check-0
     element.disabled = true;
 
+    // Get bid
+    const parent = element.parentNode.parentNode.parentNode;
+    const bid = parent.id;
+
+    // Get square index
+    let id = -1;
+    let checkables = parent.getElementsByClassName('custom-control-input');
+    for (let i = 0; i < checkables.length; i++) {
+        if (checkables[i] == element) {
+            id = i;
+            break;
+        }
+    }
+
+    if (id === -1) {
+        return;
+    }
+
     let fd = new FormData();
-    fd.append('square_toggle', id);
     fd.append('PID', PID);
+    fd.append('bid', bid);
+    fd.append('square_toggle', id);
     params = { method: 'POST', body: fd };
 
     fetch('./projects-kanban', params)
@@ -139,8 +192,20 @@ function OpenEditBoxPopup(element) {
     let btn_save = document.getElementsByName('save')[0];
     let btn_back = document.getElementsByName('back')[0];
 
+    let popup_title = document.getElementById('box-title');
+    let popup_name = document.getElementById('box-name');
+    let popup_body = document.getElementById('box-body');
+    let box_colors = document.getElementById('box-color');
+
+    popup_title.textContent = '';
+    popup_name.value = '';
+    popup_body.textContent = '';
+
+    btn_del.disabled = true;
+    btn_save.disabled = true;
+
     let id;
-    let bid = GetBID(element);
+    let bid = element.id;
 
     let fd = new FormData();
     fd.append('PID', PID);
@@ -149,23 +214,31 @@ function OpenEditBoxPopup(element) {
     fetch('./projects-kanban', params)
         .then(function(response) { return response.text(); })
         .then(function(content) {
+            if (content == "") {
+                console.error('Empty response');
+                popup.classList.remove('active');
+                return;
+            }
             let parts = content.split("\t");
             id = parts[0];
             let name = parts[1];
             let color = parts[2];
             let body = parts[3];
 
-            document.getElementById('box-title').textContent = "Box #" + id;
-            document.getElementById('box-name').value = name;
-            document.getElementById('box-body').textContent = body;
+            popup_title.textContent = "Box #" + id;
+            popup_name.value = name;
+            popup_body.textContent = body;
 
-            let box_colors = document.getElementById('box-color')
             for (let i = 1; i < box_colors.children.length; i++) {
                 box_colors.children[i].selected = color.startsWith(box_colors.children[i].value);
             }
+
+            btn_del.disabled = false;
+            btn_save.disabled = false;
         })
         .catch(function(err) {
             console.error(err);
+            popup.classList.remove('active');
         });
 
     btn_del.onclick = () => {
@@ -186,18 +259,6 @@ function OpenEditBoxPopup(element) {
     popup.onclick = (e) => { if (e.target === popup) popup.classList.remove('active'); }
 }
 
-function GetBID(element) {
-    let output;
-    let boxes = document.getElementsByClassName('box');
-    for (let b = 0; b < boxes.length; b++) {
-        if (boxes[b] == element) {
-            output = b;
-            break;
-        }
-    }
-    return output;
-}
-
 let init_box;
 let temp_box;
 let ghost_box;
@@ -212,7 +273,7 @@ function Grab(box, ev) {
     }
 
     init_box = box;
-    bid = GetBID(init_box);
+    bid = init_box.id;
 
     temp_box = init_box.cloneNode(true);
     temp_box.style.position = 'fixed';
@@ -279,7 +340,7 @@ function Ungrab() {
     RemoveHoverEvents();
 
     //console.log([PID, bid, lastColumnIndex, lastRowIndex]);
-    let data = { 'PID': PID, 'BID': bid, 'column': lastColumnIndex, 'row': lastRowIndex};
+    let data = { 'PID': PID, 'move_box': bid, 'column': lastColumnIndex, 'row': lastRowIndex};
     SaveScrollbars();
     LoadPage('projects-kanban', data, false, false, LoadScrollbars);
 }

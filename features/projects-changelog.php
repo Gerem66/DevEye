@@ -9,6 +9,7 @@
     $db = new DataBase;
     $projects = unserialize($_SESSION['PROJECTS']);
     $project = $projects->GetProjectFromID($PID);
+    $project->Update();
 
     if (isset($_POST['restore'])) {
         $restore_id = 0;

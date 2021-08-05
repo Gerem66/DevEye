@@ -73,7 +73,7 @@
     <a href="./accueil" class="brand-link">
         <img src="dist/img/OxyLogo.png" alt="Oxy Logo" class="brand-image img-circle elevation-3"
             style="opacity: .8">
-        <span class="brand-text font-weight-light">Oxy Foo</span>
+        <span class="brand-text font-weight-light">Oxy Gestion</span>
     </a>
 
     <!-- Sidebar -->

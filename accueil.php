@@ -72,13 +72,14 @@
     echo('<!-- Prevent Resub.     --><script src="dist/js/prevent_resubmission_alert.js"></script>');
 
     // Features scripts
-    echo('<!-- Mails          --><script src="features/scripts/mails.js"></script>');
-    echo('<!-- Projects       --><script src="features/scripts/projects.js"></script>');
     echo('<!-- Logbook & pwds --><script src="features/scripts/blocnote.js"></script>');
-    echo('<!-- User           --><script src="features/scripts/user.js"></script>');
-    echo('<!-- Settings       --><script src="features/scripts/settings.js"></script>');
+    echo('<!-- Dashboard      --><script src="features/scripts/dashboard.js"></script>');
     echo('<!-- Database       --><script src="features/scripts/database.js"></script>');
     echo('<!-- Functions      --><script src="features/scripts/functions.js"></script>');
+    echo('<!-- Mails          --><script src="features/scripts/mails.js"></script>');
+    echo('<!-- Projects       --><script src="features/scripts/projects.js"></script>');
+    echo('<!-- Settings       --><script src="features/scripts/settings.js"></script>');
+    echo('<!-- User           --><script src="features/scripts/user.js"></script>');
 
     require("dist/pages/body_end.html");
     echo("<script>LoadPage('$redirect');</script>");

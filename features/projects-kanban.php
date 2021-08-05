@@ -48,14 +48,12 @@
     }
 
     // Save : Box moved
-    if (isset($_POST['BID'])) {
-        $bid = $_POST['BID'];       // Initial position (No) of the box
+    if (isset($_POST['move_box'])) {
+        $bid = $_POST['move_box'];  // Box id
         $col = $_POST['column'];    // New column of the box
         $row = $_POST['row'];       // New row of the box
         if ($PID != 'NEW' && isset($col, $row)) {
-
             $curr_box_lines == NULL;
-            $curr_box_index = 0;
             $split_content = explode("---", $project->content);
             // Each column
             for ($i = 0; $i < 4; $i++) {
@@ -63,13 +61,12 @@
                 // Each block
                 if ($blocks[0] != "") {
                     for ($b = 0; $b < count($blocks); $b++) {
-                        if ($curr_box_index == $bid) {
+                        if (explode("\t", $blocks[$b])[0] == $bid) {
                             // Get this box
                             $curr_box_lines = array_splice($blocks, $b, 1)[0];
                             $split_content[$i] = join("#", $blocks);
                             break;
                         }
-                        $curr_box_index += 1;
                     }
                 }
                 if ($curr_box_lines !== NULL) {
@@ -96,54 +93,61 @@
     }
 
     // Save : Switch square
-    if (isset($_POST['square_toggle'])) {
-        $result = "";
-        $square_id = $_POST['square_toggle'];
-        $square_nb = 0;
+    if (isset($_POST['square_toggle'], $_POST['bid'])) {
+        $bid = $_POST['bid'];                 // Box id
+        $square_id = $_POST['square_toggle']; // index of square
 
-        $columns = explode("---", $project->content);
-        for ($c = 0; $c < count($columns); $c++) {
-            $blocks = explode("#", $columns[$c]);
+        $changed = false;
+        $split_content = explode("---", $project->content);
+        // Each column
+        for ($c = 0; $c < 4; $c++) {
+            $blocks = explode("#", $split_content[$c]);
+            // Each block
             if ($blocks[0] != "") {
                 for ($b = 0; $b < count($blocks); $b++) {
-                    $split_block = explode("\t", $blocks[$b]);
-                    $content = end($split_block);
-                    $lines = explode("\n", $content);
+                    if (explode("\t", $blocks[$b])[0] == $bid) {
+                        $block = explode("\t", $blocks[$b]);
+                        $content = $block[3];
 
-                    for ($i = 0; $i < count($lines); $i++) {
-                        $pre = explode(' ', $lines[$i])[0];
-                        if (strlen($lines[$i]) >= strlen($pre) + 1) {
-                            $l = substr($lines[$i], strlen($pre) + 1);
-                        }
-
-                        if (strlen($pre) < 4 && $pre[0] == '[' && $pre[-1] == ']') {
-                            if ($square_nb == $square_id) {
-                                if (strlen($pre) == 2) {
-                                    $lines[$i] = "[v] $l";
-                                    $result = "OK";
-                                }
-                                else if (strlen($pre) == 3) {
-                                    $lines[$i] = "[] $l";
-                                    $result = "OK";
-                                }
-                                break;
+                        $square_nb = 0;
+                        $lines = explode("\n", $content);
+                        for ($l = 0; $l < count($lines); $l++) {
+                            // Get prefix & line content
+                            $pre = explode(' ', $lines[$l])[0];
+                            if (strlen($lines[$l]) >= strlen($pre) + 1) {
+                                $line_content = substr($lines[$l], strlen($pre) + 1);
                             }
-                            $square_nb += 1;
+    
+                            if (strlen($pre) < 4 && $pre[0] == '[' && $pre[-1] == ']') {
+                                if ($square_nb == $square_id) {
+                                    if (strlen($pre) == 2) {
+                                        $lines[$l] = "[v] $line_content";
+                                        $changed = true;
+                                    }
+                                    else if (strlen($pre) == 3) {
+                                        $lines[$l] = "[] $line_content";
+                                        $changed = true;
+                                    }
+                                    break;
+                                }
+                                $square_nb += 1;
+                            }
                         }
-                    }
 
-                    $content = join("\n", $lines);
-                    $split_block[count($split_block) - 1] = $content;
-                    $blocks[$b] = join("\t", $split_block);
-                    if ($result !== "") break;
+                        $block[3] = join("\n", $lines);
+                        $blocks[$b] = join("\t", $block);
+                        $split_content[$c] = join("#", $blocks);
+                        break;
+                    }
                 }
-                $columns[$c] = join("#", $blocks);
+                if ($changed) break;
             }
         }
-
-        $project->SaveContent($db, join("---", $columns));
-        $_SESSION['PROJECTS'] = serialize($projects);
-        echo($result);
+        if ($changed) {
+            $project->SaveContent($db, join("---", $split_content));
+            $_SESSION['PROJECTS'] = serialize($projects);
+            echo("OK");
+        }
         exit();
     }
 
@@ -151,7 +155,6 @@
     if (isset($_POST['get_box'])) {
         $bid = $_POST['get_box'];
         $curr_box_lines == NULL;
-        $curr_box_index = 0;
         $split_content = explode("---", $project->content);
         // Each column
         for ($i = 0; $i < 4; $i++) {
@@ -160,13 +163,12 @@
             // Each block
             if ($blocks[0] != "") {
                 for ($b = 0; $b < count($blocks); $b++) {
-                    if ($curr_box_index == $bid) {
+                    if (explode("\t", $blocks[$b])[0] == $bid) {
                         // Get this box
                         $curr_box_lines = array_splice($blocks, $b, 1)[0];
                         $split_content[$i] = join("#", $blocks);
                         break;
                     }
-                    $curr_box_index += 1;
                 }
             }
         }
@@ -179,7 +181,6 @@
         $bid = $_POST['set_box'];
         if ($bid >= 0) {
             $box_content = $_POST['content'];
-            $curr_box_index = 0;
             $split_content = explode("---", $project->content);
             $saved = false;
             // Each column
@@ -189,14 +190,13 @@
                 // Each block
                 if ($blocks[0] != "") {
                     for ($b = 0; $b < count($blocks); $b++) {
-                        if ($curr_box_index == $bid) {
+                        if (explode("\t", $blocks[$b])[0] == $bid) {
                             // Get this box
                             $blocks[$b] = $box_content;
                             $split_content[$i] = join("#", $blocks);
                             $saved = true;
                             break;
                         }
-                        $curr_box_index += 1;
                     }
                 }
             }
@@ -252,7 +252,6 @@
     // Remove box
     if (isset($_POST['rem_box'])) {
         $bid = $_POST['rem_box'];
-        $curr_box_index = 0;
         $split_content = explode("---", $project->content);
         $removed = false;
         // Each column
@@ -262,14 +261,13 @@
             // Each block
             if ($blocks[0] != "") {
                 for ($b = 0; $b < count($blocks); $b++) {
-                    if ($curr_box_index == $bid) {
+                    if (explode("\t", $blocks[$b])[0] == $bid) {
                         // Remove
                         array_splice($blocks, $b, 1);
                         $split_content[$i] = join("#", $blocks);
                         $removed = true;
                         break;
                     }
-                    $curr_box_index += 1;
                 }
             }
         }
@@ -325,12 +323,23 @@
         }
     }
 
+    // Is refresh ?
+    if (isset($_POST['refresh'])) {
+        $old_content = $project->content;
+        $new_content = $db->GetCellContent('Projects', 'Content', $project->id);
+        if ($old_content == $new_content) {
+            echo("OK");
+            return;
+        }
+    }
+
     // Reset test content
     if (0) {
         $template_test = "3	Create Labels	info	[] Bug\n[] Features\n[] Enhancement\n[] Documentation\n[] Examples#4	Create Issue Template	primary	[] Bug Report\n[] Feature Request#6	Create PR template	primary	#7	Create Actions	light	Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---5	Create first milestone	primary	---2	Update Readme	danger	Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.---1	Create repo	primary	";
         $project->SaveContent($db, $template_test);
     }
 
+    $project->Update($db);
     $_SESSION['PROJECTS'] = serialize($projects);
 
     //print_r($project->content);

@@ -83,6 +83,12 @@
     - Données ci-dessus : \t
     - Séparation des éléments : #
     - Séparation des colonnes : ---
+* Utiliser les id pour récupérer/modifier/supprimer/cocher/... les cases (et non leur position...)
+    * get_box -> OK
+    * set_box -> OK
+    * rem_box -> OK
+    * move_box -> OK
+    * square_toggle -> OK
 ## Changelog
 * 02/07/21
     - Restauration du template
