@@ -87,7 +87,10 @@ function Init_Projects_Kanban() {
     }
 
     // Auto refresh
-    Refresh_kanban_loop();
+    let instance = document.getElementById('INST');
+    if (instance.value == '1') {
+        Refresh_kanban_loop();
+    }
 }
 
 function Refresh_kanban_loop() {
@@ -109,7 +112,7 @@ function Refresh_kanban_loop() {
             if (content != '' && content != 'OK') {
                 let popup = document.getElementById('popup-edit-box');
 
-                if (!popup.classList.contains('active')) {
+                if (!popup.classList.contains('active') && typeof(temp_box) === 'undefined') {
                     LoadPage('projects-kanban', { 'PID': PID });
                 }
                 //main_content.innerHTML = content;

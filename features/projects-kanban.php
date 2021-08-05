@@ -350,6 +350,7 @@
 ?>
 
 <input id="PID" value="<?= $PID ?>" style="display: none;">
+<input id="INST" value="<?= $project->instanceMode ?>" style="display: none;">
 
 <section id="popup-edit-box" class="kb-popup content-wrapper">
     <div class="popup-card">
