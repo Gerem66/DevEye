@@ -4288,7 +4288,7 @@ input[type="button"].btn-block {
 
 .nav-link {
   display: block;
-  padding: 0.5rem 1rem;
+  padding: 0.4rem 1rem;
 }
 
 .nav-link:hover, .nav-link:focus {
@@ -11448,6 +11448,7 @@ body.sidebar-collapse:not(.sidebar-mini-md):not(.sidebar-mini) .main-header::bef
 
 .sidebar-collapse .main-sidebar .nav-sidebar.nav-child-indent .nav-treeview {
   padding: 0;
+  margin-bottom: 48px;
 }
 
 @media (max-width: 767.98px) {
@@ -11884,7 +11885,7 @@ body.sidebar-collapse:not(.sidebar-mini-md):not(.sidebar-mini) .main-header::bef
 }
 
 .nav-sidebar > .nav-item {
-  margin-bottom: 0;
+  margin-bottom: 24px;
 }
 
 .nav-sidebar > .nav-item .nav-icon {
@@ -12083,7 +12084,7 @@ body.sidebar-collapse:not(.sidebar-mini-md):not(.sidebar-mini) .main-header::bef
 [class*='sidebar-dark-'] .nav-sidebar > .nav-item.menu-open > .nav-link,
 [class*='sidebar-dark-'] .nav-sidebar > .nav-item:hover > .nav-link,
 [class*='sidebar-dark-'] .nav-sidebar > .nav-item > .nav-link:focus {
-  background-color: rgba(255, 255, 255, 0.1);
+  /*background-color: rgba(255, 255, 255, 0.1);*/
   color: #ffffff;
 }
 

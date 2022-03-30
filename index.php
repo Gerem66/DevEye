@@ -15,38 +15,6 @@
         exit();
     }
 
-    // Link connection
-    $log = $_GET['login'];
-    $pwd = $_GET['pwd'];
-    if (isset($log, $pwd)) {
-        $db = new DataBase;
-        $decrypt_password = null;
-        try {
-            $decrypt_password = explode("\t", $db->Decrypt(base64_decode($pwd)));
-        } catch (Exception $e) {
-            $_SESSION['CONNECTED'] = -1;
-            $req_user = $db->GetRowContent('Users', 'Username', $log);
-            if (isset($req_user)) {
-                AddLog($req_user['ID'], "User connection failed - wrong quicklink");
-            }
-        }
-        if ($decrypt_password !== null) {
-            if (GetIP() == $decrypt_password[0]) {
-                $_SESSION['POST_DATA']['bt_connect'] = 1;
-                $_SESSION['POST_DATA']['tb_name'] = $log;
-                $_SESSION['POST_DATA']['tb_pass'] = $decrypt_password[1];
-                header('Location: ./accueil');
-                exit();
-            } else {
-                $_SESSION['CONNECTED'] = -1;
-                $req_user = $db->GetRowContent('Users', 'Username', $log);
-                if (isset($req_user)) {
-                    AddLog($req_user['ID'], "User connection failed - wrong quicklink");
-                }
-            }
-        }
-    }
-
     // Authentication failed
     if (!isset($_SESSION['CONNECTED'])) $_SESSION['CONNECTED'] = 0;
     $is_valid_txt = $_SESSION['CONNECTED'] == -1 ? 'is-invalid' : '';
@@ -58,7 +26,7 @@
 <html lang="fr">
     <head>
         <meta charset="utf-8">
-        <title>Oxy Gestion- Connexion</title>
+        <title>Oxy Gestion - Connexion</title>
 		<meta http-equiv="X-UA-Compatible" content="IE=edge">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<meta name="author" content="Geremy">
@@ -66,7 +34,7 @@
         <meta name="robots" content="noindex">
         <meta name="googlebot" content="noindex">
         
-        <!-- Icon                         --><link rel="icon" href="dist/img/logo.png">
+        <!-- Icon                         --><link rel="icon" href="dist/img/Oxy.png">
         <!-- Font Awesome                 --><link rel="stylesheet" href="plugins/fontawesome-free/css/all.min.css">
         <!-- Ionicons                     --><link rel="stylesheet" href="https://code.ionicframework.com/ionicons/2.0.1/css/ionicons.min.css">
         <!-- icheck bootstrap             --><link rel="stylesheet" href="plugins/icheck-bootstrap/icheck-bootstrap.min.css">
@@ -80,7 +48,7 @@
         <div class="background"></div>
         <div class="login-box">
             <div class="login-logo">
-                <a style="color: #ccc; user-select: none; cursor: initial;"><b>Oxy</b> Foo</a>
+                <a style="color: #ccc; user-select: none; cursor: initial;"><b>Oxy</b> Gestion</a>
             </div>
             <div class="card">
                 <div class="card-body login-card-body">
