@@ -1,23 +1,5 @@
 <?php
 
-    /*$action = $_POST['action'];
-    if (isset($action)) {
-        switch ($action) {
-            case 'temp':
-                $temp = intval(exec("cat /sys/class/thermal/thermal_zone0/temp") / 1000);
-                echo($temp);
-                break;
-            case 'ping':
-                $ip = $_POST['ip'];
-                if (isset($ip)) {
-                    exec("ping -c 1 ".$ip, $o, $r_ping);
-                    echo $r_ping == 0 ? "OK" : "NO";
-                }
-                break;
-        }
-        exit();
-    }*/
-
     // Get OA users
     $db = new DataBase(true, [ 'localhost', 'u444572210_EisenhowApp', 'u444572210_gege', 'PasswordVERYstr0ng' ]);
     $result = $db->query("SELECT * FROM `Users`");
@@ -30,6 +12,12 @@
         }
     }
     $users_OA = "$nb_logged utilisateurs ($nb_total)";
+
+    // Get GL users
+    $db = new DataBase(true, [ 'localhost', 'u444572210_GameLife', 'u444572210_GLAdmin', '2>Siz^BDOeoT5*JSh;d' ]);
+    $result = $db->query("SELECT * FROM `Devices`");
+    $nb_total = $result->num_rows;
+    $users_GL = "$nb_total utilisateurs";
 
 ?>
 
@@ -67,10 +55,10 @@
 
                 <div class="col-12 col-sm-6 col-md-3">
                     <div class="info-box bg-dark">
-                        <img class="info-box-icon" src="dist/img/GameLife-min.png" alt="GameLife" />
+                        <img class="info-box-icon" src="dist/img/GameLife.png" alt="GameLife" />
                         <div class="info-box-content">
                             <span class="info-box-text">Game Life</span>
-                            <span class="info-box-number">Pas encore publié</span>
+                            <span class="info-box-number"><?= $users_GL ?></span>
                         </div>
                     </div>
                 </div>

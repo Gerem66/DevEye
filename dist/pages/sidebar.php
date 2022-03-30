@@ -27,6 +27,19 @@
         return "<li class='nav-header'>$name</li>";
     }
 
+    function AddDropDown($name) {
+        return "<li class=\"nav-item menu-open\">
+                    <a href=\"#\" class=\"nav-link\">
+                        <p>$name
+                            <i class=\"right fas fa-angle-left\"></i>
+                        </p>
+                    </a>
+                    <ul class=\"nav nav-treeview\">";
+    }
+    function CloseDropDown() {
+        return '</ul></li>';
+    }
+
     // Niveaux d'accès :
     // 0 : Invité
     // 1 : Utilisateur
@@ -35,6 +48,7 @@
 
     $lastCat = "";
     $content = "";
+    $isOpened = 0;
     $features = $_SESSION['FEATURES'];
     for ($i = 0; $i < count($features); $i++) {
         $feature_content = AddItemMenu($i, $features[$i]);
@@ -42,11 +56,15 @@
             $cat = $features[$i]['category'];
             if ($cat != $lastCat) {
                 $lastCat = $cat;
-                $content .= AddItemCategory($lastCat);
+                if ($isOpened) $content .= CloseDropDown();
+                $isOpened = 1;
+                $content .= AddDropDown($lastCat);
+                //$content .= AddItemCategory($lastCat);
             }
             $content .= $feature_content;
         }
     }
+    if ($isOpened) $content .= CloseDropDown();
 
 ?>
 
@@ -71,7 +89,7 @@
 <aside class="main-sidebar sidebar-dark-primary elevation-4">
     <!-- Brand Logo -->
     <a href="./accueil" class="brand-link">
-        <img src="dist/img/OxyLogo.png" alt="Oxy Logo" class="brand-image img-circle elevation-3"
+        <img src="dist/img/Oxy.png" alt="Oxy Logo" class="brand-image img-circle elevation-3"
             style="opacity: .8">
         <span class="brand-text font-weight-light">Oxy Gestion</span>
     </a>

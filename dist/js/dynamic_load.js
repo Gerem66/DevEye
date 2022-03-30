@@ -73,7 +73,9 @@ function InitPage(page) {
         case 'projects-kanban': Init_Projects_Kanban(); break;
         case 'projects-changelog': Init_Projects_Changelog(); break;
         case 'washing-machine': AutoRefresh(page); break;
-        case 'database': Init_Database(); break;
+        case 'database': Init_Database(page); break;
+        case 'database-gl': Init_Database(page); break;
+        case 'database-dev-gl': Init_Database(page); break;
         case 'settings': Init_Settings(); break;
     }
 }

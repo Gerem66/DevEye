@@ -31,32 +31,7 @@
             }
         }
 
-        // Return quicklink
         echo($_status);
-        exit();
-    }
-
-    if (isset($_POST['quicklink'])) {
-        $_status = "OK";
-        $password = $_POST['quicklink'];
-
-        // Check password validity
-        $db = new DataBase;
-        $req_user = $db->GetRowContent('Users', 'Username', $username);
-        if (isset($req_user)) {
-            if (password_verify($password, $req_user['Password'])) {
-                AddLog($_SESSION['ID'], "Quicklink generated.");
-                $encrypt_password = base64_encode($db->Encrypt(GetIP() . "\t" . $password));
-                $link = "https://geremy.eu/Oxy?login=$username&pwd=$encrypt_password";
-            } else {
-                AddLog($_SESSION['ID'], "Quicklink generation failed !");
-                $_status = "FAIL";
-                $link = "Wrong password";
-            }
-        }
-
-        // Return quicklink
-        echo("$_status\n$link");
         exit();
     }
 
@@ -97,28 +72,6 @@
         <div class="col-6 card-center">
             <div class="input-group">
                 <input name="new-pwd" type="password" class="form-control" placeholder="Nouveau mot de passe">
-                <div class="input-group-prepend">
-                    <button name="bt-show-password" type="button" class="btn bg-primary btn-vision"><i class="far fa-eye-slash"></i></button>
-                </div>
-            </div>
-        </div>
-        <br />
-        <div class="col-6 card-center">
-            <button name="back" class="btn btn-dark btn-lg btn-popup">Retour</button>
-            <button name="save" class="btn bg-primary btn-lg btn-popup">Enregistrer</button>
-        </div>
-    </div>
-</section>
-
-<!-- Popup - Quicklink -->
-<section id="popup-quicklink" class="kb-popup content-wrapper">
-    <div class="popup-card">
-        <h1 id="box-title">Entre ton mot de passe</h1>
-        <p>Pour récupérer un lien de connexion rapide</p>
-        <br />
-        <div class="col-6 card-center">
-            <div class="input-group">
-                <input name="pwd" type="password" class="form-control" placeholder="Mot de passe">
                 <div class="input-group-prepend">
                     <button name="bt-show-password" type="button" class="btn bg-primary btn-vision"><i class="far fa-eye-slash"></i></button>
                 </div>
@@ -181,7 +134,6 @@
                                 <li class="list-group-item">
                                     <b>Mot de passe</b>
                                     <button id="bt-open-changepwd" class="btn btn-block btn-primary btn-xs float-right" style="width: 160px;">Modifier le mot de passe</button>
-                                    <button id="bt-open-quicklink" class="btn btn-block btn-primary btn-xs float-right" style="width: 100px; margin: 0 12px 0 0;">Lien rapide</button>
                                 </li>
                                 <li class="list-group-item">
                                     <b>Date de création du compte</b><a class="float-right nolink"><?= $reg_date ?></a>
