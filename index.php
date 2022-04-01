@@ -34,32 +34,29 @@
         <meta name="robots" content="noindex">
         <meta name="googlebot" content="noindex">
         
-        <!-- Icon                         --><link rel="icon" href="dist/img/Oxy.png">
-        <!-- Font Awesome                 --><link rel="stylesheet" href="plugins/fontawesome-free/css/all.min.css">
-        <!-- Ionicons                     --><link rel="stylesheet" href="https://code.ionicframework.com/ionicons/2.0.1/css/ionicons.min.css">
-        <!-- icheck bootstrap             --><link rel="stylesheet" href="plugins/icheck-bootstrap/icheck-bootstrap.min.css">
-        <!-- Theme style                  --><link rel="stylesheet" href="dist/css/adminlte.css">
-        <!-- Background                   --><link rel="stylesheet" href="dist/css/background.css">
-        <!-- Google Font: Source Sans Pro --><link href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700" rel="stylesheet">
-        <!-- Prevent Resubmission Alert   --><script src="dist/js/prevent_resubmission_alert.js"></script>
+        <!-- Icon         --><link rel="icon" href="dist/img/Oxy.png">
+        <!-- Font Awesome --><link rel="stylesheet" href="plugins/fontawesome-free/css/all.min.css">
+        <!-- Theme style  --><link rel="stylesheet" href="dist/css/adminlte.css">
+        <!-- Style        --><link rel="stylesheet" href="dist/css/login.css">
+        <!-- Icons        --><link rel="stylesheet" href="dist/css/icons.css">
+        <!-- Script       --><script src="dist/js/login.js"></script>
     </head>
 
     <body class="hold-transition login-page">
-        <div class="background"></div>
         <div class="login-box">
             <div class="login-logo">
                 <a style="color: #ccc; user-select: none; cursor: initial;"><b>Oxy</b> Gestion</a>
             </div>
             <div class="card">
                 <div class="card-body login-card-body">
-                    <!--p class="login-box-msg">Connectez-vous ou continuez en tant qu'invité</p-->
+                    <!--p class="login-box-msg">Phrase ?</p-->
 
                     <form action="./accueil" method="post">
                         <div class="input-group mb-3">
                             <input type="text" class="form-control <?= $is_valid_txt ?>" placeholder="Nom d'utilisateur" name="tb_name" required>
                             <div class="input-group-append">
                                 <div class="input-group-text">
-                                    <span class="fas fa-user"></span>
+                                    <span class="icon icon-user"></span>
                                 </div>
                             </div>
                         </div>
@@ -75,15 +72,6 @@
                             <button type="submit" class="btn btn-primary btn-block" name="bt_connect">Se connecter</button>
                         </div>
                     </form>
-
-                    <!--form action="./accueil" method="post">
-                        <div class="social-auth-links text-center mb-3">
-                            <p>- OU -</p>
-                            <button class="btn btn-block btn-primary" type="submit" name="bt_guest">
-                                <i class="fas fa-user mr-2"></i> Continuer en tant qu'invité
-                            </button>
-                        </div>
-                    </form-->
                 </div>
             </div>
         </div>

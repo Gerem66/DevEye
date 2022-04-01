@@ -64,6 +64,7 @@
         - [x] Mot de passe : bouton pr le rendre visible
     - [ ] Mode team (avec toutes les features ci-dessus)
 18/26
+
 ### Projects
 * Liste principale avec TOUS les projets (solo + instance) triés par ordre chronologique
 * Affichage du projet (Kanban board)
@@ -89,6 +90,7 @@
     * rem_box -> OK
     * move_box -> OK
     * square_toggle -> OK
+
 ## Changelog
 * 02/07/21
     - Restauration du template
@@ -137,6 +139,8 @@
     - Déplacements des js + fonction d'initialisations
 - 24/07/21
     - Projects : Dev des changelogs
+- 31/03/22
+    - Git : Création de la branche "Remake"
 
 ## Sources
 * Php : https://www.php.net/

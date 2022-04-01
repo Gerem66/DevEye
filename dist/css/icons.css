@@ -1,0 +1,10 @@
+.icon {
+    display: inline-block;
+    width: 18px;
+    aspect-ratio: 1;
+    mask-size: cover;
+    background: #fff;
+}
+.icon-user {
+    mask-image: url(../icons/user.svg);
+}

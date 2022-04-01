@@ -1,0 +1,8 @@
+body {
+    background: linear-gradient(#446182, rgb(31, 36, 41)) !important;
+}
+svg {
+    width: 256px;
+    fill: #fff;
+    background-color: red;
+}
