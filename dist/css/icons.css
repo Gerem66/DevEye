@@ -2,9 +2,12 @@
     display: inline-block;
     width: 18px;
     aspect-ratio: 1;
-    mask-size: cover;
+    mask-size: contain;
     background: #fff;
 }
 .icon-user {
     mask-image: url(../icons/user.svg);
+}
+.icon-lock {
+    mask-image: url(../icons/lock.svg);
 }

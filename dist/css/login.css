@@ -1,8 +1,60 @@
-body {
-    background: linear-gradient(#446182, rgb(31, 36, 41)) !important;
+@font-face {
+    font-family: 'Open Sans';
+    src: url('../fonts/open-sans/OpenSans-Regular.ttf');
+    font-weight: 400;
 }
+
+html {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-family: 'Open Sans';
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+}
+
+body {
+    background: linear-gradient(#446182, rgb(31, 36, 41));
+}
+
 svg {
     width: 256px;
     fill: #fff;
     background-color: red;
+}
+
+.form {
+    width: 360px;
+    text-align: center;
+}
+.title {
+    width: 100%;
+    margin-bottom: 48px;
+    color: #ccc;
+    font-size: 2rem;
+    user-select: none;
+    cursor: initial;
+}
+.title > b {
+  font-weight: 600;
+}
+.card {
+    margin-top: 24px;
+    padding: 20px;
+    border-radius: 4px;
+    background-color: #212529;
+}
+.input-group {
+    position: relative;
+    margin-bottom: 1rem;
+}
+.input-group > span.icon {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    bottom: 10px;
+    z-index: 10;
 }

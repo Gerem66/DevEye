@@ -34,46 +34,28 @@
         <meta name="robots" content="noindex">
         <meta name="googlebot" content="noindex">
         
-        <!-- Icon         --><link rel="icon" href="dist/img/Oxy.png">
-        <!-- Font Awesome --><link rel="stylesheet" href="plugins/fontawesome-free/css/all.min.css">
-        <!-- Theme style  --><link rel="stylesheet" href="dist/css/adminlte.css">
-        <!-- Style        --><link rel="stylesheet" href="dist/css/login.css">
-        <!-- Icons        --><link rel="stylesheet" href="dist/css/icons.css">
-        <!-- Script       --><script src="dist/js/login.js"></script>
+        <!-- Icon   --><link rel="icon" href="dist/img/Oxy.png">
+        <!-- Style  --><link rel="stylesheet" href="dist/css/login.css">
+        <!-- Icons  --><link rel="stylesheet" href="dist/css/icons.css">
+        <!-- Inputs --><link rel="stylesheet" href="dist/css/inputs.css">
+        <!-- Script --><script src="dist/js/login.js"></script>
     </head>
 
-    <body class="hold-transition login-page">
-        <div class="login-box">
-            <div class="login-logo">
-                <a style="color: #ccc; user-select: none; cursor: initial;"><b>Oxy</b> Gestion</a>
-            </div>
-            <div class="card">
-                <div class="card-body login-card-body">
-                    <!--p class="login-box-msg">Phrase ?</p-->
-
-                    <form action="./accueil" method="post">
-                        <div class="input-group mb-3">
-                            <input type="text" class="form-control <?= $is_valid_txt ?>" placeholder="Nom d'utilisateur" name="tb_name" required>
-                            <div class="input-group-append">
-                                <div class="input-group-text">
-                                    <span class="icon icon-user"></span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="input-group mb-3">
-                            <input type="password" class="form-control <?= $is_valid_txt ?>" placeholder="Mot de passe" name="tb_pass" required>
-                            <div class="input-group-append">
-                                <div class="input-group-text">
-                                    <span class="fas fa-lock"></span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-16">
-                            <button type="submit" class="btn btn-primary btn-block" name="bt_connect">Se connecter</button>
-                        </div>
-                    </form>
+    <body>
+        <div class="form">
+            <span class="title"><b>Oxy</b> Gestion</span>
+            <form class="card" action="./accueil" method="post">
+                <!--p class="login-box-msg">Phrase ?</p-->
+                <div class="input-group">
+                    <input type="text" class="form-input <?= $is_valid_txt ?>" placeholder="Nom d'utilisateur" name="tb_name" required>
+                    <span class="icon icon-user"></span>
                 </div>
-            </div>
+                <div class="input-group">
+                    <input type="password" class="form-input <?= $is_valid_txt ?>" placeholder="Mot de passe" name="tb_pass" required>
+                    <span class="icon icon-lock"></span>
+                </div>
+                <button type="submit" class="submit" name="bt_connect">Se connecter</button>
+            </form>
         </div>
     </body>
 </html>
