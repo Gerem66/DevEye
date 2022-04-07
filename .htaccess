@@ -3,6 +3,8 @@
 RewriteEngine on
 
 # GPanel
-RewriteRule ^accueil$ accueil.php
-RewriteRule ^encryptor$ encryptor.php
-RewriteRule ^(user|dashboard|projects|projects-edit|projects-kanban|projects-changelog|accounts|mails|logbook|logbook-edit|passwords|passwords-edit|gyrics|ghost|virtual-machine|washing-machine|logs|settings|database|database-gl|database-dev-gl|tradingbot)$ redirect.php?page=$1
+RewriteRule ^home$ home.php
+RewriteRule ^encryptor$ index.php?action=encryptor
+RewriteRule ^(user)$ feature.php?page=$1
+
+#RewriteRule ^(user|dashboard|projects|projects-edit|projects-kanban|projects-changelog|accounts|mails|logbook|logbook-edit|passwords|passwords-edit|gyrics|ghost|virtual-machine|washing-machine|logs|settings|database|database-gl|database-dev-gl|tradingbot)$ redirect.php?page=$1

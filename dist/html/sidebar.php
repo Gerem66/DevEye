@@ -1,0 +1,112 @@
+<?php
+
+    function AddItemMenu($index, $feature) {
+        extract($feature);
+        
+        $STATUS = $_SESSION['STATUS'];
+        $settings = $_SESSION['SETTINGS'];
+        $enabled = !$canDisable || $settings == -1 || $settings & (1 << $index);
+
+        if ($STATUS < $minLvl || !$enabled) {
+            return null;
+        }
+
+        $a_data = $page != "" ? "class='nav-link' data-page='$page' onclick=\"LoadPage('$page');\"" : "";
+        $color = !$finished ? 'style="color: red;"' : '';
+        $collabIcon = $collab && $_SESSION['INSTANCE_ID'] > 0 ? "<a onclick=\"LoadPage('$page', {'team': 1});\" class='nav-icon collab' title='Instance'><i class='fas fa-users'></i></a>" : '';
+        return "<li class='nav-item'>
+                    <a name='sidebar-item' $a_data>
+                        <i class='nav-icon fas fa-$icon'></i>
+                        <p $color>$title</p>
+                        $collabIcon
+                    </a>
+                </li>";
+    }
+
+    function AddItemCategory($name) {
+        return "<li class='nav-header'>$name</li>";
+    }
+
+    function AddDropDown($name) {
+        return "<li class=\"nav-item menu-open\">
+                    <a href=\"#\" class=\"nav-link\">
+                        <p>$name
+                            <i class=\"right fas fa-angle-left\"></i>
+                        </p>
+                    </a>
+                    <ul class=\"nav nav-treeview\">";
+    }
+    function CloseDropDown() {
+        return '</ul></li>';
+    }
+
+    // Niveaux d'accès :
+    // 0 : Invité
+    // 1 : Utilisateur
+    // 2 : Modérateur
+    // 3 : Admin
+
+    $lastCat = "";
+    $content = "";
+    $isOpened = 0;
+    $features = $_SESSION['FEATURES'];
+    for ($i = 0; $i < count($features); $i++) {
+        $feature_content = AddItemMenu($i, $features[$i]);
+        if ($feature_content != null) {
+            $cat = $features[$i]['category'];
+            if ($cat != $lastCat) {
+                $lastCat = $cat;
+                if ($isOpened) $content .= CloseDropDown();
+                $isOpened = 1;
+                $content .= AddDropDown($lastCat);
+                //$content .= AddItemCategory($lastCat);
+            }
+            $content .= $feature_content;
+        }
+    }
+    if ($isOpened) $content .= CloseDropDown();
+
+?>
+
+<!-- Topbar -->
+<nav class="main-header navbar navbar-expand navbar-black navbar-dark">
+    <ul class="navbar-nav">
+        <li class="nav-item">
+            <a class="nav-link a" data-widget="pushmenu" role="button"><i class="fas fa-bars"></i></a>
+        </li>
+    </ul>
+    <ul class="navbar-nav ml-auto">
+        <li class="nav-item">
+            <a class="nav-link a" data-widget="control-sidebar" data-slide="true" role="button"><i class="fas fa-th-large"></i></a>
+        </li>
+    </ul>
+</nav>
+
+<!-- Main Sidebar Container -->
+<aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <!-- Brand Logo -->
+    <a href="./home" class="brand-link">
+        <img src="dist/img/Oxy.png" alt="Oxy Logo" class="brand-image img-circle elevation-3"
+            style="opacity: .8">
+        <span class="brand-text font-weight-light">Oxy Gestion</span>
+    </a>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div name='sidebar-item' class="user-panel mt-3 pb-3 mb-3 d-flex item-user a" data-page="user" onclick="LoadPage('user');">
+            <div class="image">
+                <img src="dist/img/<?= $_SESSION['PHOTO']; ?>" class="img-circle elevation-2" alt="User Image">
+            </div>
+            <div class="info">
+                <a class="d-block a"><?= $_SESSION["USERNAME"] ?></a>
+            </div>
+        </div>
+
+        <!-- Sidebar Menu -->
+        <nav class="mt-2">
+            <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+                <?= $content ?>
+            </ul>
+        </nav>
+    </div>
+</aside>
