@@ -6,17 +6,18 @@
 
     require('dist/php/database.php');
 
-    $tables = AddDataTable("Achievements", "Achievements");
-    $tables .= AddDataTable("App", "App");
-    $tables .= AddDataTable("Categories", "Categories");
-    $tables .= AddDataTable("Contributors", "Contributors");
-    $tables .= AddDataTable("Devices", "Devices");
-    $tables .= AddDataTable("Quotes", "Quotes");
-    $tables .= AddDataTable("Report", "Reports");
-    $tables .= AddDataTable("Skills", "Skills");
-    $tables .= AddDataTable("SkillsIcon", "SkillsIcon");
-    $tables .= AddDataTable("Users", "Users");
-    $tables .= AddDataTable("Titles", "Titles");
+    $tables = array(
+        'Accounts', 'Achievements', 'Activities',
+        'App', 'Contributors', 'Devices',
+        'Inventories', 'Items', 'Logs',
+        'Quotes', 'Reports', 'Skills', 'SkillsIcon', 'SkillsCategory',
+        'Tasks', 'Titles'
+    );
+
+    $content = '';
+    foreach ($tables as $table) {
+        $content .= AddDataTable($table, $table);
+    }
 
 ?>
 
@@ -57,7 +58,7 @@
     <div class="content">
         <div class="container-fluid">
 
-            <?= $tables ?>
+            <?= $content ?>
 
         </div>
     </div>

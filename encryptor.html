@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="fr">
+    <head>
+        <meta charset="utf-8">
+        <title>Oxy Gestion - Encryptor</title>
+		<meta http-equiv="X-UA-Compatible" content="IE=edge">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<meta name="author" content="Geremy">
+		<meta name="description" content="Oxy Foo">
+        <meta name="robots" content="noindex">
+        <meta name="googlebot" content="noindex">
+
+        <!-- Icon      --><link rel="icon" href="dist/img/Oxy.png">
+        <!-- Style     --><link rel="stylesheet" href="dist/css/login.css">
+        <!-- Icons     --><link rel="stylesheet" href="dist/css/icons.css">
+        <!-- Inputs    --><link rel="stylesheet" href="dist/css/inputs.css">
+        <!-- Script    --><script src="dist/js/login.js"></script>
+        <!-- Clipboard --><script src="dist/js/clipboard.js"></script>
+    </head>
+
+    <body>
+        <div class="form">
+            <span class="title"><b>Oxy</b> Encryptor</span>
+            <form class="card" action="./encryptor" method="post" %class_pwd%>
+                <div class="input-group">
+                    <input type="password" class="form-input %class_error%" placeholder="Mot de passe" name="tb_pass" required>
+                    <span class="icon icon-lock"></span>
+                </div>
+                <div class="input-group">
+                    <input type="password" class="form-input %class_error%" placeholder="Mot de passe encore" name="tb_pass2" required>
+                    <span class="icon icon-lock"></span>
+                </div>
+                <button type="submit" class="submit" name="bt_connect">Chiffrer (bcrypt)</button>
+            </form>
+
+            <div class="card" %class_hash%>
+                <div class="input-group">
+                    <input class="form-input" name="tb_pass" value="%hash%" readonly>
+                    <span class="icon icon-lock"></span>
+                </div>
+                <button type="submit" class="submit" name="bt_connect" onclick="CopyContent('%hash%')">Copier & retour</button>
+            </div>
+        </div>
+    </body>
+</html>

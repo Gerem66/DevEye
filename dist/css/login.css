@@ -1,7 +1,18 @@
 @font-face {
     font-family: 'Open Sans';
-    src: url('../fonts/open-sans/OpenSans-Regular.ttf');
-    font-weight: 400;
+    src: url('../fonts/open-sans/OpenSans-Light.ttf');
+}
+
+@font-face {
+    font-family: 'Open Sans';
+    font-weight: 600;
+    src: url('../fonts/open-sans/OpenSans-Semibold.ttf');
+}
+
+@font-face {
+    font-family: 'Open Sans';
+    font-weight: 800;
+    src: url('../fonts/open-sans/OpenSans-Bold.ttf');
 }
 
 html {
@@ -32,7 +43,6 @@ svg {
 }
 .title {
     width: 100%;
-    margin-bottom: 48px;
     color: #ccc;
     font-size: 2rem;
     user-select: none;
@@ -43,6 +53,7 @@ svg {
 }
 .card {
     margin-top: 24px;
+    margin-bottom: 48px;
     padding: 20px;
     border-radius: 4px;
     background-color: #212529;
@@ -57,4 +68,5 @@ svg {
     right: 10px;
     bottom: 10px;
     z-index: 10;
+    pointer-events: none;
 }

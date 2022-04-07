@@ -76,9 +76,6 @@
         </li>
     </ul>
     <ul class="navbar-nav ml-auto">
-        <!--li class="nav-item bg-primary">
-            <a class="btn" style="width: 128px; background-color: #444;border-radius: 0;" href="http://geremy.eu/Projects"><img src="dist/img/logo.png" style="background-color: #444;" width="36px"></img> Projects</a>
-        </li-->
         <li class="nav-item">
             <a class="nav-link a" data-widget="control-sidebar" data-slide="true" role="button"><i class="fas fa-th-large"></i></a>
         </li>

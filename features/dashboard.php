@@ -45,7 +45,7 @@
             <div class="row">
                 <div class="col-12 col-sm-6 col-md-3">
                     <div class="info-box mb-3 bg-dark">
-                        <img class="info-box-icon" src="dist/img/OrganizApp-min.png" alt="GameLife" />
+                        <img class="info-box-icon" src="dist/img/OrganizApp.png" alt="GameLife" />
                         <div class="info-box-content">
                             <span class="info-box-text">Organiz'App</span>
                             <span class="info-box-number"><?= $users_OA ?></span>
