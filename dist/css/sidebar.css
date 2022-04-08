@@ -1,0 +1,23 @@
+nav.sidebar > div[name='sidebar-item'] {
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    color: #b7c0cd;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+nav.sidebar > div[name='sidebar-item']:hover {
+    color: #fff;
+}
+
+nav.sidebar > .user-panel {
+    padding: 14px !important;
+    border-bottom: .1px solid #b7c0cd4f;
+}
+nav.sidebar > .user-panel > img {
+    width: 35px;
+}
+nav.sidebar > .user-panel > span {
+    margin-left: 12px;
+    font-size: 1rem;
+}

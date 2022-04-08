@@ -11,3 +11,6 @@
 .icon-lock {
     mask-image: url(../icons/lock.svg);
 }
+.icon-menu {
+    mask-image: url(../icons/menu.svg);
+}

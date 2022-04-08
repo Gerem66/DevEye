@@ -41,8 +41,13 @@
     }*/
 
     // Header
-    require('dist/pages/home_body.html');
-    require('dist/pages/sidebar.php');
-    require('dist/pages/home_footer.html');
+    require('dist/html/home_body.html');
+    require('dist/html/sidebar.php');
+    echo('<div id="main-content"></div>');
+    echo('<!-- Utils  --><script src="dist/js/utils.js"></script>');
+    echo('<!-- Pages  --><script src="dist/js/page.js"></script>');
+    echo('<!-- Navbar --><script src="dist/js/navbar.js"></script>');
+    echo('<!-- Script --><script src="dist/js/home.js"></script>');
+    require('dist/html/home_footer.html');
 
 ?>
