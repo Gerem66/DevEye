@@ -2,21 +2,58 @@
  * @typedef {'user'} Pages
  */
 
-class Page {
+ class Page {
     constructor() {
         /** @type {HTMLElement} */
         this.content;
 
-        /** @type {Navbar} */
-        this.navbar;
-
         this.loading = false;
+        this.features = {};
+        this.lastFeatureName = null;
     }
 
     Init() {
-        this.navbar = new Navbar(this);
-        this.navbar.setEventsSidebarItems();
         this.content = document.getElementById('main-content');
+
+        /** @type {NodeListOf<HTMLElement>} */
+        this.navbarItems = document.getElementsByName('sidebar-item');
+        this.navbarItems.forEach(item => {
+            const element = Array.from(item.getElementsByTagName('a'));
+            if (element.length <= 0) {
+                return;
+            }
+            element[0].onclick = async () => {
+                this.NB_ClearActiveItems();
+                const success = await page.Load(item.getAttribute('data-page'));
+                if (success) this.NB_SetActiveItem(item);
+            };
+        });
+
+        /** @type {NodeListOf<HTMLElement>} */
+        this.navbarGroups = document.getElementsByName('sidebar-group');
+        this.navbarGroups.forEach(group => {
+            const element = Array.from(group.getElementsByTagName('a'));
+            if (element.length <= 0) {
+                return;
+            }
+            element[0].onclick = () => {
+                group.classList.toggle('active');
+
+                const ulGroup = Array.from(group.getElementsByTagName('ul'));
+                if (ulGroup.length <= 0) {
+                    return;
+                }
+
+                // Expand/collapse group if exists
+                if (group.classList.contains('active')) {
+                    const subItems = Array.from(group.getElementsByTagName('li'));
+                    const height = subItems.map(item => item.offsetHeight).reduce((a, b) => a + b, 0);
+                    ulGroup[0].style.height = height + 'px';
+                } else {
+                    ulGroup[0].style.height = '0px';
+                }
+            };
+        });
     }
 
     /** @param {Boolean} isLoading */
@@ -31,13 +68,15 @@ class Page {
 
     /**
      * @param {Pages} page
-     * @returns {Promise<string>}
+     * @returns {Promise<Boolean>}
      */
     async Load(page, data = null) {
-        if (this.loading) return;
+        if (this.loading) return false;
+
+        await this.features[this.lastFeatureName]?.onUnmount();
+        this.lastFeatureName = null;
 
         this.SetLoading(true);
-        this.navbar.ClearActiveItems();
 
         let params = null;
         if (data !== null) {
@@ -49,15 +88,34 @@ class Page {
         }
 
         const response = await fetch('./' + page, params)
-        const content = response.text();
+        const content = await response.text();
 
         if (content === 'disconnect') {
             window.location.reload();
             return false;
         }
-        this.content.innerHTML = await content;
+        this.content.innerHTML = content;
 
+        if (this.features.hasOwnProperty(page)) {
+            this.features[page]?.onMount();
+            this.lastFeatureName = page;
+        }
         this.SetLoading(false);
-        this.navbar.SetActiveItem(page)
+        return true;
+    }
+
+    /** @param {HTMLElement} item */
+    NB_SetActiveItem(item) {
+        this.NB_ClearActiveItems();
+        if (!item.classList.contains('active')) {
+            item.classList.add('active');
+        }
+    }
+    NB_ClearActiveItems() {
+        this.navbarItems.forEach(item => {
+            if (item.classList.contains('active')) {
+                item.classList.remove('active');
+            }
+        });
     }
 }

@@ -1,10 +1,6 @@
-# DO NOT REMOVE THIS LINE AND THE LINES BELLOW SSL_REDIRECT:geremy.eu
-
 RewriteEngine on
-
-# GPanel
 RewriteRule ^home$ home.php
 RewriteRule ^encryptor$ index.php?action=encryptor
-RewriteRule ^(user)$ feature.php?page=$1
+RewriteRule ^(user|logs)$ features/feature.php?page=$1
 
-#RewriteRule ^(user|dashboard|projects|projects-edit|projects-kanban|projects-changelog|accounts|mails|logbook|logbook-edit|passwords|passwords-edit|gyrics|ghost|virtual-machine|washing-machine|logs|settings|database|database-gl|database-dev-gl|tradingbot)$ redirect.php?page=$1
+ErrorDocument 404 /OxyDev/dist/errors/404.html

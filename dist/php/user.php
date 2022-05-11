@@ -1,31 +1,29 @@
 <?php
 
     function Connect() {
-        $db = new DataBase;
+        $db = new DataBase();
         $username = $_POST['tb_name'];
         $password = $_POST['tb_pass'];
         $req_user = $db->GetRowContent('Users', 'Username', $username);
-        if (isset($req_user)) {
-            if (password_verify($password, $req_user['Password'])) {
-                $instance = 'Aucune';
-                $instanceID = $req_user['InstanceID'];
-                if ($instanceID > 0) {
-                    $instance = $db->GetCellContent('Instances', 'Name', $instanceID, false);
-                }
-                SetUser($req_user['ID'], $req_user['Username'],
-                        date('d/m/y - H:i', strtotime($req_user['Created'])),
-                        $req_user['Email'], $req_user['Level'],
-                        $instanceID, $instance, $req_user['Avatar'],
-                        $req_user['Settings'], $req_user['DefaultPage']);
-                AddLog($_SESSION['ID'], "User connection successfully.");
-                $connected = true;
-            } else {
-                AddLog($req_user['ID'], "User connection failed - wrong password");
+        if (password_verify($password, $req_user['Password'])) {
+            $instance = 'Aucune';
+            $instanceID = $req_user['InstanceID'];
+            if ($instanceID > 0) {
+                $instance = $db->GetCellContent('Instances', 'Name', $instanceID, false);
             }
+            SetUser($req_user['ID'], $req_user['Username'],
+                    date('d/m/y - H:i', strtotime($req_user['Created'])),
+                    $req_user['Email'], $req_user['Level'],
+                    $instanceID, $instance, $req_user['Avatar'],
+                    $req_user['Settings'], $req_user['DefaultPage']);
+            AddLog($_SESSION['ID'], "User connection successfully.");
+        } else {
+            AddLog($req_user['ID'], "User connection failed - wrong password");
         }
     }
 
     function Disconnect() {
+        unset($_SESSION['ID']);
         unset($_SESSION['STATUS']);
         unset($_SESSION['USERNAME']);
         unset($_SESSION['CONNECTED']);

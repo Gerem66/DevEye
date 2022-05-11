@@ -4,9 +4,9 @@
     date_default_timezone_set('Europe/Paris');
     setlocale(LC_TIME, 'fr_FR.utf8', 'fra');
 
-    require('dist/php/bdd.php');
+    require('dist/php/sql/sql.php');
     require('dist/php/user.php');
-    require('dist/php/functions.php');
+    require('dist/php/utils.php');
     require('dist/php/features.php');
 
     // Connection
@@ -21,33 +21,14 @@
         exit();
     }
 
-    // Direct load page (instead of 'user')
-    $redirect = 'user';
-    /*if (isset($_SESSION['redirect'])) {
-        $redirect = $_SESSION['redirect'];
-        unset($_SESSION['redirect']);
-    } else {
-        $status = $_SESSION['STATUS'];
-        $dp = $_SESSION['DEFAULT_PAGE'];
-        $features = $_SESSION['FEATURES'];
-        if ($dp >= 0 && $dp < count($features)) {
-            $settings = $_SESSION['SETTINGS'];
-            $enabled = SettingsEnabled($settings, $dp);
-            extract($features[$dp]);
-            if ($enabled && $status >= $minLvl && $title && $canDisable) {
-                $redirect = $page;
-            }
-        }
-    }*/
-
     // Header
+    $scriptsArray = GetJavascriptFiles('features/');
+    $scriptsHTML = array_map(fn($script) => "<script src=\"$script\"></script>", $scriptsArray);
+
     require('dist/html/home_body.html');
     require('dist/html/sidebar.php');
     echo('<div id="main-content"></div>');
-    echo('<!-- Utils  --><script src="dist/js/utils.js"></script>');
-    echo('<!-- Pages  --><script src="dist/js/page.js"></script>');
-    echo('<!-- Navbar --><script src="dist/js/navbar.js"></script>');
-    echo('<!-- Script --><script src="dist/js/home.js"></script>');
+    echo(implode('', $scriptsHTML));
     require('dist/html/home_footer.html');
 
 ?>

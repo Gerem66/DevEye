@@ -1,10 +1,10 @@
 <?php
 
     function GetLogsList() {
-        $db = new DataBase;
-        $result = $db->query("SELECT * FROM `Logs`");
+        $db = new DataBase();
+        $result = $db->Query("SELECT * FROM `Logs`");
 
-        $logs = [];
+        $logs = array();
         while ($r = $result->fetch_assoc()) {
             if (!$r) break;
             $ID = $r['ID'];

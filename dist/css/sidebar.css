@@ -1,23 +1,182 @@
-nav.sidebar > div[name='sidebar-item'] {
-    padding: 10px;
-    display: flex;
-    align-items: center;
-    color: #b7c0cd;
-    cursor: pointer;
-    transition: color 0.2s ease;
+nav.sidebar * {
+    margin: 0;
+    padding: 0;
 }
-nav.sidebar > div[name='sidebar-item']:hover {
-    color: #fff;
+nav.sidebar ul {
+    list-style: none;
+}
+nav.sidebar > ul {
+    padding: 12px 0;
 }
 
+/* User profile */
 nav.sidebar > .user-panel {
-    padding: 14px !important;
+    color: #b7c0cd;
     border-bottom: .1px solid #b7c0cd4f;
 }
-nav.sidebar > .user-panel > img {
-    width: 35px;
+nav.sidebar > .user-panel:hover {
+    color: #fff;
 }
-nav.sidebar > .user-panel > span {
+nav.sidebar > .user-panel > a {
+    width: 100%;
+    height: 100%;
+    padding: 14px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+nav.sidebar > .user-panel > a > img {
+    width: 35px;
+    border-radius: 2px;
+}
+nav.sidebar > .user-panel > a > span {
     margin-left: 12px;
     font-size: 1rem;
+}
+nav.sidebar > .user-panel.active > a > span {
+    font-weight: 600;
+}
+
+/* Instances of feature */
+nav.sidebar .instance {
+    margin-top: 24px;
+}
+nav.sidebar .instance > p {
+    margin-left: 16px;
+    margin-bottom: 8px;
+    font-size: 14px;
+    text-decoration: none;
+}
+
+/* Titles of items / group-feature */
+nav.sidebar .title-item {
+    display: block;
+    padding: 12px 24px;
+
+    border-left-style: solid;
+    border-left-width: 0px;
+    border-left-color: #42a5f5;
+
+    transition: all 0.05s cubic-bezier(.79,.14,.15,.86) 0s;
+    -moz-transition: all 0.05s cubic-bezier(.79,.14,.15,.86) 0s;
+    -webkit-transition: all 0.05s cubic-bezier(.79,.14,.15,.86) 0s;
+    -o-transition: all 0.05s cubic-bezier(.79,.14,.15,.86) 0s;
+    cursor: pointer;
+}
+nav.sidebar .active > .title-item {
+    border-left-width: 3px;
+    background-color: #1d2531;
+}
+
+nav.sidebar .feature,
+nav.sidebar .group-feature {
+    margin-top: 3px;
+}
+
+nav.sidebar .title-item > span {
+    width: 16px;
+    height: 16px;
+    margin-bottom: 3px;
+    vertical-align: middle;
+}
+nav.sidebar .title-item > p {
+    display: inline;
+    margin-left: 8px;
+}
+nav.sidebar .active > .title-item > p {
+    font-weight: 600;
+}
+nav.sidebar .title-item > p,
+nav.sidebar .title-item > span {
+    opacity: 0.7;
+    transition: opacity 0.05s cubic-bezier(.79,.14,.15,.86) 0s;
+    -moz-transition: opacity 0.05s cubic-bezier(.79,.14,.15,.86) 0s;
+    -webkit-transition: opacity 0.05s cubic-bezier(.79,.14,.15,.86) 0s;
+    -o-transition: opacity 0.05s cubic-bezier(.79,.14,.15,.86) 0s;
+}
+nav.sidebar :hover > .title-item > p,
+nav.sidebar :hover > .title-item > span,
+nav.sidebar .active > .title-item > p,
+nav.sidebar .active > .title-item > span {
+    opacity: 1;
+}
+
+/* Group features */
+nav.sidebar .group-feature > ul {
+    height: 0;
+    overflow: hidden;
+    transition: height 0.5s cubic-bezier(.79,.14,.15,.86) 0s;
+}
+nav.sidebar .group-feature > .title-item {
+    position: relative;
+}
+nav.sidebar .group-feature > .title-item > .icon-chevron {
+    position: absolute;
+    right: 12px;
+    margin-top: 3px;
+}
+nav.sidebar .group-feature.active > .title-item > .icon-chevron {
+    transform: rotate(90deg);
+}
+nav.sidebar .group-feature > .title-item {
+    transition: all 0.05s cubic-bezier(.79,.14,.15,.86) 0.45s;
+    -moz-transition: all 0.05s cubic-bezier(.79,.14,.15,.86) 0.45s;
+    -webkit-transition: all 0.05s cubic-bezier(.79,.14,.15,.86) 0.45s;
+    -o-transition: all 0.05s cubic-bezier(.79,.14,.15,.86) 0.45s;
+}
+nav.sidebar .group-feature.active > .title-item {
+    transition: all 0.05s cubic-bezier(.79,.14,.15,.86) 0s;
+    -moz-transition: all 0.05s cubic-bezier(.79,.14,.15,.86) 0s;
+    -webkit-transition: all 0.05s cubic-bezier(.79,.14,.15,.86) 0s;
+    -o-transition: all 0.05s cubic-bezier(.79,.14,.15,.86) 0s;
+}
+
+/* Sub feature */
+nav.sidebar .group-feature .sub-feature,
+nav.sidebar .group-feature .group-feature {
+    margin-top: 0;
+    border-left-style: solid;
+    border-left-width: 3px;
+    border-left-color: #42a5f5;
+    background-color: #1D25317F;
+    cursor: pointer;
+    transition: all 0.05s cubic-bezier(.79,.14,.15,.86) 0s;
+    -moz-transition: all 0.05s cubic-bezier(.79,.14,.15,.86) 0s;
+    -webkit-transition: all 0.05s cubic-bezier(.79,.14,.15,.86) 0s;
+    -o-transition: all 0.05s cubic-bezier(.79,.14,.15,.86) 0s;
+}
+nav.sidebar .group-feature .sub-feature > a {
+    display: block;
+    padding: 12px;
+}
+nav.sidebar .group-feature .sub-feature > a > p {
+    display: inline;
+    color: #FFFFFF;
+    margin-left: 8px;
+}
+nav.sidebar .group-feature .sub-feature > a > span {
+    margin-left: 24px;
+    margin-bottom: -2px;
+    background-color: #FFFFFF;
+}
+nav.sidebar .group-feature .sub-feature:hover > a > p,
+nav.sidebar .group-feature .sub-feature.active > a > p {
+    color: #42A5F5;
+}
+nav.sidebar .group-feature .sub-feature:hover > a > span,
+nav.sidebar .group-feature .sub-feature.active > a > span {
+    background-color: #42A5F5;
+}
+
+/* 3rd level */
+nav.sidebar .group-feature .group-feature * {
+    border-left-width: 0;
+}
+nav.sidebar .group-feature .group-feature > a {
+    padding-left: 36px;
+    background-color: transparent;
+}
+nav.sidebar .group-feature .group-feature > ul > li {
+    padding-left: 12px;
+    background-color: transparent;
 }

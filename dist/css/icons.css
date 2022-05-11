@@ -5,12 +5,8 @@
     mask-size: contain;
     background: #fff;
 }
-.icon-user {
-    mask-image: url(../icons/user.svg);
-}
-.icon-lock {
-    mask-image: url(../icons/lock.svg);
-}
-.icon-menu {
-    mask-image: url(../icons/menu.svg);
-}
+.icon-user { mask-image: url(../icons/user.svg); }
+.icon-lock { mask-image: url(../icons/lock.svg); }
+.icon-menu { mask-image: url(../icons/menu.svg); }
+.icon-home { mask-image: url(../icons/home.svg); }
+.icon-chevron { mask-image: url(../icons/chevron.svg); }

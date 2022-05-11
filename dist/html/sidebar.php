@@ -1,70 +1,91 @@
 <?php
 
-    function AddItemMenu($index, $feature) {
-        extract($feature);
-        
-        $STATUS = $_SESSION['STATUS'];
-        $settings = $_SESSION['SETTINGS'];
-        $enabled = !$canDisable || $settings == -1 || $settings & (1 << $index);
+    function OpenInstance($name) {
+        return "<li class='instance'>
+                    <p>$name</p>
+                    <ul>";
+    }
+    function CloseInstance() {
+        return '</ul></li>';
+    }
 
-        if ($STATUS < $minLvl || !$enabled) {
-            return null;
+    function AddButtonFeature($feature, $category) {
+        global $ALL_FEATURES;
+        extract($ALL_FEATURES[$feature]);
+
+        $data_page = '';
+        if ($page !== '') {
+            $data_page = " data-category=\"$category\" data-page=\"$page\"";
         }
-
-        $a_data = $page != "" ? "class='nav-link' data-page='$page' onclick=\"LoadPage('$page');\"" : "";
-        $color = !$finished ? 'style="color: red;"' : '';
-        $collabIcon = $collab && $_SESSION['INSTANCE_ID'] > 0 ? "<a onclick=\"LoadPage('$page', {'team': 1});\" class='nav-icon collab' title='Instance'><i class='fas fa-users'></i></a>" : '';
-        return "<li class='nav-item'>
-                    <a name='sidebar-item' $a_data>
-                        <i class='nav-icon fas fa-$icon'></i>
-                        <p $color>$title</p>
-                        $collabIcon
+        return "<li class='feature' name='sidebar-item'$data_page>
+                    <a class='title-item'>
+                        <span class='icon icon-$icon'></span>
+                        <p>$title</p>
                     </a>
                 </li>";
     }
 
-    function AddItemCategory($name) {
-        return "<li class='nav-header'>$name</li>";
-    }
+    function OpenGroupFeature($feature) {
+        global $ALL_GROUP_FEATURES;
+        extract($ALL_GROUP_FEATURES[$feature]);
 
-    function AddDropDown($name) {
-        return "<li class=\"nav-item menu-open\">
-                    <a href=\"#\" class=\"nav-link\">
-                        <p>$name
-                            <i class=\"right fas fa-angle-left\"></i>
-                        </p>
+        return "<li class='group-feature' name='sidebar-group'>
+                    <a class='title-item'>
+                        <span class='icon icon-$icon'></span>
+                        <p>$title</p>
+                        <span class='icon icon-chevron'></span>
                     </a>
-                    <ul class=\"nav nav-treeview\">";
+                    <ul>";
     }
-    function CloseDropDown() {
+    function CloseGroupFeature() {
         return '</ul></li>';
     }
 
-    // Niveaux d'accès :
-    // 0 : Invité
-    // 1 : Utilisateur
-    // 2 : Modérateur
-    // 3 : Admin
+    function AddButtonSubFeature($feature, $category) {
+        global $ALL_FEATURES;
+        extract($ALL_FEATURES[$feature]);
 
-    $lastCat = "";
-    $content = "";
-    $isOpened = 0;
-    $features = $_SESSION['FEATURES'];
-    for ($i = 0; $i < count($features); $i++) {
-        $feature_content = AddItemMenu($i, $features[$i]);
-        if ($feature_content != null) {
-            $cat = $features[$i]['category'];
-            if ($cat != $lastCat) {
-                $lastCat = $cat;
-                if ($isOpened) $content .= CloseDropDown();
-                $isOpened = 1;
-                $content .= AddDropDown($lastCat);
-                //$content .= AddItemCategory($lastCat);
-            }
-            $content .= $feature_content;
+        $data_page = '';
+        if ($page !== '') {
+            $data_page = " data-category=\"$category\" data-page=\"$page\"";
         }
+        return "<li class='sub-feature' name='sidebar-item'$data_page>
+                    <a>
+                        <span class='icon icon-$icon'></span>
+                        <p>$title</p>
+                    </a>
+                </li>";
     }
-    if ($isOpened) $content .= CloseDropDown();
+
+    function GenerateSidebar($features, $category = null, $level = 0) {
+        $content = '';
+        foreach ($features as $key => $value) {
+            $keyType = gettype($key);
+            if ($keyType === 'integer') {
+                // New feature or subfeature (button)
+                if ($level === 0 || $level === 1) {
+                    $content .= AddButtonFeature($value, $category);
+                } else {
+                    $content .= AddButtonSubFeature($value, $category);
+                }
+            } else {
+                // New category (ul/li)
+                if ($level === 0) {
+                    $content .= OpenInstance($key);
+                    $content .= GenerateSidebar($value, $key, $level + 1);
+                    $content .= CloseInstance();
+                } else {
+                    $content .= OpenGroupFeature($key);
+                    $content .= GenerateSidebar($value, $key, $level + 1);
+                    $content .= CloseGroupFeature();
+                }
+            }
+        }
+        return $content;
+    }
+
+    $features = $_SESSION['FEATURES'];
+    $content = GenerateSidebar($features);
 
 ?>
 
@@ -79,11 +100,13 @@
 
 <nav class="sidebar">
     <div class="user-panel" name="sidebar-item" data-page="user">
-        <img src="dist/img/<?= $_SESSION['PHOTO']; ?>" alt="User Image">
-        <span class="d-block a"><?= $_SESSION["USERNAME"] ?></span>
+        <a>
+            <img src="dist/img/<?= $_SESSION['PHOTO']; ?>" alt="User Image">
+            <span class="d-block a"><?= $_SESSION["USERNAME"] ?></span>
+        </a>
     </div>
 
-    <ul class="">
+    <ul>
         <?= $content ?>
     </ul>
 </nav>

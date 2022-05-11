@@ -59,7 +59,7 @@ nav.sidebar {
 div#main-content {
     grid-row: 2;
     grid-column: 2;
-    background-color: #3a4453;
+    background-color: #3a485b;
 }
 div#main-content.loading {
     filter: blur(5px);

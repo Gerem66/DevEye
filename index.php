@@ -9,7 +9,7 @@
     // Start login page
     session_start();
     require("dist/php/user.php");
-    require("dist/php/bdd.php");
+    require("dist/php/sql/sql.php");
 
     // Disconnect
     if (isset($_REQUEST['disconnect'])) {
