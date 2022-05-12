@@ -60,8 +60,31 @@
             }
         }
 
-        public function Query($query) {
-            return $this->conn->query($query);
+        /**
+         * @param string $command The query command to execute.
+         * @throws Exception if the connection is not open.
+         */
+        public function Query($command) {
+            if ($this->conn == null) {
+                throw(new Exception('Connection not opened'));
+            }
+            return $this->conn->query($command);
+        }
+
+        /**
+         * @param string $query The query to execute.
+         * @return array|null Returns the result of the query, or null if the query failed.
+         */
+        public function QueryArray($command) {
+            $output = null;
+            $query = $this->Query($command);
+            if ($query !== false) {
+                $output = array();
+                while ($row = $query->fetch_assoc()) {
+                    array_push($output, $row);
+                }
+            }
+            return $output;
         }
 
         /**
@@ -95,7 +118,7 @@
          * @return array
          */
         public function GetRowContent($table, $cellSearch, $cellValue) {
-            $result = $this->Query("SELECT * FROM `u444572210_oxy`.`$table` WHERE `$cellSearch` = '$cellValue'")->fetch_assoc();
+            $result = $this->Query("SELECT * FROM `{$this->db_name}`.`$table` WHERE `$cellSearch` = '$cellValue'")->fetch_assoc();
             if ($result === false) {
                 return null;
             }
@@ -110,7 +133,7 @@
          */
         public function GetRowsContent($table, $cellSearch, $cellValue) {
             $rows = array();
-            $result = $this->Query("SELECT * FROM `u444572210_oxy`.`$table` WHERE `$cellSearch` = '$cellValue'");
+            $result = $this->Query("SELECT * FROM `{$this->db_name}`.`$table` WHERE `$cellSearch` = '$cellValue'");
             if ($result === false) {
                 return null;
             }
@@ -131,7 +154,7 @@
          */
         public function GetCellContent($table, $cell, $id, $decrpyt = true) {
             $content = '';
-            $result = $this->Query("SELECT `$cell` FROM `u444572210_oxy`.`$table` WHERE ID = '$id'")->fetch_assoc();
+            $result = $this->Query("SELECT `$cell` FROM `{$this->db_name}`.`$table` WHERE ID = '$id'")->fetch_assoc();
             if ($result === false) {
                 throw(new Exception('No row found'));
             }
@@ -169,10 +192,26 @@
             }
         }
 
+        /**
+         * @param string $table
+         * @param int $cellID
+         * @param int $id
+         */
         public function RemoveRow($table, $cellID, $id) {
             return $this->Query("DELETE FROM `$table` WHERE `$cellID` = '$id'");
         }
 
+        /**
+         * @param int $UID
+         * @param string $type
+         * @param string $description
+         * @return bool True if the query was successful
+         */
+        public function AddLog($UID, $type, $description) {
+            $IP = GetIP();
+            $result = $this->Query("INSERT INTO `Logs` (`UID`, `IP`, `Type`, `Description`) VALUES ('$UID', '$IP', '$type', '$description')");
+            return $result !== false;
+        }
     }
 
 ?>

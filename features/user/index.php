@@ -2,11 +2,14 @@
 
     $grades = [ "Invité", "Utilisateur", "Modérateur", "Admin" ];
 
+    // TODO - Remove all this
     $username   = $_SESSION['USERNAME'];
     $email      = $_SESSION['EMAIL'];
     $email_ok   = $_SESSION['EMAIL_VALIDE'];
     $avatar     = $_SESSION['PHOTO'];
+    // TODO - Status unused (last STATUS session)
     $status     = $_SESSION['STATUS'];
+    // TODO - Instance unused (last INSTANCE session)
     $instance   = $_SESSION['INSTANCE'];
     $instanceID = $_SESSION['INSTANCE_ID'];
     $reg_date   = $_SESSION['INSCRIPTION_DATE'];
@@ -23,10 +26,10 @@
             if (password_verify($password, $req_user['Password'])) {
                 $hash = password_hash($password_new, PASSWORD_BCRYPT);
                 $db->SetCellContent('Users', 'Password', $req_user['ID'], $hash, false);
-                AddLog($_SESSION['ID'], "Password changed successfully.");
+                $db->AddLog($_SESSION['ID'], 'instanceEdit', "Password changed successfully.");
                 $_status = "OK";
             } else {
-                AddLog($_SESSION['ID'], "Password changing failed (wrong password) !");
+                $db->AddLog($_SESSION['ID'], 'instanceEdit', "Password changing failed (wrong password) !");
                 $_status = "WRONG";
             }
         }

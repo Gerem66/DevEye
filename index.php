@@ -8,8 +8,9 @@
 
     // Start login page
     session_start();
-    require("dist/php/user.php");
-    require("dist/php/sql/sql.php");
+    require('dist/php/user.php');
+    require('dist/php/sql/sql.php');
+    require('dist/php/class/user.php');
 
     // Disconnect
     if (isset($_REQUEST['disconnect'])) {
@@ -17,7 +18,7 @@
     }
 
     // Already connected
-    if (isset($_SESSION['STATUS'], $_SESSION['CONNECTED']) && $_SESSION['STATUS'] >= 0 && $_SESSION['STATUS'] <= 3 && $_SESSION['CONNECTED'] >= 0) {
+    if (isset($_SESSION['USER'])) {
         header('Location: ./home');
         exit();
     }

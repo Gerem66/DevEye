@@ -24,7 +24,7 @@
             }
             element[0].onclick = async () => {
                 this.NB_ClearActiveItems();
-                const success = await page.Load(item.getAttribute('data-page'));
+                const success = await this.Load(item.getAttribute('data-page'));
                 if (success) this.NB_SetActiveItem(item);
             };
         });
@@ -58,6 +58,9 @@
 
     /** @param {Boolean} isLoading */
     SetLoading(isLoading) {
+        if (this.content === null) {
+            console.warn('Page.SetLoading: content is null');
+        }
         this.loading = isLoading;
         if (isLoading) {
             this.content.classList.add('loading');
@@ -72,6 +75,10 @@
      */
     async Load(page, data = null) {
         if (this.loading) return false;
+        if (this.content === null) {
+            console.warn('Page.Load: content is null');
+            return false;
+        }
 
         await this.features[this.lastFeatureName]?.onUnmount();
         this.lastFeatureName = null;

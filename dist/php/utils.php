@@ -34,12 +34,6 @@
         return $files;
     }
 
-    function AddLog($UID, $description) {
-        $db = new DataBase();
-        $IP = GetIP();
-        $db->Query("INSERT INTO `Logs` (`UID`, `IP`, `Description`) VALUES ('$UID', '$IP', '$description')");
-    }
-
     function GetIP() {
         if (isset($_SERVER['HTTP_CLIENT_IP']))
             return $_SERVER['HTTP_CLIENT_IP'];
