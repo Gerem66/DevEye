@@ -41,12 +41,8 @@
          * @return User|null Returns the user if it contains correct data, null otherwise
          */
         public static function Load($user) {
-            try {
-                $user = new User($user);
-                return $user;
-            } catch (Exception $e) {
-                return null;
-            }
+            try { return new User($user); }
+            catch (Exception $e) { return null; }
         }
 
         /**

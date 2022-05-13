@@ -87,6 +87,13 @@
             return $output;
         }
 
+        public function GetTables() {
+            $tables = $this->QueryArray("SHOW TABLES");
+            if ($tables === null) return null;
+            $tableMap = fn($table) => $table["Tables_in_{$this->db_name}"];
+            return array_map($tableMap, $tables);
+        }
+
         /**
          * @param string $str
          * @return string Encrypted string with sql key.

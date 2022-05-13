@@ -1,0 +1,88 @@
+<!-- TODO - Refonte popup ? Autre chose ? -->
+<!-- Popup - Change password -->
+<!--section id="popup-changepwd" class="kb-popup content-wrapper">
+    <div class="popup-card">
+        <h1 id="box-title">Changer ton mot de passe</h1>
+        <p>Aucune limitation, donc soit sûr de la sécurité de ton mot de passe<br />
+        Conseillé : 12 caractères minimum, avec minuscules/majuscules/chiffres et caractères spéciaux</p>
+        <br />
+        <div class="col-6 card-center">
+            <div class="input-group">
+                <input name="pwd" type="password" class="form-control" placeholder="Ancien mot de passe">
+                <div class="input-group-prepend">
+                    <button name="bt-show-password" type="button" class="btn bg-primary btn-vision"><i class="far fa-eye-slash"></i></button>
+                </div>
+            </div>
+        </div>
+        <br />
+        <div class="col-6 card-center">
+            <div class="input-group">
+                <input name="new-pwd" type="password" class="form-control" placeholder="Nouveau mot de passe">
+                <div class="input-group-prepend">
+                    <button name="bt-show-password" type="button" class="btn bg-primary btn-vision"><i class="far fa-eye-slash"></i></button>
+                </div>
+            </div>
+        </div>
+        <br />
+        <div class="col-6 card-center">
+            <button name="back" class="btn btn-dark btn-lg btn-popup">Retour</button>
+            <button name="save" class="btn bg-primary btn-lg btn-popup">Enregistrer</button>
+        </div>
+    </div>
+</section-->
+
+<!-- Main -->
+<div class="row">
+    <div class="col-half">
+        <h1 class="feature-title">Profil</h1>
+    </div>
+    <div class="col-half">
+        <ul id="breadcrumb" class="breadcrumb row float-right">
+            <li><a data-page="user">%username%</a></li>
+            <li><a data-page="logs">test1</a></li>
+            <li><a data-page="database">test2</a></li>
+            <li><a data-page="database" data-category="Admin">test3</a></li>
+        </ul>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-half float-center">
+
+        <!-- Profile Image -->
+        <div class="card card-primary card-outline">
+            <div class="card-body box-profile">
+                <div class="text-center">
+                    <img class="profile-user-img img-fluid img-circle"
+                        src="dist/img/%avatar%"
+                        alt="User profile picture">
+                </div>
+
+                <h3 class="profile-username text-center">%username%</h3>
+                <p class="text-muted text-center">STATUS ?</p>
+                <ul class="list-group list-group-unbordered mb-3">
+                    <li class="list-group-item">
+                        <b>Nombre d'Instances</b><a class="float-right nolink">%instance%</a>
+                    </li>
+                    <li class="list-group-item">
+                        <b>Adresse Email</b>
+                        <a class="float-right nolink">
+                            %email%
+                        </a>
+                    </li>
+                    <li class="list-group-item">
+                        <b>Mot de passe</b>
+                        <button id="bt-open-changepwd" class="btn btn-block btn-primary btn-xs float-right" style="width: 160px;">Modifier le mot de passe</button>
+                    </li>
+                    <li class="list-group-item">
+                        <b>Date de création du compte</b><a class="float-right nolink">%date%</a>
+                    </li>
+                </ul>
+                <form action="./" method="POST">
+                    <button type="submit" name="disconnect" class="btn btn-primary btn-block"><b>Se déconnecter</b></button>
+                </form>
+            </div>
+        </div>
+
+    </div>
+</div>

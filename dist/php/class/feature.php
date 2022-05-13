@@ -33,12 +33,8 @@
          * @return Feature|null Returns the feature if it contains correct data, null otherwise
          */
         public static function Load($feature) {
-            try {
-                $feature = new Feature($feature);
-                return $feature;
-            } catch (Exception $e) {
-                return null;
-            }
+            try { return new Feature($feature); }
+            catch (Exception $e) { return null; }
         }
 
         /**

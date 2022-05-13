@@ -1,0 +1,41 @@
+.row {
+    display: flex;
+    flex-wrap: wrap;
+}
+.col-half {
+    width: 50%;
+}
+.float-right {
+    float: right;
+}
+.float-center {
+    margin: auto;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    margin: 0;
+}
+
+.feature-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+.breadcrumb {
+    margin: 0;
+    list-style: none;
+}
+.breadcrumb > li {
+    display: inline-block;
+    padding-right: 12px;
+}
+.breadcrumb > li + li::before {
+    content: "/";
+    color: #ffffff;
+    padding-right: 12px;
+}
+.breadcrumb > li > a {
+    color: #42a5f5;
+    text-decoration: none;
+    cursor: pointer;
+    user-select: none;
+}

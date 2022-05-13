@@ -56,12 +56,8 @@
          * @return Project|null Returns the project if it contains correct data, null otherwise
          */
         public static function Load($project) {
-            try {
-                $project = new Project($project);
-                return $project;
-            } catch (Exception $e) {
-                return null;
-            }
+            try { return new Project($project); }
+            catch (Exception $e) { return null; }
         }
 
         /**

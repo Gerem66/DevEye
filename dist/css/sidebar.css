@@ -1,6 +1,7 @@
 nav.sidebar * {
     margin: 0;
     padding: 0;
+    user-select: none;
 }
 nav.sidebar ul {
     list-style: none;

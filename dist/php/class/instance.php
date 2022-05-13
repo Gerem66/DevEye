@@ -41,12 +41,8 @@
          * @return Instance|null Returns the instance if it contains correct data, null otherwise
          */
         public static function Load($instance) {
-            try {
-                $instance = new Instance($instance);
-                return $instance;
-            } catch (Exception $e) {
-                return null;
-            }
+            try { return new Instance($instance); }
+            catch (Exception $e) { return null; }
         }
 
         /**

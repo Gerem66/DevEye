@@ -1,6 +1,6 @@
 RewriteEngine on
 RewriteRule ^home$ home.php
 RewriteRule ^encryptor$ index.php?action=encryptor
-RewriteRule ^(user|logs)$ features/feature.php?page=$1
+RewriteRule ^(user|database|logs)$ features/feature.php?page=$1
 
 ErrorDocument 404 /OxyDev/dist/errors/404.html

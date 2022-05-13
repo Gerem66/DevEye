@@ -1,37 +1,57 @@
 <?php
 
-    function startsWith($haystack, $needle) {
+    function StartsWith($haystack, $needle) {
         $length = strlen($needle);
         return substr($haystack, 0, $length) === $needle;
     }
 
-    function endsWith($haystack, $needle) {
+    function EndsWith($haystack, $needle) {
         $length = strlen($needle);
         return !$length || substr($haystack, -$length) === $needle;
     }
 
-    function GetPostValue($name, $defaut) {
-        return isset($_REQUEST[$name]) ? $_REQUEST[$name] : $defaut;
-    }
-
-    function SettingsEnabled($settings_number, $settings_index) {
-        return $settings_number == -1 || $settings_number & 1 << $settings_index;
-    }
-
-    function GetJavascriptFiles($path) {
+    /**
+     * @param string $path Path of the parent directory to search in recursively
+     * @param string $extension Extension of the files to get
+     * @return array List of files with the given extension
+     */
+    function GetScriptsFiles($path, $extension) {
         $files = array();
         if ($dir = opendir($path)) {
             while ($file = readdir($dir)) {
                 if (is_dir($path . $file) && $file !== '.' && $file !== '..') {
-                    $files = array_merge($files, GetJavascriptFiles($path . $file . '/'));
+                    $files = array_merge($files, GetScriptsFiles($path . $file . '/', $extension));
                 }
-                if (endsWith($file, '.js')) {
+                if (EndsWith($file, $extension)) {
                     $files[] = $path . $file;
                 }
             }
             closedir($dir);
         }
         return $files;
+    }
+
+    /**
+     * @param string $path The path of the HTML file to load
+     * @param array $variables Keys are variables name between % and % in html file
+     * @return string The HTML file content with variables replaced
+     */
+    function ImportHTML($path, $variables) {
+        $html = file_get_contents($path);
+        foreach ($variables as $key => $value) {
+            $html = str_replace('%' . $key . '%', $value, $html);
+        }
+        return $html;
+    }
+
+    function GetScriptsImports($script) {
+        $extension = pathinfo($script, PATHINFO_EXTENSION);
+        if ($extension === 'js') {
+            return "<script src=\"$script\"></script>";
+        } else if ($extension === 'css') {
+            return "<link rel=\"stylesheet\" href=\"$script\">";
+        }
+        return '';
     }
 
     function GetIP() {

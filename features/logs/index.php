@@ -2,6 +2,8 @@
 
     require_once(__DIR__.'/utils.php');
 
+    $post_id = isset($_REQUEST['id']) ? $_REQUEST['id'] : 0;
+
     $logs_count = $post_id <= 0 ? 10 : $post_id;
     $logs = GetLogsList();
     $logs_content = LogsToTable($logs, $logs_count);
