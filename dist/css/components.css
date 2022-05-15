@@ -1,3 +1,6 @@
+.hide {
+    display: none !important;
+}
 .row {
     display: flex;
     flex-wrap: wrap;

@@ -17,9 +17,9 @@
     }
     function GetTFA($tfa) {
         if ($tfa === null) {
-            return "Désactivé<img src='./dist/icons/error.svg' alt='Error icon'></img>";
+            return "Désactivé<img src='./assets/icons/error.svg' alt='Error icon'></img>";
         }
-        return "<a id='delete-tfa'>Supprimer</a>Activé<img src='./dist/icons/success.svg' alt='Success icon'></img>";
+        return "<a id='delete-tfa'>Supprimer</a>Activé<img src='./assets/icons/success.svg' alt='Success icon'></img>";
     }
 
     /**

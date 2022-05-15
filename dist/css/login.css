@@ -14,6 +14,10 @@ body {
     background: linear-gradient(#446182, rgb(31, 36, 41));
 }
 
+.hide {
+    display: none !important;
+}
+
 svg {
     width: 256px;
     fill: #fff;
@@ -61,7 +65,7 @@ svg {
 @keyframes fadeIn {
     0% {
         opacity: 0;
-        margin-left: -50px;
+        margin-left: -30px;
     }
     50% {
         opacity: 0.2;
