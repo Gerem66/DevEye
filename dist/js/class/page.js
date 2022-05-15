@@ -70,7 +70,7 @@
         this.content.innerHTML = content;
 
         if (this.features.hasOwnProperty(page)) {
-            this.features[page]?.preMount();
+            this.features[page]?.preMount(category);
             this.currentFeatureName = page;
         }
 

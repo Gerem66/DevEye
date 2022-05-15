@@ -12,7 +12,7 @@ class Profile extends Feature {
         this.initIndex = 0;
     }
 
-    onMount(category) {
+    onMount() {
         this.saveButton = document.getElementById('save-settings');
         this.settingsFeatures = document.getElementById('settings-features');
         this.getFeatures = () => Array.from(this.settingsFeatures.getElementsByTagName('li'));

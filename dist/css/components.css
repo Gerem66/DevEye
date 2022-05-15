@@ -15,13 +15,18 @@
 .col-three-quarters { width: 75%; }
 
 @media screen and (max-width: 1024px) {
-    .col-half, .col-third, .col-quarter {
+    .col-half.responsive,
+    .col-third.responsive,
+    .col-quarter.responsive {
         width: 75%;
     }
 }
 @media screen and (max-width: 767px) {
-    .col-half, .col-third, .col-quarter,
-    .col-two-thirds, .col-three-quarters {
+    .col-half.responsive,
+    .col-third.responsive,
+    .col-quarter.responsive,
+    .col-two-thirds.responsive,
+    .col-three-quarters.responsive {
         width: 100%;
     }
 }

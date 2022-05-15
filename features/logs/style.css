@@ -1,0 +1,6 @@
+table.logs-table * {
+    white-space: nowrap;
+}
+table.logs-table > thead > tr > th {
+    text-align: left;
+}

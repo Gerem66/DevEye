@@ -57,7 +57,7 @@ class Sidebar {
         this.navbarItems.forEach(item => {
             const samePage = item.getAttribute('data-page') === page;
             const sameCategory = (item.getAttribute('data-category') || null) === category;
-            if (samePage && sameCategory) {
+            if (samePage && (sameCategory || page === 'user')) {
                 item.classList.add('active');
             }
         });
