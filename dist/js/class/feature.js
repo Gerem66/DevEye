@@ -9,15 +9,15 @@ class Feature {
         page.features[pageName] = this;
     }
 
-    preMount() {
-        this.loadBreadcrumb();
-        this.onMount();
+    preMount(category) {
+        this.loadBreadcrumb(category);
+        this.onMount(category);
     }
-    preUnmount() {
-        this.onUnmount();
+    async preUnmount() {
+        await this.onUnmount();
     }
 
-    loadBreadcrumb() {
+    loadBreadcrumb(category) {
         const breadcrumb = document.getElementById('breadcrumb');
         const breadcrumbA = breadcrumb?.getElementsByTagName('a');
 
@@ -25,18 +25,18 @@ class Feature {
         const links = Array.from(breadcrumbA);
         links.forEach(element => {
             const dataPage = element.getAttribute('data-page');
-            const dataCategory = element.getAttribute('data-category') || null;
             if (!dataPage) return;
             element.addEventListener('click', () => {
-                page.Load(dataPage, dataCategory);
+                page.Load(dataPage, category);
             });
         });
     }
 
     /**
      * Called when the page is mounted.
+     * @param {string} category
      */
-    onMount() {}
+    onMount(category) {}
 
     /**
      * Called just before the page is unmounted.

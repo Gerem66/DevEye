@@ -34,55 +34,56 @@
 <!-- Main -->
 <div class="row">
     <div class="col-half">
-        <h1 class="feature-title">Profil</h1>
+        <h1 class="feature-title">Mon espace</h1>
     </div>
     <div class="col-half">
         <ul id="breadcrumb" class="breadcrumb row float-right">
-            <li><a data-page="user">%username%</a></li>
-            <li><a data-page="logs">test1</a></li>
-            <li><a data-page="database">test2</a></li>
-            <li><a data-page="database" data-category="Admin">test3</a></li>
+            <li>%username%</li>
         </ul>
     </div>
 </div>
 
 <div class="row">
-    <div class="col-half float-center">
-
-        <!-- Profile Image -->
-        <div class="card card-primary card-outline">
-            <div class="card-body box-profile">
-                <div class="text-center">
-                    <img class="profile-user-img img-fluid img-circle"
-                        src="dist/img/%avatar%"
-                        alt="User profile picture">
-                </div>
-
-                <h3 class="profile-username text-center">%username%</h3>
-                <p class="text-muted text-center">STATUS ?</p>
-                <ul class="list-group list-group-unbordered mb-3">
-                    <li class="list-group-item">
-                        <b>Nombre d'Instances</b><a class="float-right nolink">%instance%</a>
-                    </li>
-                    <li class="list-group-item">
-                        <b>Adresse Email</b>
-                        <a class="float-right nolink">
-                            %email%
-                        </a>
-                    </li>
-                    <li class="list-group-item">
-                        <b>Mot de passe</b>
-                        <button id="bt-open-changepwd" class="btn btn-block btn-primary btn-xs float-right" style="width: 160px;">Modifier le mot de passe</button>
-                    </li>
-                    <li class="list-group-item">
-                        <b>Date de création du compte</b><a class="float-right nolink">%date%</a>
-                    </li>
-                </ul>
-                <form action="./" method="POST">
-                    <button type="submit" name="disconnect" class="btn btn-primary btn-block"><b>Se déconnecter</b></button>
-                </form>
-            </div>
+    <div class="card col-third" data-title="Profil">
+        <div class="profile-header">
+            <img src="dist/img/%avatar%" alt="User profile picture">
+            <h2>%username%</h2>%status%
         </div>
 
+        <div class="profile-body">
+            <ul>
+                <li>
+                    <b>Nombre d'Instances</b>
+                    <p class="float-right">%instance%</p>
+                </li>
+                <li>
+                    <b>Adresse Email</b>
+                    <p class="float-right">%email%</p>
+                </li>
+                <li>
+                    <b>Mot de passe</b>
+                    <a class="float-right">Modifier le mot de passe</a>
+                </li>
+                <li>
+                    <b>Double authentification</b>
+                    <p class="float-right tfa">%2fa%</p>
+                </li>
+                <li>
+                    <b>Date de création du compte</b>
+                    <p class="float-right">%date%</p>
+                </li>
+            </ul>
+            <form action="./" method="POST">
+                <button type="submit" name="disconnect" class="btn btn-block"><b>Se déconnecter</b></button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card col-third" data-title="Paramètres">
+        <h2 class="settings-title">Fonctionnalités</h2>
+        <ul id="settings-features" class="settings-features">
+            %features%
+        </ul>
+        <button id="save-settings" class="btn btn-block disabled"><b>Sauvegarder</b></button>
     </div>
 </div>

@@ -22,14 +22,14 @@
             return false;
         }
 
-        $_SESSION['USER'] = serialize($user);
+        $_SESSION['USER_ID'] = $user->ID;
         $db->AddLog($user->ID, 'login', 'User connection successfully.');
         return true;
     }
 
     function Disconnect() {
         unset($_SESSION['CONNECTED']);
-        unset($_SESSION['USER']);
+        unset($_SESSION['USER_ID']);
     }
 
 ?>

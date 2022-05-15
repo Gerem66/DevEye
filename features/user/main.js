@@ -1,14 +1,135 @@
 class Profile extends Feature {
     constructor() {
         super('user');
+
+        /** @type {HTMLLIElement?} */
+        this.selected = null;
+
+        /** @type {HTMLLIElement?} */
+        this.ghost = null;
+
+        this.initPos = { x: 0, y: 0 };
+        this.initIndex = 0;
     }
 
-    onMount() {
-        console.log('User mounted');
+    onMount(category) {
+        this.saveButton = document.getElementById('save-settings');
+        this.settingsFeatures = document.getElementById('settings-features');
+        this.getFeatures = () => Array.from(this.settingsFeatures.getElementsByTagName('li'));
+        this.getFeatures().forEach(this.loadFeature);
+        this.settingsFeatures.onmousemove = this.onMoveFeature;
+        this.settingsFeatures.onmouseleave = this.onDropFeature;
+        document.onmouseup = this.onDropFeature;
     }
-
     async onUnmount() {
-        console.log('User unmounted');
+    }
+
+    loadFeature = (feature) => {
+        const [ dragIcon, eyeIcon ] = feature.getElementsByTagName('span');
+        eyeIcon.onclick = () => this.onFeatureToggle(feature, eyeIcon);
+        dragIcon.onmousedown = (ev) => this.onDragFeature(ev, feature);
+    }
+    /**
+     * @param {HTMLLIElement} feature
+     * @param {HTMLSpanElement} icon
+     */
+    onFeatureToggle = (feature, icon) => {
+        if (feature.classList.contains('disabled')) {
+            // Enable
+            feature.classList.remove('disabled');
+            icon.classList.remove('icon-eye-close');
+            icon.classList.add('icon-eye-open');
+        } else {
+            // Disable
+            feature.classList.add('disabled');
+            icon.classList.remove('icon-eye-open');
+            icon.classList.add('icon-eye-close');
+        }
+        this.enableSave();
+    }
+    /**
+     * @param {MouseEvent} ev
+     * @param {HTMLLIElement} feature
+     */
+    onDragFeature = (ev, feature) => {
+        //this.onDropFeature();
+        this.initPos = {
+            y: ev.pageY - feature.offsetTop,
+            y0: feature.offsetTop
+        };
+        this.initIndex = this.getFeatures().indexOf(feature);
+        this.ghost = feature.cloneNode(true);
+        this.ghost.style.width = feature.offsetWidth + 'px';
+        this.selected = feature;
+        this.selected.classList.add('ghost');
+        this.settingsFeatures.appendChild(this.ghost);
+        this.onMoveFeature(ev);
+    }
+    /** @param {MouseEvent} ev */
+    onMoveFeature = (ev) => {
+        if (this.ghost) {
+            const features = this.getFeatures();
+            const currIndex = features.indexOf(this.selected);
+            const deltaIndex = this.initIndex - currIndex;
+            const deltaY = this.initPos.y0 - (ev.pageY - this.initPos.y);
+            const height = features[0].offsetHeight;
+            const relativeDeltaY = deltaIndex - deltaY / height;
+            if (Math.abs(relativeDeltaY) > 0.5) {
+                const diff = relativeDeltaY > 0 ? 1 : -1;
+                const newIndex = MinMax(0, currIndex + diff, features.length - 1);
+                if (newIndex !== currIndex) {
+                    const newNode = this.selected.cloneNode(true);
+                    this.selected.remove();
+                    this.settingsFeatures.insertBefore(newNode, this.settingsFeatures.children[newIndex]);
+                    this.selected = this.getFeatures()[newIndex];
+                    this.loadFeature(this.selected);
+                }
+            }
+            this.ghost.style.position = 'absolute';
+            this.ghost.style.top = `${ev.pageY - this.initPos.y}px`;
+        }
+    }
+    onDropFeature = () => {
+        if (this.selected && this.ghost) {
+            const currIndex = this.getFeatures().indexOf(this.selected);
+            this.selected.classList.remove('ghost');
+            this.selected = null;
+            this.ghost.remove();
+            this.ghost = null;
+
+            if (this.initIndex !== currIndex) {
+                this.enableSave();
+            }
+        }
+    }
+
+    enableSave = () => {
+        if (this.saveButton.classList.contains('disabled')) {
+            this.saveButton.classList.remove('disabled');
+            this.saveButton.onclick = () => this.saveSettings();
+        }
+    }
+    disableSave = () => {
+        if (!this.saveButton.classList.contains('disabled')) {
+            this.saveButton.classList.add('disabled');
+            this.saveButton.onclick = undefined;
+        }
+    }
+    saveSettings = async () => {
+        let features = {};
+        this.getFeatures().forEach(feature => {
+            const id = feature.getAttribute('data-id');
+            const isEnabled = !feature.classList.contains('disabled');
+            features[id] = isEnabled;
+        });
+        const data = { 'action': 'saveSettings', 'features': features };
+        const response = await Request_Async('./user', data);
+        if (response.status !== 200 || response.content['status'] !== 'ok') {
+            console.log('Response:', response);
+            this.disableSave();
+            throw new Error('Failed to save settings');
+        }
+        window.location.reload();
     }
 }
 
@@ -72,6 +193,4 @@ function OpenChangepasswordPopup() {
     btn_back.onclick = () => popup.classList.remove('active');
     popup.onclick = (e) => { if (e.target === popup) popup.classList.remove('active'); }
 }
-
-console.log('teest');
 */

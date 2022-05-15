@@ -18,7 +18,7 @@
     }
 
     // Already connected
-    if (isset($_SESSION['USER'])) {
+    if (isset($_SESSION['USER_ID'])) {
         header('Location: ./home');
         exit();
     }

@@ -8,11 +8,11 @@
         /** @var string $Name */
         public $Name;
 
-        /** @var array<int> $Users */
-        public $Users;
-
         /** @var string $Avatar */
         public $Avatar;
+
+        /** @var array<int> $Roles */
+        public $Roles;
 
         /** @var int $CreatedBy */
         public $CreatedBy;
@@ -30,8 +30,8 @@
             }
             $this->ID = intval($instance['ID']);
             $this->Name = $instance['Name'];
-            $this->Users = json_decode($instance['Users'], true);
             $this->Avatar = $instance['Avatar'];
+            $this->Roles = json_decode($instance['Roles'], true);
             $this->CreatedBy = intval($instance['CreatedBy']);
             $this->CreatedAt = strtotime($instance['CreatedAt']);
         }

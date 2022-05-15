@@ -10,16 +10,18 @@
     require('../dist/php/class/user.php');
 
     require('../dist/php/sql/sql.php');
+    require('../dist/php/roles.php');
     require('../dist/php/utils.php');
 
     // Check user state
-    if (!isset($_SESSION['USER'])) {
+    if (!isset($_SESSION['USER_ID'])) {
         // Hack try suspicion (or automatic disconnect)
         die('disconnect');
     }
 
-    /** @var User $USER */
-    $USER = unserialize($_SESSION['USER']);
+    $db = new DataBase();
+    $rawUser = $db->GetRowContent('Users', 'ID', $_SESSION['USER_ID']);
+    $user = User::Load($rawUser);
 
     $page = isset($_GET['page']) ? $_GET['page'] : '';
 

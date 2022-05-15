@@ -1,97 +1,50 @@
 <?php
 
-    $allFeatures = null;
-    $allFeaturesTree = null;
-
     /**
      * @param DataBase $db
-     * @return void Set the global variables $allFeatures and $allFeaturesTree
+     * @param User $user
+     * @return string Get sidebar items content
      */
-    function DefineFeatures($db) {
-        global $allFeatures, $allFeaturesTree;
-        $allFeatures = $db->QueryArray('SELECT * FROM `Features`');
-        $allFeaturesTree = array(
-            'Admin' => array(
-                'database',
-                'logs'
-            )
-        );
-
-        // Example (3 levels)
-        /*$allFeaturesTree = array(
-            'Admin' => array(
-                'database',
-                'logs',
-                'logs' => array(
-                    'logs',
-                    'logs' => array(
-                        'logs',
-                        'logs'
-                    ),
-                    'logs'
-                )
-            )
-        );*/
-    }
-
-    /**
-     * @param string $id
-     * @return Feature|null Returns the feature with the given ID, null otherwise
-     */
-    function GetFeatureByID($id) {
-        global $allFeatures;
-        if ($allFeatures === null) {
-            return null;
-        }
-        for ($i = 0; $i < count($allFeatures); $i++) {
-            if ($allFeatures[$i]['ID'] === $id) {
-                return Feature::Load($allFeatures[$i]);
-            }
-        }
-        return null;
-    }
-
-    function GenerateSidebar($featuresTree = null, $categoryName = null, $depth = 0) {
-        global $allFeaturesTree;
-
-        if ($featuresTree === null) {
-            $featuresTree = $allFeaturesTree;
-        }
-
-        $content = '';
-        foreach ($featuresTree as $key => $value) {
-            $keyType = gettype($key);
-            if ($keyType === 'integer') {
-                // New feature or subfeature (button)
-                $feature = GetFeatureByID($value);
-                if ($feature === null) continue;
-                if ($depth === 0 || $depth === 1) {
-                    $content .= AddButtonFeature($feature, $categoryName);
-                } else {
-                    $content .= AddButtonSubFeature($feature, $categoryName);
-                }
-            } else {
-                // New category (ul/li)
-                if ($depth === 0) {
-                    $content .= OpenInstance($key);
-                    $content .= GenerateSidebar($value, $key, $depth + 1);
-                    $content .= CloseInstance();
-                } else {
-                    $feature = GetFeatureByID($key);
+    function GenerateSidebar($db, $user) {
+        function gen($features, $featuresTree, $categoryName = null, $depth = 0) {
+            $content = '';
+            foreach ($featuresTree as $key => $value) {
+                $keyType = gettype($key);
+                if ($keyType === 'integer') {
+                    // New feature or subfeature (button)
+                    $feature = Feature::GetFeatureByID($value, $features);
                     if ($feature === null) continue;
-                    $content .= OpenGroupFeature($feature);
-                    $content .= GenerateSidebar($value, $key, $depth + 1);
-                    $content .= CloseGroupFeature();
+                    if ($depth === 0 || $depth === 1) {
+                        $content .= AddButtonFeature($feature, $categoryName);
+                    } else {
+                        $content .= AddButtonSubFeature($feature, $categoryName);
+                    }
+                } else {
+                    // New category (ul/li)
+                    if ($depth === 0) {
+                        $content .= OpenInstance($key);
+                        $content .= gen($features, $value, $key, $depth + 1);
+                        $content .= CloseInstance();
+                    } else {
+                        $feature = Feature::GetFeatureByID($key, $features);
+                        if ($feature === null) continue;
+                        $content .= OpenGroupFeature($feature);
+                        $content .= gen($features, $value, $key, $depth + 1);
+                        $content .= CloseGroupFeature();
+                    }
                 }
             }
+            return $content;
         }
-        return $content;
-    }
 
+        $rawFeatures = $db->QueryArray("SELECT * FROM `Features` WHERE `Level` <= {$user->Level}");
+        $features = array_map(fn($f) => Feature::Load($f), $rawFeatures);
+        $tree = Feature::GetTree($user, $features, $GLOBALS['LEVEL_TEXTS']);
+        return gen($features, $tree);
+    }
 
 
     ///// HTML Functions /////
-
 
 
     function OpenInstance($name) {

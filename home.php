@@ -11,11 +11,12 @@
 
     require('dist/php/sql/sql.php');
     require('dist/php/user.php');
+    require('dist/php/roles.php');
     require('dist/php/utils.php');
     require('dist/php/sidebar.php');
 
     $db = new DataBase();
-    $connected = isset($_SESSION['USER']);
+    $connected = isset($_SESSION['USER_ID']);
 
     // Connection
     if (array_key_exists('bt_connect', $_POST)) {
@@ -29,12 +30,11 @@
         exit();
     }
 
-    /** @var User $user */
-    DefineFeatures($db);
-    $user = unserialize($_SESSION['USER']);
+    $rawUser = $db->GetRowContent('Users', 'ID', $_SESSION['USER_ID']);
+    $user = User::Load($rawUser);
 
     // Load
-    $sidebar = GenerateSidebar();
+    $sidebar = GenerateSidebar($db, $user);
     $scriptsJS = GetScriptsFiles('features/', 'js');
     $scriptsCSS = GetScriptsFiles('features/', 'css');
     $scriptsMerge = array_merge($scriptsCSS, $scriptsJS);
