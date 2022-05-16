@@ -2,20 +2,61 @@
     display: inline-block;
     width: 18px;
     aspect-ratio: 1;
-    mask-size: contain;
-    mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+            mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+            mask-repeat: no-repeat;
     background: #fff;
 }
-.icon-chevron { mask-image: url(../../assets/icons/chevron.svg); }
-.icon-database { mask-image: url(../../assets/icons/database.svg); }
-.icon-drag { mask-image: url(../../assets/icons/drag.svg); }
-.icon-error { mask-image: url(../../assets/icons/error.svg); }
-.icon-eye-open { mask-image: url(../../assets/icons/eye-open.svg); }
-.icon-eye-close { mask-image: url(../../assets/icons/eye-close.svg); }
-.icon-home { mask-image: url(../../assets/icons/home.svg); }
-.icon-lock { mask-image: url(../../assets/icons/lock.svg); }
-.icon-logs { mask-image: url(../../assets/icons/logs.svg); }
-.icon-menu { mask-image: url(../../assets/icons/menu.svg); }
-.icon-refresh { mask-image: url(../../assets/icons/refresh.svg); }
-.icon-success { mask-image: url(../../assets/icons/success.svg); }
-.icon-user { mask-image: url(../../assets/icons/user.svg); }
+.icon-chevron {
+    -webkit-mask-image: url(../../assets/icons/chevron.svg);
+    mask-image: url(../../assets/icons/chevron.svg);
+}
+.icon-database {
+    -webkit-mask-image: url(../../assets/icons/database.svg);
+    mask-image: url(../../assets/icons/database.svg);
+}
+.icon-drag {
+    -webkit-mask-image: url(../../assets/icons/drag.svg);
+    mask-image: url(../../assets/icons/drag.svg);
+}
+.icon-error {
+    -webkit-mask-image: url(../../assets/icons/error.svg);
+    mask-image: url(../../assets/icons/error.svg);
+}
+.icon-eye-open {
+    -webkit-mask-image: url(../../assets/icons/eye-open.svg);
+    mask-image: url(../../assets/icons/eye-open.svg);
+}
+.icon-eye-close {
+    -webkit-mask-image: url(../../assets/icons/eye-close.svg);
+    mask-image: url(../../assets/icons/eye-close.svg);
+}
+.icon-home {
+    -webkit-mask-image: url(../../assets/icons/home.svg);
+    mask-image: url(../../assets/icons/home.svg);
+}
+.icon-lock {
+    -webkit-mask-image: url(../../assets/icons/lock.svg);
+    mask-image: url(../../assets/icons/lock.svg);
+}
+.icon-logs {
+    -webkit-mask-image: url(../../assets/icons/logs.svg);
+    mask-image: url(../../assets/icons/logs.svg);
+}
+.icon-menu {
+    -webkit-mask-image: url(../../assets/icons/menu.svg);
+    mask-image: url(../../assets/icons/menu.svg);
+}
+.icon-refresh {
+    -webkit-mask-image: url(../../assets/icons/refresh.svg);
+    mask-image: url(../../assets/icons/refresh.svg);
+}
+.icon-success {
+    -webkit-mask-image: url(../../assets/icons/success.svg);
+    mask-image: url(../../assets/icons/success.svg);
+}
+.icon-user {
+    -webkit-mask-image: url(../../assets/icons/user.svg);
+    mask-image: url(../../assets/icons/user.svg);
+}

@@ -15,11 +15,17 @@ class Profile extends Feature {
     onMount() {
         this.saveButton = document.getElementById('save-settings');
         this.settingsFeatures = document.getElementById('settings-features');
+        this.settingsDefault = document.getElementById('settings-default');
+
+        // Define features drag & drop
         this.getFeatures = () => Array.from(this.settingsFeatures.getElementsByTagName('li'));
         this.getFeatures().forEach(this.loadFeature);
         this.settingsFeatures.onmousemove = this.onMoveFeature;
         this.settingsFeatures.onmouseleave = this.onDropFeature;
         document.onmouseup = this.onDropFeature;
+
+        // Define default features
+        this.settingsDefault.onchange = this.enableSave;
     }
     async onUnmount() {
     }
@@ -116,7 +122,9 @@ class Profile extends Feature {
         }
     }
     saveSettings = async () => {
-        let features = {};
+        let features = {
+            'default': this.settingsDefault.value
+        };
         this.getFeatures().forEach(feature => {
             const id = feature.getAttribute('data-id');
             const isEnabled = !feature.classList.contains('disabled');

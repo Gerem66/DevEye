@@ -52,15 +52,18 @@ class Sidebar {
     }
 
     /** @param {Pages} page */
-    SetActiveItem(page, category) {
+    SetActiveItem(page, category = null) {
         this.ClearActiveItems();
-        this.navbarItems.forEach(item => {
-            const samePage = item.getAttribute('data-page') === page;
-            const sameCategory = (item.getAttribute('data-category') || null) === category;
-            if (samePage && (sameCategory || page === 'user')) {
-                item.classList.add('active');
-            }
-        });
+
+        const items = Array.from(this.navbarItems);
+        const itemsPage = items.filter(item => item.getAttribute('data-page') === page);
+        const itemsCategory = itemsPage.filter(item => item.getAttribute('data-category') || null === category);
+
+        if (itemsCategory.length > 0) {
+            itemsCategory[0].classList.add('active');
+        } else if (itemsPage.length > 0) {
+            itemsPage[0].classList.add('active');
+        }
     }
     ClearActiveItems() {
         this.navbarItems.forEach(item => {

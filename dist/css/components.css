@@ -112,6 +112,23 @@ button, select {
     cursor: not-allowed;
 }
 
+select {
+    width: 100%;
+    padding: 8px;
+    color: #fff;
+    background-color: #102b3c;
+    border: solid 2px #2d6ea2;
+    border-left: none;
+    border-right: none;
+    border-radius: 2px;
+}
+select:hover {
+    border-color: #3e79a8;
+}
+select:focus {
+    border-color: #4193d5;
+}
+
 .feature-title {
     font-size: 1.5rem;
     font-weight: 600;

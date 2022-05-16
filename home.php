@@ -41,11 +41,18 @@
     $scripts = implode('', array_map('GetScriptsImports', $scriptsMerge));
 
     // Load home variables and render
-    $home = file_get_contents('dist/html/home.html');
-    $home = str_replace('%sidebar%', $sidebar, $home);
-    $home = str_replace('%avatar%', $user->Avatar, $home);
-    $home = str_replace('%username%', $user->Username, $home);
-    $home = str_replace('%scripts%', $scripts, $home);
-    echo($home);
+    $variables = array(
+        'sidebar' => $sidebar,
+        'avatar' => $user->Avatar,
+        'username' => $user->Username,
+        'scripts' => $scripts,
+        'commandJS' => "<script>page.defaultPage = 'database'</script>"
+    );
+    if (array_key_exists('default', $user->Settings)) {
+        $variables['commandJS'] = "<script>page.defaultPage = '{$user->Settings['default']}'</script>";
+    }
+
+    $content = ImportHTML('dist/html/home.html', $variables);
+    echo($content);
 
 ?>

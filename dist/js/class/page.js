@@ -13,11 +13,13 @@
         this.sidebar = new Sidebar(this);
         this.loading = false;
         this.currentFeatureName = null;
+        this.defaultPage = 'user';
     }
 
     Init() {
         this.sidebar.Init();
         this.content = document.getElementById('main-content');
+        this.Load(this.defaultPage);
     }
 
     /** @param {Boolean} isLoading */
@@ -62,6 +64,13 @@
 
         const response = await fetch('./' + page, params)
         const content = await response.text();
+
+        if (response.status !== 200) {
+            this.SetLoading(false);
+            if (response.status !== 404) {
+                throw new Error(`Page.Load: loading failed (${response.status} ${response.statusText})`);
+            }
+        }
 
         if (content === 'disconnect') {
             window.location.reload();

@@ -5,6 +5,13 @@
      * @var User $user
      */
 
+    function GetTFA($tfa) {
+        if ($tfa === null) {
+            return "Désactivé<img src='./assets/icons/error.svg' alt='Error icon'></img>";
+        }
+        return "<a id='delete-tfa'>Supprimer</a>Activé<img src='./assets/icons/success.svg' alt='Success icon'></img>";
+    }
+
     /** @param Feature $feature */
     function AddFeature($feature, $enabled = true) {
         $class = $enabled ? '' : ' class="disabled"';
@@ -15,11 +22,11 @@
                     <span class=\"icon icon-eye-$icon\" title=\"Activer ou désactiver la fonctionnalité\"></span>
                 </li>";
     }
-    function GetTFA($tfa) {
-        if ($tfa === null) {
-            return "Désactivé<img src='./assets/icons/error.svg' alt='Error icon'></img>";
-        }
-        return "<a id='delete-tfa'>Supprimer</a>Activé<img src='./assets/icons/success.svg' alt='Success icon'></img>";
+
+    /** @param Feature $feature */
+    function AddFeatureOption($feature, $default = false) {
+        $selected = $default ? ' selected' : '';
+        return "<option value='{$feature->ID}'$selected>{$feature->Name}</option>";
     }
 
     /**
@@ -45,7 +52,35 @@
                 $featuresHTML .= AddFeature($feature, $featureEnabled);
             }
         }
+        return $featuresHTML;
+    }
 
+    /**
+     * @param Feature[] $features
+     * @param User $user
+     * @param array $tree
+     * @param int $level
+     * @return string Return HTML elements of all features
+     */
+    function DefineOptions($features, $user, $tree, $level = 0) {
+        $featuresHTML = '';
+        foreach ($tree as $key => $value) {
+            $keyType = gettype($key);
+            if ($keyType === 'string') {
+                $featuresHTML .= DefineOptions($features, $user, $value, $level + 1);
+            } else if ($keyType === 'integer') {
+                $feature = Feature::GetFeatureByID($value, $features);
+                if ($feature === null) continue;
+                $featureEnabled = $feature->Enabled;
+                if (array_key_exists($feature->ID, $user->Settings)) {
+                    $featureEnabled = $user->Settings[$feature->ID];
+                }
+                $default = array_key_exists('default', $user->Settings) && $user->Settings['default'] === $feature->ID;
+                if ($featureEnabled) {
+                    $featuresHTML .= AddFeatureOption($feature, $default);
+                }
+            }
+        }
         return $featuresHTML;
     }
 
@@ -70,6 +105,7 @@
     $features = array_map(fn($f) => Feature::Load($f), $rawFeatures);
     $tree = Feature::GetTree($user, $features, $GLOBALS['LEVEL_TEXTS'], true);
     $featuresHTML = DefineFeatures($features, $user, $tree);
+    $featuresOptions = DefineOptions($features, $user, $tree);
 
     // Print page
     $status = $user->Level === 0 ? '' : "<h3>{$LEVEL_TEXTS[$user->Level]}</h3>";
@@ -81,7 +117,8 @@
         'instance' => 0,
         '2fa' => GetTFA($user->TwoFactorAuth),
         'date' => date('d/m/Y H:i', $user->Created),
-        'features' => $featuresHTML
+        'features' => $featuresHTML,
+        'options' => $featuresOptions
     );
 
     $content = ImportHTML(__DIR__.'/index.html', $vars);
