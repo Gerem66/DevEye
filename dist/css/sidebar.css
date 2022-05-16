@@ -1,9 +1,9 @@
 nav.sidebar * {
-    margin: 0;
-    padding: 0;
     user-select: none;
 }
 nav.sidebar ul {
+    margin: 0;
+    padding: 0;
     list-style: none;
 }
 nav.sidebar > ul {
@@ -41,6 +41,10 @@ nav.sidebar > .user-panel.active > a > span {
 /* Instances of feature */
 nav.sidebar .instance {
     margin-top: 24px;
+}
+nav.sidebar .instance > ul {
+    margin: 0;
+    padding: 0;
 }
 nav.sidebar .instance > p {
     margin-left: 16px;
@@ -105,6 +109,8 @@ nav.sidebar .active > .title-item > span {
 /* Group features */
 nav.sidebar .group-feature > ul {
     height: 0;
+    margin: 0;
+    padding: 0;
     overflow: hidden;
     transition: height 0.5s cubic-bezier(.79,.14,.15,.86) 0s;
 }

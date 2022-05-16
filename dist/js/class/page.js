@@ -5,6 +5,9 @@
  class Page {
     constructor() {
         /** @type {HTMLElement} */
+        this.topbar;
+
+        /** @type {HTMLElement} */
         this.content;
 
         /** @type {Array<Feature>} */
@@ -18,7 +21,9 @@
 
     Init() {
         this.sidebar.Init();
+        this.topbar = document.getElementById('topbar');
         this.content = document.getElementById('main-content');
+        this.content.onclick = () => this.sidebar.HideSidebarOnSmallScreen();
         this.Load(this.defaultPage);
     }
 
@@ -47,6 +52,7 @@
             throw new Error('Page.Load: content is null');
         }
 
+        this.sidebar.HideSidebarOnSmallScreen();
         this.sidebar.ClearActiveItems();
         await this.features[this.currentFeatureName]?.preUnmount();
         this.currentFeatureName = null;

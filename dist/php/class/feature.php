@@ -116,12 +116,6 @@
             }
 
             return $tree;
-            return array(
-                'Admin' => array(
-                    'database',
-                    'logs'
-                )
-            );
         }
     }
 

@@ -51,6 +51,7 @@ h1, h2, h3, h4, h5, h6 {
     border-radius: 4px;
     border-top: solid 4px #42a5f5;
     background-color: #263544;
+    overflow: auto;
 }
 .card::before {
     position: absolute;
@@ -135,6 +136,7 @@ select:focus {
 }
 .breadcrumb {
     margin: 0;
+    padding: 0;
     list-style: none;
 }
 .breadcrumb > li {
@@ -151,4 +153,23 @@ select:focus {
     text-decoration: none;
     cursor: pointer;
     user-select: none;
+}
+
+table {
+    padding: 0 12px;
+    white-space: nowrap;
+    border-collapse: collapse;
+}
+table > thead > tr > th {
+    margin-bottom: 6px;
+    padding: 6px 4px;
+    border-top: 1px solid #fff;
+    border-bottom: 1px solid #fff;
+    text-align: left;
+}
+table > tbody > tr:first-child > td {
+    padding-top: 16px;
+}
+table > tbody > tr > td {
+    padding: 6px 0;
 }
