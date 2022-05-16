@@ -11,13 +11,20 @@
 </div>
 
 <div class="row">
-    <div class="card col-full" data-title="Logs">
-        <table class="logs-table">
+    <div class="card col-full logs" data-title="Logs">
+        <div class="card-header">
+            <a id="btn-last" class="link">Dernier</a>
+            <a id="btn-next" class="link">Suivant</a>
+            <p class="logs-text-margin">%logsTitle%</p>
+            <a id="btn-prev" class="link">Précédent</a>
+        </div>
+        <table>
             <thead>
                 <tr>
                     <th style="width: 5%; min-width: 48px;">ID</th>
-                    <th style="width: 5%; min-width: 124px;">ID Utilisateur</th>
+                    <th style="width: 5%;">ID Utilisateur</th>
                     <th style="width: 10%; min-width: 350px;">IP</th>
+                    <th style="width: 5%;">Type</th>
                     <th style="width: 60%;">Descritption</th>
                     <th style="width: 20%; min-width: 200px;">Date</th>
                 </tr>

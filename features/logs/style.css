@@ -1,6 +1,7 @@
-table.logs-table * {
-    white-space: nowrap;
+.card.logs > .card-header {
+    user-select: none;
 }
-table.logs-table > thead > tr > th {
-    text-align: left;
+.card.logs > .card-header > a:first-child,
+.card.logs > .card-header > p {
+    margin: 12px;
 }

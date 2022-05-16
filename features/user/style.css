@@ -99,7 +99,7 @@
 select.settings {
     margin: 12px auto 24px;
 }
-.settings-saved {
+.card.settings > .card-header {
     position: absolute;
     top: 2px;
     right: 16px;
@@ -108,12 +108,12 @@ select.settings {
     opacity: 0;
     transition: opacity .3s ease-in-out;
 }
-.settings-saved.visible {
+.card.settings > .card-header.visible {
     opacity: 1;
 }
-.settings-saved > p {
+.card.settings > .card-header > p {
     margin-right: 8px;
 }
-.settings-saved > img {
+.card.settings > .card-header > img {
     width: 20px;
 }

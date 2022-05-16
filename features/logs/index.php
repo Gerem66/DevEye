@@ -1,19 +1,38 @@
 <?php
 
+    /** @var DataBase $db */
+
     require_once(__DIR__.'/utils.php');
 
-    $post_id = isset($_REQUEST['id']) ? $_REQUEST['id'] : 0;
+    $logsCount = 15;
 
-    $logs_count = $post_id <= 0 ? 10 : $post_id;
-    $logs = GetLogsList();
-    $logs_content = LogsToTable($logs, $logs_count);
 
-    $bt_showall_id = $post_id == 0 ? '999' : '0';
-    $btShowallText = intval($post_id) > 10 ? 'Réduire les logs' : 'Afficher tous les logs';
+
+    if (!isset($_SESSION['logs-page'])) {
+        $_SESSION['logs-page'] = 0;
+    }
+    if (isset($_POST['type'])) {
+        $type = $_POST['type'];
+        if ($type === 'next' && $_SESSION['logs-page'] > 0) {
+            $_SESSION['logs-page']--;
+        } else if ($type === 'prev') {
+            $_SESSION['logs-page']++;
+            $logs = GetLogs($db, $_SESSION['logs-page'] * $logsCount, $logsCount, 'ID');
+            if (count($logs) <= 0) $_SESSION['logs-page']--;
+        } else if ($type === 'last') {
+            $_SESSION['logs-page'] = 0;
+        }
+    }
+
+    $logStarts = $_SESSION['logs-page'] * $logsCount;
+    $logs = GetLogs($db, $logStarts, $logsCount);
+
+    $firstID = reset($logs)['ID'];
+    $lastID = end($logs)['ID'];
     $variables = array(
         'username' => $user->Username,
-        'logsContent' => $logs_content,
-        'buttonText' => $btShowallText,
+        'logsTitle' => "$firstID - $lastID",
+        'logsContent' => LogsToTable($logs)
     );
 
     $content = ImportHTML(__DIR__.'/index.html', $variables);
