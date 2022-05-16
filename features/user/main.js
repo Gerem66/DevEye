@@ -13,7 +13,6 @@ class Profile extends Feature {
     }
 
     onMount() {
-        this.saveButton = document.getElementById('save-settings');
         this.settingsFeatures = document.getElementById('settings-features');
         this.settingsDefault = document.getElementById('settings-default');
 
@@ -25,9 +24,13 @@ class Profile extends Feature {
         document.onmouseup = this.onDropFeature;
 
         // Define default features
-        this.settingsDefault.onchange = this.enableSave;
+        this.settingsDefault.onchange = () => this.saveSettings(false);
+
+        this.settingsSaved = document.getElementById('settings-saved');
+        this.settingsSavedTimeout = null;
     }
     async onUnmount() {
+        clearTimeout(this.settingsSavedTimeout);
     }
 
     loadFeature = (feature) => {
@@ -51,7 +54,7 @@ class Profile extends Feature {
             icon.classList.remove('icon-eye-open');
             icon.classList.add('icon-eye-close');
         }
-        this.enableSave();
+        this.saveSettings();
     }
     /**
      * @param {MouseEvent} ev
@@ -104,24 +107,15 @@ class Profile extends Feature {
             this.ghost = null;
 
             if (this.initIndex !== currIndex) {
-                this.enableSave();
+                this.saveSettings();
             }
         }
     }
 
-    enableSave = () => {
-        if (this.saveButton.classList.contains('disabled')) {
-            this.saveButton.classList.remove('disabled');
-            this.saveButton.onclick = () => this.saveSettings();
-        }
-    }
-    disableSave = () => {
-        if (!this.saveButton.classList.contains('disabled')) {
-            this.saveButton.classList.add('disabled');
-            this.saveButton.onclick = undefined;
-        }
-    }
-    saveSettings = async () => {
+    /**
+     * @param {Boolean} [couldRefresh=true] True to show refresh button
+     */
+    saveSettings = async (couldRefresh = true) => {
         let features = {
             'default': this.settingsDefault.value
         };
@@ -134,10 +128,22 @@ class Profile extends Feature {
         const response = await Request_Async('./user', data);
         if (response.status !== 200 || response.content['status'] !== 'ok') {
             console.log('Response:', response);
-            this.disableSave();
             throw new Error('Failed to save settings');
         }
-        window.location.reload();
+
+        this.settingsSaved.classList.add('visible');
+        if (this.settingsSavedTimeout !== null) {
+            clearTimeout(this.settingsSavedTimeout);
+        }
+        this.settingsSavedTimeout = setTimeout(() => {
+            this.settingsSaved.classList.remove('visible');
+            this.settingsSavedTimeout = null;
+        }, 2 * 1000);
+
+        if (couldRefresh) {
+            const refreshLogo = document.getElementById('refresh-logo');
+            refreshLogo?.classList.remove('hide');
+        }
     }
 }
 

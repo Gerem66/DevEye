@@ -41,16 +41,26 @@
     $scripts = implode('', array_map('GetScriptsImports', $scriptsMerge));
 
     // Load home variables and render
+    $commandJS = '';
+    if (array_key_exists('default', $user->Settings)) {
+        $rawFeature = $db->GetRowContent('Features', 'ID', $user->Settings['default']);
+        $feature = Feature::Load($rawFeature);
+        $correctLevel = $feature->Level <= $user->Level;
+        $enabled = $feature->EnabledDefault;
+        if (array_key_exists($feature->ID, $user->Settings)) {
+            $enabled = $user->Settings[$feature->ID];
+        }
+        if ($feature !== null && $correctLevel && $enabled) {
+            $commandJS = "<script>page.defaultPage = '{$user->Settings['default']}'</script>";
+        }
+    }
     $variables = array(
         'sidebar' => $sidebar,
         'avatar' => $user->Avatar,
         'username' => $user->Username,
         'scripts' => $scripts,
-        'commandJS' => "<script>page.defaultPage = 'database'</script>"
+        'commandJS' => $commandJS
     );
-    if (array_key_exists('default', $user->Settings)) {
-        $variables['commandJS'] = "<script>page.defaultPage = '{$user->Settings['default']}'</script>";
-    }
 
     $content = ImportHTML('dist/html/home.html', $variables);
     echo($content);

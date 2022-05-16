@@ -12,6 +12,7 @@ body {
 }
 
 .homebar {
+    position: relative;
     grid-row: 1;
     grid-column: 1;
 
@@ -23,7 +24,6 @@ body {
     z-index: 101;
 }
 .homebar > a {
-    width: 100%;
     height: 100%;
     padding-left: 12px;
     display: flex;
@@ -38,6 +38,19 @@ body {
     margin-left: 12px;
     color: #fff;
     font-size: 1.2rem;
+}
+.homebar > span.refresh {
+    position: absolute;
+    right: 12px;
+    top: calc(50% - 14px);
+    display: flex;
+    padding: 5px;
+    border-radius: 14px;
+    background-color: #ffbc1e;
+    box-shadow: 0 0 6px 1px #ffbc1e;
+    -webkit-box-shadow: 0 0 6px 1px #ffbc1e;
+    animation: rotation 6s linear infinite;
+    pointer-events: none;
 }
 
 nav.topbar {
@@ -69,4 +82,26 @@ nav#main-content {
 }
 nav#main-content.loading {
     filter: blur(5px);
+}
+
+@keyframes rotation {
+    0% {
+        opacity: 0.4;
+        transform: scale3d(1, 1, 1);
+    }
+    9% {
+        opacity: 0.8;
+        transform: scale3d(1.2, 1.2, 1) rotate3d(0, 0, 1, 180deg);
+    }
+    18% {
+        opacity: 0.4;
+        transform: scale3d(1, 1, 1) rotate3d(0, 0, 1, 360deg);
+    }
+    60% {
+        opacity: 0.6;
+    }
+    100% {
+        opacity: 0.4;
+        transform: rotate3d(0, 0, 1, 360deg);
+    }
 }

@@ -99,3 +99,21 @@
 select.settings {
     margin: 12px auto 24px;
 }
+.settings-saved {
+    position: absolute;
+    top: 2px;
+    right: 16px;
+    display: flex;
+    font-size: .8rem;
+    opacity: 0;
+    transition: opacity .3s ease-in-out;
+}
+.settings-saved.visible {
+    opacity: 1;
+}
+.settings-saved > p {
+    margin-right: 8px;
+}
+.settings-saved > img {
+    width: 20px;
+}
