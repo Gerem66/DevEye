@@ -89,6 +89,8 @@ a.link.disabled {
 }
 .card > .card-navigation {
     width: max-content;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 /* Button */

@@ -52,9 +52,7 @@ class DBTable {
 
         /** @type {DBTableEvents} */
         this.events = {};
-
-        const cells = Array.from(this.table?.getElementsByTagName('td'));
-        cells.forEach(cell => cell.onclick = () => this.onCellClick(cell));
+        this.setupCellsEvents();
     }
 
     /**
@@ -80,6 +78,11 @@ class DBTable {
      */
     RemoveEventListener(event) {
         delete this.events[event];
+    }
+
+    setupCellsEvents() {
+        const cells = Array.from(this.table?.getElementsByTagName('td'));
+        cells.forEach(cell => cell.onclick = () => this.onCellClick(cell));
     }
 
     setupSaveText() {
@@ -157,6 +160,7 @@ class DBTable {
                     this.currentPage = pageNumber;
                     this.lastPage = maxPage;
                     tbody.innerHTML = content;
+                    this.setupCellsEvents();
                     this.setupTrash(false);
 
                     const text = document.getElementById('navigation-text');
@@ -220,6 +224,7 @@ class DBTable {
         if (newContent !== null) {
             const tbody = this.table.getElementsByTagName('tbody')[0];
             tbody.innerHTML = newContent;
+            this.setupCellsEvents();
             this.setupTrash(false);
         }
         row.classList.remove('blur');
