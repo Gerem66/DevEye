@@ -8,6 +8,10 @@
             mask-repeat: no-repeat;
     background: #fff;
 }
+.icon-add {
+    -webkit-mask-image: url(../../assets/icons/add.svg);
+    mask-image: url(../../assets/icons/add.svg);
+}
 .icon-chevron {
     -webkit-mask-image: url(../../assets/icons/chevron.svg);
     mask-image: url(../../assets/icons/chevron.svg);

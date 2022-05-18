@@ -92,6 +92,11 @@ a.link.disabled {
     user-select: none;
     -webkit-user-select: none;
 }
+.card > .card-navigation > a:first-child,
+.card > .card-navigation > a:last-child,
+.card > .card-navigation > p {
+    margin: 0 12px;
+}
 
 /* Button */
 

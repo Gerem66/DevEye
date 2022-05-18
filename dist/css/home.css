@@ -103,7 +103,7 @@ nav.sidebar.collapse-sidebar {
     justify-content: center;
     background-color: #263544;
 }
-#sidebar:hover,
+#sidebar.collapse-sidebar:hover,
 .minibar:hover ~ #sidebar {
     transform: translate3d(0, 0, 0);
 }
@@ -140,7 +140,8 @@ nav#main-content.with-minibar {
 
     /* Show sidebar (inverse default on smartphone) */
     nav.sidebar.collapse-sidebar { transform: translate3d(0, 0, 0); }
-    nav#main-content.with-minibar { filter: blur(4px); }
+    nav#main-content.with-minibar { filter: blur(3px); }
+    nav#main-content.with-minibar > * { pointer-events: none; }
 }
 
 /* Animations */

@@ -4,9 +4,3 @@
 .f-logs .card > .card-header > img {
     width: 20px;
 }
-
-.f-logs .card > .card-navigation > a:first-child,
-.f-logs .card > .card-navigation > a:last-child,
-.f-logs .card > .card-navigation > p {
-    margin: 0 12px;
-}

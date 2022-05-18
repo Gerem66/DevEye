@@ -8,6 +8,12 @@
  * @param {String} value
  * @returns {Promise<Boolean>} True if value changed successfully, false if not.
  *
+ * Fires when add row button clicked.
+ * @async
+ * @callback onrowadd
+ * @param {String} table
+ * @returns {Promise<String?>} New content if row removed successfully, null if not.
+ *
  * Fires when delete row button clicked.
  * @async
  * @callback onrowremove
@@ -27,6 +33,7 @@
 /**
  * @typedef {Object} DBTableEvents
  * @property {oncellchange} oncellchange
+ * @property {onrowadd} onrowadd
  * @property {onrowremove} onrowremove
  * @property {onnavigation} onnavigation
  */
@@ -35,11 +42,13 @@ class DBTable {
     /**
      * @param {HTMLElement} card Component containing the table [& navigation]
      * @param {String} tableName Name of table focused
+     * @param {String} pageName Name of feature page, used for requests
      */
-    constructor(card, tableName) {
+    constructor(card, tableName, pageName) {
         this.card = card;
         this.table = card?.getElementsByTagName('table')[0];
         this.tableName = tableName;
+        this.pageName = pageName;
 
         // Navigation variables
         this.loading = false;
@@ -66,6 +75,8 @@ class DBTable {
         // Setups
         if (event === 'oncellchange') {
             this.setupSaveText();
+        } else if (event === 'onrowadd') {
+            this.setupAddRow();
         } else if (event === 'onrowremove') {
             this.setupSaveText();
             this.setupTrash();
@@ -84,7 +95,6 @@ class DBTable {
         const cells = Array.from(this.table?.getElementsByTagName('td'));
         cells.forEach(cell => cell.onclick = () => this.onCellClick(cell));
     }
-
     setupSaveText() {
         if (this.savedText !== null) {
             return;
@@ -94,19 +104,19 @@ class DBTable {
         this.savedText.classList.add('card-header');
         this.card.insertBefore(this.savedText, this.card.firstChild);
     }
-    showSavedText(success = true) {
-        let content = "<p>Changements sauvegardés</p><img src='./assets/icons/success.svg' alt='Success icon'></img>";
-        if (!success) {
-            content = "<p>Une erreur est survenue</p><img src='./assets/icons/error.svg' alt='Error icon'></img>";
-        }
-        this.savedText.innerHTML = content;
-        this.savedText.style.opacity = 1;
-        clearTimeout(this.savedTextTimeout);
-        this.savedTextTimeout = setTimeout(() => {
-            this.savedText.style.opacity = 0;
-        }, 2 * 1000);
-    }
+    setupAddRow() {
+        const divAdd = document.createElement('div');
+        divAdd.classList.add('float-right');
+        divAdd.style.marginTop = '-24px';
 
+        const buttonAdd = document.createElement('a');
+        buttonAdd.classList.add('link');
+        buttonAdd.textContent = 'Ajouter une ligne';
+        buttonAdd.onclick = () => this.onAddRowClick();
+        divAdd.append(buttonAdd);
+
+        this.card.insertAdjacentElement('afterbegin', divAdd);
+    }
     setupNavigation() {
         const navigation = '\
             <div class="card-navigation float-center">\
@@ -138,24 +148,25 @@ class DBTable {
                     return;
                 }
 
-                // Enable / disable buttons
-                btns.forEach(btn => {
-                    const name = btn.getAttribute('name');
-                    if ((name === 'first' || name === 'next') && this.currentPage === 1) {
-                        btn.classList.add('disabled');
-                    } else if ((name === 'prev' || name === 'last') && this.currentPage === this.lastPage) {
-                        btn.classList.add('disabled');
-                    } else {
-                        btn.classList.remove('disabled');
-                    }
-                });
-
                 const tbody = this.table.getElementsByTagName('tbody')[0];
                 this.loading = true;
                 tbody.classList.add('blur');
 
                 const result = await this.events['onnavigation'](this.tableName, this.currentPage);
                 if (result !== null) {
+                    // Enable / disable buttons
+                    btns.forEach(btn => {
+                        const name = btn.getAttribute('name');
+                        if ((name === 'first' || name === 'next') && this.currentPage === 1) {
+                            btn.classList.add('disabled');
+                        } else if ((name === 'prev' || name === 'last') && this.currentPage === this.lastPage) {
+                            btn.classList.add('disabled');
+                        } else {
+                            btn.classList.remove('disabled');
+                        }
+                    });
+
+                    // Execute response
                     const [ pageNumber, maxPage, content ] = result;
                     this.currentPage = pageNumber;
                     this.lastPage = maxPage;
@@ -174,7 +185,6 @@ class DBTable {
             }
         });
     }
-
     setupTrash(setupHeader = true) {
         if (setupHeader) {
             const tr = this.table.getElementsByTagName('thead')[0].getElementsByTagName('tr')[0];
@@ -196,6 +206,57 @@ class DBTable {
             newCell.append(trash);
             row.insertBefore(newCell, row.firstChild);
         });
+    }
+
+    /**
+     * Show message (success or error) at corner of the table
+     * @param {Boolean} success
+     */
+    showSavedText(success = true) {
+        let content = "<p>Changements sauvegardés</p><img src='./assets/icons/success.svg' alt='Success icon'></img>";
+        if (!success) {
+            content = "<p>Une erreur est survenue</p><img src='./assets/icons/error.svg' alt='Error icon'></img>";
+        }
+        this.savedText.innerHTML = content;
+        this.savedText.style.opacity = 1;
+        clearTimeout(this.savedTextTimeout);
+        this.savedTextTimeout = setTimeout(() => {
+            this.savedText.style.opacity = 0;
+        }, 2 * 1000);
+    }
+
+    async onAddRowClick() {
+        if (this.loading) return;
+
+        this.loading = true;
+        const tbody = this.table.getElementsByTagName('tbody')[0];
+        tbody.classList.add('blur');
+
+        const result = await this.events['onrowadd'](this.tableName);
+        this.showSavedText(result !== null);
+
+        if (result !== null) {
+            this.currentPage = 1;
+            tbody.innerHTML = result;
+            this.setupCellsEvents();
+            this.setupTrash(false);
+
+            const text = document.getElementById('navigation-text');
+            text.textContent = this.currentPage + ' / ' + this.lastPage;
+
+            const btns = Array.from(this.card.getElementsByClassName('card-navigation')[0].getElementsByTagName('a'));
+            btns.forEach(btn => {
+                const name = btn.getAttribute('name');
+                if ((name === 'first' || name === 'next')) {
+                    btn.classList.add('disabled');
+                } else {
+                    btn.classList.remove('disabled');
+                }
+            });
+        }
+
+        tbody.classList.remove('blur');
+        this.loading = false;
     }
 
     /**
