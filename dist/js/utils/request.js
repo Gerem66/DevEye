@@ -18,7 +18,7 @@ class ReqResponse {
 }
 
 /**
- * @param {String} url - Default : App server
+ * @param {String} url
  * @param {Object} [data={}]
  * @param {'GET' | 'POST'} [method='POST']
  * @param {Object} [headers] - Default :

@@ -9,6 +9,8 @@
     require('../dist/php/class/project.php');
     require('../dist/php/class/user.php');
 
+    require('../dist/php/components/dbtable.php');
+
     require('../dist/php/sql/sql.php');
     require('../dist/php/roles.php');
     require('../dist/php/utils.php');
@@ -22,6 +24,9 @@
     $db = new DataBase();
     $rawUser = $db->GetRowContent('Users', 'ID', $_SESSION['USER_ID']);
     $user = User::Load($rawUser);
+
+    $input = file_get_contents('php://input');
+    $post = json_decode($input, true);
 
     $page = isset($_GET['page']) ? $_GET['page'] : '';
 

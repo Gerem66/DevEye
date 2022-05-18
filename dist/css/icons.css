@@ -56,6 +56,10 @@
     -webkit-mask-image: url(../../assets/icons/success.svg);
     mask-image: url(../../assets/icons/success.svg);
 }
+.icon-trash {
+    -webkit-mask-image: url(../../assets/icons/trash.svg);
+    mask-image: url(../../assets/icons/trash.svg);
+}
 .icon-user {
     -webkit-mask-image: url(../../assets/icons/user.svg);
     mask-image: url(../../assets/icons/user.svg);

@@ -34,9 +34,9 @@
         }
         this.loading = isLoading;
         if (isLoading) {
-            this.content.classList.add('loading');
+            this.content.classList.add('blur');
         } else {
-            this.content.classList.remove('loading');
+            this.content.classList.remove('blur');
         }
     }
 

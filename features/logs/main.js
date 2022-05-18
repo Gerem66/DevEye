@@ -5,29 +5,47 @@ class Logs extends Feature {
 
     onMount(category) {
         this.category = category;
-        this.btnPrev = document.getElementById('btn-prev');
-        this.btnNext = document.getElementById('btn-next');
-        this.btnLast = document.getElementById('btn-last');
-        this.btnPrev.onclick = () => this.requestLogs('prev');
-        this.btnNext.onclick = () => this.requestLogs('next');
-        this.btnLast.onclick = () => this.requestLogs('last');
+
+        const tableElement = document.getElementsByClassName('card')[0];
+        const table = new DBTable(tableElement, 'Logs');
+        table.AddEventListener('oncellchange', this.onCellChange);
+        table.AddEventListener('onrowremove', this.onRowRemove);
+        table.AddEventListener('onnavigation', this.onNavigation);
     }
     async onUnmount() {
     }
 
-    /**
-     * Ask the server for the logs & show them
-     * @param {'prev'|'next'|'last'} type 
-     */
-    async requestLogs(type) {
-        page.Load('logs', this.category, { type });
-        return;
-        const data = { type };
+    /** @type {DBTableEvents['oncellchange']} */
+    async onCellChange(table, ID, column, value) {
+        const data = { type: 'cellchange', table, ID, column, value };
         const response = await Request_Async('./logs', data);
-        if (response.status !== 200 || response.content['status'] !== 'ok') {
-            throw new Error(`Error while requesting logs: ${response.status} - ${response.content['error']}`);
+        if (response.status !== 200 || response.content?.status !== 'ok') {
+            return false;
         }
-        console.log(response);
+        return true;
+    }
+
+    /** @type {DBTableEvents['onrowremove']} */
+    async onRowRemove(table, ID, page) {
+        const data = { type: 'rowremove', table, ID, page };
+        const response = await Request_Async('./logs', data);
+        if (response.status !== 200 || response.content?.status !== 'ok') {
+            return null;
+        }
+        return response.content?.content || null;
+    }
+
+    /** @type {DBTableEvents['onnavigation']} */
+    async onNavigation(table, page) {
+        const data = { type: 'navigation', table, page };
+        const response = await Request_Async('./logs', data);
+        if (response.status !== 200 || response.content?.status !== 'ok') {
+            return null;
+        }
+        const newPage = response.content.newPage || 1;
+        const maxPage = response.content.maxPage || 1;
+        const content = response.content.content || '';
+        return [ newPage, maxPage, content ];
     }
 }
 

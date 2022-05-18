@@ -3,6 +3,7 @@ body {
     height: 100vh;
     margin: 0;
     color: #fff;
+    font-size: 16px;
     font-family: 'Open Sans';
     background-color: #3a485b;
 }
@@ -39,6 +40,7 @@ nav.sidebar {
     bottom: 0;
     width: 250px;
 
+    font-size: 16px;
     box-shadow: 0 14px 28px rgba(0, 0, 0, 0.25), 0 10px 10px rgba(0, 0, 0, 0.22);
     background-color: #263544;
     z-index: 100;
@@ -118,9 +120,6 @@ nav#main-content {
     background-color: #3a485b;
     overflow: auto;
     transition: margin-left .3s ease-in-out;
-}
-nav#main-content.loading {
-    filter: blur(5px);
 }
 nav.topbar.with-minibar,
 nav#main-content.with-minibar {
