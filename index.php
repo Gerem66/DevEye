@@ -1,11 +1,5 @@
 <?php
 
-    // Show encryptor page
-    if ($_GET['action'] === 'encryptor') {
-        require('./dist/php/encryptor.php');
-        exit();
-    }
-
     // Start login page
     session_start();
     require('dist/php/user.php');
