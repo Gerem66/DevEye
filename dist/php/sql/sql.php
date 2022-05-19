@@ -71,6 +71,11 @@
             return $this->conn->query($command);
         }
 
+        /** Return last sql error */
+        public function GetLastError() {
+            return $this->conn->error;
+        }
+
         /**
          * @param string $query The query to execute.
          * @return array|null Returns the result of the query, or null if the query failed.

@@ -238,3 +238,9 @@ table > tbody > tr > td.editing > input {
 table > tbody > tr > td.editing > input::selection {
     background-color: #1792ae;
 }
+.card > .card-header.message > p {
+    margin-right: 8px;
+}
+.card > .card-header.message > img {
+    width: 20px;
+}

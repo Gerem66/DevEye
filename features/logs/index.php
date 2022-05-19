@@ -11,7 +11,7 @@
     $maxPage = ceil($logsLength / $logsCount);
 
     if (isset($post['type'])) {
-        ExecCommand($db, $post, $logsCount);
+        DBTableCommand($db, $post, $logsCount);
     }
 
     $variables = array(

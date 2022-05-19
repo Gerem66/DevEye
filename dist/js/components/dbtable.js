@@ -1,46 +1,15 @@
 /**
- * Fires when value changed.
- * @async
- * @callback oncellchange
- * @param {String} table
- * @param {String} ID
- * @param {String} column
- * @param {String} value
- * @returns {Promise<Boolean>} True if value changed successfully, false if not.
- *
- * Fires when add row button clicked.
- * @async
- * @callback onrowadd
- * @param {String} table
- * @returns {Promise<String?>} New content if row removed successfully, null if not.
- *
- * Fires when delete row button clicked.
- * @async
- * @callback onrowremove
- * @param {String} table
- * @param {String} ID
- * @param {Number} page
- * @returns {Promise<String?>} New content if row removed successfully, null if not.
- *
- * Fires when navigation bar is used.
- * @async
- * @callback onnavigation
- * @param {String} table
- * @param {Number} newPage
- * @returns {Promise<Number, Number, String>} Return the new page number, number of last page, and the new content or null if error.
- */
-
-/**
- * @typedef {Object} DBTableEvents
- * @property {oncellchange} oncellchange
- * @property {onrowadd} onrowadd
- * @property {onrowremove} onrowremove
- * @property {onnavigation} onnavigation
+ * @typedef {Object} DBTableFeatures
+ * @property {Boolean} cellchange
+ * @property {Boolean} rowadd
+ * @property {Boolean} rowremove
+ * @property {Boolean} navigation
  */
 
 class DBTable {
     /**
-     * @param {HTMLElement} card Component containing the table [& navigation]
+     * @description Setup database table
+     * @param {HTMLElement} card Card containing the table [& navigation]
      * @param {String} tableName Name of table focused
      * @param {String} pageName Name of feature page, used for requests
      */
@@ -53,42 +22,47 @@ class DBTable {
         // Navigation variables
         this.loading = false;
         this.currentPage = 1;
-        this.lastPage = this.table.getAttribute('data-maxpage');
+        this.lastPage = parseInt(this.table.getAttribute('data-maxpage')) || 1;
 
         /** @description Show success while cell was correctly edited */
         this.savedText = null;
         this.savedTextTimeout = null;
 
-        /** @type {DBTableEvents} */
-        this.events = {};
+        /** @type {DBTableFeatures} */
+        this.features = {
+            cellchange: false,
+            rowadd: false,
+            rowremove: false,
+            navigation: false
+        };
         this.setupCellsEvents();
     }
 
-    /**
-     * @typedef {keyof DBTableEvents} ev
-     * @param {ev} event
-     * @param {DBTableEvents[ev]} callback
-     */
-    AddEventListener(event, callback) {
-        this.events[event] = callback;
+    /** @param {keyof DBTableFeatures} feature */
+    AddFeature(feature) {
+        if (!this.features.hasOwnProperty(feature)) {
+            throw new Error(`Feature ${feature} does not exist`);
+        }
+        this.features[feature] = true;
 
         // Setups
-        if (event === 'oncellchange') {
+        if (feature === 'cellchange') {
             this.setupSaveText();
-        } else if (event === 'onrowadd') {
+        } else if (feature === 'rowadd') {
             this.setupAddRow();
-        } else if (event === 'onrowremove') {
+        } else if (feature === 'rowremove') {
             this.setupSaveText();
             this.setupTrash();
-        } else if (event === 'onnavigation') {
+        } else if (feature === 'navigation') {
             this.setupNavigation();
         }
     }
-    /**
-     * @param {keyof DBTableEvents} event
-     */
-    RemoveEventListener(event) {
-        delete this.events[event];
+    /** @param {keyof DBTableFeatures} feature */
+    RemoveFeature(feature) {
+        if (!this.features.hasOwnProperty(feature)) {
+            throw new Error(`Feature ${feature} does not exist`);
+        }
+        this.features[feature] = false;
     }
 
     setupCellsEvents() {
@@ -101,13 +75,17 @@ class DBTable {
         }
         this.savedText = document.createElement('div');
         this.savedText.style.opacity = 0;
-        this.savedText.classList.add('card-header');
+        this.savedText.classList.add('card-header', 'message');
         this.card.insertBefore(this.savedText, this.card.firstChild);
     }
     setupAddRow() {
+        if (!this.features['rowadd']) return;
+        if (!this.features['navigation']) {
+            throw new Error('Navigation feature is required to add a row');
+        }
+
         const divAdd = document.createElement('div');
         divAdd.classList.add('float-right');
-        divAdd.style.marginTop = '-24px';
 
         const buttonAdd = document.createElement('a');
         buttonAdd.classList.add('link');
@@ -118,13 +96,14 @@ class DBTable {
         this.card.insertAdjacentElement('afterbegin', divAdd);
     }
     setupNavigation() {
+        const isLast = this.currentPage === this.lastPage;
         const navigation = '\
             <div class="card-navigation float-center">\
                 <a name="first" class="link disabled">Premier</a>\
                 <a name="next" class="link disabled">Suivant</a>\
-                <p id="navigation-text" class="logs-text-margin">' + this.currentPage + ' / ' + this.lastPage + '</p>\
-                <a name="prev" class="link">Précédent</a>\
-                <a name="last" class="link">Dernier</a>\
+                <p name="navigation-text" class="logs-text-margin">' + this.currentPage + ' / ' + this.lastPage + '</p>\
+                <a name="prev" class="link ' + (isLast && 'disabled') + '">Précédent</a>\
+                <a name="last" class="link ' + (isLast && 'disabled') + '">Dernier</a>\
             </div>';
         this.card.insertAdjacentHTML('afterbegin', navigation);
 
@@ -152,8 +131,11 @@ class DBTable {
                 this.loading = true;
                 tbody.classList.add('blur');
 
-                const result = await this.events['onnavigation'](this.tableName, this.currentPage);
-                if (result !== null) {
+                const data = { type: 'navigation', table: this.tableName, page: this.currentPage };
+                const response = await Request_Async('./' + this.pageName, data);
+                const success = response.status === 200 && response.content?.status === 'ok';
+
+                if (success) {
                     // Enable / disable buttons
                     btns.forEach(btn => {
                         const name = btn.getAttribute('name');
@@ -167,14 +149,13 @@ class DBTable {
                     });
 
                     // Execute response
-                    const [ pageNumber, maxPage, content ] = result;
-                    this.currentPage = pageNumber;
-                    this.lastPage = maxPage;
-                    tbody.innerHTML = content;
+                    this.currentPage = response.content.newPage || 1;
+                    this.lastPage = response.content.maxPage || 1;
+                    tbody.innerHTML = response.content.content || '';
                     this.setupCellsEvents();
                     this.setupTrash(false);
 
-                    const text = document.getElementById('navigation-text');
+                    const text = this.card.getElementsByTagName('p')[0];
                     text.textContent = this.currentPage + ' / ' + this.lastPage;
                 } else {
                     this.showSavedText(false);
@@ -186,6 +167,10 @@ class DBTable {
         });
     }
     setupTrash(setupHeader = true) {
+        if (!this.features['rowremove']) {
+            return;
+        }
+
         if (setupHeader) {
             const tr = this.table.getElementsByTagName('thead')[0].getElementsByTagName('tr')[0];
             const th = document.createElement('th');
@@ -232,29 +217,34 @@ class DBTable {
         const tbody = this.table.getElementsByTagName('tbody')[0];
         tbody.classList.add('blur');
 
-        const result = await this.events['onrowadd'](this.tableName);
-        this.showSavedText(result !== null);
+        const data = { type: 'rowadd', table: this.tableName };
+        const response = await Request_Async('./' + this.pageName, data);
+        const success = response.status === 200 && response.content?.status === 'ok';
+        const content = success ? response.content?.content || null : null;
 
-        if (result !== null) {
+        if (content !== null) {
             this.currentPage = 1;
-            tbody.innerHTML = result;
+            tbody.innerHTML = content;
             this.setupCellsEvents();
             this.setupTrash(false);
 
-            const text = document.getElementById('navigation-text');
-            text.textContent = this.currentPage + ' / ' + this.lastPage;
+            if (this.features['navigation']) {
+                const text = this.card.getElementsByTagName('p')[0];
+                text.textContent = this.currentPage + ' / ' + this.lastPage;
 
-            const btns = Array.from(this.card.getElementsByClassName('card-navigation')[0].getElementsByTagName('a'));
-            btns.forEach(btn => {
-                const name = btn.getAttribute('name');
-                if ((name === 'first' || name === 'next')) {
-                    btn.classList.add('disabled');
-                } else {
-                    btn.classList.remove('disabled');
-                }
-            });
+                const btns = Array.from(this.card.getElementsByClassName('card-navigation')[0].getElementsByTagName('a'));
+                btns.forEach(btn => {
+                    const name = btn.getAttribute('name');
+                    if ((name === 'first' || name === 'next')) {
+                        btn.classList.add('disabled');
+                    } else {
+                        btn.classList.remove('disabled');
+                    }
+                });
+            }
         }
 
+        this.showSavedText(content !== null);
         tbody.classList.remove('blur');
         this.loading = false;
     }
@@ -262,10 +252,10 @@ class DBTable {
     /**
      * @param {HTMLElement} row
      * @param {HTMLElement} trash
-     * @param {String} id
+     * @param {String} ID
      */
-    async onTrashClick(row, trash, id) {
-        if (!this.events['onrowremove']) {
+    async onTrashClick(row, trash, ID) {
+        if (!this.features['rowremove']) {
             return;
         }
 
@@ -280,20 +270,25 @@ class DBTable {
         }
 
         row.classList.add('blur');
-        const newContent = await this.events['onrowremove'](this.tableName, id, this.currentPage);
-        this.showSavedText(newContent !== null);
-        if (newContent !== null) {
+
+        const data = { type: 'rowremove', table: this.tableName, ID, page: this.currentPage };
+        const response = await Request_Async('./' + this.pageName, data);
+        const success = response.status === 200 && response.content?.status === 'ok';
+
+        if (success) {
             const tbody = this.table.getElementsByTagName('tbody')[0];
-            tbody.innerHTML = newContent;
+            tbody.innerHTML = response.content?.content || null;
             this.setupCellsEvents();
             this.setupTrash(false);
         }
+
+        this.showSavedText(success);
         row.classList.remove('blur');
     }
 
     /** @param {HTMLTableCellElement} cell */
     onCellClick(cell) {
-        if (!this.events['oncellchange']) {
+        if (!this.features['cellchange']) {
             return;
         }
 
@@ -334,12 +329,14 @@ class DBTable {
             const ID = cell.getAttribute('data-id');
             const column = cell.getAttribute('data-column');
 
-            if (this.events['oncellchange']) {
-                const success = await this.events['oncellchange'](this.tableName, ID, column, newValue);
-                this.showSavedText(success);
+            if (this.features['cellchange']) {
+                const data = { type: 'cellchange', table: this.tableName, ID, column, value: newValue };
+                const response = await Request_Async('./' + this.pageName, data);
+                const success = response.status === 200 && response.content?.status === 'ok';
                 if (!success) {
                     newValue = initValue;
                 }
+                this.showSavedText(success);
             }
             cell.classList.remove('blur');
         }

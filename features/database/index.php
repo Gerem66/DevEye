@@ -3,54 +3,49 @@
     //$curr = 'database-dev-gl';
     //$credentials = [ 'localhost', 'u444572210_GameLifeDev', 'u444572210_GLAdminDev', 'T5*JSh;d' ];
 
-    $db = new DataBase();
+    /** @var DataBase $db */
 
-    require(__DIR__.'/utils.php');
+    /**
+     * @param DataBase $db
+     * @param string $table
+     * @param int $page
+     * @param int $pageLength
+     */
+    function AddDataTable($db, $table, $page, $pageLength) {
+        $headers = GetHeaders($db, $table);
+        $rows = GetRows($db, $table, $page, $pageLength);
+        $lastPage = ceil(GetTableLength($db, $table) / $pageLength);
+
+        $tableHead = TheadFromDB($headers);
+        $tableBody = TbodyFromDB($rows);
+
+        return "<div class='row'>
+                    <div class='card col-full' data-title='$table'>
+                        <table class='show-lines' data-maxpage='$lastPage'>
+                            <thead>$tableHead</thead>
+                            <tbody>$tableBody</tbody>
+                        </table>
+                    </div>
+                </div>";
+    }
+
+    $rowsCount = 10;
+
+    if (isset($post['type'])) {
+        DBTableCommand($db, $post, $rowsCount);
+    }
 
     $tables = $db->GetTables();
-
-    $content = '';
+    $tablesContent = '';
     foreach ($tables as $table) {
-        $content .= AddDataTable($table, $table);
+        $tablesContent .= AddDataTable($db, $table, 0, $rowsCount);
     }
+
+    $variables = array(
+        'username' => $user->Username,
+        'tablesContent' => $tablesContent
+    );
+    $content = ImportHTML(__DIR__.'/index.html', $variables);
+    echo($content);
 
 ?>
-
-<style>
-    tbody td {
-        max-width: 256px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    tbody td input {
-        min-width: calc(256px - 12px);
-    }
-    tbody td i {
-        transition: color 0.25s ease 0s;
-    }
-    tbody td i.red {
-        color: red;
-    }
-</style>
-
-<div>
-    <div class="row">
-        <div class="col-half">
-            <h1 class="m-0 text">Base de données</h1>
-        </div>
-        <div class="col-half float-right">
-            <ol>
-                <li class="breadcrumb-item"><a onclick="LoadPage('user');"><?= $_SESSION['USERNAME']; ?></a></li>
-                <li class="breadcrumb-item active">database-dev-gl</li>
-            </ol>
-        </div>
-    </div>
-
-    <div class="content">
-        <div class="container-fluid">
-
-            <?= $content ?>
-
-        </div>
-    </div>
-</div>
