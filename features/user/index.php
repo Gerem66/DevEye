@@ -85,11 +85,14 @@
     }
 
     // Save features settings
-    $input = file_get_contents('php://input');
-    $data = json_decode($input, true);
-    $action = $data['action'];
-    $features = $data['features'];
+    $action = $post['action'];
+    $features = $post['features'];
     if (isset($action, $features) && $action === 'saveSettings') {
+        // Remove first character of each key in array
+        $removeFirst = fn($k) => StartsWith($k, 'f-') ? substr($k, 2) : $k;
+        $newKeys = array_map($removeFirst, array_keys($features));
+        $features = array_combine($newKeys, array_values($features));
+
         $newFeatures = json_encode($features);
         $result = $db->Query("UPDATE `Users` SET `Settings` = '$newFeatures' WHERE `ID` = {$user->ID}");
         if ($result === false) {

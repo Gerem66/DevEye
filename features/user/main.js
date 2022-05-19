@@ -122,7 +122,7 @@ class Profile extends Feature {
         this.getFeatures().forEach(feature => {
             const id = feature.getAttribute('data-id');
             const isEnabled = !feature.classList.contains('disabled');
-            features[id] = isEnabled;
+            features['f-' + id] = isEnabled; // f to force string, to keep order
         });
         const data = { 'action': 'saveSettings', 'features': features };
         const response = await Request_Async('./user', data);

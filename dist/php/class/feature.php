@@ -88,7 +88,7 @@
                 // Add all features in order of level
                 $branch = array();
                 foreach ($user->Settings as $id => $enabled) {
-                    $feature = Feature::GetFeatureByID($id, $features);
+                    $feature = Feature::GetFeatureByID(strval($id), $features);
                     $correctLevel = $feature->Level === $i && $feature->Level <= $user->Level;
                     if ($correctLevel && ($enabled || $getAll)) {
                         array_push($branch, $feature->ID);
