@@ -110,9 +110,16 @@ select.settings {
 .card.settings > .card-header.visible {
     opacity: 1;
 }
-.card.settings > .card-header > p {
-    margin-right: 8px;
+
+.popup .form-group:last-child {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 24px;
 }
-.card.settings > .card-header > img {
-    width: 20px;
+.popup .form-group:last-child > button[name='save'] {
+    padding-left: 24px;
+    padding-right: 24px;
+}
+.popup#popup-message .form-group {
+    width: max-content;
 }

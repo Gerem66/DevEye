@@ -4,7 +4,7 @@
     height: calc(2.25rem + 2px);
     padding: 0.375rem 0.75rem;
     padding-right: 48px;
-    font-size: 1rem;
+    font-size: 1em;
     font-weight: 400;
     line-height: 1.5;
     color: #fff !important;
@@ -79,6 +79,23 @@ select.form-input:focus::-ms-value {
     background-color: #ffffff;
 }
 
+.form-group {
+    position: relative;
+    margin-top: 12px;
+}
+.form-group > .form-input ~ button {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    bottom: 1px;
+    width: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
 button.submit {
     width: 100%;
     font-weight: 400;
@@ -93,7 +110,7 @@ button.submit {
     background-color: transparent;
     border: none;
     padding: 0.375rem 0.75rem;
-    font-size: 1rem;
+    font-size: 1em;
     line-height: 1.5;
     border-radius: 0.25rem;
     transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;

@@ -28,6 +28,29 @@ class Profile extends Feature {
 
         this.settingsSaved = document.getElementById('settings-saved');
         this.settingsSavedTimeout = null;
+
+        // Popups
+        this.popupMessage = new Popup('popup-message');
+        this.popupMessage.SetCancelable(false);
+        this.popupMessage.popup.getElementsByTagName('button')[0].onclick = () => this.popupMessage.Close();
+        this.popup = new Popup('popup-password');
+        this.popup.AddButtonClickListener(name => {
+            if (name === 'btn-back') this.popup.Close();
+            else if (name === 'btn-save') this.editPassword();
+        });
+        document.getElementById('button-password-edit').onclick = () => this.popup.Open();
+
+        // Popup input toggle password mode
+        const buttons = Array.from(this.popup.popup.getElementsByTagName('button'));
+        const buttonsToggle = buttons.filter(btn => btn.name === 'btn-toggle-pwd');
+        buttonsToggle.forEach(btn => btn.onclick = () => {
+            const parent = btn.parentElement;
+            const input = parent.getElementsByTagName('input')[0];
+            input.type = input.type === 'password' ? 'text' : 'password';
+            const icon = btn.getElementsByTagName('i')[0];
+            icon.classList.toggle('icon-eye-open');
+            icon.classList.toggle('icon-eye-close');
+        });
     }
     async onUnmount() {
         clearTimeout(this.settingsSavedTimeout);
@@ -145,66 +168,39 @@ class Profile extends Feature {
             refreshLogo?.classList.remove('hide');
         }
     }
+
+    async editPassword() {
+        this.popup.popup.firstElementChild.classList.add('blur');
+
+        const inputPwdOld = this.popup.inputs.find(input => input.name === 'input-pwd-old') || null;
+        const inputPwdNew = this.popup.inputs.find(input => input.name === 'input-pwd-new') || null;
+        if (inputPwdOld === null || inputPwdNew === null) throw new Error('No password inputs found');
+
+        const data = { action: 'passwordEdit', passwordOld: inputPwdOld.value, passwordNew: inputPwdNew.value };
+        const response = await Request_Async('./user', data);
+        const success = response.status === 200 && response.content['status'] === 'ok';
+
+        // Close popup & reset all components
+        this.popup.Close();
+        await new Promise(resolve => setTimeout(resolve, 200));
+        this.popup.popup.firstElementChild.classList.remove('blur');
+        inputPwdOld.value = '';
+        inputPwdNew.value = '';
+        const buttons = Array.from(this.popup.popup.getElementsByTagName('button'));
+        const buttonsToggle = buttons.filter(btn => btn.name === 'btn-toggle-pwd');
+        buttonsToggle.forEach(btn => {
+            const icon = btn.getElementsByTagName('i')[0];
+            if (icon.classList.contains('icon-eye-open')) btn.click();
+        });
+
+        const text = this.popupMessage.popup.getElementsByTagName('p')[0];
+        text.textContent = 'Le mot de passe a été modifié avec succès';
+        if (!success) {
+            text.textContent = `Le mot de passe n'a pas pu être modifié (${response.status} - ${response.content['status']})`;
+        }
+
+        this.popupMessage.Open();
+    }
 }
 
 new Profile();
-
-/*
-function Init_User() {
-    let bt_show_passwords = document.getElementsByName('bt-show-password');
-    for (let i = 0; i < bt_show_passwords.length; i++) {
-        bt_show_passwords[i].onclick = () => SwitchPasswordVision(bt_show_passwords[i]);
-    }
-
-    let bt_open_changepwd = document.getElementById('bt-open-changepwd');
-    let bt_open_quicklink = document.getElementById('bt-open-quicklink');
-    bt_open_changepwd.onclick = OpenChangepasswordPopup;
-}
-
-function OpenChangepasswordPopup() {
-    let popup = document.getElementById('popup-changepwd');
-    popup.classList.add('active');
-
-    let tb_password = document.getElementsByName('pwd')[0];
-    let tb_new_password = document.getElementsByName('new-pwd')[0];
-    let btn_save = document.getElementsByName('save')[0];
-    let btn_back = document.getElementsByName('back')[0];
-    tb_password.focus();
-
-    function SavePassword() {
-        btn_save.disabled = true;
-        let password = tb_password.value;
-        let new_password = tb_new_password.value;
-
-        // Get quicklink
-        let data = new FormData();
-        data.append('changepassword', password);
-        data.append('newpassword', new_password);
-        params = { method: 'POST', body: data };
-        fetch('./user', params)
-            .then(function(res) { return res.text(); })
-            .then(function(content) {
-                if (content === "OK") {
-                    tb_password.parentNode.parentNode.innerHTML = "<p>Mot de passe modifié avec succès !</p>";
-                } else if (content == "WRONG") {
-                    tb_password.parentNode.parentNode.innerHTML = "<p>Une erreur est survenue. (Wrong password)</p>";
-                } else {
-                    tb_password.parentNode.parentNode.innerHTML = "<p>Une erreur est survenue. (" + content + ")</p>";
-                }
-            })
-            .catch(function(err) {
-                tb_password.parentNode.parentNode.innerHTML = "<p>Une erreur est survenue. (" + err + ")</p>";
-            })
-            .finally(function() {
-                btn_save.remove();
-                tb_new_password.parentNode.parentNode.remove();
-                btn_back.onclick = () => LoadPage('user');
-                popup.onclick = (e) => { if (e.target === popup) LoadPage('user'); }
-            });
-    }
-
-    btn_save.onclick = SavePassword;
-    btn_back.onclick = () => popup.classList.remove('active');
-    popup.onclick = (e) => { if (e.target === popup) popup.classList.remove('active'); }
-}
-*/

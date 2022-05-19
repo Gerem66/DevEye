@@ -1,93 +1,37 @@
 <?php
 
+    require(__DIR__.'/utils.php');
+
     /**
      * @var DataBase $db
      * @var User $user
      */
 
-    function GetTFA($tfa) {
-        if ($tfa === null) {
-            return "Désactivé<img src='./assets/icons/error.svg' alt='Error icon'></img>";
+    // Change password
+    $action = $post['action'];
+    if (isset($action) && $action === 'passwordEdit') {
+        $status = array('status' => 'error');
+
+        $passwordOld = $post['passwordOld'];
+        $passwordNew = $post['passwordNew'];
+
+        // Check password validity
+        if (password_verify($passwordOld, $user->Password)) {
+            $hash = password_hash($passwordNew, PASSWORD_BCRYPT);
+            $db->SetCellContent('Users', 'Password', $user->ID, $hash, false);
+            $db->AddLog($user->ID, 'passwordEdit', "Password changed successfully.");
+            $status['status'] = 'ok';
+        } else {
+            $db->AddLog($user->ID, 'passwordEdit', "Password changing failed (wrong password) !");
         }
-        return "<a id='delete-tfa'>Supprimer</a>Activé<img src='./assets/icons/success.svg' alt='Success icon'></img>";
-    }
 
-    /** @param Feature $feature */
-    function AddFeature($feature, $enabled = true) {
-        $class = $enabled ? '' : ' class="disabled"';
-        $icon = $enabled ? 'open' : 'close';
-        return "<li data-id=\"{$feature->ID}\"$class>
-                    <span class=\"icon icon-drag\" title=\"Déplacer la fonctionnalité\"></span>
-                    <p>{$feature->Name}</p>
-                    <span class=\"icon icon-eye-$icon\" title=\"Activer ou désactiver la fonctionnalité\"></span>
-                </li>";
-    }
-
-    /** @param Feature $feature */
-    function AddFeatureOption($feature, $default = false) {
-        $selected = $default ? ' selected' : '';
-        return "<option value='{$feature->ID}'$selected>{$feature->Name}</option>";
-    }
-
-    /**
-     * @param Feature[] $features
-     * @param User $user
-     * @param array $tree
-     * @param int $level
-     * @return string Return HTML elements of all features
-     */
-    function DefineFeatures($features, $user, $tree, $level = 0) {
-        $featuresHTML = '';
-        foreach ($tree as $key => $value) {
-            $keyType = gettype($key);
-            if ($keyType === 'string') {
-                $featuresHTML .= DefineFeatures($features, $user, $value, $level + 1);
-            } else if ($keyType === 'integer') {
-                $feature = Feature::GetFeatureByID($value, $features);
-                if ($feature === null) continue;
-                $featureEnabled = $feature->Enabled;
-                if (array_key_exists($feature->ID, $user->Settings)) {
-                    $featureEnabled = $user->Settings[$feature->ID];
-                }
-                $featuresHTML .= AddFeature($feature, $featureEnabled);
-            }
-        }
-        return $featuresHTML;
-    }
-
-    /**
-     * @param Feature[] $features
-     * @param User $user
-     * @param array $tree
-     * @param int $level
-     * @return string Return HTML elements of all features
-     */
-    function DefineOptions($features, $user, $tree, $level = 0) {
-        $featuresHTML = '';
-        foreach ($tree as $key => $value) {
-            $keyType = gettype($key);
-            if ($keyType === 'string') {
-                $featuresHTML .= DefineOptions($features, $user, $value, $level + 1);
-            } else if ($keyType === 'integer') {
-                $feature = Feature::GetFeatureByID($value, $features);
-                if ($feature === null) continue;
-                $featureEnabled = $feature->Enabled;
-                if (array_key_exists($feature->ID, $user->Settings)) {
-                    $featureEnabled = $user->Settings[$feature->ID];
-                }
-                $default = array_key_exists('default', $user->Settings) && $user->Settings['default'] === $feature->ID;
-                if ($featureEnabled) {
-                    $featuresHTML .= AddFeatureOption($feature, $default);
-                }
-            }
-        }
-        return $featuresHTML;
+        echo(json_encode($status));
+        exit();
     }
 
     // Save features settings
-    $action = $post['action'];
-    $features = $post['features'];
-    if (isset($action, $features) && $action === 'saveSettings') {
+    if (isset($action, $post['features']) && $action === 'saveSettings') {
+        $features = $post['features'];
         // Remove first character of each key in array
         $removeFirst = fn($k) => StartsWith($k, 'f-') ? substr($k, 2) : $k;
         $newKeys = array_map($removeFirst, array_keys($features));
@@ -126,31 +70,6 @@
 
     $content = ImportHTML(__DIR__.'/index.html', $vars);
     echo($content);
-
-    // TODO - Coder le changement de mdp
-    /*if (isset($_POST['changepassword'], $_POST['newpassword'])) {
-        $_status = "FAIL";
-        $password = $_POST['changepassword'];
-        $password_new = $_POST['newpassword'];
-
-        // Check password validity
-        $db = new DataBase;
-        $req_user = $db->GetRowContent('Users', 'ID', $user->Username);
-        if (isset($req_user)) {
-            if (password_verify($password, $req_user['Password'])) {
-                $hash = password_hash($password_new, PASSWORD_BCRYPT);
-                $db->SetCellContent('Users', 'Password', $req_user['ID'], $hash, false);
-                $db->AddLog($_SESSION['ID'], 'instanceEdit', "Password changed successfully.");
-                $_status = "OK";
-            } else {
-                $db->AddLog($_SESSION['ID'], 'instanceEdit', "Password changing failed (wrong password) !");
-                $_status = "WRONG";
-            }
-        }
-
-        echo($_status);
-        exit();
-    }*/
 
     // TODO - Récup le nombre d'Instances
     /*$instance = 0;
