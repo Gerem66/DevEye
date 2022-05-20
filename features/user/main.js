@@ -33,24 +33,13 @@ class Profile extends Feature {
         this.popupMessage = new Popup('popup-message');
         this.popupMessage.SetCancelable(false);
         this.popupMessage.popup.getElementsByTagName('button')[0].onclick = () => this.popupMessage.Close();
+
         this.popup = new Popup('popup-password');
         this.popup.AddButtonClickListener(name => {
             if (name === 'btn-back') this.popup.Close();
             else if (name === 'btn-save') this.editPassword();
         });
         document.getElementById('button-password-edit').onclick = () => this.popup.Open();
-
-        // Popup input toggle password mode
-        const buttons = Array.from(this.popup.popup.getElementsByTagName('button'));
-        const buttonsToggle = buttons.filter(btn => btn.name === 'btn-toggle-pwd');
-        buttonsToggle.forEach(btn => btn.onclick = () => {
-            const parent = btn.parentElement;
-            const input = parent.getElementsByTagName('input')[0];
-            input.type = input.type === 'password' ? 'text' : 'password';
-            const icon = btn.getElementsByTagName('i')[0];
-            icon.classList.toggle('icon-eye-open');
-            icon.classList.toggle('icon-eye-close');
-        });
     }
     async onUnmount() {
         clearTimeout(this.settingsSavedTimeout);
@@ -170,6 +159,7 @@ class Profile extends Feature {
     }
 
     async editPassword() {
+        this.popup.SetCancelable(false);
         this.popup.popup.firstElementChild.classList.add('blur');
 
         const inputPwdOld = this.popup.inputs.find(input => input.name === 'input-pwd-old') || null;
@@ -181,17 +171,9 @@ class Profile extends Feature {
         const success = response.status === 200 && response.content['status'] === 'ok';
 
         // Close popup & reset all components
-        this.popup.Close();
-        await new Promise(resolve => setTimeout(resolve, 200));
+        this.popup.Close(true);
+        this.popup.SetCancelable(true);
         this.popup.popup.firstElementChild.classList.remove('blur');
-        inputPwdOld.value = '';
-        inputPwdNew.value = '';
-        const buttons = Array.from(this.popup.popup.getElementsByTagName('button'));
-        const buttonsToggle = buttons.filter(btn => btn.name === 'btn-toggle-pwd');
-        buttonsToggle.forEach(btn => {
-            const icon = btn.getElementsByTagName('i')[0];
-            if (icon.classList.contains('icon-eye-open')) btn.click();
-        });
 
         const text = this.popupMessage.popup.getElementsByTagName('p')[0];
         text.textContent = 'Le mot de passe a été modifié avec succès';

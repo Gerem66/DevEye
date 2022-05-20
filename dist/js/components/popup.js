@@ -11,6 +11,8 @@ class Popup {
         /** @type {Array<HTMLInputElement>} */
         this.inputs = Array.from(this.popup.getElementsByTagName('input'));
 
+        this.inputsEvents = Input.LoadAll(this.popup);
+
         this.callback = () => {};
         this.SetCancelable(true);
     }
@@ -30,14 +32,21 @@ class Popup {
     AddButtonClickListener(callback) {
         this.callback = callback;
 
-        const buttons = Array.from(this.popup.getElementsByClassName('btn'));
+        let buttons = Array.from(this.popup.getElementsByClassName('btn'));
+        buttons = buttons.filter(btn => btn.getAttribute('name') !== 'btn-toggle-pwd');
         buttons.forEach(button => button.onclick = () => this.callback(button.getAttribute('name')));
     }
 
     Open() {
         this.popup.classList.add('active');
     }
-    Close() {
+    Close(clearInputs = false) {
         this.popup.classList.remove('active');
+        setTimeout(() => {
+            if (clearInputs) {
+                this.inputs.forEach(input => input.value = '');
+            }
+            this.inputsEvents.forEach(input => input.SetVisible(false));
+        }, 200);
     }
 }

@@ -82,6 +82,7 @@ a.link.disabled {
     transition: opacity .3s ease;
     -webkit-transition: opacity .3s ease;
 }
+
 .card > .card-header > *,
 .card > .card-navigation > * {
     display: inline-block;
@@ -97,6 +98,9 @@ a.link.disabled {
 .card > .card-navigation > p {
     margin: 0 12px;
 }
+
+.card > .card-header.message > p { margin-right: 8px; }
+.card > .card-header.message > img { width: 20px; }
 
 /* Button */
 
@@ -237,10 +241,4 @@ table > tbody > tr > td.editing > input {
 }
 table > tbody > tr > td.editing > input::selection {
     background-color: #1792ae;
-}
-.card > .card-header.message > p {
-    margin-right: 8px;
-}
-.card > .card-header.message > img {
-    width: 20px;
 }

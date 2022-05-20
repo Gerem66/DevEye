@@ -16,7 +16,9 @@
         $passwordNew = $post['passwordNew'];
 
         // Check password validity
-        if (password_verify($passwordOld, $user->Password)) {
+        if ($passwordOld === $passwordNew) {
+            $db->AddLog($user->ID, 'passwordEdit', "Password changing failed (same password) !");
+        } else if (password_verify($passwordOld, $user->Password)) {
             $hash = password_hash($passwordNew, PASSWORD_BCRYPT);
             $db->SetCellContent('Users', 'Password', $user->ID, $hash, false);
             $db->AddLog($user->ID, 'passwordEdit', "Password changed successfully.");

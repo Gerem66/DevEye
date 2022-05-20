@@ -36,6 +36,8 @@
         margin-top: -500px;
         border-top: none;
         border-bottom: solid 4px #42a5f5;
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
         transform: scale3d(1, 1, 1);
         transition: margin-top 0.5s cubic-bezier(.77,0,.18,1);
     }
