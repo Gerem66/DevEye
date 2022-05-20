@@ -51,7 +51,7 @@
             $enabled = $user->Settings[$feature->ID];
         }
         if ($feature !== null && $correctLevel && $enabled) {
-            $commandJS = "<script>page.defaultPage = '{$user->Settings['default']}'</script>";
+            $commandJS = "<script>page.defaultPage = '{$feature->Redirect}'</script>";
         }
     }
     $variables = array(

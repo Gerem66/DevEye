@@ -85,7 +85,7 @@ class DBTable {
         }
 
         const divAdd = document.createElement('div');
-        divAdd.classList.add('float-right');
+        divAdd.classList.add('float-right', 'responsive');
 
         const buttonAdd = document.createElement('a');
         buttonAdd.classList.add('link');
