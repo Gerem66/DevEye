@@ -40,6 +40,9 @@ class Profile extends Feature {
             else if (name === 'btn-save') this.editPassword();
         });
         document.getElementById('button-password-edit').onclick = () => this.popup.Open();
+
+        const img = document.getElementById('image-profile');
+        img.onmousedown = (e) => e.preventDefault();
     }
     async onUnmount() {
         clearTimeout(this.settingsSavedTimeout);

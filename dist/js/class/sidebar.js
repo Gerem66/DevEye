@@ -31,6 +31,10 @@ class Sidebar {
         /** @type {HTMLElement} Button to collapse/expand sidebar */
         this.buttonSidebar = document.getElementById('button-sidebar');
         this.buttonSidebar.onclick = () => this.ButtonSidebar();
+
+        // Disable icon drag
+        const img = document.getElementById('image-profile-sidebar');
+        img.onmousedown = (e) => e.preventDefault();
     }
 
     /** @param {HTMLElement} item */
