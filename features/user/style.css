@@ -46,11 +46,13 @@
     text-align: center;
 }
 .settings-features {
+    position: relative;
     list-style: none;
     margin: 12px 0 24px;
     padding: 24px;
     border-radius: 4px;
     background-color: #102b3c;
+    overflow-y: hidden;
 }
 .settings-features > li {
     list-style: none;

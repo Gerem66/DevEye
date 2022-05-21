@@ -19,8 +19,10 @@ class Profile extends Feature {
         // Define features drag & drop
         this.getFeatures = () => Array.from(this.settingsFeatures.getElementsByTagName('li'));
         this.getFeatures().forEach(this.loadFeature);
-        this.settingsFeatures.onmousemove = this.onMoveFeature;
-        this.settingsFeatures.onmouseleave = this.onDropFeature;
+
+        const touch = new MyTouch(this.settingsFeatures);
+        touch.AddEventListener('TouchMove', this.onMoveFeature);
+        touch.AddEventListener('TouchEnd', this.onDropFeature);
         document.onmouseup = this.onDropFeature;
 
         // Define default features
@@ -51,7 +53,8 @@ class Profile extends Feature {
     loadFeature = (feature) => {
         const [ dragIcon, eyeIcon ] = feature.getElementsByTagName('span');
         eyeIcon.onclick = () => this.onFeatureToggle(feature, eyeIcon);
-        dragIcon.onmousedown = (ev) => this.onDragFeature(ev, feature);
+        const touch = new MyTouch(dragIcon);
+        touch.AddEventListener('TouchStart', (ev) => this.onDragFeature(ev, feature));
     }
     /**
      * @param {HTMLLIElement} feature
@@ -72,15 +75,11 @@ class Profile extends Feature {
         this.saveSettings();
     }
     /**
-     * @param {MouseEvent} ev
+     * @param {MyTouchEvent} ev
      * @param {HTMLLIElement} feature
      */
     onDragFeature = (ev, feature) => {
-        //this.onDropFeature();
-        this.initPos = {
-            y: ev.pageY - feature.offsetTop,
-            y0: feature.offsetTop
-        };
+        this.initPos.y = feature.offsetTop;
         this.initIndex = this.getFeatures().indexOf(feature);
         this.ghost = feature.cloneNode(true);
         this.ghost.style.width = feature.offsetWidth + 'px';
@@ -88,16 +87,16 @@ class Profile extends Feature {
         this.selected.classList.add('ghost');
         this.settingsFeatures.appendChild(this.ghost);
         this.onMoveFeature(ev);
+        return true;
     }
-    /** @param {MouseEvent} ev */
+    /** @param {MyTouchEvent} ev */
     onMoveFeature = (ev) => {
         if (this.ghost) {
             const features = this.getFeatures();
             const currIndex = features.indexOf(this.selected);
             const deltaIndex = this.initIndex - currIndex;
-            const deltaY = this.initPos.y0 - (ev.pageY - this.initPos.y);
             const height = features[0].offsetHeight;
-            const relativeDeltaY = deltaIndex - deltaY / height;
+            const relativeDeltaY = deltaIndex - ev.relativeY / height;
             if (Math.abs(relativeDeltaY) > 0.5) {
                 const diff = relativeDeltaY > 0 ? 1 : -1;
                 const newIndex = MinMax(0, currIndex + diff, features.length - 1);
@@ -110,8 +109,9 @@ class Profile extends Feature {
                 }
             }
             this.ghost.style.position = 'absolute';
-            this.ghost.style.top = `${ev.pageY - this.initPos.y}px`;
+            this.ghost.style.top = `${this.initPos.y - ev.relativeY}px`;
         }
+        return true;
     }
     onDropFeature = () => {
         if (this.selected && this.ghost) {
