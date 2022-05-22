@@ -1,0 +1,149 @@
+.card-notes {
+    width: 10em;
+    height: 100%;
+    margin-left: -24px;
+    padding-left: 18px;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-bottom: solid 4px #42a5f5;
+}
+.card-notes::before {
+    position: sticky;
+    display: inline-block;
+    top: -48px;
+    left: 0;
+    width: 100%;
+    margin-top: -28px;
+    padding-top: 24px;
+    padding-bottom: 12px;
+    border-bottom: solid #ffffff5e 1px;
+    background-color: #263544;
+    z-index: 10;
+}
+.card-notes > .card-header {
+    position: absolute;
+    top: 16px;
+    right: 12px;
+    z-index: 15;
+}
+.card-notes > .card-header > i {
+    opacity: .7;
+    cursor: pointer;
+}
+.card-notes > .card-header > i:hover {
+    opacity: 1;
+}
+
+.row-notes {
+    height: calc(100% - 168px);
+    justify-content: space-between;
+}
+
+ul.notes-list {
+    list-style: none;
+    margin: 18px 0 0;
+    padding: 0;
+    user-select: none;
+    -webkit-user-select: none;
+}
+ul.notes-list > li {
+    position: relative;
+    padding: 12px;
+    cursor: pointer;
+    transition: background-color 0.2s cubic-bezier(.19,1,.22,1);
+}
+ul.notes-list > li:hover {
+    background-color: #00000030;
+}
+ul.notes-list > li.active {
+    background-color: #00000050;
+}
+ul.notes-list > li::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    bottom: 50%;
+    width: 2px;
+    background-color: #42a5f5;
+    transition: top 0.4s cubic-bezier(.19,1,.22,1), bottom 0.4s cubic-bezier(.19,1,.22,1);
+}
+ul.notes-list > li.active::before {
+    top: 0;
+    bottom: 0;
+}
+ul.notes-list > li > p {
+    margin: 0;
+}
+
+.card-note {
+    position: absolute;
+    left: 15em;
+    width: calc(100% - 20em);
+    height: calc(100% - 210px);
+    opacity: 0;
+    margin-top: 24px;
+    transition: margin-top 0.4s cubic-bezier(.77,0,.18,1),
+                opacity 0.4s cubic-bezier(.77,0,.18,1);
+    pointer-events: none;
+}
+.card-note.active {
+    opacity: 1;
+    margin-top: 0;
+    pointer-events: inherit;
+}
+#note-header {
+    position: absolute;
+    top: 0;
+    width: calc(50% - 24px);
+    margin-top: 16px;
+    display: flex;
+    align-items: center;
+    font-size: 1.5em;
+}
+#note-header > p {
+    display: inline;
+    margin: 0;
+    margin-right: 16px;
+}
+#note-header > i {
+    flex-shrink: 0;
+    margin-left: 12px;
+    background-color: #ffffff7e;
+    cursor: pointer;
+}
+#note-header > i:hover {
+    background-color: #ffffff;
+}
+.card-note > .card-header {
+    max-width: calc(50% - 24px);
+    margin-top: 6px;
+}
+.card-note > .card-header > p {
+    margin: 0 0 4px;
+}
+#note-content {
+    margin-top: 40px;
+}
+
+.card-note .form-input {
+    height: auto;
+    resize: none;
+    overflow: hidden;
+}
+
+.card-note .input-title {
+    display: inline;
+    width: 100%;
+    padding: 2px 8px 4px;
+    font-size: .8em;
+}
+
+.card-note #note-content > h1,
+.card-note #note-content > h2,
+.card-note #note-content > h3,
+.card-note #note-content > h4 {
+    margin-top: 30px;
+}
+.card-note #note-content > p { margin: 6px 0 0; }
+.card-note #note-content > ul { margin: 6px 0 0; }

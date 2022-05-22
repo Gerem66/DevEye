@@ -70,6 +70,7 @@ a.link.disabled {
     border-top: solid 4px #42a5f5;
     background-color: #263544;
     overflow: auto;
+    box-shadow: 2px 2px 8px #00000040;
 }
 .card::before {
     position: absolute;

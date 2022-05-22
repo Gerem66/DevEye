@@ -71,6 +71,10 @@
             return $this->conn->query($command);
         }
 
+        public function GetLastInsertedID() {
+            return $this->conn->insert_id;
+        }
+
         /** Return last sql error */
         public function GetLastError() {
             return $this->conn->error;
@@ -141,18 +145,11 @@
          * @param string $table
          * @param string $cellSearch
          * @param string $cellValue
-         * @return array Array of rows
+         * @param string $cellsReturn
          */
-        public function GetRowsContent($table, $cellSearch, $cellValue) {
-            $rows = array();
-            $result = $this->Query("SELECT * FROM `{$this->db_name}`.`$table` WHERE `$cellSearch` = '$cellValue'");
-            if ($result === false) {
-                return null;
-            }
-            while ($row = $result->fetch_row()) {
-                array_push($rows, $row);
-            }
-            return $rows;
+        public function GetRowsContent($table, $cellSearch, $cellValue, $cellsReturn = '*') {
+            $command = "SELECT $cellsReturn FROM `{$this->db_name}`.`$table` WHERE `$cellSearch` = '$cellValue'";
+            return $this->QueryArray($command);
         }
 
         /**

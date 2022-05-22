@@ -24,6 +24,10 @@
     -webkit-mask-image: url(../../assets/icons/drag.svg);
     mask-image: url(../../assets/icons/drag.svg);
 }
+.icon-edit {
+    -webkit-mask-image: url(../../assets/icons/edit.svg);
+    mask-image: url(../../assets/icons/edit.svg);
+}
 .icon-error {
     -webkit-mask-image: url(../../assets/icons/error.svg);
     mask-image: url(../../assets/icons/error.svg);
@@ -52,9 +56,21 @@
     -webkit-mask-image: url(../../assets/icons/menu.svg);
     mask-image: url(../../assets/icons/menu.svg);
 }
+.icon-notes {
+    -webkit-mask-image: url(../../assets/icons/notes.svg);
+    mask-image: url(../../assets/icons/notes.svg);
+}
 .icon-refresh {
     -webkit-mask-image: url(../../assets/icons/refresh.svg);
     mask-image: url(../../assets/icons/refresh.svg);
+}
+.icon-square-check {
+    -webkit-mask-image: url(../../assets/icons/square-check.svg);
+    mask-image: url(../../assets/icons/square-check.svg);
+}
+.icon-square-empty {
+    -webkit-mask-image: url(../../assets/icons/square-empty.svg);
+    mask-image: url(../../assets/icons/square-empty.svg);
 }
 .icon-success {
     -webkit-mask-image: url(../../assets/icons/success.svg);
@@ -67,4 +83,12 @@
 .icon-user {
     -webkit-mask-image: url(../../assets/icons/user.svg);
     mask-image: url(../../assets/icons/user.svg);
+}
+.icon-v {
+    -webkit-mask-image: url(../../assets/icons/v.svg);
+    mask-image: url(../../assets/icons/v.svg);
+}
+.icon-x {
+    -webkit-mask-image: url(../../assets/icons/x.svg);
+    mask-image: url(../../assets/icons/x.svg);
 }

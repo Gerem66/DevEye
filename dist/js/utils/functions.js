@@ -21,3 +21,12 @@ function MinMax(min, value, max) {
     else if (value > max) return max;
     return value;
 }
+
+/**
+ * Wait during 'ms' milliseconds
+ * @param {Number} ms 
+ * @returns {Promise}
+ */
+function Sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
