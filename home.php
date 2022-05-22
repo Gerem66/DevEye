@@ -17,6 +17,7 @@
 
     $db = new DataBase();
     $connected = isset($_SESSION['USER_ID']);
+    $version = '0.0.1';
 
     // Connection
     if (array_key_exists('bt_connect', $_POST)) {
@@ -56,6 +57,7 @@
     }
     $variables = array(
         'sidebar' => $sidebar,
+        'version' => $version,
         'avatar' => $user->Avatar,
         'username' => $user->Username,
         'scripts' => $scripts,

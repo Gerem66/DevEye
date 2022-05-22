@@ -93,13 +93,16 @@ ul.notes-list > li > p {
     pointer-events: inherit;
 }
 #note-header {
-    position: absolute;
-    top: 0;
+    position: sticky;
+    top: -42px;
     width: calc(50% - 24px);
-    margin-top: 16px;
+    margin-top: -12px;
+    padding-top: 10px;
+    padding-bottom: 6px;
     display: flex;
     align-items: center;
     font-size: 1.5em;
+    background-color: #263544;
 }
 #note-header > p {
     display: inline;

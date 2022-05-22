@@ -77,6 +77,13 @@ nav.sidebar.collapse-sidebar {
     color: #fff;
     font-size: 1.2rem;
 }
+.homebar > span.home-version {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    color: #fff5;
+    font-size: .8em;
+}
 .homebar > span.refresh {
     position: absolute;
     right: 12px;

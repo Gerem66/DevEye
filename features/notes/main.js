@@ -170,11 +170,13 @@ class Notes extends Feature {
 
         if (success) {
             this.noteTitle.textContent = newTitle;
-            this.getNotesList().forEach(li => {
-                if (li.classList.contains('active')) {
-                    li.firstChild.textContent = newTitle;
-                }
-            });
+            const li = this.getNotesList().find(li => li.classList.contains('active')) || null;
+            if (li !== null) {
+                li.firstChild.textContent = newTitle;
+                const savedLi = li.cloneNode(true);
+                li.remove();
+                this.notesContainer.insertAdjacentElement('afterbegin', savedLi);
+            }
         }
         this.noteTitleInput.replaceWith(this.noteTitle);
         this.showNote(response);

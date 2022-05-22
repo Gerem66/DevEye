@@ -33,7 +33,8 @@
     }
 
     $getNoteContent = fn($note) => "<li data-id='{$note['ID']}'><p>{$note['Title']}</p></li>";
-    $notes = $db->GetRowsContent('_Notes', 'UID', $user->ID, '`ID`, `Title`');
+    $command = "SELECT `ID`, `Title` FROM `_Notes` WHERE `UID` = '{$user->ID}' ORDER BY `Last` DESC";
+    $notes = $db->QueryArray($command);
     $notes = implode('', array_map($getNoteContent, $notes));
 
     $variables = array(
