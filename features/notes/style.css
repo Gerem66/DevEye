@@ -56,6 +56,7 @@ ul.notes-list > li:hover {
     background-color: #00000030;
 }
 ul.notes-list > li.active {
+    font-weight: 600;
     background-color: #00000050;
 }
 ul.notes-list > li::before {
@@ -103,6 +104,17 @@ ul.notes-list > li > p {
     align-items: center;
     font-size: 1.5em;
     background-color: #263544;
+    z-index: 2;
+}
+#note-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: -100%;
+    height: 100%;
+    background-color: #263544;
+    z-index: -1;
 }
 #note-header > p {
     display: inline;
@@ -127,6 +139,7 @@ ul.notes-list > li > p {
 }
 #note-content {
     margin-top: 40px;
+    padding: 0 5em;
 }
 
 .card-note .form-input {
@@ -142,11 +155,22 @@ ul.notes-list > li > p {
     font-size: .8em;
 }
 
-.card-note #note-content > h1,
-.card-note #note-content > h2,
-.card-note #note-content > h3,
-.card-note #note-content > h4 {
-    margin-top: 30px;
+/* Pseudo markdown */
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+    margin: 1.2em auto 0.4em -24px;
+    font-weight: 600;
 }
-.card-note #note-content > p { margin: 6px 0 0; }
-.card-note #note-content > ul { margin: 6px 0 0; }
+.markdown p { margin: 6px 0 0; }
+.markdown ul, .markdown ol { margin: 6px 0 0; }
+.markdown p > i.icon {
+    width: 20px;
+    margin-right: 8px;
+    margin-bottom: 2px;
+    vertical-align: middle;
+}
+.markdown p > i.icon[name='checkable'] { cursor: pointer; }
+.markdown p > i.icon[name='checkable']:active { opacity: .6; }
+.markdown p[name='checkable'] { margin-left: 24px; }

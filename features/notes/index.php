@@ -9,11 +9,11 @@
 
     if (isset($post['addNote'])) {
         $id = AddNote($db, $user);
-        exit(GetContent($db, $user, $id));
+        exit(json_encode(GetContent($db, $user, $id)));
     }
     if (isset($post['getContent'])) {
         $id = $post['getContent'];
-        exit(GetContent($db, $user, $id));
+        exit(json_encode(GetContent($db, $user, $id)));
     }
     if (isset($post['setContent'])) {
         $id = $post['setContent'];
@@ -21,11 +21,20 @@
         if (!$success) {
             exit('{"status":"error"}');
         }
-        exit(GetContent($db, $user, $id));
+        exit(json_encode(GetContent($db, $user, $id)));
     }
     if (isset($post['removeNote'])) {
         $id = $post['removeNote'];
         $success = $db->Query("DELETE FROM `_Notes` WHERE `ID` = {$id} AND `UID` = {$user->ID}");
+        if (!$success) {
+            exit('{"status":"error"}');
+        }
+        exit('{"status":"ok"}');
+    }
+    if (isset($post['checkSquare'])) {
+        $id = $post['noteID'];
+        $checkboxID = $post['checkSquare'];
+        $success = SetCheckbox($db, $user, $id, $checkboxID);
         if (!$success) {
             exit('{"status":"error"}');
         }

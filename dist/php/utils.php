@@ -63,4 +63,34 @@
             return (isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : '');
     }
 
+    /**
+     * Return number of characters at the beginning of a string
+     * @param string $str
+     * @param string $char One character
+     * @return int
+     */
+    function str_count_first($str, $char) {
+        for ($i = 0; $i < strlen($str); $i++) {
+            if ($str[$i] !== $char) {
+                return $i;
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * Same as str_replace but replace only the first occurence
+     * @param string $search
+     * @param string $replace
+     * @param string $subject
+     * @return string
+     */
+    function str_replace_first($search, $replace, $subject) {
+        $pos = strpos($subject, $search);
+        if ($pos === false) {
+            return $subject;
+        }
+        return substr_replace($subject, $replace, $pos, strlen($search));
+    }
+
 ?>

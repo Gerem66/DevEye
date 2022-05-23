@@ -86,7 +86,7 @@ nav.sidebar.collapse-sidebar {
 }
 .homebar > span.refresh {
     position: absolute;
-    right: 12px;
+    right: 50px;
     top: calc(50% - 14px);
     display: flex;
     padding: 5px;
@@ -109,6 +109,8 @@ nav.sidebar.collapse-sidebar {
     align-items: center;
     justify-content: center;
     background-color: #263544;
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.25), 0 10px 10px rgba(0, 0, 0, 0.22);
+    z-index: 95;
 }
 #sidebar.collapse-sidebar:hover,
 .minibar:hover ~ #sidebar {

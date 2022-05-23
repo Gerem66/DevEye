@@ -1,3 +1,26 @@
+const PLACEHOLDER = `# Titre principal
+1er paragraphe, texte en *italique* et en **gras**.
+2e paragraphe, texte en __souligné__ et en --barré--.
+
+## Titre secondaire
+- Liste à puce
+- Liste à puce
+-- Sous-liste
+--- Sous-sous-liste
+---- ...
+
++ Liste numérotée
++ Liste numérotée
+++ Sous-liste
++++ Sous-sous-liste
+++++ ...
+
+### Titre tertiaire
+[] Case cochable (au clic)
+[ ] Case cochable
+[x] Case cochée
+[v] Case cochée`;
+
 class Notes extends Feature {
     constructor() {
         super('notes');
@@ -8,7 +31,6 @@ class Notes extends Feature {
 
         this.editing = false;
         this.currentNote = null;
-        this.inputContent = null;
 
         this.popup = new Popup('popup-message');
         this.popup.popup.getElementsByTagName('button')[0].onclick = () => this.popup.Close();
@@ -22,11 +44,20 @@ class Notes extends Feature {
         document.getElementById('btn-notes-add').onclick = () => this.noteAdd();
 
         this.noteTitle = document.getElementById('note-title');
-        this.noteTitleInput = null;
         this.noteContent = document.getElementById('note-content');
         this.noteDate = document.getElementById('note-date');
         this.btnEdit = document.getElementById('btn-edit');
         this.btnDelete = document.getElementById('btn-delete');
+
+        // Define title editing input
+        this.inputTitle = document.createElement('input');
+        this.inputTitle.classList.add('form-input', 'input-title');
+        this.inputTitle.type = 'text';
+        this.inputTitle.maxLength = 128;
+        // Textarea for content editing
+        this.inputContent = document.createElement('textarea');
+        this.inputContent.classList.add('form-input');
+        this.inputContent.placeholder = PLACEHOLDER;
     }
     async onUnmount() {
     }
@@ -74,13 +105,31 @@ class Notes extends Feature {
 
     showNote(note) {
         this.currentNote = note.content;
-        const { title, content, rawContent, date } = this.currentNote;
+        const { id, title, content, rawContent, date } = this.currentNote;
 
         this.editing = false;
         this.noteTitle.textContent = title;
         this.noteContent.innerHTML = content;
         this.noteDate.textContent = date;
         this.noteContainer.classList.add('active');
+
+        // Load checkable squares
+        const images = Array.from(this.noteContent.getElementsByTagName('i'));
+        const checkables = images.filter(i => i.getAttribute('name') === 'checkable');
+        checkables.forEach(i => {
+            const squareID = i.getAttribute('data-id');
+            i.onclick = async () => {
+                i.classList.add('blur');
+                const data = { checkSquare: squareID, 'noteID': id };
+                const response = await Request_Async('./notes', data);
+                const success = response.status === 200 && response.content['status'] === 'ok';
+                if (success) {
+                    i.classList.toggle('icon-square-check');
+                    i.classList.toggle('icon-square-empty');
+                }
+                i.classList.remove('blur');
+            }
+        });
 
         this.updateButtons(this.noteEdit, this.noteDelete);
     }
@@ -90,7 +139,7 @@ class Notes extends Feature {
      * @param {Function} callback1 
      * @param {Function} callback2 
      */
-    updateButtons(callback1, callback2) {
+    updateButtons = (callback1, callback2) => {
         this.btnEdit.classList.toggle('icon-edit', !this.editing);
         this.btnEdit.classList.toggle('icon-v', this.editing);
         this.btnEdit.title = this.editing ? 'Enregistrer les modifications' : 'Modifier la note';
@@ -121,7 +170,9 @@ class Notes extends Feature {
             newLi.classList.add('active');
             newLi.setAttribute('data-id', id);
             this.notesContainer.insertAdjacentElement('afterbegin', newLi);
+
             this.showNote(response);
+            this.noteEdit();
         }
     }
     noteEdit() {
@@ -131,38 +182,39 @@ class Notes extends Feature {
         this.updateButtons(this.noteSave, this.noteEditCancel);
 
         // Title input
-        this.noteTitleInput = document.createElement('input');
-        this.noteTitleInput.classList.add('form-input', 'input-title');
-        this.noteTitleInput.type = 'text';
-        this.noteTitleInput.value = title;
-        this.noteTitleInput.maxLength = 128;
-        this.noteTitle.replaceWith(this.noteTitleInput);
+        this.inputTitle.value = title;
+        this.noteTitle.replaceWith(this.inputTitle);
 
         // Content textarea
-        this.inputContent = document.createElement('textarea');
-        this.inputContent.classList.add('form-input');
         const updateRows = () => {
             const rows = this.inputContent.value.split('\n').length;
-            this.inputContent.rows = rows;
+            const minRows = 3;
+            const rowsPlaceholder = this.inputContent.placeholder.split('\n').length;
+            if (this.inputContent.value.length === 0) {
+                this.inputContent.rows = rowsPlaceholder;
+            } else {
+                this.inputContent.rows = Math.max(rows, minRows);
+            }
         };
-        this.inputContent.textContent = rawContent;
-        this.inputContent.oninput = updateRows;
-        updateRows();
 
         this.noteContent.innerHTML = '';
         this.noteContent.append(this.inputContent);
+        this.inputContent.oninput = updateRows;
+        this.inputContent.value = rawContent;
+        updateRows.bind(this.inputContent)();
     }
     noteEditCancel() {
         const { content } = this.currentNote;
         this.noteContent.innerHTML = content;
         this.editing = false;
-        this.noteTitleInput.replaceWith(this.noteTitle);
+        this.inputTitle.replaceWith(this.noteTitle);
         this.updateButtons(this.noteEdit, this.noteDelete);
     }
     async noteSave() {
         const { id } = this.currentNote;
-        const newTitle = this.noteTitleInput.value;
+        const newTitle = this.inputTitle.value;
         const newContent = this.inputContent.value;
+        this.updateButtons(() => {}, () => {});
 
         const data = { 'setContent': id, newTitle, newContent };
         const response = await Request_Async('./notes', data);
@@ -174,11 +226,12 @@ class Notes extends Feature {
             if (li !== null) {
                 li.firstChild.textContent = newTitle;
                 const savedLi = li.cloneNode(true);
+                savedLi.onclick = () => this.loadNote(savedLi, savedLi.getAttribute('data-id'));
                 li.remove();
                 this.notesContainer.insertAdjacentElement('afterbegin', savedLi);
             }
         }
-        this.noteTitleInput.replaceWith(this.noteTitle);
+        this.inputTitle.replaceWith(this.noteTitle);
         this.showNote(response);
     }
     noteDelete() {

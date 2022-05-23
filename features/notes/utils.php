@@ -17,6 +17,7 @@
      * @param DataBase $db
      * @param User $user
      * @param int $id
+     * @return array The object containing all note's informations.
      */
     function GetContent($db, $user, $id) {
         $note = $db->Query("SELECT * FROM `_Notes` WHERE `ID` = {$id} AND `UID` = {$user->ID}")->fetch_assoc();
@@ -29,7 +30,7 @@
             'content' => TextMdToHtml($content),
             'date' => $note['Date']
         );
-        return json_encode($result);
+        return $result;
     }
 
     /**
@@ -46,51 +47,50 @@
         return $result !== false;
     }
 
-    function TextMdToHtml($lines) {
-        $lines = explode("\n", $lines);
-        $lines = array_map('trim', $lines);
-        $content = '';
+    /**
+     * @param DataBase $db
+     * @param User $user
+     * @param int $id
+     * @param int $checkboxID
+     * @return bool Success
+     */
+    function SetCheckbox($db, $user, $id, $checkboxID) {
+        $content = GetContent($db, $user, $id);
+        $rawContent = $content['rawContent'];
+        $lines = explode("\n", $rawContent);
+        $checkboxIndex = 0;
+        $allCheckboxTypes = array('[]', '[ ]', '[x]', '[v]');
 
-        $square_nb = 0;
-        $inlist = false;
-
-        foreach ($lines as $line) {
-            $pre = explode(' ', $line)[0];
-            if (strlen($line) >= strlen($pre) + 1)
-                $l = substr($line, strlen($pre) + 1);
-
-            if ($inlist && $pre != '*' && $pre != '**' && $pre != '[]' && $pre != '[x]' && $pre != '[v]') {
-                $content .= "</ul>";
-                $inlist = false;
+        for ($i = 0; $i < count($lines); $i++) {
+            $line = $lines[$i];
+            $checkboxType = false;
+            foreach ($allCheckboxTypes as $type) {
+                if (StartsWith($line, $type)) {
+                    $checkboxType = $type;
+                    break;
+                }
             }
 
-            if ($pre == '#') {
-                $content .= "<h1>$l</h1>";
-            } else if ($pre == '##') {
-                $content .= "<h2>$l</h2>";
-            } else if ($pre == '###') {
-                $content .= "<h3>$l</h3>";
-            } else if ($pre == '*' || (strlen($pre) < 4 && $pre[0] == '[' && $pre[-1] == ']')) {
-                if (!$inlist) {
-                    $content .= "<ul>";
-                    $inlist = true;
+            if ($checkboxType !== false && $checkboxIndex == $checkboxID) {
+                switch ($checkboxType) {
+                    case '[]':
+                    case '[ ]':
+                        $lines[$i] = '[v]' . substr($line, strlen($checkboxType));
+                        break;
+                    case '[x]':
+                    case '[v]':
+                        $lines[$i] = '[]' . substr($line, strlen($checkboxType));
+                        break;
                 }
-                if ($pre == '*') {
-                    $content .= "<li>$l</li>";
-                } else {
-                    //$square_icon = strlen($pre) == 2 ? "square" : "check-square";
-                    $content .= "<li><i id='$square_nb' class=''></i>$l</li>";
-                    $square_nb += 1;
-                }
-            } else if ($pre == '**') {
-                $content .= "<li>$l</li>";
-            } else if ($line != '') {
-                $content .= "<p>$line</p>";
+                break;
+            }
+
+            if ($checkboxType !== false) {
+                $checkboxIndex++;
             }
         }
 
-        $content = str_replace('->', '<i class="fas fa-arrow-right"></i>', $content);
-        return $content;
+        return SetContent($db, $user, $id, $content['title'], implode("\n", $lines));
     }
 
 ?>

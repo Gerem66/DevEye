@@ -12,6 +12,10 @@
     -webkit-mask-image: url(../../assets/icons/add.svg);
     mask-image: url(../../assets/icons/add.svg);
 }
+.icon-arrow {
+    -webkit-mask-image: url(../../assets/icons/arrow.svg);
+    mask-image: url(../../assets/icons/arrow.svg);
+}
 .icon-chevron {
     -webkit-mask-image: url(../../assets/icons/chevron.svg);
     mask-image: url(../../assets/icons/chevron.svg);

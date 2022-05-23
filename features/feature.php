@@ -10,6 +10,7 @@
     require('../dist/php/class/user.php');
 
     require('../dist/php/components/dbtable.php');
+    require('../dist/php/components/markdown.php');
 
     require('../dist/php/sql/sql.php');
     require('../dist/php/roles.php');
