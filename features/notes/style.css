@@ -164,13 +164,13 @@ ul.notes-list > li > p {
     font-weight: 600;
 }
 .markdown p { margin: 6px 0 0; }
-.markdown ul, .markdown ol { margin: 6px 0 0; }
-.markdown p > i.icon {
+.markdown ul, .markdown ol { margin: 6px 0 0; padding-left: 2em; }
+.markdown li.checkable { list-style: none; }
+.markdown i.icon {
     width: 20px;
     margin-right: 8px;
     margin-bottom: 2px;
     vertical-align: middle;
 }
-.markdown p > i.icon[name='checkable'] { cursor: pointer; }
-.markdown p > i.icon[name='checkable']:active { opacity: .6; }
-.markdown p[name='checkable'] { margin-left: 24px; }
+.markdown i.icon[name='checkable'] { cursor: pointer; }
+.markdown i.icon[name='checkable']:active { opacity: .6; }

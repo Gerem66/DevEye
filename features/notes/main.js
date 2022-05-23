@@ -16,10 +16,10 @@ const PLACEHOLDER = `# Titre principal
 ++++ ...
 
 ### Titre tertiaire
-[] Case cochable (au clic)
-[ ] Case cochable
-[x] Case cochée
-[v] Case cochée`;
+- [] Case cochable (au clic)
+- [ ] Case cochable
+- [x] Case cochée
+- [v] Case cochée`;
 
 class Notes extends Feature {
     constructor() {

@@ -62,7 +62,9 @@
         $allCheckboxTypes = array('[]', '[ ]', '[x]', '[v]');
 
         for ($i = 0; $i < count($lines); $i++) {
-            $line = $lines[$i];
+            // Get after first space
+            $start = substr($lines[$i], 0, strpos($lines[$i], ' ') + 1);
+            $line = substr($lines[$i], strpos($lines[$i], ' ') + 1);
             $checkboxType = false;
             foreach ($allCheckboxTypes as $type) {
                 if (StartsWith($line, $type)) {
@@ -75,11 +77,11 @@
                 switch ($checkboxType) {
                     case '[]':
                     case '[ ]':
-                        $lines[$i] = '[v]' . substr($line, strlen($checkboxType));
+                        $lines[$i] = $start . '[v]' . substr($line, strlen($checkboxType));
                         break;
                     case '[x]':
                     case '[v]':
-                        $lines[$i] = '[]' . substr($line, strlen($checkboxType));
+                        $lines[$i] = $start . '[]' . substr($line, strlen($checkboxType));
                         break;
                 }
                 break;

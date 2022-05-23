@@ -51,11 +51,13 @@
             '######' => 'h6',
             '*' => 'ul',
             '-' => 'ul',
-            '+' => 'ol',
-            '[x]' => 'square_checked',
-            '[v]' => 'square_checked',
-            '[]' => 'square_empty',
-            '[ ]' => 'square_empty'
+            '+' => 'ol'
+        );
+        $compCheckbox = array(
+            '[x]' => 'checked',
+            '[v]' => 'checked',
+            '[]' => 'empty',
+            '[ ]' => 'empty'
         );
 
         foreach ($lines as $line) {
@@ -87,15 +89,6 @@
                     $content .= "<$type>{$l}</$type>";
                     break;
 
-                case 'square_empty':
-                case 'square_checked':
-                    $checked = $type === 'square_checked';
-                    $icon = $checked ? 'check' : 'empty';
-                    $state = $checked ? 'checked' : '';
-                    $content .= "<p name='checkable'><i name='checkable' class='icon icon-square-$icon' data-id='$squareIndex' $state></i>{$l}</p>";
-                    $squareIndex++;
-                    break;
-
                 case 'ul':
                 case 'ol':
                     $newLevel = str_count_first($line, $line[$line[0]]);
@@ -111,6 +104,22 @@
                         }
                     }
                     $l = substr($l, $newLevel - 1);
+                    $l = trim($l);
+
+                    if (($pos = strpos($l, ']')) !== false) {
+                        $textCheckbox = substr($l, 0, $pos + 1);
+                        if (array_key_exists($textCheckbox, $compCheckbox)) {
+                            $checked = $compCheckbox[$textCheckbox] === 'checked';
+                            $icon = $checked ? 'check' : 'empty';
+                            $state = $checked ? 'checked' : '';
+                            $checkbox = "<i name='checkable' class='icon icon-square-$icon' data-id='$squareIndex' $state></i>";
+                            $l = $checkbox . substr($l, $pos + 1);
+                            $squareIndex++;
+                        }
+                        $content .= "<li class='checkable'>{$l}</li>";
+                        break;
+                    }
+
                     $content .= "<li>{$l}</li>";
                     break;
 
