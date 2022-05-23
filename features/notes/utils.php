@@ -60,6 +60,7 @@
         $lines = explode("\n", $rawContent);
         $checkboxIndex = 0;
         $allCheckboxTypes = array('[]', '[ ]', '[x]', '[v]');
+        $edited = false;
 
         for ($i = 0; $i < count($lines); $i++) {
             // Get after first space
@@ -78,13 +79,17 @@
                     case '[]':
                     case '[ ]':
                         $lines[$i] = $start . '[v]' . substr($line, strlen($checkboxType));
+                        $edited = true;
                         break;
                     case '[x]':
                     case '[v]':
                         $lines[$i] = $start . '[]' . substr($line, strlen($checkboxType));
+                        $edited = true;
                         break;
                 }
-                break;
+                if ($edited) {
+                    break;
+                }
             }
 
             if ($checkboxType !== false) {
@@ -92,6 +97,9 @@
             }
         }
 
+        if (!$edited) {
+            return false;
+        }
         return SetContent($db, $user, $id, $content['title'], implode("\n", $lines));
     }
 

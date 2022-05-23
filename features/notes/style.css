@@ -163,6 +163,10 @@ ul.notes-list > li > p {
     margin: 1.2em auto 0.4em -24px;
     font-weight: 600;
 }
+.markdown h1 { margin-left: -24px; }
+.markdown h2 { margin-left: -18px; }
+.markdown h3 { margin-left: -12px; }
+.markdown h4 { margin-left: -6px; }
 .markdown p { margin: 6px 0 0; }
 .markdown ul, .markdown ol { margin: 6px 0 0; padding-left: 2em; }
 .markdown li.checkable { list-style: none; }

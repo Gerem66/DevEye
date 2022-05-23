@@ -88,6 +88,10 @@
     -webkit-mask-image: url(../../assets/icons/user.svg);
     mask-image: url(../../assets/icons/user.svg);
 }
+.icon-users {
+    -webkit-mask-image: url(../../assets/icons/users.svg);
+    mask-image: url(../../assets/icons/users.svg);
+}
 .icon-v {
     -webkit-mask-image: url(../../assets/icons/v.svg);
     mask-image: url(../../assets/icons/v.svg);
