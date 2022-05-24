@@ -73,23 +73,4 @@
     $content = ImportHTML(__DIR__.'/index.html', $vars);
     echo($content);
 
-    // TODO - Récup le nombre d'Instances
-    /*$instance = 0;
-    $instanceID = 0;
-    // Get instance length
-    if ($instanceID > 0) {
-        $db = new DataBase;
-        $instance_length = 0;
-        $result = $db->Query("SELECT ID FROM `Users` WHERE `InstanceID` = '$instanceID'");
-        if (isset($result)) {
-            $instance_length = $result->num_rows;
-        }
-        $instance .= " ($instance_length membre" . ($instance_length > 1 ? 's)' : ')');
-    }*/
-
-    // TODO - Rajouter l'icone (double auth ? Validation du mail ?)
-    //$icon_ok = '<i class="fas fa-check-circle" style="color: green; margin-left: 6px;"></i>';
-    //$icon_ko = '<i class="fas fa-times-circle" style="color: red; margin-left: 6px;"></i>';
-    //$mailIcon = $email_ok ? $icon_ok : $icon_ko;
-
 ?>

@@ -220,11 +220,11 @@ class DBTable {
         const data = { type: 'rowadd', table: this.tableName };
         const response = await Request_Async('./' + this.pageName, data);
         const success = response.status === 200 && response.content?.status === 'ok';
-        const content = success ? response.content?.content || null : null;
 
-        if (content !== null) {
+        if (success) {
             this.currentPage = 1;
-            tbody.innerHTML = content;
+            this.lastPage = response.content.maxPage;
+            tbody.innerHTML = response.content.content;
             this.setupCellsEvents();
             this.setupTrash(false);
 
@@ -235,7 +235,7 @@ class DBTable {
                 const btns = Array.from(this.card.getElementsByClassName('card-navigation')[0].getElementsByTagName('a'));
                 btns.forEach(btn => {
                     const name = btn.getAttribute('name');
-                    if ((name === 'first' || name === 'next')) {
+                    if ((name === 'first' || name === 'next') || this.lastPage === 1) {
                         btn.classList.add('disabled');
                     } else {
                         btn.classList.remove('disabled');
@@ -244,7 +244,7 @@ class DBTable {
             }
         }
 
-        this.showSavedText(content !== null);
+        this.showSavedText(success);
         tbody.classList.remove('blur');
         this.loading = false;
     }
@@ -280,6 +280,13 @@ class DBTable {
             tbody.innerHTML = response.content?.content || null;
             this.setupCellsEvents();
             this.setupTrash(false);
+
+            // Next page if current is empty
+            if (!tbody.innerHTML) {
+                const btns = Array.from(this.card.getElementsByClassName('card-navigation')[0].getElementsByTagName('a'));
+                this.lastPage--;
+                btns.forEach(btn => btn.getAttribute('name') === 'next' && btn.click());
+            }
         }
 
         this.showSavedText(success);

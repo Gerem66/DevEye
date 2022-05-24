@@ -57,31 +57,33 @@
      */
     function DBTableCommand($db, $post, $rowsCount = 10) {
         $status = array('status' => 'error');
+        $table = $post['table'];
 
         if ($post['type'] === 'cellchange') {
-            $result = $db->Query("UPDATE `{$post['table']}` SET `{$post['column']}` = '{$post['value']}' WHERE `ID` = {$post['ID']}");
+            $result = $db->Query("UPDATE `$table` SET `{$post['column']}` = '{$post['value']}' WHERE `ID` = {$post['ID']}");
             if ($result !== false) {
                 $status['status'] = 'ok';
             }
         }
 
         if ($post['type'] === 'rowadd') {
-            $result = $db->Query("INSERT INTO `{$post['table']}` (`ID`) VALUES (NULL)");
+            $result = $db->Query("INSERT INTO `$table` (`ID`) VALUES (NULL)");
             if ($result !== false) {
-                $logs = GetRows($db, $post['table'], 0, $rowsCount);
+                $logs = GetRows($db, $table, 0, $rowsCount);
                 $status['status'] = 'ok';
                 $status['content'] = TbodyFromDB($logs);
+                $status['maxPage'] = ceil(GetTableLength($db, $table) / $rowsCount);
             } else {
                 $status['message'] = $db->GetLastError();
             }
         }
 
         if ($post['type'] === 'rowremove') {
-            $result = $db->Query("DELETE FROM `{$post['table']}` WHERE `ID` = {$post['ID']}");
+            $result = $db->Query("DELETE FROM `$table` WHERE `ID` = {$post['ID']}");
             $status['status'] = 'error';
             if ($result !== false) {
                 $logStarts = ($post['page'] - 1) * $rowsCount;
-                $logs = GetRows($db, $post['table'], $logStarts, $rowsCount);
+                $logs = GetRows($db, $table, $logStarts, $rowsCount);
                 $status['status'] = 'ok';
                 $status['content'] = TbodyFromDB($logs);
             }
@@ -89,11 +91,8 @@
 
         if ($post['type'] === 'navigation') {
             $logStarts = ($post['page'] - 1) * $rowsCount;
-            $logs = GetRows($db, $post['table'], $logStarts, $rowsCount);
-
-            $logsIDs = $db->QueryArray("SELECT `ID` FROM `Logs`");
-            $logsLength = count($logsIDs);
-            $maxPage = ceil($logsLength / $rowsCount);
+            $logs = GetRows($db, $table, $logStarts, $rowsCount);
+            $maxPage = ceil(GetTableLength($db, $table) / $rowsCount);
 
             $status['status'] = 'ok';
             $status['newPage'] = $post['page'];

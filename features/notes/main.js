@@ -46,6 +46,7 @@ class Notes extends Feature {
         this.noteTitle = document.getElementById('note-title');
         this.noteContent = document.getElementById('note-content');
         this.noteDate = document.getElementById('note-date');
+        this.noteDateLast = document.getElementById('note-date-last');
         this.btnEdit = document.getElementById('btn-edit');
         this.btnDelete = document.getElementById('btn-delete');
 
@@ -105,12 +106,13 @@ class Notes extends Feature {
 
     showNote(note) {
         this.currentNote = note.content;
-        const { id, title, content, rawContent, date } = this.currentNote;
+        const { id, title, content, rawContent, last, date } = this.currentNote;
 
         this.editing = false;
         this.noteTitle.textContent = title;
         this.noteContent.innerHTML = content;
         this.noteDate.textContent = date;
+        this.noteDateLast.textContent = last;
         this.noteContainer.classList.add('active');
 
         // Load checkable squares

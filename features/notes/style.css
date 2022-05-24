@@ -133,6 +133,8 @@ ul.notes-list > li > p {
 .card-note > .card-header {
     max-width: calc(50% - 24px);
     margin-top: 6px;
+    text-align: right;
+    z-index: 10;
 }
 .card-note > .card-header > p {
     margin: 0 0 4px;

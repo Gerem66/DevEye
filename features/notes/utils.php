@@ -28,6 +28,7 @@
             'title' => $note['Title'],
             'rawContent' => $content,
             'content' => TextMdToHtml($content),
+            'last' => $note['Last'],
             'date' => $note['Date']
         );
         return $result;
