@@ -40,7 +40,7 @@
         $features = array_combine($newKeys, array_values($features));
 
         $newFeatures = json_encode($features);
-        $result = $db->Query("UPDATE `Users` SET `Settings` = '$newFeatures' WHERE `ID` = {$user->ID}");
+        $result = $db->QueryPrepare('Users', "UPDATE TABLE SET `Settings` = ? WHERE `ID` = ?", 'si', array($newFeatures, $user->ID));
         if ($result === false) {
             throw new Exception("Settings could not be saved.");
         }
@@ -50,7 +50,7 @@
     }
 
     // Get features settings
-    $rawFeatures = $db->QueryArray("SELECT * FROM `Features` WHERE `Level` <= {$user->Level}");
+    $rawFeatures = $db->QueryPrepare('Features', "SELECT * FROM TABLE WHERE `Level` <= ?", 'i', array($user->Level));
     $features = array_map(fn($f) => Feature::Load($f), $rawFeatures);
     $tree = Feature::GetTree($user, $features, $GLOBALS['LEVEL_TEXTS'], true);
     $featuresHTML = DefineFeatures($features, $user, $tree);

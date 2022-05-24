@@ -37,7 +37,7 @@
             return $content;
         }
 
-        $rawFeatures = $db->QueryArray("SELECT * FROM `Features` WHERE `Level` <= {$user->Level}");
+        $rawFeatures = $db->QueryPrepare('Features', "SELECT * FROM TABLE WHERE `Level` <= ?", 'i', array($user->Level));
         $features = array_map(fn($f) => Feature::Load($f), $rawFeatures);
         $tree = Feature::GetTree($user, $features, $GLOBALS['LEVEL_TEXTS']);
         return gen($features, $tree);

@@ -25,8 +25,8 @@
     }
     if (isset($post['removeNote'])) {
         $id = $post['removeNote'];
-        $success = $db->Query("DELETE FROM `_Notes` WHERE `ID` = {$id} AND `UID` = {$user->ID}");
-        if (!$success) {
+        $success = $db->QueryPrepare('_Notes', "DELETE FROM TABLE WHERE `ID` = ? AND `UID` = ?", 'ii', array($id, $user->ID));
+        if ($success === false) {
             exit('{"status":"error"}');
         }
         exit('{"status":"ok"}');
@@ -42,8 +42,8 @@
     }
 
     $getNoteContent = fn($note) => "<li data-id='{$note['ID']}'><p>{$note['Title']}</p></li>";
-    $command = "SELECT `ID`, `Title` FROM `_Notes` WHERE `UID` = '{$user->ID}' ORDER BY `Last` DESC";
-    $notes = $db->QueryArray($command);
+    $command = "SELECT `ID`, `Title` FROM TABLE WHERE `UID` = ? ORDER BY `Last` DESC";
+    $notes = $db->QueryPrepare('_Notes', $command, 'i', array($user->ID));
     $notes = implode('', array_map($getNoteContent, $notes));
 
     $variables = array(

@@ -12,9 +12,9 @@
      * @param int $pageLength
      */
     function AddDataTable($db, $table, $page, $pageLength) {
-        $headers = GetHeaders($db, $table);
+        $headers = $db->GetColumns($table);
         $rows = GetRows($db, $table, $page, $pageLength);
-        $lastPage = ceil(GetTableLength($db, $table) / $pageLength);
+        $lastPage = ceil($db->GetTableLength($table) / $pageLength);
 
         $tableHead = TheadFromDB($headers);
         $tableBody = TbodyFromDB($rows);

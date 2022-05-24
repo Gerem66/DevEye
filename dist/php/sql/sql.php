@@ -61,6 +61,7 @@
         }
 
         /**
+         * Unsafe method to execute a query when parameters are not checked.
          * @param string $command The query command to execute.
          * @throws Exception if the connection is not open.
          */
@@ -69,6 +70,48 @@
                 throw(new Exception('Connection not opened'));
             }
             return $this->conn->query($command);
+        }
+
+        /**
+         * Used to select, insert, update or delete data.
+         * @param string $table The table to replace in query.
+         * @param string $command The query command to execute.
+         * @param string $types The types of the parameters. ('i'(nteger), 'd'(ouble), 's'(tring), 'b'(lob))
+         * @param array $variables The variables to bind to the query.
+         * @return array|int|false Array if query type is select, otherwise the number of affected rows or false if the query failed.
+         * @throws Exception if the connection is not open.
+         */
+        public function QueryPrepare($table, $command, $types = '', $variables = array()) {
+            if ($this->conn === null) {
+                throw(new Exception('Connection not opened'));
+            }
+            if (!$this->IsSafe($table)) {
+                throw(new Exception('Invalid table name'));
+            }
+
+            $replace = 0;
+            $command = str_replace('`TABLE`', "`$table`", $command, $replace);
+            if ($replace === 0) {
+                $command = str_replace('TABLE', "`$table`", $command, $replace);
+            }
+
+            $query = $this->conn->prepare($command);
+            if ($query === false) return false;
+
+
+            $bind = $query->bind_param($types, ...$variables);
+            if ($bind === false) return false;
+
+            $result = $query->execute();
+            if ($result === false) return false;
+
+            $output = $query->affected_rows;
+            if (StartsWith($command, 'SELECT')) {
+                $output = $query->get_result()->fetch_all(MYSQLI_ASSOC);
+            }
+
+            $query->close();
+            return $output;
         }
 
         public function GetLastInsertedID() {
@@ -103,6 +146,28 @@
             return array_map($tableMap, $tables);
         }
 
+        public function GetColumns($table) {
+            if (!$this->IsSafe($table)) {
+                throw(new Exception('Invalid table name'));
+            }
+            $rawHeaders = $this->QueryArray("SHOW COLUMNS FROM `$table`");
+            return array_map(fn($header) => $header['Field'], $rawHeaders);
+        }
+
+        /**
+         * @param string $table
+         * @return int|false The number of rows in the table, or false if an error occurred.
+         */
+        function GetTableLength($table) {
+            $command = "SELECT COUNT(*) FROM TABLE";
+            $result = $this->QueryPrepare($table, $command);
+            return $result !== false ? $result[0]['COUNT(*)'] : false;
+        }
+
+        function IsSafe($string) {
+            return !preg_match('/[^a-zA-Z0-9_]/', $string);
+        }
+
         /**
          * @param string $str
          * @return string Encrypted string with sql key.
@@ -131,28 +196,21 @@
          * @param string $table
          * @param string $cellSearch
          * @param string $cellValue
-         * @return array
+         * @return array|false
          */
         public function GetRowContent($table, $cellSearch, $cellValue) {
-            $result = $this->Query("SELECT * FROM `{$this->db_name}`.`$table` WHERE `$cellSearch` = '$cellValue'")->fetch_assoc();
-            if ($result === false) {
-                return null;
+            if (!$this->IsSafe($cellSearch)) {
+                throw(new Exception('Invalid cell search'));
             }
-            return $result;
+            $result = $this->QueryPrepare($table, "SELECT * FROM TABLE WHERE `$cellSearch` = ?", 's', array($cellValue));
+            if ($result !== false && count($result) > 0) {
+                return $result[0];
+            }
+            return false;
         }
 
         /**
-         * @param string $table
-         * @param string $cellSearch
-         * @param string $cellValue
-         * @param string $cellsReturn
-         */
-        public function GetRowsContent($table, $cellSearch, $cellValue, $cellsReturn = '*') {
-            $command = "SELECT $cellsReturn FROM `{$this->db_name}`.`$table` WHERE `$cellSearch` = '$cellValue'";
-            return $this->QueryArray($command);
-        }
-
-        /**
+         * Get cell content by ID.
          * @param string $table
          * @param string $cell
          * @param string $id
@@ -161,16 +219,24 @@
          * @throws Exception If the query fails
          * @throws Exception If the cell is not found
          */
-        public function GetCellContent($table, $cell, $id, $decrpyt = true) {
+        public function GetCellContent($table, $cell, $id, $decrpyt = false) {
+            if (!$this->IsSafe($cell)) {
+                throw(new Exception('Invalid cell name'));
+            }
+
             $content = '';
-            $result = $this->Query("SELECT `$cell` FROM `{$this->db_name}`.`$table` WHERE ID = '$id'")->fetch_assoc();
-            if ($result === false) {
+            $result = $this->QueryPrepare($table, "SELECT `$cell` FROM TABLE WHERE `ID` = ?", 'i', array($id));
+
+            if ($result === false || count($result) === 0) {
                 throw(new Exception('No row found'));
             }
-            if (!array_key_exists($cell, $result)) {
-                throw(new Exception("Cell \"$cell\" found"));
+
+            $row = $result[0];
+            if (!array_key_exists($cell, $row)) {
+                throw(new Exception("Cell '$cell' not found"));
             }
-            $content = $result[$cell];
+
+            $content = $row[$cell];
             if ($decrpyt) {
                 $content = $this->Decrypt($content);
             }
@@ -186,19 +252,19 @@
          * @return void Array of rows
          * @throws Exception If the query fails
          */
-        public function SetCellContent($table, $cell, $id, $content, $encrpyt = true) {
-            $command = '';
-            if ($encrpyt) {
-                $encryptedContent = $this->Encrypt($content);
-                $command = "UPDATE `$table` SET `$cell` = '$encryptedContent' WHERE ID = '$id'";
-            } else {
-                $command = "UPDATE `$table` SET `$cell` = '$content' WHERE ID = '$id'";
+        public function SetCellContent($table, $cell, $id, $content, $encrpyt = false) {
+            if (!$this->IsSafe($cell)) {
+                throw(new Exception('Invalid cell name'));
             }
 
-            $result = $this->Query($command);
-            if ($result === false) {
-                throw(new Exception('Query failed'));
+            $command = '';
+            if ($encrpyt) {
+                $content = $this->Encrypt($content);
             }
+
+            $command = "UPDATE TABLE SET `$cell` = ? WHERE ID = ?";
+            $result = $this->QueryPrepare($table, $command, 'si', array($content, $id));
+            return $result !== false;
         }
 
         /**
@@ -207,7 +273,10 @@
          * @param int $id
          */
         public function RemoveRow($table, $cellID, $id) {
-            return $this->Query("DELETE FROM `$table` WHERE `$cellID` = '$id'");
+            if (!$this->IsSafe($cellID)) {
+                throw(new Exception('Invalid cell name'));
+            }
+            return $this->QueryPrepare($table, "DELETE FROM TABLE WHERE `$cellID` = ?", 'i', array($id));
         }
 
         /**
@@ -218,7 +287,8 @@
          */
         public function AddLog($UID, $type, $description) {
             $IP = GetIP();
-            $result = $this->Query("INSERT INTO `Logs` (`UID`, `IP`, `Type`, `Description`) VALUES ('$UID', '$IP', '$type', '$description')");
+            $args = array($UID, $IP, $type, $description);
+            $result = $this->QueryPrepare('Logs', "INSERT INTO TABLE (`UID`, `IP`, `Type`, `Description`) VALUES (?, ?, ?, ?)", 'isss', $args);
             return $result !== false;
         }
     }

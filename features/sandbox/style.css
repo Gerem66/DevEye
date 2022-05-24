@@ -1,7 +1,19 @@
-.card-sandbox > textarea {
+.card-sandbox,
+.card-sandbox-result {
+    height: calc(100vh - 280px);
+}
+
+.card-sandbox > textarea,
+.card-sandbox-result > textarea {
+    max-height: calc(100% - 28px);
     margin-top: 24px;
-    height: auto;
+    padding-right: 8px;
     resize: none;
+}
+
+.card-sandbox > textarea {
+    height: auto;
+    white-space: pre;
 }
 .card-sandbox > button {
     position: absolute;
@@ -14,4 +26,8 @@
     margin-left: 6px;
     margin-bottom: 2px;
     vertical-align: middle;
+}
+
+.card-sandbox-result > textarea {
+    height: calc(100% - 28px);
 }

@@ -3,31 +3,11 @@
     /**
      * @param DataBase $db
      * @param string $table
-     */
-    function GetTableLength($db, $table) {
-        $query = "SELECT COUNT(*) FROM `$table`";
-        $result = $db->Query($query);
-        $row = $result->fetch_row();
-        return $row[0];
-    }
-
-    /**
-     * @param DataBase $db
-     * @param string $table
-     */
-    function GetHeaders($db, $table) {
-        $rawHeaders = $db->QueryArray("SHOW COLUMNS FROM `$table`");
-        return array_map(fn($header) => $header['Field'], $rawHeaders);
-    }
-
-    /**
-     * @param DataBase $db
-     * @param string $table
      * @param int $starts
      * @param int $count
      */
     function GetRows($db, $table, $starts, $count) {
-        return $db->QueryArray("SELECT * FROM `$table` ORDER BY `ID` DESC LIMIT $count OFFSET $starts");
+        return $db->QueryPrepare($table, "SELECT * FROM TABLE ORDER BY `ID` DESC LIMIT ? OFFSET ?", 'ii', array($count, $starts));
     }
 
     function TheadFromDB($headers) {
@@ -60,26 +40,31 @@
         $table = $post['table'];
 
         if ($post['type'] === 'cellchange') {
-            $result = $db->Query("UPDATE `$table` SET `{$post['column']}` = '{$post['value']}' WHERE `ID` = {$post['ID']}");
+            $column = $post['column'];
+            if (!$db->IsSafe($column)) {
+                // TODO - Add cheat suspicion
+                throw new Exception('Column name is not safe');
+            }
+            $result = $db->QueryPrepare($table, "UPDATE TABLE SET `$column` = ? WHERE `ID` = ?", 'si', array($post['value'], $post['ID']));
             if ($result !== false) {
                 $status['status'] = 'ok';
             }
         }
 
         if ($post['type'] === 'rowadd') {
-            $result = $db->Query("INSERT INTO `$table` (`ID`) VALUES (NULL)");
+            $result = $db->QueryPrepare($table, "INSERT INTO TABLE (`ID`) VALUES (NULL)");
             if ($result !== false) {
                 $logs = GetRows($db, $table, 0, $rowsCount);
                 $status['status'] = 'ok';
                 $status['content'] = TbodyFromDB($logs);
-                $status['maxPage'] = ceil(GetTableLength($db, $table) / $rowsCount);
+                $status['maxPage'] = ceil($db->GetTableLength($table) / $rowsCount);
             } else {
                 $status['message'] = $db->GetLastError();
             }
         }
 
         if ($post['type'] === 'rowremove') {
-            $result = $db->Query("DELETE FROM `$table` WHERE `ID` = {$post['ID']}");
+            $result = $db->QueryPrepare($table, "DELETE FROM TABLE WHERE `ID` = ?", 'i', array($post['ID']));
             $status['status'] = 'error';
             if ($result !== false) {
                 $logStarts = ($post['page'] - 1) * $rowsCount;
@@ -92,7 +77,7 @@
         if ($post['type'] === 'navigation') {
             $logStarts = ($post['page'] - 1) * $rowsCount;
             $logs = GetRows($db, $table, $logStarts, $rowsCount);
-            $maxPage = ceil(GetTableLength($db, $table) / $rowsCount);
+            $maxPage = ceil($db->GetTableLength($table) / $rowsCount);
 
             $status['status'] = 'ok';
             $status['newPage'] = $post['page'];

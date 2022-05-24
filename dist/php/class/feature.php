@@ -66,7 +66,7 @@
          */
         public static function GetFeatureByID($id, $features) {
             foreach ($features as $feature) {
-                if ($feature->ID === $id) {
+                if ($feature->ID == $id) {
                     return $feature;
                 }
             }

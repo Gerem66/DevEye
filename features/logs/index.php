@@ -6,8 +6,7 @@
     $logStarts = 0 * $logsCount;
     $logs = GetRows($db, 'Logs', $logStarts, $logsCount);
 
-    $logsIDs = $db->QueryArray("SELECT `ID` FROM `Logs`");
-    $logsLength = count($logsIDs);
+    $logsLength = $db->GetTableLength('Logs');
     $maxPage = ceil($logsLength / $logsCount);
 
     if (isset($post['type'])) {

@@ -13,13 +13,17 @@
         );
 
         if ($user->Level >= 2) {
-            //$result = eval($code);
-            $result = eval($code);
-            if ($result === null) {
-                $output['result'] = 'Failed to execute the code';
-            } else {
-                $output['result'] = $result;
-                $output['status'] = 'ok';
+            $result = null;
+            try {
+                $result = eval($code);
+                if ($result === null) {
+                    $output['result'] = 'Failed to execute the code';
+                } else {
+                    $output['result'] = $result;
+                    $output['status'] = 'ok';
+                }
+            } catch (Exception $e) {
+                $output['result'] = $e->getMessage();
             }
         }
 
