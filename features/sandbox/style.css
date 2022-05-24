@@ -1,0 +1,17 @@
+.card-sandbox > textarea {
+    margin-top: 24px;
+    height: auto;
+    resize: none;
+}
+.card-sandbox > button {
+    position: absolute;
+    top: 8px;
+    right: 24px;
+    padding: 6px 24px;
+}
+.card-sandbox > button > i {
+    width: 16px;
+    margin-left: 6px;
+    margin-bottom: 2px;
+    vertical-align: middle;
+}

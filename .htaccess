@@ -1,5 +1,5 @@
 RewriteEngine on
 RewriteRule ^home$ home.php
-RewriteRule ^(user|database|logs|notes|passwords)$ features/feature.php?page=$1
+RewriteRule ^(user|database|logs|notes|passwords|sandbox)$ features/feature.php?page=$1
 
 ErrorDocument 404 /OxyDev/dist/errors/404.html

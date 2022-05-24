@@ -68,6 +68,10 @@
     -webkit-mask-image: url(../../assets/icons/refresh.svg);
     mask-image: url(../../assets/icons/refresh.svg);
 }
+.icon-sandbox {
+    -webkit-mask-image: url(../../assets/icons/sandbox.svg);
+    mask-image: url(../../assets/icons/sandbox.svg);
+}
 .icon-square-check {
     -webkit-mask-image: url(../../assets/icons/square-check.svg);
     mask-image: url(../../assets/icons/square-check.svg);
