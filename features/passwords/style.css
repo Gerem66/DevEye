@@ -1,0 +1,36 @@
+.table-passwords i {
+    vertical-align: middle;
+    opacity: .7;
+    cursor: pointer;
+}
+.table-passwords i:hover,
+.table-passwords i:active {
+    opacity: 1;
+}
+.table-passwords i[name='icon-show-password'] {
+    margin-left: 12px;
+}
+
+select#input-status {
+    margin: 12px auto 12px;
+    border: solid 1px #ced4da;
+    border-radius: 0.25rem;
+    background-color: #212529;
+}
+
+.card-password::before {
+    width: 25%;
+}
+.password-header {
+    width: 70%;
+    margin-top: 12px;
+    text-align: right;
+}
+.password-header > a {
+    margin-left: 24px;
+}
+.card-password table td > p {
+    display: inline-block;
+    margin: 0;
+    vertical-align: middle;
+}

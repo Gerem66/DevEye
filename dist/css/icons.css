@@ -64,6 +64,10 @@
     -webkit-mask-image: url(../../assets/icons/notes.svg);
     mask-image: url(../../assets/icons/notes.svg);
 }
+.icon-other {
+    -webkit-mask-image: url(../../assets/icons/other.svg);
+    mask-image: url(../../assets/icons/other.svg);
+}
 .icon-refresh {
     -webkit-mask-image: url(../../assets/icons/refresh.svg);
     mask-image: url(../../assets/icons/refresh.svg);
