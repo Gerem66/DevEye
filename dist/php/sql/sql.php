@@ -118,7 +118,6 @@
             return $this->conn->insert_id;
         }
 
-        /** Return last sql error */
         public function GetLastError() {
             return $this->conn->error;
         }
@@ -173,11 +172,8 @@
          * @return string Encrypted string with sql key.
          */
         public function Encrypt($str) {
-            $output = "";
-            if ($str) {
-                $output = openssl_encrypt($str, 'AES-128-ECB', $this->key);
-            }
-            return $output;
+            if (!$str) return '';
+            return openssl_encrypt($str, 'AES-128-ECB', $this->key);
         }
 
         /**
@@ -185,11 +181,8 @@
          * @return string Decrypted string with sql key.
          */
         public function Decrypt($str) {
-            $output = "";
-            if ($str) {
-                $output = openssl_decrypt($str, 'AES-128-ECB', $this->key);
-            }
-            return $output;
+            if (!$str) return '';
+            return openssl_decrypt($str, 'AES-128-ECB', $this->key);
         }
 
         /**
@@ -207,76 +200,6 @@
                 return $result[0];
             }
             return false;
-        }
-
-        /**
-         * Get cell content by ID.
-         * @param string $table
-         * @param string $cell
-         * @param string $id
-         * @param bool $decrpyt
-         * @return array Array of rows
-         * @throws Exception If the query fails
-         * @throws Exception If the cell is not found
-         */
-        public function GetCellContent($table, $cell, $id, $decrpyt = false) {
-            if (!$this->IsSafe($cell)) {
-                throw(new Exception('Invalid cell name'));
-            }
-
-            $content = '';
-            $result = $this->QueryPrepare($table, "SELECT `$cell` FROM TABLE WHERE `ID` = ?", 'i', array($id));
-
-            if ($result === false || count($result) === 0) {
-                throw(new Exception('No row found'));
-            }
-
-            $row = $result[0];
-            if (!array_key_exists($cell, $row)) {
-                throw(new Exception("Cell '$cell' not found"));
-            }
-
-            $content = $row[$cell];
-            if ($decrpyt) {
-                $content = $this->Decrypt($content);
-            }
-            return $content;
-        }
-
-        /**
-         * @param string $table
-         * @param string $cell
-         * @param string $id
-         * @param string $content
-         * @param bool $encrpyt
-         * @return void Array of rows
-         * @throws Exception If the query fails
-         */
-        public function SetCellContent($table, $cell, $id, $content, $encrpyt = false) {
-            if (!$this->IsSafe($cell)) {
-                throw(new Exception('Invalid cell name'));
-            }
-
-            $command = '';
-            if ($encrpyt) {
-                $content = $this->Encrypt($content);
-            }
-
-            $command = "UPDATE TABLE SET `$cell` = ? WHERE ID = ?";
-            $result = $this->QueryPrepare($table, $command, 'si', array($content, $id));
-            return $result !== false;
-        }
-
-        /**
-         * @param string $table
-         * @param int $cellID
-         * @param int $id
-         */
-        public function RemoveRow($table, $cellID, $id) {
-            if (!$this->IsSafe($cellID)) {
-                throw(new Exception('Invalid cell name'));
-            }
-            return $this->QueryPrepare($table, "DELETE FROM TABLE WHERE `$cellID` = ?", 'i', array($id));
         }
 
         /**

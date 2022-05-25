@@ -1,6 +1,9 @@
 <?php
 
-    /** @var DataBase $db */
+    /**
+     * @var User $user
+     * @var DataBase $db
+     */
 
     $variables = array(
         'username' => $user->Username

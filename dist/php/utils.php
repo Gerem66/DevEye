@@ -36,7 +36,7 @@
      * @param array $variables Keys are variables name between % and % in html file
      * @return string The HTML file content with variables replaced
      */
-    function ImportHTML($path, $variables) {
+    function ImportHTML($path, $variables = array()) {
         $html = file_get_contents($path);
         foreach ($variables as $key => $value) {
             $html = str_replace('%' . $key . '%', $value, $html);

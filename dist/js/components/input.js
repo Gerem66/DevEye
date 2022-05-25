@@ -26,7 +26,7 @@ class Input {
 
         const groups = Array.from(parent.getElementsByClassName('form-group'));
         groups.forEach(group => {
-            if (group.children.length > 2) return;
+            if (group.children.length !== 2) return;
             const input = group.children[0];
             const button = group.children[1];
             if (input.tagName !== 'INPUT' || button.tagName !== 'BUTTON') return;

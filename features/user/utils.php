@@ -70,7 +70,7 @@
                 if (array_key_exists($feature->ID, $user->Settings)) {
                     $featureEnabled = $user->Settings[$feature->ID];
                 }
-                $default = array_key_exists('default', $user->Settings) && $user->Settings['default'] === $feature->ID;
+                $default = array_key_exists('default', $user->Settings) && $user->Settings['default'] == $feature->ID;
                 if ($featureEnabled) {
                     $featuresHTML .= AddFeatureOption($feature, $default);
                 }

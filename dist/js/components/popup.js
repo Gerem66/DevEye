@@ -40,13 +40,13 @@ class Popup {
     Open() {
         this.popup.classList.add('active');
     }
-    Close(clearInputs = false) {
+    Close(clearInputs = true) {
         this.popup.classList.remove('active');
         setTimeout(() => {
             if (clearInputs) {
                 this.inputs.forEach(input => input.value = '');
             }
-            this.inputsEvents.forEach(input => input.SetVisible(false));
+            this.inputsEvents?.forEach(input => input.SetVisible(false));
         }, 200);
     }
 }
