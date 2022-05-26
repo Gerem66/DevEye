@@ -18,8 +18,6 @@ class Sandbox extends Feature {
         this.savedText = document.getElementById('header-text');
         this.savedText.style.opacity = 0;
     }
-    async onUnmount() {
-    }
 
     /**
      * Show message (success or error) at corner of the table

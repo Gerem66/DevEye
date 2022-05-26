@@ -177,9 +177,18 @@ select:hover {
 select:focus {
     border-color: #4193d5;
 }
+select > option {
+    font: -moz-pull-down-menu;
+    font-size: 0.8em !important;
+}
 select > option > p {
-    font-size: 1em;
     font-family: 'Open Sans';
+}
+select.grey {
+    margin: 12px auto 12px;
+    border: solid 1px #ced4da;
+    border-radius: 0.25rem;
+    background-color: #212529;
 }
 
 .feature-title {

@@ -28,6 +28,23 @@
     transition: transform .3s ease;
 }
 
+.form-group {
+    position: relative;
+    margin-top: 12px;
+}
+.form-group > .form-input ~ button {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    bottom: 1px;
+    width: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
 @media screen and (max-width: 800px) {
     .popup {
         align-items: start;

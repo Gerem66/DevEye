@@ -17,8 +17,6 @@ class Database extends Feature {
             table.AddFeature('rowremove');
         });
     }
-    async onUnmount() {
-    }
 }
 
 new Database();

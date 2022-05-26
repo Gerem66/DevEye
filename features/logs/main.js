@@ -13,8 +13,6 @@ class Logs extends Feature {
         table.AddFeature('rowadd');
         table.AddFeature('rowremove');
     }
-    async onUnmount() {
-    }
 }
 
 new Logs();
