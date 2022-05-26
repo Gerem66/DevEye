@@ -38,6 +38,33 @@ class Passwords extends Feature {
                 category !== null && this.EditCategory(category);
             }
         });
+
+        this.SetAllCounters(true);
+    }
+
+    SetAllCounters(first = false) {
+        let total = 0;
+
+        const tables = Array.from(document.getElementsByTagName('table'));
+        tables.forEach(table => {
+            const card = table.parentElement.parentElement;
+            let title = card.getAttribute('data-title');
+            if (title === null) return;
+            if (first) card.setAttribute('data-title-length', title.length);
+            else title = title.slice(0, card.getAttribute('data-title-length'));
+
+            const tbody = table.getElementsByTagName('tbody')[0];
+            const lines = Array.from(tbody.getElementsByTagName('tr'));
+            const linesOn = lines.filter(line => line.style.display !== 'none');
+            card.setAttribute('data-title', `${title} (${linesOn.length})`);
+            total += linesOn.length;
+        });
+
+        const cardSearch = document.getElementById('card-search');
+        let title = cardSearch.getAttribute('data-title');
+        if (first) cardSearch.setAttribute('data-title-length', title.length);
+        else title = title.slice(0, cardSearch.getAttribute('data-title-length'));
+        cardSearch.setAttribute('data-title', `${title} (${total})`);
     }
 
     Search(search) {
@@ -64,6 +91,8 @@ class Passwords extends Feature {
             const linesOn = lines.filter(line => line.style.display !== 'none');
             card.style.display = linesOn.length === 0 ? 'none' : 'block';
         });
+
+        this.SetAllCounters();
     }
 
     async EditCategory(category) {

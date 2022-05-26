@@ -23,8 +23,8 @@
         return $result !== false;
     }
 
-    function AddCard($title, $content, $length) {
-        return "<div class='card col-two-thirds responsive card-password' data-title='$title ($length)'>
+    function AddCard($title, $content) {
+        return "<div class='card col-two-thirds responsive card-password' data-title='$title'>
                     <div class='card-header password-header'>
                         <a name='btn-edit-category' data-title='$title' class='link'>Modifier la catégorie</a>
                         <a name='btn-add-password' data-title='$title' class='link'>Ajouter un mot de passe</a>

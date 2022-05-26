@@ -47,7 +47,7 @@
         }
         $Content = $db->Decrypt($password['Content']);
         $variables = json_decode($Content, true);
-        $arr = array($password['ID'], $variables['service'], $variables['username'], $variables['status']);
+        $arr = array($password['ID'], ucfirst($variables['service']), $variables['username'], $variables['status']);
         array_push($passwords[$category], $arr);
     }
 
@@ -55,22 +55,24 @@
     $categoriesOptions = array_map(fn($c) => "<option value='$c'>$c</option>", $categories);
     $categoriesOptions = implode('', $categoriesOptions);
 
-    $total = 0;
     $tables = '';
     foreach ($passwords as $category => $rows) {
         array_sort_by_column($rows, 1);
         $tableContent = '';
-        foreach ($rows as $row) {
-            $tableContent .= AddRow(...$row);
+        $statusOrder = array('enable', 'none', 'disable');
+        foreach ($statusOrder as $stat) {
+            foreach ($rows as $row) {
+                if ($row[3] === $stat) {
+                    $tableContent .= AddRow(...$row);
+                }
+            }
         }
-        $total += ($length = count($rows));
-        $tables .= AddCard($category, $tableContent, $length);
+        $tables .= AddCard($category, $tableContent);
     }
 
     $variables = array(
         'username' => $user->Username,
-        'passwords' => $tables,
-        'total' => $total,
+        'passwords' => $tables
     );
     $popupVars = array(
         'categories' => $categoriesOptions
