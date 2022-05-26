@@ -69,11 +69,6 @@
     opacity: 1;
 }
 
-select.form-input:focus::-ms-value {
-    color: #495057;
-    background-color: #ffffff;
-}
-
 @media (prefers-reduced-motion: reduce) {
     .form-input {
         transition: none;

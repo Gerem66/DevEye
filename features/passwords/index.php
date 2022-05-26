@@ -55,6 +55,7 @@
     $categoriesOptions = array_map(fn($c) => "<option value='$c'>$c</option>", $categories);
     $categoriesOptions = implode('', $categoriesOptions);
 
+    $total = 0;
     $tables = '';
     foreach ($passwords as $category => $rows) {
         array_sort_by_column($rows, 1);
@@ -62,12 +63,14 @@
         foreach ($rows as $row) {
             $tableContent .= AddRow(...$row);
         }
-        $tables .= AddCard($category, $tableContent);
+        $total += ($length = count($rows));
+        $tables .= AddCard($category, $tableContent, $length);
     }
 
     $variables = array(
         'username' => $user->Username,
-        'passwords' => $tables
+        'passwords' => $tables,
+        'total' => $total,
     );
     $popupVars = array(
         'categories' => $categoriesOptions

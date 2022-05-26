@@ -55,7 +55,7 @@ class Passwords extends Feature {
         // Show / hide tables
         const tables = Array.from(document.getElementsByTagName('table'));
         tables.forEach(table => {
-            const card = table.parentElement;
+            const card = table.parentElement.parentElement;
             const title = card.getAttribute('data-title');
             if (title === null) return;
 

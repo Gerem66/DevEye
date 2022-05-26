@@ -98,7 +98,7 @@
     margin-right: 8px;
     font-size: 0.7rem;
 }
-select.settings {
+select.select-settings {
     margin: 12px auto 24px;
 }
 .card.settings > .card-header {

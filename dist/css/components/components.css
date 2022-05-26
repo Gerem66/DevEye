@@ -61,56 +61,6 @@ a.link.disabled {
     cursor: default;
 }
 
-.card {
-    position: relative;
-    height: max-content;
-    margin-bottom: 24px;
-    padding: 42px 24px 24px;
-    border-radius: 4px;
-    border-top: solid 4px #42a5f5;
-    background-color: #263544;
-    overflow: auto;
-    box-shadow: 2px 2px 8px #00000040;
-}
-.card::before {
-    position: absolute;
-    top: 12px;
-    left: 24px;
-    content: attr(data-title);
-    font-size: 1.2rem;
-    color: #dbdbdb;
-}
-.card > .card-header {
-    position: absolute;
-    top: 2px;
-    right: 16px;
-    font-size: .8rem;
-    user-select: none;
-    transition: opacity .3s ease;
-    -webkit-transition: opacity .3s ease;
-}
-
-.card > .card-header > *,
-.card > .card-navigation > * {
-    display: inline-block;
-    vertical-align: middle;
-}
-.card > .card-navigation {
-    width: max-content;
-    user-select: none;
-    -webkit-user-select: none;
-}
-.card > .card-navigation > a:first-child,
-.card > .card-navigation > a:last-child,
-.card > .card-navigation > p {
-    margin: 0 12px;
-}
-
-.card > .card-header.message > p { margin-right: 8px; }
-.card > .card-header.message > img { width: 20px; }
-
-/* Button */
-
 button, [type="button"], [type="reset"], [type="submit"] {
     -webkit-appearance: button;
 }
@@ -184,7 +134,7 @@ select > option {
 select > option > p {
     font-family: 'Open Sans';
 }
-select.grey {
+select.select-grey {
     margin: 12px auto 12px;
     border: solid 1px #ced4da;
     border-radius: 0.25rem;
@@ -264,4 +214,16 @@ table > tbody > tr > td.editing > input {
 }
 table > tbody > tr > td.editing > input::selection {
     background-color: #1792ae;
+}
+
+/* TODO - Weird warning on firefox, but it works */
+.table-scroll-mode {
+    max-height: 50vh;
+    overflow: auto;
+}
+.table-scroll-mode table > thead {
+    position: sticky;
+    top: 0px;
+    background-color: #263544;
+    z-index: 5;
 }

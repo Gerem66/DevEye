@@ -23,26 +23,28 @@
         return $result !== false;
     }
 
-    function AddCard($title, $content) {
-        return "<div class='card col-two-thirds responsive card-password' data-title='$title'>
+    function AddCard($title, $content, $length) {
+        return "<div class='card col-two-thirds responsive card-password' data-title='$title ($length)'>
                     <div class='card-header password-header'>
                         <a name='btn-edit-category' data-title='$title' class='link'>Modifier la catégorie</a>
                         <a name='btn-add-password' data-title='$title' class='link'>Ajouter un mot de passe</a>
                     </div>
-                    <table class='show-lines table-passwords'>
-                        <thead>
-                            <tr>
-                                <th style='width: 20%'>Service</th>
-                                <th>Nom d'utilisateur / Email</th>
-                                <th style='width: 20%'>Mot de passe</th>
-                                <th style='width: 10%'>Status</th>
-                                <th style='width: 5%'></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            $content
-                        </tbody>
-                    </table>
+                    <div class='table-scroll-mode'>
+                        <table class='show-lines table-passwords'>
+                            <thead>
+                                <tr>
+                                    <th style='width: 20%'>Service</th>
+                                    <th>Nom d'utilisateur / Email</th>
+                                    <th style='width: 20%'>Mot de passe</th>
+                                    <th style='width: 10%'>Status</th>
+                                    <th style='width: 5%'></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                $content
+                            </tbody>
+                        </table>
+                    </div>
                 </div>";
     }
 
