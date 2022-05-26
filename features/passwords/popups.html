@@ -7,25 +7,25 @@
             Les informations concernant les mots de passe sont chiffrées.
         </p>
 
-        <input id="input-category" list="category" class="form-input" placeholder="Catégorie">
+        <input name="input-category" list="category" class="form-input" placeholder="Catégorie">
         <datalist id="category">%categories%</datalist>
 
         <div class="form-group">
-            <input id="input-service" class="form-input" type="text" placeholder="Service">
+            <input name="input-service" class="form-input" type="text" placeholder="Service">
         </div>
 
         <div class="form-group">
-            <input id="input-username" class="form-input" type="text" placeholder="Nom d'utilisateur / Email">
+            <input name="input-username" class="form-input" type="text" placeholder="Nom d'utilisateur / Email">
         </div>
 
         <div class="form-group">
-            <input id="input-password" class="form-input" type="password" placeholder="Mot de passe">
-            <button name="btn-toggle-pwd" class="btn">
+            <input name="input-password" class="form-input" type="password" placeholder="Mot de passe">
+            <button name="toggle" class="btn" data-input="input-password">
                 <i class="icon icon-eye-close"></i>
             </button>
         </div>
 
-        <select id="input-status">
+        <select name="input-status" class="grey">
             <option value="enable">Actif</option>
             <option value="disable">Inactif</option>
             <option value="none">Indéterminé</option>
@@ -41,7 +41,7 @@
 
 <div id="popup-message" class="popup">
     <div class="card col-quarter responsive" data-title="Mot de passe">
-        <p></p>
+        <p name="main-text"></p>
         <div class="form-group float-center">
             <button name="btn-back" class="btn">Continuer</button>
         </div>
@@ -52,8 +52,8 @@
     <div class="card col-quarter responsive" data-title="Mot de passe">
 
         <div class="form-group">
-            <input id="input-password" class="form-input" type="password" placeholder="Mot de passe">
-            <button name="btn-toggle-pwd" class="btn">
+            <input name="input-password" class="form-input" type="password" placeholder="Mot de passe">
+            <button name="toggle" class="btn" data-input="input-password">
                 <i class="icon icon-eye-close"></i>
             </button>
         </div>
@@ -70,12 +70,12 @@
 
         <p>Nom de la catégorie à modifier :</p>
         <div class="form-group">
-            <input id="input-category-old" class="form-input" type="text" readonly>
+            <input name="input-category-old" class="form-input" type="text" readonly>
         </div>
 
         <p>Nouveau nom :</p>
         <div class="form-group">
-            <input id="input-category-new" class="form-input" type="text" placeholder="Nouveau nom">
+            <input name="input-category-new" class="form-input" type="text" placeholder="Nouveau nom">
         </div>
 
         <div class="form-group float-center">

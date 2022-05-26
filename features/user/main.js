@@ -32,16 +32,11 @@ class Profile extends Feature {
         this.settingsSavedTimeout = null;
 
         // Popups
-        this.popupMessage = new Popup('popup-message');
-        this.popupMessage.SetCancelable(false);
-        this.popupMessage.popup.getElementsByTagName('button')[0].onclick = () => this.popupMessage.Close();
-
         this.popup = new Popup('popup-password');
-        this.popup.AddButtonClickListener(name => {
-            if (name === 'btn-back') this.popup.Close();
-            else if (name === 'btn-save') this.editPassword();
-        });
-        document.getElementById('button-password-edit').onclick = () => this.popup.Open();
+        this.popupMessage = new Popup('popup-message');
+
+        const btnPasswordEdit = document.getElementById('button-password-edit');
+        btnPasswordEdit.onclick = () => this.openPopupPassword();
 
         const img = document.getElementById('image-profile');
         img.onmousedown = (e) => e.preventDefault();
@@ -161,30 +156,37 @@ class Profile extends Feature {
         }
     }
 
-    async editPassword() {
-        this.popup.SetCancelable(false);
-        this.popup.popup.firstElementChild.classList.add('blur');
+    async openPopupPassword() {
+        const [ closeType, inputs ] = await this.popup.Open({ atEnd: 'blur' });
+        if (closeType !== 'btn-save') {
+            this.popup.Close();
+            return;
+        }
+        const inputPwdOld = inputs.inputs['input-pwd-old'] || null;
+        const inputPwdNew = inputs.inputs['input-pwd-new'] || null;
+        if (inputPwdOld === null || inputPwdNew === null) {
+            throw new Error('No password inputs found');
+        }
+        await this.editPassword(inputPwdOld, inputPwdNew);
+    }
 
-        const inputPwdOld = this.popup.inputs.find(input => input.name === 'input-pwd-old') || null;
-        const inputPwdNew = this.popup.inputs.find(input => input.name === 'input-pwd-new') || null;
-        if (inputPwdOld === null || inputPwdNew === null) throw new Error('No password inputs found');
-
-        const data = { action: 'passwordEdit', passwordOld: inputPwdOld.value, passwordNew: inputPwdNew.value };
+    async editPassword(passwordOld, passwordNew) {
+        const data = { action: 'passwordEdit', passwordOld, passwordNew };
         const response = await Request_Async('./user', data);
         const success = response.status === 200 && response.content['status'] === 'ok';
 
         // Close popup & reset all components
-        this.popup.Close(true);
-        this.popup.SetCancelable(true);
-        this.popup.popup.firstElementChild.classList.remove('blur');
+        this.popup.Close();
 
-        const text = this.popupMessage.popup.getElementsByTagName('p')[0];
-        text.textContent = 'Le mot de passe a été modifié avec succès';
+        const title = success ? 'Succès' : 'Erreur';
+        let text = 'Le mot de passe a été modifié avec succès !';
         if (!success) {
-            text.textContent = `Le mot de passe n'a pas pu être modifié (${response.status} - ${response.content['status']})`;
+            text = `Le mot de passe n'a pas pu être modifié (${response.status} - ${response.content['status']}).`;
         }
 
-        this.popupMessage.Open();
+        await this.popupMessage.Open({ title, cancelable: false }, (inputs, outputs) => {
+            outputs.p['main-text'].textContent = text;
+        });
     }
 }
 

@@ -11,13 +11,6 @@
     margin-left: 12px;
 }
 
-select#input-status {
-    margin: 12px auto 12px;
-    border: solid 1px #ced4da;
-    border-radius: 0.25rem;
-    background-color: #212529;
-}
-
 .card-password::before {
     width: 25%;
 }

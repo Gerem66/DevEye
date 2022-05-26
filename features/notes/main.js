@@ -33,9 +33,7 @@ class Notes extends Feature {
         this.currentNote = null;
 
         this.popup = new Popup('popup-message');
-        this.popup.popup.getElementsByTagName('button')[0].onclick = () => this.popup.Close();
         this.popupDelete = new Popup('popup-delete');
-        this.popupDelete.popup.getElementsByClassName('btn-delete-back')[0].onclick = () => this.popupDelete.Close();
 
         this.notesContainer = document.getElementById('notes-list');
         this.getNotesList = () => Array.from(this.notesContainer.getElementsByTagName('li'))
@@ -59,8 +57,6 @@ class Notes extends Feature {
         this.inputContent = document.createElement('textarea');
         this.inputContent.classList.add('form-input');
         this.inputContent.placeholder = PLACEHOLDER;
-    }
-    async onUnmount() {
     }
 
     async loadNote(li, id) {
@@ -90,8 +86,9 @@ class Notes extends Feature {
 
     isEditing() {
         if (this.editing) {
-            this.popup.popup.getElementsByTagName('p')[0].innerHTML = 'Une note est en cours de modification, enregistrez ou annulez pour continuer.';
-            this.popup.Open();
+            this.popup.Open({ title: 'Attention' }, (inputs, outputs) => {
+                outputs.p['main-text'].textContent = 'Une note est en cours de modification, enregistrez ou annulez pour continuer.';
+            });
             return true;
         }
         return false;
@@ -236,22 +233,22 @@ class Notes extends Feature {
         this.inputTitle.replaceWith(this.noteTitle);
         this.showNote(response);
     }
-    noteDelete() {
+    async noteDelete() {
         const { id, title, content, rawContent, date } = this.currentNote;
-        this.popupDelete.Open();
-        const buttonDelete = this.popupDelete.popup.getElementsByClassName('btn-delete-delete')[0];
-        buttonDelete.onclick = async () => {
-            this.popupDelete.popup.classList.add('blur');
-            const data = { 'removeNote': id };
-            const response = await Request_Async('./notes', data);
-            const success = response.status === 200 && response.content['status'] === 'ok';
-            if (success) {
-                this.getNotesList().forEach(li => li.classList.contains('active') && li.remove());
-                this.hideNote();
-            }
-            this.popupDelete.popup.classList.remove('blur');
+        const [ closeTypes, results ] = await this.popupDelete.Open({ atEnd: 'blur' });
+        if (closeTypes !== 'btn-delete') {
             this.popupDelete.Close();
+            return;
         }
+
+        const data = { 'removeNote': id };
+        const response = await Request_Async('./notes', data);
+        const success = response.status === 200 && response.content['status'] === 'ok';
+        if (success) {
+            this.getNotesList().forEach(li => li.classList.contains('active') && li.remove());
+            this.hideNote();
+        }
+        this.popupDelete.Close();
     }
 }
 

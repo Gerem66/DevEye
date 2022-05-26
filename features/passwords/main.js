@@ -6,70 +6,36 @@ class Passwords extends Feature {
     onMount(category) {
         this.category = category;
         this.loading = false;
-        this.selectedCell = null;
-
-        this.inputCategory = document.getElementById('input-category');
-        this.inputService = document.getElementById('input-service');
-        this.inputUsername = document.getElementById('input-username');
-        this.inputPassword = document.getElementById('input-password');
-        this.inputStatus = document.getElementById('input-status');
-        this.inputCategoryOld = document.getElementById('input-category-old');
-        this.inputCategoryNew = document.getElementById('input-category-new');
 
         // Popups
+        this.popupAdd = new Popup('popup-password');
         this.popupMessage = new Popup('popup-message');
-        this.popupMessage.AddButtonClickListener(() => this.popupMessage.Close());
-
-        const popupAdd = new Popup('popup-password');
-        popupAdd.AddButtonClickListener(name => {
-            if (name === 'btn-save') this.AddPassword();
-            else popupAdd.Close();
-        });
-
-        const popupVerify = new Popup('popup-verify');
-        popupVerify.AddButtonClickListener(name => {
-            if (name === 'btn-unlock') {
-                const password = popupVerify.inputs[0].value;
-                popupVerify.Close();
-                this.ShowPassword(this.selectedCell, password);
-            } else {
-                popupVerify.Close();
-            }
-        });
+        this.popupVerify = new Popup('popup-verify');
+        this.popupEditCategory = new Popup('popup-edit-category');
 
         // Show passwords
         const eyes = document.getElementsByName('icon-show-password');
-        eyes.forEach(eye => {
-            eye.onclick = () => {
-                this.selectedCell = eye.parentElement;
-                popupVerify.Open();
-            }
-        });
-
-        // Add passwords
-        const buttonsAdd = document.getElementsByName('btn-add-password');
-        buttonsAdd.forEach(button => {
-            button.onclick = () => {
-                this.inputCategory.value = button.getAttribute('data-title') || '';
-                popupAdd.Open();
-            }
-        });
+        eyes.forEach(eye => eye.onclick = () => this.ShowPassword(eye.parentElement));
 
         // Search passwords
         const inputSearch = document.getElementById('input-search');
         inputSearch.oninput = () => this.Search(inputSearch.value.toLowerCase());
 
-        // Edit category
-        const popupCategory = new Popup('popup-edit-category');
-        popupCategory.AddButtonClickListener(name => {
-            if (name === 'btn-edit') this.EditCategory();
-            else if (name === 'btn-back') popupCategory.Close();
+        // Add passwords
+        const buttonsAdd = document.getElementsByName('btn-add-password');
+        buttonsAdd.forEach(button => {
+            button.onclick = () => {
+                const title = button.getAttribute('data-title') || '';
+                this.AddPassword(title);
+            }
         });
+
+        // Edit category
         const buttonsCategory = document.getElementsByName('btn-edit-category');
         buttonsCategory.forEach(button => {
             button.onclick = () => {
-                this.inputCategoryOld.value = button.getAttribute('data-title') || '';
-                popupCategory.Open();
+                const category = button.getAttribute('data-title') || null;
+                category !== null && this.EditCategory(category);
             }
         });
     }
@@ -100,18 +66,26 @@ class Passwords extends Feature {
         });
     }
 
-    async EditCategory() {
+    async EditCategory(category) {
+        const [ closeType, results ] = await this.popupEditCategory.Open({ atEnd: 'blur' }, (inputs, outputs) => {
+            inputs.inputs['input-category-old'].value = category;
+        });
+        if (closeType !== 'btn-edit') {
+            this.popupEditCategory.Close();
+            return;
+        }
+
         const data = {
             action: 'categoryEdit',
-            old: this.inputCategoryOld.value,
-            new: this.inputCategoryNew.value
+            old: results.inputs['input-category-old'],
+            new: results.inputs['input-category-new']
         };
         const response = await Request_Async('./passwords', data);
         const success = response.status === 200 && response.content['status'] === 'ok';
         if (!success) {
-            const popupMessageP = this.popupMessage.popup.getElementsByTagName('p')[0];
-            popupMessageP.textContent = 'Une erreur est survenue lors de la modification de la catégorie.';
-            this.popupMessage.Open();
+            this.popupMessage.Open({ title: 'Erreur' }, (inputs, outputs) => {
+                outputs.p['main-text'].textContent = 'Une erreur est survenue lors de la modification de la catégorie.';
+            });
             return;
         }
         page.Load('passwords');
@@ -119,22 +93,27 @@ class Passwords extends Feature {
 
     /**
      * @param {HTMLElement} cell
-     * @param {String} password
      */
-    async ShowPassword(cell, password) {
+    async ShowPassword(cell) {
         if (this.loading) {
             return;
         }
 
+        const [ closeType, results ] = await this.popupVerify.Open({ atEnd: 'blur' });
+        if (closeType !== 'btn-unlock') {
+            this.popupVerify.Close();
+            return;
+        }
+
+        this.loading = true;
         const id = parseInt(cell.parentElement.getAttribute('data-id')) || 0;
+        const password = results.inputs['input-password'];
         const icon = cell.getElementsByTagName('i')[0];
         const text = cell.getElementsByTagName('p')[0];
 
-        this.loading = true;
-        const popupMessageP = this.popupMessage.popup.getElementsByTagName('p')[0];
-
         const data = { action: 'show', id, password };
         const response = await Request_Async('./passwords', data);
+        this.popupVerify.Close();
 
         if (response.status === 200) {
             if (response.content['status'] === 'ok') {
@@ -142,30 +121,39 @@ class Passwords extends Feature {
                 text.textContent = response.content['content'];
                 icon.style.display = 'none';
 
-                this.timeout && clearTimeout(this.timeout);
-                this.timeout = setTimeout(() => {
+                setTimeout(() => {
                     text.textContent = initPasswordContent;
                     icon.style.display = 'inline-block';
                 }, 10 * 1000);
             } else if (response.content['status'] === 'wrong') {
-                popupMessageP.textContent = 'Le mot de passe est incorrect.';
-                this.popupMessage.Open();
+                this.popupMessage.Open({}, (inputs, outputs) => {
+                    outputs.p['main-text'].textContent = 'Le mot de passe est incorrect.';
+                });
             }
         } else {
-            popupMessageP.textContent = 'Une erreur est survenue';
-            this.popupMessage.Open();
+            this.popupMessage.Open({}, (inputs, outputs) => {
+                outputs.p['main-text'].textContent = 'Une erreur est survenue';
+            });
         }
 
         this.loading = false;
     }
-    async AddPassword() {
+    async AddPassword(categoryName) {
+        const [ closeType, results ] = await this.popupAdd.Open({ atEnd: 'blur' }, (inputs, outputs) => {
+            inputs.inputs['input-category'].value = categoryName;
+        });
+        if (closeType !== 'btn-save') {
+            this.popupAdd.Close();
+            return;
+        }
+
         const data = {
             action: 'add',
-            category: this.inputCategory.value.trim(),
-            service: this.inputService.value,
-            username: this.inputUsername.value,
-            password: this.inputPassword.value,
-            status: this.inputStatus.value
+            category: results.inputs['input-category'],
+            service: results.inputs['input-service'],
+            username: results.inputs['input-username'],
+            password: results.inputs['input-password'],
+            status: results.selects['input-status']
         };
         const response = await Request_Async('./passwords', data);
         const success = response.status === 200 && response.content['status'] === 'ok';
