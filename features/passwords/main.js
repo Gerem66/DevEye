@@ -1,3 +1,11 @@
+/**
+ * @typedef {Object} Password
+ * @property {string} service
+ * @property {string} username
+ * @property {string} password
+ * @property {string} status
+ */
+
 class Passwords extends Feature {
     constructor() {
         super('passwords');
@@ -5,13 +13,14 @@ class Passwords extends Feature {
 
     onMount(category) {
         this.category = category;
-        this.loading = false;
 
         // Popups
-        this.popupAdd = new Popup('popup-password');
+        this.popupPassword = new Popup('popup-password');
         this.popupMessage = new Popup('popup-message');
         this.popupVerify = new Popup('popup-verify');
         this.popupEditCategory = new Popup('popup-edit-category');
+        this.popupRemove = new Popup('popup-remove');
+        this.popupMovePassword = new Popup('popup-move-password');
 
         // Show passwords
         const eyes = document.getElementsByName('icon-show-password');
@@ -37,6 +46,30 @@ class Passwords extends Feature {
                 const category = button.getAttribute('data-title') || null;
                 category !== null && this.EditCategory(category);
             }
+        });
+
+        // Other buttons
+        const buttons = document.getElementsByName('icon-other');
+        buttons.forEach(button => {
+            button.parentElement.style.position = 'relative';
+            const row = button.parentElement.parentElement;
+            const table = row.parentElement.parentElement;
+            const card = table.parentElement.parentElement;
+
+            const id = row.getAttribute('data-id') || null;
+            const category = card.getAttribute('data-title') || null;
+            if (id === null || category === null) return;
+
+            const buttonClick = (ev) => {
+                const position = { x: ev.pageX, y: ev.pageY - 50 };
+                new Toolbar(document.body, position, [
+                    { name: 'edit', icon: 'edit', title: 'Modifier' },
+                    { name: 'move', icon: 'move-to-right', title: 'Déplacer' },
+                    { name: 'remove', icon: 'trash', title: 'Supprimer' }
+                ], (name) => this.Other(id, category, name));
+            }
+            button.onclick = buttonClick;
+            button.onmouseenter = buttonClick;
         });
 
         this.SetAllCounters(true);
@@ -120,59 +153,68 @@ class Passwords extends Feature {
         page.Load('passwords');
     }
 
+    /** 
+     * Open popup to verify user password & return password with 'id'
+     * @param {number} id
+     * @returns {Promise<Password|null>} password object or null if user cancel or password is wrong
+     */
+    async GetPassword(id) {
+        const [ closeType, results ] = await this.popupVerify.Open();
+        if (closeType !== 'btn-unlock') {
+            return null;
+        }
+
+        const password = results.inputs['input-password'];
+        const data = { action: 'getPassword', id, password };
+        const response = await Request_Async('./passwords', data);
+
+        if (response.status !== 200 || response.content['status'] === 'error') {
+            this.popupMessage.Open({ title: 'Erreur' }, (inputs, outputs) => {
+                outputs.p['main-text'].textContent = 'Une erreur est survenue';
+            });
+            return null;
+        }
+
+        if (response.content['status'] === 'wrong') {
+            this.popupMessage.Open({ title: 'Erreur' }, (inputs, outputs) => {
+                outputs.p['main-text'].textContent = 'Le mot de passe est incorrect.';
+            });
+            return null;
+        }
+
+        return response.content['content'];
+    }
+
     /**
      * @param {HTMLElement} cell
      */
     async ShowPassword(cell) {
-        if (this.loading) {
-            return;
-        }
-
-        const [ closeType, results ] = await this.popupVerify.Open({ atEnd: 'blur' });
-        if (closeType !== 'btn-unlock') {
-            this.popupVerify.Close();
-            return;
-        }
-
-        this.loading = true;
+        cell.classList.add('blur');
         const id = parseInt(cell.parentElement.getAttribute('data-id')) || 0;
-        const password = results.inputs['input-password'];
         const icon = cell.getElementsByTagName('i')[0];
         const text = cell.getElementsByTagName('p')[0];
 
-        const data = { action: 'show', id, password };
-        const response = await Request_Async('./passwords', data);
-        this.popupVerify.Close();
+        const password = await this.GetPassword(id);
+        cell.classList.remove('blur');
+        if (password === null) return;
 
-        if (response.status === 200) {
-            if (response.content['status'] === 'ok') {
-                const initPasswordContent = text.textContent;
-                text.textContent = response.content['content'];
-                icon.style.display = 'none';
+        const initPasswordContent = text.textContent;
+        text.textContent = password.password;
+        icon.style.display = 'none';
 
-                setTimeout(() => {
-                    text.textContent = initPasswordContent;
-                    icon.style.display = 'inline-block';
-                }, 10 * 1000);
-            } else if (response.content['status'] === 'wrong') {
-                this.popupMessage.Open({}, (inputs, outputs) => {
-                    outputs.p['main-text'].textContent = 'Le mot de passe est incorrect.';
-                });
-            }
-        } else {
-            this.popupMessage.Open({}, (inputs, outputs) => {
-                outputs.p['main-text'].textContent = 'Une erreur est survenue';
-            });
-        }
+        setTimeout(() => {
+            text.textContent = initPasswordContent;
+            icon.style.display = 'inline-block';
+        }, 10 * 1000);
 
-        this.loading = false;
     }
     async AddPassword(categoryName) {
-        const [ closeType, results ] = await this.popupAdd.Open({ atEnd: 'blur' }, (inputs, outputs) => {
+        const settings = { title: 'Ajouter un mot de passe', atEnd: 'blur' };
+        const [ closeType, results ] = await this.popupPassword.Open(settings, (inputs) => {
             inputs.inputs['input-category'].value = categoryName;
         });
         if (closeType !== 'btn-save') {
-            this.popupAdd.Close();
+            this.popupPassword.Close();
             return;
         }
 
@@ -190,6 +232,104 @@ class Passwords extends Feature {
         if (success) {
             page.Load('passwords');
         }
+    }
+
+    /**
+     * @param {Number} id
+     * @param {string} category
+     * @param {'edit'|'move'|'remove'} name
+     */
+    Other(id, category, name) {
+        if (name === 'edit') this.EditPassword(id, category);
+        if (name === 'move') this.MovePassword(id, category);
+        else if (name === 'remove') this.RemovePassword(id);
+    }
+
+    async EditPassword(id, category) {
+        const password = await this.GetPassword(id);
+        if (password === null) return;
+
+        const settings = { title: 'Modification d\'un mot de passe', atEnd: 'blur' };
+        const [ closeType, results ] = await this.popupPassword.Open(settings, (inputs) => {
+            const options = Array.from(inputs.selects['input-status'].getElementsByTagName('option'));
+            inputs.inputs['input-category'].value = category;
+            inputs.inputs['input-service'].value = password.service;
+            inputs.inputs['input-username'].value = password.username;
+            inputs.inputs['input-password'].value = password.password;
+            inputs.selects['input-status'].selectedIndex = options.findIndex(option => option.value === password.status);
+        });
+
+        if (closeType !== 'btn-save') {
+            this.popupPassword.Close();
+            return;
+        }
+
+        const data = {
+            action: 'edit', id,
+            category: results.inputs['input-category'],
+            service: results.inputs['input-service'],
+            username: results.inputs['input-username'],
+            password: results.inputs['input-password'],
+            status: results.selects['input-status']
+        };
+        const response = await Request_Async('./passwords', data);
+        const success = response.status === 200 && response.content['status'] === 'ok';
+
+        if (!success) {
+            this.popupMessage.Open({ title: 'Erreur' }, (inputs, outputs) => {
+                outputs.p['main-text'].textContent = 'Une erreur est survenue';
+            });
+            this.popupPassword.Close();
+            return;
+        }
+
+        page.Load('passwords');
+    }
+
+    async MovePassword(id, category) {
+        const [ closeType, results ] = await this.popupMovePassword.Open({ atEnd: 'blur' }, (inputs, outputs) => {
+            inputs.inputs['input-category'].placeholder = category;
+        });
+        if (closeType !== 'btn-move') {
+            this.popupMovePassword.Close();
+            return;
+        }
+
+        const data = {
+            action: 'move', id, category: results.inputs['input-category']
+        };
+        const response = await Request_Async('./passwords', data);
+        const success = response.status === 200 && response.content['status'] === 'ok';
+        this.popupMovePassword.Close();
+
+        if (!success) {
+            this.popupMessage.Open({ title: 'Erreur' }, (inputs, outputs) => {
+                outputs.p['main-text'].textContent = 'Une erreur est survenue lors de la suppression du mot de passe.';
+            });
+            return;
+        }
+        page.Load('passwords');
+    }
+
+    async RemovePassword(id) {
+        const [ closeType, results ] = await this.popupRemove.Open({ atEnd: 'blur' });
+        if (closeType !== 'btn-remove') {
+            this.popupRemove.Close();
+            return;
+        }
+
+        const data = { action: 'remove', id, password: results.inputs['input-password'] };
+        const response = await Request_Async('./passwords', data);
+        const success = response.status === 200 && response.content['status'] === 'ok';
+        this.popupRemove.Close();
+
+        if (!success) {
+            this.popupMessage.Open({ title: 'Erreur' }, (inputs, outputs) => {
+                outputs.p['main-text'].textContent = 'Une erreur est survenue lors de la suppression du mot de passe.';
+            });
+            return;
+        }
+        page.Load('passwords');
     }
 }
 

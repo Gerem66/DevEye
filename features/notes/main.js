@@ -57,6 +57,8 @@ class Notes extends Feature {
         this.inputContent = document.createElement('textarea');
         this.inputContent.classList.add('form-input');
         this.inputContent.placeholder = PLACEHOLDER;
+        this.inputContent.style.whiteSpace = 'pre';
+        this.inputContent.style.overflowX = 'auto';
     }
 
     async loadNote(li, id) {

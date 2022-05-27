@@ -16,7 +16,7 @@
  * 
  * @typedef {Object} PopupSettings
  * @property {String?} [title=null] The title of the popup, not edit if null
- * @property {Boolean} [cancelable=true] True if popup can be closed by clicking on background
+ * @property {Boolean} [cancelable=true] True if popup can be closed by clicking on background or escape key
  * @property {'close'|'blur'|'nothing'} [atEnd='close'] Behaviour of the popup after buttons are clicked
  * 
  * @callback PopupAfterStartCallback
@@ -69,6 +69,11 @@ class Popup {
                         resolve('background');
                     }
                 };
+                this.popup.onkeydown = (ev) => {
+                    if (ev.key === 'Escape') {
+                        resolve('escape');
+                    }
+                }
             }
 
             for (let btn in buttons) {
@@ -84,6 +89,7 @@ class Popup {
         } else if (settings.atEnd === 'blur') {
             this.card.classList.add('blur');
             this.popup.onclick = null; // Disable background click
+            this.popup.onkeydown = null; // Disable escape key
         }
         return [ closeType, results ];
     }

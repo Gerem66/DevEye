@@ -2,24 +2,59 @@
 
     /**
      * @param DataBase $db
-     * @param int $userID
-     * @param string $category
+     * @param int $uid
+     * @param string $clearPassword
+     * @return bool|null True if password is correct, false otherwise or null if error
+     */
+    function CheckPassword($db, $uid, $clearPassword) {
+        $u = $db->QueryPrepare('Users', 'SELECT * FROM TABLE WHERE `ID` = ?', 'i', [$uid]);
+        if ($u === false || count($u) === 0) return null;
+        return password_verify($clearPassword, $u[0]['Password']);
+    }
+
+    /**
+     * Get encrypted content from password informations
+     * @param DataBase $db
      * @param string $service
      * @param string $username
      * @param string $password
      * @param string $status
-     * @return bool true if success, false if failed
      */
-    function AddPassword($db, $userID, $category, $service, $username, $password, $status) {
+    function GetPasswordContent($db, $service, $username, $password, $status) {
         $variables = array(
             'service' => $service,
             'username' => $username,
             'password' => $password,
             'status' => $status
         );
-        $content = $db->Encrypt(json_encode($variables));
+        return $db->Encrypt(json_encode($variables));
+    }
+
+    /**
+     * @param DataBase $db
+     * @param int $userID
+     * @param string $category
+     * @return bool true if success, false if failed
+     */
+    function AddPassword($db, $userID, $category, $content) {
         $args = array($userID, $category, $content);
-        $result = $db->QueryPrepare("_Passwords", "INSERT INTO TABLE (`UID`, `Category`, `Content`) VALUES (?, ?, ?)", 'iss', $args);
+        $command = 'INSERT INTO TABLE (`UID`, `Category`, `Content`) VALUES (?, ?, ?)';
+        $result = $db->QueryPrepare('_Passwords', $command, 'iss', $args);
+        return $result !== false;
+    }
+
+    /**
+     * @param DataBase $db
+     * @param int $userID
+     * @param int $id
+     * @param string $newCategory
+     * @param array $newContent
+     * @return bool true if success, false if failed
+     */
+    function EditPassword($db, $userID, $id, $newCategory, $newContent) {
+        $args = array($newCategory, $newContent, $id, $userID);
+        $command = 'UPDATE TABLE SET `Category` = ?, `Content` = ? WHERE `ID` = ? AND `UID` = ?';
+        $result = $db->QueryPrepare('_Passwords', $command, 'ssii', $args);
         return $result !== false;
     }
 
@@ -48,11 +83,12 @@
                 </div>";
     }
 
-    function AddRow($ID, $service, $username, $status) {
+    function AddRow($ID, $service, $username, $status, $showPassword) {
+        $password = $showPassword ? "<p>**********</p><i name='icon-show-password' class='icon icon-eye-open'></i>" : '';
         return "<tr data-id='$ID'>
                     <td>$service</td>
                     <td>$username</td>
-                    <td><p>**********</p><i name='icon-show-password' class='icon icon-eye-open'></i></td>
+                    <td>$password</td>
                     <td>$status</td>
                     <td><i name='icon-other' class='icon icon-other'></i></td>
                 </tr>";

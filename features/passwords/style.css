@@ -17,6 +17,7 @@
 .password-header {
     width: 70%;
     margin-top: 12px;
+    margin-right: 8px;
     text-align: right;
 }
 .password-header > a {

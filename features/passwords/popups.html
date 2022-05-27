@@ -84,3 +84,35 @@
         </div>
     </div>
 </div>
+
+<div id="popup-move-password" class="popup">
+    <div class="card col-quarter responsive" data-title="Modifier la catégorie du mot de passe">
+        <p>Nouvelle catégorie</p>
+        <div class="form-group">
+            <input name="input-category" list="category" class="form-input" placeholder="Catégorie">
+            <datalist id="category">%categories%</datalist>
+        </div>
+
+        <div class="form-group float-center">
+            <button name="btn-back" class="btn">Retour</button>
+            <button name="btn-move" class="btn">Modifier</button>
+        </div>
+    </div>
+</div>
+
+<div id="popup-remove" class="popup">
+    <div class="card col-quarter responsive" data-title="Confirmation de la suppression">
+
+        <div class="form-group">
+            <input name="input-password" class="form-input" type="password" placeholder="Mot de passe">
+            <button name="toggle" class="btn" data-input="input-password">
+                <i class="icon icon-eye-close"></i>
+            </button>
+        </div>
+
+        <div class="form-group float-center">
+            <button name="btn-back" class="btn">Retour</button>
+            <button name="btn-remove" class="btn">Supprimer</button>
+        </div>
+    </div>
+</div>
