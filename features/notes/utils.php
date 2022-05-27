@@ -19,7 +19,7 @@
      * @param int $id
      * @return array The object containing all note's informations.
      */
-    function GetContent($db, $user, $id) {
+    function GetNotesContent($db, $user, $id) {
         $notes = $db->QueryPrepare('_Notes', "SELECT * FROM TABLE WHERE `ID` = ? AND `UID` = ?", 'ii', array($id, $user->ID));
         if ($notes === false || count($notes) === 0) {
             exit('{"status":"error"}');
@@ -34,6 +34,26 @@
             'content' => TextMdToHtml($content),
             'last' => $note['Last'],
             'date' => $note['Date']
+        );
+        return $result;
+    }
+
+    /**
+     * @param DataBase $db
+     * @param User $user
+     * @param int $id
+     * @return array The object containing all note's informations.
+     */
+    function GetNotesRawContent($db, $user, $id) {
+        $notes = $db->QueryPrepare('_Notes', "SELECT `Content` FROM TABLE WHERE `ID` = ? AND `UID` = ?", 'ii', array($id, $user->ID));
+        if ($notes === false || count($notes) === 0) {
+            exit('{"status":"error"}');
+        }
+        $content = $db->Decrypt($notes[0]['Content']);
+        $result = array(
+            'status' => 'ok',
+            'rawContent' => $content,
+            'content' => TextMdToHtml($content)
         );
         return $result;
     }
@@ -61,7 +81,7 @@
      * @return bool Success
      */
     function SetCheckbox($db, $user, $id, $checkboxID) {
-        $content = GetContent($db, $user, $id);
+        $content = GetNotesContent($db, $user, $id);
         $rawContent = $content['rawContent'];
         $lines = explode("\n", $rawContent);
         $checkboxIndex = 0;

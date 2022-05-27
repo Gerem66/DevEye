@@ -169,7 +169,7 @@ ul.notes-list > li > p {
 .markdown h2 { margin-left: -18px; }
 .markdown h3 { margin-left: -12px; }
 .markdown h4 { margin-left: -6px; }
-.markdown p { margin: 6px 0 0; }
+.markdown p { margin: 6px 0 0; min-height: 4px; }
 .markdown ul, .markdown ol { margin: 6px 0 0; padding-left: 2em; }
 .markdown li.checkable { list-style: none; }
 .markdown i.icon {

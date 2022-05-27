@@ -73,8 +73,8 @@ class Notes extends Feature {
         // Load note
         const t1 = performance.now();
         const data = { getContent: id };
-        const note = await Request_Async('./notes', data);
-        const success = note.status === 200 && note.content['status'] === 'ok';
+        const response = await Request_Async('./notes', data);
+        const success = response.status === 200 && response.content['status'] === 'ok';
 
         // Wait for animation
         const t2 = performance.now();
@@ -82,7 +82,7 @@ class Notes extends Feature {
         if (time < 200 && alreadyActive) await Sleep(200 -  time);
 
         if (success) {
-            this.showNote(note);
+            this.showNote(response.content);
         }
     }
 
@@ -104,7 +104,7 @@ class Notes extends Feature {
     }
 
     showNote(note) {
-        this.currentNote = note.content;
+        this.currentNote = note;
         const { id, title, content, rawContent, last, date } = this.currentNote;
 
         this.editing = false;
@@ -127,6 +127,8 @@ class Notes extends Feature {
                 if (success) {
                     i.classList.toggle('icon-square-check');
                     i.classList.toggle('icon-square-empty');
+                    this.currentNote.content = response.content['content'];
+                    this.currentNote.rawContent = response.content['rawContent'];
                 }
                 i.classList.remove('blur');
             }
@@ -172,7 +174,7 @@ class Notes extends Feature {
             newLi.setAttribute('data-id', id);
             this.notesContainer.insertAdjacentElement('afterbegin', newLi);
 
-            this.showNote(response);
+            this.showNote(response.content);
             this.noteEdit();
         }
     }
@@ -209,7 +211,8 @@ class Notes extends Feature {
         this.noteContent.innerHTML = content;
         this.editing = false;
         this.inputTitle.replaceWith(this.noteTitle);
-        this.updateButtons(this.noteEdit, this.noteDelete);
+        this.showNote(this.currentNote);
+        //this.updateButtons(this.noteEdit, this.noteDelete);
     }
     async noteSave() {
         const { id } = this.currentNote;
@@ -233,7 +236,7 @@ class Notes extends Feature {
             }
         }
         this.inputTitle.replaceWith(this.noteTitle);
-        this.showNote(response);
+        this.showNote(response.content);
     }
     async noteDelete() {
         const { id, title, content, rawContent, date } = this.currentNote;

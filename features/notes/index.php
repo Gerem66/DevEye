@@ -9,11 +9,11 @@
 
     if (isset($post['addNote'])) {
         $id = AddNote($db, $user);
-        exit(json_encode(GetContent($db, $user, $id)));
+        exit(json_encode(GetNotesContent($db, $user, $id)));
     }
     if (isset($post['getContent'])) {
         $id = $post['getContent'];
-        exit(json_encode(GetContent($db, $user, $id)));
+        exit(json_encode(GetNotesContent($db, $user, $id)));
     }
     if (isset($post['setContent'])) {
         $id = $post['setContent'];
@@ -21,7 +21,7 @@
         if (!$success) {
             exit('{"status":"error"}');
         }
-        exit(json_encode(GetContent($db, $user, $id)));
+        exit(json_encode(GetNotesContent($db, $user, $id)));
     }
     if (isset($post['removeNote'])) {
         $id = $post['removeNote'];
@@ -35,10 +35,8 @@
         $id = $post['noteID'];
         $checkboxID = $post['checkSquare'];
         $success = SetCheckbox($db, $user, $id, $checkboxID);
-        if (!$success) {
-            exit('{"status":"error"}');
-        }
-        exit('{"status":"ok"}');
+        if (!$success) exit('{"status":"error"}');
+        exit(json_encode(GetNotesRawContent($db, $user, $id)));
     }
 
     $getNoteContent = fn($note) => "<li data-id='{$note['ID']}'><p>{$note['Title']}</p></li>";
