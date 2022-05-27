@@ -84,12 +84,18 @@
     }
 
     function AddRow($ID, $service, $username, $status, $showPassword) {
+        $color = '';
+        $formatStatus = 'Autre';
+        if ($status === 'enable') { $formatStatus = 'Actif'; $color = ' style="color: #2ecc71"'; }
+        else if ($status === 'disable') { $formatStatus = 'Inactif'; $color = ' style="color: #e74c3c"'; }
+        else if ($status === 'none') $formatStatus = 'Indéterminé';
+
         $password = $showPassword ? "<p>**********</p><i name='icon-show-password' class='icon icon-eye-open'></i>" : '';
         return "<tr data-id='$ID'>
                     <td>$service</td>
                     <td>$username</td>
                     <td>$password</td>
-                    <td>$status</td>
+                    <td$color>$formatStatus</td>
                     <td><i name='icon-other' class='icon icon-other'></i></td>
                 </tr>";
     }

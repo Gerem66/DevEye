@@ -6,7 +6,8 @@
      * @return int The ID of the new note.
      */
     function AddNote($db, $user) {
-        $result = $db->QueryPrepare('_Notes', "INSERT INTO TABLE (`UID`, `Title`, `Content`) VALUES (?, 'Nouvelle Note', '')", 'i', array($user->ID));
+        $defaultTitle = $db->Encrypt('Nouvelle Note');
+        $result = $db->QueryPrepare('_Notes', "INSERT INTO TABLE (`UID`, `Title`, `Content`) VALUES (?, ?, '')", 'is', array($user->ID, $defaultTitle));
         if ($result === false) {
             exit('{"status":"error"}');
         }
@@ -25,11 +26,12 @@
             exit('{"status":"error"}');
         }
         $note = $notes[0];
+        $title = $db->Decrypt($note['Title']);
         $content = $db->Decrypt($note['Content']);
         $result = array(
             'id' => $id,
             'status' => 'ok',
-            'title' => $note['Title'],
+            'title' => $title,
             'rawContent' => $content,
             'content' => TextMdToHtml($content),
             'last' => $note['Last'],
@@ -67,8 +69,9 @@
      * @return bool Success
      */
     function SetContent($db, $user, $id, $newTitle, $newContent) {
-        $encrypt = $db->Encrypt($newContent);
-        $args = array($newTitle, $encrypt, $id, $user->ID);
+        $encryptTitle = $db->Encrypt($newTitle);
+        $encryptContent = $db->Encrypt($newContent);
+        $args = array($encryptTitle, $encryptContent, $id, $user->ID);
         $result = $db->QueryPrepare('_Notes', "UPDATE TABLE SET `Title` = ?, `Content` = ?, `Last` = CURRENT_TIMESTAMP() WHERE `ID` = ? AND `UID` = ?", 'ssii', $args);
         return $result !== false;
     }

@@ -39,7 +39,10 @@
         exit(json_encode(GetNotesRawContent($db, $user, $id)));
     }
 
-    $getNoteContent = fn($note) => "<li data-id='{$note['ID']}'><p>{$note['Title']}</p></li>";
+    $getNoteContent = function($note) {
+        $title = $GLOBALS['db']->Decrypt($note['Title']);
+        return "<li data-id='{$note['ID']}'><p>{$title}</p></li>";
+    };
     $command = "SELECT `ID`, `Title` FROM TABLE WHERE `UID` = ? ORDER BY `Last` DESC";
     $notes = $db->QueryPrepare('_Notes', $command, 'i', array($user->ID));
     $notes = implode('', array_map($getNoteContent, $notes));
