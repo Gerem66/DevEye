@@ -1,17 +1,20 @@
 <?php
 
     require_once(__DIR__.'/config.php');
+    require_once(__DIR__.'/encryption.php');
 
     class DataBase {
-        /**
-         * @var mysqli $conn
-         */
+        /** @var mysqli $conn */
         private $conn;
+
         private $key;
         private $db_hostname;
         private $db_name;
         private $db_username;
         private $db_password;
+
+        /** @var Encryption */
+        public $encryption = null;
 
         public function __construct($openConnection = true, $credentials = null) {
             $this->conn = null;
@@ -24,6 +27,16 @@
             if ($this->conn != null) {
                 $this->conn->close();
             }
+        }
+
+        public function SetEncryption($hashedPassword) {
+            if ($this->encryption !== null) {
+                $user = $GLOBALS['user'];
+                $uid = isset($user) ? $user->ID : 0;
+                $this->AddLog($uid, 'SetPasswordKey', 'User tried to change password key.');
+                return;
+            }
+            $this->encryption = new Encryption($this->key, $hashedPassword);
         }
 
         /**
@@ -168,8 +181,10 @@
         }
 
         /**
+         * Old method to encrypt a string.
          * @param string $str
          * @return string Encrypted string with sql key.
+         * @deprecated
          */
         public function Encrypt($str) {
             if (!$str) return '';
@@ -177,8 +192,10 @@
         }
 
         /**
+         * Old method to decrypt a string.
          * @param string $str
          * @return string Decrypted string with sql key.
+         * @deprecated
          */
         public function Decrypt($str) {
             if (!$str) return '';

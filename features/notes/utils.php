@@ -6,7 +6,7 @@
      * @return int The ID of the new note.
      */
     function AddNote($db, $user) {
-        $defaultTitle = $db->Encrypt('Nouvelle Note');
+        $defaultTitle = $db->encryption->Encrypt('Nouvelle Note');
         $result = $db->QueryPrepare('_Notes', "INSERT INTO TABLE (`UID`, `Title`, `Content`) VALUES (?, ?, '')", 'is', array($user->ID, $defaultTitle));
         if ($result === false) {
             exit('{"status":"error"}');
@@ -26,8 +26,8 @@
             exit('{"status":"error"}');
         }
         $note = $notes[0];
-        $title = $db->Decrypt($note['Title']);
-        $content = $db->Decrypt($note['Content']);
+        $title = $db->encryption->Decrypt($note['Title']);
+        $content = $db->encryption->Decrypt($note['Content']);
         $result = array(
             'id' => $id,
             'status' => 'ok',
@@ -51,7 +51,7 @@
         if ($notes === false || count($notes) === 0) {
             exit('{"status":"error"}');
         }
-        $content = $db->Decrypt($notes[0]['Content']);
+        $content = $db->encryption->Decrypt($notes[0]['Content']);
         $result = array(
             'status' => 'ok',
             'rawContent' => $content,
@@ -69,8 +69,11 @@
      * @return bool Success
      */
     function SetContent($db, $user, $id, $newTitle, $newContent) {
-        $encryptTitle = $db->Encrypt($newTitle);
-        $encryptContent = $db->Encrypt($newContent);
+        if (strlen($newTitle) > 128) {
+            $newTitle = substr($newTitle, 0, 128);
+        }
+        $encryptTitle = $db->encryption->Encrypt($newTitle);
+        $encryptContent = $db->encryption->Encrypt($newContent);
         $args = array($encryptTitle, $encryptContent, $id, $user->ID);
         $result = $db->QueryPrepare('_Notes', "UPDATE TABLE SET `Title` = ?, `Content` = ?, `Last` = CURRENT_TIMESTAMP() WHERE `ID` = ? AND `UID` = ?", 'ssii', $args);
         return $result !== false;

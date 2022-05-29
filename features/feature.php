@@ -25,6 +25,7 @@
     $db = new DataBase();
     $rawUser = $db->GetRowContent('Users', 'ID', $_SESSION['USER_ID']);
     $user = User::Load($rawUser);
+    $db->SetEncryption($_SESSION['USER_HASH']);
 
     $input = file_get_contents('php://input');
     $post = json_decode($input, true);

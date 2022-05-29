@@ -22,7 +22,7 @@
             // Get password
             $result = $db->QueryPrepare('_Passwords', 'SELECT `Content` FROM TABLE WHERE `ID` = ? AND `UID` = ?', 'ii', [$post['id'], $user->ID]);
             if ($result === false || count($result) === 0) exit('{"status": "error"}');
-            $content = json_decode($db->Decrypt($result[0]['Content']), true);
+            $content = json_decode($db->encryption->Decrypt($result[0]['Content']), true);
             $status = array('status' => 'ok', 'content' => $content);
             exit(json_encode($status));
 
@@ -62,7 +62,7 @@
         if (!array_key_exists($category, $passwords)) {
             $passwords[$category] = array();
         }
-        $Content = $db->Decrypt($password['Content']);
+        $Content = $db->encryption->Decrypt($password['Content']);
         $variables = json_decode($Content, true);
         $arr = array($password['ID'], ucfirst($variables['service']), $variables['username'], $variables['status'], strlen($variables['password']) > 0);
         array_push($passwords[$category], $arr);

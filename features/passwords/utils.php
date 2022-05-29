@@ -27,7 +27,7 @@
             'password' => $password,
             'status' => $status
         );
-        return $db->Encrypt(json_encode($variables));
+        return $db->encryption->Encrypt(json_encode($variables));
     }
 
     /**

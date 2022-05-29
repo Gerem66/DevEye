@@ -40,7 +40,7 @@
     }
 
     $getNoteContent = function($note) {
-        $title = $GLOBALS['db']->Decrypt($note['Title']);
+        $title = $GLOBALS['db']->encryption->Decrypt($note['Title']);
         return "<li data-id='{$note['ID']}'><p>{$title}</p></li>";
     };
     $command = "SELECT `ID`, `Title` FROM TABLE WHERE `UID` = ? ORDER BY `Last` DESC";

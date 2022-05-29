@@ -33,6 +33,7 @@
 
     $rawUser = $db->GetRowContent('Users', 'ID', $_SESSION['USER_ID']);
     $user = User::Load($rawUser);
+    $db->SetEncryption($_SESSION['USER_HASH']);
 
     // Load
     $sidebar = GenerateSidebar($db, $user);
