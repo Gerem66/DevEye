@@ -3,8 +3,6 @@
     // Start login page
     session_start();
     require('dist/php/user.php');
-    require('dist/php/sql/sql.php');
-    require('dist/php/class/user.php');
 
     // Disconnect
     if (isset($_REQUEST['disconnect'])) {
