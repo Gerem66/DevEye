@@ -2,7 +2,7 @@
  * @typedef {'database'|'user'|'logs'} Pages
  */
 
- class Page {
+class Page {
     constructor() {
         /** @type {HTMLElement} */
         this.topbar;
@@ -25,6 +25,18 @@
         this.content = document.getElementById('main-content');
         this.content.onclick = () => this.sidebar.HideSidebarOnSmallScreen();
         this.Load(this.defaultPage);
+
+        return;
+        const IP = '45.82.73.154';
+        const PORT = '8080';
+        const socket = new WebSocket(`wss://${IP}:${PORT}`);
+
+        socket.onmessage = (e) => { console.log('Message received:', e); };
+        socket.onopen = () => { console.log('Connected to server'); }
+        socket.onclose = (e) => console.log('Disconnected from server', e);
+        socket.onerror = (e) => console.log('Error with server', e);
+        //socket.send('Hello');
+        this.socket = socket;
     }
 
     /** @param {Boolean} isLoading */
