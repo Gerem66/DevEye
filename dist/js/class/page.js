@@ -26,7 +26,6 @@ class Page {
         this.content.onclick = () => this.sidebar.HideSidebarOnSmallScreen();
         this.Load(this.defaultPage);
 
-        return;
         const IP = '45.82.73.154';
         const PORT = '8080';
         const socket = new WebSocket(`wss://${IP}:${PORT}`);
