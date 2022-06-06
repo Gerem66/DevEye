@@ -29,6 +29,7 @@
             }
         }
 
+        /** TODO - Définir au moment où on chiffre le message (pour le multi user) */
         public function SetEncryption($hashedPassword) {
             if ($this->encryption !== null) {
                 $user = $GLOBALS['user'];
@@ -68,6 +69,8 @@
             }
 
             $this->conn = new mysqli($this->db_hostname, $this->db_username, $this->db_password, $this->db_name);
+            $this->conn->options(MYSQLI_OPT_CONNECT_TIMEOUT, 0);
+
             if ($this->conn->connect_error) {
                 throw(new Exception('Connection failed: ' . $this->conn->connect_error));
             }

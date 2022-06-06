@@ -21,8 +21,8 @@
             $context = stream_context_create(
                 array(
                     'ssl' => array(
-                        'local_cert' => 'certs/public.pem',
-                        'local_pk' => 'certs/private.pem',
+                        'local_cert' => __DIR__.'/certs/public.pem',
+                        'local_pk' => __DIR__.'/certs/private.pem',
                         'allow_self_signed' => true,
                         'verify_peer' => false,
                         'verify_peer_name' => false
@@ -65,10 +65,14 @@
             }
             fclose($this->server);
             echo("WSS server stopped\n");
+            readline('Press enter to exit...');
         }
 
         private function checkNewClients() {
+            set_error_handler('error_handler');
             $socket = stream_socket_accept($this->server, 0.1);
+            restore_error_handler();
+
             if ($socket === false) {
                 return;
             }
@@ -94,7 +98,11 @@
 
             $write = array();
             $except = array();
+
+            set_error_handler('error_handler');
             $wait = stream_select($read, $write, $except, 0, 100000);
+            restore_error_handler();
+
             if ($wait === false) {
                 // Select failed
                 return;
@@ -122,14 +130,9 @@
                 $this->removeClient($client->UID);
                 return;
             }
-            echo("[{$client->UID}] $data\n");
 
-            $resonse = mask("Hello, world!");
-            $written = fwrite($client->socket, $resonse);
-            if ($written === false) {
-                echo("Write failed\n");
-                return;
-            }
+            echo("[{$client->UID}] $data\n");
+            $client->receive($data);
         }
 
         private function getClientsSocket() {
@@ -156,6 +159,9 @@
         }
 
         private function removeClient($uid) {
+            if (!isset($this->clients[$uid])) {
+                return;
+            }
             $this->clients[$uid]->close();
             unset($this->clients[$uid]);
             echo("[$uid] Client disconnected\n");

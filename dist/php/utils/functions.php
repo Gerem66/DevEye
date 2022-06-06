@@ -13,22 +13,33 @@
     /**
      * @param string $path Path of the parent directory to search in recursively
      * @param string $extension Extension of the files to get
-     * @return array List of files with the given extension
+     * @param array $ignore, list of filenames to ignore
+     * @return string All content of the files
      */
-    function GetScriptsFiles($path, $extension) {
-        $files = array();
+    function GetScriptsFiles($path, $extension, $ignore = array()) {
+        $content = '';
+        if (substr($path, -1) != '/') $path .= '/';
         if ($dir = opendir($path)) {
-            while ($file = readdir($dir)) {
-                if (is_dir($path . $file) && $file !== '.' && $file !== '..') {
-                    $files = array_merge($files, GetScriptsFiles($path . $file . '/', $extension));
+            while ($filename = readdir($dir)) {
+                if (is_dir($path . $filename) && $filename !== '.' && $filename !== '..') {
+                    $content .= GetScriptsFiles($path . $filename, $extension, $ignore);
                 }
-                if (EndsWith($file, $extension)) {
-                    $files[] = $path . $file;
+
+                $ignore_match = false;
+                foreach ($ignore as $ignore_filename) {
+                    if ($filename === "$ignore_filename.$extension") {
+                        $ignore_match = true;
+                        break;
+                    }
+                }
+
+                if (EndsWith($filename, ".$extension") && !$ignore_match) {
+                    $content .= file_get_contents($path . $filename) . "\n";
                 }
             }
             closedir($dir);
         }
-        return $files;
+        return $content;
     }
 
     /**

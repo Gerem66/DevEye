@@ -6,41 +6,41 @@
      * @return string Get sidebar items content
      */
     function GenerateSidebar($db, $user) {
-        function gen($features, $featuresTree, $categoryName = null, $depth = 0) {
-            $content = '';
-            foreach ($featuresTree as $key => $value) {
-                $keyType = gettype($key);
-                if ($keyType === 'integer') {
-                    // New feature or subfeature (button)
-                    $feature = Feature::GetFeatureByID($value, $features);
-                    if ($feature === null) continue;
-                    if ($depth === 0 || $depth === 1) {
-                        $content .= AddButtonFeature($feature, $categoryName);
-                    } else {
-                        $content .= AddButtonSubFeature($feature, $categoryName);
-                    }
-                } else {
-                    // New category (ul/li)
-                    if ($depth === 0) {
-                        $content .= OpenInstance($key);
-                        $content .= gen($features, $value, $key, $depth + 1);
-                        $content .= CloseInstance();
-                    } else {
-                        $feature = Feature::GetFeatureByID($key, $features);
-                        if ($feature === null) continue;
-                        $content .= OpenGroupFeature($feature);
-                        $content .= gen($features, $value, $key, $depth + 1);
-                        $content .= CloseGroupFeature();
-                    }
-                }
-            }
-            return $content;
-        }
-
         $rawFeatures = $db->QueryPrepare('Features', "SELECT * FROM TABLE WHERE `Level` <= ?", 'i', array($user->Level));
         $features = array_map(fn($f) => Feature::Load($f), $rawFeatures);
         $tree = Feature::GetTree($user, $features, $GLOBALS['LEVEL_TEXTS']);
-        return gen($features, $tree);
+        return _gen($features, $tree);
+    }
+
+    function _gen($features, $featuresTree, $categoryName = null, $depth = 0) {
+        $content = '';
+        foreach ($featuresTree as $key => $value) {
+            $keyType = gettype($key);
+            if ($keyType === 'integer') {
+                // New feature or subfeature (button)
+                $feature = Feature::GetFeatureByID($value, $features);
+                if ($feature === null) continue;
+                if ($depth === 0 || $depth === 1) {
+                    $content .= AddButtonFeature($feature, $categoryName);
+                } else {
+                    $content .= AddButtonSubFeature($feature, $categoryName);
+                }
+            } else {
+                // New category (ul/li)
+                if ($depth === 0) {
+                    $content .= OpenInstance($key);
+                    $content .= _gen($features, $value, $key, $depth + 1);
+                    $content .= CloseInstance();
+                } else {
+                    $feature = Feature::GetFeatureByID($key, $features);
+                    if ($feature === null) continue;
+                    $content .= OpenGroupFeature($feature);
+                    $content .= _gen($features, $value, $key, $depth + 1);
+                    $content .= CloseGroupFeature();
+                }
+            }
+        }
+        return $content;
     }
 
 

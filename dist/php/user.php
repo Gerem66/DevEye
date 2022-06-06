@@ -3,11 +3,14 @@
     /**
      * User connection from login page (POST)
      * @param DataBase $db
+     * @param string $username
+     * @param string $password
      * @return bool True if the user is connected, false otherwise
      */
-    function Connect($db) {
-        $username = $_POST['tb_name'];
-        $password = $_POST['tb_pass'];
+    function Connect($db, $username, $password) {
+        if (!isset($username, $password)) {
+            return false;
+        }
 
         $reqUser = $db->GetRowContent('Users', 'Username', $username);
         $user = User::Load($reqUser);
@@ -22,16 +25,8 @@
             return false;
         }
 
-        $_SESSION['USER_ID'] = $user->ID;
-        $_SESSION['USER_HASH'] = Encryption::HashPassword($password);
         $db->AddLog($user->ID, 'login', 'User connection successfully.');
         return true;
-    }
-
-    function Disconnect() {
-        unset($_SESSION['CONNECTED']);
-        unset($_SESSION['USER_ID']);
-        unset($_SESSION['USER_HASH']);
     }
 
 ?>

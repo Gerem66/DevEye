@@ -1,10 +1,5 @@
 class Sidebar {
-    /** @param {Page} parent */
-    constructor(parent) {
-        this.parent = parent;
-    }
-
-    Init() {
+    Mount() {
         /** @type {HTMLElement} Sidebar element */
         this.sidebar = document.getElementById('sidebar');
 
@@ -41,7 +36,7 @@ class Sidebar {
     eventOnItemClick(item) {
         const dataPage = item.getAttribute('data-page');
         const dataCategory = item.getAttribute('data-category') || null;
-        this.parent.Load(dataPage, dataCategory);
+        deveye.Load(dataPage, dataCategory);
     }
     /** @param {HTMLElement} group */
     eventOnGroupClick(group) {
@@ -83,8 +78,8 @@ class Sidebar {
     }
     ButtonSidebar() {
         this.sidebar.classList.toggle('collapse-sidebar');
-        this.parent.topbar.classList.toggle('with-minibar');
-        this.parent.content.classList.toggle('with-minibar');
+        deveye.topbar.classList.toggle('with-minibar');
+        deveye.content.classList.toggle('with-minibar');
     }
 
     /** @param {Pages} page */

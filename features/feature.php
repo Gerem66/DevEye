@@ -13,19 +13,22 @@
     require('../dist/php/components/markdown.php');
 
     require('../dist/php/sql/sql.php');
-    require('../dist/php/roles.php');
+    require('../dist/php/global.php');
     require('../dist/php/utils.php');
 
     // Check user state
-    if (!isset($_SESSION['USER_ID'])) {
+    // TODO - Change this verification (remove all $_SESSION)
+    if (!isset($_SESSION['USER_NAME'])) {
         // Hack try suspicion (or automatic disconnect)
         die('disconnect');
     }
 
     $db = new DataBase();
-    $rawUser = $db->GetRowContent('Users', 'ID', $_SESSION['USER_ID']);
+    $rawUser = $db->GetRowContent('Users', 'Name', $_SESSION['USER_NAME']);
     $user = User::Load($rawUser);
-    $db->SetEncryption($_SESSION['USER_HASH']);
+
+    // TODO - Remove this
+    //$db->SetEncryption($_SESSION['USER_HASH']);
 
     $input = file_get_contents('php://input');
     $post = json_decode($input, true);

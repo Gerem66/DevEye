@@ -65,8 +65,8 @@
 }
 
 .form-input:disabled, .form-input[readonly] {
-    background-color: #e9ecef;
-    opacity: 1;
+    opacity: 0.65;
+    background-color: #c2c2c245 !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -102,4 +102,9 @@ button.submit:hover {
 }
 button.submit:active {
     background-color: #0062cc;
+}
+button.submit:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    background-color: #81858a;
 }

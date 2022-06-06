@@ -30,3 +30,13 @@ function MinMax(min, value, max) {
 function Sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
+
+/**
+ * @param {string} str
+ * @returns {Boolean}
+ */
+function StrIsJson(str) {
+    try { JSON.parse(str); }
+    catch (e) { return false; }
+    return true;
+}

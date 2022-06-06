@@ -1,74 +1,33 @@
-<!DOCTYPE html>
-<html lang="fr">
-    <head>
-        <meta charset="utf-8">
-        <title>DevEye</title>
-		<meta http-equiv="X-UA-Compatible" content="IE=edge">
-		<meta name="viewport" content="width=device-width, initial-scale=1">
-		<meta name="author" content="Geremy">
-		<meta name="description" content="Oxy Foo">
-        <meta name="robots" content="noindex">
-        <meta name="googlebot" content="noindex">
+<nav id="topbar" class="topbar">
+    <a id="button-sidebar">
+        <i class="icon icon-menu"></i>
+    </a>
+</nav>
 
-        <!-- Icon    --><link rel="icon" href="assets/img/logo_deveye.png">
-        <!-- Style   --><link rel="stylesheet" href="dist/css/home.css">
-        <!-- Icons   --><link rel="stylesheet" href="dist/css/icons.css">
-        <!-- Fonts   --><link rel="stylesheet" href="dist/css/fonts.css">
-        <!-- Inputs  --><link rel="stylesheet" href="dist/css/inputs.css">
-        <!-- Navbar  --><link rel="stylesheet" href="dist/css/sidebar.css">
-        <!-- Card    --><link rel="stylesheet" href="dist/css/components/card.css">
-        <!-- Comp.   --><link rel="stylesheet" href="dist/css/components/components.css">
-        <!-- Popup   --><link rel="stylesheet" href="dist/css/components/popup.css">
-        <!-- Table   --><link rel="stylesheet" href="dist/css/components/table.css">
-        <!-- Toolbar --><link rel="stylesheet" href="dist/css/components/toolbar.css">
-        <!-- Pages   --><script src="dist/js/class/page.js"></script>
-        <!-- Feature --><script src="dist/js/class/feature.js"></script>
-        <!-- Sidebar --><script src="dist/js/class/sidebar.js"></script>
-        <!-- Touch   --><script src="dist/js/class/touch.js"></script>
-        <!-- DBTable --><script src="dist/js/components/dbtable.js"></script>
-        <!-- Popup   --><script src="dist/js/components/popup.js"></script>
-        <!-- Toolbar --><script src="dist/js/components/toolbar.js"></script>
-        <!-- Utils   --><script src="dist/js/utils/functions.js"></script>
-        <!-- Request --><script src="dist/js/utils/request.js"></script>
-        <!-- Script  --><script src="dist/js/home.js"></script>
-        <!-- Others  -->%scripts%
-    </head>
-    <body>
+<div class="minibar">
+    <i class="icon icon-chevron"></i>
+</div>
 
-        <nav id="topbar" class="topbar">
-            <a id="button-sidebar">
-                <i class="icon icon-menu"></i>
-            </a>
-        </nav>
+<nav id="sidebar" class="sidebar">
+    <div class="homebar">
+        <a href="./home">
+            <img src="assets/img/logo_deveye.png" alt="Oxy logo" />
+            <span>Dev Eye</span>
+        </a>
+        <span class="home-version">V %version%</span>
+        <span id="refresh-logo" class="refresh hide">
+            <span class="icon icon-refresh"></span>
+        </span>
+    </div>
 
-        <div class="minibar">
-            <i class="icon icon-chevron"></i>
-        </div>
+    <div class="user-panel" name="sidebar-item" data-page="user">
+        <a>
+            <img id="image-profile-sidebar" src="assets/img/%avatar%" alt="User Image">
+            <span class="d-block a">%username%</span>
+        </a>
+    </div>
 
-        <nav id="sidebar" class="sidebar">
-            <div class="homebar">
-                <a href="./home">
-                    <img src="assets/img/logo_deveye.png" alt="Oxy logo" />
-                    <span>Dev Eye</span>
-                </a>
-                <span class="home-version">V %version%</span>
-                <span id="refresh-logo" class="refresh hide">
-                    <span class="icon icon-refresh"></span>
-                </span>
-            </div>
+    <ul>%sidebar%</ul>
+</nav>
 
-            <div class="user-panel" name="sidebar-item" data-page="user">
-                <a>
-                    <img id="image-profile-sidebar" src="assets/img/%avatar%" alt="User Image">
-                    <span class="d-block a">%username%</span>
-                </a>
-            </div>
-
-            <ul>%sidebar%</ul>
-        </nav>
-
-        <nav id="main-content"></nav>
-
-        %commandJS%
-    </body>
-</html>
+<nav id="main-content"></nav>

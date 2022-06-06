@@ -50,6 +50,7 @@
          * @return bool True if the instance contains correct data, false otherwise
          */
         private function isValid($arr) {
+            if (!$arr) return false;
             $vars = array_keys(get_object_vars($this));
             foreach ($vars as $var) {
                 if (!array_key_exists($var, $arr)) {

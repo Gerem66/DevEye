@@ -3,10 +3,10 @@ class Feature {
      * @param {string} pageName Name of the page this feature is for.
      */
     constructor(pageName) {
-        if (page.features.hasOwnProperty(pageName)) {
+        if (deveye.features.hasOwnProperty(pageName)) {
             throw new Error(`Feature "${pageName}" already exists.`);
         }
-        page.features[pageName] = this;
+        deveye.features[pageName] = this;
     }
 
     preMount(category) {
@@ -27,7 +27,7 @@ class Feature {
             const dataPage = element.getAttribute('data-page');
             if (!dataPage) return;
             element.addEventListener('click', () => {
-                page.Load(dataPage, category);
+                deveye.Load(dataPage, category);
             });
         });
     }

@@ -1,5 +1,7 @@
 <?php
 
+    $VERSION = '0.1.0';
+
     $LEVEL_TEXTS = array(
         0 => 'Perso',
         1 => 'Modérateur',

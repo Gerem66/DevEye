@@ -50,6 +50,7 @@
          * @return bool True if the feature contains correct data, false otherwise
          */
         private function isValid($arr) {
+            if (!$arr) return false;
             $vars = array_keys(get_object_vars($this));
             foreach ($vars as $var) {
                 if (!array_key_exists($var, $arr)) {
@@ -88,6 +89,7 @@
                 // Add all features in order of level
                 $branch = array();
                 foreach ($user->Settings as $id => $enabled) {
+                    if ($id === 'default') continue;
                     $feature = Feature::GetFeatureByID(strval($id), $features);
                     $correctLevel = $feature->Level === $i && $feature->Level <= $user->Level;
                     if ($correctLevel && ($enabled || $getAll)) {

@@ -1,27 +1,45 @@
 html {
     width: 100vw;
     height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     color: #fff;
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
 }
 
 body {
-    font-family: 'Open Sans';
-    background: linear-gradient(#446182, rgb(31, 36, 41));
+    margin: 0;
+    padding: 0;
 }
 
-.hide {
-    display: none !important;
+.login {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Open Sans';
+    background: linear-gradient(#446182, #1f2429);
+    z-index: 1000;
+}
+
+.login, .form {
+    -webkit-transition: opacity 0.3s cubic-bezier(.17,.84,.44,1),
+                        transform 0.3s cubic-bezier(.17,.84,.44,1);
+            transition: opacity 0.3s cubic-bezier(.17,.84,.44,1),
+                        transform 0.3s cubic-bezier(.17,.84,.44,1);
+}
+.form-hide {
+    opacity: 0;
+    transform: scale(0.9);
+    pointer-events: none;
 }
 
 svg {
     width: 256px;
     fill: #fff;
-    background-color: red;
 }
 
 .form {
@@ -42,7 +60,7 @@ svg {
     display: inline;
     animation: fadeIn 1s;
 }
-.card {
+.login-card {
     margin-top: 24px;
     margin-bottom: 48px;
     padding: 20px;

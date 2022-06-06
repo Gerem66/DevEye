@@ -1,5 +1,4 @@
 RewriteEngine on
-RewriteRule ^home$ home.php
 RewriteRule ^(user|database|logs|notes|passwords|sandbox)$ features/feature.php?page=$1
 
 ErrorDocument 404 /dist/errors/404.html

@@ -15,6 +15,7 @@
 * [Logo principal](https://fr.vecteezy.com/art-vectoriel/585533-modele-de-conception-de-logo-vectoriel-eye-care)
 
 ### Serveur
+* [WebSocket Protocol](https://www.rfc-editor.org/rfc/rfc6455)
 * [WSS start script](https://stackoverflow.com/questions/35031603/create-php-websocket-with-ssl)
 * [PEM file](https://github.com/ratchetphp/Ratchet/issues/489)
 * [Un/mask functions](https://www.php.net/manual/fr/function.stream-socket-server.php)
@@ -34,7 +35,7 @@
         - main.js (extend de la classe Feature) est appelé lors de l'ouverture du site, mais les fonctions de l'extend sont exécutés à l'ouverture/fermeture de la feature
         - Possibilité d'ajouter d'autres fichiers, ils seront tous automatiquement appelés à l'ouverture du site (attention à l'overloading)
     - Ajouter du `css`:
-        - Ajouter les fichiers css directement dans le code source du site (Penser à les importer si besoin dans le home.html)
+        - Ajouter les fichiers css directement dans le code source du site
         - Ou pour le css uniquement lié à la page, l'ajouter directement dans le répertoire, il sera importé automatiquement à l'ouverture du site (tous les css sont importés au démarrage, donc attention à l'overloading)
 * Base de données
     - Ajouter la feature dans la table 'Features' (pour autoriser la page dans la sidebar / management)
