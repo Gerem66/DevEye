@@ -29,17 +29,6 @@
             }
         }
 
-        /** TODO - Définir au moment où on chiffre le message (pour le multi user) */
-        public function SetEncryption($hashedPassword) {
-            if ($this->encryption !== null) {
-                $user = $GLOBALS['user'];
-                $uid = isset($user) ? $user->ID : 0;
-                $this->AddLog($uid, 'SetPasswordKey', 'User tried to change password key.');
-                return;
-            }
-            $this->encryption = new Encryption($this->key, $hashedPassword);
-        }
-
         /**
          * @param array|null $credentials Array containing the following keys:\
          * hostname, name, username, password\
@@ -68,8 +57,8 @@
                 $this->db_password = $credentials[3];
             }
 
-            $this->conn = new mysqli($this->db_hostname, $this->db_username, $this->db_password, $this->db_name);
-            $this->conn->options(MYSQLI_OPT_CONNECT_TIMEOUT, 0);
+            $this->encryption = new Encryption($this->key);
+            $this->conn = new mysqli("p:{$this->db_hostname}", $this->db_username, $this->db_password, $this->db_name);
 
             if ($this->conn->connect_error) {
                 throw(new Exception('Connection failed: ' . $this->conn->connect_error));
@@ -114,12 +103,18 @@
             $query = $this->conn->prepare($command);
             if ($query === false) return false;
 
+            if (count($variables)) {
+                $bind = $query->bind_param($types, ...$variables);
+                if ($bind === false) return false;
+            }
 
-            $bind = $query->bind_param($types, ...$variables);
-            if ($bind === false) return false;
-
-            $result = $query->execute();
-            if ($result === false) return false;
+            try {
+                $result = $query->execute();
+                if ($result === false) return false;
+            } catch (Exception $e) {
+                //print_r($e);
+                return false;
+            }
 
             $output = $query->affected_rows;
             if (StartsWith($command, 'SELECT')) {

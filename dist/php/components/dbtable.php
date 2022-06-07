@@ -32,61 +32,69 @@
 
     /**
      * @param DataBase $db
-     * @param array $post
+     * @param array $args
      * @param int $rowsCount
      */
-    function DBTableCommand($db, $post, $rowsCount = 10) {
-        $status = array('status' => 'error');
-        $table = $post['table'];
+    function DBTableCommand($db, $args, $rowsCount = 10) {
+        $status = 'error';
+        $table = $args['table'];
 
-        if ($post['type'] === 'cellchange') {
-            $column = $post['column'];
+        if ($args['type'] === 'cellchange') {
+            $column = $args['column'];
             if (!$db->IsSafe($column)) {
                 // TODO - Add cheat suspicion
                 throw new Exception('Column name is not safe');
-            }
-            $result = $db->QueryPrepare($table, "UPDATE TABLE SET `$column` = ? WHERE `ID` = ?", 'si', array($post['value'], $post['ID']));
-            if ($result !== false) {
-                $status['status'] = 'ok';
+            } else {
+                $result = $db->QueryPrepare($table, "UPDATE TABLE SET `$column` = ? WHERE `ID` = ?", 'si', array($args['value'], $args['ID']));
+                if ($result !== false) {
+                    // Get the new value
+                    $result2 = $db->QueryPrepare($table, "SELECT `$column` FROM TABLE WHERE `ID` = ?", 'i', array($args['ID']));
+                    if ($result2 !== false) {
+                        $status = json_encode(array('value' => $result2[0][$column]));
+                    }
+                }
             }
         }
 
-        if ($post['type'] === 'rowadd') {
+        if ($args['type'] === 'rowadd') {
             $result = $db->QueryPrepare($table, "INSERT INTO TABLE (`ID`) VALUES (NULL)");
             if ($result !== false) {
                 $logs = GetRows($db, $table, 0, $rowsCount);
-                $status['status'] = 'ok';
-                $status['content'] = TbodyFromDB($logs);
-                $status['maxPage'] = ceil($db->GetTableLength($table) / $rowsCount);
+                $status = json_encode(array(
+                    'content' => TbodyFromDB($logs),
+                    'maxPage' => ceil($db->GetTableLength($table) / $rowsCount)
+                ));
             } else {
-                $status['message'] = $db->GetLastError();
+                // TODO - Manage this error $db->GetLastError();
             }
         }
 
-        if ($post['type'] === 'rowremove') {
-            $result = $db->QueryPrepare($table, "DELETE FROM TABLE WHERE `ID` = ?", 'i', array($post['ID']));
-            $status['status'] = 'error';
+        if ($args['type'] === 'rowremove') {
+            $result = $db->QueryPrepare($table, "DELETE FROM TABLE WHERE `ID` = ?", 'i', array($args['ID']));
             if ($result !== false) {
-                $logStarts = ($post['page'] - 1) * $rowsCount;
+                $logStarts = ($args['page'] - 1) * $rowsCount;
                 $logs = GetRows($db, $table, $logStarts, $rowsCount);
-                $status['status'] = 'ok';
-                $status['content'] = TbodyFromDB($logs);
+                $maxPage = ceil($db->GetTableLength($table) / $rowsCount);
+                $status = json_encode(array(
+                    'content' => TbodyFromDB($logs),
+                    'maxPage' => $maxPage
+                ));
             }
         }
 
-        if ($post['type'] === 'navigation') {
-            $logStarts = ($post['page'] - 1) * $rowsCount;
+        if ($args['type'] === 'navigation') {
+            $logStarts = ($args['page'] - 1) * $rowsCount;
             $logs = GetRows($db, $table, $logStarts, $rowsCount);
             $maxPage = ceil($db->GetTableLength($table) / $rowsCount);
 
-            $status['status'] = 'ok';
-            $status['newPage'] = $post['page'];
-            $status['maxPage'] = $maxPage;
-            $status['content'] = TbodyFromDB($logs);
+            $status = json_encode(array(
+                'newPage' => $args['page'],
+                'maxPage' => $maxPage,
+                'content' => TbodyFromDB($logs)
+            ));
         }
 
-        echo(json_encode($status));
-        exit();
+        return $status;
     }
 
 ?>

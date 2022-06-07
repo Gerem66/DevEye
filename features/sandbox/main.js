@@ -44,14 +44,19 @@ class Sandbox extends Feature {
         this.loading = true;
         this.output.textContent = 'Chargement...';
         const data = { code: this.input.value };
-        const response = await Request_Async('./sandbox', data);
-        const success = response.status === 200 && response.content.status === 'ok';
+        const response = await this.CallAction('php', data);
 
-        const result = success ? response.content?.result : response;
-        this.output.textContent = JSON.stringify(result);
+        if (response === 'error') {
+            this.loading = false;
+            this.showSavedText(false);
+            return;
+        }
+
+        const result = JSON.parse(response);
+        this.output.textContent = JSON.stringify(result['result']);
 
         this.loading = false;
-        this.showSavedText(success);
+        this.showSavedText(result['status'] === 'ok');
     }
 }
 

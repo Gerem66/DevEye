@@ -134,9 +134,9 @@ class Profile extends Feature {
             const isEnabled = !feature.classList.contains('disabled');
             features['f-' + id] = isEnabled; // f to force string, to keep order
         });
-        const data = { 'action': 'saveSettings', 'features': features };
-        const response = await Request_Async('./user', data);
-        if (response.status !== 200 || response.content['status'] !== 'ok') {
+
+        const response = await this.CallAction('saveSettings', { 'features': features });
+        if (response !== 'ok') {
             console.log('Response:', response);
             throw new Error('Failed to save settings');
         }
@@ -171,9 +171,8 @@ class Profile extends Feature {
     }
 
     async editPassword(passwordOld, passwordNew) {
-        const data = { action: 'passwordEdit', passwordOld, passwordNew };
-        const response = await Request_Async('./user', data);
-        const success = response.status === 200 && response.content['status'] === 'ok';
+        const response = await this.CallAction('passwordEdit', { passwordOld, passwordNew });
+        const success = response === 'ok';
 
         // Close popup & reset all components
         this.popup.Close();
@@ -181,7 +180,7 @@ class Profile extends Feature {
         const title = success ? 'Succès' : 'Erreur';
         let text = 'Le mot de passe a été modifié avec succès !';
         if (!success) {
-            text = `Le mot de passe n'a pas pu être modifié (${response.status} - ${response.content['status']}).`;
+            text = `Le mot de passe n'a pas pu être modifié (${response}).`;
         }
 
         await this.popupMessage.Open({ title, cancelable: false }, (inputs, outputs) => {

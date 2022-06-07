@@ -114,21 +114,21 @@ class WSS {
         deveye.login.loadingSetState(30, 'Téléchargement des scripts...');
         const dataScripts = { type: 'loadScripts' };
         const responseScripts = await this.sendData(dataScripts, 'waitResponse');
-        const scripts = JSON.parse(responseScripts.data);
+        const scripts = responseScripts.data;
 
         deveye.login.loadingSetState(50, 'Chargement des scripts...');
         const script = document.createElement('script');
-        script.textContent = scripts['content'];
+        script.textContent = scripts;
         document.head.appendChild(script);
 
         deveye.login.loadingSetState(60, 'Téléchargement des styles...');
         const dataStyles = { type: 'loadStyles' };
         const responseStyles = await this.sendData(dataStyles, 'waitResponse');
-        const styles = JSON.parse(responseStyles.data);
+        const styles = responseStyles.data;
 
         deveye.login.loadingSetState(80, 'Chargement des styles...');
         const style = document.createElement('style');
-        style.innerHTML = styles['content'];
+        style.innerHTML = styles;
         document.head.appendChild(style);
 
         deveye.login.loadingSetState(90, 'Rendu des composants...');
@@ -149,11 +149,14 @@ class WSS {
      */
     async GetPage(pageName, category = null) {
         const reqData = {
-            action: 'getPage',
+            type: 'loadPage',
             page: pageName,
             category: category
         };
+        const t1 = Date.now();
         const response = await this.sendData(reqData, 'waitResponse');
+        const t2 = Date.now();
+        console.log(`${pageName} loaded in ${t2 - t1}ms`);
         return response?.data || null;
     }
 }

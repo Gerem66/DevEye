@@ -35,9 +35,12 @@
      * @param string $lines
      */
     function TextMdToHtml($lines) {
+        $content = '';
+        if (!$lines) {
+            return $content;
+        }
         $lines = explode("\n", $lines);
         $lines = array_map('trim', $lines);
-        $content = '';
 
         $squareIndex = 0;
         $inList = array();
@@ -91,7 +94,7 @@
 
                 case 'ul':
                 case 'ol':
-                    $newLevel = str_count_first($line, $line[$line[0]]);
+                    $newLevel = str_count_first($line, $line[0]);
                     while (($currLevel = count($inList)) !== $newLevel) {
                         if ($currLevel > $newLevel) {
                             // Remove last level (list & content)

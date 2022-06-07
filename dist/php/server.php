@@ -26,6 +26,9 @@
     require(__DIR__.'/global.php');
 
     $db = new DataBase();
+    $rawFeatures = $db->QueryPrepare('Features', "SELECT * FROM TABLE");
+    $features = array_map(fn($f) => Feature::Load($f), $rawFeatures);
+
     $wss = new WSS();
     $wss->run();
 

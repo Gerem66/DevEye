@@ -6,10 +6,10 @@
      * @return int The ID of the new note.
      */
     function AddNote($db, $user) {
-        $defaultTitle = $db->encryption->Encrypt('Nouvelle Note');
+        $defaultTitle = $db->encryption->Encrypt('Nouvelle Note', $user->hashedPassword);
         $result = $db->QueryPrepare('_Notes', "INSERT INTO TABLE (`UID`, `Title`, `Content`) VALUES (?, ?, '')", 'is', array($user->ID, $defaultTitle));
         if ($result === false) {
-            exit('{"status":"error"}');
+            return false;
         }
         return $db->GetLastInsertedID();
     }
@@ -18,16 +18,16 @@
      * @param DataBase $db
      * @param User $user
      * @param int $id
-     * @return array The object containing all note's informations.
+     * @return array|false The object containing all note's informations.
      */
-    function GetNotesContent($db, $user, $id) {
+    function Notes_GetContent($db, $user, $id) {
         $notes = $db->QueryPrepare('_Notes', "SELECT * FROM TABLE WHERE `ID` = ? AND `UID` = ?", 'ii', array($id, $user->ID));
         if ($notes === false || count($notes) === 0) {
-            exit('{"status":"error"}');
+            return false;
         }
         $note = $notes[0];
-        $title = $db->encryption->Decrypt($note['Title']);
-        $content = $db->encryption->Decrypt($note['Content']);
+        $title = $db->encryption->Decrypt($note['Title'], $user->hashedPassword);
+        $content = $db->encryption->Decrypt($note['Content'], $user->hashedPassword);
         $result = array(
             'id' => $id,
             'status' => 'ok',
@@ -46,12 +46,12 @@
      * @param int $id
      * @return array The object containing all note's informations.
      */
-    function GetNotesRawContent($db, $user, $id) {
+    function Notes_GetRawContent($db, $user, $id) {
         $notes = $db->QueryPrepare('_Notes', "SELECT `Content` FROM TABLE WHERE `ID` = ? AND `UID` = ?", 'ii', array($id, $user->ID));
         if ($notes === false || count($notes) === 0) {
-            exit('{"status":"error"}');
+            return false;
         }
-        $content = $db->encryption->Decrypt($notes[0]['Content']);
+        $content = $db->encryption->Decrypt($notes[0]['Content'], $user->hashedPassword);
         $result = array(
             'status' => 'ok',
             'rawContent' => $content,
@@ -72,8 +72,8 @@
         if (strlen($newTitle) > 128) {
             $newTitle = substr($newTitle, 0, 128);
         }
-        $encryptTitle = $db->encryption->Encrypt($newTitle);
-        $encryptContent = $db->encryption->Encrypt($newContent);
+        $encryptTitle = $db->encryption->Encrypt($newTitle, $user->hashedPassword);
+        $encryptContent = $db->encryption->Encrypt($newContent, $user->hashedPassword);
         $args = array($encryptTitle, $encryptContent, $id, $user->ID);
         $result = $db->QueryPrepare('_Notes', "UPDATE TABLE SET `Title` = ?, `Content` = ?, `Last` = CURRENT_TIMESTAMP() WHERE `ID` = ? AND `UID` = ?", 'ssii', $args);
         return $result !== false;
@@ -87,7 +87,8 @@
      * @return bool Success
      */
     function SetCheckbox($db, $user, $id, $checkboxID) {
-        $content = GetNotesContent($db, $user, $id);
+        $content = Notes_GetContent($db, $user, $id);
+        if ($content === false) return false;
         $rawContent = $content['rawContent'];
         $lines = explode("\n", $rawContent);
         $checkboxIndex = 0;

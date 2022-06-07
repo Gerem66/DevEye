@@ -42,4 +42,14 @@ class Feature {
      * Called just before the page is unmounted.
      */
     async onUnmount() {}
+
+    /**
+     * @param {string} type
+     * @param {string|object} args
+     */
+    async CallAction(type, args = null) {
+        const data = JSON.stringify({ type: 'callAction', action: { type, args } });
+        const response = await deveye.server.sendData(data, 'waitResponse');
+        return response?.data || 'error';
+    }
 }

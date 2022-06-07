@@ -31,6 +31,7 @@
         - Le script index.php est appelé lors de l'ouverture de la feature
         - Possibilité d'ajouter d'autres fichiers PHP, en les important depuis index.php
         - Idem pour les fichiers HTML
+        - Les autres scripts PHP ne peuvent être appelés qu'une seule fois, il faut donc les appeler avec 'include_once' (donc attention à l'overloading)
     - Créer le code client principal en `JS` :
         - main.js (extend de la classe Feature) est appelé lors de l'ouverture du site, mais les fonctions de l'extend sont exécutés à l'ouverture/fermeture de la feature
         - Possibilité d'ajouter d'autres fichiers, ils seront tous automatiquement appelés à l'ouverture du site (attention à l'overloading)

@@ -138,19 +138,20 @@ class Passwords extends Feature {
         }
 
         const data = {
-            action: 'categoryEdit',
             old: results.inputs['input-category-old'],
             new: results.inputs['input-category-new']
         };
-        const response = await Request_Async('./passwords', data);
-        const success = response.status === 200 && response.content['status'] === 'ok';
-        if (!success) {
+        const response = await this.CallAction('categoryEdit', data);
+        if (response !== 'ok') {
             this.popupMessage.Open({ title: 'Erreur' }, (inputs, outputs) => {
                 outputs.p['main-text'].textContent = 'Une erreur est survenue lors de la modification de la catégorie.';
             });
             return;
         }
-        page.Load('passwords');
+
+        this.popupEditCategory.Close();
+        await Sleep(200);
+        deveye.Load('passwords');
     }
 
     /** 
@@ -165,24 +166,24 @@ class Passwords extends Feature {
         }
 
         const password = results.inputs['input-password'];
-        const data = { action: 'getPassword', id, password };
-        const response = await Request_Async('./passwords', data);
+        const data = { id, password };
+        const response = await this.CallAction('getPassword', data);
 
-        if (response.status !== 200 || response.content['status'] === 'error') {
+        if (response === 'error') {
             this.popupMessage.Open({ title: 'Erreur' }, (inputs, outputs) => {
                 outputs.p['main-text'].textContent = 'Une erreur est survenue';
             });
             return null;
         }
 
-        if (response.content['status'] === 'wrong') {
+        if (response === 'wrong') {
             this.popupMessage.Open({ title: 'Erreur' }, (inputs, outputs) => {
                 outputs.p['main-text'].textContent = 'Le mot de passe est incorrect.';
             });
             return null;
         }
 
-        return response.content['content'];
+        return JSON.parse(response);
     }
 
     /**
@@ -219,18 +220,17 @@ class Passwords extends Feature {
         }
 
         const data = {
-            action: 'add',
             category: results.inputs['input-category'],
             service: results.inputs['input-service'],
             username: results.inputs['input-username'],
             password: results.inputs['input-password'],
             status: results.selects['input-status']
         };
-        const response = await Request_Async('./passwords', data);
-        const success = response.status === 200 && response.content['status'] === 'ok';
-
-        if (success) {
-            page.Load('passwords');
+        const response = await this.CallAction('add', data);
+        if (response === 'ok') {
+            this.popupPassword.Close();
+            await Sleep(200);
+            deveye.Load('passwords');
         }
     }
 
@@ -265,17 +265,15 @@ class Passwords extends Feature {
         }
 
         const data = {
-            action: 'edit', id,
+            id,
             category: results.inputs['input-category'],
             service: results.inputs['input-service'],
             username: results.inputs['input-username'],
             password: results.inputs['input-password'],
             status: results.selects['input-status']
         };
-        const response = await Request_Async('./passwords', data);
-        const success = response.status === 200 && response.content['status'] === 'ok';
-
-        if (!success) {
+        const response = await this.CallAction('edit', data);
+        if (response !== 'ok') {
             this.popupMessage.Open({ title: 'Erreur' }, (inputs, outputs) => {
                 outputs.p['main-text'].textContent = 'Une erreur est survenue';
             });
@@ -283,7 +281,9 @@ class Passwords extends Feature {
             return;
         }
 
-        page.Load('passwords');
+        this.popupPassword.Close();
+        await Sleep(200);
+        deveye.Load('passwords');
     }
 
     async MovePassword(id, category) {
@@ -295,20 +295,20 @@ class Passwords extends Feature {
             return;
         }
 
-        const data = {
-            action: 'move', id, category: results.inputs['input-category']
-        };
-        const response = await Request_Async('./passwords', data);
-        const success = response.status === 200 && response.content['status'] === 'ok';
+        const data = { id, category: results.inputs['input-category'] };
+        const response = await this.CallAction('move', data);
         this.popupMovePassword.Close();
 
-        if (!success) {
+        if (response !== 'ok') {
             this.popupMessage.Open({ title: 'Erreur' }, (inputs, outputs) => {
                 outputs.p['main-text'].textContent = 'Une erreur est survenue lors de la suppression du mot de passe.';
             });
             return;
         }
-        page.Load('passwords');
+
+        this.popupMovePassword.Close();
+        await Sleep(200);
+        deveye.Load('passwords');
     }
 
     async RemovePassword(id) {
@@ -318,18 +318,19 @@ class Passwords extends Feature {
             return;
         }
 
-        const data = { action: 'remove', id, password: results.inputs['input-password'] };
-        const response = await Request_Async('./passwords', data);
-        const success = response.status === 200 && response.content['status'] === 'ok';
+        const data = { id, password: results.inputs['input-password'] };
+        const response = await this.CallAction('remove', data);
         this.popupRemove.Close();
-
-        if (!success) {
+        if (response !== 'ok') {
             this.popupMessage.Open({ title: 'Erreur' }, (inputs, outputs) => {
                 outputs.p['main-text'].textContent = 'Une erreur est survenue lors de la suppression du mot de passe.';
             });
             return;
         }
-        page.Load('passwords');
+
+        this.popupRemove.Close();
+        await Sleep(200);
+        deveye.Load('passwords');
     }
 }
 

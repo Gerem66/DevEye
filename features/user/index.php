@@ -1,62 +1,67 @@
 <?php
 
-    require(__DIR__.'/utils.php');
-
     /**
-     * @var DataBase $db
      * @var User $user
+     * @var DataBase $db
+     * @var Feature[] $features
      */
 
-    // Change password
-    $action = $post['action'];
-    if (isset($action) && $action === 'passwordEdit') {
-        $status = array('status' => 'error');
+    include_once(__DIR__.'/utils.php');
 
-        $passwordOld = $post['passwordOld'];
-        $passwordNew = $post['passwordNew'];
+    /**
+     * @param DataBase $db
+     * @param User $user
+     * @param string $type
+     * @param array $args
+     * @return string String returned to the client
+     */
+    $action = function($db, $user, $type, $args) {
+        // Change password
+        if ($type === 'passwordEdit') {
+            $status = 'error';
 
-        // Check password validity
-        if ($passwordOld === $passwordNew) {
-            $db->AddLog($user->ID, 'passwordEdit', "Password changing failed (same password) !");
-        } else if (password_verify($passwordOld, $user->Password)) {
-            $hash = password_hash($passwordNew, PASSWORD_BCRYPT);
-            $db->QueryPrepare('Users', 'UPDATE TABLE SET `Password` = ? WHERE `ID` = ?', 'si', [$hash, $user->ID]);
-            $db->AddLog($user->ID, 'passwordEdit', "Password changed successfully.");
-            $status['status'] = 'ok';
-        } else {
-            $db->AddLog($user->ID, 'passwordEdit', "Password changing failed (wrong password) !");
+            $passwordOld = $args['passwordOld'];
+            $passwordNew = $args['passwordNew'];
+
+            // Check password validity
+            if ($passwordOld === $passwordNew) {
+                $db->AddLog($user->ID, 'passwordEdit', "Password changing failed (same password) !");
+            } else if (password_verify($passwordOld, $user->Password)) {
+                $hash = password_hash($passwordNew, PASSWORD_BCRYPT);
+                $db->QueryPrepare('Users', 'UPDATE TABLE SET `Password` = ? WHERE `ID` = ?', 'si', [$hash, $user->ID]);
+                $db->AddLog($user->ID, 'passwordEdit', "Password changed successfully.");
+                $status = 'ok';
+            } else {
+                $db->AddLog($user->ID, 'passwordEdit', "Password changing failed (wrong password) !");
+            }
+
+            return $status;
         }
 
-        echo(json_encode($status));
-        exit();
-    }
+        // Save features settings
+        if ($type === 'saveSettings') {
+            $features = $args['features'];
+            // Remove first character of each key in array
+            $removeFirst = fn($k) => StartsWith($k, 'f-') ? substr($k, 2) : $k;
+            $newKeys = array_map($removeFirst, array_keys($features));
+            $features = array_combine($newKeys, array_values($features));
 
-    // Save features settings
-    if (isset($action, $post['features']) && $action === 'saveSettings') {
-        $features = $post['features'];
-        // Remove first character of each key in array
-        $removeFirst = fn($k) => StartsWith($k, 'f-') ? substr($k, 2) : $k;
-        $newKeys = array_map($removeFirst, array_keys($features));
-        $features = array_combine($newKeys, array_values($features));
-
-        $newFeatures = json_encode($features);
-        $result = $db->QueryPrepare('Users', "UPDATE TABLE SET `Settings` = ? WHERE `ID` = ?", 'si', array($newFeatures, $user->ID));
-        if ($result === false) {
-            throw new Exception("Settings could not be saved.");
+            $newFeatures = json_encode($features);
+            $result = $db->QueryPrepare('Users', "UPDATE TABLE SET `Settings` = ? WHERE `ID` = ?", 'si', array($newFeatures, $user->ID));
+            if ($result === false) {
+                throw new Exception("Settings could not be saved.");
+            }
+            return 'ok';
         }
-        $return = array('status' => 'ok');
-        echo(json_encode($return));
-        exit();
-    }
+    };
 
     // Get features settings
-    $rawFeatures = $db->QueryPrepare('Features', "SELECT * FROM TABLE WHERE `Level` <= ?", 'i', array($user->Level));
-    $features = array_map(fn($f) => Feature::Load($f), $rawFeatures);
     $tree = Feature::GetTree($user, $features, $GLOBALS['LEVEL_TEXTS'], true);
     $featuresHTML = DefineFeatures($features, $user, $tree);
     $featuresOptions = DefineOptions($features, $user, $tree);
 
     // Print page
+    global $LEVEL_TEXTS;
     $status = $user->Level === 0 ? '' : "<h3>{$LEVEL_TEXTS[$user->Level]}</h3>";
     $vars = array(
         'status' => $status,
@@ -70,7 +75,6 @@
         'options' => $featuresOptions
     );
 
-    $content = ImportHTML(__DIR__.'/index.html', $vars);
-    echo($content);
+    return ImportHTML(__DIR__.'/index.html', $vars);
 
 ?>

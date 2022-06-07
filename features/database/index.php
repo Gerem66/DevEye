@@ -3,49 +3,46 @@
     //$curr = 'database-dev-gl';
     //$credentials = [ 'localhost', 'u444572210_GameLifeDev', 'u444572210_GLAdminDev', 'T5*JSh;d' ];
 
-    /** @var DataBase $db */
+    /**
+     * @var User $user
+     * @var DataBase $db
+     * @var Feature[] $features
+     */
+
+    include_once(__DIR__.'/utils.php');
 
     /**
      * @param DataBase $db
-     * @param string $table
-     * @param int $page
-     * @param int $pageLength
+     * @param User $user
+     * @param string $type
+     * @param array $args
+     * @return string String returned to the client
      */
-    function AddDataTable($db, $table, $page, $pageLength) {
-        $headers = $db->GetColumns($table);
-        $rows = GetRows($db, $table, $page, $pageLength);
-        $lastPage = ceil($db->GetTableLength($table) / $pageLength);
-
-        $tableHead = TheadFromDB($headers);
-        $tableBody = TbodyFromDB($rows);
-
-        return "<div class='row'>
-                    <div class='card col-full' data-title='$table'>
-                        <table class='show-lines' data-maxpage='$lastPage'>
-                            <thead>$tableHead</thead>
-                            <tbody>$tableBody</tbody>
-                        </table>
-                    </div>
-                </div>";
-    }
+    $action = function($db, $user, $type, $args) {
+        if ($type === 'dbtable') {
+            return DBTableCommand($db, $args, 10);
+        }
+    };
 
     $rowsCount = 10;
-
-    if (isset($post['type'])) {
-        DBTableCommand($db, $post, $rowsCount);
-    }
-
+    $t1 = microtime(true);
     $tables = $db->GetTables();
+    $t2 = microtime(true);
+    $tt = ($t2 - $t1) * 1000;
+    echo("[$tt]");
     $tablesContent = '';
     foreach ($tables as $table) {
+        $t1 = microtime(true);
         $tablesContent .= AddDataTable($db, $table, 0, $rowsCount);
+        $t2 = microtime(true);
+        $tt = ($t2 - $t1) * 1000;
+        echo("[$tt]");
     }
 
     $variables = array(
         'username' => $user->Username,
         'tablesContent' => $tablesContent
     );
-    $content = ImportHTML(__DIR__.'/index.html', $variables);
-    echo($content);
+    return ImportHTML(__DIR__.'/index.html', $variables);
 
 ?>

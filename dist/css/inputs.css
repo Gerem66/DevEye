@@ -64,7 +64,7 @@
     opacity: 1;
 }
 
-.form-input:disabled, .form-input[readonly] {
+.form-input:disabled {
     opacity: 0.65;
     background-color: #c2c2c245 !important;
 }

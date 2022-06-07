@@ -38,6 +38,10 @@
      * @copyright https://github.com/richardfullmer/php-websocket/blob/master/WebSocket/Client.php
      */
     function encodeFrame($payload, $type = 'text', $masked = true) {
+        if (!$payload) {
+            return '';
+        }
+
         $frameHead = array();
         $frame = '';
         $payloadLength = strlen($payload);

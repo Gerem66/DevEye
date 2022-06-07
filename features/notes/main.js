@@ -72,17 +72,16 @@ class Notes extends Feature {
 
         // Load note
         const t1 = performance.now();
-        const data = { getContent: id };
-        const response = await Request_Async('./notes', data);
-        const success = response.status === 200 && response.content['status'] === 'ok';
+        const response = await this.CallAction('getContent', { id });
+        const t2 = performance.now();
 
         // Wait for animation
-        const t2 = performance.now();
         const time = t2 - t1;
         if (time < 200 && alreadyActive) await Sleep(200 -  time);
 
-        if (success) {
-            this.showNote(response.content);
+        if (response !== 'error') {
+            const note = JSON.parse(response);
+            this.showNote(note);
         }
     }
 
@@ -121,14 +120,13 @@ class Notes extends Feature {
             const squareID = i.getAttribute('data-id');
             i.onclick = async () => {
                 i.classList.add('blur');
-                const data = { checkSquare: squareID, 'noteID': id };
-                const response = await Request_Async('./notes', data);
-                const success = response.status === 200 && response.content['status'] === 'ok';
-                if (success) {
+                const response = await this.CallAction('checkSquare', { id, squareID });
+                if (response !== 'error') {
                     i.classList.toggle('icon-square-check');
                     i.classList.toggle('icon-square-empty');
-                    this.currentNote.content = response.content['content'];
-                    this.currentNote.rawContent = response.content['rawContent'];
+                    const rawNote = JSON.parse(response);
+                    this.currentNote.content = rawNote['content'];
+                    this.currentNote.rawContent = rawNote['rawContent'];
                 }
                 i.classList.remove('blur');
             }
@@ -143,6 +141,14 @@ class Notes extends Feature {
      * @param {Function} callback2 
      */
     updateButtons = (callback1, callback2) => {
+        if (callback1 === null && callback2 === null) {
+            this.btnEdit.classList.add('icon-hide');
+            this.btnDelete.classList.add('icon-hide');
+            return;
+        }
+        this.btnEdit.classList.remove('icon-hide');
+        this.btnDelete.classList.remove('icon-hide');
+
         this.btnEdit.classList.toggle('icon-edit', !this.editing);
         this.btnEdit.classList.toggle('icon-v', this.editing);
         this.btnEdit.title = this.editing ? 'Enregistrer les modifications' : 'Modifier la note';
@@ -159,13 +165,12 @@ class Notes extends Feature {
             return;
         }
 
-        const data = { 'addNote': 1 };
-        const response = await Request_Async('./notes', data);
-        const success = response.status === 200 && response.content['status'] === 'ok';
-        if (success) {
+        const response = await this.CallAction('addNote');
+        if (response !== 'error') {
+            const note = JSON.parse(response);
             this.hideNote();
-            const id = response.content['id'];
-            const title = response.content['title'];
+            const id = note['id'];
+            const title = note['title'];
 
             const newLi = document.createElement('li');
             newLi.onclick = () => this.loadNote(newLi, id);
@@ -174,7 +179,7 @@ class Notes extends Feature {
             newLi.setAttribute('data-id', id);
             this.notesContainer.insertAdjacentElement('afterbegin', newLi);
 
-            this.showNote(response.content);
+            this.showNote(note);
             this.noteEdit();
         }
     }
@@ -218,13 +223,10 @@ class Notes extends Feature {
         const { id } = this.currentNote;
         const newTitle = this.inputTitle.value;
         const newContent = this.inputContent.value;
-        this.updateButtons(() => {}, () => {});
+        this.updateButtons(null, null);
 
-        const data = { 'setContent': id, newTitle, newContent };
-        const response = await Request_Async('./notes', data);
-        const success = response.status === 200 && response.content['status'] === 'ok';
-
-        if (success) {
+        const response = await this.CallAction('setContent', { id, newTitle, newContent });
+        if (response !== 'error') {
             this.noteTitle.textContent = newTitle;
             const li = this.getNotesList().find(li => li.classList.contains('active')) || null;
             if (li !== null) {
@@ -234,9 +236,10 @@ class Notes extends Feature {
                 li.remove();
                 this.notesContainer.insertAdjacentElement('afterbegin', savedLi);
             }
+            this.inputTitle.replaceWith(this.noteTitle);
+            const note = JSON.parse(response);
+            this.showNote(note);
         }
-        this.inputTitle.replaceWith(this.noteTitle);
-        this.showNote(response.content);
     }
     async noteDelete() {
         const { id, title, content, rawContent, date } = this.currentNote;
@@ -246,10 +249,8 @@ class Notes extends Feature {
             return;
         }
 
-        const data = { 'removeNote': id };
-        const response = await Request_Async('./notes', data);
-        const success = response.status === 200 && response.content['status'] === 'ok';
-        if (success) {
+        const response = await this.CallAction('deleteNote', { id });
+        if (response === 'ok') {
             this.getNotesList().forEach(li => li.classList.contains('active') && li.remove());
             this.hideNote();
         }

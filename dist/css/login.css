@@ -9,6 +9,7 @@ html {
 body {
     margin: 0;
     padding: 0;
+    overflow: hidden;
 }
 
 .login {
@@ -33,7 +34,7 @@ body {
 }
 .form-hide {
     opacity: 0;
-    transform: scale(0.9);
+    transform: scale(1.05);
     pointer-events: none;
 }
 

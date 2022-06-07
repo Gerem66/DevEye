@@ -15,19 +15,20 @@
     /**
      * Get encrypted content from password informations
      * @param DataBase $db
+     * @param string $hash User's hashed password
      * @param string $service
      * @param string $username
      * @param string $password
      * @param string $status
      */
-    function GetPasswordContent($db, $service, $username, $password, $status) {
+    function GetPasswordContent($db, $hash, $service, $username, $password, $status) {
         $variables = array(
             'service' => $service,
             'username' => $username,
             'password' => $password,
             'status' => $status
         );
-        return $db->encryption->Encrypt(json_encode($variables));
+        return $db->encryption->Encrypt(json_encode($variables), $hash);
     }
 
     /**

@@ -33,6 +33,7 @@ class DevEye {
         }
 
         this.login.loginForm.classList.remove('form-hide');
+        this.login.loginForm.getElementsByTagName('p')[0].classList.add('anim');
     }
 
     Unmount() {
@@ -87,6 +88,7 @@ class DevEye {
      * @returns {Promise<Boolean>}
      */
     async Load(page, category) {
+        const t1 = Date.now();
         if (this.loading) return false;
         if (this.content === null) {
             throw new Error('Page.Load: content is null');
@@ -100,11 +102,19 @@ class DevEye {
         this.SetLoading(true);
 
         const content = await this.server.GetPage(page, category);
-
         if (content !== null) {
             this.content.innerHTML = content;
-            this.SetLoading(false);
+            if (this.features.hasOwnProperty(page)) {
+                this.features[page]?.preMount(category);
+                this.currentFeatureName = page;
+            }
         }
+
+        this.SetLoading(false);
+        this.sidebar.SetActiveItem(page, category);
+        const t2 = Date.now();
+        console.log(`Page.Load: ${t2 - t1}ms`);
+        return content !== null;
     }
 
     /** @param {HTMLElement} content */

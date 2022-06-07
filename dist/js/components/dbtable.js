@@ -9,13 +9,15 @@
 class DBTable {
     /**
      * @description Setup database table
+     * @param {Feature} feature Feature used to callAction
      * @param {HTMLElement} card Card containing the table [& navigation]
      * @param {String} tableName Name of table focused
      * @param {String} pageName Name of feature page, used for requests
      */
-    constructor(card, tableName, pageName) {
+    constructor(feature, card, tableName, pageName) {
+        this.feature = feature;
         this.card = card;
-        this.table = card?.getElementsByTagName('table')[0];
+        this.table = card.getElementsByTagName('table')[0];
         this.tableName = tableName;
         this.pageName = pageName;
 
@@ -132,10 +134,9 @@ class DBTable {
                 tbody.classList.add('blur');
 
                 const data = { type: 'navigation', table: this.tableName, page: this.currentPage };
-                const response = await Request_Async('./' + this.pageName, data);
-                const success = response.status === 200 && response.content?.status === 'ok';
+                const response = await this.feature.CallAction('dbtable', data);
 
-                if (success) {
+                if (response !== 'error') {
                     // Enable / disable buttons
                     btns.forEach(btn => {
                         const name = btn.getAttribute('name');
@@ -149,9 +150,10 @@ class DBTable {
                     });
 
                     // Execute response
-                    this.currentPage = response.content.newPage || 1;
-                    this.lastPage = response.content.maxPage || 1;
-                    tbody.innerHTML = response.content.content || '';
+                    const result = JSON.parse(response);
+                    this.currentPage = result['newPage'] || 1;
+                    this.lastPage = result['maxPage'] || 1;
+                    tbody.innerHTML = result['content'] || '';
                     this.setupCellsEvents();
                     this.setupTrash(false);
 
@@ -218,13 +220,13 @@ class DBTable {
         tbody.classList.add('blur');
 
         const data = { type: 'rowadd', table: this.tableName };
-        const response = await Request_Async('./' + this.pageName, data);
-        const success = response.status === 200 && response.content?.status === 'ok';
+        const response = await this.feature.CallAction('dbtable', data);
 
-        if (success) {
+        if (response !== 'error') {
+            const result = JSON.parse(response);
             this.currentPage = 1;
-            this.lastPage = response.content.maxPage;
-            tbody.innerHTML = response.content.content;
+            this.lastPage = result['maxPage'];
+            tbody.innerHTML = result['content'];
             this.setupCellsEvents();
             this.setupTrash(false);
 
@@ -244,7 +246,7 @@ class DBTable {
             }
         }
 
-        this.showSavedText(success);
+        this.showSavedText(response !== 'error');
         tbody.classList.remove('blur');
         this.loading = false;
     }
@@ -272,14 +274,20 @@ class DBTable {
         row.classList.add('blur');
 
         const data = { type: 'rowremove', table: this.tableName, ID, page: this.currentPage };
-        const response = await Request_Async('./' + this.pageName, data);
-        const success = response.status === 200 && response.content?.status === 'ok';
+        const response = await this.feature.CallAction('dbtable', data);
 
-        if (success) {
+        if (response !== 'error') {
+            const result = JSON.parse(response);
             const tbody = this.table.getElementsByTagName('tbody')[0];
-            tbody.innerHTML = response.content?.content || null;
+            tbody.innerHTML = result['content'] || null;
+
+            this.lastPage = result['maxPage'] || 1;
+            tbody.innerHTML = result['content'] || '';
             this.setupCellsEvents();
             this.setupTrash(false);
+
+            const text = this.card.getElementsByTagName('p')[0];
+            text.textContent = this.currentPage + ' / ' + this.lastPage;
 
             // Next page if current is empty
             if (!tbody.innerHTML) {
@@ -289,7 +297,7 @@ class DBTable {
             }
         }
 
-        this.showSavedText(success);
+        this.showSavedText(response !== 'error');
         row.classList.remove('blur');
     }
 
@@ -338,12 +346,13 @@ class DBTable {
 
             if (this.features['cellchange']) {
                 const data = { type: 'cellchange', table: this.tableName, ID, column, value: newValue };
-                const response = await Request_Async('./' + this.pageName, data);
-                const success = response.status === 200 && response.content?.status === 'ok';
-                if (!success) {
+                const response = await this.feature.CallAction('dbtable', data);
+                if (response === 'error') {
                     newValue = initValue;
+                } else {
+                    newValue = JSON.parse(response)['value'];
                 }
-                this.showSavedText(success);
+                this.showSavedText(response !== 'error');
             }
             cell.classList.remove('blur');
         }

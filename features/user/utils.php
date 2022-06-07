@@ -66,7 +66,7 @@
             } else if ($keyType === 'integer') {
                 $feature = Feature::GetFeatureByID($value, $features);
                 if ($feature === null) continue;
-                $featureEnabled = $feature->Enabled;
+                $featureEnabled = $feature->EnabledDefault;
                 if (array_key_exists($feature->ID, $user->Settings)) {
                     $featureEnabled = $user->Settings[$feature->ID];
                 }

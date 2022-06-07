@@ -79,12 +79,11 @@
 
             // Define unique id
             while (isset($this->clients[$uid = uniqid()])) usleep(100);
-            $newClient = new Client($socket, $uid);
+            $newClient = new Client($uid, $socket);
             $newClient->handshake();
 
             if (!$newClient->isConnected) {
                 echo("Bad handshake\n");
-                $this->removeClient($newClient->UID);
                 return;
             }
 
@@ -100,7 +99,7 @@
             $except = array();
 
             set_error_handler('error_handler');
-            $wait = stream_select($read, $write, $except, 0, 100000);
+            $wait = stream_select($read, $write, $except, 0, 10000);
             restore_error_handler();
 
             if ($wait === false) {
@@ -119,6 +118,7 @@
         }
 
         private function readMessage($client) {
+            $t1 = microtime(true);
             $buffer = fread($client->socket, 1024);
             if ($buffer === false) {
                 echo("Read failed\n");
@@ -131,8 +131,12 @@
                 return;
             }
 
-            echo("[{$client->UID}] $data\n");
+            echo("[{$client->UID}] $data ");
             $client->receive($data);
+
+            $t2 = microtime(true);
+            $tt = round(($t2 - $t1) * 1000, 2);
+            echo("($tt ms)\n");
         }
 
         private function getClientsSocket() {

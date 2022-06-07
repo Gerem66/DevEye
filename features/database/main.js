@@ -10,7 +10,7 @@ class Database extends Feature {
 
         cards.forEach(card => {
             const cardName = card.getAttribute('data-title');
-            const table = new DBTable(card, cardName, 'database');
+            const table = new DBTable(this, card, cardName, 'database');
             table.AddFeature('cellchange');
             table.AddFeature('navigation');
             table.AddFeature('rowadd');

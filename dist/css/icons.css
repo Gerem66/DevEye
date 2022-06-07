@@ -8,6 +8,10 @@
             mask-repeat: no-repeat;
     background: #fff;
 }
+.icon-hide {
+    opacity: 0.2;
+    pointer-events: none;
+}
 .icon-add {
     -webkit-mask-image: url(../../assets/icons/add.svg);
     mask-image: url(../../assets/icons/add.svg);
