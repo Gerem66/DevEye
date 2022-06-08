@@ -4,12 +4,6 @@ function CopyContent(text) {
     .catch(console.error);
 }
 
-function PreventResubmissionAlert() {
-    if (window.history.replaceState) {
-        window.history.replaceState(null, null, window.location.href);
-    }
-}
-
 /**
  * @param {Number} min
  * @param {Number} value

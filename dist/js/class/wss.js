@@ -5,6 +5,9 @@
  */
 
 class WSS {
+    headerStyle = false;
+    headerScript = false;
+
     constructor() {
         this.socket = null;
     }
@@ -56,7 +59,7 @@ class WSS {
     }
 
     onDisconnect() {
-        deveye.ShowDisconnected();
+        deveye.ShowErrorMessage('Une erreur est survenue');
     }
 
     /**
@@ -111,25 +114,33 @@ class WSS {
 
     async LoadData() {
         deveye.login.loginForm.classList.add('form-hide');
-        deveye.login.loadingSetState(30, 'Téléchargement des scripts...');
-        const dataScripts = { type: 'loadScripts' };
-        const responseScripts = await this.sendData(dataScripts, 'waitResponse');
-        const scripts = responseScripts.data;
 
-        deveye.login.loadingSetState(50, 'Chargement des scripts...');
-        const script = document.createElement('script');
-        script.textContent = scripts;
-        document.head.appendChild(script);
+        if (this.headerScript === false) {
+            this.headerScript = true;
+            deveye.login.loadingSetState(30, 'Téléchargement des scripts...');
+            const dataScripts = { type: 'loadScripts' };
+            const responseScripts = await this.sendData(dataScripts, 'waitResponse');
+            const scripts = responseScripts.data;
 
-        deveye.login.loadingSetState(60, 'Téléchargement des styles...');
-        const dataStyles = { type: 'loadStyles' };
-        const responseStyles = await this.sendData(dataStyles, 'waitResponse');
-        const styles = responseStyles.data;
+            deveye.login.loadingSetState(50, 'Chargement des scripts...');
+            const script = document.createElement('script');
+            script.textContent = scripts;
+            document.head.appendChild(script);
+            document.head.removeChild(script);
+        }
 
-        deveye.login.loadingSetState(80, 'Chargement des styles...');
-        const style = document.createElement('style');
-        style.innerHTML = styles;
-        document.head.appendChild(style);
+        if (this.headerStyle === false) {
+            this.headerStyle = true;
+            deveye.login.loadingSetState(60, 'Téléchargement des styles...');
+            const dataStyles = { type: 'loadStyles' };
+            const responseStyles = await this.sendData(dataStyles, 'waitResponse');
+            const styles = responseStyles.data;
+
+            deveye.login.loadingSetState(80, 'Chargement des styles...');
+            const style = document.createElement('style');
+            style.innerHTML = styles;
+            document.head.appendChild(style);
+        }
 
         deveye.login.loadingSetState(90, 'Rendu des composants...');
         const dataBody = { type: 'loadBody' };
@@ -137,6 +148,9 @@ class WSS {
         const home = document.createElement('div');
         home.innerHTML = responseBody.data;
         document.body.insertBefore(home, document.body.firstChild);
+
+        const homebar = document.getElementById('homebar');
+        homebar.onclick = () => deveye.Load('user');
 
         deveye.login.loadingSetState(100, 'Terminé');
         await new Promise((resolve) => setTimeout(resolve, 100));

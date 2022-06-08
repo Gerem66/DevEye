@@ -32,6 +32,17 @@ class Login {
         this.loadingDiv.classList.toggle('form-hide', value === -1);
     };
 
+    /** @param {'login'|'home'} type */
+    SetTitle(type) {
+        const titles = {
+            login: 'DevEye - Connexion',
+            home: 'DevEye'
+        };
+        if (titles.hasOwnProperty(type)) {
+            document.title = titles[type];
+        }
+    }
+
     async connect() {
         if (this.connecting) {
             return;
@@ -61,6 +72,7 @@ class Login {
         const state = await deveye.server.UserConnection(username, password);
 
         if (state === 'ok') {
+            this.SetTitle('home');
             await deveye.MountHome();
         } else {
             this.tbUsername.classList.add('error');
@@ -72,5 +84,21 @@ class Login {
             this.connecting = false;
             this.loadingSetState(-1);
         }
+    }
+
+    async disconnect() {
+        this.connecting = false;
+        this.tbUsername.value = '';
+        this.tbPassword.value = '';
+        this.tbUsername.disabled = false;
+        this.tbPassword.disabled = false;
+        this.btConnect.disabled = false;
+
+        this.loadingSetState(-1);
+        this.loginContent.classList.remove('form-hide');
+        await Sleep(300);
+
+        this.loginForm.classList.remove('form-hide');
+        this.SetTitle('login');
     }
 }

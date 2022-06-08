@@ -16,6 +16,9 @@ class Profile extends Feature {
         this.settingsFeatures = document.getElementById('settings-features');
         this.settingsDefault = document.getElementById('settings-default');
 
+        const disconnectButton = document.getElementById('btn-disconnect');
+        disconnectButton.onclick = () => deveye.UnmountHome();
+
         // Define features drag & drop
         this.getFeatures = () => Array.from(this.settingsFeatures.getElementsByTagName('li'));
         this.getFeatures().forEach(this.loadFeature);

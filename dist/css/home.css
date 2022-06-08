@@ -52,7 +52,7 @@ nav.sidebar.collapse-sidebar {
     transform: translate3d(-250px, 0, 0);
 }
 .homebar {
-    position: relative;
+    /*position: relative;*/
     height: 56px;
 
     border-bottom: .1px solid #b7c0cd4f;
@@ -60,8 +60,9 @@ nav.sidebar.collapse-sidebar {
     background-color: #263544;
     box-shadow: 0 14px 28px rgba(0, 0, 0, 0.25);
     z-index: 101;
+    cursor: pointer;
 }
-.homebar > a {
+.homebar > div {
     height: 100%;
     padding-left: 12px;
     display: flex;
@@ -69,17 +70,17 @@ nav.sidebar.collapse-sidebar {
 
     text-decoration: none;
 }
-.homebar > a > img {
+.homebar > div > img {
     width: 35px;
 }
-.homebar > a > span {
+.homebar > div > span {
     margin-left: 12px;
     color: #fff;
     font-size: 1.2rem;
 }
 .homebar > span.home-version {
     position: absolute;
-    right: 6px;
+    left: 6px;
     bottom: 6px;
     color: #fff5;
     font-size: .8em;

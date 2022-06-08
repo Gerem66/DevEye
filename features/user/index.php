@@ -75,6 +75,8 @@
         'options' => $featuresOptions
     );
 
-    return ImportHTML(__DIR__.'/index.html', $vars);
+    $content = ImportHTML(__DIR__.'/popups.html');
+    $content .= ImportHTML(__DIR__.'/index.html', $vars);
+    return $content;
 
 ?>

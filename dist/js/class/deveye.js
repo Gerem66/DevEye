@@ -28,7 +28,7 @@ class DevEye {
         this.login = new Login();
         const connected = await this.server.Connect();
         if (!connected) {
-            this.ShowDisconnected();
+            this.ShowErrorMessage('Une erreur est survenue');
             return;
         }
 
@@ -40,25 +40,18 @@ class DevEye {
         this.server?.Disconnect();
     }
 
-    ShowDisconnected() {
-        if (document.body.firstChild !== this.login.loginContent) {
-            document.body.removeChild(document.body.firstChild);
-        }
-
-        this.login.loadingSetState(-1);
-        this.login.loginContent.classList.remove('form-hide');
-
+    ShowErrorMessage(message) {
+        this.UnmountHome();
         const form = document.getElementById('login-form');
         const p = document.createElement('p');
         p.style.fontSize = '1.5em';
-        p.textContent = 'Une erreur est survenue';
+        p.textContent = message;
         form.innerHTML = '';
         form.appendChild(p);
         form.classList.remove('form-hide');
     }
 
     async MountHome() {
-        document.title = document.title.split(' - ')[0];
         await this.server.LoadData();
 
         this.login.loginContent.classList.add('form-hide');
@@ -69,6 +62,13 @@ class DevEye {
         this.content = document.getElementById('main-content');
         this.content.onclick = () => this.sidebar.HideSidebarOnSmallScreen();
         this.Load(this.defaultPage);
+    }
+
+    UnmountHome() {
+        if (document.body.firstChild !== this.login.loginContent) {
+            document.body.removeChild(document.body.firstChild);
+        }
+        this.login.disconnect();
     }
 
     /** @param {Boolean} isLoading */
