@@ -179,25 +179,29 @@
         }
 
         /**
-         * Old method to encrypt a string.
+         * Old method to encrypt a string. Used to test or simple encryption.\
+         * Its recommended to use the encryption class instead.
          * @param string $str
+         * @param string $key
          * @return string Encrypted string with sql key.
          * @deprecated
          */
-        public function Encrypt($str) {
+        public function Encrypt($str, $key) {
             if (!$str) return '';
-            return openssl_encrypt($str, 'AES-128-ECB', $this->key);
+            return openssl_encrypt($str, 'AES-128-ECB', $key);
         }
 
         /**
-         * Old method to decrypt a string.
+         * Old method to decrypt a string. Used to test or simple encryption.\
+         * Its recommended to use the encryption class instead.
          * @param string $str
+         * @param string $key
          * @return string Decrypted string with sql key.
          * @deprecated
          */
-        public function Decrypt($str) {
+        public function Decrypt($str, $key) {
             if (!$str) return '';
-            return openssl_decrypt($str, 'AES-128-ECB', $this->key);
+            return openssl_decrypt($str, 'AES-128-ECB', $key);
         }
 
         /**
@@ -219,12 +223,12 @@
 
         /**
          * @param int $UID
+         * @param string $IP
          * @param string $type
          * @param string $description
          * @return bool True if the query was successful
          */
-        public function AddLog($UID, $type, $description) {
-            $IP = GetIP();
+        public function AddLog($UID, $IP, $type, $description) {
             $args = array($UID, $IP, $type, $description);
             $result = $this->QueryPrepare('Logs', "INSERT INTO TABLE (`UID`, `IP`, `Type`, `Description`) VALUES (?, ?, ?, ?)", 'isss', $args);
             return $result !== false;

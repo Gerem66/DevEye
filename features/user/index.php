@@ -25,14 +25,14 @@
 
             // Check password validity
             if ($passwordOld === $passwordNew) {
-                $db->AddLog($user->ID, 'passwordEdit', "Password changing failed (same password) !");
+                $db->AddLog($user->ID, $user->IP, 'passwordEdit', "Password changing failed (same password) !");
             } else if (password_verify($passwordOld, $user->Password)) {
                 $hash = password_hash($passwordNew, PASSWORD_BCRYPT);
                 $db->QueryPrepare('Users', 'UPDATE TABLE SET `Password` = ? WHERE `ID` = ?', 'si', [$hash, $user->ID]);
-                $db->AddLog($user->ID, 'passwordEdit', "Password changed successfully.");
+                $db->AddLog($user->ID, $user->IP, 'passwordEdit', "Password changed successfully.");
                 $status = 'ok';
             } else {
-                $db->AddLog($user->ID, 'passwordEdit', "Password changing failed (wrong password) !");
+                $db->AddLog($user->ID, $user->IP, 'passwordEdit', "Password changing failed (wrong password) !");
             }
 
             return $status;

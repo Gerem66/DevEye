@@ -147,34 +147,48 @@
             return true;
         }
 
+        /**
+         * @param DataBase $db
+         * @param array $data
+         * @return bool Success of the connection
+         */
         private function connect($db, $data) {
             $username = $data['username'];
             $password = $data['password'];
-            if (!isset($username, $password)) {
+            $IP = $data['IP'];
+            if (!isset($username, $password, $IP)) {
+                $this->send('error');
+                return false;
+            }
+
+            $IP = $db->Decrypt($IP, 's5/vZ2G9~f9(p]w_');
+            $isSafe = filter_var($IP, FILTER_VALIDATE_IP) || filter_var($IP, FILTER_VALIDATE_MAC);
+            if (!$isSafe) {
                 $this->send('error');
                 return false;
             }
 
             $hashedPassword = $db->encryption->HashPassword($password);
             $rawUser = $db->GetRowContent('Users', 'Username', $username);
-            $user = User::Load($rawUser, $hashedPassword);
+            $user = User::Load($rawUser, $hashedPassword, $IP);
 
             if ($user === null) {
-                $db->AddLog(0, 'login', "User connection failed - User \"$username\" not found");
+                $db->AddLog(0, $IP, 'login', "User connection failed - User \"$username\" not found");
                 $this->send('error');
                 return false;
             }
-    
+
             if (!password_verify($password, $user->Password)) {
-                $db->AddLog($user->ID, 'login', 'User connection failed - wrong password');
+                $db->AddLog($user->ID, $IP, 'login', 'User connection failed - wrong password');
                 $this->send('error');
                 return false;
             }
-    
-            $db->AddLog($user->ID, 'login', 'User connection successfully.');
+
+            $db->AddLog($user->ID, $IP, 'login', 'User connection successfully.');
             $this->user = $user;
             $this->send('ok');
             $this->wss->DebugMessage(3, "[{$this->UID}] Authentified");
+            return true;
         }
 
         public function disconnect() {

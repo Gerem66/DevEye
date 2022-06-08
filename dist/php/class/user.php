@@ -21,6 +21,13 @@
          */
         public $hashedPassword;
 
+        /**
+         * Variable used to store the user's IP (only for session).
+         * This is'nt stored in the database. (define in the constructor)
+         * @var string $IP
+         */
+        public $IP;
+
         /** @var string $Avatar */
         public $Avatar;
 
@@ -41,7 +48,7 @@
          * @param string $hashedPassword The user's hashed password
          * @throws Exception If the user contains incorrect data
          */
-        public function __construct($user, $hashedPassword) {
+        public function __construct($user, $hashedPassword, $IP) {
             if ($user === null || !$this->isValid($user)) {
                 throw(new Exception('Invalid user'));
             }
@@ -50,6 +57,7 @@
             $this->Username = $user['Username'];
             $this->Password = $user['Password'];
             $this->hashedPassword = $hashedPassword;
+            $this->IP = $IP;
             $this->Avatar = $user['Avatar'];
             $this->Level = intval($user['Level']);
             $this->Settings = json_decode($user['Settings'], true);
@@ -61,8 +69,8 @@
          * @param array $user Contains all user information
          * @return User|null Returns the user if it contains correct data, null otherwise
          */
-        public static function Load($user, $hashedPassword) {
-            try { return new User($user, $hashedPassword); }
+        public static function Load($user, $hashedPassword, $IP) {
+            try { return new User($user, $hashedPassword, $IP); }
             catch (Exception $e) { return null; }
         }
 
@@ -75,7 +83,7 @@
             $vars = array_keys(get_object_vars($this));
             foreach ($vars as $var) {
                 // Exception for the hashedPassword variable
-                if ($var === 'hashedPassword') continue;
+                if ($var === 'hashedPassword' || $var === 'IP') continue;
                 if (!array_key_exists($var, $arr)) {
                     return false;
                 }
