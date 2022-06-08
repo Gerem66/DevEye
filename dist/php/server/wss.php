@@ -10,8 +10,28 @@
         /** @var Client[] $clients */
         private $clients = array();
 
-        /** @var bool $isRunning */
+        /**
+         * If the server is running.
+         * @var bool $isRunning
+         */
         private $isRunning = false;
+
+        /**
+         * Show debug messages.\
+         * 0 = none\
+         * 1 = errors only,\
+         * 2 = errors, warnings and debug messages,\
+         * 3 = all, with client messages, etc.
+         * @var int $isDebug
+         */
+        private $isDebug = 3;
+
+        /**
+         * Maximal number of clients. New clients will be rejected.\
+         * Set to -1 to disable the limit.
+         * @var int $maxClients
+         */
+        private $maxClients = 3;
 
         function __construct($ip = '0.0.0.0', $port = 8080, $protocol = 'tls') {
             $addr = "$protocol://$ip:$port";
@@ -32,8 +52,7 @@
 
             $this->server = stream_socket_server($addr, $errno, $errstr, $flags, $context);
             if ($this->server === false) {
-                echo("$errstr ($errno)\n");
-                exit(1);
+                throw new Exception("Failed to create server socket: $errstr ($errno)");
             }
         }
 
@@ -51,21 +70,20 @@
             }
             pcntl_signal(SIGINT, array(&$this, "close"));
 
-            echo("WSS server started\n");
+            $this->DebugMessage(2, "WSS server started");
             $this->isRunning = true;
             while ($this->isRunning) {
                 $this->checkNewClients();
-                $this->removeDeadClients();
                 $this->checkNewMessages();
+                $this->removeDeadClients();
             }
 
-            echo("\nClosing...\n");
+            $this->DebugMessage(2, "\nClosing...");
             foreach ($this->clients as $client) {
                 $this->removeClient($client->UID);
             }
             fclose($this->server);
-            echo("WSS server stopped\n");
-            readline('Press enter to exit...');
+            $this->DebugMessage(2, "WSS server stopped");
         }
 
         private function checkNewClients() {
@@ -79,20 +97,38 @@
 
             // Define unique id
             while (isset($this->clients[$uid = uniqid()])) usleep(100);
-            $newClient = new Client($uid, $socket);
-            $newClient->handshake();
+            $newClient = new Client($uid, $socket, $this);
+            $handChecked = $newClient->handshake();
 
-            if (!$newClient->isConnected) {
-                echo("Bad handshake\n");
+            if (!$handChecked) {
+                $this->DebugMessage(2, "[WARN] Bad handshake, client disconnected");
+                return;
+            }
+
+            if ($this->maxClients > 0 && count($this->clients) >= $this->maxClients) {
+                $newClient->send(json_encode(array('type' => 'error', 'message' => 'Server is full')));
+                $newClient->close();
+                $this->DebugMessage(2, "[WARN] Client rejected, server is full");
                 return;
             }
 
             $this->clients[$uid] = $newClient;
-            echo("[$uid] New client connected\n");
+            $this->DebugMessage(3, "[$uid] New client connected");
+        }
+
+        /**
+         * @param int $level
+         * @param string $message
+         */
+        public function DebugMessage($level, $message) {
+            if ($this->isDebug === 0 || $this->isDebug < $level) {
+                return;
+            }
+            echo("$message\n");
         }
 
         private function checkNewMessages() {
-            $read = $this->getClientsSocket();
+            $read = $this->getSocketsClients();
             if (count($read) === 0) return;
 
             $write = array();
@@ -110,36 +146,50 @@
                 return;
             }
 
-
             foreach ($read as $socket) {
                 $client = $this->getClientBySocket($socket);
                 $this->readMessage($client);
             }
         }
 
+        /**
+         * @param Client $client
+         */
         private function readMessage($client) {
             $t1 = microtime(true);
-            $buffer = fread($client->socket, 1024);
+            $buffer = fread($client->socket, 8192);
             if ($buffer === false) {
-                echo("Read failed\n");
+                $this->DebugMessage(1, "[ERR] Read failed, message skipped");
                 return;
             }
 
-            $data = unmask($buffer);
+            $headers = array();
+            $data = frameDecode($buffer, $headers);
+
+            if ($data === null) {
+                $this->DebugMessage(1, "[ERR] Bad frame, message skipped ({$client->UID})");
+                return;
+            }
+
             if ($data === 'exit') {
                 $this->removeClient($client->UID);
                 return;
             }
 
-            echo("[{$client->UID}] $data ");
-            $client->receive($data);
+            $received = $client->receive($data);
+            if ($received === false) {
+                $this->DebugMessage(1, "[ERR] Bad message, message skipped ({$client->UID} - {$data})");
+                return;
+            }
 
             $t2 = microtime(true);
             $tt = round(($t2 - $t1) * 1000, 2);
-            echo("($tt ms)\n");
+            $this->DebugMessage(3, "[{$client->UID}] $data ($tt ms)");
         }
 
-        private function getClientsSocket() {
+
+
+        private function getSocketsClients() {
             $sockets = array();
             foreach ($this->clients as $client) {
                 $sockets[] = $client->socket;
@@ -156,19 +206,20 @@
         }
         private function removeDeadClients() {
             foreach ($this->clients as $uid => $client) {
-                if (!$client->isConnected) {
+                $isntResource = gettype($client->socket) !== 'resource';
+                $isntAlive = $client->socket === null || gettype($client->socket) === 'resource (closed)';
+                if ($isntResource || $isntAlive) {
                     $this->removeClient($uid);
                 }
             }
         }
-
-        private function removeClient($uid) {
-            if (!isset($this->clients[$uid])) {
+        private function removeClient($UID) {
+            if (!isset($this->clients[$UID])) {
                 return;
             }
-            $this->clients[$uid]->close();
-            unset($this->clients[$uid]);
-            echo("[$uid] Client disconnected\n");
+            $this->clients[$UID]->close();
+            unset($this->clients[$UID]);
+            $this->DebugMessage(3, "[$UID] Client disconnected");
         }
     }
 

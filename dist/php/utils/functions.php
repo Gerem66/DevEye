@@ -112,4 +112,29 @@
         array_multisort($sort_col, $dir, $arr);
     }
 
+    /**
+     * @param array $arr1
+     * @param array $arr2
+     * @return bool True if concatenation successfully, false otherwise
+     */
+    function array_concatenate(&$arr1, $arr2) {
+        foreach ($arr2 as $key => $value) {
+            if (key_exists($key, $arr1)) {
+                $type = gettype($arr1[$key]);
+                if ($type !== gettype($value)) {
+                    continue;
+                }
+                if ($type === 'array') {
+                    array_concatenate($arr1[$key], $value);
+                } else if ($type === 'integer') {
+                    $arr1[$key] = $value;
+                } else if ($type === 'string') {
+                    $arr1[$key] = $arr1[$key] . $value;
+                }
+            } else {
+                $arr1[$key] = $value;
+            }
+        }
+    }
+
 ?>

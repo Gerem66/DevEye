@@ -225,7 +225,43 @@ class Notes extends Feature {
         const newContent = this.inputContent.value;
         this.updateButtons(null, null);
 
-        const response = await this.CallAction('setContent', { id, newTitle, newContent });
+        const maxLength = 800;
+        const parts = Math.ceil(newContent.length / maxLength) - 1;
+        let response = '';
+
+        if (parts === 0) {
+            response = await this.CallAction('setContent', { id, newTitle, newContent });
+        } else {
+            let data = {
+                type: 'callAction',
+                action: {
+                    type: 'setContent',
+                    args: {
+                        id,
+                        newTitle,
+                        newContent: newContent.slice(0, maxLength)
+                    }
+                },
+                multiple: parts
+            };
+            response = await deveye.server.sendData(data, 'waitResponse');
+            for (let i = 1; i <= parts; i++) {
+                if (response.data !== 'ok') {
+                    break;
+                }
+                data = {
+                    action: {
+                        args: {
+                            newContent: newContent.slice(maxLength * i, maxLength * (i + 1))
+                        }
+                    },
+                    part: i
+                };
+                response = await deveye.server.sendData(data, 'waitResponse');
+            }
+            response = response?.data || 'error';
+        }
+
         if (response !== 'error') {
             this.noteTitle.textContent = newTitle;
             const li = this.getNotesList().find(li => li.classList.contains('active')) || null;

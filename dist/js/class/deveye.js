@@ -45,7 +45,9 @@ class DevEye {
             document.body.removeChild(document.body.firstChild);
         }
 
+        this.login.loadingSetState(-1);
         this.login.loginContent.classList.remove('form-hide');
+
         const form = document.getElementById('login-form');
         const p = document.createElement('p');
         p.style.fontSize = '1.5em';

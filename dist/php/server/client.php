@@ -2,40 +2,74 @@
 
     class Client
     {
-        /** @var User $user */
+        /** @var int $UID */
+        public $UID;
+
+        /** @var resource $socket */
+        public $socket;
+
+        /** @var WSS $wss */
+        private $wss = null;
+
+        /**
+         * Database user.
+         * @var User|null $user
+         */
         private $user = null;
 
-        /** @var string $currentPage */
+        /**
+         * Used to store multiple messages before interpreting them.
+         * @var array|null $tempMessage
+         */
+        private $tempMessage = null;
+
+        /**
+         * Last page loaded.
+         * @var string|null $currentPage
+         */
         private $currentPage = null;
-        /** @var string $currentCategory */
+
+        /**
+         * Category of last page loaded.
+         * @var string|null $currentCategory
+         */
         private $currentCategory = null;
 
-        /** @var function $action */
+        /**
+         * Function of last feature loaded.
+         * To be used to do some actions in current page.
+         * @var function|null $action
+         */
         private $action = null;
 
-        function __construct($UID, $socket) {
+        /**
+         * @param int $UID
+         * @param resource $socket
+         * @param function $server
+         */
+        function __construct($UID, $socket, $server) {
             $this->UID = $UID;
             $this->socket = $socket;
-            $this->isConnected = false;
+            $this->wss = $server;
         }
 
         public function close() {
-            if (!$this->isConnected) {
+            if (!$this->socket) {
                 return false;
             }
-            $this->isConnected = false;
             return fclose($this->socket);
         }
 
         public function handshake() {
             $headers = fread($this->socket, 8192);
             if ($headers === false) {
-                echo("Read failed\n");
+                $this->wss->DebugMessage(1, "[ERR] Handshake: Read failed");
                 return false;
             }
 
             $secWebSocketKey = preg_match('/Sec-WebSocket-Key: (.*)\r\n/', $headers, $matches) ? $matches[1] : false;
             if ($secWebSocketKey === false) {
+                $this->wss->DebugMessage(1, "[ERR] Handshake: No Sec-WebSocket-Key");
                 return false;
             }
 
@@ -46,9 +80,10 @@
                 "Upgrade: websocket\r\n" .
                 "Connection: Upgrade\r\n" .
                 "Sec-WebSocket-Accept: $secWebSocketAccept\r\n\r\n";
+
             $written = fwrite($this->socket, $handshake);
             if ($written) {
-                $this->isConnected = true;
+                return true;
             }
         }
 
@@ -57,6 +92,11 @@
 
             $data = json_decode($message, true);
             if ($data === null) return false;
+
+            $multipleMsgState = $this->checkMultipleMessage($data);
+            if ($multipleMsgState !== null) {
+                return $multipleMsgState;
+            }
 
             if (!key_exists('type', $data)) {
                 return false;
@@ -82,17 +122,16 @@
          * @return bool True if the message has been sent, false otherwise
          */
         public function send($message) {
-            //$message = mask($message);
-            $message = encodeFrame($message);
+            $message = frameEncode($message);
 
             if ($message === false) {
-                echo('Mask failed');
+                $this->wss->DebugMessage(1, '[ERR] Mask failed, message skipped');
                 return false;
             }
 
             $written = fwrite($this->socket, $message);
             if ($written === false) {
-                echo("Write failed\n");
+                $this->wss->DebugMessage(1, "[ERR] Write failed, message skipped");
                 return false;
             }
 
@@ -126,9 +165,11 @@
             $db->AddLog($user->ID, 'login', 'User connection successfully.');
             $this->user = $user;
             $this->send('ok');
+            $this->wss->DebugMessage(3, "[{$this->UID}] Authentified");
         }
 
         private function loadScripts() {
+            $root = __DIR__.'/../../..';
             $scriptsIgnore = array(
                 'deveye',
                 'wss',
@@ -136,12 +177,13 @@
                 'functions',
                 'main'
             );
-            $content = GetScriptsFiles(__DIR__.'/../../js/', 'js', $scriptsIgnore);
-            $content .= GetScriptsFiles(__DIR__.'/../../../features/', 'js');
+            $content = GetScriptsFiles("$root/dist/js/", 'js', $scriptsIgnore);
+            $content .= GetScriptsFiles("$root/features/", 'js');
             $this->send($content);
         }
 
         private function loadStyles() {
+            $root = __DIR__.'/../../..';
             $styleIgnore = array(
                 'login',
                 'icons',
@@ -149,8 +191,8 @@
                 'inputs',
                 'loading'
             );
-            $content = GetScriptsFiles(__DIR__.'/../../css/', 'css', $styleIgnore);
-            $content .= GetScriptsFiles(__DIR__.'/../../../features/', 'css');
+            $content = GetScriptsFiles("$root/dist/css/", 'css', $styleIgnore);
+            $content .= GetScriptsFiles("$root/features/", 'css');
             $this->send($content);
         }
 
@@ -222,6 +264,61 @@
 
             $response = ($this->action)($db, $this->user, $type, $args);
             $this->send($response);
+        }
+
+        private function checkMultipleMessage(&$data) {
+            // Initialisation of "multiple message"
+            if (key_exists('multiple', $data)) {
+                if (gettype($data['multiple']) !== 'integer' || $data['multiple'] < 1) {
+                    return false;
+                }
+                if ($this->tempMessage !== null) {
+                    $this->wss->DebugMessage(2, "[WARN] Receive: Multiple messages already received, discarding previous messages");
+                }
+
+                $this->tempMessage = $data;
+                $this->tempMessage['part'] = 0;
+                // tempMessage['multiple'] is the index of last parts (already in array)
+                $this->send('ok');
+                return true;
+            }
+
+            // "multiple message" is initialized but error occured,
+            // We need to clean it and ignore other messages
+            if ($this->tempMessage !== null && $this->tempMessage['part'] === -1) {
+                if (key_exists('part', $data)) {
+                    // Skip all parts of this corrupted message
+                    return true; // True because error is already sent
+                } else {
+                    // New message received, reset tempMessage
+                    $this->tempMessage = null;
+                }
+            }
+
+            // "multiple message" is initialized
+            // We append current message to it or finish it
+            if ($this->tempMessage !== null) {
+                if (!key_exists('part', $data)) {
+                    $this->wss->DebugMessage(2, "[WARN] Receive: Multiple messages not complete, discarding previous messages");
+                    $this->tempMessage = null;
+                    // Continue interpreting message
+                } else if ($data['part'] !== $this->tempMessage['part'] + 1) {
+                    $this->tempMessage['part'] = -1;
+                    $this->wss->DebugMessage(2, "[WARN] Receive: Multiple messages part was lost, discarding previous messages");
+                    return true; // Return true because error is already sent
+                } else {
+                    array_concatenate($this->tempMessage, $data);
+                    if ($this->tempMessage['part'] !== $this->tempMessage['multiple']) {
+                        $this->send('ok'); // Confirm message received
+                        return true; // Is not the last part
+                    }
+                    $data = $this->tempMessage;
+                    $this->tempMessage = null;
+                    // Continue interpreting all of "multiple message"
+                }
+            }
+
+            return null;
         }
     }
 
