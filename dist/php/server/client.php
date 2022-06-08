@@ -12,6 +12,13 @@
         private $wss = null;
 
         /**
+         * Used to close the socket if the client send\
+         * multiple bad frames messages
+         * @var int $lastBadFrame
+         */
+        public $lastBadFrame = 0;
+
+        /**
          * Database user.
          * @var User|null $user
          */
@@ -54,7 +61,8 @@
         }
 
         public function close() {
-            if (!$this->socket) {
+            $this->disconnect();
+            if (gettype($this->socket) !== 'resource') {
                 return false;
             }
             return fclose($this->socket);
@@ -87,11 +95,11 @@
             }
         }
 
-        public function receive($message) {
+        /**
+         * @param array $data
+         */
+        public function receive($data) {
             global $db;
-
-            $data = json_decode($message, true);
-            if ($data === null) return false;
 
             $multipleMsgState = $this->checkMultipleMessage($data);
             if ($multipleMsgState !== null) {
@@ -169,7 +177,10 @@
             $this->wss->DebugMessage(3, "[{$this->UID}] Authentified");
         }
 
-        private function disconnect() {
+        public function disconnect() {
+            if ($this->user === null) {
+                return;
+            }
             unset($this->user);
             $this->user = null;
             $this->wss->DebugMessage(3, "[{$this->UID}] Disconnected");

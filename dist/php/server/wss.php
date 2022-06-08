@@ -168,15 +168,23 @@
 
             if ($data === null) {
                 $this->DebugMessage(1, "[ERR] Bad frame, message skipped ({$client->UID})");
+                $now = microtime(true);
+                if ($client->lastBadFrame === 0) {
+                    $client->lastBadFrame = microtime(true);
+                } else if (($now - $client->lastBadFrame) * 1000 > 100) { // Less than 100ms
+                    $this->DebugMessage(1, "[WARN] Too bad frame, client disconnecting ({$client->UID})");
+                    $client->close();
+                }
                 return;
             }
 
-            if ($data === 'exit') {
+            $dataObject = json_decode($data ?? '', true);
+            if ($data === 'exit' || $dataObject === null) {
                 $this->removeClient($client->UID);
                 return;
             }
 
-            $received = $client->receive($data);
+            $received = $client->receive($dataObject);
             if ($received === false) {
                 $this->DebugMessage(1, "[ERR] Bad message, message skipped ({$client->UID} - {$data})");
                 return;
