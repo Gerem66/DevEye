@@ -105,6 +105,7 @@
             $type = $data['type'];
             switch ($type) {
                 case 'connect': $this->connect($db, $data); break;
+                case 'disconnect': $this->disconnect(); break;
                 case 'loadScripts': $this->loadScripts(); break;
                 case 'loadStyles': $this->loadStyles(); break;
                 case 'loadBody': $this->loadBody($db); break;
@@ -166,6 +167,12 @@
             $this->user = $user;
             $this->send('ok');
             $this->wss->DebugMessage(3, "[{$this->UID}] Authentified");
+        }
+
+        private function disconnect() {
+            unset($this->user);
+            $this->user = null;
+            $this->wss->DebugMessage(3, "[{$this->UID}] Disconnected");
         }
 
         private function loadScripts() {

@@ -69,6 +69,7 @@ class DevEye {
             document.body.removeChild(document.body.firstChild);
         }
         this.login.disconnect();
+        this.server.UserDisconnection();
     }
 
     /** @param {Boolean} isLoading */
