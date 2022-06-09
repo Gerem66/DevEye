@@ -22,7 +22,7 @@
          * Database user.
          * @var User|null $user
          */
-        private $user = null;
+        public $user = null;
 
         /**
          * Used to store multiple messages before interpreting them.
@@ -97,22 +97,23 @@
 
         /**
          * @param array $data
+         * @return string status: ok|connectionFailed|error
          */
         public function receive($data) {
             global $db;
 
             $multipleMsgState = $this->checkMultipleMessage($data);
             if ($multipleMsgState !== null) {
-                return $multipleMsgState;
+                return $multipleMsgState ? 'ok' : 'error';
             }
 
             if (!key_exists('type', $data)) {
-                return false;
+                return 'error';
             }
 
             $type = $data['type'];
             switch ($type) {
-                case 'connect': $this->connect($db, $data); break;
+                case 'connect': return $this->connect($db, $data); break;
                 case 'disconnect': $this->disconnect(); break;
                 case 'loadScripts': $this->loadScripts(); break;
                 case 'loadStyles': $this->loadStyles(); break;
@@ -120,10 +121,10 @@
                 case 'loadPage': $this->loadPage($data); break;
                 case 'callAction': $this->callAction($db, $data['action']); break;
 
-                default: return false;
+                default: return 'error';
             }
 
-            return true;
+            return 'ok';
         }
 
         /**
@@ -150,7 +151,8 @@
         /**
          * @param DataBase $db
          * @param array $data
-         * @return bool Success of the connection
+         * @param bool $tooManyAttempts True if user can't connect
+         * @return string status: ok|connectionFailed|error
          */
         private function connect($db, $data) {
             $username = $data['username'];
@@ -158,14 +160,14 @@
             $IP = $data['IP'];
             if (!isset($username, $password, $IP)) {
                 $this->send('error');
-                return false;
+                return 'error';
             }
 
             $IP = $db->Decrypt($IP, 's5/vZ2G9~f9(p]w_');
             $isSafe = filter_var($IP, FILTER_VALIDATE_IP) || filter_var($IP, FILTER_VALIDATE_MAC);
             if (!$isSafe) {
                 $this->send('error');
-                return false;
+                return 'error';
             }
 
             $hashedPassword = $db->encryption->HashPassword($password);
@@ -175,20 +177,21 @@
             if ($user === null) {
                 $db->AddLog(0, $IP, 'login', "User connection failed - User \"$username\" not found");
                 $this->send('error');
-                return false;
+                return 'error';
             }
+
+            $this->user = $user;
 
             if (!password_verify($password, $user->Password)) {
                 $db->AddLog($user->ID, $IP, 'login', 'User connection failed - wrong password');
                 $this->send('error');
-                return false;
+                return 'connectionFailed';
             }
 
             $db->AddLog($user->ID, $IP, 'login', 'User connection successfully.');
-            $this->user = $user;
             $this->send('ok');
             $this->wss->DebugMessage(3, "[{$this->UID}] Authentified");
-            return true;
+            return 'ok';
         }
 
         public function disconnect() {

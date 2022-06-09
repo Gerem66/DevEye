@@ -28,10 +28,17 @@
 
         /**
          * Maximal number of clients. New clients will be rejected.\
-         * Set to -1 to disable the limit.
+         * Set to 0 to disable the limit.
          * @var int $maxClients
          */
         private $maxClients = 3;
+
+        /**
+         * Maximal number of messages per client.\
+         * Set to 0 to disable the limit.
+         * @var int $maxAttemptsPerMinute
+         */
+        private $maxAttemptsPerMinute = 3;
 
         function __construct($ip = '0.0.0.0', $port = 8080, $protocol = 'tls') {
             $addr = "$protocol://$ip:$port";
@@ -50,6 +57,7 @@
                 )
             );
 
+            $this->attempsIPs = array();
             $this->server = stream_socket_server($addr, $errno, $errstr, $flags, $context);
             if ($this->server === false) {
                 throw new Exception("Failed to create server socket: $errstr ($errno)");
@@ -184,9 +192,37 @@
                 return;
             }
 
+            $now = time();
+            $UIP = $client->user !== null ? $client->user->IP : null;
+            if ($UIP !== null && key_exists($UIP, $this->attempsIPs)) {
+                // Remove old attempts
+                $this->attempsIPs[$UIP] = array_filter($this->attempsIPs[$UIP], function ($time) use ($now) {
+                    return ($now - $time) < 60;
+                });
+
+                // Check attempts
+                if (count($this->attempsIPs[$UIP]) > $this->maxAttemptsPerMinute) {
+                    $this->DebugMessage(1, "[WARN] Too many failed attempts, client disconnecting ({$client->UID})");
+                    $client->close();
+                    return;
+                }
+            }
+
             $received = $client->receive($dataObject);
-            if ($received === false) {
+
+            if ($received === 'error') {
                 $this->DebugMessage(1, "[ERR] Bad message, message skipped ({$client->UID} - {$data})");
+                return;
+            } else
+
+            if ($received === 'connectionFailed') {
+                $this->DebugMessage(1, "[{$client->UID}] Authentification failed");
+
+                $UIP = $client->user->IP;
+                if (!key_exists($UIP, $this->attempsIPs)) {
+                    $this->attempsIPs[$UIP] = array();
+                }
+                array_push($this->attempsIPs[$UIP], $now);
                 return;
             }
 
