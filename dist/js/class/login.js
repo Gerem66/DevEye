@@ -32,11 +32,12 @@ class Login {
         this.loadingDiv.classList.toggle('form-hide', value === -1);
     };
 
-    /** @param {'login'|'home'} type */
+    /** @param {'login'|'home'|'error'} type */
     SetTitle(type) {
         const titles = {
             login: 'DevEye - Connexion',
-            home: 'DevEye'
+            home: 'DevEye',
+            error: 'DevEye - Erreur'
         };
         if (titles.hasOwnProperty(type)) {
             document.title = titles[type];
@@ -103,6 +104,5 @@ class Login {
         await Sleep(300);
 
         this.loginForm.classList.remove('form-hide');
-        this.SetTitle('login');
     }
 }

@@ -42,6 +42,7 @@ class DevEye {
 
     ShowErrorMessage(message) {
         this.UnmountHome();
+        this.login.SetTitle('error');
         const form = document.getElementById('login-form');
         const p = document.createElement('p');
         p.style.fontSize = '1.5em';
@@ -68,6 +69,7 @@ class DevEye {
         if (document.body.firstChild !== this.login.loginContent) {
             document.body.removeChild(document.body.firstChild);
         }
+        this.login.SetTitle('login');
         this.login.disconnect();
         this.server.UserDisconnection();
     }
