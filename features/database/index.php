@@ -25,18 +25,10 @@
     };
 
     $rowsCount = 10;
-    $t1 = microtime(true);
     $tables = $db->GetTables();
-    $t2 = microtime(true);
-    $tt = ($t2 - $t1) * 1000;
-    echo("[$tt]");
     $tablesContent = '';
     foreach ($tables as $table) {
-        $t1 = microtime(true);
         $tablesContent .= AddDataTable($db, $table, 0, $rowsCount);
-        $t2 = microtime(true);
-        $tt = ($t2 - $t1) * 1000;
-        echo("[$tt]");
     }
 
     $variables = array(

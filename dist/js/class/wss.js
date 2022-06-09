@@ -43,6 +43,9 @@ class WSS {
     }
 
     UserDisconnection() {
+        if (this.socket === null || this.socket.readyState !== WebSocket.OPEN) {
+            return;
+        }
         const data = { type: 'disconnect' };
         this.sendData(data, 'normal');
     }

@@ -150,6 +150,7 @@ class Profile extends Feature {
         if (jsonResponse.hasOwnProperty('sidebar')) {
             const sidebar = document.getElementById('sidebar-content');
             sidebar.innerHTML = jsonResponse['sidebar'];
+            deveye.sidebar.DefineEvents();
         }
 
         this.settingsSaved.classList.add('visible');

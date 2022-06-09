@@ -3,6 +3,14 @@ class Sidebar {
         /** @type {HTMLElement} Sidebar element */
         this.sidebar = document.getElementById('sidebar');
 
+        // Disable icon drag
+        const img = document.getElementById('image-profile-sidebar');
+        img.onmousedown = (e) => e.preventDefault();
+
+        this.DefineEvents();
+    }
+
+    DefineEvents() {
         /** @type {NodeListOf<HTMLElement>} List of all features in sidebar */
         this.navbarItems = document.getElementsByName('sidebar-item');
         this.navbarItems.forEach(item => {
@@ -26,10 +34,6 @@ class Sidebar {
         /** @type {HTMLElement} Button to collapse/expand sidebar */
         this.buttonSidebar = document.getElementById('button-sidebar');
         this.buttonSidebar.onclick = () => this.ButtonSidebar();
-
-        // Disable icon drag
-        const img = document.getElementById('image-profile-sidebar');
-        img.onmousedown = (e) => e.preventDefault();
     }
 
     /** @param {HTMLElement} item */
