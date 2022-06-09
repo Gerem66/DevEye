@@ -40,6 +40,8 @@
 
         // Save features settings
         if ($type === 'saveSettings') {
+            $status = array('status' => 'ok');
+
             $features = $args['features'];
             // Remove first character of each key in array
             $removeFirst = fn($k) => StartsWith($k, 'f-') ? substr($k, 2) : $k;
@@ -48,10 +50,20 @@
 
             $newFeatures = json_encode($features);
             $result = $db->QueryPrepare('Users', "UPDATE TABLE SET `Settings` = ? WHERE `ID` = ?", 'si', array($newFeatures, $user->ID));
+            $user->Settings = $features;
+
             if ($result === false) {
-                throw new Exception("Settings could not be saved.");
+                //throw new Exception("Settings could not be saved.");
+                return json_encode(array('status' => 'error'));
             }
-            return 'ok';
+
+            // Re-load sidebar if needed
+            if (isset($args['refreshSidebar']) && $args['refreshSidebar']) {
+                $sidebar = GenerateSidebar($db, $user);
+                $status['sidebar'] = $sidebar;
+            }
+
+            return json_encode($status);
         }
     };
 

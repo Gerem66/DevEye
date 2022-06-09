@@ -70,7 +70,7 @@ class Profile extends Feature {
             icon.classList.remove('icon-eye-open');
             icon.classList.add('icon-eye-close');
         }
-        this.saveSettings();
+        this.saveSettings(true);
     }
     /**
      * @param {MyTouchEvent} ev
@@ -120,15 +120,15 @@ class Profile extends Feature {
             this.ghost = null;
 
             if (this.initIndex !== currIndex) {
-                this.saveSettings();
+                this.saveSettings(true);
             }
         }
     }
 
     /**
-     * @param {Boolean} [couldRefresh=true] True to show refresh button
+     * @param {Boolean} [refreshSidebar=false]
      */
-    saveSettings = async (couldRefresh = true) => {
+    saveSettings = async (refreshSidebar = false) => {
         let features = {
             'default': this.settingsDefault.value
         };
@@ -138,10 +138,18 @@ class Profile extends Feature {
             features['f-' + id] = isEnabled; // f to force string, to keep order
         });
 
-        const response = await this.CallAction('saveSettings', { 'features': features });
-        if (response !== 'ok') {
+        const data = { 'features': features, refreshSidebar };
+        const response = await this.CallAction('saveSettings', data);
+        const jsonResponse = StrIsJson(response) ? JSON.parse(response) : null;
+
+        if (jsonResponse === null || jsonResponse['status'] !== 'ok') {
             console.log('Response:', response);
             throw new Error('Failed to save settings');
+        }
+
+        if (jsonResponse.hasOwnProperty('sidebar')) {
+            const sidebar = document.getElementById('sidebar-content');
+            sidebar.innerHTML = jsonResponse['sidebar'];
         }
 
         this.settingsSaved.classList.add('visible');
@@ -152,11 +160,6 @@ class Profile extends Feature {
             this.settingsSaved.classList.remove('visible');
             this.settingsSavedTimeout = null;
         }, 2 * 1000);
-
-        if (couldRefresh) {
-            const refreshLogo = document.getElementById('refresh-logo');
-            refreshLogo?.classList.remove('hide');
-        }
     }
 
     async openPopupPassword() {
