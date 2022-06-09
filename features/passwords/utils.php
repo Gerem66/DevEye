@@ -96,7 +96,7 @@
                     <td>$service</td>
                     <td>$username</td>
                     <td>$password</td>
-                    <td$color>$formatStatus</td>
+                    <td$color data-status='$status'>$formatStatus</td>
                     <td><i name='icon-other' class='icon icon-other'></i></td>
                 </tr>";
     }

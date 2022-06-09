@@ -139,6 +139,9 @@ nav#main-content.with-minibar {
 
 /* Main content: show sidebar on small screens */
 @media screen and (max-width: 800px) {
+    .minibar {
+        display: none;
+    }
     nav.topbar.with-minibar,
     nav#main-content.with-minibar {
         margin-left: 0px;

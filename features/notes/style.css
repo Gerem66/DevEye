@@ -180,3 +180,11 @@ ul.notes-list > li > p {
 }
 .markdown i.icon[name='checkable'] { cursor: pointer; }
 .markdown i.icon[name='checkable']:active { opacity: .6; }
+.markdown a {
+    color: #4f9df0;
+    text-decoration: none;
+    cursor: pointer;
+}
+.markdown a:hover {
+    color: #3872b1;
+}

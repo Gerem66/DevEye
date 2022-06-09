@@ -155,6 +155,8 @@
          * @return string status: ok|connectionFailed|error
          */
         private function connect($db, $data) {
+            global $features;
+
             $username = $data['username'];
             $password = $data['password'];
             $IP = $data['IP'];
@@ -164,6 +166,9 @@
             }
 
             $IP = $db->Decrypt($IP, 's5/vZ2G9~f9(p]w_');
+            if ($IP) {
+                $IP = explode('-', $IP)[0];
+            }
             $isSafe = filter_var($IP, FILTER_VALIDATE_IP) || filter_var($IP, FILTER_VALIDATE_MAC);
             if (!$isSafe) {
                 $this->send('error');
@@ -189,7 +194,21 @@
             }
 
             $db->AddLog($user->ID, $IP, 'login', 'User connection successfully.');
-            $this->send('ok');
+
+            $defaultPage = 'user';
+            $defaultPageID = key_exists('default', $user->Settings) ? $user->Settings['default'] : null;
+            if ($defaultPageID !== null) {
+                $page = Feature::GetFeatureByID($defaultPageID, $features);
+                if ($page !== null) {
+                    $defaultPage = $page->Redirect;
+                }
+            }
+            $status = json_encode(array(
+                'status' => 'ok',
+                'default' => $defaultPage
+            ));
+
+            $this->send($status);
             $this->wss->DebugMessage(3, "[{$this->UID}] Authentified");
             return 'ok';
         }

@@ -17,9 +17,6 @@
     box-sizing: border-box;
     transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
 }
-.form-input.error {
-    border-color: #dc3545;
-}
 
 .form-input::-ms-expand {
     background-color: transparent;
@@ -62,6 +59,10 @@
 .form-input::placeholder {
     color: #939ba2;
     opacity: 1;
+}
+
+.form-input.error {
+    border-color: #dc3545;
 }
 
 .form-input:disabled {

@@ -30,6 +30,9 @@ class Passwords extends Feature {
         const inputSearch = document.getElementById('input-search');
         inputSearch.oninput = () => this.Search(inputSearch.value.toLowerCase());
 
+        this.SetAllCounters(true);
+        this.Search('');
+
         // Add passwords
         const buttonsAdd = document.getElementsByName('btn-add-password');
         buttonsAdd.forEach(button => {
@@ -71,8 +74,6 @@ class Passwords extends Feature {
             button.onclick = buttonClick;
             button.onmouseenter = buttonClick;
         });
-
-        this.SetAllCounters(true);
     }
 
     SetAllCounters(first = false) {
@@ -108,8 +109,20 @@ class Passwords extends Feature {
                 return;
             }
 
-            const title = line.firstElementChild.textContent.toLowerCase();
-            line.style.display = title.includes(search) ? 'table-row' : 'none';
+            let show = true;
+            const cols = Array.from(line.getElementsByTagName('td'));
+
+            // Search in title (true if found or search = *)
+            const title = cols[0].textContent.toLowerCase();
+            show &= search === '*' || title.includes(search);
+
+            // Default, hide disabled passwords
+            const status = cols[cols.length - 2].getAttribute('data-status');
+            if (!search && status !== 'enable') {
+                show = false;
+            }
+
+            line.style.display = show ? 'table-row' : 'none';
         });
 
         // Show / hide tables

@@ -71,7 +71,11 @@ class Login {
         this.loadingSetState(20, 'Vérification des identifiants...');
         const state = await deveye.server.UserConnection(username, password);
 
-        if (state === 'ok') {
+        const validResponse = StrIsJson(state);
+        const response = validResponse ? JSON.parse(state) : null;
+
+        if (response !== null && response['status'] === 'ok') {
+            deveye.defaultPage = response['default'];
             this.SetTitle('home');
             await deveye.MountHome();
         } else {

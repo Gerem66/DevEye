@@ -16,13 +16,12 @@
     require(__DIR__.'/utils/mask.php');
     require(__DIR__.'/utils/sidebar.php');
 
-    require(__DIR__.'/server/client.php');
-    require(__DIR__.'/server/wss.php');
-
     require(__DIR__.'/components/dbtable.php');
     require(__DIR__.'/components/markdown.php');
 
+    require(__DIR__.'/server/wss.php');
     require(__DIR__.'/sql/sql.php');
+
     require(__DIR__.'/global.php');
 
     $db = new DataBase();

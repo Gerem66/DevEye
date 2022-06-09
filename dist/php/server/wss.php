@@ -2,6 +2,9 @@
 
     declare(ticks = 1); // To ctrl + c to stop the script.
 
+    require(__DIR__.'/client.php');
+    require(__DIR__.'/config.php');
+
     class WSS
     {
         /** @var resource $server */
@@ -15,30 +18,6 @@
          * @var bool $isRunning
          */
         private $isRunning = false;
-
-        /**
-         * Show debug messages.\
-         * 0 = none\
-         * 1 = errors only,\
-         * 2 = errors, warnings and debug messages,\
-         * 3 = all, with client messages, etc.
-         * @var int $isDebug
-         */
-        private $isDebug = 3;
-
-        /**
-         * Maximal number of clients. New clients will be rejected.\
-         * Set to 0 to disable the limit.
-         * @var int $maxClients
-         */
-        private $maxClients = 3;
-
-        /**
-         * Maximal number of messages per client.\
-         * Set to 0 to disable the limit.
-         * @var int $maxAttemptsPerMinute
-         */
-        private $maxAttemptsPerMinute = 3;
 
         function __construct($ip = '0.0.0.0', $port = 8080, $protocol = 'tls') {
             $addr = "$protocol://$ip:$port";
@@ -62,6 +41,11 @@
             if ($this->server === false) {
                 throw new Exception("Failed to create server socket: $errstr ($errno)");
             }
+
+            if (WSSConfig::$isDebug >= 3) {
+                $this->DebugMessage(3, '[WARN] Debug messages are enabled. All requests will be displayed in clear text, including user passwords.');
+            }
+            //stream_socket_enable_crypto($this->server, true, STREAM_CRYPTO_METHOD_TLS_SERVER);
         }
 
         private function close() {
@@ -78,7 +62,7 @@
             }
             pcntl_signal(SIGINT, array(&$this, "close"));
 
-            $this->DebugMessage(2, "WSS server started");
+            $this->DebugMessage(2, "[INFO] WSS server started");
             $this->isRunning = true;
             while ($this->isRunning) {
                 $this->checkNewClients();
@@ -113,7 +97,7 @@
                 return;
             }
 
-            if ($this->maxClients > 0 && count($this->clients) >= $this->maxClients) {
+            if (WSSConfig::$maxClients > 0 && count($this->clients) >= WSSConfig::$maxClients) {
                 $newClient->send(json_encode(array('type' => 'error', 'message' => 'Server is full')));
                 $newClient->close();
                 $this->DebugMessage(2, "[WARN] Client rejected, server is full");
@@ -129,10 +113,11 @@
          * @param string $message
          */
         public function DebugMessage($level, $message) {
-            if ($this->isDebug === 0 || $this->isDebug < $level) {
+            if (WSSConfig::$isDebug === 0 || WSSConfig::$isDebug < $level) {
                 return;
             }
-            echo("$message\n");
+            $now = date("y-m-d H:i:s");
+            echo("[$now] $message\n");
         }
 
         private function checkNewMessages() {
@@ -201,7 +186,7 @@
                 });
 
                 // Check attempts
-                if (count($this->attempsIPs[$UIP]) > $this->maxAttemptsPerMinute) {
+                if (count($this->attempsIPs[$UIP]) > WSSConfig::$maxAttemptsPerMinute) {
                     $this->DebugMessage(1, "[WARN] Too many failed attempts, client disconnecting ({$client->UID})");
                     $client->close();
                     return;
