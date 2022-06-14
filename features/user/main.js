@@ -34,10 +34,6 @@ class Profile extends Feature {
         this.settingsSaved = document.getElementById('settings-saved');
         this.settingsSavedTimeout = null;
 
-        // Popups
-        this.popup = new Popup('popup-password');
-        this.popupMessage = new Popup('popup-message');
-
         const btnPasswordEdit = document.getElementById('button-password-edit');
         btnPasswordEdit.onclick = () => this.openPopupPassword();
 
@@ -164,9 +160,9 @@ class Profile extends Feature {
     }
 
     async openPopupPassword() {
-        const [ closeType, inputs ] = await this.popup.Open({ atEnd: 'blur' });
+        const [ closeType, inputs ] = await this.popups['password'].Open({ atEnd: 'blur' });
         if (closeType !== 'btn-save') {
-            this.popup.Close();
+            this.popups['password'].Close();
             return;
         }
         const inputPwdOld = inputs.inputs['input-pwd-old'] || null;
@@ -182,7 +178,7 @@ class Profile extends Feature {
         const success = response === 'ok';
 
         // Close popup & reset all components
-        this.popup.Close();
+        this.popups['password'].Close();
 
         const title = success ? 'Succès' : 'Erreur';
         let text = 'Le mot de passe a été modifié avec succès !';
@@ -190,7 +186,7 @@ class Profile extends Feature {
             text = `Le mot de passe n'a pas pu être modifié (${response}).`;
         }
 
-        await this.popupMessage.Open({ title, cancelable: false }, (inputs, outputs) => {
+        await this.popups['message'].Open({ title, cancelable: false }, (inputs, outputs) => {
             outputs.p['main-text'].textContent = text;
         });
     }

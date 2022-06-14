@@ -14,14 +14,6 @@ class Passwords extends Feature {
     onMount(category) {
         this.category = category;
 
-        // Popups
-        this.popupPassword = new Popup('popup-password');
-        this.popupMessage = new Popup('popup-message');
-        this.popupVerify = new Popup('popup-verify');
-        this.popupEditCategory = new Popup('popup-edit-category');
-        this.popupRemove = new Popup('popup-remove');
-        this.popupMovePassword = new Popup('popup-move-password');
-
         // Show passwords
         const eyes = document.getElementsByName('icon-show-password');
         eyes.forEach(eye => eye.onclick = () => this.ShowPassword(eye.parentElement));
@@ -142,11 +134,11 @@ class Passwords extends Feature {
     }
 
     async EditCategory(category) {
-        const [ closeType, results ] = await this.popupEditCategory.Open({ atEnd: 'blur' }, (inputs, outputs) => {
+        const [ closeType, results ] = await this.popups['edit-category'].Open({ atEnd: 'blur' }, (inputs, outputs) => {
             inputs.inputs['input-category-old'].value = category;
         });
         if (closeType !== 'btn-edit') {
-            this.popupEditCategory.Close();
+            this.popups['edit-category'].Close();
             return;
         }
 
@@ -156,13 +148,13 @@ class Passwords extends Feature {
         };
         const response = await this.CallAction('categoryEdit', data);
         if (response !== 'ok') {
-            this.popupMessage.Open({ title: 'Erreur' }, (inputs, outputs) => {
+            this.popups['message'].Open({ title: 'Erreur' }, (inputs, outputs) => {
                 outputs.p['main-text'].textContent = 'Une erreur est survenue lors de la modification de la catégorie.';
             });
             return;
         }
 
-        this.popupEditCategory.Close();
+        this.popups['edit-category'].Close();
         await Sleep(200);
         deveye.Load('passwords');
     }
@@ -173,7 +165,7 @@ class Passwords extends Feature {
      * @returns {Promise<Password|null>} password object or null if user cancel or password is wrong
      */
     async GetPassword(id) {
-        const [ closeType, results ] = await this.popupVerify.Open();
+        const [ closeType, results ] = await this.popups['verify'].Open();
         if (closeType !== 'btn-unlock') {
             return null;
         }
@@ -183,14 +175,14 @@ class Passwords extends Feature {
         const response = await this.CallAction('getPassword', data);
 
         if (response === 'error') {
-            this.popupMessage.Open({ title: 'Erreur' }, (inputs, outputs) => {
+            this.popups['message'].Open({ title: 'Erreur' }, (inputs, outputs) => {
                 outputs.p['main-text'].textContent = 'Une erreur est survenue';
             });
             return null;
         }
 
         if (response === 'wrong') {
-            this.popupMessage.Open({ title: 'Erreur' }, (inputs, outputs) => {
+            this.popups['message'].Open({ title: 'Erreur' }, (inputs, outputs) => {
                 outputs.p['main-text'].textContent = 'Le mot de passe est incorrect.';
             });
             return null;
@@ -224,11 +216,11 @@ class Passwords extends Feature {
     }
     async AddPassword(categoryName) {
         const settings = { title: 'Ajouter un mot de passe', atEnd: 'blur' };
-        const [ closeType, results ] = await this.popupPassword.Open(settings, (inputs) => {
+        const [ closeType, results ] = await this.popups['password'].Open(settings, (inputs) => {
             inputs.inputs['input-category'].value = categoryName;
         });
         if (closeType !== 'btn-save') {
-            this.popupPassword.Close();
+            this.popups['password'].Close();
             return;
         }
 
@@ -241,7 +233,7 @@ class Passwords extends Feature {
         };
         const response = await this.CallAction('add', data);
         if (response === 'ok') {
-            this.popupPassword.Close();
+            this.popups['password'].Close();
             await Sleep(200);
             deveye.Load('passwords');
         }
@@ -263,7 +255,7 @@ class Passwords extends Feature {
         if (password === null) return;
 
         const settings = { title: 'Modification d\'un mot de passe', atEnd: 'blur' };
-        const [ closeType, results ] = await this.popupPassword.Open(settings, (inputs) => {
+        const [ closeType, results ] = await this.popups['password'].Open(settings, (inputs) => {
             const options = Array.from(inputs.selects['input-status'].getElementsByTagName('option'));
             inputs.inputs['input-category'].value = category;
             inputs.inputs['input-service'].value = password.service;
@@ -273,7 +265,7 @@ class Passwords extends Feature {
         });
 
         if (closeType !== 'btn-save') {
-            this.popupPassword.Close();
+            this.popups['password'].Close();
             return;
         }
 
@@ -287,61 +279,61 @@ class Passwords extends Feature {
         };
         const response = await this.CallAction('edit', data);
         if (response !== 'ok') {
-            this.popupMessage.Open({ title: 'Erreur' }, (inputs, outputs) => {
+            this.popups['message'].Open({ title: 'Erreur' }, (inputs, outputs) => {
                 outputs.p['main-text'].textContent = 'Une erreur est survenue';
             });
-            this.popupPassword.Close();
+            this.popups['password'].Close();
             return;
         }
 
-        this.popupPassword.Close();
+        this.popups['password'].Close();
         await Sleep(200);
         deveye.Load('passwords');
     }
 
     async MovePassword(id, category) {
-        const [ closeType, results ] = await this.popupMovePassword.Open({ atEnd: 'blur' }, (inputs, outputs) => {
+        const [ closeType, results ] = await this.popups['move-password'].Open({ atEnd: 'blur' }, (inputs, outputs) => {
             inputs.inputs['input-category'].placeholder = category;
         });
         if (closeType !== 'btn-move') {
-            this.popupMovePassword.Close();
+            this.popups['move-password'].Close();
             return;
         }
 
         const data = { id, category: results.inputs['input-category'] };
         const response = await this.CallAction('move', data);
-        this.popupMovePassword.Close();
+        this.popups['move-password'].Close();
 
         if (response !== 'ok') {
-            this.popupMessage.Open({ title: 'Erreur' }, (inputs, outputs) => {
+            this.popups['message'].Open({ title: 'Erreur' }, (inputs, outputs) => {
                 outputs.p['main-text'].textContent = 'Une erreur est survenue lors de la suppression du mot de passe.';
             });
             return;
         }
 
-        this.popupMovePassword.Close();
+        this.popups['move-password'].Close();
         await Sleep(200);
         deveye.Load('passwords');
     }
 
     async RemovePassword(id) {
-        const [ closeType, results ] = await this.popupRemove.Open({ atEnd: 'blur' });
+        const [ closeType, results ] = await this.popups['remove'].Open({ atEnd: 'blur' });
         if (closeType !== 'btn-remove') {
-            this.popupRemove.Close();
+            this.popups['remove'].Close();
             return;
         }
 
         const data = { id, password: results.inputs['input-password'] };
         const response = await this.CallAction('remove', data);
-        this.popupRemove.Close();
+        this.popups['remove'].Close();
         if (response !== 'ok') {
-            this.popupMessage.Open({ title: 'Erreur' }, (inputs, outputs) => {
+            this.popups['message'].Open({ title: 'Erreur' }, (inputs, outputs) => {
                 outputs.p['main-text'].textContent = 'Une erreur est survenue lors de la suppression du mot de passe.';
             });
             return;
         }
 
-        this.popupRemove.Close();
+        this.popups['remove'].Close();
         await Sleep(200);
         deveye.Load('passwords');
     }

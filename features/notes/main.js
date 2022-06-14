@@ -32,9 +32,6 @@ class Notes extends Feature {
         this.editing = false;
         this.currentNote = null;
 
-        this.popup = new Popup('popup-message');
-        this.popupDelete = new Popup('popup-delete');
-
         this.notesContainer = document.getElementById('notes-list');
         this.getNotesList = () => Array.from(this.notesContainer.getElementsByTagName('li'))
         this.getNotesList().forEach(li => li.onclick = () => this.loadNote(li, li.getAttribute('data-id')));
@@ -87,7 +84,7 @@ class Notes extends Feature {
 
     isEditing() {
         if (this.editing) {
-            this.popup.Open({ title: 'Attention' }, (inputs, outputs) => {
+            this.popups['message'].Open({ title: 'Attention' }, (inputs, outputs) => {
                 outputs.p['main-text'].textContent = 'Une note est en cours de modification, enregistrez ou annulez pour continuer.';
             });
             return true;
@@ -279,9 +276,9 @@ class Notes extends Feature {
     }
     async noteDelete() {
         const { id, title, content, rawContent, date } = this.currentNote;
-        const [ closeTypes, results ] = await this.popupDelete.Open({ atEnd: 'blur' });
+        const [ closeTypes, results ] = await this.popups['delete'].Open({ atEnd: 'blur' });
         if (closeTypes !== 'btn-delete') {
-            this.popupDelete.Close();
+            this.popups['delete'].Close();
             return;
         }
 
@@ -290,7 +287,7 @@ class Notes extends Feature {
             this.getNotesList().forEach(li => li.classList.contains('active') && li.remove());
             this.hideNote();
         }
-        this.popupDelete.Close();
+        this.popups['delete'].Close();
     }
 }
 

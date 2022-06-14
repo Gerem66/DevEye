@@ -12,6 +12,16 @@ class Feature {
     preMount(category) {
         this.loadBreadcrumb(category);
         this.onMount(category);
+
+        /** @type {Object<string, Popup} */
+        this.popups = {};
+        const popups = Array.from(document.getElementsByTagName('popup'));
+        popups.forEach(popup => {
+            const id = popup.getAttribute('id');
+            if (!id || !id.startsWith('popup-')) return;
+            popup.classList.add('popup');
+            this.popups[id.slice(6)] = new Popup(id);
+        });
     }
     async preUnmount() {
         await this.onUnmount();
