@@ -20,27 +20,44 @@
             'result' => 'empty'
         );
 
-        if ($type === 'php') {
-            $code = $args['code'];
+        switch ($type) {
+            case 'php':
+                $code = $args['code'];
 
-            if ($user->Level >= 2) {
-                $result = null;
-                try {
-                    $result = eval($code);
-                    if ($result === null) {
-                        $output['result'] = 'Failed to execute the code';
-                    } else {
-                        $output['result'] = $result;
-                        $output['status'] = 'ok';
+                if ($user->Level >= 2) {
+                    $result = null;
+                    try {
+
+                        $containsFunc = preg_match('/function[\\s\\t]*(\\S.+)[\\s\\t]*\\(/', $code) === 1;
+                        $containsClass = preg_match('/class[\\s\\t]*(\\S.+)[\\s\\t]*\\{/', $code) === 1;
+
+                        if ($containsFunc || $containsClass) {
+                            $output['result'] = 'It is impossible to use functions or classes, you can use arrow functions instead';
+                            break;
+                        }
+
+                        $syntaxCheck = trim(shell_exec("echo " . escapeshellarg($code) . " | php -l"));
+                        if (!StartsWith($syntaxCheck, 'No syntax errors detected')) {
+                            $output['result'] = $syntaxCheck;
+                            break;
+                        }
+
+                        $result = eval($code);
+                        if ($result === null) {
+                            $output['result'] = 'Failed to execute the code';
+                        } else {
+                            $output['status'] = 'ok';
+                            $output['result'] = $result;
+                        }
+                    } catch (ParseError $e) {
+                        $output['result'] = $e->getMessage();
+                    } catch (Exception $e) {
+                        $output['result'] = $e->getMessage();
                     }
-                } catch (ParseError $e) {
-                    $output['result'] = $e->getMessage();
-                } catch (Exception $e) {
-                    $output['result'] = $e->getMessage();
+                } else {
+                    // TODO - Add cheat suspicion
                 }
-            } else {
-                // TODO - Add cheat suspicion
-            }
+                break;
         }
 
         return $output;
