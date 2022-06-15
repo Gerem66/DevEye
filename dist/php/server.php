@@ -15,6 +15,7 @@
     require(__DIR__.'/utils/functions.php');
     require(__DIR__.'/utils/mask.php');
     require(__DIR__.'/utils/sidebar.php');
+    require(__DIR__.'/utils/time.php');
 
     require(__DIR__.'/components/dbtable.php');
     require(__DIR__.'/components/markdown.php');

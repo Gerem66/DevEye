@@ -35,6 +35,7 @@ table > tbody > tr > td:last-child { padding-right: 12px; }
 table > tbody > tr > td.editing { padding: 0 12px; }
 table > tbody > tr > td.editing > input {
     width: calc(100% - 18px); /* (padding + border) * 2 */
+    min-width: 64px;
     height: 100%;
     padding: 8px;
 

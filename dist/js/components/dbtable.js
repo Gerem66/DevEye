@@ -345,15 +345,16 @@ class DBTable {
                 const data = { type: 'cellchange', table: this.tableName, ID, column, value: newValue };
                 const response = await this.feature.CallAction('dbtable', data);
                 if (response !== null && response['status'] === 'ok') {
-                    cell.innerHTML = response['value'];
+                    newValue = response['value'];
                 } else {
-                    cell.innerHTML = initValue;
+                    newValue = initValue;
                 }
                 this.showSavedText(response !== 'error');
             }
             cell.classList.remove('blur');
         }
 
+        cell.innerHTML = newValue;
         cell.classList.remove('editing');
     }
 }
