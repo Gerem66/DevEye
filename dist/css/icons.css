@@ -60,6 +60,10 @@
     -webkit-mask-image: url(../../assets/icons/logs.svg);
     mask-image: url(../../assets/icons/logs.svg);
 }
+.icon-mail {
+    -webkit-mask-image: url(../../assets/icons/mail.svg);
+    mask-image: url(../../assets/icons/mail.svg);
+}
 .icon-menu {
     -webkit-mask-image: url(../../assets/icons/menu.svg);
     mask-image: url(../../assets/icons/menu.svg);

@@ -1,0 +1,87 @@
+.mails {
+    display: block;
+}
+
+.mails .mail-left {
+    display: inline-block;
+    width: 250px;
+}
+.mails .mail-left > div {
+    padding: 48px 0 0;
+}
+.mails .accounts > .mail-add {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    opacity: .7;
+    cursor: pointer;
+}
+.mails .accounts > .mail-add:hover {
+    opacity: 1;
+}
+
+.mails ul {
+    margin: 16px 0 6px;
+    padding: 0;
+    list-style: none;
+}
+.mails ul > li {
+    position: relative;
+    padding: 6px 40px;
+    color: #ffffff;
+    border-top: solid 1px #1e1e1e45;
+    cursor: pointer;
+}
+.mails ul > li::before {
+    /* Loading bar */
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 100%;
+    opacity: .5;
+    background-color: #42a5f5;
+    transition: width 0s ease;
+}
+.mails ul > li.mail-loading::before {
+    width: 100%;
+    transition: width 2s ease;
+}
+.mails ul > li.active { background-color: #2b6ea4; }
+.mails ul > li > a { opacity: .7; }
+.mails ul > li:hover > a { opacity: 1; }
+
+.mails .mail-right {
+    display: inline-block;
+    width: calc(100% - 312px);
+    margin-left: 8px;
+    vertical-align: top;
+}
+.mails .mail-edit {
+    position: absolute;
+    top: 16px;
+    right: 24px;
+    color: #42a5f5;
+    opacity: .7;
+    cursor: pointer;
+}
+.mails .mail-edit:hover { opacity: 1; }
+
+.mails table { white-space: normal; }
+.mails table > thead > tr > th:first-child,
+.mails table > tbody > tr > td:first-child {
+    padding-left: 4px;
+}
+.mails table > tbody > tr.unseen {
+    background-color: #515E95;
+}
+.mails table > tbody > tr > td {
+    cursor: pointer;
+}
+.mails table > tbody > tr > td > p {
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: break-spaces; /* nowrap */
+}

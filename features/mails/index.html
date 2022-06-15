@@ -1,0 +1,40 @@
+<div class="row">
+    <div class="col-half">
+        <h1 class="feature-title">Mails</h1>
+    </div>
+    <div class="col-half">
+        <ul id="breadcrumb" class="breadcrumb row float-right">
+            <li><a data-page="user">%username%</a></li>
+            <li>Mails</li>
+        </ul>
+    </div>
+</div>
+
+<div class="row mails">
+    <div class="mail-left">
+        <div class="card accounts" data-title="Comptes">
+            <span id="mail-add" class="icon icon-add mail-add"></span>
+            %accounts%
+        </div>
+        <div id="mailbox-folders" class="card folders hide" data-title="Dossiers"></div>
+    </div>
+    <div class="card mail-right" data-title="Boîte mail 1">
+
+        <!--a class="mail-edit">Paramètres</a-->
+
+        <table class="table table-hover table-striped">
+            <thead>
+                <tr>
+                    <th style="width: 32px;"></th>
+                    <th style="width: 46px;">Fav</th>
+                    <th>Correspondant</th>
+                    <th>Sujet</th>
+                    <th style="width: 50px;"></th>
+                    <th style="width: 125px;">Date</th>
+                </tr>
+            </thead>
+            <tbody id="mailbox-content"></tbody>
+        </table>
+
+    </div>
+</div>
