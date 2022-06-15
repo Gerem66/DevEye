@@ -30,9 +30,15 @@
 
                         $containsFunc = preg_match('/function[\\s\\t]*(\\S.+)[\\s\\t]*\\(/', $code) === 1;
                         $containsClass = preg_match('/class[\\s\\t]*(\\S.+)[\\s\\t]*\\{/', $code) === 1;
+                        $containsGlobal = preg_match('/\$GLOBALS/', $code) === 1;
 
                         if ($containsFunc || $containsClass) {
                             $output['result'] = 'It is impossible to use functions or classes, you can use arrow functions instead';
+                            break;
+                        }
+
+                        if ($containsGlobal) {
+                            $output['result'] = 'It is impossible to use $GLOBALS';
                             break;
                         }
 
@@ -41,6 +47,9 @@
                             $output['result'] = $syntaxCheck;
                             break;
                         }
+
+                        unset($db);
+                        unset($user);
 
                         $result = eval($code);
                         if ($result === null) {
