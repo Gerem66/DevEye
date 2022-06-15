@@ -6,7 +6,7 @@
      * @param string $clearPassword
      * @return bool|null True if password is correct, false otherwise or null if error
      */
-    function CheckPassword($db, $uid, $clearPassword) {
+    function Passwords_Check($db, $uid, $clearPassword) {
         $u = $db->QueryPrepare('Users', 'SELECT * FROM TABLE WHERE `ID` = ?', 'i', [$uid]);
         if ($u === false || count($u) === 0) return null;
         return password_verify($clearPassword, $u[0]['Password']);
@@ -21,7 +21,7 @@
      * @param string $password
      * @param string $status
      */
-    function GetPasswordContent($db, $hash, $service, $username, $password, $status) {
+    function Passwords_GetContent($db, $hash, $service, $username, $password, $status) {
         $variables = array(
             'service' => $service,
             'username' => $username,
@@ -37,7 +37,7 @@
      * @param string $category
      * @return bool true if success, false if failed
      */
-    function AddPassword($db, $userID, $category, $content) {
+    function Passwords_Add($db, $userID, $category, $content) {
         $args = array($userID, $category, $content);
         $command = 'INSERT INTO TABLE (`UID`, `Category`, `Content`) VALUES (?, ?, ?)';
         $result = $db->QueryPrepare('_Passwords', $command, 'iss', $args);
@@ -52,14 +52,14 @@
      * @param array $newContent
      * @return bool true if success, false if failed
      */
-    function EditPassword($db, $userID, $id, $newCategory, $newContent) {
+    function Passwords_Edit($db, $userID, $id, $newCategory, $newContent) {
         $args = array($newCategory, $newContent, $id, $userID);
         $command = 'UPDATE TABLE SET `Category` = ?, `Content` = ? WHERE `ID` = ? AND `UID` = ?';
         $result = $db->QueryPrepare('_Passwords', $command, 'ssii', $args);
         return $result !== false;
     }
 
-    function AddCard($title, $content) {
+    function Passwords_AddCard($title, $content) {
         return "<div class='card col-two-thirds responsive card-password' data-title='$title'>
                     <div class='card-header password-header'>
                         <a name='btn-edit-category' data-title='$title' class='link'>Modifier la catégorie</a>
@@ -84,7 +84,7 @@
                 </div>";
     }
 
-    function AddRow($ID, $service, $username, $status, $showPassword) {
+    function Passwords_AddRow($ID, $service, $username, $status, $showPassword) {
         $color = '';
         $formatStatus = 'Autre';
         if ($status === 'enable') { $formatStatus = 'Actif'; $color = ' style="color: #2ecc71"'; }

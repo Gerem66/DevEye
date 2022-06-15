@@ -76,9 +76,8 @@ class Notes extends Feature {
         const time = t2 - t1;
         if (time < 200 && alreadyActive) await Sleep(200 -  time);
 
-        if (response !== 'error') {
-            const note = JSON.parse(response);
-            this.showNote(note);
+        if (response !== null && response['status'] === 'ok') {
+            this.showNote(response);
         }
     }
 
@@ -118,12 +117,11 @@ class Notes extends Feature {
             i.onclick = async () => {
                 i.classList.add('blur');
                 const response = await this.CallAction('checkSquare', { id, squareID });
-                if (response !== 'error') {
+                if (response !== null && response['status'] === 'ok') {
                     i.classList.toggle('icon-square-check');
                     i.classList.toggle('icon-square-empty');
-                    const rawNote = JSON.parse(response);
-                    this.currentNote.content = rawNote['content'];
-                    this.currentNote.rawContent = rawNote['rawContent'];
+                    this.currentNote.content = response['content'];
+                    this.currentNote.rawContent = response['rawContent'];
                 }
                 i.classList.remove('blur');
             }
@@ -163,11 +161,10 @@ class Notes extends Feature {
         }
 
         const response = await this.CallAction('addNote');
-        if (response !== 'error') {
-            const note = JSON.parse(response);
+        if (response !== null && response['status'] === 'ok') {
             this.hideNote();
-            const id = note['id'];
-            const title = note['title'];
+            const id = response['id'];
+            const title = response['title'];
 
             const newLi = document.createElement('li');
             newLi.onclick = () => this.loadNote(newLi, id);
@@ -176,7 +173,7 @@ class Notes extends Feature {
             newLi.setAttribute('data-id', id);
             this.notesContainer.insertAdjacentElement('afterbegin', newLi);
 
-            this.showNote(note);
+            this.showNote(response);
             this.noteEdit();
         }
     }
@@ -226,7 +223,7 @@ class Notes extends Feature {
         const parts = Math.ceil(newContent.length / maxLength) - 1;
         let response = '';
 
-        if (parts === 0) {
+        if (parts <= 0) {
             response = await this.CallAction('setContent', { id, newTitle, newContent });
         } else {
             let data = {
@@ -243,7 +240,7 @@ class Notes extends Feature {
             };
             response = await deveye.server.sendData(data, 'waitResponse');
             for (let i = 1; i <= parts; i++) {
-                if (response.data !== 'ok') {
+                if (response?.data !== 'ok') {
                     break;
                 }
                 data = {
@@ -256,10 +253,10 @@ class Notes extends Feature {
                 };
                 response = await deveye.server.sendData(data, 'waitResponse');
             }
-            response = response?.data || 'error';
+            response = StrIsJson(response?.data) ? JSON.parse(response.data) : null;
         }
 
-        if (response !== 'error') {
+        if (response !== null && response['status'] === 'ok') {
             this.noteTitle.textContent = newTitle;
             const li = this.getNotesList().find(li => li.classList.contains('active')) || null;
             if (li !== null) {
@@ -270,8 +267,7 @@ class Notes extends Feature {
                 this.notesContainer.insertAdjacentElement('afterbegin', savedLi);
             }
             this.inputTitle.replaceWith(this.noteTitle);
-            const note = JSON.parse(response);
-            this.showNote(note);
+            this.showNote(response);
         }
     }
     async noteDelete() {
@@ -283,7 +279,7 @@ class Notes extends Feature {
         }
 
         const response = await this.CallAction('deleteNote', { id });
-        if (response === 'ok') {
+        if (response !== null && response['status'] === 'ok') {
             this.getNotesList().forEach(li => li.classList.contains('active') && li.remove());
             this.hideNote();
         }

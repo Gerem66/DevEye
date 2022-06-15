@@ -46,17 +46,15 @@ class Sandbox extends Feature {
         const data = { code: this.input.value };
         const response = await this.CallAction('php', data);
 
-        if (response === 'error') {
+        if (response === null) {
             this.loading = false;
-            this.showSavedText(false);
+            this.output.textContent = 'Erreur de connexion';
             return;
         }
 
-        const result = JSON.parse(response);
-        this.output.textContent = JSON.stringify(result['result']);
-
         this.loading = false;
-        this.showSavedText(result['status'] === 'ok');
+        this.showSavedText(response['status'] === 'ok');
+        this.output.textContent = JSON.stringify(response['result']);
     }
 }
 

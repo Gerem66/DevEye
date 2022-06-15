@@ -56,10 +56,11 @@ class Feature {
     /**
      * @param {string} type
      * @param {string|object} args
+     * @returns {Promise<Object|null>}
      */
     async CallAction(type, args = null) {
         const data = JSON.stringify({ type: 'callAction', action: { type, args } });
         const response = await deveye.server.sendData(data, 'waitResponse');
-        return response?.data || 'error';
+        return StrIsJson(response?.data) ? JSON.parse(response.data) : null;
     }
 }

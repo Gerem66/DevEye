@@ -93,6 +93,9 @@
             if (!$this->IsSafe($table)) {
                 throw(new Exception('Invalid table name'));
             }
+            if (gettype($variables) !== 'array') {
+                throw(new Exception('Invalid variables type (must be an array)'));
+            }
 
             $replace = 0;
             $command = str_replace('`TABLE`', "`$table`", $command, $replace);

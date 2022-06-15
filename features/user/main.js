@@ -136,16 +136,15 @@ class Profile extends Feature {
 
         const data = { 'features': features, refreshSidebar };
         const response = await this.CallAction('saveSettings', data);
-        const jsonResponse = StrIsJson(response) ? JSON.parse(response) : null;
 
-        if (jsonResponse === null || jsonResponse['status'] !== 'ok') {
+        if (response === null || response['status'] !== 'ok') {
             console.log('Response:', response);
             throw new Error('Failed to save settings');
         }
 
-        if (jsonResponse.hasOwnProperty('sidebar')) {
+        if (response.hasOwnProperty('sidebar')) {
             const sidebar = document.getElementById('sidebar-content');
-            sidebar.innerHTML = jsonResponse['sidebar'];
+            sidebar.innerHTML = response['sidebar'];
             deveye.sidebar.DefineEvents();
         }
 
@@ -175,7 +174,7 @@ class Profile extends Feature {
 
     async editPassword(passwordOld, passwordNew) {
         const response = await this.CallAction('passwordEdit', { passwordOld, passwordNew });
-        const success = response === 'ok';
+        const success = response !== null && response['status'] === 'ok';
 
         // Close popup & reset all components
         this.popups['password'].Close();

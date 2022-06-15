@@ -34,9 +34,10 @@
      * @param DataBase $db
      * @param array $args
      * @param int $rowsCount
+     * @return array
      */
     function DBTableCommand($db, $args, $rowsCount = 10) {
-        $status = 'error';
+        $status = array('status' => 'error');
         $table = $args['table'];
 
         if ($args['type'] === 'cellchange') {
@@ -50,7 +51,8 @@
                     // Get the new value
                     $result2 = $db->QueryPrepare($table, "SELECT `$column` FROM TABLE WHERE `ID` = ?", 'i', array($args['ID']));
                     if ($result2 !== false) {
-                        $status = json_encode(array('value' => $result2[0][$column]));
+                        $status['status'] = 'ok';
+                        $status['value'] = $result2[0][$column];
                     }
                 }
             }
@@ -60,10 +62,9 @@
             $result = $db->QueryPrepare($table, "INSERT INTO TABLE (`ID`) VALUES (NULL)");
             if ($result !== false) {
                 $logs = GetRows($db, $table, 0, $rowsCount);
-                $status = json_encode(array(
-                    'content' => TbodyFromDB($logs),
-                    'maxPage' => ceil($db->GetTableLength($table) / $rowsCount)
-                ));
+                $status['status'] = 'ok';
+                $status['content'] = TbodyFromDB($logs);
+                $status['maxPage'] = ceil($db->GetTableLength($table) / $rowsCount);
             } else {
                 // TODO - Manage this error $db->GetLastError();
             }
@@ -75,10 +76,9 @@
                 $logStarts = ($args['page'] - 1) * $rowsCount;
                 $logs = GetRows($db, $table, $logStarts, $rowsCount);
                 $maxPage = ceil($db->GetTableLength($table) / $rowsCount);
-                $status = json_encode(array(
-                    'content' => TbodyFromDB($logs),
-                    'maxPage' => $maxPage
-                ));
+                $status['status'] = 'ok';
+                $status['content'] = TbodyFromDB($logs);
+                $status['maxPage'] = $maxPage;
             }
         }
 
@@ -87,11 +87,10 @@
             $logs = GetRows($db, $table, $logStarts, $rowsCount);
             $maxPage = ceil($db->GetTableLength($table) / $rowsCount);
 
-            $status = json_encode(array(
-                'newPage' => $args['page'],
-                'maxPage' => $maxPage,
-                'content' => TbodyFromDB($logs)
-            ));
+            $status['status'] = 'ok';
+            $status['newPage'] = $args['page'];
+            $status['maxPage'] = $maxPage;
+            $status['content'] = TbodyFromDB($logs);
         }
 
         return $status;

@@ -136,7 +136,7 @@ class DBTable {
                 const data = { type: 'navigation', table: this.tableName, page: this.currentPage };
                 const response = await this.feature.CallAction('dbtable', data);
 
-                if (response !== 'error') {
+                if (response !== null && response['status'] === 'ok') {
                     // Enable / disable buttons
                     btns.forEach(btn => {
                         const name = btn.getAttribute('name');
@@ -150,10 +150,9 @@ class DBTable {
                     });
 
                     // Execute response
-                    const result = JSON.parse(response);
-                    this.currentPage = result['newPage'] || 1;
-                    this.lastPage = result['maxPage'] || 1;
-                    tbody.innerHTML = result['content'] || '';
+                    this.currentPage = response['newPage'] || 1;
+                    this.lastPage = response['maxPage'] || 1;
+                    tbody.innerHTML = response['content'] || '';
                     this.setupCellsEvents();
                     this.setupTrash(false);
 
@@ -222,11 +221,10 @@ class DBTable {
         const data = { type: 'rowadd', table: this.tableName };
         const response = await this.feature.CallAction('dbtable', data);
 
-        if (response !== 'error') {
-            const result = JSON.parse(response);
+        if (response !== null && response['status'] === 'ok') {
             this.currentPage = 1;
-            this.lastPage = result['maxPage'];
-            tbody.innerHTML = result['content'];
+            this.lastPage = response['maxPage'];
+            tbody.innerHTML = response['content'];
             this.setupCellsEvents();
             this.setupTrash(false);
 
@@ -276,13 +274,12 @@ class DBTable {
         const data = { type: 'rowremove', table: this.tableName, ID, page: this.currentPage };
         const response = await this.feature.CallAction('dbtable', data);
 
-        if (response !== 'error') {
-            const result = JSON.parse(response);
+        if (response !== null && response['status'] === 'ok') {
             const tbody = this.table.getElementsByTagName('tbody')[0];
-            tbody.innerHTML = result['content'] || null;
+            tbody.innerHTML = response['content'] || null;
 
-            this.lastPage = result['maxPage'] || 1;
-            tbody.innerHTML = result['content'] || '';
+            this.lastPage = response['maxPage'] || 1;
+            tbody.innerHTML = response['content'] || '';
             this.setupCellsEvents();
             this.setupTrash(false);
 
@@ -347,17 +344,16 @@ class DBTable {
             if (this.features['cellchange']) {
                 const data = { type: 'cellchange', table: this.tableName, ID, column, value: newValue };
                 const response = await this.feature.CallAction('dbtable', data);
-                if (response === 'error') {
-                    newValue = initValue;
+                if (response !== null && response['status'] === 'ok') {
+                    cell.innerHTML = response['value'];
                 } else {
-                    newValue = JSON.parse(response)['value'];
+                    cell.innerHTML = initValue;
                 }
                 this.showSavedText(response !== 'error');
             }
             cell.classList.remove('blur');
         }
 
-        cell.innerHTML = newValue;
         cell.classList.remove('editing');
     }
 }

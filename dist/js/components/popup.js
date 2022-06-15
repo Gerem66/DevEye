@@ -5,6 +5,7 @@
  * @property {Object.<string, HTMLInputElement>} inputs
  * @property {Object.<string, HTMLSelectElement>} selects
  * @property {Object.<string, HTMLTextAreaElement>} textareas
+ * @property {Object.<string, HTMLButtonElement>} buttons
  * 
  * @typedef {Object} PopupResults
  * @property {Object.<string, string>} inputs
@@ -127,13 +128,16 @@ class Popup {
     /** @returns {PopupInputs} */
     getInputs() {
         const parent = this.popup;
-        const allInputs = { inputs: {}, selects: {}, textareas: {} };
+        const allInputs = { inputs: {}, selects: {}, textareas: {}, buttons: {} };
         const inputs = Array.from(parent.getElementsByTagName('input'));
         const selects = Array.from(parent.getElementsByTagName('select'));
         const textareas = Array.from(parent.getElementsByTagName('textarea'));
+        const buttons = Array.from(parent.getElementsByTagName('button'));
+
         inputs.forEach(input => allInputs['inputs'][input.name] = input);
         selects.forEach(select => allInputs['selects'][select.name] = select);
         textareas.forEach(textarea => allInputs['textareas'][textarea.name] = textarea);
+        buttons.forEach(btn => allInputs['buttons'][btn.name] = btn);
         return allInputs;
     }
 

@@ -13,53 +13,51 @@
      * @param User $user
      * @param string $type
      * @param array $args
-     * @return string String returned to the client
+     * @return array Array returned to the client
      */
     $action = function($db, $user, $type, $args) {
+        $status = array('status' => 'error');
+
         if ($type === 'addNote') {
             $id = AddNote($db, $user);
-            if ($id === false) return 'error';
-            $content = Notes_GetContent($db, $user, $id);
-            if ($content === false) return 'error';
-            return json_encode($content);
+            if ($id !== false) {
+                $content = Notes_GetContent($db, $user, $id);
+                if ($content !== false) $status = $content;
+            }
         }
 
-        if ($type === 'getContent') {
-            if (!isset($args['id'])) return 'error';
+        else if ($type === 'getContent' && isset($args['id'])) {
             $id = $args['id'];
             $content = Notes_GetContent($db, $user, $id);
-            if ($content === false) return 'error';
-            return json_encode($content);
+            if ($content !== false) $status = $content;
         }
 
-        if ($type === 'setContent') {
-            if (!isset($args['id'], $args['newTitle'], $args['newContent'])) return 'error';
+        else if ($type === 'setContent' && isset($args['id'], $args['newTitle'], $args['newContent'])) {
             $id = $args['id'];
             $success = SetContent($db, $user, $id, $args['newTitle'], $args['newContent']);
-            if (!$success) return 'error';
-            $content = Notes_GetContent($db, $user, $id);
-            if ($content === false) return 'error';
-            return json_encode($content);
+            if ($success) {
+                $content = Notes_GetContent($db, $user, $id);
+                if ($content !== false) $status = $content;
+            }
         }
 
-        if ($type === 'deleteNote') {
-            if (!isset($args['id'])) return 'error';
+        else if ($type === 'deleteNote' && isset($args['id'])) {
             $id = $args['id'];
             $success = $db->QueryPrepare('_Notes', "DELETE FROM TABLE WHERE `ID` = ? AND `UID` = ?", 'ii', array($id, $user->ID));
-            if ($success === false) return 'error';
-            return 'ok';
+            if ($success) $status['status'] = 'ok';
         }
 
-        if ($type === 'checkSquare') {
-            if (!isset($args['id'], $args['squareID'])) return 'error';
+        else if ($type === 'checkSquare' && isset($args['id'], $args['squareID'])) {
             $id = $args['id'];
             $checkboxID = $args['squareID'];
             $success = SetCheckbox($db, $user, $id, $checkboxID);
-            if (!$success) return 'error';
-            $content = Notes_GetRawContent($db, $user, $id);
-            if ($content === false) return 'error';
-            return json_encode($content);
+            if ($success) {
+                $content = Notes_GetRawContent($db, $user, $id);
+                if ($content !== false) $status = $content;
+            }
         }
+
+        return $status;
     };
 
     $getNoteContent = function($note, $db, $user) {

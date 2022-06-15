@@ -21,7 +21,7 @@
      * @param User $user
      * @param string $type
      * @param array $args
-     * @return string String returned to the client
+     * @return array Array returned to the client
      */
     $action = function($db, $user, $type, $args) {
     };

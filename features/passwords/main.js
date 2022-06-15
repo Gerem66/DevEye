@@ -52,7 +52,8 @@ class Passwords extends Feature {
             const card = table.parentElement.parentElement;
 
             const id = row.getAttribute('data-id') || null;
-            const category = card.getAttribute('data-title') || null;
+            const categoryLength = card.getAttribute('data-title-length') || 0;
+            const category = card.getAttribute('data-title').slice(0, categoryLength) || null;
             if (id === null || category === null) return;
 
             const buttonClick = (ev) => {
@@ -147,14 +148,15 @@ class Passwords extends Feature {
             new: results.inputs['input-category-new']
         };
         const response = await this.CallAction('categoryEdit', data);
-        if (response !== 'ok') {
+        this.popups['edit-category'].Close();
+
+        if (response === null || response['status'] !== 'ok') {
             this.popups['message'].Open({ title: 'Erreur' }, (inputs, outputs) => {
                 outputs.p['main-text'].textContent = 'Une erreur est survenue lors de la modification de la catégorie.';
             });
             return;
         }
 
-        this.popups['edit-category'].Close();
         await Sleep(200);
         deveye.Load('passwords');
     }
@@ -165,7 +167,7 @@ class Passwords extends Feature {
      * @returns {Promise<Password|null>} password object or null if user cancel or password is wrong
      */
     async GetPassword(id) {
-        const [ closeType, results ] = await this.popups['verify'].Open();
+        const [ closeType, results ] = await this.popups['verify'].Open({ atEnd: 'blur' });
         if (closeType !== 'btn-unlock') {
             return null;
         }
@@ -173,22 +175,23 @@ class Passwords extends Feature {
         const password = results.inputs['input-password'];
         const data = { id, password };
         const response = await this.CallAction('getPassword', data);
+        this.popups['verify'].Close();
 
-        if (response === 'error') {
+        if (response === null || response['status'] === 'error') {
             this.popups['message'].Open({ title: 'Erreur' }, (inputs, outputs) => {
                 outputs.p['main-text'].textContent = 'Une erreur est survenue';
             });
             return null;
         }
 
-        if (response === 'wrong') {
+        if (response['status'] === 'wrong') {
             this.popups['message'].Open({ title: 'Erreur' }, (inputs, outputs) => {
                 outputs.p['main-text'].textContent = 'Le mot de passe est incorrect.';
             });
             return null;
         }
 
-        return JSON.parse(response);
+        return response['password'];
     }
 
     /**
@@ -218,6 +221,7 @@ class Passwords extends Feature {
         const settings = { title: 'Ajouter un mot de passe', atEnd: 'blur' };
         const [ closeType, results ] = await this.popups['password'].Open(settings, (inputs) => {
             inputs.inputs['input-category'].value = categoryName;
+            inputs.buttons['btn-save'].textContent = 'Ajouter';
         });
         if (closeType !== 'btn-save') {
             this.popups['password'].Close();
@@ -232,7 +236,7 @@ class Passwords extends Feature {
             status: results.selects['input-status']
         };
         const response = await this.CallAction('add', data);
-        if (response === 'ok') {
+        if (response !== null && response['status'] === 'ok') {
             this.popups['password'].Close();
             await Sleep(200);
             deveye.Load('passwords');
@@ -262,6 +266,7 @@ class Passwords extends Feature {
             inputs.inputs['input-username'].value = password.username;
             inputs.inputs['input-password'].value = password.password;
             inputs.selects['input-status'].selectedIndex = options.findIndex(option => option.value === password.status);
+            inputs.buttons['btn-save'].textContent = 'Modifier';
         });
 
         if (closeType !== 'btn-save') {
@@ -278,15 +283,15 @@ class Passwords extends Feature {
             status: results.selects['input-status']
         };
         const response = await this.CallAction('edit', data);
-        if (response !== 'ok') {
+        this.popups['password'].Close();
+
+        if (response === null || response['status'] !== 'ok') {
             this.popups['message'].Open({ title: 'Erreur' }, (inputs, outputs) => {
                 outputs.p['main-text'].textContent = 'Une erreur est survenue';
             });
-            this.popups['password'].Close();
             return;
         }
 
-        this.popups['password'].Close();
         await Sleep(200);
         deveye.Load('passwords');
     }
@@ -304,7 +309,7 @@ class Passwords extends Feature {
         const response = await this.CallAction('move', data);
         this.popups['move-password'].Close();
 
-        if (response !== 'ok') {
+        if (response === null || response['status'] !== 'ok') {
             this.popups['message'].Open({ title: 'Erreur' }, (inputs, outputs) => {
                 outputs.p['main-text'].textContent = 'Une erreur est survenue lors de la suppression du mot de passe.';
             });
@@ -326,7 +331,7 @@ class Passwords extends Feature {
         const data = { id, password: results.inputs['input-password'] };
         const response = await this.CallAction('remove', data);
         this.popups['remove'].Close();
-        if (response !== 'ok') {
+        if (response !== null && response['status'] === 'ok') {
             this.popups['message'].Open({ title: 'Erreur' }, (inputs, outputs) => {
                 outputs.p['main-text'].textContent = 'Une erreur est survenue lors de la suppression du mot de passe.';
             });

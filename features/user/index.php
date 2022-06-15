@@ -13,13 +13,13 @@
      * @param User $user
      * @param string $type
      * @param array $args
-     * @return string String returned to the client
+     * @return array Array returned to the client
      */
     $action = function($db, $user, $type, $args) {
+        $status = array('status' => 'error');
+
         // Change password
         if ($type === 'passwordEdit') {
-            $status = 'error';
-
             $passwordOld = $args['passwordOld'];
             $passwordNew = $args['passwordNew'];
 
@@ -27,21 +27,18 @@
             if ($passwordOld === $passwordNew) {
                 $db->AddLog($user->ID, $user->IP, 'passwordEdit', "Password changing failed (same password) !");
             } else if (password_verify($passwordOld, $user->Password)) {
+                // TODO - Re encrypt all data
                 $hash = password_hash($passwordNew, PASSWORD_BCRYPT);
                 $db->QueryPrepare('Users', 'UPDATE TABLE SET `Password` = ? WHERE `ID` = ?', 'si', [$hash, $user->ID]);
                 $db->AddLog($user->ID, $user->IP, 'passwordEdit', "Password changed successfully.");
-                $status = 'ok';
+                $status['status'] = 'ok';
             } else {
                 $db->AddLog($user->ID, $user->IP, 'passwordEdit', "Password changing failed (wrong password) !");
             }
-
-            return $status;
         }
 
         // Save features settings
-        if ($type === 'saveSettings') {
-            $status = array('status' => 'ok');
-
+        else if ($type === 'saveSettings') {
             $features = $args['features'];
             // Remove first character of each key in array
             $removeFirst = fn($k) => StartsWith($k, 'f-') ? substr($k, 2) : $k;
@@ -52,9 +49,8 @@
             $result = $db->QueryPrepare('Users', "UPDATE TABLE SET `Settings` = ? WHERE `ID` = ?", 'si', array($newFeatures, $user->ID));
             $user->Settings = $features;
 
-            if ($result === false) {
-                //throw new Exception("Settings could not be saved.");
-                return json_encode(array('status' => 'error'));
+            if ($result !== false) {
+                $status['status'] = 'ok';
             }
 
             // Re-load sidebar if needed
@@ -62,9 +58,9 @@
                 $sidebar = GenerateSidebar($db, $user);
                 $status['sidebar'] = $sidebar;
             }
-
-            return json_encode($status);
         }
+
+        return $status;
     };
 
     // Get features settings

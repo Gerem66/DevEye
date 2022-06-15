@@ -12,12 +12,14 @@
      * @param User $user
      * @param string $type
      * @param array $args
-     * @return string String returned to the client
+     * @return array Array returned to the client
      */
     $action = function($db, $user, $type, $args) {
+        $status = array('status' => 'error');
+
         switch ($type) {
             case 'add':
-                $content = GetPasswordContent(
+                $content = Passwords_GetContent(
                     $db,
                     $user->hashedPassword,
                     $args['service'],
@@ -25,30 +27,33 @@
                     $args['password'],
                     $args['status']
                 );
-                $success = AddPassword($db, $user->ID, $args['category'], $content);
-                if (!$success) return 'error';
-                return 'ok';
-    
+                $success = Passwords_Add($db, $user->ID, $args['category'], $content);
+                if ($success) $status['status'] = 'ok';
+                break;
+
             case 'getPassword':
-                $passwordIsCorrect = CheckPassword($db, $user->ID, $args['password']);
-                if ($passwordIsCorrect === null) return 'error';
-                if ($passwordIsCorrect === false) return 'wrong';
-    
+                $passwordIsCorrect = Passwords_Check($db, $user->ID, $args['password']);
+                if ($passwordIsCorrect === null) { $status['status'] = 'error'; break; }
+                if ($passwordIsCorrect === false) { $status['status'] = 'wrong'; break; }
+
                 // Get password
                 $command = 'SELECT `Content` FROM TABLE WHERE `ID` = ? AND `UID` = ?';
                 $result = $db->QueryPrepare('_Passwords', $command, 'ii', [$args['id'], $user->ID]);
-                if ($result === false || count($result) === 0) return 'error';
+                if ($result === false || count($result) === 0) break;
                 $content = $db->encryption->Decrypt($result[0]['Content'], $user->hashedPassword);
-                return $content;
-    
+                if ($content === null) break;
+                $status['status'] = 'ok';
+                $status['password'] = json_decode($content, true);
+                break;
+
             case 'categoryEdit':
                 $command = 'UPDATE TABLE SET `Category` = ? WHERE `Category` = ? AND `UID` = ?';
                 $result = $db->QueryPrepare('_Passwords', $command, 'ssi', [$args['new'], $args['old'], $user->ID]);
-                if ($result === false) return 'error';
-                return 'ok';
-    
+                if ($result !== false) $status['status'] = 'ok';
+                break;
+
             case 'edit':
-                $content = GetPasswordContent(
+                $content = Passwords_GetContent(
                     $db,
                     $user->hashedPassword,
                     $args['service'],
@@ -56,26 +61,28 @@
                     $args['password'],
                     $args['status']
                 );
-                $success = EditPassword($db, $user->ID, $args['id'], $args['category'], $content);
-                if (!$success) return 'error';
-                return 'ok';
-    
+                $success = Passwords_Edit($db, $user->ID, $args['id'], $args['category'], $content);
+                if ($success) $status['status'] = 'ok';
+                break;
+
             case 'move':
                 $command = 'UPDATE TABLE SET `Category` = ? WHERE `ID` = ? AND `UID` = ?';
                 $result = $db->QueryPrepare('_Passwords', $command, 'sii', [$args['category'], $args['id'], $user->ID]);
-                if ($result === false) return 'error';
-                return 'ok';
-    
+                if ($result !== false) $status['status'] = 'ok';
+                break;
+
             case 'remove':
-                $passwordIsCorrect = CheckPassword($db, $user->ID, $args['password']);
-                if ($passwordIsCorrect === null) return 'error';
-                if ($passwordIsCorrect === false) return 'wrong';
-    
+                $passwordIsCorrect = Passwords_Check($db, $user->ID, $args['password']);
+                if ($passwordIsCorrect === null) { $status['status'] = 'error'; break; }
+                if ($passwordIsCorrect === false) { $status['status'] = 'wrong'; break; }
+
                 $command = 'DELETE FROM TABLE WHERE `ID` = ? AND `UID` = ?';
                 $result = $db->QueryPrepare('_Passwords', $command, 'ii', [$args['id'], $user->ID]);
-                if ($result === false) return 'error';
-                return 'ok';
+                if ($result === false) $status['status'] = 'error';
+                break;
         }
+
+        return $status;
     };
 
     $passwords = array();
@@ -109,11 +116,11 @@
         foreach ($statusOrder as $stat) {
             foreach ($rows as $row) {
                 if ($row[3] === $stat) {
-                    $tableContent .= AddRow(...$row);
+                    $tableContent .= Passwords_AddRow(...$row);
                 }
             }
         }
-        $tables .= AddCard($category, $tableContent);
+        $tables .= Passwords_AddCard($category, $tableContent);
     }
 
     $variables = array(

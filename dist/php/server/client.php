@@ -317,6 +317,10 @@
             if (!isset($type)) return;
 
             $response = ($this->action)($db, $this->user, $type, $args);
+            $response = json_encode($response);
+            if ($response === false) {
+                throw new Exception('Error while encoding act response');
+            }
             $this->send($response);
         }
 

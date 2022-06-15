@@ -12,16 +12,17 @@
      * @param User $user
      * @param string $type
      * @param array $args
-     * @return string String returned to the client
+     * @return array Array returned to the client
      */
     $action = function($db, $user, $type, $args) {
+        $output = array(
+            'status' => 'error',
+            'result' => 'empty'
+        );
+
         if ($type === 'php') {
             $code = $args['code'];
-            $output = array(
-                'status' => 'error',
-                'result' => 'empty'
-            );
-    
+
             if ($user->Level >= 2) {
                 $result = null;
                 try {
@@ -40,9 +41,9 @@
             } else {
                 // TODO - Add cheat suspicion
             }
-    
-            return json_encode($output);
         }
+
+        return $output;
     };
 
     $variables = array(
