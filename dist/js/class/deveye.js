@@ -93,7 +93,7 @@ class DevEye {
      * @returns {Promise<Boolean>}
      */
     async Load(page, category) {
-        const t1 = Date.now();
+        const time_total_1 = Date.now();
         if (this.loading) return false;
         if (this.content === null) {
             throw new Error('Page.Load: content is null');
@@ -106,7 +106,10 @@ class DevEye {
 
         this.SetLoading(true);
 
+        const time_loading_1 = Date.now();
         const content = await this.server.GetPage(page, category);
+        const time_loading_2 = Date.now();
+
         if (content !== null) {
             this.content.innerHTML = content;
             if (this.features.hasOwnProperty(page)) {
@@ -117,8 +120,11 @@ class DevEye {
 
         this.SetLoading(false);
         this.sidebar.SetActiveItem(page, category);
-        const t2 = Date.now();
-        console.log(`Page.Load: ${t2 - t1}ms`);
+        const time_total_2 = Date.now();
+
+        const time_total = time_total_2 - time_total_1;
+        const time_loading = time_loading_2 - time_loading_1;
+        console.log(`Page.Load (${page}): ${time_total}ms (Request: ${time_loading}ms)`);
         return content !== null;
     }
 

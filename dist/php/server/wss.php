@@ -208,7 +208,6 @@
                     $this->attempsIPs[$UIP] = array();
                 }
                 array_push($this->attempsIPs[$UIP], $now);
-                return;
             }
 
             $t2 = microtime(true);

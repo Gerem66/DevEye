@@ -1,5 +1,5 @@
 /**
- * @typedef {'database'|'logs'|'notes'|'passwords'|'sandbox'|'user'} Pages
+ * @typedef {'database'|'logs'|'mails'|'notes'|'passwords'|'sandbox'|'user'} Pages
  */
 
 var deveye = new DevEye();

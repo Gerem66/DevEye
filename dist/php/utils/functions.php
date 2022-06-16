@@ -128,4 +128,13 @@
         }
     }
 
+    function get_mime_type($structure) {
+        $primaryMimetype = ["TEXT", "MULTIPART", "MESSAGE", "APPLICATION", "AUDIO", "IMAGE", "VIDEO", "OTHER"];
+
+        if ($structure->subtype) {
+            return $primaryMimetype[(int)$structure->type] . "/" . $structure->subtype;
+        }
+        return "TEXT/PLAIN";
+    }
+
 ?>

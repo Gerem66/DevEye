@@ -177,10 +177,7 @@ class WSS {
             page: pageName,
             category: category
         };
-        const t1 = Date.now();
         const response = await this.sendData(reqData, 'waitResponse');
-        const t2 = Date.now();
-        console.log(`${pageName} loaded in ${t2 - t1}ms`);
         return response?.data || null;
     }
 }

@@ -13,6 +13,7 @@
  * @property {Object.<string, string>} textareas
  * 
  * @typedef {Object} PopupOutputs
+ * @property {Object.<string, HTMLDivElement>} div
  * @property {Object.<string, HTMLParagraphElement>} p
  * 
  * @typedef {Object} PopupSettings
@@ -118,10 +119,13 @@ class Popup {
 
     /** @returns {PopupOutputs} */
     getOutputs() {
-        let outputs = { p: {} };
+        let outputs = { div: {}, p: {} };
+        let div = Array.from(this.popup.getElementsByTagName('div'));
+        div.filter(div => div.getAttribute('name') !== null);
+        div.forEach(div => outputs.div[div.getAttribute('name')] = div);
         let p = Array.from(this.popup.getElementsByTagName('p'));
         p.filter(p => p.getAttribute('name') !== null);
-        p.forEach(p => outputs['p'][p.getAttribute('name')] = p);
+        p.forEach(p => outputs.p[p.getAttribute('name')] = p);
         return outputs;
     }
 
