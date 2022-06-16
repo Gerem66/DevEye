@@ -41,20 +41,43 @@
                 $folder = $folderDefined ? $args['folder'] : 'INBOX';
 
                 $server = '';
-                $inbox = Mails_GetInbox($db, $user, $accountID, $folder, $server);
-                if ($inbox === false) break;
+                $imap = Mails_GetIMAP($db, $user, $accountID, $folder, $server);
+                if ($imap === false) break;
 
-                $mailContent = Mails_GetMails($inbox);
+                $mailContent = Mails_GetMails($imap);
                 if ($mailContent === false) break;
 
                 if ($getFolders) {
-                    $foldersContent = Mails_LoadFolders($inbox, $server);
+                    $foldersContent = Mails_LoadFolders($imap, $server);
                     if ($foldersContent === false) break;
                     $status['folders'] = $foldersContent;
                 }
 
                 $status['status'] = 'ok';
                 $status['mails'] = $mailContent;
+                break;
+
+            case 'read':
+                $accountID = $args['accountID'];
+                $mailno = $args['mailno'];
+                if (!isset($accountID, $mailno)) break;
+
+                $folderDefined = array_key_exists('folder', $args);
+                $folder = $folderDefined ? $args['folder'] : 'INBOX';
+
+                $server = '';
+                $imap = Mails_GetIMAP($db, $user, $accountID, $folder, $server);
+                if ($imap === false) break;
+
+                $mailHeader = Mails_ReadMailHead($imap, $mailno);
+                if ($mailHeader === false) break;
+
+                $mailContent = Mails_ReadMailBody($imap, $mailno);
+                if ($mailContent === false) break;
+
+                $status['status'] = 'ok';
+                $status['head'] = $mailHeader;
+                $status['body'] = $mailContent;
                 break;
 
             case 'remove':

@@ -28,6 +28,10 @@
     -webkit-mask-image: url(../../assets/icons/database.svg);
     mask-image: url(../../assets/icons/database.svg);
 }
+.icon-details {
+    -webkit-mask-image: url(../../assets/icons/details.svg);
+    mask-image: url(../../assets/icons/details.svg);
+}
 .icon-drag {
     -webkit-mask-image: url(../../assets/icons/drag.svg);
     mask-image: url(../../assets/icons/drag.svg);

@@ -30,9 +30,9 @@
      * @param int $id
      * @param string $folder
      * @param string $server Get server from the database
-     * @return \IMAP\Connection $inbox
+     * @return \IMAP\Connection|false
      */
-    function Mails_GetInbox($db, $user, $id, $folder, &$server) {
+    function Mails_GetIMAP($db, $user, $id, $folder, &$server) {
         $mailInfo = $db->QueryPrepare('_Mails', 'SELECT * FROM TABLE WHERE `UID` = ? AND `ID` = ?', 'ii', [$user->ID, $id]);
         if ($mailInfo === false) return false;
 
@@ -40,59 +40,129 @@
         $server = $mailInfo['Server'];
         $email = $mailInfo['Email'];
         $password = $db->encryption->Decrypt($mailInfo['Password'], $user->hashedPassword);
-        $inbox = imap_open($server.$folder, $email, $password);
-        if ($inbox === false) {
+        $imap = imap_open($server.$folder, $email, $password);
+        if ($imap === false) {
             print_r(imap_errors());
             return false;
         }
-        return $inbox;
+        return $imap;
     }
 
     /**
-     * @param \IMAP\Connection $inbox
+     * @param \IMAP\Connection $imap
      * @param int $page
      */
-    function Mails_GetMails($inbox, $page = 0) {
-        $MC = imap_check($inbox);
+    function Mails_GetMails($imap, $page = 0) {
+        $MC = imap_check($imap);
         if ($MC === false) {
             print_r(imap_errors());
-            imap_close($inbox);
+            imap_close($imap);
             return false;
         }
 
         $mailsLength = $MC->Nmsgs;
         $firstMail = $mailsLength - 20;
 
-        $mails = imap_fetch_overview($inbox, "$firstMail:$mailsLength", 0);
+        $mails = imap_fetch_overview($imap, "$firstMail:$mailsLength", 0);
         if ($mails === false) {
             print_r(imap_errors());
-            imap_close($inbox);
+            imap_close($imap);
             return false;
         }
 
-        imap_close($inbox);
+        imap_close($imap);
 
+        $mails = array_reverse($mails);
         $output = array_map('Mails_MailToHtml', $mails);
         return implode('', $output);
     }
 
-    function Mails_LoadFolders($mailbox, $server, $current = 'INBOX') {
-        $inbox_raw = imap_list($mailbox, $server, "*");
-        echo("$server\n");
-        print_r($inbox_raw);
-        echo("\n");
+    /**
+     * @param \IMAP\Connection $imap
+     * @param string $server
+     * @param string $current
+     */
+    function Mails_LoadFolders($imap, $server, $current = 'INBOX') {
+        $inbox_raw = imap_list($imap, $server, "*");
 
-        $unseen = 0;//imap_status($mailbox, $server.'INBOX', SA_UNSEEN)->unseen;
+        $status = false; //imap_status($imap, $server.'INBOX', SA_UNSEEN);
+        $unseen = $status !== false ? $status->unseen : 0;
         $inboxFolders = Mails_FolderToHtml('INBOX', $current, $unseen);
 
         for ($i = 0; $i < count($inbox_raw); $i++) {
             $name = substr($inbox_raw[$i], strlen($server));
-            if ($name == 'INBOX') continue;
+            if ($name === 'INBOX') continue;
 
-            $unseen = 0;//imap_status($mailbox, $server.$name, SA_UNSEEN)->unseen;
+            $status = false; //imap_status($imap, $server.$name, SA_UNSEEN);
+            $unseen = $status !== false ? $status->unseen : 0;
             $inboxFolders .= Mails_FolderToHtml($name, $current, $unseen);
         }
         return "<ul>$inboxFolders</ul>";
+    }
+
+    /**
+     * @param \IMAP\Connection $imap
+     * @param string $mailno
+     * @return string|false
+     */
+    function Mails_ReadMailHead($imap, $mailno) {
+        $headers = imap_fetchheader($imap, $mailno);
+        return $headers;
+    }
+
+    /**
+     * @param \IMAP\Connection $imap
+     * @param string $mailno
+     * @return string|false
+     */
+    function Mails_ReadMailBody($imap, $mailno) {
+        $body = Mails_get_part($imap, $mailno, 'TEXT/HTML');
+        if ($body === false) {
+            $body = Mails_get_part($imap, $mailno, 'TEXT/PLAIN');
+        }
+        if (!mb_check_encoding($body, 'UTF-8')) {
+            $body = utf8_encode($body);
+        }
+        return $body;
+    }
+
+    function Mails_get_part($imap, $mailno, $mimetype, $structure = false, $partNumber = false) {
+        if ($structure === false) {
+            $structure = imap_fetchstructure($imap, $mailno);
+            if ($structure === false) return false;
+        }
+
+        if ($mimetype === get_mime_type($structure)) {
+            if (!$partNumber) {
+                $partNumber = 1;
+            }
+
+            $text = imap_fetchbody($imap, $mailno, $partNumber);
+            switch ($structure->encoding) {
+                case 3:
+                    return imap_base64($text);
+                case 4:
+                    return imap_qprint($text);
+                default:
+                    return $text;
+            }
+        }
+
+        // multipart
+        if ($structure->type === 1) {
+            foreach ($structure->parts as $index => $subStruct) {
+                $prefix = "";
+                if ($partNumber) {
+                    $prefix = $partNumber . ".";
+                }
+                $data = Mails_get_part($imap, $mailno, $mimetype, $subStruct, $prefix . ($index + 1));
+                if ($data) {
+                    return $data;
+                }
+            }
+        }
+
+        return false;
     }
 
     function Mails_AccountToHtml($account) {
@@ -120,7 +190,7 @@
         $time1 = substr(explode(':', $time)[0], 0, strlen($time) - 6);
         $time2 = end($timeSplit);
 
-        return "<tr class='$seenClass' data-id='$msgno'>
+        return "<tr class='$seenClass' data-no='$msgno'>
                     <td><input name='mail-check' type='checkbox' value='0'></td>
                     <td class='mailbox-star'></td>
                     <td class='mailbox-name'>$from</td>

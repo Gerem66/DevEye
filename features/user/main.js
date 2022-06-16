@@ -159,6 +159,12 @@ class Profile extends Feature {
     }
 
     async openPopupPassword() {
+        // TODO - Finish password edition server side
+        this.popups['message'].Open({ title: 'Indisponible' }, (inputs, outputs) => {
+            outputs.p['main-text'].textContent = 'Cette fonctionnalité n\'est pas encore disponible.';
+        });
+        return;
+
         const [ closeType, inputs ] = await this.popups['password'].Open({ atEnd: 'blur' });
         if (closeType !== 'btn-save') {
             this.popups['password'].Close();

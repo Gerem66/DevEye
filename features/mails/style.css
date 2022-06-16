@@ -85,3 +85,29 @@
     text-overflow: ellipsis;
     white-space: break-spaces; /* nowrap */
 }
+
+.popup-mail-content {
+    width: 100%;
+    height: 80vh;
+    margin-top: 12px;
+    border: 0;
+    background-color: #fff;
+}
+#popup-mail-content .icon-x,
+#popup-mail-content .icon-details {
+    position: absolute;
+    top: 14px;
+    right: 24px;
+    opacity: .7;
+    transform: scale(1.6);
+    cursor: pointer;
+}
+#popup-mail-content .icon-details {
+    top: 16px;
+    right: 72px;
+    transform: scale(1.2);
+}
+#popup-mail-content .icon-x:hover,
+#popup-mail-content .icon-details:hover {
+    opacity: 1;
+}
