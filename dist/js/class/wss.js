@@ -35,7 +35,15 @@ class WSS {
     }
 
     async UserConnection(username, password) {
-        const reqIP = await fetch('https://wyrmo.com/DevEye/dist/gettoken.php');
+        const form = new FormData();
+        form.append('key', '3TA3,<jbr?S4');
+
+        const reqData = {
+            method: 'POST',
+            body: form
+        };
+
+        const reqIP = await fetch('https://wyrmo.com/DevEye/dist/gettoken.php', reqData);
         const IP = await reqIP.text();
         const data = { type: 'connect', username, password, IP };
         const response = await this.sendData(data, 'waitResponse');
