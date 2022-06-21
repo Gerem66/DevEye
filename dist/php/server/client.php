@@ -180,7 +180,7 @@
             $user = User::Load($rawUser, $hashedPassword, $IP);
 
             if ($user === null) {
-                $db->AddLog(0, $IP, 'login', "User connection failed - User \"$username\" not found");
+                $db->AddLog(0, $IP, 0, 'login', "User connection failed - User \"$username\" not found");
                 $this->send('error');
                 return 'error';
             }
@@ -188,12 +188,12 @@
             $this->user = $user;
 
             if (!password_verify($password, $user->Password)) {
-                $db->AddLog($user->ID, $IP, 'login', 'User connection failed - wrong password');
+                $db->AddLog($user->ID, $IP, 1, 'login', 'User connection failed - wrong password');
                 $this->send('error');
                 return 'connectionFailed';
             }
 
-            $db->AddLog($user->ID, $IP, 'login', 'User connection successfully.');
+            $db->AddLog($user->ID, $IP, 0, 'login', 'User login successful.');
 
             $defaultPage = 'user';
             $defaultPageID = key_exists('default', $user->Settings) ? $user->Settings['default'] : null;

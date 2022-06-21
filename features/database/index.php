@@ -9,8 +9,6 @@
      * @var Feature[] $features
      */
 
-    include_once(__DIR__.'/utils.php');
-
     /**
      * @param DataBase $db
      * @param User $user

@@ -19,18 +19,12 @@
         }
     };
 
-
-    $logsCount = 10;
-    $logStarts = 0 * $logsCount;
-    $logs = GetRows($db, 'Logs', $logStarts, $logsCount);
-    $logsLength = $db->GetTableLength('Logs');
-    $maxPage = ceil($logsLength / $logsCount);
-
+    $logsTable = AddDataTable($db, 'Logs', 0, 10);
     $variables = array(
         'username' => $user->Username,
-        'maxpage' => $maxPage,
-        'logsContent' => TbodyFromDB($logs)
+        'logsTable' => $logsTable
     );
+
     return ImportHTML(__DIR__.'/index.html', $variables);
 
 ?>

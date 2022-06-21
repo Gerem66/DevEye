@@ -166,20 +166,24 @@ ul.notes-list > li > p {
     font-weight: 600;
 }
 .markdown h1 { margin-left: -24px; }
-.markdown h2 { margin-left: -18px; }
-.markdown h3 { margin-left: -12px; }
-.markdown h4 { margin-left: -6px; }
+.markdown h2 { margin-left: 0px; }
+.markdown h3 { margin-left: 12px; }
+.markdown h4 { margin-left: 24px; }
 .markdown p { margin: 6px 0 0; min-height: 4px; }
 .markdown ul, .markdown ol { margin: 0 0 6px; padding-left: 2em; }
 .markdown li.checkable { list-style: none; }
 .markdown i.icon {
     width: 20px;
-    margin-right: 8px;
     margin-bottom: 2px;
     vertical-align: middle;
 }
-.markdown i.icon[name='checkable'] { cursor: pointer; }
-.markdown i.icon[name='checkable']:active { opacity: .6; }
+.markdown i.icon[name='checkable'] {
+    margin-right: 8px;
+    cursor: pointer;
+}
+.markdown i.icon[name='checkable']:active {
+    opacity: .6;
+}
 .markdown a {
     color: #4f9df0;
     text-decoration: none;

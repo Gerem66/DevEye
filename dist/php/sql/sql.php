@@ -227,13 +227,21 @@
         /**
          * @param int $UID
          * @param string $IP
-         * @param string $type
+         * @param int $level Level of action:
+         * - 0: Log for monitoring or debugging
+         * - 1: Log for important events
+         * - 2: Log for critical events
+         * @param string $type Type of action:
+         * - login: The user tries to log in
+         * - logout: The user tries to log out
+         * - update: The user tries to update his profile
          * @param string $description
          * @return bool True if the query was successful
          */
-        public function AddLog($UID, $IP, $type, $description) {
-            $args = array($UID, $IP, $type, $description);
-            $result = $this->QueryPrepare('Logs', "INSERT INTO TABLE (`UID`, `IP`, `Type`, `Description`) VALUES (?, ?, ?, ?)", 'isss', $args);
+        public function AddLog($UID, $IP, $level, $type, $description) {
+            $args = array($UID, $IP, $level, $type, $description);
+            $command = 'INSERT INTO TABLE (`UID`, `IP`, `Level`, `Type`, `Description`) VALUES (?, ?, ?, ?, ?)';
+            $result = $this->QueryPrepare('Logs', $command, 'isiss', $args);
             return $result !== false;
         }
     }

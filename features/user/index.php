@@ -25,15 +25,15 @@
 
             // Check password validity
             if ($passwordOld === $passwordNew) {
-                $db->AddLog($user->ID, $user->IP, 'passwordEdit', "Password changing failed (same password) !");
+                $db->AddLog($user->ID, $user->IP, 1, 'update', 'Password changing failed (same password) !');
             } else if (password_verify($passwordOld, $user->Password)) {
                 // TODO - Re encrypt all data
                 $hash = password_hash($passwordNew, PASSWORD_BCRYPT);
                 $db->QueryPrepare('Users', 'UPDATE TABLE SET `Password` = ? WHERE `ID` = ?', 'si', [$hash, $user->ID]);
-                $db->AddLog($user->ID, $user->IP, 'passwordEdit', "Password changed successfully.");
+                $db->AddLog($user->ID, $user->IP, 1, 'update', 'Password changed successfully.');
                 $status['status'] = 'ok';
             } else {
-                $db->AddLog($user->ID, $user->IP, 'passwordEdit', "Password changing failed (wrong password) !");
+                $db->AddLog($user->ID, $user->IP, 1, 'update', 'Password changing failed (wrong password) !');
             }
         }
 
@@ -71,6 +71,18 @@
     // Print page
     global $LEVEL_TEXTS;
     $status = $user->Level === 0 ? '' : "<h3>{$LEVEL_TEXTS[$user->Level]}</h3>";
+
+    // Get last connection
+    $connectionDescription = 'User login successful.';
+    $command = 'SELECT `Date` FROM TABLE WHERE `UID` = ? AND `Description` = ? ORDER BY `Date` DESC LIMIT 2';
+    $logsConnections = $db->QueryPrepare('Logs', $command, 'is', array($user->ID, $connectionDescription));
+
+    $lastConnection = 'Aucune';
+    if (count($logsConnections) === 2) {
+        $dates = array_map(fn($log) => date('d/m/Y H:i:s', strtotime($log['Date'])), $logsConnections);
+        $lastConnection = $dates[1];
+    }
+
     $vars = array(
         'status' => $status,
         'username' => $user->Username,
@@ -78,6 +90,7 @@
         'avatar' => $user->Avatar,
         'instance' => 0,
         '2fa' => GetTFA($user->TwoFactorAuth),
+        'lastConnection' => $lastConnection,
         'date' => date('d/m/Y H:i', $user->Created),
         'features' => $featuresHTML,
         'options' => $featuresOptions
