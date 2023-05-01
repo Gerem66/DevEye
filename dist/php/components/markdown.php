@@ -110,17 +110,20 @@
                     $l = trim($l);
 
                     if (($pos = strpos($l, ']')) !== false) {
-                        $textCheckbox = substr($l, 0, $pos + 1);
-                        if (array_key_exists($textCheckbox, $compCheckbox)) {
-                            $checked = $compCheckbox[$textCheckbox] === 'checked';
-                            $icon = $checked ? 'check' : 'empty';
-                            $state = $checked ? 'checked' : '';
-                            $checkbox = "<i name='checkable' class='icon icon-square-$icon' data-id='$squareIndex' $state></i>";
-                            $l = $checkbox . substr($l, $pos + 1);
-                            $squareIndex++;
+                        $openPos = strpos($l, '[');
+                        if ($openPos === $pos - 1 || $openPos === $pos - 2) {
+                            $textCheckbox = substr($l, 0, $pos + 1);
+                            if (array_key_exists($textCheckbox, $compCheckbox)) {
+                                $checked = $compCheckbox[$textCheckbox] === 'checked';
+                                $icon = $checked ? 'check' : 'empty';
+                                $state = $checked ? 'checked' : '';
+                                $checkbox = "<i name='checkable' class='icon icon-square-$icon' data-id='$squareIndex' $state></i>";
+                                $l = $checkbox . substr($l, $pos + 1);
+                                $squareIndex++;
+                            }
+                            $content .= "<li class='checkable'>{$l}</li>";
+                            break;
                         }
-                        $content .= "<li class='checkable'>{$l}</li>";
-                        break;
                     }
 
                     $content .= "<li>{$l}</li>";

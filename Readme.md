@@ -17,11 +17,17 @@
 ### Serveur
 * [WebSocket Protocol](https://www.rfc-editor.org/rfc/rfc6455)
 * [WSS start script](https://stackoverflow.com/questions/35031603/create-php-websocket-with-ssl)
-* [PEM file](https://github.com/ratchetphp/Ratchet/issues/489)
-* [Un/mask functions](https://www.php.net/manual/fr/function.stream-socket-server.php)
-* Make PEM files from TLS certificate
-    - sudo openssl rsa -in /etc/ssl/private/private.key -text > private.pem
-    - sudo openssl x509 -inform PEM -in /etc/ssl/certificate.crt > public.pem
+* TLS Certificate
+    * [PEM file](https://github.com/ratchetphp/Ratchet/issues/489)
+    * [Un/mask functions](https://www.php.net/manual/fr/function.stream-socket-server.php)
+
+    * Install CertBot & generate TLS certificate
+        - sudo snap install --classic certbot
+        - sudo certbot certonly --manual -d wyrmo.com
+
+    * Make PEM files from TLS certificate
+        - sudo openssl rsa -in /etc/ssl/private/private.key -text > private.pem
+        - sudo openssl x509 -inform PEM -in /etc/ssl/certificate.crt > public.pem
 
 ## Manips
 ### Ajouter une feature

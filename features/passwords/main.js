@@ -169,6 +169,7 @@ class Passwords extends Feature {
     async GetPassword(id) {
         const [ closeType, results ] = await this.popups['verify'].Open({ atEnd: 'blur' });
         if (closeType !== 'btn-unlock') {
+            this.popups['verify'].Close();
             return null;
         }
 

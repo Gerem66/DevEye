@@ -19,6 +19,8 @@
          */
         private $isRunning = false;
 
+        private $attempsIPs = array();
+
         function __construct($ip = '0.0.0.0', $port = 8080, $protocol = 'tls') {
             $addr = "$protocol://$ip:$port";
             $errno = 0;

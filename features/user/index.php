@@ -27,10 +27,49 @@
             if ($passwordOld === $passwordNew) {
                 $db->AddLog($user->ID, $user->IP, 1, 'update', 'Password changing failed (same password) !');
             } else if (password_verify($passwordOld, $user->Password)) {
-                // TODO - Re encrypt all data
+                // TODO
+                // - Backup temporaire (Variables flash ? DB ? File ?)
+                // - Get all "content" tables
+                // - Decrypt & Encrypt new content
+                // - Special tables (user (password hash), other ?)
+                // - Check data ? Progressbar ?
+                // - Supprimer la backup
+
+                $newHashedPassword = $db->encryption->HashPassword($passwordNew);
+                $allTables = $db->GetTables();
+                $conTables = array_filter($allTables, fn($t) => StartsWith($t, '_'));
+
+                // Temporary backup to prevent [data lost]
+                $tempBackup = array();
+                foreach ($conTables as $table) {
+                    $content = $db->QueryPrepare($table, "SELECT * FROM TABLE WHERE `UID` = ?", 'i', [ $user->ID ]);
+                    if ($content === false) {
+                        // TODO - Manage error
+                        return false;
+                    }
+                    $tempBackup[$table] = $content;
+                }
+
+                // TODO - Save backup
+                // Save $tempBackup (not only in variable because if script crash, all data can be lost)
+
+                foreach ($conTables as $table) {
+                    $content = $db->QueryPrepare($table, "SELECT `Content` FROM TABLE WHERE `UID` = ?", 'i', [ $user->ID ]);
+                    $decrypted = $db->encryption->Decrypt($content, $user->hashedPassword);
+                    $newEncrypted = $db->encryption->Encrypt($decrypted, $newHashedPassword);
+                    $result = $db->QueryPrepare($table, "UPDATE TABLE WHERE `UID` = ? SET `Content` = ?", 'is', [ $user->ID, $newEncrypted ]);
+                    if ($result === false) {
+                        // TODO - Manage error
+                        return false;
+                    }
+                }
+
+                // Store new password's hash
                 $hash = password_hash($passwordNew, PASSWORD_BCRYPT);
                 $db->QueryPrepare('Users', 'UPDATE TABLE SET `Password` = ? WHERE `ID` = ?', 'si', [$hash, $user->ID]);
                 $db->AddLog($user->ID, $user->IP, 1, 'update', 'Password changed successfully.');
+
+                // TODO - Delete backup
                 $status['status'] = 'ok';
             } else {
                 $db->AddLog($user->ID, $user->IP, 1, 'update', 'Password changing failed (wrong password) !');
