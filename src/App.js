@@ -1,15 +1,15 @@
 import React from 'react';
 import { LoginPage } from './pages';
 
-import './fonts.css'
-import './icons.css';
+import './global/fonts.css'
+import './global/icons.css';
 
 function App() {
     console.log(location);
     return (
-        <div>
+        <React.StrictMode>
             <LoginPage />
-        </div>
+        </React.StrictMode>
     );
 }
 

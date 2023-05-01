@@ -5,13 +5,16 @@ import './input.css'
 
 function LoginPage() {
     return (
-        <div id="login-content" className="login">
-            <div id="login-form" className="form">
-                <span id="title" className="title">
+        <div className="login">
+            <div className="form">
+
+                {/* Title */}
+                <span className="title">
                     <b>Dev</b> <p>Eye</p>
                 </span>
 
                 <div className="login-card">
+                    {/* Username input */}
                     <div className="input-group">
                         <input
                             id="tb-username"
@@ -23,6 +26,7 @@ function LoginPage() {
                         <span className="icon icon-user"></span>
                     </div>
 
+                    {/* Password input */}
                     <div className="input-group">
                         <input
                             id="tb-password"
@@ -32,7 +36,11 @@ function LoginPage() {
                         />
                         <span className="icon icon-lock" />
                     </div>
-                    <button id="bt-connect" className="submit">Se connecter</button>
+
+                    {/* Submit button */}
+                    <button id="bt-connect" className="submit">
+                        Se connecter
+                    </button>
                 </div>
             </div>
 
