@@ -26,6 +26,10 @@ body {
 
     transition: opacity 0.5s cubic-bezier(.77,0,.18,1);
 }
+.login-to-home {
+    opacity: 0;
+    pointer-events: none;
+}
 
 .form-hide {
     pointer-events: none;

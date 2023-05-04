@@ -2,15 +2,26 @@ import React from 'react';
 
 import './style.css';
 
-function HomePage() {
-    const onLoginClick = (e) => {
-        const div_home = document.getElementById('home');
-    };
+const HomeProps = {
+    disconnect: () => {}
+};
 
-    return (
-        <div id='home' className='home'>
-        </div>
-    );
+class HomePage extends React.Component {
+    render() {
+        return (
+            <div id='home' className='home'>
+                <span
+                    style={{ color: 'red' }}
+                    onClick={this.props.disconnect}
+                >
+                    Home
+                </span>
+            </div>
+        );
+    }
 }
+
+HomePage.propTypes = HomeProps;
+HomePage.defaultProps = HomeProps;
 
 export default HomePage;

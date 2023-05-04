@@ -1,19 +1,39 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 import { Sleep } from '../../utils';
 
 import './style.css';
 import './input.css'
 
-function LoginPage() {
+function LoginPage({ show, setShowLogin, setLogged }) {
+    useEffect(() => {
+        // Login on press enter
+        const onKeyPress = (e) => {
+            e.key === 'Enter' && onLoginClick(e);
+        };
+        document.addEventListener('keypress', onKeyPress);
+        return () => {
+            document.removeEventListener('keypress', onKeyPress);
+        };
+    });
+
     const onLoginClick = (e) => {
-        const div_login = document.getElementById('login');
         const card_login = document.getElementById('login-card');
         const input_username = /** @type {HTMLInputElement} */ (document.getElementById('tb-username'));
         const input_password = /** @type {HTMLInputElement} */ (document.getElementById('tb-password'));
 
-        const username = input_username.value
+        const username = input_username.value;
         const password = input_password.value;
+
+        // Check inputs
+        if (username === '') {
+            input_username.focus();
+            return;
+        }
+        else if (password === '') {
+            input_password.focus();
+            return;
+        }
 
         // Get start time & start progress bar
         const start = Date.now();
@@ -26,12 +46,20 @@ function LoginPage() {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ username, password })
+            body: JSON.stringify({
+                username,
+                password
+            })
         };
 
         fetch(url, data)
         .then(response => response.json())
         .then(async (data) => {
+            // Load home page without pause
+            if (data['status'] === 'success') {
+                setLogged(true);
+            }
+
             // Await for progress bar to finish
             const end = Date.now();
             const elapsed = end - start;
@@ -39,14 +67,22 @@ function LoginPage() {
                 await Sleep(2000 - elapsed);
             }
 
-            // Check response
-            if (data['status'] !== 'success') {
-                //console.error(data['message']);
-                card_login.classList.remove('card-to-progressbar');
-                return;
+            if (data['status'] === 'success') {
+                input_username.value = '';
+                setShowLogin(false);
+                await Sleep(500);
             }
 
-            div_login.style.opacity = '0';
+            // Reset login card
+            input_password.value = '';
+            input_password.focus();
+            card_login.classList.remove('card-to-progressbar');
+
+            // Error message ?
+            //if (data['status'] !== 'success') {
+            //    //console.error(data['message']);
+            //    return;
+            //}
         })
         .catch(error => {
             //console.error(error);
@@ -55,7 +91,7 @@ function LoginPage() {
     };
 
     return (
-        <div id='login' className='login'>
+        <div className={'login' + (show ? '' : ' login-to-home')}>
             <div className='form'>
 
                 {/* Title */}
