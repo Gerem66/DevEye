@@ -1,10 +1,13 @@
-import LoginPage from "./pages/login";
+import HomePage from './pages/home';
+import LoginPage from './pages/login';
 
 const PAGES = {
-    'login': LoginPage
+    'login': LoginPage,
+    'home': HomePage
 };
 
 export {
-    LoginPage
+    LoginPage,
+    HomePage
 };
 export default PAGES;
