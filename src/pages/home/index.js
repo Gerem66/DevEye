@@ -1,27 +1,20 @@
 import React from 'react';
 
+import auth from '../../scripts/auth';
+
 import './style.css';
 
-const HomeProps = {
-    disconnect: () => {}
-};
-
-class HomePage extends React.Component {
-    render() {
-        return (
-            <div id='home' className='home'>
-                <span
-                    style={{ color: 'red' }}
-                    onClick={this.props.disconnect}
-                >
-                    Home
-                </span>
-            </div>
-        );
-    }
+function HomePage() {
+    return (
+        <div id='home' className='home'>
+            <span
+                style={{ color: 'red' }}
+                onClick={auth.Logout}
+            >
+                Home
+            </span>
+        </div>
+    );
 }
-
-HomePage.propTypes = HomeProps;
-HomePage.defaultProps = HomeProps;
 
 export default HomePage;

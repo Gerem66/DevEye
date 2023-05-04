@@ -1,4 +1,6 @@
 import React from 'react';
+
+import auth from './scripts/auth';
 import { LoginPage, HomePage } from './pages';
 
 import './global/fonts.css'
@@ -9,18 +11,12 @@ function App() {
 
     const [ showLogin, setShowLogin ] = React.useState(user === null);
     const [ logged, setLogged ] = React.useState(user !== null);
-    const disconnect = () => {
-        const input_username = /** @type {HTMLInputElement} */ (document.getElementById('tb-username'));
-        input_username.focus();
-        localStorage.removeItem('user');
-        setLogged(false);
-        setShowLogin(true);
-    };
+    auth.SetHooks(setLogged, setShowLogin);
 
     return (
         <React.StrictMode>
-            {logged && <HomePage disconnect={disconnect} />}
-            <LoginPage show={showLogin} setShowLogin={setShowLogin} setLogged={setLogged} />
+            {logged && <HomePage />}
+            <LoginPage show={showLogin} />
         </React.StrictMode>
     );
 }
