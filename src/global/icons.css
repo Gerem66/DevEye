@@ -72,6 +72,10 @@
     -webkit-mask-image: url(../../public/icons/menu.svg);
     mask-image: url(../../public/icons/menu.svg);
 }
+.icon-menu-left {
+    -webkit-mask-image: url(../../public/icons/menu_left.svg);
+    mask-image: url(../../public/icons/menu_left.svg);
+}
 .icon-move-to-right {
     -webkit-mask-image: url(../../public/icons/move-to-right.svg);
     mask-image: url(../../public/icons/move-to-right.svg);

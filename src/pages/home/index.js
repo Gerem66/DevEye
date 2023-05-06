@@ -1,18 +1,17 @@
 import React from 'react';
 
-import auth from '../../scripts/auth';
-
 import './style.css';
+import Navbar from '../../components/navbar';
 
 function HomePage() {
     return (
         <div id='home' className='home'>
-            <span
-                style={{ color: 'red' }}
-                onClick={auth.Logout}
-            >
-                Home
-            </span>
+            <div className="home-left">
+                <Navbar />
+            </div>
+
+            <div className="home-right">
+            </div>
         </div>
     );
 }
