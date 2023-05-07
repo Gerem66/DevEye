@@ -1,36 +1,48 @@
 import React from 'react';
 
+import Features from '../../../class/feature';
+
 import './styleFeatures.css';
-import Features from '../../../class/project';
 
 /**
- * @typedef {import('../../../class/project').Feature} Feature
+ * @typedef {import('../../../class/feature').FeatureType} FeatureType
+ * @typedef {import('../../../class/feature').ProjectType} ProjectType
  */
 
 const NavFeaturesProps = {
-    /** @type {string|null} */
-    active_feature_id: null,
+    /** @type {ProjectType} */
+    context: null,
+
+    /**
+     * @type {{ feature_id: string, context_id: string }}
+     */
+    active: {
+        feature_id: null,
+        context_id: null
+    },
 
     /** @type {() => void} */
     onProfileClick: () => {},
 
-    /** @type {(feature: Feature) => void} */
-    onFeatureClick: (feature) => {}
+    /** @type {(context: ProjectType, feature: FeatureType) => void} */
+    onFeatureClick: (context, feature) => {}
 };
 
 class NavFeatures extends React.Component {
     /**
-     * @param {string} category
+     * @param {ProjectType} context
      * @returns {JSX.Element}
      */
-    renderCategory = (category) => {
-        const features = Features[category].map(this.renderFeature);
+    renderCategory = (context) => {
+        const features = context.features
+            .map(id => Features.find(f => f.id === id))
+            .map(feature => this.renderFeature(context, feature));
 
         return (
             <section
-                key={'section-' + category}
+                key={'section-' + context}
                 className='category'
-                data-title='Personal'
+                data-title={context.name}
             >
                 {features}
             </section>
@@ -38,18 +50,20 @@ class NavFeatures extends React.Component {
     }
 
     /**
-     * @param {Feature} feature 
+     * @param {ProjectType} context
+     * @param {FeatureType} feature 
      * @returns {JSX.Element}
      */
-    renderFeature = (feature) => {
-        const { active_feature_id, onFeatureClick } = this.props;
-        const active = active_feature_id === feature.id ? 'active' : '';
-        const onClick = () => onFeatureClick(feature);
+    renderFeature = (context, feature) => {
+        const { active, onFeatureClick } = this.props;
+        const isActive = active.feature_id === feature.id &&
+                         active.context_id === context.id;
+        const onClick = () => onFeatureClick(context, feature);
 
         return (
             <button
                 key={'btn-feature-' + feature.id}
-                className={'button ' + active}
+                className={'button' + (isActive ? ' active' : '')}
                 onClick={onClick}
             >
                 <span className={'icon icon-' + feature.icon} />
@@ -59,8 +73,8 @@ class NavFeatures extends React.Component {
     }
 
     render() {
-        const { onProfileClick } = this.props;
-        const features = Object.keys(Features).map(this.renderCategory);
+        const { context, onProfileClick } = this.props;
+        const features = this.renderCategory(context);
 
         return (
             <div>
@@ -70,10 +84,10 @@ class NavFeatures extends React.Component {
                     <div className='profile-content'>
                         <img
                             className='profile-image'
-                            src='./avatars/gerem.png'
+                            src={'./images/' + context.logo}
                             alt='Logo'
                         />
-                        <span>User</span>
+                        <span>{context.name}</span>
                     </div>
                     <span className='icon icon-arrow' />
                 </button>

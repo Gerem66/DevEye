@@ -1,24 +1,42 @@
 import React from 'react';
 
+import user from '../../../class/user';
+
+import './styleProjects.css';
+
+/**
+ * @typedef {import('../../../class/feature').ProjectType} ProjectType
+ */
+
 const NavProjectsProps = {
-    /** @type {() => void} */
-    onProjectClick: () => {}
+    /** @type {(project: ProjectType) => void|undefined} */
+    onProjectClick: (project) => {}
 };
 
-class NavProjects extends React.Component {
-    render() {
+
+function NavProjects(props = NavProjectsProps) {
+    const { onProjectClick } = props;
+
+    /** @param {ProjectType} context */
+    function ProjectButton(context) {
+        const { id, name, logo } = context;
         return (
-            <div>
-                <button className='button' onClick={this.props.onProjectClick}>
-                    <span className='icon icon-home' />
-                    <span>Test 1</span>
-                </button>
-            </div>
+            <button
+                key={'project-' + id}
+                className='button nav-project-button'
+                onClick={() => onProjectClick(context)}
+            >
+                <img
+                    className='nav-project-logo'
+                    src={'./images/' + logo}
+                    alt={name}
+                />
+                <span>{name}</span>
+            </button>
         );
     }
-}
 
-NavProjects.prototype.props = NavProjectsProps;
-NavProjects.defaultProps = NavProjectsProps;
+    return (<>{user.projects.map(ProjectButton)}</>);
+}
 
 export default NavProjects;

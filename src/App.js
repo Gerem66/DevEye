@@ -1,7 +1,8 @@
 import React from 'react';
 
 import auth from './scripts/auth';
-import { LoginPage, HomePage } from './pages';
+import HomePage from './pages/home/index';
+import LoginPage from './pages/login/index';
 
 import './global/fonts.css'
 import './global/icons.css';

@@ -6,13 +6,27 @@ import NavProjects from './content/navProjects';
 import './style.css';
 
 /**
- * @typedef {import('../../class/project').Feature} Feature
+ * @typedef {import('../../class/feature').FeatureType} FeatureType
+ * @typedef {import('../../class/feature').ProjectType} ProjectType
  */
+
+const NavbarProps = {
+    /** @type {ProjectType} */
+    context: null,
+
+    /** @type {(project: ProjectType) => void} */
+    onProjectClick: (project) => {},
+
+    /** @type {(content: JSX.Element|null) => void} */
+    setContent: (content) => {}
+};
 
 class Navbar extends React.Component {
     state = {
-        /** @type {string|null} */
-        active_feature_id: null,
+        active: {
+            feature_id: null,
+            context_id: null
+        },
 
         /** @type {boolean} */
         is_navpanel_switch: false
@@ -23,22 +37,29 @@ class Navbar extends React.Component {
         this.setState({ is_navpanel_switch: true });
     }
 
-    /** @param {Feature} feature */
-    onFeatureClick = (feature) => {
-        if (feature.id === this.state.active_feature_id) {
+    /**
+     * @param {ProjectType} context
+     * @param {FeatureType} feature
+     */
+    onFeatureClick = (context, feature) => {
+        if (feature.id === this.state.active.feature_id &&
+            context.id === this.state.active.context_id) {
             return;
         }
 
-        this.setState({ active_feature_id: feature.id });
+        this.setState({ active: { feature_id: feature.id, context_id: context.id } });
+        this.props.setContent(feature.component(context));
     }
 
-    onProjectClick = () => {
-        // TODO
+    /** @param {ProjectType} project */
+    onProjectClick = (project) => {
         this.setState({ is_navpanel_switch: false });
+        this.props.onProjectClick(project);
     }
 
     render() {
-        const { active_feature_id, is_navpanel_switch } = this.state;
+        const { context } = this.props;
+        const { active, is_navpanel_switch } = this.state;
         const styleSwitch = is_navpanel_switch ? ' switch' : '';
 
         return (
@@ -52,10 +73,12 @@ class Navbar extends React.Component {
                     <span className='icon icon-menu-left' />
                 </div>
 
+                {/* Navpanel */}
                 <div className={'navpanel' + styleSwitch}>
                     <div className='navpanel-content'>
                         <NavFeatures
-                            active_feature_id={active_feature_id}
+                            context={context}
+                            active={active}
                             onFeatureClick={this.onFeatureClick}
                             onProfileClick={this.onProfileClick}
                         />
@@ -70,5 +93,8 @@ class Navbar extends React.Component {
         );
     }
 }
+
+Navbar.prototype.props = NavbarProps;
+Navbar.defaultProps = NavbarProps;
 
 export default Navbar;
