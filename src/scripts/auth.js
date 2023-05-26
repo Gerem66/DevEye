@@ -1,6 +1,6 @@
 import { Sleep } from '../utils';
 
-const URL = process.env.NODE_ENV === 'production' ? 'https://wyrmo.com/DevEye/Prod/server/auth.php' : 'https://wyrmo.com/DevEye/Dev/server/auth.php';
+const URL = process.env.NODE_ENV === 'production' ? 'https://wyrmo.com/DevEye/server/auth.php' : 'https://wyrmo.com/DevEye/server-dev/auth.php';
 const LOCAL_USER_KEY = 'user';
 
 class Auth {
