@@ -4,8 +4,8 @@ import auth from './class/auth';
 import HomePage from './pages/home/index';
 import LoginPage from './pages/login/index';
 
-import './global/fonts.css'
-import './global/icons.css';
+import './styles/fonts.css'
+import './styles/icons.css';
 
 function App() {
     const user = localStorage.getItem('user');
