@@ -13,14 +13,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
-      - name: Connect to GitHub account
-        uses: ad-m/github-push-action@master
+      - name: Connect to GitHub account and download submodules
+        uses: actions/checkout@v2
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ github.base_ref }}
-
-      - name: Clone submodules
-        run: git submodule update --init --recursive
+          submodules: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Use Node.js 18.x
         uses: actions/setup-node@v2
