@@ -13,13 +13,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
+      - name: Connect to GitHub account
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.base_ref }}
+
       - name: Clone submodules
-        run: |
-          git config --global credential.helper store
-          git config --global user.email "contact@wyrmo.com"
-          git config --global user.name "Gerem66"
-          git config --global github.token ${{ secrets.ACCESS_TOKEN }}
-          git submodule update --init --recursive
+        run: git submodule update --init --recursive
 
       - name: Use Node.js 18.x
         uses: actions/setup-node@v2
