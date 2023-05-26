@@ -137,6 +137,11 @@ class Auth {
             if (typeof(this.__hooks.setShowLogin) === 'function') {
                 this.__hooks.setShowLogin(false);
             }
+
+            // Navbar animation
+            const navbar = document.getElementById('navbar');
+            navbar.classList.add('from-login');
+
             await Sleep(500);
         }
 

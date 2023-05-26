@@ -24,7 +24,10 @@ const NavbarProps = {
 class Navbar extends React.Component {
     state = {
         active: {
+            /** @type {string|null} */
             feature_id: null,
+
+            /** @type {string|null} */
             context_id: null
         },
 

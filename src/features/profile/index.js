@@ -1,5 +1,7 @@
 import React from 'react';
 
+import auth from '../../class/auth';
+
 /**
  * @typedef {import('../../class/feature').ProjectType} ProjectType
  */
@@ -12,6 +14,12 @@ function FeatureProfile(context) {
     return (
         <div>
             <h1>{`Profile (${context.name})`}</h1>
+
+            <button
+                onClick={auth.Logout}
+            >
+                Disconnect
+            </button>
         </div>
     );
 }

@@ -56,6 +56,7 @@ class NavFeatures extends React.Component {
      */
     renderFeature = (context, feature) => {
         const { active, onFeatureClick } = this.props;
+
         const isActive = active.feature_id === feature.id &&
                          active.context_id === context.id;
         const onClick = () => onFeatureClick(context, feature);

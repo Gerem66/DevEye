@@ -1,6 +1,6 @@
 import React from 'react';
 
-import auth from './scripts/auth';
+import auth from './class/auth';
 import HomePage from './pages/home/index';
 import LoginPage from './pages/login/index';
 

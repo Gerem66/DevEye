@@ -10,6 +10,12 @@
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
 }
 
+.navbar.from-login {
+    transform: translateX(-100%);
+    -webkit-animation: startOpen .4s .2s cubic-bezier(.77,0,.18,1) forwards;
+            animation: startOpen .4s .2s cubic-bezier(.77,0,.18,1) forwards;
+}
+
 .navbar-header {
     padding: 12px;
 
@@ -50,4 +56,13 @@
 }
 .navpanel.switch {
     transform: translateX(-50%);
+}
+
+@keyframes startOpen {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(0%);
+    }
 }

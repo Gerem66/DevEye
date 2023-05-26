@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 
-import auth from '../../scripts/auth';
+import auth from '../../class/auth';
 
 import './style.css';
 import './input.css'
