@@ -2,11 +2,10 @@
   "name": "deveye",
   "version": "0.1.0",
   "description": "Tool management tools",
-  "homepage": "/DevEye/",
   "private": true,
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build",
+    "build": "PUBLIC_URL=/DevEye/ react-scripts build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Gerem",
