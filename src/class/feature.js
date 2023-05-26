@@ -7,7 +7,7 @@ import FeatureProfile from '../features/profile';
  * @property {string} id
  * @property {string} name
  * @property {string} logo
- * @property {string[]} features
+ * @property {FeaturesID[]} features
  * 
  * @typedef {Object} FeatureType
  * @property {FeaturesID} id

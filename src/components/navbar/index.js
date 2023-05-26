@@ -18,7 +18,7 @@ const NavbarProps = {
     context: null,
 
     /** @type {(context: Context) => void} */
-    onContextClick: (context) => {},
+    setContext: (context) => {},
 
     /** @type {(content: JSX.Element|null) => void} */
     setContent: (content) => {}
@@ -38,8 +38,34 @@ class Navbar extends React.Component {
         is_navpanel_switch: false
     };
 
+    componentDidMount() {
+        this.__selectDefaultFeature();
+    }
+
+    componentDidUpdate(prevProps) {
+        if (prevProps.context !== this.props.context) {
+            this.__selectDefaultFeature();
+        }
+    }
+
+    __selectDefaultFeature = () => {
+        const { context } = this.props;
+        if (context === null || context.features.length === 0) return;
+
+        this.onFeatureClick(context.id, context.features[0]);
+    }
+
     onProfileClick = () => {
         this.setState({ is_navpanel_switch: true });
+    }
+
+    /** @param {Context|null} context */
+    onContextClick = (context = null) => {
+        this.setState({ is_navpanel_switch: false });
+
+        if (context !== null) {
+            this.props.setContext(context);
+        }
     }
 
     /**
@@ -76,15 +102,6 @@ class Navbar extends React.Component {
 
         // Set content
         this.props.setContent(feature.component(context));
-    }
-
-    /** @param {Context|null} context */
-    onContextClick = (context = null) => {
-        this.setState({ is_navpanel_switch: false });
-
-        if (context !== null) {
-            this.props.onContextClick(context);
-        }
     }
 
     render() {

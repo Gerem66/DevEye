@@ -10,7 +10,7 @@ import Features from '../../../class/feature';
  */
 
 const NavFeaturesProps = {
-    /** @type {Context} */
+    /** @type {Context|null} */
     context: null,
 
     /**
@@ -30,10 +30,12 @@ const NavFeaturesProps = {
 
 class NavFeatures extends React.Component {
     /**
-     * @param {Context} context
+     * @param {Context|null} context
      * @returns {JSX.Element}
      */
     renderCategory = (context) => {
+        if (!context) return null;
+
         const features = context.features
             .map(id => Features.find(f => f.id === id))
             .map(feature => this.renderFeature(context, feature));
@@ -85,10 +87,10 @@ class NavFeatures extends React.Component {
                     <div className='profile-content'>
                         <img
                             className='profile-image'
-                            src={'./images/' + context.logo}
+                            src={'./images/' + context?.logo}
                             alt='Logo'
                         />
-                        <span>{context.name}</span>
+                        <span>{context?.name || 'Context'}</span>
                     </div>
                     <span className='icon icon-arrow' />
                 </button>
