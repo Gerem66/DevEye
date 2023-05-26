@@ -1,0 +1,34 @@
+name: React App CD
+
+on:
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Use Node.js 18.x
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18.x
+        cache: 'npm'
+
+    - name: Install FTP client
+      run: sudo apt-get update && sudo apt-get install lftp -y
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Build
+      run: npm run build
+
+    - name: Upload htaccess to FTP prod server
+      if: ${{ github.base_ref == 'master' }}
+      run: lftp -c "set ftp:ssl-allow true; set ssl:verify-certificate no; open -u ${{ secrets.FTP_PROD_USER }},${{ secrets.FTP_PROD_PASS }} ${{ secrets.FTP_PROD_HOST }} && put -O / .htaccess"
+
+    - name: Upload files to FTP prod server
+      if: ${{ github.base_ref == 'master' }}
+      run: lftp -c "set ftp:ssl-allow true; set ssl:verify-certificate no; open -u ${{ secrets.FTP_PROD_USER }},${{ secrets.FTP_PROD_PASS }} ${{ secrets.FTP_PROD_HOST }} && mirror --reverse ./src/server/ /server"
