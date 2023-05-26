@@ -2,6 +2,7 @@
   "name": "deveye",
   "version": "0.1.0",
   "description": "Tool management tools",
+  "homepage": "/DevEye/",
   "private": true,
   "scripts": {
     "start": "react-scripts start",

@@ -25,10 +25,6 @@ jobs:
     - name: Build
       run: npm run build
 
-    - name: Upload htaccess to FTP prod server
-      if: ${{ github.base_ref == 'master' }}
-      run: lftp -c "set ftp:ssl-allow true; set ssl:verify-certificate no; open -u ${{ secrets.FTP_PROD_USER }},${{ secrets.FTP_PROD_PASS }} ${{ secrets.FTP_PROD_HOST }} && put -O / .htaccess"
-
     - name: Upload files to FTP prod server
       if: ${{ github.base_ref == 'master' }}
       run: lftp -c "set ftp:ssl-allow true; set ssl:verify-certificate no; open -u ${{ secrets.FTP_PROD_USER }},${{ secrets.FTP_PROD_PASS }} ${{ secrets.FTP_PROD_HOST }} && mirror --reverse ./src/server/ /server"

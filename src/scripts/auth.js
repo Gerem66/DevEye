@@ -1,6 +1,6 @@
 import { Sleep } from '../utils';
 
-const URL = 'https://wyrmo.com/DevEyeReact/auth.php';
+const URL = process.env.NODE_ENV === 'production' ? 'https://wyrmo.com/DevEye/Prod/server/auth.php' : 'https://wyrmo.com/DevEye/Dev/server/auth.php';
 const LOCAL_USER_KEY = 'user';
 
 class Auth {
@@ -156,7 +156,7 @@ class Auth {
         //    return;
         //}
     }
-    
+
     /**
      * Logout from the application
      * @returns {void}

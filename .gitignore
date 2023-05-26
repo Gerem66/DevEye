@@ -4,6 +4,7 @@
 # React
 node_modules
 package-lock.json
+build
 
 # Old files
 _*/
