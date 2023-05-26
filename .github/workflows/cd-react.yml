@@ -16,8 +16,8 @@ jobs:
       - name: Clone submodules
         run: |
           git config --global credential.helper store
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
+          git config --global user.email "contact@wyrmo.com"
+          git config --global user.name "Gerem66"
           git config --global github.token ${{ secrets.ACCESS_TOKEN }}
           git submodule update --init --recursive
 
