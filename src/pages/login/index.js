@@ -1,9 +1,8 @@
 import React, { useEffect } from 'react';
 
-import auth from '../../class/auth';
-
 import './style.css';
 import './input.css'
+import auth from '../../class/auth';
 
 function LoginPage({ show }) {
     useEffect(() => {

@@ -3,11 +3,11 @@ import React from 'react';
 import auth from '../../class/auth';
 
 /**
- * @typedef {import('../../class/feature').ProjectContext} ProjectContext
+ * @typedef {import('../../class/feature').Context} Context
  */
 
 /**
- * @param {ProjectContext} context
+ * @param {Context} context
  * @returns {JSX.Element}
  */
 function FeatureProfile(context) {

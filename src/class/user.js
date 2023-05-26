@@ -1,6 +1,6 @@
 /**
  * @typedef {import('./feature').FeatureType} FeatureType
- * @typedef {import('./feature').ProjectContext} ProjectContext
+ * @typedef {import('./feature').Context} Context
  */
 
 class User {
@@ -8,8 +8,8 @@ class User {
     avatar = 'gerem.png';
     email = 'test@mail.fr';
 
-    /** @type {ProjectContext[]} */
-    projects = [
+    /** @type {Context[]} */
+    contexts = [
         {
             id: 'self',
             name: this.username,

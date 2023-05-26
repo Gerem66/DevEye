@@ -7,8 +7,8 @@ import Features from '../../class/feature';
 import Navbar from '../../components/navbar';
 
 function HomePage() {
-    const [ context, setContext ] = React.useState(user.projects[0]);
-    const [ content, setContent ] = React.useState(Features[0].component(user.projects[0]));
+    const [ context, setContext ] = React.useState(user.contexts[0]);
+    const [ content, setContent ] = React.useState(Features[0].component(user.contexts[0]));
 
     return (
         <div id='home' className='home'>
@@ -16,7 +16,7 @@ function HomePage() {
                 <Navbar
                     context={context}
                     setContent={setContent}
-                    onProjectClick={(project) => setContext(project)}
+                    onContextClick={(context) => setContext(context)}
                 />
             </div>
 

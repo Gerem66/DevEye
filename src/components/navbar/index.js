@@ -4,21 +4,21 @@ import './style.css';
 import user from '../../class/user';
 import Features from '../../class/feature';
 import NavFeatures from './content/navFeatures';
-import NavProjects from './content/navProjects';
+import NavContexts from './content/navContexts';
 
 
 /**
  * @typedef {import('../../class/feature').FeaturesID} FeaturesID
  * @typedef {import('../../class/feature').FeatureType} FeatureType
- * @typedef {import('../../class/feature').ProjectContext} ProjectContext
+ * @typedef {import('../../class/feature').Context} Context
  */
 
 const NavbarProps = {
-    /** @type {ProjectContext} */
+    /** @type {Context} */
     context: null,
 
-    /** @type {(project: ProjectContext) => void} */
-    onProjectClick: (project) => {},
+    /** @type {(context: Context) => void} */
+    onContextClick: (context) => {},
 
     /** @type {(content: JSX.Element|null) => void} */
     setContent: (content) => {}
@@ -53,7 +53,7 @@ class Navbar extends React.Component {
             return;
         }
 
-        const context = user.projects.find(f => f.id === context_id);
+        const context = user.contexts.find(f => f.id === context_id);
 
         // Check if context & feature exists in this context
         if (!context)
@@ -78,12 +78,12 @@ class Navbar extends React.Component {
         this.props.setContent(feature.component(context));
     }
 
-    /** @param {ProjectContext|null} project */
-    onProjectClick = (project = null) => {
+    /** @param {Context|null} context */
+    onContextClick = (context = null) => {
         this.setState({ is_navpanel_switch: false });
 
-        if (project !== null) {
-            this.props.onProjectClick(project);
+        if (context !== null) {
+            this.props.onContextClick(context);
         }
     }
 
@@ -114,8 +114,8 @@ class Navbar extends React.Component {
                         />
                     </div>
                     <div className='navpanel-content'>
-                        <NavProjects
-                            onProjectClick={this.onProjectClick}
+                        <NavContexts
+                            onContextClick={this.onContextClick}
                         />
                     </div>
                 </div>

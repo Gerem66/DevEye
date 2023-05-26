@@ -1,9 +1,9 @@
-.nav-project-button {
+.nav-context-button {
     display: flex;
     align-items: center;
     height: auto;
 }
-.nav-project-logo {
+.nav-context-logo {
     width: 36px;
     height: 36px;
     margin-right: 12px;

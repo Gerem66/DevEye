@@ -1,17 +1,16 @@
 import React from 'react';
 
-import Features from '../../../class/feature';
-
 import './styleFeatures.css';
+import Features from '../../../class/feature';
 
 /**
  * @typedef {import('../../../class/feature').FeaturesID} FeaturesID
  * @typedef {import('../../../class/feature').FeatureType} FeatureType
- * @typedef {import('../../../class/feature').ProjectContext} ProjectContext
+ * @typedef {import('../../../class/feature').Context} Context
  */
 
 const NavFeaturesProps = {
-    /** @type {ProjectContext} */
+    /** @type {Context} */
     context: null,
 
     /**
@@ -31,7 +30,7 @@ const NavFeaturesProps = {
 
 class NavFeatures extends React.Component {
     /**
-     * @param {ProjectContext} context
+     * @param {Context} context
      * @returns {JSX.Element}
      */
     renderCategory = (context) => {
@@ -51,7 +50,7 @@ class NavFeatures extends React.Component {
     }
 
     /**
-     * @param {ProjectContext} context
+     * @param {Context} context
      * @param {FeatureType} feature 
      * @returns {JSX.Element}
      */

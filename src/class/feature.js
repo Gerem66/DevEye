@@ -3,7 +3,7 @@ import FeatureProfile from '../features/profile';
 /**
  * @typedef {'profile'} FeaturesID
  * 
- * @typedef {Object} ProjectContext
+ * @typedef {Object} Context
  * @property {string} id
  * @property {string} name
  * @property {string} logo
@@ -13,7 +13,7 @@ import FeatureProfile from '../features/profile';
  * @property {FeaturesID} id
  * @property {string} name
  * @property {string} icon
- * @property {(context: ProjectContext) => JSX.Element} component
+ * @property {(context: Context) => JSX.Element} component
  */
 
 /** @type {FeatureType[]} */

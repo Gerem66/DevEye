@@ -8,7 +8,7 @@ require_once(__DIR__.'/utils.php');
 require_once(__DIR__.'/PHP-SQL/sql.php');
 
 require_once(__DIR__.'/class/user.php');
-//require_once(__DIR__.'/class/project.php');
+//require_once(__DIR__.'/class/context.php');
 //require_once(__DIR__.'/class/instance.php');
 //require_once(__DIR__.'/class/feature.php');
 
