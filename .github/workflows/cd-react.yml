@@ -10,6 +10,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Use Personal Access Token
+        run: |
+          git config --global credential.helper store
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git config --global github.token ${{ secrets.ACCESS_TOKEN }}
+
       - name: Checkout
         uses: actions/checkout@v2
         with:
