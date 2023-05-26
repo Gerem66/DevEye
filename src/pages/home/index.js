@@ -1,13 +1,14 @@
 import React from 'react';
 
-import user from '../../class/user';
-import Navbar from '../../components/navbar';
-
 import './style.css';
+import user from '../../class/user';
+import Features from '../../class/feature';
+
+import Navbar from '../../components/navbar';
 
 function HomePage() {
     const [ context, setContext ] = React.useState(user.projects[0]);
-    const [ content, setContent ] = React.useState(null);
+    const [ content, setContent ] = React.useState(Features[0].component(user.projects[0]));
 
     return (
         <div id='home' className='home'>

@@ -1,17 +1,19 @@
 import FeatureProfile from '../features/profile';
 
 /**
- * @typedef {Object} ProjectType
+ * @typedef {'profile'} FeaturesID
+ * 
+ * @typedef {Object} ProjectContext
  * @property {string} id
  * @property {string} name
  * @property {string} logo
  * @property {string[]} features
  * 
  * @typedef {Object} FeatureType
- * @property {string} id
+ * @property {FeaturesID} id
  * @property {string} name
  * @property {string} icon
- * @property {(context: ProjectType) => JSX.Element} component
+ * @property {(context: ProjectContext) => JSX.Element} component
  */
 
 /** @type {FeatureType[]} */

@@ -5,12 +5,13 @@ import Features from '../../../class/feature';
 import './styleFeatures.css';
 
 /**
+ * @typedef {import('../../../class/feature').FeaturesID} FeaturesID
  * @typedef {import('../../../class/feature').FeatureType} FeatureType
- * @typedef {import('../../../class/feature').ProjectType} ProjectType
+ * @typedef {import('../../../class/feature').ProjectContext} ProjectContext
  */
 
 const NavFeaturesProps = {
-    /** @type {ProjectType} */
+    /** @type {ProjectContext} */
     context: null,
 
     /**
@@ -24,13 +25,13 @@ const NavFeaturesProps = {
     /** @type {() => void} */
     onProfileClick: () => {},
 
-    /** @type {(context: ProjectType, feature: FeatureType) => void} */
-    onFeatureClick: (context, feature) => {}
+    /** @type {(context: string, feature_id: FeaturesID) => void} */
+    onFeatureClick: (context_id, feature_id) => {}
 };
 
 class NavFeatures extends React.Component {
     /**
-     * @param {ProjectType} context
+     * @param {ProjectContext} context
      * @returns {JSX.Element}
      */
     renderCategory = (context) => {
@@ -50,7 +51,7 @@ class NavFeatures extends React.Component {
     }
 
     /**
-     * @param {ProjectType} context
+     * @param {ProjectContext} context
      * @param {FeatureType} feature 
      * @returns {JSX.Element}
      */
@@ -59,7 +60,7 @@ class NavFeatures extends React.Component {
 
         const isActive = active.feature_id === feature.id &&
                          active.context_id === context.id;
-        const onClick = () => onFeatureClick(context, feature);
+        const onClick = () => onFeatureClick(context.id, feature.id);
 
         return (
             <button

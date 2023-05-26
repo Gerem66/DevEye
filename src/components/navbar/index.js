@@ -1,20 +1,23 @@
 import React from 'react';
 
+import './style.css';
+import user from '../../class/user';
+import Features from '../../class/feature';
 import NavFeatures from './content/navFeatures';
 import NavProjects from './content/navProjects';
 
-import './style.css';
 
 /**
+ * @typedef {import('../../class/feature').FeaturesID} FeaturesID
  * @typedef {import('../../class/feature').FeatureType} FeatureType
- * @typedef {import('../../class/feature').ProjectType} ProjectType
+ * @typedef {import('../../class/feature').ProjectContext} ProjectContext
  */
 
 const NavbarProps = {
-    /** @type {ProjectType} */
+    /** @type {ProjectContext} */
     context: null,
 
-    /** @type {(project: ProjectType) => void} */
+    /** @type {(project: ProjectContext) => void} */
     onProjectClick: (project) => {},
 
     /** @type {(content: JSX.Element|null) => void} */
@@ -36,28 +39,52 @@ class Navbar extends React.Component {
     };
 
     onProfileClick = () => {
-        console.log('Profile clicked');
         this.setState({ is_navpanel_switch: true });
     }
 
     /**
-     * @param {ProjectType} context
-     * @param {FeatureType} feature
+     * @param {string} context_id
+     * @param {FeaturesID} feature_id
      */
-    onFeatureClick = (context, feature) => {
-        if (feature.id === this.state.active.feature_id &&
-            context.id === this.state.active.context_id) {
+    onFeatureClick = (context_id, feature_id) => {
+        // Check if feature is already active
+        if (feature_id === this.state.active.feature_id &&
+            context_id === this.state.active.context_id) {
             return;
         }
 
-        this.setState({ active: { feature_id: feature.id, context_id: context.id } });
+        const context = user.projects.find(f => f.id === context_id);
+
+        // Check if context & feature exists in this context
+        if (!context)
+            throw new Error('Context not found');
+        if (!context.features.includes(feature_id))
+            throw new Error('Feature not found');
+
+        // Check if feature exists
+        const feature = Features.find(f => f.id === feature_id);
+        if (!feature)
+            throw new Error('Feature not found');
+
+        // Set active feature
+        this.setState({
+            active: {
+                feature_id: feature.id,
+                context_id: context.id
+            }
+        });
+
+        // Set content
         this.props.setContent(feature.component(context));
     }
 
-    /** @param {ProjectType} project */
-    onProjectClick = (project) => {
+    /** @param {ProjectContext|null} project */
+    onProjectClick = (project = null) => {
         this.setState({ is_navpanel_switch: false });
-        this.props.onProjectClick(project);
+
+        if (project !== null) {
+            this.props.onProjectClick(project);
+        }
     }
 
     render() {

@@ -1,6 +1,6 @@
 /**
  * @typedef {import('./feature').FeatureType} FeatureType
- * @typedef {import('./feature').ProjectType} ProjectType
+ * @typedef {import('./feature').ProjectContext} ProjectContext
  */
 
 class User {
@@ -8,7 +8,7 @@ class User {
     avatar = 'gerem.png';
     email = 'test@mail.fr';
 
-    /** @type {ProjectType[]} */
+    /** @type {ProjectContext[]} */
     projects = [
         {
             id: 'self',

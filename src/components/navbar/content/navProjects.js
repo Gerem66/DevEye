@@ -1,15 +1,14 @@
 import React from 'react';
 
+import './styleProjects.css';
 import user from '../../../class/user';
 
-import './styleProjects.css';
-
 /**
- * @typedef {import('../../../class/feature').ProjectType} ProjectType
+ * @typedef {import('../../../class/feature').ProjectContext} ProjectContext
  */
 
 const NavProjectsProps = {
-    /** @type {(project: ProjectType) => void|undefined} */
+    /** @type {(project: ProjectContext|null) => void} */
     onProjectClick: (project) => {}
 };
 
@@ -17,7 +16,7 @@ const NavProjectsProps = {
 function NavProjects(props = NavProjectsProps) {
     const { onProjectClick } = props;
 
-    /** @param {ProjectType} context */
+    /** @param {ProjectContext} context */
     function ProjectButton(context) {
         const { id, name, logo } = context;
         return (
@@ -36,7 +35,20 @@ function NavProjects(props = NavProjectsProps) {
         );
     }
 
-    return (<>{user.projects.map(ProjectButton)}</>);
+    return (
+        <>
+            <button
+                key={'project-back'}
+                className='button nav-back-button'
+                onClick={() => onProjectClick(null)}
+            >
+                <span className='icon icon-arrow' />
+                <span>Retour</span>
+                <span className='icon icon-blank' />
+            </button>
+            {user.projects.map(ProjectButton)}
+        </>
+    );
 }
 
 export default NavProjects;
