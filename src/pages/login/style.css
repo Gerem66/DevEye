@@ -31,36 +31,36 @@ body {
     pointer-events: none;
 }
 
-.form-hide {
+.login .form-hide {
     pointer-events: none;
 }
 
-svg {
+.login svg {
     width: 256px;
     fill: #fff;
 }
 
-.form {
+.login .form {
     width: 360px;
     text-align: center;
     animation: loadAnim 1s;
 }
-.title {
+.login .title {
     width: 100%;
     color: #ccc;
     font-size: 2rem;
     user-select: none;
     cursor: initial;
 }
-.title > b {
+.login .title > b {
     font-weight: 600;
 }
-.title > p {
+.login .title > p {
     display: inline;
     animation: fadeIn 1s;
 }
 
-.login-card {
+.login .login-card {
     position: relative;
     height: 144px;
     margin-top: 24px;
@@ -75,21 +75,21 @@ svg {
                 background-color 0.5s cubic-bezier(.77,0,.18,1);
     overflow: hidden;
 }
-.login-card.card-to-progressbar {
+.login .login-card.card-to-progressbar {
     height: 3px;
     margin-top: 6px;
     padding-top: 0px;
     padding-bottom: 0px;
     /*background-color: #21252983;*/
 }
-.login-card * {
+.login .login-card * {
     transition: opacity 0.5s cubic-bezier(.77,0,.18,1);
 }
-.login-card.card-to-progressbar * {
+.login .login-card.card-to-progressbar * {
     transition: opacity 0.5s cubic-bezier(.77,0,.18,1);
     opacity: 0;
 }
-.progress-bar {
+.login .progress-bar {
     position: absolute;
     top: 0;
     left: 0;
@@ -99,17 +99,17 @@ svg {
     background-color: #3585df;
     transition: width 0s .5s cubic-bezier(.77,0,.18,1);
 }
-.login-card.card-to-progressbar > .progress-bar {
+.login .login-card.card-to-progressbar > .progress-bar {
     width: 100%;
     opacity: 1;
     transition: width 1s .5s cubic-bezier(.77,0,.18,1);
 }
 
-.input-group {
+.login .input-group {
     position: relative;
     margin-bottom: 1rem;
 }
-.input-group > span.icon {
+.login .input-group > span.icon {
     position: absolute;
     top: 10px;
     right: 10px;

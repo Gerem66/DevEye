@@ -31,14 +31,8 @@
         /** @var string $Avatar */
         public $Avatar;
 
-        /** @var int $Level */
-        public $Level;
-
         /** @var array $Settings */
         public $Settings;
-
-        /** @var string|null $TwoFactorAuth */
-        public $TwoFactorAuth;
 
         /** @var int $Created */
         public $Created;
@@ -59,9 +53,7 @@
             $this->hashedPassword = $hashedPassword;
             $this->IP = $IP;
             $this->Avatar = $user['Avatar'];
-            $this->Level = intval($user['Level']);
             $this->Settings = json_decode($user['Settings'], true);
-            $this->TwoFactorAuth = $user['TwoFactorAuth'];
             $this->Created = strtotime($user['Created']);
         }
 

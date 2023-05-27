@@ -3,7 +3,7 @@ import React from 'react';
 import './style.css';
 
 /**
- * @param {Object} props
+ * @param {object} props
  * @param {string} props.title
  * @param {string} props.context_name
  * @param {string} props.feature_name

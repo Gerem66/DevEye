@@ -3,7 +3,7 @@ import React from 'react';
 import './style.css';
 import user from '../../class/user';
 
-import Navbar from '../../components/navbar';
+import { Navbar } from '../../components/components';
 
 function HomePage() {
     const [ context, setContext ] = React.useState(user.contexts[0]);
