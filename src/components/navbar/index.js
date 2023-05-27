@@ -6,6 +6,9 @@ import Features from '../../class/feature';
 import NavFeatures from './content/navFeatures';
 import NavContexts from './content/navContexts';
 
+// @ts-ignore
+import packageJson from '../../../package.json';
+const version = packageJson.version + (process.env.NODE_ENV === 'development' && '-dev' || '');
 
 /**
  * @typedef {import('../../class/feature').FeaturesID} FeaturesID
@@ -101,7 +104,7 @@ class Navbar extends React.Component {
         });
 
         // Set content
-        this.props.setContent(feature.component(context));
+        this.props.setContent(feature.component(context, feature));
     }
 
     render() {
@@ -117,7 +120,9 @@ class Navbar extends React.Component {
                         <img src='./logo_deveye.png' alt='Logo' />
                         <span>DevEye</span>
                     </a>
-                    <span className='icon icon-menu-left' />
+                    <div className='version'>
+                        <span>{version}</span>
+                    </div>
                 </div>
 
                 {/* Navpanel */}

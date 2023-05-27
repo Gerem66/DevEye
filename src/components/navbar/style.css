@@ -23,6 +23,7 @@
     align-items: center;
     justify-content: space-between;
 
+    font-family: 'Open Sans';
     border-bottom: .1px solid #b7c0cd4f;
 }
 .navbar-header > .navbar-brand {
@@ -30,17 +31,23 @@
     align-items: center;
     justify-content: space-between;
 
-    font-family: 'Open Sans';
     font-size: 24px;
     text-decoration: none;
     color: #fff;
 }
 .navbar-header > .navbar-brand > img {
-    width: 34px;
+    width: 33px;
     margin-right: 12px;
 }
-.navbar-header > span {
-    width: 36px;
+.navbar-header > .version {
+    height: 33px;
+    margin-left: 4px;
+
+    display: flex;
+    align-items: flex-end;
+
+    font-size: 14px;
+    color: #b7c0cd;
 }
 
 .navpanel {

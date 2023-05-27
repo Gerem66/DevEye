@@ -1,4 +1,4 @@
-import FeatureProfile from '../features/profile';
+import FeatureProfile from '../pages/profile';
 
 /**
  * @typedef {'profile'} FeaturesID
@@ -13,7 +13,7 @@ import FeatureProfile from '../features/profile';
  * @property {FeaturesID} id
  * @property {string} name
  * @property {string} icon
- * @property {(context: Context) => JSX.Element} component
+ * @property {(context: Context, feature: FeatureType) => JSX.Element} component
  */
 
 /** @type {FeatureType[]} */
