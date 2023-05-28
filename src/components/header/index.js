@@ -3,19 +3,21 @@ import React from 'react';
 import './style.css';
 
 /**
- * @param {object} props
- * @param {string} props.title
- * @param {string} props.context_name
- * @param {string} props.feature_name
+ * @typedef {import('../../class/feature').Context} Context
+ * @typedef {import('../../class/feature').FeatureType} FeatureType
+ */
+
+/**
+ * @param {{ context: Context, feature: FeatureType }} props
  * @returns {JSX.Element}
  */
 function Header(props) {
-    const { title, context_name, feature_name } = props;
+    const { context, feature } = props;
 
     return (
         <header>
-            <h1>{title}</h1>
-            <p>{`${context_name} / ${feature_name}`}</p>
+            <h1>{context.name}</h1>
+            <p>{`${context.name} / ${feature.id}`}</p>
         </header>
     );
 }

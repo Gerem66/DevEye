@@ -15,7 +15,7 @@ class User {
             name: this.username,
             logo: this.avatar,
             features: [
-                'profile'
+                'dashboard'
             ]
         },
         {
@@ -23,7 +23,7 @@ class User {
             name: 'test',
             logo: 'default.png',
             features: [
-                'profile'
+                'dashboard'
             ]
         }
     ];

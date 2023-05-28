@@ -18,11 +18,7 @@ import { Header, Row, Card } from '../../components/components';
 function FeatureProfile(context, feature) {
     return (
         <div className='profile'>
-            <Header
-                title={context.name}
-                context_name={context.name}
-                feature_name={feature.id}
-            />
+            <Header context={context} feature={feature} />
 
             <Row>
                 <Card.Value
@@ -50,24 +46,40 @@ function FeatureProfile(context, feature) {
                 />
             </Row>
 
-            <Row>
-                <Card.Element size='1/2' color='blue-dark'>
-                    <h2>Profil</h2>
-                    <div className='separator' />
-                </Card.Element>
+            {context.id === 'self' ? (
+                <SelfProfile context={context} />
+            ) : (
+                <ContextProfile />
+            )}
 
-                <Card.Element size='1/2' color='blue-dark'>
-                    <h2>News</h2>
-                    <div className='separator' />
-                </Card.Element>
-            </Row>
-
-            <button
-                onClick={auth.Logout}
-            >
-                Disconnect
-            </button>
         </div>
+    );
+}
+
+function SelfProfile({ context }) {
+    return (
+        <Row>
+            <Card.Element size='1/2' color='blue-dark'>
+                <h2>{context.id === 'self' ? 'Profil' : 'Settings'}</h2>
+                <div className='separator' />
+                
+                <button onClick={auth.Logout}>
+                    Disconnect
+                </button>
+            </Card.Element>
+
+            <Card.Element size='1/2' color='blue-dark'>
+                <h2>News</h2>
+                <div className='separator' />
+            </Card.Element>
+        </Row>
+    );
+}
+
+function ContextProfile() {
+    return (
+        <>
+        </>
     );
 }
 

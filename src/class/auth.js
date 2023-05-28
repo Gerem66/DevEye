@@ -1,6 +1,6 @@
 import { Sleep } from './utils';
+import { ffetch } from './request';
 
-const URL = process.env.NODE_ENV === 'production' ? 'https://wyrmo.com/DevEye/server/auth.php' : 'https://wyrmo.com/DevEye/server-dev/auth.php';
 const LOCAL_USER_KEY = 'user';
 
 class Auth {
@@ -66,7 +66,12 @@ class Auth {
         return true;
     }
 
+    /**
+     * @param {string} username 
+     * @param {string} password 
+     */
     __loginRequest = async (username, password) => {
+        /** @type {RequestInit} */
         const data = {
             method: 'POST',
             headers: {
@@ -78,8 +83,7 @@ class Auth {
             })
         };
 
-        const result = await fetch(URL, data)
-            .then(response => response.json())
+        const result = await ffetch('/auth', data)
             .catch(error => ({
                 status: 'error',
                 message: 'Erreur de connexion',

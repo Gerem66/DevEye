@@ -1,7 +1,8 @@
-import FeatureProfile from '../pages/profile';
+import FeatureProfile from '../pages/dashboard';
 
 /**
- * @typedef {'profile'} FeaturesID
+ * @typedef {'dashboard'} FeaturesID
+ * @typedef {import('../styles/icons').Icon} Icon
  * 
  * @typedef {Object} Context
  * @property {string} id
@@ -12,15 +13,15 @@ import FeatureProfile from '../pages/profile';
  * @typedef {Object} FeatureType
  * @property {FeaturesID} id
  * @property {string} name
- * @property {string} icon
+ * @property {Icon} icon
  * @property {(context: Context, feature: FeatureType) => JSX.Element} component
  */
 
 /** @type {FeatureType[]} */
 const Features = [
     {
-        id: 'profile',
-        name: 'Profile',
+        id: 'dashboard',
+        name: 'Dashboard',
         icon: 'user',
         component: FeatureProfile
     }
