@@ -1,5 +1,7 @@
 <?php
 
+    // Table: Users
+
     class User
     {
         /** @var int $ID */
@@ -64,6 +66,28 @@
         public static function Load($user, $hashedPassword, $IP) {
             try { return new User($user, $hashedPassword, $IP); }
             catch (Exception $e) { return null; }
+        }
+
+        /**
+         * @param DataBase $db The database connection
+         * @param string $username The user's username
+         * @param string $password The user's password
+         * @param string $IP The user's IP
+         * @return User|null Returns the user if it contains correct data, null otherwise
+         */
+        public static function LoadFromDB($db, $username, $password) {
+            $IP = $db->GetClientIP();
+            $hashedPassword = $db->encryption->HashPassword($password);
+
+            // Get the user
+            $result = $db->QueryPrepare('Users', 'SELECT * FROM TABLE WHERE `Username` = ?', 's', [ $username ]);
+            if ($result === false || count($result) === 0) {
+                return null;
+            }
+
+            $rawUser = $result[0];
+            $user = User::Load($rawUser, $hashedPassword, $IP);
+            return $user;
         }
 
         /**

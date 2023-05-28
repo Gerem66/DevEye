@@ -34,15 +34,7 @@ $IP = $db->GetClientIP();
 $hashedPassword = $db->encryption->HashPassword($password);
 
 // Get the user
-$result = $db->QueryPrepare('Users', 'SELECT * FROM TABLE WHERE `Username` = ?', 's', [ $username ]);
-if ($result === false || count($result) === 0) {
-    AddLog($db, 0, $IP, 0, 'login', "User connection failed - User \"$username\" not found");
-    $output['message'] = 'Invalid username or password';
-    exit(json_encode($output));
-}
-
-$rawUser = $result[0];
-$user = User::Load($rawUser, $hashedPassword, $IP);
+$user = User::LoadFromDB($db, $username, $password);
 if ($user === null) {
     AddLog($db, 0, $IP, 0, 'login', "User connection failed - User \"$username\" not found");
     $output['message'] = 'Invalid username or password';
