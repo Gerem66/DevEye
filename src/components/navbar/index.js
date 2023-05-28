@@ -1,6 +1,7 @@
 import React from 'react';
 
 import './style.css';
+import './button.css';
 import user from '../../class/user';
 import Features from '../../class/feature';
 import NavFeatures from './content/navFeatures';

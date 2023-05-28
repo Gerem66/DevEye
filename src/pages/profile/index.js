@@ -17,7 +17,7 @@ import { Header, Row, Card } from '../../components/components';
  */
 function FeatureProfile(context, feature) {
     return (
-        <div>
+        <div className='profile'>
             <Header
                 title={context.name}
                 context_name={context.name}
@@ -48,6 +48,18 @@ function FeatureProfile(context, feature) {
                     size='1/3'
                     icon='mail'
                 />
+            </Row>
+
+            <Row>
+                <Card.Element size='1/2' color='blue-dark'>
+                    <h2>Profil</h2>
+                    <div className='separator' />
+                </Card.Element>
+
+                <Card.Element size='1/2' color='blue-dark'>
+                    <h2>News</h2>
+                    <div className='separator' />
+                </Card.Element>
             </Row>
 
             <button

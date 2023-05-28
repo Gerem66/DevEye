@@ -1,15 +1,15 @@
-.nav-context-button {
+.navbar .nav-context-button {
     display: flex;
     align-items: center;
     height: auto;
 }
-.nav-context-logo {
+.navbar .nav-context-logo {
     width: 36px;
     height: 36px;
     margin-right: 12px;
     border-radius: 4px;
 }
-.nav-back-button {
+.navbar .nav-back-button {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -31,12 +31,12 @@
     transition: all 0.1s ease-in-out;
 }
 
-.nav-back-button > span.icon {
+.navbar .nav-back-button > span.icon {
     width: 18px;
     margin-right: 12px;
     background-color: #cacaca;
     transform: rotateZ(180deg);
 }
-.nav-back-button > span.icon.icon-blank {
+.navbar .nav-back-button > span.icon.icon-blank {
     background-color: transparent;
 }

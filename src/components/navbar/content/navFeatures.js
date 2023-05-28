@@ -80,7 +80,7 @@ class NavFeatures extends React.Component {
         const features = this.renderCategory(context);
 
         return (
-            <div>
+            <div className='nav-features'>
 
                 {/* Profile */}
                 <button className='profile' onClick={onProfileClick}>

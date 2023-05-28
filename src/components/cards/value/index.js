@@ -5,7 +5,7 @@ import CardElement from '../card';
 
 /**
  * @typedef {import('../index').CardSize} CardSize
- * @typedef {import('../index').CardColor} CardColor
+ * @typedef {import('../../../styles/colors').Color} Color
  * @typedef {import('../../../styles/icons').Icon} Icon
  * 
  * @typedef {object} CardValueProps
@@ -13,7 +13,7 @@ import CardElement from '../card';
  * @property {string} value
  * @property {Icon|null} [icon]
  * @property {CardSize} [size]
- * @property {CardColor} [color]
+ * @property {Color} [color]
  */
 
 /**

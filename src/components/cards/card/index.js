@@ -4,12 +4,12 @@ import './style.css';
 
 /**
  * @typedef {import('../index').CardSize} CardSize
- * @typedef {import('../index').CardColor} CardColor
+ * @typedef {import('../../../styles/colors').Color} Color
  * 
  * @typedef {object} CardValueProps
  * @property {React.JSX.Element|React.JSX.Element[]} children
  * @property {CardSize} [size]
- * @property {CardColor} [color]
+ * @property {Color} [color]
  */
 
 /**
