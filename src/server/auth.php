@@ -30,24 +30,16 @@ if (!isset($username, $password)) {
     exit(json_encode($output));
 }
 
-$IP = $db->GetClientIP();
-$hashedPassword = $db->encryption->HashPassword($password);
-
 // Get the user
 $user = User::LoadFromDB($db, $username, $password);
 if ($user === null) {
-    AddLog($db, 0, $IP, 0, 'login', "User connection failed - User \"$username\" not found");
+    AddLog($db, 0, 0, 'login', "User connection failed - User \"$username\" not found");
     $output['message'] = 'Invalid username or password';
     exit(json_encode($output));
 }
 
-if (!password_verify($password, $user->Password)) {
-    AddLog($db, $user->ID, $IP, 1, 'login', 'User connection failed - wrong password');
-    $output['message'] = 'Invalid username or password';
-    exit(json_encode($output));
-}
+AddLog($db, $user->ID, 0, 'login', 'User connection successful');
 
-AddLog($db, $user->ID, $IP, 0, 'login', 'User connection successful');
 $output['user'] = $user;
 $output['message'] = 'Logged in successfully';
 $output['status'] = 'success';
