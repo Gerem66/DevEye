@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 import auth from './class/auth';
 import HomePage from './pages/home/index';
 import LoginPage from './pages/login/index';
+import Server from './class/node';
 
 import './styles/sizes.css';
 import './styles/fonts.css';
@@ -15,6 +16,11 @@ function App() {
     const [ showLogin, setShowLogin ] = React.useState(user === null);
     const [ logged, setLogged ] = React.useState(user !== null);
     auth.SetHooks(setLogged, setShowLogin);
+
+    useEffect(() => {
+        const server = new Server();
+        server.Connect();
+    }, []);
 
     return (
         <React.StrictMode>

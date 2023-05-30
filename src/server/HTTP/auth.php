@@ -26,8 +26,9 @@ $data = json_decode($input, true);
 $username = $data['username'];
 $password = $data['password'];
 if (!isset($username, $password)) {
-    $output['message'] = 'Missing username or password';
-    exit(json_encode($output));
+    // Try to reverse engineer the input ?
+    AddLog($db, 0, 2, 'hack', 'Enpoint /auth - Invalid input data');
+    exit();
 }
 
 // Get the user

@@ -1,3 +1,3 @@
-[submodule "src/server/PHP-SQL"]
-	path = src/server/PHP-SQL
+[submodule "src/server/HTTP/PHP-SQL"]
+	path = src/server/HTTP/PHP-SQL
 	url = https://github.com/Gerem66/PHP-SQL
