@@ -12,11 +12,7 @@ require_once(__DIR__.'/class/user.php');
 //require_once(__DIR__.'/class/instance.php');
 //require_once(__DIR__.'/class/feature.php');
 
-// Initialize
-$output = array(
-    'status' => 'error',
-    'message' => 'Unknown error'
-);
+// Initialize the database
 $db = new DataBase();
 
 // Get the input data
@@ -27,6 +23,7 @@ $username = $data['username'];
 $password = $data['password'];
 if (!isset($username, $password)) {
     // Try to reverse engineer the input ?
+    // TODO: Généraliser
     AddLog($db, 0, 2, 'hack', 'Enpoint /auth - Invalid input data');
     exit();
 }
@@ -35,16 +32,10 @@ if (!isset($username, $password)) {
 $user = User::LoadFromDB($db, $username, $password);
 if ($user === null) {
     AddLog($db, 0, 0, 'login', "User connection failed - User \"$username\" not found");
-    $output['message'] = 'Invalid username or password';
-    exit(json_encode($output));
+    Done(1, 'Invalid username or password');
 }
 
 AddLog($db, $user->ID, 0, 'login', 'User connection successful');
-
-$output['user'] = $user;
-$output['message'] = 'Logged in successfully';
-$output['status'] = 'success';
-
-echo(json_encode($output));
+Done(0, 'Logged in successfully', $user);
 
 ?>

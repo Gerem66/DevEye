@@ -83,7 +83,7 @@ class Navbar extends React.Component {
             return;
         }
 
-        const context = user.contexts.find(f => f.id === context_id);
+        const context = user.Contexts.find(f => f.id === context_id);
 
         // Check if context & feature exists in this context
         if (!context)

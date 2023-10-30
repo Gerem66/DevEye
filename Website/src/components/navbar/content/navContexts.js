@@ -46,7 +46,7 @@ function NavContexts(props = NavContextsProps) {
                 <span>Retour</span>
                 <span className='icon icon-blank' />
             </button>
-            {user.contexts.map(ContextButton)}
+            {user.Contexts.map(ContextButton)}
         </>
     );
 }

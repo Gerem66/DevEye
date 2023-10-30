@@ -15,7 +15,7 @@ import { Header, Row, Card } from '../../components/components';
  * @param {FeatureType} feature
  * @returns {JSX.Element}
  */
-function FeatureProfile(context, feature) {
+function FeaturePassword(context, feature) {
     return (
         <div className='profile'>
             <Header context={context} feature={feature} />
@@ -83,4 +83,4 @@ function ContextProfile() {
     );
 }
 
-export default FeatureProfile;
+export default FeaturePassword;

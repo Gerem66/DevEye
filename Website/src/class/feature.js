@@ -1,7 +1,8 @@
-import FeatureProfile from '../pages/dashboard';
+import FeatureProfile from '../features/dashboard';
+import FeaturePassword from '../features/password';
 
 /**
- * @typedef {'dashboard'} FeaturesID
+ * @typedef {'dashboard'|'password'} FeaturesID
  * @typedef {import('../styles/icons').Icon} Icon
  * 
  * @typedef {Object} Context
@@ -24,6 +25,12 @@ const Features = [
         name: 'Dashboard',
         icon: 'user',
         component: FeatureProfile
+    },
+    {
+        id: 'password',
+        name: 'Mot de passe',
+        icon: 'lock',
+        component: FeaturePassword
     }
 ];
 

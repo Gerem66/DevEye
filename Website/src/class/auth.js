@@ -1,16 +1,24 @@
 import { Sleep } from './utils';
 import { ffetch } from './request';
+import user from './user';
 
-const LOCAL_USER_KEY = 'user';
+/**
+ * @typedef {import('./user').UserType} UserType
+ * @typedef {import('./request').RequestResult<UserType>} RequestResult
+ */
 
 class Auth {
-    __user = null;
-
+    /**
+     * @private
+     */
     __hooks = {
         setLogged: null,
         setShowLogin: null
     };
 
+    /**
+     * @private
+     */
     __requestIsRunning = false;
 
     onMount = () => {
@@ -30,26 +38,16 @@ class Auth {
         e.key === 'Enter' && this.Login();
     }
 
-    __setUser = (user) => {
-        this.__user = user;
-        localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(user));
-    }
-
-    GetUser = () => {
-        return this.__user;
-    }
-
-    __clearUser = () => {
-        this.__user = null;
-        localStorage.removeItem(LOCAL_USER_KEY);
-    }
-
     SetHooks = (setLogged, setShowLogin) => {
         this.__hooks.setLogged = setLogged;
         this.__hooks.setShowLogin = setShowLogin;
     }
 
-    __checkInputs = () => {
+    /**
+     * @private
+     * @returns {boolean}
+     */
+    checkInputs = () => {
         const username = this.__input_username.value;
         const password = this.__input_password.value;
 
@@ -67,10 +65,12 @@ class Auth {
     }
 
     /**
+     * @private
      * @param {string} username 
      * @param {string} password 
+     * @returns {Promise<RequestResult>}
      */
-    __loginRequest = async (username, password) => {
+    loginRequest = async (username, password) => {
         /** @type {RequestInit} */
         const data = {
             method: 'POST',
@@ -83,12 +83,8 @@ class Auth {
             })
         };
 
-        const result = await ffetch('/auth', data)
-            .catch(error => ({
-                status: 'error',
-                message: 'Erreur de connexion',
-                error: error.name + ': ' + error.message
-            }));
+        /** @type {RequestResult} */
+        const result = await ffetch('/auth', data);
 
         return result;
     }
@@ -99,7 +95,7 @@ class Auth {
      */
     Login = async () => {
         // Check inputs
-        if (!this.__checkInputs()) {
+        if (!this.checkInputs()) {
             return;
         }
 
@@ -117,16 +113,16 @@ class Auth {
         this.__card_login.classList.add('card-to-progressbar');
 
         // Login request
-        const data = await this.__loginRequest(username, password);
+        const data = await this.loginRequest(username, password);
 
         // Load home page without pause
-        if (data['status'] === 'success') {
+        if (data.status === 0) {
             if (typeof(this.__hooks.setLogged) === 'function') {
                 this.__hooks.setLogged(true);
             }
 
             // Save user
-            this.__setUser(data['user']);
+            user.SetData(data.content);
         }
 
         // Await for progress bar to finish
@@ -136,7 +132,7 @@ class Auth {
             await Sleep(2000 - elapsed);
         }
 
-        if (data['status'] === 'success') {
+        if (data.status === 0) {
             this.__input_username.value = '';
             if (typeof(this.__hooks.setShowLogin) === 'function') {
                 this.__hooks.setShowLogin(false);
@@ -160,8 +156,8 @@ class Auth {
         this.__requestIsRunning = false;
 
         // Error message ?
-        //if (data['status'] !== 'success') {
-        //    //console.error(data['message']);
+        //if (data.status !== 0) {
+        //    console.error(data.message);
         //    return;
         //}
     }
@@ -171,7 +167,7 @@ class Auth {
      * @returns {void}
      */
     Logout = () => {
-        this.__clearUser();
+        user.Clear();
         this.__input_username.focus();
 
         if (typeof(this.__hooks.setLogged) === 'function') {

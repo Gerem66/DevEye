@@ -6,7 +6,7 @@ import user from '../../class/user';
 import { Navbar } from '../../components/components';
 
 function HomePage() {
-    const [ context, setContext ] = React.useState(user.contexts[0]);
+    const [ context, setContext ] = React.useState(user.Contexts[0]);
     const [ content, setContent ] = React.useState(null);
 
     return (

@@ -22,4 +22,19 @@ function AddLog($db, $UID, $level, $type, $description) {
     return $result !== false;
 }
 
+/**
+ * @param int $status
+ * @param string $message
+ * @param mixed|null $content
+ */
+function Done($status, $message, $content = null) {
+    $output = array(
+        'status' => $status,
+        'message' => $message,
+        'content' => $content
+    );
+    $json = json_encode($output);
+    exit($json);
+}
+
 ?>
