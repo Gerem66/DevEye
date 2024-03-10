@@ -6,12 +6,12 @@ import auth from '../../class/auth';
 import { Header, Row, Card } from '../../components/components';
 
 /**
- * @typedef {import('../../class/feature').Context} Context
- * @typedef {import('../../class/feature').FeatureType} FeatureType
+ * @typedef {import('Types/Context').ContextType} ContextType
+ * @typedef {import('Types/Feature').FeatureType} FeatureType
  */
 
 /**
- * @param {Context} context
+ * @param {ContextType} context
  * @param {FeatureType} feature
  * @returns {JSX.Element}
  */

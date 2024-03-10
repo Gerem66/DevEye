@@ -3,12 +3,12 @@ import React from 'react';
 import './style.css';
 
 /**
- * @typedef {import('../../class/feature').Context} Context
- * @typedef {import('../../class/feature').FeatureType} FeatureType
+ * @typedef {import('Types/Context').ContextType} ContextType
+ * @typedef {import('Types/Feature').FeatureType} FeatureType
  */
 
 /**
- * @param {{ context: Context, feature: FeatureType }} props
+ * @param {{ context: ContextType, feature: FeatureType }} props
  * @returns {JSX.Element}
  */
 function Header(props) {

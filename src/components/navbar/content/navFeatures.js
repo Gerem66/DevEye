@@ -1,16 +1,16 @@
 import React from 'react';
 
 import './styleFeatures.css';
-import Features from '../../../class/feature';
+import { AllFeatures } from '../../../Types/Feature';
 
 /**
- * @typedef {import('../../../class/feature').FeaturesID} FeaturesID
- * @typedef {import('../../../class/feature').FeatureType} FeatureType
- * @typedef {import('../../../class/feature').Context} Context
+ * @typedef {import('Types/Feature').FeaturesID} FeaturesID
+ * @typedef {import('Types/Feature').FeatureType} FeatureType
+ * @typedef {import('Types/Context').ContextType} ContextType
  */
 
 const NavFeaturesProps = {
-    /** @type {Context|null} */
+    /** @type {ContextType|null} */
     context: null,
 
     /**
@@ -30,14 +30,14 @@ const NavFeaturesProps = {
 
 class NavFeatures extends React.Component {
     /**
-     * @param {Context|null} context
+     * @param {ContextType|null} context
      * @returns {JSX.Element}
      */
     renderCategory = (context) => {
         if (!context) return null;
 
         const features = context.features
-            .map(id => Features.find(f => f.id === id))
+            .map(id => AllFeatures.find(f => f.id === id))
             .map(feature => this.renderFeature(context, feature));
 
         return (
@@ -52,7 +52,7 @@ class NavFeatures extends React.Component {
     }
 
     /**
-     * @param {Context} context
+     * @param {ContextType} context
      * @param {FeatureType} feature 
      * @returns {JSX.Element}
      */

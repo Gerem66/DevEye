@@ -2,8 +2,9 @@ import React from 'react';
 
 import './style.css';
 import './button.css';
-import user from '../../class/user';
-import Features from '../../class/feature';
+import { AllFeatures } from '../../Types/Feature';
+import { GlobalContext } from '../../context';
+
 import NavFeatures from './content/navFeatures';
 import NavContexts from './content/navContexts';
 
@@ -12,16 +13,17 @@ import packageJson from '../../../package.json';
 const version = packageJson.version + (process.env.NODE_ENV === 'development' && '-dev' || '');
 
 /**
- * @typedef {import('../../class/feature').FeaturesID} FeaturesID
- * @typedef {import('../../class/feature').FeatureType} FeatureType
- * @typedef {import('../../class/feature').Context} Context
+ * @typedef {import('Types/Feature').FeaturesID} FeaturesID
+ * @typedef {import('Types/Feature').FeatureType} FeatureType
+ * @typedef {import('Types/Context').ContextType} ContextType
+ * @typedef {import('../../context').ReactContextType} ReactContextType
  */
 
 const NavbarProps = {
-    /** @type {Context} */
+    /** @type {ContextType} */
     context: null,
 
-    /** @type {(context: Context) => void} */
+    /** @type {(context: ContextType) => void} */
     setContext: (context) => {},
 
     /** @type {(content: JSX.Element|null) => void} */
@@ -29,6 +31,8 @@ const NavbarProps = {
 };
 
 class Navbar extends React.Component {
+    static contextType = GlobalContext;
+
     state = {
         active: {
             /** @type {string|null} */
@@ -63,7 +67,7 @@ class Navbar extends React.Component {
         this.setState({ is_navpanel_switch: true });
     }
 
-    /** @param {Context|null} context */
+    /** @param {ContextType|null} context */
     onContextClick = (context = null) => {
         this.setState({ is_navpanel_switch: false });
 
@@ -77,6 +81,8 @@ class Navbar extends React.Component {
      * @param {FeaturesID} feature_id
      */
     onFeatureClick = (context_id, feature_id) => {
+        const { user } = /** @type {ReactContextType} */ (this.context);
+
         // Check if feature is already active
         if (feature_id === this.state.active.feature_id &&
             context_id === this.state.active.context_id) {
@@ -92,7 +98,7 @@ class Navbar extends React.Component {
             throw new Error('Feature not found');
 
         // Check if feature exists
-        const feature = Features.find(f => f.id === feature_id);
+        const feature = AllFeatures.find(f => f.id === feature_id);
         if (!feature)
             throw new Error('Feature not found');
 
@@ -147,7 +153,7 @@ class Navbar extends React.Component {
     }
 }
 
-Navbar.prototype.props = NavbarProps;
 Navbar.defaultProps = NavbarProps;
+Navbar.prototype.props = NavbarProps;
 
 export default Navbar;

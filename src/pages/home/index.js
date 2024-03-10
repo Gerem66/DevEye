@@ -1,29 +1,35 @@
 import React from 'react';
 
 import './style.css';
-import user from '../../class/user';
 
+import { GlobalContext } from '../../context';
 import { Navbar } from '../../components/components';
 
-function HomePage() {
-    const [ context, setContext ] = React.useState(user.Contexts[0]);
-    const [ content, setContent ] = React.useState(null);
+/**
+ * @typedef {import('../../context').ReactContextType} ContextType
+ */
 
-    return (
-        <div id='home' className='home'>
-            <div className="home-left">
-                <Navbar
-                    context={context}
-                    setContent={setContent}
-                    setContext={setContext}
-                />
-            </div>
+class HomePage extends React.Component {
+    static contextType = GlobalContext;
 
-            <div className="home-right">
-                {content}
+    render() {
+        const { user } = /** @type {ContextType} */ (this.context);
+        if (user === null) return null;
+
+        return (
+            <div id='home' className='home'>
+                <div className="home-left">
+                    <Navbar
+                        context={user === null || user.Contexts.length === 0 ? null : user.Contexts[0]}
+                    />
+                </div>
+
+                <div className="home-right">
+                    {/* Content */}
+                </div>
             </div>
-        </div>
-    );
+        );
+    }
 }
 
 export default HomePage;

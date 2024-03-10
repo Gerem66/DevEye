@@ -10,23 +10,32 @@ import './styles/sizes.css';
 import './styles/fonts.css';
 import './styles/icons.css';
 import './styles/colors.css';
+import ContextProvider, { GlobalContext } from './context';
 
 function App() {
-    const loaded = user.Load();
+    const loaded = false; //user.Load();
 
+    const { user } = React.useContext(GlobalContext);
     const [ showLogin, setShowLogin ] = React.useState(!loaded);
-    const [ logged, setLogged ] = React.useState(loaded);
-    auth.SetHooks(setLogged, setShowLogin);
 
     useEffect(() => {
         const server = new Server();
         server.Connect();
+
+        return () => {
+            server.Disconnect();
+        };
     }, []);
 
     return (
         <React.StrictMode>
-            {logged && <HomePage />}
-            <LoginPage show={showLogin} />
+            <ContextProvider>
+                <HomePage />
+                <LoginPage
+                    showLogin={showLogin}
+                    setShowLogin={setShowLogin}
+                />
+            </ContextProvider>
         </React.StrictMode>
     );
 }

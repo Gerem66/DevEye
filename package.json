@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "start": "react-scripts start",
+    "server": "cd src/Server && npm start",
     "build": "PUBLIC_URL=/DevEye/ react-scripts build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -26,5 +27,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.64"
   }
 }

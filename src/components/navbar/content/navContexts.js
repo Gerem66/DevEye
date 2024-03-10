@@ -4,11 +4,11 @@ import './styleContexts.css';
 import user from '../../../class/user';
 
 /**
- * @typedef {import('../../../class/feature').Context} Context
+ * @typedef {import('Types/Context').ContextType} ContextType
  */
 
 const NavContextsProps = {
-    /** @type {(context: Context|null) => void} */
+    /** @type {(context: ContextType|null) => void} */
     onContextClick: (context) => {}
 };
 
@@ -16,7 +16,7 @@ const NavContextsProps = {
 function NavContexts(props = NavContextsProps) {
     const { onContextClick } = props;
 
-    /** @param {Context} context */
+    /** @param {ContextType} context */
     function ContextButton(context) {
         const { id, name, logo } = context;
         return (

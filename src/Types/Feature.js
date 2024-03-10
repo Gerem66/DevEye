@@ -4,22 +4,17 @@ import FeaturePassword from '../features/password';
 /**
  * @typedef {'dashboard'|'password'} FeaturesID
  * @typedef {import('../styles/icons').Icon} Icon
- * 
- * @typedef {Object} Context
- * @property {string} id
- * @property {string} name
- * @property {string} logo
- * @property {FeaturesID[]} features
+ * @typedef {import('./Context').ContextType} ContextType
  * 
  * @typedef {Object} FeatureType
  * @property {FeaturesID} id
  * @property {string} name
  * @property {Icon} icon
- * @property {(context: Context, feature: FeatureType) => JSX.Element} component
+ * @property {(context: ContextType, feature: FeatureType) => JSX.Element} component
  */
 
 /** @type {FeatureType[]} */
-const Features = [
+const AllFeatures = [
     {
         id: 'dashboard',
         name: 'Dashboard',
@@ -34,4 +29,5 @@ const Features = [
     }
 ];
 
-export default Features;
+export { AllFeatures };
+export default null;

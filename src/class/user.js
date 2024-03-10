@@ -1,6 +1,5 @@
 /**
- * @typedef {import('./feature').FeatureType} FeatureType
- * @typedef {import('./feature').Context} Context
+ * @typedef {import('Types/Context').ContextType} ContextType
  * 
  * @typedef UserType
  * @property {number} ID
@@ -11,7 +10,7 @@
  * @property {string[]} Settings
  * @property {number} Security
  * @property {number} Created
- * @property {Context[]} Contexts
+ * @property {ContextType[]} Contexts
  */
 
 const LOCAL_KEYS = {
@@ -28,7 +27,7 @@ class User {
     Security = 0;
     Created = 0;
 
-    /** @type {Context[]} */
+    /** @type {ContextType[]} */
     Contexts = [];
 
     Save() {
