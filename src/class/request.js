@@ -1,8 +1,6 @@
-const featureURL = process.env.NODE_ENV === 'production' ? 'https://wyrmo.com/DevEye/server' : 'https://wyrmo.com/DevEye/server-dev';
-
 /**
  * @typedef {'/auth'} Endpoint
- * @typedef {import('./user').UserType} UserType
+ * @typedef {import('Types/User').UserType} UserType
  * @typedef {any|UserType} RequestOutputTypes
  */
 
@@ -21,7 +19,7 @@ const featureURL = process.env.NODE_ENV === 'production' ? 'https://wyrmo.com/De
  * @returns {Promise<RequestResult<T>>}
  */
 const ffetch = (endpoint, requestInfo = {}) => 
-    fetch(featureURL + endpoint + '.php', requestInfo)
+    fetch(process.env.REACT_APP_SERVER_URL + endpoint + '.php', requestInfo)
         .then(res => res.json())
         .catch((error) => {
             const output = {

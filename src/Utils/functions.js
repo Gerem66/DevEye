@@ -7,4 +7,14 @@ function Sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-export { Sleep };
+/**
+ * @param {string} str
+ * @returns {boolean}
+ */
+function StrIsJson(str) {
+    try { JSON.parse(str); }
+    catch (e) { return false; }
+    return true;
+}
+
+export { Sleep, StrIsJson };

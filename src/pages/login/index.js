@@ -14,11 +14,6 @@ import { Sleep } from '../../Utils/functions';
  */
 
 const LoginPageProps = {
-    /** @type {boolean} Show the login page */
-    showLogin: true,
-
-    /** @type {(show: boolean) => void} */
-    setShowLogin: (show) => {}
 };
 
 // TODO: Handle enter key press
@@ -28,6 +23,7 @@ class LoginPage extends React.Component {
     static contextType = GlobalContext;
 
     state = {
+        show: false,
         input: {
             username: '',
             password: ''
@@ -44,6 +40,22 @@ class LoginPage extends React.Component {
     inputPassword = React.createRef();
 
     componentDidMount() {
+        const { user } = /** @type {ContextType} */ (this.context);
+        if (user === null) {
+            this.setState({ show: true });
+        }
+    }
+
+    componentDidUpdate() {
+        const { user } = /** @type {ContextType} */ (this.context);
+        const newState = user === null;
+
+        if (newState !== this.state.show) {
+            this.setState({ show: newState });
+            if (newState) {
+                this.inputUsername.current.focus();
+            }
+        }
     }
 
     componentWillUnmount() {
@@ -67,7 +79,6 @@ class LoginPage extends React.Component {
 
     onLogin = async () => {
         const { setUser } = /** @type {ContextType} */ (this.context);
-        const { setShowLogin } = this.props;
         const { input: { username, password } } = this.state;
 
         // Check inputs
@@ -87,12 +98,6 @@ class LoginPage extends React.Component {
         // Login request
         const data = await this.loginRequest(username, password);
 
-        // Load home page without pause
-        if (data.status === 0) {
-            // Save user
-            setUser({ ...DefaultUser, ...data.content });
-        }
-
         // Await for progress bar animation to finish
         const end = Date.now();
         const elapsed = end - start;
@@ -103,13 +108,14 @@ class LoginPage extends React.Component {
         // Open home page
         if (data.status === 0) {
             this.inputUsername.current.value = '';
-            setShowLogin(false);
+            this.inputPassword.current.value = '';
 
-            // Navbar animation
-            const navbar = document.getElementById('navbar');
-            navbar.classList.add('from-login');
-
+            // Await for navbar animation to finish
             await Sleep(500);
+
+            // Set user
+            this.setState({ show: false });
+            setUser({ ...DefaultUser, ...data.content });
         }
 
         // Reset text inputs
@@ -119,6 +125,7 @@ class LoginPage extends React.Component {
         }
 
         // Reset animation
+        await Sleep(200);
         this.cardLogin.current.classList.remove('card-to-progressbar');
     }
 
@@ -148,7 +155,7 @@ class LoginPage extends React.Component {
 
     render() {
         return (
-            <div className={'login' + (this.props.showLogin ? '' : ' login-to-home')}>
+            <div className={'login' + (this.state.show ? ' show' : '')}>
                 <div className='form'>
 
                     {/* Title */}

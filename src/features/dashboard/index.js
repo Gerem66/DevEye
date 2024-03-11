@@ -1,7 +1,8 @@
-import React from 'react';
+import { useContext } from 'react';
 
 import './style.css';
 
+import { GlobalContext } from '../../context';
 import { Header, Row, Card } from '../../components/components';
 
 /**
@@ -56,13 +57,15 @@ function FeatureProfile(context, feature) {
 }
 
 function SelfProfile({ context }) {
+    const { setUser } = useContext(GlobalContext);
+
     return (
         <Row>
             <Card.Element size='1/2' color='blue-dark'>
                 <h2>{context.id === 'self' ? 'Profil' : 'Settings'}</h2>
                 <div className='separator' />
 
-                <button onClick={() => console.log('TODO')}>
+                <button onClick={() => setUser(null)}>
                     Disconnect
                 </button>
             </Card.Element>

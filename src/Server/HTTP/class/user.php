@@ -22,9 +22,6 @@
         /** @var array $Settings */
         public $Settings;
 
-        /** @var int $Security */
-        public $Security;
-
         /** @var int $Created */
         public $Created;
 
@@ -42,7 +39,6 @@
             $this->Password = $user['Password'];
             $this->Avatar = $user['Avatar'];
             $this->Settings = json_decode($user['Settings'], true);
-            $this->Security = intval($user['Security']);
             $this->Created = strtotime($user['Created']);
         }
 
@@ -84,9 +80,9 @@
             }
 
             // Set the encryption keys
-            if ($user->Security === 1) {
-                $db->encryption->DefineSecondKey($password);
-            }
+            //if ($user->Security === 1) {
+            //    $db->encryption->DefineSecondKey($password);
+            //}
 
             return $user;
         }

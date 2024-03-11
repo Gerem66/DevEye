@@ -1,7 +1,7 @@
 import React from 'react';
 
 import './styleContexts.css';
-import user from '../../../class/user';
+import { GlobalContext } from '../../../context';
 
 /**
  * @typedef {import('Types/Context').ContextType} ContextType
@@ -15,6 +15,7 @@ const NavContextsProps = {
 
 function NavContexts(props = NavContextsProps) {
     const { onContextClick } = props;
+    const { user } = React.useContext(GlobalContext);
 
     /** @param {ContextType} context */
     function ContextButton(context) {

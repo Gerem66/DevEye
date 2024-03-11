@@ -1,4 +1,6 @@
-import React, { Component, createContext } from 'react';
+import { Component, createContext } from 'react';
+
+import { Load, Save } from './Utils/storage';
 
 /**
  * @typedef {import('Types/User').UserType} UserType
@@ -21,9 +23,16 @@ class ContextProvider extends Component {
     constructor(props) {
         super(props);
         this.state = DEFAULT_VALUE;
+
+        const user = Load('user');
+        if (user !== null) {
+            this.state.user = user;
+        }
     }
 
+    /** @param {UserType} newUser */
     setUser = (newUser) => {
+        Save('user', newUser);
         this.setState({ user: newUser });
     };
 
