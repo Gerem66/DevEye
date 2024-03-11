@@ -11,6 +11,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "dotenv": "^16.4.5",
+    "mysql2": "^3.9.2",
     "websocket": "^1.0.34"
+  },
+  "devDependencies": {
+    "@types/websocket": "^1.0.10"
   }
 }

@@ -21,7 +21,7 @@ class Node {
             return;
         }
         const url = `ws://${settings.host}:${settings.port}`;
-        const socket = new WebSocket(url, 'server-multiplayer');
+        const socket = new WebSocket(url, 'deveye-only-TX0-CR7');
         socket.addEventListener('open', this.onOpen);
         socket.addEventListener('message', this.onMessage);
         socket.addEventListener('error', this.onError);

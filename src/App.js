@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 
 import user from './class/user';
-import auth from './class/auth';
 import HomePage from './pages/home/index';
 import LoginPage from './pages/login/index';
 import Server from './class/node';

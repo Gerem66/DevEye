@@ -1,7 +1,6 @@
 import React from 'react';
 
 import './style.css';
-import auth from '../../class/auth';
 
 import { Header, Row, Card } from '../../components/components';
 
@@ -62,8 +61,8 @@ function SelfProfile({ context }) {
             <Card.Element size='1/2' color='blue-dark'>
                 <h2>{context.id === 'self' ? 'Profil' : 'Settings'}</h2>
                 <div className='separator' />
-                
-                <button onClick={auth.Logout}>
+
+                <button onClick={() => console.log('TODO')}>
                     Disconnect
                 </button>
             </Card.Element>
