@@ -8,9 +8,9 @@
  * @property {string} Password
  * @property {string} Avatar
  * @property {string[]} Settings
- * @property {number} Security
  * @property {number} Created
  * @property {ContextType[]} Contexts
+ * @property {string} Token
  */
 
 /** @type {UserType} */
@@ -21,7 +21,6 @@ const DefaultUser = {
     Password: '',
     Avatar: '',
     Settings: [],
-    Security: 0,
     Created: 0,
     //Contexts: []
     Contexts: [
@@ -42,7 +41,8 @@ const DefaultUser = {
                 'dashboard'
             ]
         }
-    ]
+    ],
+    Token: ''
 };
 
 export { DefaultUser };

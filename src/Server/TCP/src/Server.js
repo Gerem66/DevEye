@@ -6,10 +6,13 @@ import { createServer } from 'https';
 import { StrIsJson, GetLocalIP } from './Utils/Functions.js';
 
 /**
+ * @typedef {import('Types/TCP.js').TCPRequestHeader} TCPRequestHeader
+ * @typedef {import('Types/TCP.js').TCPRequestMap} TCPRequestMap
+ * 
  * @typedef {Object} ServerConnectionCallbacks
  * @property {(connection: WebSocket.connection) => void} callbacks.onConnect
  * @property {(connection: WebSocket.connection) => void} callbacks.onDisconnect
- * @property {(connection: WebSocket.connection, data: Object) => void} callbacks.onMessage
+ * @property {(connection: WebSocket.connection, data: TCPRequestHeader) => void} callbacks.onMessage
  * @property {(connection: WebSocket.connection, error: Error) => void} callbacks.onError
  */
 
@@ -19,6 +22,7 @@ class Server {
 
         if (ENV === 'dev') {
             this.server = createHTTPServer({});
+            console.warn('[WebSocket] Using HTTP server');
         } else {
             this.server = createServer({
                 key: fs.readFileSync('/etc/letsencrypt/live/www.oxyfoo.com/privkey.pem'),
@@ -42,15 +46,15 @@ class Server {
             return;
         }
 
-        this.port = port;
-        this.server.listen(port);
-
         this.wsServer = new WebSocket.server({ httpServer: this.server });
         this.wsServer.addListener('request', this.onRequest);
         this.wsServer.addListener('close', this.onClose);
         this.wsServer.addListener('connect', (connection) =>
             this.handleNewConnection(connection, callbacks)
         );
+
+        this.port = port;
+        this.server.listen(port);
 
         console.log('[WebSocket] Listening on', GetLocalIP() + ':' + port);
     }
@@ -70,11 +74,12 @@ class Server {
 
     /** @param {WebSocket.request} request */
     onRequest = (request) => {
-        const protocol = request.requestedProtocols;
+        const protocols = request.requestedProtocols;
 
         // Accept the deveye-only-TX0-CR7 protocol
-        if (protocol.indexOf('deveye-only-TX0-CR7') !== -1) {
-            request.accept('deveye-only-TX0-CR7', request.origin);
+        const autorizedProtocols = 'deveye-only-tx0-cr7';
+        if (protocols.includes(autorizedProtocols)) {
+            request.accept(autorizedProtocols, request.origin);
         }
 
         // Reject all other protocols
@@ -100,22 +105,24 @@ class Server {
      * @param {ServerConnectionCallbacks} callbacks
      */
     handleNewConnection = (connection, callbacks) => {
-        if (!this.checkProtocol(connection)) {
-            console.log('Invalid protocol, closing connection');
-            return;
-        }
-
         connection.on('message', async (message) => {
             if (message.type !== 'utf8') {
+                // TODO: Alert
                 return;
             }
 
             const rawData = message.type === 'utf8' ? message.utf8Data : null;
             if (!StrIsJson(rawData)) {
+                // TODO: Alert
                 return;
             }
 
             const data = JSON.parse(rawData);
+            if (!data.hasOwnProperty('action') || !data.hasOwnProperty('message')) {
+                // TODO: Alert
+                return;
+            }
+
             callbacks.onMessage(connection, data);
         });
 
@@ -128,18 +135,6 @@ class Server {
         );
 
         callbacks.onConnect(connection);
-    }
-
-    /**
-     * @param {WebSocket.connection} connection
-     * @returns {boolean}
-     */
-    checkProtocol = (connection) => {
-        const protocol = connection.protocol;
-        if (protocol === 'deveye-only-TX0-CR7') {
-            return true;
-        }
-        return false;
     }
 }
 

@@ -5,12 +5,8 @@ header("Access-Control-Allow-Methods: POST");
 header("Access-Control-Allow-Headers: Content-Type");
 
 require_once(__DIR__.'/utils.php');
+require_once(__DIR__.'/functions.php');
 require_once(__DIR__.'/PHP-SQL/sql.php');
-
-require_once(__DIR__.'/class/user.php');
-//require_once(__DIR__.'/class/context.php');
-//require_once(__DIR__.'/class/instance.php');
-//require_once(__DIR__.'/class/feature.php');
 
 // Initialize the database
 $db = new DataBase();
@@ -23,19 +19,49 @@ $username = $data['username'];
 $password = $data['password'];
 if (!isset($username, $password)) {
     // Try to reverse engineer the input ?
-    // TODO: Généraliser
     AddLog($db, 0, 2, 'hack', 'Enpoint /auth - Invalid input data');
-    exit();
+    Done(1, 'Invalid username or password');
 }
 
 // Get the user
-$user = User::LoadFromDB($db, $username, $password);
-if ($user === null) {
+$resultUser = $db->QueryPrepare('Users', 'SELECT `ID`, `Password` FROM TABLE WHERE `Username` = ?', 's', [ $username ]);
+if ($resultUser === false || count($resultUser) === 0) {
     AddLog($db, 0, 0, 'login', "User connection failed - User \"$username\" not found");
     Done(1, 'Invalid username or password');
 }
 
-AddLog($db, $user->ID, 0, 'login', 'User connection successful');
-Done(0, 'Logged in successfully', $user);
+$rawUser = $resultUser[0];
+$userID = $rawUser['ID'];
+$userPassword = $rawUser['Password'];
+
+// Check if the password is correct
+if (!password_verify($password, $userPassword)) {
+    AddLog($db, 0, 0, 'login', "User connection failed - User \"$username\" password incorrect");
+    Done(1, 'Invalid username or password');
+}
+
+// Update the user token
+$currentTimestamp = time();
+$newToken = GenerateToken();
+$args = array(
+    $newToken,
+    $currentTimestamp,
+    $userID
+);
+$resultToken = $db->QueryPrepare('Users', 'UPDATE TABLE SET `Token` = ?, `LastLogin` = ? WHERE `ID` = ?', 'sii', $args);
+if ($resultToken === false) {
+    AddLog($db, 0, 0, 'login', "User connection failed - User \"$username\" token update failed");
+    Done(1, 'Invalid username or password');
+}
+
+$userToken = json_encode(array(
+    'Token' => $newToken,
+    'UserID' => $userID,
+    'LastLogin' => $currentTimestamp
+));
+
+$data = $db->encryption->Encrypt($userToken);
+AddLog($db, $userID, 0, 'login', 'User connection successful');
+Done(0, 'Logged in successfully', $data);
 
 ?>
