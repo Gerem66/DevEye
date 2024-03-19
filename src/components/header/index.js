@@ -1,5 +1,3 @@
-import React from 'react';
-
 import './style.css';
 
 /**
@@ -8,16 +6,16 @@ import './style.css';
  */
 
 /**
- * @param {{ context: ContextType, feature: FeatureType }} props
+ * @param {Object} props
+ * @param {ContextType} props.context
+ * @param {FeatureType} props.feature
  * @returns {JSX.Element}
  */
-function Header(props) {
-    const { context, feature } = props;
-
+function Header({ context, feature }) {
     return (
         <header>
-            <h1>{context.name}</h1>
-            <p>{`${context.name} / ${feature.id}`}</p>
+            <h1>{context?.name}</h1>
+            <p>{`${context?.name} / ${feature.id}`}</p>
         </header>
     );
 }

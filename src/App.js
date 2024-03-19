@@ -1,5 +1,3 @@
-import React from 'react';
-
 import ContextProvider from './context';
 import HomePage from './pages/home/index';
 import LoginPage from './pages/login/index';

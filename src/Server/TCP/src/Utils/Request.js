@@ -10,7 +10,7 @@
  * @returns {Promise<{ status: number, message: string, content: EndpointTypes[T] }>}
  */
 const ffetch = (endpoint, requestInfo = {}) =>
-    fetch(process.env.REACT_APP_SERVER_URL + '/' + endpoint + '.php', {
+    fetch(process.env.SERVER_URL + '/' + endpoint + '.php', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'

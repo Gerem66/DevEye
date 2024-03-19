@@ -29,7 +29,7 @@
  * 
  * @typedef {Object} TCPRequestHeader
  * @property {keyof TCPRequestMap} action
- * @property {TCPRequestMap[keyof TCPRequestMap]['send']} message
+ * @property {TCPRequestMap[keyof TCPRequestMap]['send' | 'receive']} message
  * @property {string} [callbackID]
  */
 

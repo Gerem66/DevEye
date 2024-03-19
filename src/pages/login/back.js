@@ -6,6 +6,7 @@ import { ffetch } from '../../Utils/request';
 import { Sleep } from '../../Utils/functions';
 
 /**
+ * @typedef {import('../../Types/User').UserType} UserType
  * @typedef {import('../../context').ReactContextType} ContextType
  */
 
@@ -69,6 +70,7 @@ class LoginPageBack extends React.Component {
         this.setState({ input: { ...this.state.input, password: e.target.value } });
     }
 
+    /** @param {React.KeyboardEvent<HTMLDivElement>} e */
     onKeyDown = (e) => {
         if (e.key === 'Enter') {
             this.onLogin();
@@ -77,7 +79,7 @@ class LoginPageBack extends React.Component {
 
     StartAnimation = () => {
         this.startTimeLoading = Date.now();
-        this.cardLogin.current.classList.add('card-to-progressbar');
+        this.cardLogin.current?.classList.add('card-to-progressbar');
     }
 
     WaitAnimation = async () => {
@@ -89,7 +91,7 @@ class LoginPageBack extends React.Component {
     }
 
     StopAnimation = () => {
-        this.cardLogin.current.classList.remove('card-to-progressbar');
+        this.cardLogin.current?.classList.remove('card-to-progressbar');
     }
 
     onLogin = async () => {
@@ -98,11 +100,11 @@ class LoginPageBack extends React.Component {
 
         // Check inputs
         if (username === '') {
-            this.inputUsername.current.focus();
+            this.inputUsername.current?.focus();
             return;
         }
         else if (password === '') {
-            this.inputPassword.current.focus();
+            this.inputPassword.current?.focus();
             return;
         }
 
@@ -110,18 +112,35 @@ class LoginPageBack extends React.Component {
 
         // Login request
         const data = await ffetch('auth', { username, password });
-        const newUser = { ...DefaultUser, Token: data.content };
-        await Sleep(200);
 
-        const response = await server.SendAndWaitForCallback('get-user-info', {
-            token: data.content
-        })
-        console.log(response);
+        let newUser = DefaultUser;
+
+        let connected = false;
+        if (data.status === 0) {
+            connected = await server.Connect();
+            if (connected) {
+                const response = await server.SendAndWaitForCallback('get-user-info', {
+                    token: data.content
+                });
+
+                if (response === 'not-sended' || response === 'timeout' || response.status !== 0) {
+                    connected = false;
+                    server.Disconnect();
+                } else {
+                    // Response.user into newUser
+                    newUser = {
+                        ...newUser,
+                        ...response.user,
+                        Token: data.content
+                    };
+                }
+            }
+        }
 
         await this.WaitAnimation();
 
         // Open home page
-        if (data.status === 0) {
+        if (data.status === 0 && connected) {
             this.setState({
                 input: {
                     username: '',
@@ -140,7 +159,7 @@ class LoginPageBack extends React.Component {
         // Reset text inputs
         else {
             this.setState({ input: { username, password: '' } });
-            this.inputPassword.current.focus();
+            this.inputPassword.current?.focus();
         }
 
         this.StopAnimation();
@@ -152,11 +171,14 @@ class LoginPageBack extends React.Component {
     LoginFromToken = async (token) => {
         // Login request
         const { server, user, setUser } = /** @type {ContextType} */ (this.context);
+        if (user === null) {
+            return;
+        }
 
         this.StartAnimation();
 
         // Login request
-        const data = await ffetch('auto-login', { token: user.Token });
+        const data = await ffetch('check-token', { token: user.Token });
         if (data.status !== 0) {
             // Invalid token, reset user
             setUser(null);
@@ -166,27 +188,39 @@ class LoginPageBack extends React.Component {
             return;
         }
 
-        const newUser = { ...DefaultUser, Token: data.content };
-        await Sleep(200);
+        let connected = await server.Connect();
+        if (connected === false) {
+            setUser(null);
+            await this.WaitAnimation();
+            this.StopAnimation();
+            return;
+        }
 
         const response = await server.SendAndWaitForCallback('get-user-info', {
-            token: data.content
-        })
-        console.log(response);
+            token: user.Token
+        });
+
+        if (response === 'not-sended' || response === 'timeout' || response.status !== 0) {
+            connected = false;
+            server.Disconnect();
+            setUser(null);
+            await this.WaitAnimation();
+            this.StopAnimation();
+            return;
+        }
+
+        // Response.user into newUser
+        /** @type {UserType} */
+        const newUser = {
+            ...user,
+            ...response.user
+        };
 
         await this.WaitAnimation();
 
         // Open home page
-        if (data.status === 0) {
-            // Set user
-            //setUser(newUser);
-            this.setState({ show: false });
-            await Sleep(500);
-        }
-
-        // Reset text inputs
-        else {
-        }
+        setUser(newUser);
+        this.setState({ show: false });
 
         this.StopAnimation();
     }

@@ -11,6 +11,8 @@
  * @property {number} Created
  * @property {ContextType[]} Contexts
  * @property {string} Token
+ * @property {string} SelectedContext
+ * @property {string} SelectedFeature
  */
 
 /** @type {UserType} */
@@ -42,7 +44,9 @@ const DefaultUser = {
             ]
         }
     ],
-    Token: ''
+    Token: '',
+    SelectedContext: 'self',
+    SelectedFeature: 'dashboard'
 };
 
 export { DefaultUser };

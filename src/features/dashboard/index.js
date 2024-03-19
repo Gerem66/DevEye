@@ -1,24 +1,19 @@
-import { useContext } from 'react';
-
 import './style.css';
 
-import { GlobalContext } from '../../context';
 import { Header, Row, Card } from '../../components/components';
 
 /**
- * @typedef {import('Types/Context').ContextType} ContextType
- * @typedef {import('Types/Feature').FeatureType} FeatureType
+ * @typedef {import('Types/Feature').FeatureProps} FeatureProps
  */
 
-/**
- * @param {ContextType} context
- * @param {FeatureType} feature
- * @returns {JSX.Element}
- */
-function FeatureProfile(context, feature) {
+/** @param {FeatureProps} props */
+function FeatureProfile({ user, setUser, context, feature }) {
     return (
         <div className='profile'>
-            <Header context={context} feature={feature} />
+            <Header
+                context={context}
+                feature={feature}
+            />
 
             <Row>
                 <Card.Value
@@ -46,42 +41,23 @@ function FeatureProfile(context, feature) {
                 />
             </Row>
 
-            {context.id === 'self' ? (
-                <SelfProfile context={context} />
-            ) : (
-                <ContextProfile />
-            )}
+            <Row>
+                <Card.Element size='1/2' color='blue-dark'>
+                    <h2>Profil</h2>
+                    <div className='separator' />
+
+                    <button onClick={() => setUser(null)}>
+                        Disconnect
+                    </button>
+                </Card.Element>
+
+                <Card.Element size='1/2' color='blue-dark'>
+                    <h2>News</h2>
+                    <div className='separator' />
+                </Card.Element>
+            </Row>
 
         </div>
-    );
-}
-
-function SelfProfile({ context }) {
-    const { setUser } = useContext(GlobalContext);
-
-    return (
-        <Row>
-            <Card.Element size='1/2' color='blue-dark'>
-                <h2>{context.id === 'self' ? 'Profil' : 'Settings'}</h2>
-                <div className='separator' />
-
-                <button onClick={() => setUser(null)}>
-                    Disconnect
-                </button>
-            </Card.Element>
-
-            <Card.Element size='1/2' color='blue-dark'>
-                <h2>News</h2>
-                <div className='separator' />
-            </Card.Element>
-        </Row>
-    );
-}
-
-function ContextProfile() {
-    return (
-        <>
-        </>
     );
 }
 

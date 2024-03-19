@@ -10,9 +10,12 @@ const LOCAL_KEYS = {
  */
 function Save(key, value) {
     if (typeof value === 'object') {
-        value = JSON.stringify(value);
+        localStorage.setItem(key, JSON.stringify(value));
+    } else if (typeof value === 'string') {
+        localStorage.setItem(key, value);
+    } else {
+        throw new Error('Invalid type');
     }
-    localStorage.setItem(key, value);
 }
 
 /**

@@ -1,7 +1,7 @@
 import { Component, createContext } from 'react';
 
 import ClientTCP from './Utils/TCP';
-import { Load, Save } from './Utils/storage';
+import { Clear, Load, Save } from './Utils/storage';
 
 /**
  * @typedef {import('Types/User').UserType} UserType
@@ -9,24 +9,26 @@ import { Load, Save } from './Utils/storage';
  * @typedef {Object} ReactContextType
  * @property {ClientTCP} server
  * @property {UserType | null} user
- * @property {(newUser: UserType) => void} setUser
+ * @property {(newUser: UserType | null) => void} setUser
  */
 
 /** @type {ReactContextType} */
 const DEFAULT_VALUE = {
     server: new ClientTCP(),
     user: null,
-    setUser: () => {}
+    /** @param {UserType | null} user */
+    setUser: (user) => {}
 };
 
 const GlobalContext = createContext(DEFAULT_VALUE);
 
 class ContextProvider extends Component {
+    /** @param {Object} props */
     constructor(props) {
         super(props);
         this.state = DEFAULT_VALUE;
 
-        const user = Load('user');
+        const user = /** @type {UserType | null} */ (Load('user'));
         if (user !== null) {
             this.state.user = user;
         }
@@ -35,16 +37,14 @@ class ContextProvider extends Component {
     componentDidMount() {
     }
 
-    /** @param {UserType} newUser */
+    /** @param {UserType | null} newUser */
     setUser = (newUser) => {
-        Save('user', newUser);
-        this.setState({ user: newUser });
-
         if (newUser === null) {
-            this.state.server.Disconnect();
-        } else if (!this.state.server.IsConnected()) {
-            this.state.server.Connect();
+            Clear('user');
+        } else {
+            Save('user', newUser);
         }
+        this.setState({ user: newUser });
     }
 
     render() {

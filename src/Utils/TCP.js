@@ -19,12 +19,12 @@ class ClientTCP {
     callbacks = {};
 
     /**
-     * @returns {boolean} Whether the connection was successful, or if it was already connected
+     * @returns {Promise<boolean>} Whether the connection was successful, or if it was already connected
      */
-    Connect = () => {
+    Connect = async () => {
         // If already connected, or if the user is not connected to the server
         if (this.IsConnected()) {
-            return false;
+            return true;
         }
 
         const protocol = VPS_CREDENTIALS.env === 'development' ? 'ws' : 'wss';
@@ -32,27 +32,44 @@ class ClientTCP {
         const socket = new WebSocket(url, 'deveye-only-tx0-cr7');
         socket.addEventListener('open', this.onOpen);
         socket.addEventListener('message', this.onMessage);
-        socket.addEventListener('error', this.onError);
         socket.addEventListener('close', this.onClose);
         this.socket = socket;
+
+        // Wait until conencted or error && reset listener
+        return new Promise((resolve) => {
+            const timer = setTimeout(() => {
+                resolve(false);
+            }, 1000);
+
+            socket.addEventListener('open', () => {
+                clearTimeout(timer);
+                socket.removeEventListener('open', this.onOpen);
+                socket.removeEventListener('error', this.onError);
+                socket.addEventListener('error', this.onError);
+                resolve(true);
+            });
+
+            socket.addEventListener('error', () => {
+                clearTimeout(timer);
+                resolve(false);
+            });
+        });
     }
 
     Disconnect = () => {
-        if (this.IsConnected()) {
+        if (this.socket !== null && this.IsConnected()) {
             this.socket.close();
         }
         this.socket = null;
     }
 
     IsConnected = () => {
-        return this.socket !== null && this.socket.readyState === WebSocket.OPEN;
+        return this.socket?.readyState === WebSocket.OPEN;
     }
 
     /** @param {Event} event */
     onOpen = (event) => {
         console.log('[TCP] Connected to server');
-        const data = { token: '' };
-        //this.socket.send(JSON.stringify(data));
     }
 
     /** @param {MessageEvent} event */
@@ -62,12 +79,6 @@ class ClientTCP {
          * @type {{ action: T, message: TCPRequestMap[T]['receive'] }}
          */
         const data = JSON.parse(event.data);
-
-        if (data.action === 'get-user-info') {
-            data.message.status = 0
-        } else if (data.action === 'TEEEEEEST') {
-            data.message.status = 0
-        }
 
         if (data.hasOwnProperty('callbackID')) {
             const callbackID = data['callbackID'];
@@ -107,7 +118,7 @@ class ClientTCP {
             return false;
         }
 
-        if (this.IsConnected() === false) {
+        if (this.socket === null || !this.IsConnected()) {
             console.log('[TCP] Send socket: Not connected.');
             return false;
         }
@@ -138,7 +149,7 @@ class ClientTCP {
             }, timeout);
             this.callbacks[callbackID] = (data) => {
                 clearTimeout(timer);
-                resolve(data['result']);
+                resolve(data['message']);
             };
         });
     }

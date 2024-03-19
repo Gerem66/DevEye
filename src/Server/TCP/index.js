@@ -2,16 +2,19 @@ import 'dotenv/config';
 import SQL from './src/SQL.js';
 import Server from './src/Server.js';
 import MyCrypto from './src/Utils/Crypt.js';
+import { ffetch } from './src/Utils/Request.js';
 
 /**
  * @typedef {import('Types/TCP.ts').TCPRequestMap} TCPRequestMap
+ * @typedef {import('Types/TCP.ts').TCPRequestHeader} TCPRequestHeader
+ * @typedef {import('Types/TCP.ts').ReceiveRequestGetUserInfo} ReceiveRequestGetUserInfo
  */
 
 const database = new SQL({
-    database: process.env.DB_DATABASE,
-    hostname: process.env.DB_HOSTNAME,
-    username: process.env.DB_USERNAME,
-    password: process.env.DB_PASSWORD
+    database: process.env.DB_DATABASE || '',
+    hostname: process.env.DB_HOSTNAME || '',
+    username: process.env.DB_USERNAME || '',
+    password: process.env.DB_PASSWORD || ''
 });
 
 const serv = new Server();
@@ -31,13 +34,41 @@ serv.Listen(8080, {
     onMessage: async (connection, data) => {
         if (data.action === 'get-user-info') {
             const message = /** @type {TCPRequestMap['get-user-info']['send']} */ (data.message);
-            //const user = database.QueryPrepare('SELECT * FROM users WHERE token = ?', [message.token]);
-            //connection.send(JSON.stringify({ status: 200, user }));
+
+            // Check token
+            const code = 'UJu-79a?:w=4O7mp#sM]yQiOsI/Jb_ag';
             const token = message.token;
-            const a = new MyCrypto('!VjrqHB_eQ?r#C8HBj1<470L:Ddd;jO$', 'Y0QuZLpVt38Qb?Fai4Hy@$Ix#iG8J1nw');
-            const decrypted = await a.decrypt(message.token);
-            console.log(decrypted);
-            connection.send(JSON.stringify({ status: 200, user: 'aaaaaaa' }));
+            const requestToken = await ffetch('get-token', { code, token });
+            if (requestToken.status !== 0) {
+                // TODO: Alert
+                connection.send(JSON.stringify({
+                    status: 1,
+                    callbackID: data.callbackID
+                }));
+                return;
+            }
+
+            const user = await database.QueryPrepare('SELECT * FROM Users WHERE Token = ?', [requestToken.content]);
+            if (user === null) {
+                // TODO: Alert
+                connection.send(JSON.stringify({
+                    status: 1,
+                    callbackID: data.callbackID
+                }));
+            }
+
+            /** @type {TCPRequestHeader} */
+            const response = {
+                action: 'get-user-info',
+                /** @type {ReceiveRequestGetUserInfo} */
+                message: {
+                    status: 0,
+                    user: user[0]
+                },
+                callbackID: data.callbackID
+            };
+
+            connection.send(JSON.stringify(response));
         }
     }
 });

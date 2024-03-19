@@ -17,8 +17,8 @@ const NavFeaturesProps = {
      * @type {{ feature_id: string, context_id: string }}
      */
     active: {
-        feature_id: null,
-        context_id: null
+        feature_id: '',
+        context_id: ''
     },
 
     /** @type {() => void} */
@@ -29,20 +29,47 @@ const NavFeaturesProps = {
 };
 
 class NavFeatures extends React.Component {
+    render() {
+        const { context, onProfileClick } = this.props;
+
+        return (
+            <div className='nav-features'>
+
+                {/* Profile */}
+                <button className='profile' onClick={onProfileClick}>
+                    <div className='profile-content'>
+                        <img
+                            className='profile-image'
+                            src={'./images/' + context?.logo}
+                            alt='Logo'
+                        />
+                        <span>{context?.name || 'Context'}</span>
+                    </div>
+                    <span className='icon icon-arrow' />
+                </button>
+
+                {/* Features */}
+                {this.renderCategory(context)}
+
+            </div>
+        );
+    }
+
     /**
-     * @param {ContextType|null} context
-     * @returns {JSX.Element}
+     * @param {ContextType | null} context
+     * @returns {JSX.Element | null}
      */
     renderCategory = (context) => {
         if (!context) return null;
 
         const features = context.features
             .map(id => AllFeatures.find(f => f.id === id))
+            .filter(f => f !== undefined)
             .map(feature => this.renderFeature(context, feature));
 
         return (
             <section
-                key={'section-' + context}
+                key={'section-' + context.id}
                 className='category'
                 data-title={context.name}
             >
@@ -72,33 +99,6 @@ class NavFeatures extends React.Component {
                 <span className={'icon icon-' + feature.icon} />
                 <span>{feature.name}</span>
             </button>
-        );
-    }
-
-    render() {
-        const { context, onProfileClick } = this.props;
-        const features = this.renderCategory(context);
-
-        return (
-            <div className='nav-features'>
-
-                {/* Profile */}
-                <button className='profile' onClick={onProfileClick}>
-                    <div className='profile-content'>
-                        <img
-                            className='profile-image'
-                            src={'./images/' + context?.logo}
-                            alt='Logo'
-                        />
-                        <span>{context?.name || 'Context'}</span>
-                    </div>
-                    <span className='icon icon-arrow' />
-                </button>
-
-                {/* Features */}
-                {features}
-
-            </div>
         );
     }
 }
