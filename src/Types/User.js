@@ -24,26 +24,7 @@ const DefaultUser = {
     Avatar: '',
     Settings: [],
     Created: 0,
-    //Contexts: []
-    Contexts: [
-        {
-            id: 'self',
-            name: 'Username',
-            logo: 'Avatar',
-            features: [
-                'dashboard',
-                'password'
-            ]
-        },
-        {
-            id: 'test',
-            name: 'test',
-            logo: 'default.png',
-            features: [
-                'dashboard'
-            ]
-        }
-    ],
+    Contexts: [],
     Token: '',
     SelectedContext: 'self',
     SelectedFeature: 'dashboard'

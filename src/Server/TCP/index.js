@@ -35,7 +35,7 @@ serv.Listen(8080, {
         if (data.action === 'get-user-info') {
             const message = /** @type {TCPRequestMap['get-user-info']['send']} */ (data.message);
 
-            // Check token
+            // Check token & code
             const code = 'UJu-79a?:w=4O7mp#sM]yQiOsI/Jb_ag';
             const token = message.token;
             const requestToken = await ffetch('get-token', { code, token });
@@ -56,6 +56,28 @@ serv.Listen(8080, {
                     callbackID: data.callbackID
                 }));
             }
+
+            // Load contexts
+            const selfContext = {
+                id: 'self',
+                name: user[0].Username,
+                logo: user[0].Avatar,
+                features: [
+                    'dashboard',
+                    'password'
+                ]
+            };
+            const tempContexts = [
+                {
+                    id: 'test',
+                    name: 'test',
+                    logo: 'default.png',
+                    features: [
+                        'dashboard'
+                    ]
+                }
+            ];
+            user[0].Contexts = [selfContext, ...tempContexts];
 
             /** @type {TCPRequestHeader} */
             const response = {

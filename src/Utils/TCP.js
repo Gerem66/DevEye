@@ -16,12 +16,15 @@ class ClientTCP {
     /** @type {ConnectionState} */
     state = 'idle';
 
+    callbackClose = () => {};
+
     callbacks = {};
 
     /**
+     * @param {() => void} onCloseCallback
      * @returns {Promise<boolean>} Whether the connection was successful, or if it was already connected
      */
-    Connect = async () => {
+    Connect = async (onCloseCallback) => {
         // If already connected, or if the user is not connected to the server
         if (this.IsConnected()) {
             return true;
@@ -46,6 +49,7 @@ class ClientTCP {
                 socket.removeEventListener('open', this.onOpen);
                 socket.removeEventListener('error', this.onError);
                 socket.addEventListener('error', this.onError);
+                this.callbackClose = onCloseCallback;
                 resolve(true);
             });
 
@@ -60,6 +64,7 @@ class ClientTCP {
         if (this.socket !== null && this.IsConnected()) {
             this.socket.close();
         }
+        this.callbackClose();
         this.socket = null;
     }
 

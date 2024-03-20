@@ -125,7 +125,7 @@ class LoginPageBack extends React.Component {
 
         let connected = false;
         if (data.status === 0) {
-            connected = await tcp.Connect();
+            connected = await tcp.Connect(() => setUser(null));
             if (connected) {
                 const response = await tcp.SendAndWaitForCallback('get-user-info', {
                     token: data.content
@@ -197,7 +197,7 @@ class LoginPageBack extends React.Component {
             return;
         }
 
-        let connected = await tcp.Connect();
+        let connected = await tcp.Connect(() => setUser(null));
         if (connected === false) {
             Clear('token');
             await this.WaitAnimation();
