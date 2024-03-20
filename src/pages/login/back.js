@@ -1,22 +1,27 @@
 import React from 'react';
 
 import { DefaultUser } from '../../Types/User';
-import { GlobalContext } from '../../context';
 import { ffetch } from '../../Utils/request';
 import { Sleep } from '../../Utils/functions';
+import { Clear, Load, Save } from '../../Utils/storage';
 
 /**
- * @typedef {import('../../Types/User').UserType} UserType
- * @typedef {import('../../context').ReactContextType} ContextType
+ * @typedef {import('Types/User').UserType} UserType
+ * @typedef {import('Utils/TCP').default} ClientTCP
  */
 
 const LoginPageProps = {
+    /** @type {UserType | null} */
+    user: null,
+
+    /** @type {(user: UserType | null) => void} */
+    setUser: (user) => {},
+
+    /** @type {ClientTCP | null} */
+    tcp: null
 };
 
-/** @extends {React.Component<{}, {}, ContextType>} */
 class LoginPageBack extends React.Component {
-    static contextType = GlobalContext;
-
     state = {
         show: true,
         input: {
@@ -37,27 +42,18 @@ class LoginPageBack extends React.Component {
     startTimeLoading = 0;
 
     componentDidMount() {
-        const { user } = /** @type {ContextType} */ (this.context);
-        if (user !== null) {
-            this.LoginFromToken(user.Token);
+        const token = Load('token');
+        if (token !== null && typeof token === 'string') {
+            this.LoginFromToken(token);
         }
     }
 
     componentDidUpdate() {
-        const { user } = /** @type {ContextType} */ (this.context);
-        const newState = user === null;
-
-        /*
-        if (newState !== this.state.show) {
-            this.setState({ show: newState });
-            if (newState) {
-                this.inputUsername.current.focus();
-            }
+        // Disconnect user
+        if (this.props.user === null && this.state.show === false) {
+            this.setState({ show: true });
+            Clear('token');
         }
-        */
-    }
-
-    componentWillUnmount() {
     }
 
     /** @param {React.ChangeEvent<HTMLInputElement>} e */
@@ -77,9 +73,12 @@ class LoginPageBack extends React.Component {
         }
     }
 
-    StartAnimation = () => {
+    StartAnimation = (autoLogin = false) => {
         this.startTimeLoading = Date.now();
         this.cardLogin.current?.classList.add('card-to-progressbar');
+        if (autoLogin) {
+            this.cardLogin.current?.classList.add('auto-login');
+        }
     }
 
     WaitAnimation = async () => {
@@ -91,12 +90,18 @@ class LoginPageBack extends React.Component {
     }
 
     StopAnimation = () => {
+        this.startTimeLoading = 0;
         this.cardLogin.current?.classList.remove('card-to-progressbar');
+        this.cardLogin.current?.classList.remove('auto-login');
     }
 
     onLogin = async () => {
-        const { server, setUser } = /** @type {ContextType} */ (this.context);
+        const { tcp, setUser } = this.props;
         const { input: { username, password } } = this.state;
+
+        if (tcp === null || this.startTimeLoading !== 0) {
+            return;
+        }
 
         // Check inputs
         if (username === '') {
@@ -108,6 +113,9 @@ class LoginPageBack extends React.Component {
             return;
         }
 
+        this.inputUsername.current?.blur();
+        this.inputPassword.current?.blur();
+
         this.StartAnimation();
 
         // Login request
@@ -117,15 +125,15 @@ class LoginPageBack extends React.Component {
 
         let connected = false;
         if (data.status === 0) {
-            connected = await server.Connect();
+            connected = await tcp.Connect();
             if (connected) {
-                const response = await server.SendAndWaitForCallback('get-user-info', {
+                const response = await tcp.SendAndWaitForCallback('get-user-info', {
                     token: data.content
                 });
 
                 if (response === 'not-sended' || response === 'timeout' || response.status !== 0) {
                     connected = false;
-                    server.Disconnect();
+                    tcp.Disconnect();
                 } else {
                     // Response.user into newUser
                     newUser = {
@@ -150,6 +158,7 @@ class LoginPageBack extends React.Component {
 
             // Set user
             setUser(newUser);
+            Save('token', newUser.Token);
             this.setState({ show: false });
 
             // Await for navbar animation to finish
@@ -170,58 +179,56 @@ class LoginPageBack extends React.Component {
      */
     LoginFromToken = async (token) => {
         // Login request
-        const { server, user, setUser } = /** @type {ContextType} */ (this.context);
-        if (user === null) {
+        const { tcp, setUser } = this.props;
+        if (tcp === null) {
             return;
         }
 
-        this.StartAnimation();
+        this.StartAnimation(true);
 
         // Login request
-        const data = await ffetch('check-token', { token: user.Token });
+        const data = await ffetch('check-token', { token });
         if (data.status !== 0) {
             // Invalid token, reset user
-            setUser(null);
+            Clear('token');
 
             await this.WaitAnimation();
             this.StopAnimation();
             return;
         }
 
-        let connected = await server.Connect();
+        let connected = await tcp.Connect();
         if (connected === false) {
-            setUser(null);
+            Clear('token');
             await this.WaitAnimation();
             this.StopAnimation();
             return;
         }
 
-        const response = await server.SendAndWaitForCallback('get-user-info', {
-            token: user.Token
-        });
+        const response = await tcp.SendAndWaitForCallback('get-user-info', { token });
 
         if (response === 'not-sended' || response === 'timeout' || response.status !== 0) {
             connected = false;
-            server.Disconnect();
-            setUser(null);
+            tcp.Disconnect();
+            Clear('token');
             await this.WaitAnimation();
             this.StopAnimation();
             return;
         }
 
-        // Response.user into newUser
-        /** @type {UserType} */
-        const newUser = {
-            ...user,
-            ...response.user
-        };
-
         await this.WaitAnimation();
 
+        setUser({
+            ...DefaultUser,
+            ...response.user,
+            Token: token
+        });
+
         // Open home page
-        setUser(newUser);
         this.setState({ show: false });
 
+        // Wait for home animation to finish
+        await Sleep(500);
         this.StopAnimation();
     }
 }

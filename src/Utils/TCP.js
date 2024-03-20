@@ -156,15 +156,3 @@ class ClientTCP {
 }
 
 export default ClientTCP;
-
-(async () => {
-    const client = new ClientTCP();
-    const resultGetUserInfo = await client.SendAndWaitForCallback('TEEEEEEST', {
-        variablerandom: 'username'
-    });
-    if (resultGetUserInfo === 'not-sended') {
-    } else if (resultGetUserInfo === 'timeout') {
-    } else if (resultGetUserInfo.status === 0) {
-        resultGetUserInfo.yessss.caca
-    }
-})

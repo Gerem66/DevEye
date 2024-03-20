@@ -1,7 +1,7 @@
 import { StrIsJson } from './functions';
 
 const LOCAL_KEYS = {
-    user: 'data/user'
+    token: 'data/token'
 };
 
 /**

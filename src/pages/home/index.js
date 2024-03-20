@@ -1,7 +1,6 @@
-import { useContext, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import './style.css';
-import { GlobalContext } from '../../context';
 import { Navbar } from '../../components/components';
 import { AllFeatures } from '../../Types/Feature';
 
@@ -9,19 +8,17 @@ import { AllFeatures } from '../../Types/Feature';
  * @typedef {import('Types/User').UserType} UserType
  * @typedef {import('Types/Context').ContextType} ContextType
  * @typedef {import('Types/Feature').FeatureType} FeatureType
+ * @typedef {import('Utils/TCP').default} ClientTCP
  */
 
 /**
- * param {Object} props
- * param {UserType} props.user
+ * @param {Object} props
+ * @param {ClientTCP} props.tcp
+ * @param {UserType | null} props.user
+ * @param {(user: UserType | null) => void} props.setUser
  * @returns {JSX.Element | null}
  */
-function HomePage() {
-    const { user, setUser } = useContext(GlobalContext);
-    if (user === null) {
-        return null;
-    }
-
+function HomePage({ user, setUser }) {
     const defaultFeature = AllFeatures.find(f => f.id === 'dashboard');
     if (defaultFeature === undefined) {
         return null;
@@ -31,11 +28,13 @@ function HomePage() {
     const [ feature, setFeature ] = useState(/** @type {FeatureType | null} */ (null));
 
     useEffect(() => {
-        setContext(user.Contexts[0]);
-        setFeature(defaultFeature);
-    }, []);
+        if (user !== null && user.Contexts.length > 0) {
+            setContext(user.Contexts[0]);
+            setFeature(defaultFeature);
+        }
+    }, [ user ]);
 
-    if (context === null || feature === null) {
+    if (user === null || context === null || feature === null) {
         return null;
     }
 

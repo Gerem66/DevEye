@@ -16,7 +16,7 @@ class Navbar extends NavbarBack {
         const styleSwitch = is_navpanel_switch ? ' switch' : '';
 
         return (
-            <nav id='navbar' className='navbar'>
+            <nav id='navbar' className={`navbar ${user === null ? '' : 'open'}`}>
                 {/* Header - Logo & text */}
                 <div className='navbar-header'>
                     <a href='/' className='navbar-brand'>

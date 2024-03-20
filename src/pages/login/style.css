@@ -105,6 +105,13 @@ body {
     opacity: 1;
     transition: width 1s .5s cubic-bezier(.77,0,.18,1);
 }
+.login .login-card.auto-login {
+    transition: none;
+    height: 3px;
+}
+.login .login-card.auto-login *:not(.progress-bar) {
+    display: none;
+}
 
 .login .input-group {
     position: relative;
