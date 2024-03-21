@@ -1,5 +1,6 @@
 import FeatureDashboard from './Dashboard';
 import FeaturePassword from './Password';
+import FeatureProfile from './Profile';
 
 /**
  * @typedef {import('Types/Feature').FeatureType} FeatureType
@@ -14,16 +15,16 @@ const FEATURES = [
         component: FeatureDashboard
     },
     {
-        id: 'profile',
-        name: 'Profil',
-        icon: 'user',
-        component: FeatureDashboard
-    },
-    {
         id: 'password',
         name: 'Mot de passe',
         icon: 'lock',
         component: FeaturePassword
+    },
+    {
+        id: 'profile',
+        name: 'Profil',
+        icon: 'user',
+        component: FeatureProfile
     }
 ];
 

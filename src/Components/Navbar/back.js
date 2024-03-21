@@ -18,6 +18,9 @@ const NavbarProps = {
     /** @type {ContextType | null} */
     context: null,
 
+    /** @type {FeatureType | null} */
+    feature: null,
+
     /** @type {(context: ContextType) => void} */
     setContext: (context) => {},
 
@@ -28,33 +31,30 @@ const NavbarProps = {
 class NavbarBack extends React.Component {
     state = {
         active: {
-            /** @type {string} */
-            feature_id: '',
+            /** @type {number} */
+            context_id: 0,
 
-            /** @type {string} */
-            context_id: ''
+            /** @type {FeaturesID | null} */
+            feature_id: null
         },
 
         /** @type {boolean} */
         is_navpanel_switch: false
     };
 
-    componentDidMount() {
-        this.__selectDefaultFeature();
-    }
-
     /** @param {NavbarProps} prevProps */
     componentDidUpdate(prevProps) {
-        if (prevProps.context !== this.props.context) {
-            this.__selectDefaultFeature();
+        const { context, feature } = this.props;
+        if (context !== null && feature !== null) {
+            if (context.id !== this.state.active.context_id || feature.id !== this.state.active.feature_id) {
+                this.setState({
+                    active: {
+                        context_id: context.id,
+                        feature_id: feature.id
+                    }
+                });
+            }
         }
-    }
-
-    __selectDefaultFeature = () => {
-        const { context } = this.props;
-        if (context === null || context.features.length === 0) return;
-
-        this.onFeatureClick(context.id, context.features[0]);
     }
 
     onProfileClick = () => {
@@ -71,10 +71,11 @@ class NavbarBack extends React.Component {
     }
 
     /**
-     * @param {string} context_id
+     * @param {number} context_id
      * @param {FeaturesID} feature_id
+     * @param {boolean} [sendCallbackToParent]
      */
-    onFeatureClick = (context_id, feature_id) => {
+    onFeatureClick = (context_id, feature_id, sendCallbackToParent = true) => {
         const { user } = this.props;
 
         // Check if feature is already active
@@ -105,7 +106,9 @@ class NavbarBack extends React.Component {
         });
 
         // Set content
-        this.props.setFeature(feature);
+        if (sendCallbackToParent) {
+            this.props.setFeature(feature);
+        }
     }
 }
 

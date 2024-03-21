@@ -63,7 +63,7 @@ serv.Listen(8080, {
             const contexts = await database.QueryPrepare('SELECT * FROM Contexts WHERE ID IN (?)', [ contextsID.join(',') ]);
 
             const selfContext = {
-                id: 'self',
+                id: 0,
                 name: user[0].Username,
                 logo: user[0].Avatar,
                 features: JSON.parse(user[0].Features)

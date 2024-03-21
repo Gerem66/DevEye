@@ -11,6 +11,8 @@ import { FEATURES } from '../../Features/Features';
  * @typedef {import('Utils/TCP').default} ClientTCP
  */
 
+let firstLoad = false;
+
 /**
  * @param {Object} props
  * @param {ClientTCP} props.tcp
@@ -19,18 +21,28 @@ import { FEATURES } from '../../Features/Features';
  * @returns {JSX.Element | null}
  */
 function HomePage({ user, setUser }) {
-    const defaultFeature = FEATURES.find(f => f.id === 'dashboard');
-    if (defaultFeature === undefined) {
-        return null;
-    }
-
     const [ context, setContext ] = useState(/** @type {ContextType | null} */ (null));
     const [ feature, setFeature ] = useState(/** @type {FeatureType | null} */ (null));
 
+
     useEffect(() => {
-        if (user !== null && user.Contexts.length > 0) {
-            setContext(user.Contexts[0]);
-            setFeature(defaultFeature);
+        if (user !== null && context === null) {
+            const context = user.Contexts.find(c => c.id === user.DefaultContext) || null;
+            if (context === null || !context.features.includes(user.DefaultFeature)) {
+                setContext(null);
+                console.error('Context or feature not found');
+                return;
+            }
+
+            const feature = FEATURES.find(f => f.id === user.DefaultFeature) || null;
+            if (feature === null) {
+                setFeature(null);
+                console.error('Feature not found');
+                return;
+            }
+
+            setContext(context);
+            setFeature(feature);
         }
     }, [ user ]);
 
@@ -38,21 +50,23 @@ function HomePage({ user, setUser }) {
         if (context === null) {
             return;
         }
-        if (context.id === 'self') {
-            setFeature(defaultFeature);
-        } else if (context.features.length > 0) {
-            const newFeature = FEATURES.find(f => f.id === context.features[0]);
-            if (newFeature === undefined) {
-                setFeature(null);
-                return;
-            }
-            setFeature(newFeature);
-        } else {
-            setFeature(null);
+
+        // Disable auto-load feature on first render
+        if (!firstLoad) {
+            firstLoad = true;
+            return;
         }
+
+        if (context.features.length <= 0) {
+            setFeature(null);
+            return;
+        }
+
+        const newFeature = FEATURES.find(f => f.id === context.features[0]) || null;
+        setFeature(newFeature);
     }, [ context ]);
 
-    if (user === null || context === null) {
+    if (user === null) {
         return null;
     }
 
@@ -62,6 +76,7 @@ function HomePage({ user, setUser }) {
                 <Navbar
                     user={user}
                     context={context}
+                    feature={feature}
                     setContext={setContext}
                     setFeature={setFeature}
                 />

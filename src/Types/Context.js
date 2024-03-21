@@ -1,9 +1,9 @@
 /**
  * @typedef {import('./Feature').FeaturesID} FeaturesID
- * @typedef {import('../styles/icons').Icon} Icon
+ * @typedef {import('../Styles/icons').Icon} Icon
  * 
  * @typedef {Object} ContextType
- * @property {string} id
+ * @property {number} id Context ID (0 = self)
  * @property {string} name
  * @property {string} logo
  * @property {FeaturesID[]} features

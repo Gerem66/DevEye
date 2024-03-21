@@ -13,18 +13,18 @@ const NavFeaturesProps = {
     /** @type {ContextType|null} */
     context: null,
 
-    /**
-     * @type {{ feature_id: string, context_id: string }}
-     */
     active: {
-        feature_id: '',
-        context_id: ''
+        /** @type {FeaturesID | null} */
+        feature_id: null,
+
+        /** @type {number} */
+        context_id: 0
     },
 
     /** @type {() => void} */
     onProfileClick: () => {},
 
-    /** @type {(context: string, feature_id: FeaturesID) => void} */
+    /** @type {(context: number, feature_id: FeaturesID) => void} */
     onFeatureClick: (context_id, feature_id) => {}
 };
 
