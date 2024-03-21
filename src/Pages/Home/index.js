@@ -34,7 +34,25 @@ function HomePage({ user, setUser }) {
         }
     }, [ user ]);
 
-    if (user === null || context === null || feature === null) {
+    useEffect(() => {
+        if (context === null) {
+            return;
+        }
+        if (context.id === 'self') {
+            setFeature(defaultFeature);
+        } else if (context.features.length > 0) {
+            const newFeature = FEATURES.find(f => f.id === context.features[0]);
+            if (newFeature === undefined) {
+                setFeature(null);
+                return;
+            }
+            setFeature(newFeature);
+        } else {
+            setFeature(null);
+        }
+    }, [ context ]);
+
+    if (user === null || context === null) {
         return null;
     }
 

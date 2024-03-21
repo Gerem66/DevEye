@@ -1,6 +1,6 @@
 /**
- * @typedef {'dashboard' | 'password'} FeaturesID
- * @typedef {import('../styles/icons').Icon} Icon
+ * @typedef {'dashboard' | 'profile' | 'password'} FeaturesID
+ * @typedef {import('Styles/icons').Icon} Icon
  * @typedef {import('./User').UserType} UserType
  * @typedef {import('./Context').ContextType} ContextType
  * 

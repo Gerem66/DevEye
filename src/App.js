@@ -3,10 +3,10 @@ import { useState } from 'react';
 import HomePage from './Pages/Home/index';
 import LoginPage from './Pages/Login/index';
 
-import './styles/sizes.css';
-import './styles/fonts.css';
-import './styles/icons.css';
-import './styles/colors.css';
+import './Styles/sizes.css';
+import './Styles/fonts.css';
+import './Styles/icons.css';
+import './Styles/colors.css';
 
 import ClientTCP from './Utils/TCP';
 

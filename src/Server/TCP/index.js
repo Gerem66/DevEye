@@ -58,26 +58,25 @@ serv.Listen(8080, {
             }
 
             // Load contexts
+            const rawContextsID = await database.QueryPrepare('SELECT `ContextID` FROM ContextsLinks WHERE UserID = ?', [ user[0].ID ]);
+            const contextsID = rawContextsID.map((c) => c.ContextID);
+            const contexts = await database.QueryPrepare('SELECT * FROM Contexts WHERE ID IN (?)', [ contextsID.join(',') ]);
+
             const selfContext = {
                 id: 'self',
                 name: user[0].Username,
                 logo: user[0].Avatar,
-                features: [
-                    'dashboard',
-                    'password'
-                ]
+                features: JSON.parse(user[0].Features)
             };
-            const tempContexts = [
-                {
-                    id: 'test',
-                    name: 'test',
-                    logo: 'default.png',
-                    features: [
-                        'dashboard'
-                    ]
-                }
-            ];
-            user[0].Contexts = [selfContext, ...tempContexts];
+            const userContexts = contexts.map((c) => {
+                return {
+                    id: c.ID,
+                    name: c.Name,
+                    logo: c.Logo,
+                    features: JSON.parse(c.Features)
+                };
+            });
+            user[0].Contexts = [selfContext, ...userContexts];
 
             /** @type {TCPRequestHeader} */
             const response = {

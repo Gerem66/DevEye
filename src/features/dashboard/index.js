@@ -7,7 +7,7 @@ import { Header, Row, Card } from '../../Components';
  */
 
 /** @param {FeatureProps} props */
-function FeatureProfile({ user, setUser, context, feature }) {
+function FeatureDashboard({ user, setUser, context, feature }) {
     return (
         <div className='profile'>
             <Header
@@ -61,4 +61,4 @@ function FeatureProfile({ user, setUser, context, feature }) {
     );
 }
 
-export default FeatureProfile;
+export default FeatureDashboard;

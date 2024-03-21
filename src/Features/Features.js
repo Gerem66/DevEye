@@ -1,4 +1,4 @@
-import FeatureProfile from './Dashboard';
+import FeatureDashboard from './Dashboard';
 import FeaturePassword from './Password';
 
 /**
@@ -10,8 +10,14 @@ const FEATURES = [
     {
         id: 'dashboard',
         name: 'Dashboard',
+        icon: 'home',
+        component: FeatureDashboard
+    },
+    {
+        id: 'profile',
+        name: 'Profil',
         icon: 'user',
-        component: FeatureProfile
+        component: FeatureDashboard
     },
     {
         id: 'password',
