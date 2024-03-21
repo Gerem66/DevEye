@@ -1,7 +1,7 @@
 import React from 'react';
 
 import './styleFeatures.css';
-import { FEATURES } from '../../../features/Feature';
+import { FEATURES } from '../../../Features/Features';
 
 /**
  * @typedef {import('Types/Feature').FeaturesID} FeaturesID

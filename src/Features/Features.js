@@ -1,5 +1,5 @@
-import FeatureProfile from './dashboard';
-import FeaturePassword from './password';
+import FeatureProfile from './Dashboard';
+import FeaturePassword from './Password';
 
 /**
  * @typedef {import('Types/Feature').FeatureType} FeatureType

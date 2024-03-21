@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
-import HomePage from './pages/home/index';
-import LoginPage from './pages/login/index';
+import HomePage from './Pages/Home/index';
+import LoginPage from './Pages/Login/index';
 
 import './styles/sizes.css';
 import './styles/fonts.css';

@@ -1,4 +1,4 @@
-import { StrIsJson } from './functions';
+import { StrIsJson } from './Functions';
 
 const LOCAL_KEYS = {
     token: 'data/token'
