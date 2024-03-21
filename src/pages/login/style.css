@@ -22,7 +22,7 @@ body {
     align-items: center;
     justify-content: center;
     font-family: 'Open Sans';
-    background: linear-gradient(#446182, #1f2429);
+    background: linear-gradient(#446182, #13181c);
 
     transition: opacity 0.5s cubic-bezier(.77,0,.18,1);
     pointer-events: all;

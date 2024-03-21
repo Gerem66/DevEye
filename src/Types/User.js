@@ -11,8 +11,8 @@
  * @property {number} Created
  * @property {ContextType[]} Contexts
  * @property {string} Token
- * @property {string} SelectedContext
- * @property {string} SelectedFeature
+ * @property {string} DefaultContext
+ * @property {string} DefaultFeature
  */
 
 /** @type {UserType} */
@@ -26,8 +26,8 @@ const DefaultUser = {
     Created: 0,
     Contexts: [],
     Token: '',
-    SelectedContext: 'self',
-    SelectedFeature: 'dashboard'
+    DefaultContext: 'self',
+    DefaultFeature: 'dashboard'
 };
 
 export { DefaultUser };

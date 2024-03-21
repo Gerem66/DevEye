@@ -64,7 +64,6 @@ class ClientTCP {
         if (this.socket !== null && this.IsConnected()) {
             this.socket.close();
         }
-        this.callbackClose();
         this.socket = null;
     }
 
@@ -102,6 +101,7 @@ class ClientTCP {
         console.log('[TCP] TCP server:', event);
         this.state = 'error';
         this.Disconnect();
+        this.callbackClose();
     }
 
     /** @param {CloseEvent} event */

@@ -2,7 +2,7 @@ import React from 'react';
 
 import './style.css';
 import './button.css';
-import { AllFeatures } from '../../Types/Feature';
+import { FEATURES } from '../../features/Feature';
 
 /**
  * @typedef {import('Types/User').UserType} UserType
@@ -92,7 +92,7 @@ class NavbarBack extends React.Component {
             throw new Error('Feature not found');
 
         // Check if feature exists
-        const feature = AllFeatures.find(f => f.id === feature_id);
+        const feature = FEATURES.find(f => f.id === feature_id);
         if (!feature)
             throw new Error('Feature not found');
 

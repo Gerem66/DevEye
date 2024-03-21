@@ -1,7 +1,7 @@
 import React from 'react';
 
 import './styleFeatures.css';
-import { AllFeatures } from '../../../Types/Feature';
+import { FEATURES } from '../../../features/Feature';
 
 /**
  * @typedef {import('Types/Feature').FeaturesID} FeaturesID
@@ -63,7 +63,7 @@ class NavFeatures extends React.Component {
         if (!context) return null;
 
         const features = context.features
-            .map(id => AllFeatures.find(f => f.id === id))
+            .map(id => FEATURES.find(f => f.id === id))
             .filter(f => f !== undefined)
             .map(feature => this.renderFeature(context, feature));
 

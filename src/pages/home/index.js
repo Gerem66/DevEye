@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import './style.css';
 import { Navbar } from '../../components/components';
-import { AllFeatures } from '../../Types/Feature';
+import { FEATURES } from '../../features/Feature';
 
 /**
  * @typedef {import('Types/User').UserType} UserType
@@ -19,7 +19,7 @@ import { AllFeatures } from '../../Types/Feature';
  * @returns {JSX.Element | null}
  */
 function HomePage({ user, setUser }) {
-    const defaultFeature = AllFeatures.find(f => f.id === 'dashboard');
+    const defaultFeature = FEATURES.find(f => f.id === 'dashboard');
     if (defaultFeature === undefined) {
         return null;
     }
