@@ -1,6 +1,6 @@
 import React from 'react';
 
-import './style.css';
+import styles from './style.module.css';
 
 /**
  * @typedef {import('../index').CardSize} CardSize
@@ -8,19 +8,25 @@ import './style.css';
  * 
  * @typedef {object} CardValueProps
  * @property {React.JSX.Element|React.JSX.Element[]} children
+ * @property {string} title
  * @property {CardSize} [size]
  * @property {Color} [color]
+ * @property {string} [style]
  */
 
 /**
  * @param {CardValueProps} props
  * @returns {React.JSX.Element}
  */
-function CardElement({ children, size = '1/4', color = 'blue' }) {
+function CardElement({ children, title, style = '', size = '1/4', color = 'blue' }) {
     const sizeNb = `${size.replace('/', '')}`;
 
     return (
-        <div className={`card bg-${color} col-${sizeNb}`}>
+        <div
+            className={`${styles.card} bg-${color} col-${sizeNb} ${style}`}
+            style={{ paddingTop: !!title ? '52px' : '0'}}
+            data-title={title}
+        >
             {children}
         </div>
     );

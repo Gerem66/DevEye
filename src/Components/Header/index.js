@@ -14,7 +14,7 @@ import './style.css';
 function Header({ context, feature }) {
     return (
         <header>
-            <h1>{context?.name}</h1>
+            <h1>{feature?.name}</h1>
             <p>{`${context?.name} / ${feature.id}`}</p>
         </header>
     );

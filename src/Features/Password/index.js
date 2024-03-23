@@ -1,4 +1,4 @@
-import './style.css';
+import styles from './style.module.css';
 
 import { Header, Row, Card } from '../../Components';
 
@@ -9,31 +9,25 @@ import { Header, Row, Card } from '../../Components';
 /** @param {FeatureProps} props */
 function FeaturePassword({ context, feature }) {
     return (
-        <div className='profile'>
+        <div className={styles.profile}>
             <Header
                 context={context}
                 feature={feature}
             />
 
-            <Row>
-                <Card.Value
-                    title='Nombre total de mot de passe'
-                    value='0'
-                    color='blue'
-                    size='1/3'
-                    icon='details'
-                />
+            <Row style='center'>
+                <Card.Element title='Rechercher (xxx)' style={styles['search-container']} color='blue-dark' size='1/3'>
+                    <input
+                        className='form-input'
+                        type='text'
+                        placeholder="Nom d'un service"
+                    />
+                </Card.Element>
             </Row>
 
-            <Row>
-                <Card.Element size='1/2' color='blue-dark'>
-                    <h2>{'Mot de passes'}</h2>
-                    <div className='separator' />
-                </Card.Element>
-
-                <Card.Element size='1/2' color='blue-dark'>
-                    <h2>News</h2>
-                    <div className='separator' />
+            <Row style='center'>
+                <Card.Element title='Catégorie (xx)' size='2/3' color='blue-dark'>
+                    <div className={styles.separator} />
                 </Card.Element>
             </Row>
 
