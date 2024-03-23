@@ -1,6 +1,7 @@
 import './style.css';
 
 import { Header, Row, Card } from '../../Components';
+import { ChangeImage, EditPassword } from './actions';
 
 /**
  * @typedef {import('Types/Feature').FeatureProps} FeatureProps
@@ -8,6 +9,23 @@ import { Header, Row, Card } from '../../Components';
 
 /** @param {FeatureProps} props */
 function FeatureProfile({ user, setUser, context, feature }) {
+    /** @type {(time: number) => string} */
+    const convertDate = (time) => new Date(time * 1000)
+        .toLocaleDateString(undefined, {
+            hour: '2-digit',
+            minute: '2-digit',
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        })
+        .split(' ')
+        .map((word) => word.length <= 1 ? word : word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+
+    const dateCreated = convertDate(user.Created);
+    const dateLastLogin = !!user.LastLogin ? convertDate(user.LastLogin) : 'Première connexion';
+
     return (
         <div className='profile'>
             <Header
@@ -15,17 +33,59 @@ function FeatureProfile({ user, setUser, context, feature }) {
                 feature={feature}
             />
 
-            <Row>
-                <Card.Element size='1/2' color='blue-dark'>
-                    <h2>Profil</h2>
-                    <div className='separator' />
+            <Row style='center'>
+                <Card.Element size='1/3' color='blue-dark'>
+                    <div className='profile-header'>
+                        <div className='profile-avatar' onClick={ChangeImage}>
+                            <img
+                                className='profile-avatar-logo'
+                                src={'./images/' + context.logo}
+                                alt={context.name}
+                            />
+                        </div>
+                        <h2 className='profile-avatar-name'>{context.name}</h2>
+                    </div>
 
-                    <button onClick={() => setUser(null)}>
-                        Disconnect
+                    <div className='separator' />
+                    <div className='profile-info'>
+                        <h3 className='profile-info-title'>Adresse e-mail</h3>
+                        <p className='profile-info-text'>{user.Email}</p>
+                    </div>
+
+                    <div className='separator' />
+                    <div className='profile-info'>
+                        <h3 className='profile-info-title'>Nombre d'entreprises</h3>
+                        <p className='profile-info-text'>{user.Contexts.length - 1}</p>
+                    </div>
+
+                    <div className='separator' />
+                    <div className='profile-info'>
+                        <h3 className='profile-info-title'>Mot de passe</h3>
+                        <div className='profile-info-content'>
+                            <button className='profile-btn-edit' onClick={EditPassword}>
+                                Modifier le mot de passe
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className='separator' />
+                    <div className='profile-info'>
+                        <h3 className='profile-info-title'>Dernière connexion</h3>
+                        <p className='profile-info-text'>{dateLastLogin}</p>
+                    </div>
+
+                    <div className='separator' />
+                    <div className='profile-info'>
+                        <h3 className='profile-info-title'>Créé le</h3>
+                        <p className='profile-info-text'>{dateCreated}</p>
+                    </div>
+
+                    <div className='separator' />
+                    <button className='profile-btn-disconnect' onClick={() => setUser(null)}>
+                        Se déconnecter
                     </button>
                 </Card.Element>
             </Row>
-
         </div>
     );
 }

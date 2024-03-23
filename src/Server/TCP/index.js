@@ -57,6 +57,12 @@ serv.Listen(8080, {
                 }));
             }
 
+            // Update LastLogin
+            database.QueryPrepare('UPDATE Users SET LastLogin = NOW() WHERE ID = ?', [ user[0].ID ]);
+
+            user[0].LastLogin = (new Date(user[0].LastLogin)).getTime() / 1000;
+            user[0].Created = (new Date(user[0].Created)).getTime() / 1000;
+
             // Load contexts
             const rawContextsID = await database.QueryPrepare('SELECT `ContextID` FROM ContextsLinks WHERE UserID = ?', [ user[0].ID ]);
             const contextsID = rawContextsID.map((c) => c.ContextID);

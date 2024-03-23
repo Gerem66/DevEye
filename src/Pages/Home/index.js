@@ -29,14 +29,19 @@ function HomePage({ user, setUser }) {
         if (user !== null && context === null) {
             const context = user.Contexts.find(c => c.id === user.DefaultContext) || null;
             if (context === null || !context.features.includes(user.DefaultFeature)) {
-                setContext(null);
+                const selfContext = user.Contexts.find(f => f.id === 0) || null;
+                const firstFeature = FEATURES.find(f => f.id === selfContext?.features[0]) || null;
+                setContext(selfContext);
+                setFeature(firstFeature)
                 console.error('Context or feature not found');
                 return;
             }
 
             const feature = FEATURES.find(f => f.id === user.DefaultFeature) || null;
             if (feature === null) {
-                setFeature(null);
+                const firstFeature = FEATURES.find(f => context.features[0]) || null;
+                setContext(context);
+                setFeature(firstFeature)
                 console.error('Feature not found');
                 return;
             }

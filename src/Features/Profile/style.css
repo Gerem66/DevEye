@@ -2,9 +2,107 @@
     margin: 0;
 }
 .profile .separator {
-    margin: 0 8px;
-    width: 100px;
+    width: 100%;
     height: 1px;
+    background-color: #b7c0cd27;
+}
+.profile-header {
+    width: 100%;
     margin: 12px 0;
-    background-color: #b7c0cd4f;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+.profile-avatar {
+    position: relative;
+    width: 96px;
+    height: 96px;
+    padding: 3px;
+    border: 2px solid #b7c0cd4f;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: border-color 0.1s;
+}
+.profile-avatar:hover:after {
+    content: 'Modifier l\'image';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 400;
+    pointer-events: none;
+}
+.profile-avatar-logo {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+}
+.profile-avatar:hover .profile-avatar-logo {
+    filter: brightness(0.2);
+}
+.profile-avatar:hover {
+    border-color: #b7c0cd;
+}
+.profile-avatar-name {
+    margin-top: 8px;
+    font-size: 18px;
+    font-weight: 400;
+}
+.profile-info {
+    margin-bottom: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+}
+.profile-info-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #b7c0cd;
+}
+.profile-info-text {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 400;
+}
+.profile-info-content {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+}
+.profile-btn-edit {
+    padding: 4px 12px;
+    border: none;
+    border-radius: 4px;
+    color: white;
+    font-family: 'Open Sans';
+    background-color: #4481dd;
+    transition: background-color 0.1s;
+    cursor: pointer;
+}
+.profile-btn-disconnect {
+    width: 100%;
+    margin: 6px 0;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    color: white;
+    font-family: 'Open Sans';
+    font-size: 16px;
+    font-weight: 600;
+    background-color: #4481dd;
+    transition: background-color 0.1s;
+    cursor: pointer;
+}
+.profile-btn-edit:hover, .profile-btn-disconnect:hover {
+    background-color: #3a6ebd;
+}
+.profile-btn-edit:active, .profile-btn-disconnect:active {
+    background-color: #2e5a9e;
 }

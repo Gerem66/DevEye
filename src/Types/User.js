@@ -10,6 +10,7 @@
  * @property {string} Avatar
  * @property {string[]} Settings
  * @property {number} Created
+ * @property {number} LastLogin
  * @property {ContextType[]} Contexts
  * @property {string} Token
  * @property {number} DefaultContext ID of the default context (0 = self)
@@ -25,6 +26,7 @@ const DefaultUser = {
     Avatar: '',
     Settings: [],
     Created: 0,
+    LastLogin: 0,
     Contexts: [],
     Token: '',
     DefaultContext: 0,
