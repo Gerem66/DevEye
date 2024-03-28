@@ -3,7 +3,6 @@ body {
     padding: 0;
     font-family: 'Open Sans';
     background-color: #3a485b;
-    overflow: hidden;
 }
 
 .home {
@@ -18,8 +17,9 @@ body {
 
 /* Set first child to fill first column and second child the second column */
 .home > .home-left {
-    grid-column: 1;
-    grid-row: 1;
+    position: fixed;
+    width: 250px;
+    height: 100%;
 }
 .home > .home-right {
     grid-column: 2;

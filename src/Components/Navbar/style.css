@@ -6,7 +6,7 @@
     border-bottom-right-radius: 8px;
     background-color: #263544;
 
-    overflow: hidden;
+    overflow-x: hidden;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
 }
 
@@ -53,7 +53,6 @@
 .navpanel {
     display: flex;
     width: 200%;
-    height: 100%;
     overflow: auto;
     transition: transform 0.4s cubic-bezier(.77,0,.18,1);
 }

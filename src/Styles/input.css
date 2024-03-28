@@ -109,3 +109,9 @@ button.submit:disabled {
     cursor: not-allowed;
     background-color: #81858a;
 }
+
+a.link {
+    color: #42a5f5;
+    text-decoration: none;
+    cursor: pointer;
+}

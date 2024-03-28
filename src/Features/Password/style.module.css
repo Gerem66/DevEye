@@ -11,3 +11,39 @@
 .search-container {
     padding-bottom: 24px;
 }
+.password-container {
+    padding-top: 48px !important;
+}
+.add-password {
+    position: absolute;
+    top: 12px;
+    right: 24px;
+    font-size: 14px;
+}
+.password-cell > p {
+    display: inline;
+}
+.password-cell > i {
+    margin-left: 6px;
+    vertical-align: middle;
+    cursor: pointer;
+}
+.cell-active {
+    color: #2ecc71;
+}
+.cell-inactive {
+    color: #e74c3c;
+}
+.cell-none {
+    color: #aab0b1;
+}
+.scroll-mode {
+    max-height: 400px;
+    overflow-y: auto;
+}
+.scroll-mode > thead {
+    position: sticky;
+    top: 0px;
+    background-color: #223142;
+    z-index: 5;
+}

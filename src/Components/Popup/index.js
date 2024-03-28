@@ -13,20 +13,29 @@ import styles from './style.module.css';
  * @property {string} [style]
  */
 
-/** @type {Record<string, React.Dispatch<React.SetStateAction<boolean>>>} */
+/**
+ * @type {Record<string, { setOpened: React.Dispatch<React.SetStateAction<boolean>>, callback?: () => void }>}
+ */
 const PopupEvents = {};
 
-/** @param {string} id */
-function OpenPopup(id) {
+/**
+ * @param {string} id
+ * @param {() => void} [callback]
+ */
+function OpenPopup(id, callback = () => {}) {
     if (PopupEvents[id]) {
-        PopupEvents[id](true);
+        PopupEvents[id].setOpened(true);
+        PopupEvents[id].callback = callback;
     }
 }
 
 /** @param {string} id */
 function ClosePopup(id) {
     if (PopupEvents[id]) {
-        PopupEvents[id](false);
+        PopupEvents[id].setOpened(false);
+        if (PopupEvents[id].callback) {
+            PopupEvents[id].callback();
+        }
     }
 }
 
@@ -38,7 +47,10 @@ function Popup({ children, id, title = '', style = '' }) {
     const [ opened, setOpened ] = React.useState(false);
 
     React.useEffect(() => {
-        PopupEvents[id] = setOpened;
+        PopupEvents[id] = {
+            setOpened,
+            callback: () => {}
+        }
 
         return () => {
             delete PopupEvents[id];
@@ -53,7 +65,7 @@ function Popup({ children, id, title = '', style = '' }) {
     /** @param {React.MouseEvent<HTMLDivElement, MouseEvent>} event */
     const onBackgroundClick = (event) => {
         if (event.target === event.currentTarget) {
-            setOpened(false);
+            ClosePopup(id);
         }
     };
 
