@@ -26,7 +26,14 @@ function HomePage({ user, setUser }) {
 
 
     useEffect(() => {
-        if (user !== null && context === null) {
+        if (user === null) {
+            setContext(null);
+            setFeature(null);
+            firstLoad = false;
+            return;
+        }
+
+        if (context === null) {
             const context = user.Contexts.find(c => c.id === user.DefaultContext) || null;
             if (context === null || !context.features.includes(user.DefaultFeature)) {
                 const selfContext = user.Contexts.find(f => f.id === 0) || null;

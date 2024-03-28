@@ -7,6 +7,7 @@ import './Styles/sizes.css';
 import './Styles/fonts.css';
 import './Styles/icons.css';
 import './Styles/colors.css';
+import './Styles/input.css';
 
 import ClientTCP from './Utils/TCP';
 

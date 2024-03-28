@@ -1,5 +1,4 @@
 import './style.css';
-import './input.css';
 import LoginPageBack from './back';
 
 class LoginPage extends LoginPageBack {

@@ -1,6 +1,6 @@
 import './style.css';
 
-import { Header, Row, Card } from '../../Components';
+import { Header, Row, Card, Popup } from '../../Components';
 import { ChangeImage, EditPassword } from './actions';
 
 /**
@@ -86,6 +86,15 @@ function FeatureProfile({ user, setUser, context, feature }) {
                     </button>
                 </Card.Element>
             </Row>
+
+            <Popup id='in-dev'>
+                <h2>En développement</h2>
+                <p>
+                    Cette fonctionnalité est en cours de développement.
+                    <br />
+                    Elle sera bientôt disponible.
+                </p>
+            </Popup>
         </div>
     );
 }

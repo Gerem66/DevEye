@@ -1,9 +1,11 @@
+import { OpenPopup } from '../../Components/Popup';
+
 function ChangeImage() {
-    console.log('TODO');
+    OpenPopup('in-dev');
 }
 
 function EditPassword() {
-    console.log('TODO');
+    OpenPopup('in-dev');
 }
 
 export { ChangeImage, EditPassword };
