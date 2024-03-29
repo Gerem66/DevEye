@@ -61,7 +61,7 @@ class Server {
 
     Stop = () => {
         if (this.server.listening) {
-            this.wsServer.shutDown();
+            this.wsServer?.shutDown();
             this.server.close();
             console.log('[WebSocket] Closed');
         }
@@ -112,7 +112,7 @@ class Server {
             }
 
             const rawData = message.type === 'utf8' ? message.utf8Data : null;
-            if (!StrIsJson(rawData)) {
+            if (!rawData || !StrIsJson(rawData)) {
                 // TODO: Alert
                 return;
             }

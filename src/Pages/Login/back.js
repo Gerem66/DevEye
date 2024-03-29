@@ -1,13 +1,13 @@
 import React from 'react';
 
 import { DefaultUser } from '../../Types/User';
+import { tcp } from '../../Utils/TCP';
 import { ffetch } from '../../Utils/Request';
 import { Sleep } from '../../Utils/Functions';
 import { Clear, Load, Save } from '../../Utils/Storage';
 
 /**
  * @typedef {import('Types/User').UserType} UserType
- * @typedef {import('Utils/TCP').default} ClientTCP
  */
 
 const LoginPageProps = {
@@ -15,10 +15,7 @@ const LoginPageProps = {
     user: null,
 
     /** @type {(user: UserType | null) => void} */
-    setUser: (user) => {},
-
-    /** @type {ClientTCP | null} */
-    tcp: null
+    setUser: (user) => {}
 };
 
 class LoginPageBack extends React.Component {
@@ -96,7 +93,7 @@ class LoginPageBack extends React.Component {
     }
 
     onLogin = async () => {
-        const { tcp, setUser } = this.props;
+        const { setUser } = this.props;
         const { input: { username, password } } = this.state;
 
         if (tcp === null || this.startTimeLoading !== 0) {
@@ -127,7 +124,7 @@ class LoginPageBack extends React.Component {
         if (data.status === 0) {
             connected = await tcp.Connect(() => setUser(null));
             if (connected) {
-                const response = await tcp.SendAndWaitForCallback('get-user-info', {
+                const response = await tcp.SendAsync('get-user-info', {
                     token: data.content
                 });
 
@@ -179,7 +176,7 @@ class LoginPageBack extends React.Component {
      */
     LoginFromToken = async (token) => {
         // Login request
-        const { tcp, setUser } = this.props;
+        const { setUser } = this.props;
         if (tcp === null) {
             return;
         }
@@ -205,7 +202,7 @@ class LoginPageBack extends React.Component {
             return;
         }
 
-        const response = await tcp.SendAndWaitForCallback('get-user-info', { token });
+        const response = await tcp.SendAsync('get-user-info', { token });
 
         if (response === 'not-sended' || response === 'timeout' || response.status !== 0) {
             connected = false;

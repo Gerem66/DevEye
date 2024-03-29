@@ -10,20 +10,17 @@ import './Styles/colors.css';
 import './Styles/input.css';
 import './Styles/table.css';
 
-import ClientTCP from './Utils/TCP';
-
 /**
  * @typedef {import('Types/User').UserType} UserType
  */
 
 function App() {
-    const tcp = new ClientTCP();
     const [ user, setUser ] = useState(/** @type {UserType | null} */ (null));
 
     return (
         <>
-            <HomePage tcp={tcp} user={user} setUser={setUser} />
-            <LoginPage tcp={tcp} user={user} setUser={setUser} />
+            <HomePage user={user} setUser={setUser} />
+            <LoginPage user={user} setUser={setUser} />
         </>
     );
 }

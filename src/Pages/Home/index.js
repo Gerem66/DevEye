@@ -15,7 +15,6 @@ let firstLoad = false;
 
 /**
  * @param {Object} props
- * @param {ClientTCP} props.tcp
  * @param {UserType | null} props.user
  * @param {(user: UserType | null) => void} props.setUser
  * @returns {JSX.Element | null}
