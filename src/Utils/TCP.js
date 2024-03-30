@@ -112,12 +112,12 @@ class ClientTCP {
     /**
      * @template {keyof SendRequestType} T
      * @param {T} action
-     * @param {SendRequestType[T]} data
+     * @param {SendRequestType[T]} content
      * @param {string} [callbackID]
      * @returns {boolean} Whether the message was sent successfully
      */
-    Send = (action, data, callbackID) => {
-        if (typeof(data) !== 'object') {
+    Send = (action, content, callbackID) => {
+        if (typeof(content) !== 'object') {
             console.log('[TCP] Send socket: Invalid message type.');
             return false;
         }
@@ -127,8 +127,8 @@ class ClientTCP {
             return false;
         }
 
-        const _data = { action, callbackID, message: data };
-        this.socket.send(JSON.stringify(_data));
+        const data = { action, callbackID, content };
+        this.socket.send(JSON.stringify(data));
         return true;
     }
 
@@ -153,7 +153,7 @@ class ClientTCP {
             }, timeout);
             this.callbacks[callbackID] = (data) => {
                 clearTimeout(timer);
-                resolve(data['message']);
+                resolve(data['content']);
             };
         });
     }

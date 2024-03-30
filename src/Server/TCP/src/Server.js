@@ -7,14 +7,18 @@ import { StrIsJson, GetLocalIP } from './Utils/Functions.js';
 
 /**
  * @typedef {import('Types/TCP.js').SendRequestType} SendRequestType
- * @typedef {import('Types/TCP.js').TCPRequestHeader<keyof SendRequestType>} TCPRequestHeader
+ */
+
+/**
+ * @template {keyof SendRequestType} T
+ * @typedef {import('Types/TCP.js').TCPRequestSendHeader<T>} TCPRequestSendHeader
  */
 
 /**
  * @typedef {Object} ServerConnectionCallbacks
  * @property {(connection: WebSocket.connection) => void} callbacks.onConnect
  * @property {(connection: WebSocket.connection) => void} callbacks.onDisconnect
- * @property {(connection: WebSocket.connection, data: TCPRequestHeader) => void} callbacks.onMessage
+ * @property {(connection: WebSocket.connection, data: TCPRequestSendHeader<*>) => void} callbacks.onMessage
  * @property {(connection: WebSocket.connection, error: Error) => void} callbacks.onError
  */
 
@@ -120,7 +124,7 @@ class Server {
             }
 
             const data = JSON.parse(rawData);
-            if (!data.hasOwnProperty('action') || !data.hasOwnProperty('message')) {
+            if (!data.hasOwnProperty('action') || !data.hasOwnProperty('content')) {
                 // TODO: Alert
                 return;
             }

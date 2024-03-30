@@ -13,17 +13,25 @@
  * @property {{ userID: number, passwordID: number }} get-password
  * 
  * @typedef {Object} ReceiveRequestType
- * @property {{ status: number, user: UserType }} get-user-info
+ * @property {{ status: number, user: UserType | null }} get-user-info
  * @property {{ status: number }} check-password
  * @property {{ status: number, passwords: Array<PasswordType> }} get-passwords
- * @property {{ status: number, password: PasswordType }} get-password
+ * @property {{ status: number, password: PasswordType | null }} get-password
+ */
+
+/**
+ * @template {keyof SendRequestType} T
+ * @typedef {Object} TCPRequestSendHeader<T>
+ * @property {T} action
+ * @property {SendRequestType[T]} content
+ * @property {string} [callbackID]
  */
 
 /**
  * @template {keyof ReceiveRequestType} T
- * @typedef {Object} TCPRequestHeader<T>
+ * @typedef {Object} TCPRequestReceiveHeader<T>
  * @property {T} action
- * @property {SendRequestType[T] | ReceiveRequestType[T]} message
+ * @property {ReceiveRequestType[T]} content
  * @property {string} [callbackID]
  */
 
