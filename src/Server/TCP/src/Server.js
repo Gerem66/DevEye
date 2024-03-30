@@ -6,9 +6,11 @@ import { createServer } from 'https';
 import { StrIsJson, GetLocalIP } from './Utils/Functions.js';
 
 /**
- * @typedef {import('Types/TCP.js').TCPRequestHeader} TCPRequestHeader
- * @typedef {import('Types/TCP.js').TCPRequestMap} TCPRequestMap
- * 
+ * @typedef {import('Types/TCP.js').SendRequestType} SendRequestType
+ * @typedef {import('Types/TCP.js').TCPRequestHeader<keyof SendRequestType>} TCPRequestHeader
+ */
+
+/**
  * @typedef {Object} ServerConnectionCallbacks
  * @property {(connection: WebSocket.connection) => void} callbacks.onConnect
  * @property {(connection: WebSocket.connection) => void} callbacks.onDisconnect

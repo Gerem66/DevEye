@@ -6,7 +6,8 @@ const VPS_CREDENTIALS = {
 
 /**
  * @typedef {import('Types/TCP').ConnectionState} ConnectionState
- * @typedef {import('Types/TCP').TCPRequestMap} TCPRequestMap
+ * @typedef {import('Types/TCP').SendRequestType} SendRequestType
+ * @typedef {import('Types/TCP').ReceiveRequestType} ReceiveRequestType
  */
 
 class ClientTCP {
@@ -18,6 +19,7 @@ class ClientTCP {
 
     callbackClose = () => {};
 
+    /** @type {{ [key: string]: (data: any) => void }} */
     callbacks = {};
 
     /**
@@ -65,6 +67,7 @@ class ClientTCP {
             this.socket.close();
         }
         this.socket = null;
+        console.log('[TCP] Disconnected from server');
     }
 
     IsConnected = () => {
@@ -78,10 +81,6 @@ class ClientTCP {
 
     /** @param {MessageEvent} event */
     onMessage = (event) => {
-        /**
-         * @template {keyof TCPRequestMap} T
-         * @type {{ action: T, message: TCPRequestMap[T]['receive'] }}
-         */
         const data = JSON.parse(event.data);
 
         if (data.hasOwnProperty('callbackID')) {
@@ -111,38 +110,38 @@ class ClientTCP {
     }
 
     /**
-     * @template {keyof TCPRequestMap} T
+     * @template {keyof SendRequestType} T
      * @param {T} action
-     * @param {TCPRequestMap[T]['send']} message
+     * @param {SendRequestType[T]} data
      * @param {string} [callbackID]
      * @returns {boolean} Whether the message was sent successfully
      */
-    Send = (action, message, callbackID) => {
-        if (typeof(message) !== 'object') {
+    Send = (action, data, callbackID) => {
+        if (typeof(data) !== 'object') {
             console.log('[TCP] Send socket: Invalid message type.');
             return false;
         }
 
-        if (this.socket === null || !this.IsConnected()) {
+        if (this.socket === null) {
             console.log('[TCP] Send socket: Not connected.');
             return false;
         }
 
-        const data = { action, callbackID, message };
-        this.socket.send(JSON.stringify(data));
+        const _data = { action, callbackID, message: data };
+        this.socket.send(JSON.stringify(_data));
         return true;
     }
 
     /**
-     * @template {keyof TCPRequestMap} T
+     * @template {keyof SendRequestType} T
      * @param {T} action
-     * @param {TCPRequestMap[T]['send']} message
+     * @param {SendRequestType[T]} data
      * @param {number} [timeout] in milliseconds
-     * @returns {Promise<'not-sended' | 'timeout' | TCPRequestMap[T]['receive']>} The result of the callback or 'timeout' if it took too long
+     * @returns {Promise<'not-sended' | 'timeout' | ReceiveRequestType[T]>} The result of the callback or 'timeout' if it took too long
      */
-    SendAndWaitForCallback = (action, message, timeout = 10000) => {
+    SendAsync = async (action, data, timeout = 10000) => {
         const callbackID = action + '-' + Math.random().toString(36).substring(7);
-        const sended = this.Send(action, message, callbackID);
+        const sended = this.Send(action, data, callbackID);
 
         if (sended === false) {
             return Promise.resolve('not-sended');
@@ -160,4 +159,7 @@ class ClientTCP {
     }
 }
 
+const tcp = new ClientTCP();
+
+export { tcp };
 export default ClientTCP;

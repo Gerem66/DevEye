@@ -4,8 +4,20 @@ import styles from './style.module.css';
  * @typedef {import('Types/Password').PasswordType} PasswordType
  */
 
-/** @param {{ password: PasswordType }} props */
-function PasswordRow({ password }) {
+/** @param {{ password: PasswordType | null, callback?: (ID: number) => void }} props */
+function PasswordRow({ password, callback = () => {} }) {
+    if (password === null) {
+        return (
+            <tr data-id={`${Math.random()}`} style={{ height: 48 }}>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+        );
+    }
+
     return (
         <tr data-id={`${password.ID}`}>
             <td>{password.service}</td>
@@ -15,7 +27,7 @@ function PasswordRow({ password }) {
             <td className={styles['password-cell']}>
                 <p>{password.password}</p>
                 {password.password !== '**********' ? null : (
-                    <i className='icon icon-eye-open' />
+                    <i className='icon icon-eye-open' onClick={() => callback(password.ID)} />
                 )}
             </td>
 
@@ -27,7 +39,7 @@ function PasswordRow({ password }) {
                 <td className={styles['cell-none']}>Aucun</td>
             )}
 
-            <td>
+            <td className={styles['edit-cell']}>
                 <i className='icon icon-other' />
             </td>
         </tr>
