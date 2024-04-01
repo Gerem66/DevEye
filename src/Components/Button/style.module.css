@@ -1,0 +1,17 @@
+.button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    color: white;
+    font-family: 'Open Sans';
+    font-size: 16px;
+    background-color: #4481dd;
+    transition: background-color 0.1s;
+    cursor: pointer;
+}
+.button:hover {
+    background-color: #3a6ebd;
+}
+.button:active {
+    background-color: #2e5a9e;
+}
