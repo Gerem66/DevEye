@@ -1,5 +1,6 @@
 import './style.css';
 import LoginPageBack from './back';
+import { TextInput } from '../../Components';
 
 class LoginPage extends LoginPageBack {
     render() {
@@ -22,10 +23,8 @@ class LoginPage extends LoginPageBack {
 
                         {/* Username input */}
                         <div className='input-group'>
-                            <input
+                            <TextInput
                                 ref={this.inputUsername}
-                                className='form-input'
-                                type='text'
                                 placeholder="Nom d'utilisateur"
                                 value={this.state.input.username}
                                 onChange={this.onInputUsernameChange}
@@ -36,9 +35,8 @@ class LoginPage extends LoginPageBack {
 
                         {/* Password input */}
                         <div className='input-group'>
-                            <input
+                            <TextInput
                                 ref={this.inputPassword}
-                                className='form-input'
                                 type='password'
                                 placeholder='Mot de passe'
                                 value={this.state.input.password}

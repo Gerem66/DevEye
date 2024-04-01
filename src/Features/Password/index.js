@@ -3,8 +3,8 @@ import styles from './style.module.css';
 import FeaturePasswordBack from './back';
 import PasswordRow from './passwordRow';
 import LoadingTable from './loadingTable';
-import { Header, Row, Card, Popup } from '../../Components';
 import { OpenPopup, ClosePopup } from '../../Components/Popup';
+import { Header, Row, Card, Popup, Button, TextInput } from '../../Components';
 
 class FeaturePassword extends FeaturePasswordBack {
     render() {
@@ -23,9 +23,7 @@ class FeaturePassword extends FeaturePasswordBack {
                         <a className={`link ${styles['add-password']}`} onClick={() => OpenPopup('popup-add-password')}>
                             Ajouter un mot de passe
                         </a>
-                        <input
-                            className='form-input'
-                            type='text'
+                        <TextInput
                             placeholder="Nom d'un service"
                             value={search}
                             onChange={this.onSearchChange}
@@ -87,16 +85,20 @@ class FeaturePassword extends FeaturePasswordBack {
                     </p>
     
                     <div className="form-group">
-                        <input name="input-password" className="form-input" type="password" placeholder="Mot de passe principal" />
-                        <button name="toggle" className="btn" data-input="input-password">
+                        <TextInput
+                            type="password"
+                            placeholder="Mot de passe principal"
+                            value={this.state.inputPassword}
+                            onChange={this.onInputPasswordChange}
+                        />
+                        <button name="toggle" data-input="input-password">
                             <i className="icon icon-eye-close"></i>
                         </button>
                     </div>
     
-                    <div className="form-group float-center">
-                        <button onClick={() => ClosePopup('popup-unlock')}>Fermer</button>
-                        <button name="btn-back" className="btn">Retour</button>
-                        <button name="btn-save" className="btn">Déverrouiller</button>
+                    <div className={`form-group ${styles['popup-check-password-buttons']}`}>
+                        <Button onClick={() => ClosePopup('popup-unlock')}>Fermer</Button>
+                        <Button onClick={this.UnlockPassword}>Déverrouiller</Button>
                     </div>
                 </Popup>
     
@@ -107,20 +109,20 @@ class FeaturePassword extends FeaturePasswordBack {
                         Les informations concernant les mots de passe sont chiffrées.
                     </p>
     
-                    <input name="input-category" list="category" className="form-input" placeholder="Catégorie" />
+                    <TextInput name="input-category" list="category" placeholder="Catégorie" />
                     <datalist id="category"><option value="Achats">Achats</option><option value="Administratif">Administratif</option><option value="Antivirus / VPN">Antivirus / VPN</option><option value="Argent">Argent</option><option value="Autre">Autre</option><option value="Jeux">Jeux</option><option value="Local">Local</option><option value="Médias">Médias</option><option value="Perso">Perso</option><option value="Pro">Pro</option><option value="Réseaux sociaux">Réseaux sociaux</option><option value="Serveurs">Serveurs</option><option value="Services">Services</option></datalist>
     
                     <div className="form-group">
-                        <input name="input-service" className="form-input" type="text" placeholder="Service" />
+                        <TextInput name="input-service" type="text" placeholder="Service" />
                     </div>
     
                     <div className="form-group">
-                        <input name="input-username" className="form-input" type="text" placeholder="Nom d'utilisateur / Email" />
+                        <TextInput name="input-username" type="text" placeholder="Nom d'utilisateur / Email" />
                     </div>
     
                     <div className="form-group">
-                        <input name="input-password" className="form-input" type="password" placeholder="Mot de passe" />
-                        <button name="toggle" className="btn" data-input="input-password">
+                        <TextInput name="input-password" type="password" placeholder="Mot de passe" />
+                        <button name="toggle" data-input="input-password">
                             <i className="icon icon-eye-close"></i>
                         </button>
                     </div>
@@ -131,12 +133,10 @@ class FeaturePassword extends FeaturePasswordBack {
                         <option value="none">Indéterminé</option>
                     </select> 
     
-                    <div className="form-group float-center">
-                        <button name="btn-back" className="btn">Retour</button>
-                        <button name="btn-save" className="btn">Ajouter</button>
+                    <div className={`form-group ${styles['popup-check-password-buttons']}`}>
+                        <Button onClick={() => ClosePopup('popup-add-password')}>Fermer</Button>
+                        <Button onClick={() => {}}>Ajouter / modifier</Button>
                     </div>
-    
-                    <button onClick={() => ClosePopup('popup-add-password')}>Fermer</button>
                 </Popup>
     
             </div>

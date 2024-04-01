@@ -1,6 +1,6 @@
 import './style.css';
 
-import { Header, Row, Card, Popup } from '../../Components';
+import { Header, Row, Card, Popup, Button } from '../../Components';
 import { ChangeImage, EditPassword } from './actions';
 
 /**
@@ -62,9 +62,9 @@ function FeatureProfile({ user, setUser, context, feature }) {
                     <div className='profile-info'>
                         <h3 className='profile-info-title'>Mot de passe</h3>
                         <div className='profile-info-content'>
-                            <button className='profile-btn-edit' onClick={EditPassword}>
+                            <Button className='profile-btn-edit' onClick={EditPassword}>
                                 Modifier le mot de passe
-                            </button>
+                            </Button>
                         </div>
                     </div>
 
@@ -81,9 +81,9 @@ function FeatureProfile({ user, setUser, context, feature }) {
                     </div>
 
                     <div className='separator' />
-                    <button className='profile-btn-disconnect' onClick={() => setUser(null)}>
+                    <Button className='profile-btn-disconnect' onClick={() => setUser(null)}>
                         Se déconnecter
-                    </button>
+                    </Button>
                 </Card.Element>
             </Row>
 

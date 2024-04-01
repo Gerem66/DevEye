@@ -64,3 +64,9 @@
     background-color: #223142;
     z-index: 5;
 }
+
+.popup-check-password-buttons {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 24px;
+}

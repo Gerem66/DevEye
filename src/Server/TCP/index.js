@@ -5,6 +5,7 @@ import Server from './src/Server.js';
 import Encryption from './src/Utils/Encryption.js';
 
 import { GetUserInfo } from './src/Features/getUserInfo.js';
+import { CheckPassword } from './src/Features/checkPassword.js';
 import { GetPassword, GetPasswords } from './src/Features/getPassword.js';
 
 const database = new SQL({
@@ -35,6 +36,11 @@ serv.Listen(8080, {
     onMessage: async (connection, data) => {
         if (data.action === 'get-user-info') {
             const response = await GetUserInfo(database, data);
+            connection.send(JSON.stringify(response));
+        }
+
+        else if (data.action === 'check-password') {
+            const response = await CheckPassword(database, data);
             connection.send(JSON.stringify(response));
         }
 
