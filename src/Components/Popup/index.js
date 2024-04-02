@@ -14,40 +14,54 @@ import styles from './style.module.css';
  */
 
 /**
- * @type {Record<string, { setOpened: React.Dispatch<React.SetStateAction<boolean>>, callback?: () => void }>}
+ * @type {Record<string, { setInputData: React.Dispatch<React.SetStateAction<any | null>>, setOpened: React.Dispatch<React.SetStateAction<boolean>>, callback?: (data: any) => void }>}
  */
 const PopupEvents = {};
 
 /**
+ * @template {Object} T
  * @param {string} id
- * @param {() => void} [callback]
+ * @param {any} [inputData]
+ * @returns {Promise<T | null>}
  */
-function OpenPopup(id, callback = () => {}) {
+function OpenPopup(id, inputData = null) {
     if (PopupEvents[id]) {
-        PopupEvents[id].setOpened(true);
-        PopupEvents[id].callback = callback;
+        return new Promise((resolve) => {
+            PopupEvents[id].setInputData(inputData);
+            PopupEvents[id].setOpened(true);
+            PopupEvents[id].callback = (data) => {
+                resolve(data);
+            };
+        });
     }
+    return Promise.resolve(null);
 }
 
-/** @param {string} id */
-function ClosePopup(id) {
+/**
+ * @param {string} id
+ * @param {any} data
+ */
+function ClosePopup(id, data = null) {
     if (PopupEvents[id]) {
+        PopupEvents[id].setInputData(null);
         PopupEvents[id].setOpened(false);
         if (PopupEvents[id].callback) {
-            PopupEvents[id].callback();
+            PopupEvents[id].callback(data);
         }
     }
 }
 
 /**
- * @param {CardValueProps} props
+ * @param {CardValueProps & { onInputChange?: ((input: any) => void) | null, onClosePopup?: ((id: string) => void) | null }} props
  * @returns {React.JSX.Element}
  */
-function Popup({ children, id, title = '', style = '' }) {
+function Popup({ children, id, title = '', style = '', onInputChange = null, onClosePopup = null }) {
     const [ opened, setOpened ] = React.useState(false);
+    const [ inputData, setInputData ] = React.useState(null);
 
     React.useEffect(() => {
         PopupEvents[id] = {
+            setInputData,
             setOpened,
             callback: () => {}
         }
@@ -57,6 +71,10 @@ function Popup({ children, id, title = '', style = '' }) {
         };
     }, [id]);
 
+    React.useEffect(() => {
+        onInputChange?.(inputData);
+    }, [onInputChange, inputData]);
+
     /** @type {DetailedHTMLProps['style']} */
     const styleCard = {
         paddingTop: !!title ? '52px' : '12px'
@@ -65,7 +83,11 @@ function Popup({ children, id, title = '', style = '' }) {
     /** @param {React.MouseEvent<HTMLDivElement, MouseEvent>} event */
     const onBackgroundClick = (event) => {
         if (event.target === event.currentTarget) {
-            ClosePopup(id);
+            if (onClosePopup === null) {
+                ClosePopup(id);
+            } else {
+                onClosePopup(id);
+            }
         }
     };
 

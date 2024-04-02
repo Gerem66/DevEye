@@ -6,22 +6,23 @@ import styles from './style.module.css';
  * @typedef {import('react').ButtonHTMLAttributes<HTMLButtonElement>} ButtonHTMLAttributes
  * @typedef {import('react').DetailedHTMLProps<ButtonHTMLAttributes, HTMLButtonElement>} DetailedHTMLProps
  * 
- * @typedef {object} CardValueProps
- * @property {React.JSX.Element|React.JSX.Element[]} children
- * @property {string} [title]
- * @property {string} [style]
+ * @typedef {DetailedHTMLProps & { color?: string }} ButtonProps
  */
 
 /**
- * @param {DetailedHTMLProps} props
+ * @param {ButtonProps} props
  * @returns {React.JSX.Element}
  */
 function Button(props) {
-    const { children } = props;
-    const classes = `${styles.button} ${props.className || ''}`;
+    const { children, color, className, ...rest } = props;
+    const classes = `${styles.button} ${className || ''}`;
 
     return (
-        <button {...props} className={classes}>
+        <button className={classes} {...rest}>
+            <div
+                className={styles['button-background']}
+                style={{ backgroundColor: color || '#4481dd' }}
+            />
             {children}
         </button>
     );
