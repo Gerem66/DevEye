@@ -2,7 +2,7 @@ import React from 'react';
 
 import { tcp } from '../../Utils/TCP';
 import { DefaultUser } from '../../Types/User';
-import { ClosePopup, OpenPopup } from '../../Components/Popup';
+import { OpenPopup, ClosePopup } from '../../Components/Popup';
 
 /**
  * @typedef {import('Types/Feature').FeatureProps} FeatureProps
@@ -26,10 +26,14 @@ class FeaturePasswordBack extends React.Component {
     /** @type {PasswordType[]} Discovered password */
     discovered = [];
 
+    /** @type {React.RefObject<HTMLInputElement>} */
+    refInputUnlock = React.createRef();
+
     state = {
         /** @type {boolean} Show popup to ask password or not */
         locked: true,
         inputPassword: '',
+        errorPassword: '',
         tmpPassword: '',
 
         search: '',
@@ -110,17 +114,13 @@ class FeaturePasswordBack extends React.Component {
             if (this.timeoutUnlock !== null) {
                 clearTimeout(this.timeoutUnlock);
             }
-            this.timeoutUnlock = setTimeout(this.Lock, 30000);
+            this.timeoutUnlock = setTimeout(this.Lock, 60000);
             return true;
         }
 
         if (this.state.locked) {
-            await new Promise((resolve) => {
-                OpenPopup('popup-unlock', () => {
-                    resolve(null);
-                })
-            });
-            this.setState({ inputPassword: '' });
+            this.refInputUnlock.current?.focus();
+            await OpenPopup('popup-unlock');
             if (this.state.locked) {
                 return false;
             }
@@ -173,6 +173,36 @@ class FeaturePasswordBack extends React.Component {
         this.updatePasswords();
     }
 
+    /** @param {number} ID */
+    OpenEditPassword = async (ID) => {
+        const { user, context } = this.props;
+
+        const unlocked = await this.Unlock();
+        if (!unlocked) {
+            return;
+        }
+
+        const { tmpPassword } = this.state;
+        const response = await tcp.SendAsync('get-password', {
+            contextID: context.id,
+            userID: user.ID,
+            passwordID: ID,
+            password: tmpPassword
+        });
+        if (response === 'timeout') {
+            console.log('Error: Timeout');
+            return;
+        } else if (response === 'not-sended') {
+            console.log('Error: Not sended');
+            return;
+        } else if (response.status !== 0 || response.password === null) {
+            console.log('Error:', response);
+            return
+        }
+
+        OpenPopup('popup-add-password', response.password);
+    }
+
     /** Unlock popup */
 
     /** @param {React.ChangeEvent<HTMLInputElement>} e */
@@ -180,9 +210,21 @@ class FeaturePasswordBack extends React.Component {
         this.setState({ inputPassword: e.target.value });
     }
 
+    /** @param {React.KeyboardEvent<HTMLInputElement>} e */
+    onInputPasswordKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            this.UnlockPassword();
+        }
+    }
+
     UnlockPassword = async () => {
         const { inputPassword } = this.state;
         const { user, context } = this.props;
+
+        if (!inputPassword) {
+            this.setState({ errorPassword: 'Mot de passe vide', inputPassword: '' });
+            return;
+        }
 
         const response = await tcp.SendAsync('check-password', {
             contextID: context.id,
@@ -191,19 +233,24 @@ class FeaturePasswordBack extends React.Component {
         });
 
         if (response === 'timeout') {
-            console.log('Error: Timeout');
+            this.setState({ errorPassword: 'Timeout', inputPassword: '' });
             return;
         } else if (response === 'not-sended') {
-            console.log('Error: Not sended');
+            this.setState({ errorPassword: 'Not sended', inputPassword: '' });
             return;
         } else if (response.status !== 0) {
-            console.log('Error:', response);
+            this.setState({ errorPassword: 'Mot de passe incorrect', inputPassword: '' });
             return;
         }
 
         this.setState({ locked: false, tmpPassword: inputPassword }, () => {
             ClosePopup('popup-unlock');
         });
+    }
+
+    CloseUnlockPopup = () => {
+        this.setState({ inputPassword: '', errorPassword: '' });
+        ClosePopup('popup-unlock');
     }
 }
 

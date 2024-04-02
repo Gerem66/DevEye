@@ -69,4 +69,11 @@
     display: flex;
     justify-content: space-between;
     margin-top: 24px;
+    margin-bottom: 12px;
+}
+.password-add-input {
+    margin-bottom: 12px;
+}
+.password-edit-btn-delete {
+    margin-left: 12px;
 }

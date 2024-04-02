@@ -3,7 +3,9 @@ import styles from './style.module.css';
 import FeaturePasswordBack from './back';
 import PasswordRow from './passwordRow';
 import LoadingTable from './loadingTable';
-import { OpenPopup, ClosePopup } from '../../Components/Popup';
+import { PasswordPopupAdd } from './popups';
+
+import { OpenPopup } from '../../Components/Popup';
 import { Header, Row, Card, Popup, Button, TextInput } from '../../Components';
 
 class FeaturePassword extends FeaturePasswordBack {
@@ -17,9 +19,9 @@ class FeaturePassword extends FeaturePasswordBack {
                     context={context}
                     feature={feature}
                 />
-    
+
                 <Row style='center'>
-                    <Card.Element title='Rechercher (xxx)' style={styles['search-container']} color='blue-dark' size='1/3'>
+                    <Card.Element title={`Rechercher (${this.allPasswords.length})`} style={styles['search-container']} color='blue-dark' size='1/3'>
                         <a className={`link ${styles['add-password']}`} onClick={() => OpenPopup('popup-add-password')}>
                             Ajouter un mot de passe
                         </a>
@@ -30,20 +32,20 @@ class FeaturePassword extends FeaturePasswordBack {
                         />
                     </Card.Element>
                 </Row>
-    
+
                 {Object.keys(categories).length === 0 && (
                     <>
                         <LoadingTable key={'loading-table-password-1'} />
                         <LoadingTable key={'loading-table-password-2'} />
                     </>
                 )}
-    
+
                 {Object.keys(categories).map((category) => {
                     const passwords = categories[category];
                     if (passwords.length === 0) {
                         return null;
                     }
-    
+
                     return (
                         <Row key={category} style='center'>
                             <Card.Element
@@ -68,6 +70,7 @@ class FeaturePassword extends FeaturePasswordBack {
                                                 <PasswordRow
                                                     key={password.ID}
                                                     password={password}
+                                                    onEdit={this.OpenEditPassword}
                                                     callback={this.GetPassword}
                                                 />
                                             ))}
@@ -78,67 +81,32 @@ class FeaturePassword extends FeaturePasswordBack {
                         </Row>
                     );
                 })}
-    
-                <Popup id='popup-unlock' title='Déverrouiller'>
+
+                <Popup id='popup-unlock' title='Déverrouiller' onClosePopup={this.CloseUnlockPopup}>
                     <p>
                         Pour accéder à vos mots de passe, veuillez entrer votre mot de passe principal.
                     </p>
     
                     <div className="form-group">
                         <TextInput
+                            ref={this.refInputUnlock}
                             type="password"
                             placeholder="Mot de passe principal"
                             value={this.state.inputPassword}
+                            error={this.state.errorPassword}
                             onChange={this.onInputPasswordChange}
+                            onKeyDown={this.onInputPasswordKeyDown}
+                            enableShowHideButton
                         />
-                        <button name="toggle" data-input="input-password">
-                            <i className="icon icon-eye-close"></i>
-                        </button>
                     </div>
-    
+
                     <div className={`form-group ${styles['popup-check-password-buttons']}`}>
-                        <Button onClick={() => ClosePopup('popup-unlock')}>Fermer</Button>
+                        <Button onClick={this.CloseUnlockPopup} color='#576d8c'>Fermer</Button>
                         <Button onClick={this.UnlockPassword}>Déverrouiller</Button>
                     </div>
                 </Popup>
-    
-                <Popup id='popup-add-password' title='Ajouter un mot de passe'>
-                    <p>
-                        Stocker un mot de passe est une bonne pratique pour protéger vos compte.
-                        <br />
-                        Les informations concernant les mots de passe sont chiffrées.
-                    </p>
-    
-                    <TextInput name="input-category" list="category" placeholder="Catégorie" />
-                    <datalist id="category"><option value="Achats">Achats</option><option value="Administratif">Administratif</option><option value="Antivirus / VPN">Antivirus / VPN</option><option value="Argent">Argent</option><option value="Autre">Autre</option><option value="Jeux">Jeux</option><option value="Local">Local</option><option value="Médias">Médias</option><option value="Perso">Perso</option><option value="Pro">Pro</option><option value="Réseaux sociaux">Réseaux sociaux</option><option value="Serveurs">Serveurs</option><option value="Services">Services</option></datalist>
-    
-                    <div className="form-group">
-                        <TextInput name="input-service" type="text" placeholder="Service" />
-                    </div>
-    
-                    <div className="form-group">
-                        <TextInput name="input-username" type="text" placeholder="Nom d'utilisateur / Email" />
-                    </div>
-    
-                    <div className="form-group">
-                        <TextInput name="input-password" type="password" placeholder="Mot de passe" />
-                        <button name="toggle" data-input="input-password">
-                            <i className="icon icon-eye-close"></i>
-                        </button>
-                    </div>
-    
-                    <select name="input-status" className="select-grey">
-                        <option value="enable">Actif</option>
-                        <option value="disable">Inactif</option>
-                        <option value="none">Indéterminé</option>
-                    </select> 
-    
-                    <div className={`form-group ${styles['popup-check-password-buttons']}`}>
-                        <Button onClick={() => ClosePopup('popup-add-password')}>Fermer</Button>
-                        <Button onClick={() => {}}>Ajouter / modifier</Button>
-                    </div>
-                </Popup>
-    
+
+                <PasswordPopupAdd passwordCategories={Object.keys(categories)} />
             </div>
         );
     }

@@ -4,8 +4,8 @@ import styles from './style.module.css';
  * @typedef {import('Types/Password').PasswordType} PasswordType
  */
 
-/** @param {{ password: PasswordType | null, callback?: (ID: number) => void }} props */
-function PasswordRow({ password, callback = () => {} }) {
+/** @param {{ password: PasswordType | null, onEdit?: (ID: number) => void, callback?: (ID: number) => void }} props */
+function PasswordRow({ password, onEdit = () => {}, callback = () => {} }) {
     if (password === null) {
         return (
             <tr data-id={`${Math.random()}`} style={{ height: 48 }}>
@@ -40,7 +40,7 @@ function PasswordRow({ password, callback = () => {} }) {
             )}
 
             <td className={styles['edit-cell']}>
-                <i className='icon icon-other' />
+                <i className='icon icon-other' onClick={() => onEdit(password.ID)} />
             </td>
         </tr>
     );
