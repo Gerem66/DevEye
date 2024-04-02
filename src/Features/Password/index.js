@@ -22,7 +22,7 @@ class FeaturePassword extends FeaturePasswordBack {
 
                 <Row style='center'>
                     <Card.Element title={`Rechercher (${this.allPasswords.length})`} style={styles['search-container']} color='blue-dark' size='1/3'>
-                        <a className={`link ${styles['add-password']}`} onClick={() => OpenPopup('popup-add-password')}>
+                        <a className={`link ${styles['add-password']}`} onClick={() => this.OpenEditPassword(null)}>
                             Ajouter un mot de passe
                         </a>
                         <TextInput
@@ -82,7 +82,7 @@ class FeaturePassword extends FeaturePasswordBack {
                     );
                 })}
 
-                <Popup id='popup-unlock' title='Déverrouiller' onClosePopup={this.CloseUnlockPopup}>
+                <Popup id='popup-unlock' title='Déverrouiller' onClosePopup={this.UnlockPopupClose}>
                     <p>
                         Pour accéder à vos mots de passe, veuillez entrer votre mot de passe principal.
                     </p>
@@ -94,15 +94,15 @@ class FeaturePassword extends FeaturePasswordBack {
                             placeholder="Mot de passe principal"
                             value={this.state.inputPassword}
                             error={this.state.errorPassword}
-                            onChange={this.onInputPasswordChange}
-                            onKeyDown={this.onInputPasswordKeyDown}
+                            onChange={this.onUnlockPopupInputChange}
+                            onKeyDown={this.onUnlockPopupInputKeyDown}
                             enableShowHideButton
                         />
                     </div>
 
                     <div className={`form-group ${styles['popup-check-password-buttons']}`}>
-                        <Button onClick={this.CloseUnlockPopup} color='#576d8c'>Fermer</Button>
-                        <Button onClick={this.UnlockPassword}>Déverrouiller</Button>
+                        <Button onClick={this.UnlockPopupClose} color='#576d8c'>Fermer</Button>
+                        <Button onClick={this.UnlockPopupValidate}>Déverrouiller</Button>
                     </div>
                 </Popup>
 

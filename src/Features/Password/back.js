@@ -173,51 +173,125 @@ class FeaturePasswordBack extends React.Component {
         this.updatePasswords();
     }
 
-    /** @param {number} ID */
+    /** @param {number | null} ID */
     OpenEditPassword = async (ID) => {
         const { user, context } = this.props;
 
-        const unlocked = await this.Unlock();
-        if (!unlocked) {
-            return;
+        /** @type {PasswordType} */
+        let password = {
+            ID: 0,
+            category: '',
+            service: '',
+            email: '',
+            password: '',
+            status: 'active'
+        };
+
+        if (ID !== null) {
+            const unlocked = await this.Unlock();
+            if (!unlocked) {
+                return;
+            }
+
+            const { tmpPassword } = this.state;
+            const response = await tcp.SendAsync('get-password', {
+                contextID: context.id,
+                userID: user.ID,
+                passwordID: ID,
+                password: tmpPassword
+            });
+            if (response === 'timeout') {
+                console.log('Error: Timeout');
+                return;
+            } else if (response === 'not-sended') {
+                console.log('Error: Not sended');
+                return;
+            } else if (response.status !== 0 || response.password === null) {
+                console.log('Error:', response);
+                return
+            }
+            password = response.password;
         }
 
-        const { tmpPassword } = this.state;
-        const response = await tcp.SendAsync('get-password', {
-            contextID: context.id,
-            userID: user.ID,
-            passwordID: ID,
-            password: tmpPassword
+        /** @type {Promise<'delete' | PasswordType | null>} */
+        const popup = OpenPopup('popup-add-password', password);
+
+        popup.then(async (newPassword) => {
+            if (newPassword === null) {
+                return;
+            }
+
+            const unlocked = await this.Unlock();
+            if (!unlocked) {
+                return;
+            }
+
+            // Remove password
+            if (newPassword === 'delete') {
+                if (ID !== null) {
+                    const response = await tcp.SendAsync('delete-password', {
+                        contextID: context.id,
+                        userID: user.ID,
+                        passwordID: ID
+                    });
+                    if (response === 'timeout' || response === 'not-sended' || response.status !== 0) {
+                        console.log('Error:', response);
+                        return;
+                    }
+                    this.allPasswords = this.allPasswords.filter((p) => p.ID !== ID);
+                }
+            }
+
+            // Add password
+            else if (ID === null) {
+                const response = await tcp.SendAsync('add-password', {
+                    contextID: context.id,
+                    userID: user.ID,
+                    password: newPassword
+                });
+                if (response === 'timeout' || response === 'not-sended' || response.status !== 0 || response.password === null) {
+                    console.log('Error:', response);
+                    return;
+                }
+                this.allPasswords.push(response.password);
+            }
+
+            // Edit password
+            else {
+                const response = await tcp.SendAsync('edit-password', {
+                    contextID: context.id,
+                    userID: user.ID,
+                    password: newPassword
+                });
+                if (response === 'timeout' || response === 'not-sended' || response.status !== 0 || response.password === null) {
+                    console.log('Error:', response);
+                    return;
+                }
+                const index = this.allPasswords.findIndex((p) => p.ID === ID);
+                if (index !== -1) {
+                    this.allPasswords[index] = response.password;
+                }
+            }
+
+            this.updatePasswords();
         });
-        if (response === 'timeout') {
-            console.log('Error: Timeout');
-            return;
-        } else if (response === 'not-sended') {
-            console.log('Error: Not sended');
-            return;
-        } else if (response.status !== 0 || response.password === null) {
-            console.log('Error:', response);
-            return
-        }
-
-        OpenPopup('popup-add-password', response.password);
     }
 
     /** Unlock popup */
 
     /** @param {React.ChangeEvent<HTMLInputElement>} e */
-    onInputPasswordChange = (e) => {
+    onUnlockPopupInputChange = (e) => {
         this.setState({ inputPassword: e.target.value });
     }
 
     /** @param {React.KeyboardEvent<HTMLInputElement>} e */
-    onInputPasswordKeyDown = (e) => {
+    onUnlockPopupInputKeyDown = (e) => {
         if (e.key === 'Enter') {
-            this.UnlockPassword();
+            this.UnlockPopupValidate();
         }
     }
 
-    UnlockPassword = async () => {
+    UnlockPopupValidate = async () => {
         const { inputPassword } = this.state;
         const { user, context } = this.props;
 
@@ -243,12 +317,12 @@ class FeaturePasswordBack extends React.Component {
             return;
         }
 
-        this.setState({ locked: false, tmpPassword: inputPassword }, () => {
+        this.setState({ locked: false, inputPassword: '', tmpPassword: inputPassword }, () => {
             ClosePopup('popup-unlock');
         });
     }
 
-    CloseUnlockPopup = () => {
+    UnlockPopupClose = () => {
         this.setState({ inputPassword: '', errorPassword: '' });
         ClosePopup('popup-unlock');
     }

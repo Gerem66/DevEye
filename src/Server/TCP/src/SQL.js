@@ -42,6 +42,10 @@ class SQL {
     }
 
     Unmount = () => {
+        if (!this.pool) {
+            console.warn('SQL Pool not initialized');
+            return;
+        }
         this.pool.end((err) => {
             if (err) {
                 console.warn('Error closing the pool:', err);
@@ -51,8 +55,16 @@ class SQL {
         });
     }
 
+    /**
+     * @param {string} query
+     * @returns {Promise<any>}
+     */
     ExecQuery = (query) => {
         return new Promise((resolve, reject) => {
+            if (!this.pool) {
+                console.warn('SQL Pool not initialized');
+                return null;
+            }
             this.pool.query(query, (err, results) => {
                 if (err) {
                     console.warn('SQL Query Error:', err);
@@ -70,7 +82,11 @@ class SQL {
      */
     QueryPrepare = (command, args) => {
         return new Promise((resolve, reject) => {
-            this.pool.execute(command, args, (err, results) => {
+            if (!this.pool) {
+                console.warn('SQL Pool not initialized');
+                resolve(null);
+            }
+            this.pool?.execute(command, args, (err, results) => {
                 if (err) {
                     console.warn('SQL Query Error:', err);
                     resolve(null);

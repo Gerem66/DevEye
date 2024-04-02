@@ -7,8 +7,9 @@ import Encryption from './src/Utils/Encryption.js';
 import { GetUserInfo } from './src/Features/getUserInfo.js';
 import { CheckPassword } from './src/Features/checkPassword.js';
 import { GetPassword, GetPasswords } from './src/Features/getPassword.js';
+import { AddPassword, EditPassword, DeletePassword } from './src/Features/setPassword.js';
 
-const database = new SQL({
+const db = new SQL({
     database: process.env.DB_DATABASE || '',
     hostname: process.env.DB_HOSTNAME || '',
     username: process.env.DB_USERNAME || '',
@@ -34,24 +35,19 @@ serv.Listen(8080, {
     },
 
     onMessage: async (connection, data) => {
-        if (data.action === 'get-user-info') {
-            const response = await GetUserInfo(database, data);
-            connection.send(JSON.stringify(response));
+        let response = null;
+        switch (data.action) {
+            case 'get-user-info':   response = GetUserInfo(db, data);           break;
+            case 'check-password':  response = CheckPassword(db, data);         break;
+            case 'get-passwords':   response = GetPasswords(db, crypt, data);   break;
+            case 'get-password':    response = GetPassword(db, crypt, data);    break;
+            case 'add-password':    response = AddPassword(db, crypt, data);    break
+            case 'edit-password':   response = EditPassword(db, crypt, data);   break;
+            case 'delete-password': response = DeletePassword(db, data);        break;
         }
 
-        else if (data.action === 'check-password') {
-            const response = await CheckPassword(database, data);
-            connection.send(JSON.stringify(response));
-        }
-
-        else if (data.action === 'get-passwords') {
-            const response = await GetPasswords(database, crypt, data);
-            connection.send(JSON.stringify(response));
-        }
-
-        else if (data.action === 'get-password') {
-            const response = await GetPassword(database, crypt, data);
-            connection.send(JSON.stringify(response));
+        if (response !== null) {
+            connection.send(JSON.stringify(await response));
         }
     }
 });

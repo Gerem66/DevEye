@@ -16,20 +16,26 @@ import { Popup, Button, TextInput, SelectInput } from '../../Components';
  */
 function PasswordPopupAdd({ passwordCategories }) {
     const [ mode, setMode ] = useState(/** @type {'add' | 'edit'} */ ('add'));
+    const [ ID, setID ] = useState(0);
     const [ category, setCategory ] = useState('');
     const [ service, setService ] = useState('');
     const [ email, setEmail ] = useState('');
     const [ password, setPassword ] = useState('');
     const [ status, setStatus ] = useState(/** @type {PasswordStatus} */ ('active'));
 
+    const [ errorCategory, setErrorCategory ] = useState('');
+    const [ errorService, setErrorService ] = useState('');
+    const [ errorEmail, setErrorEmail ] = useState('');
+
     /** @param {PasswordType | null} password */
     function handleOpenPopup(password) {
-        if (password === null) {
+        if (!password || password.ID === 0) {
             setMode('add');
             return;
         }
 
         setMode('edit');
+        setID(password.ID);
         setCategory(password.category);
         setService(password.service);
         setEmail(password.email);
@@ -38,25 +44,38 @@ function PasswordPopupAdd({ passwordCategories }) {
     }
 
     function handleAddPassword() {
+        if (category === '' || service === '' || email === '') {
+            setErrorCategory(category === '' ? 'Ce champ est obligatoire' : '');
+            setErrorService(service === '' ? 'Ce champ est obligatoire' : '');
+            setErrorEmail(email === '' ? 'Ce champ est obligatoire' : '');
+            return;
+        }
+
         /** @type {PasswordType} */
         const newPassword = {
-            ID: 0,
+            ID,
             category,
             service,
             email,
             password,
             status
         };
-        ClosePopup('popup-add-password', newPassword);
+        handleBack(newPassword);
     }
 
-    function handleBack() {
+    /** @param {PasswordType | null} [newPassword] */
+    function handleBack(newPassword = null) {
+        setID(0);
         setCategory('');
         setService('');
         setEmail('');
         setPassword('');
         setStatus('active');
-        ClosePopup('popup-add-password');
+        ClosePopup('popup-add-password', newPassword);
+    }
+
+    function handleDelete() {
+        ClosePopup('popup-add-password', 'delete');
     }
 
     /** @param {React.ChangeEvent<HTMLSelectElement>} e */
@@ -69,7 +88,7 @@ function PasswordPopupAdd({ passwordCategories }) {
             id='popup-add-password'
             title={mode === 'add' ? 'Ajouter un mot de passe' : 'Modifier le mot de passe'}
             onInputChange={handleOpenPopup}
-            onClosePopup={handleBack}
+            onClosePopup={() => handleBack()}
         >
             <p>
                 Stocker un mot de passe est une bonne pratique pour protéger vos compte.
@@ -82,6 +101,7 @@ function PasswordPopupAdd({ passwordCategories }) {
                 list="category"
                 placeholder="Catégorie"
                 value={category}
+                error={errorCategory}
                 onChange={(e) => setCategory(e.target.value)}
             />
             <datalist id="category">
@@ -96,6 +116,7 @@ function PasswordPopupAdd({ passwordCategories }) {
                     className={styles['password-add-input']}
                     placeholder="Service"
                     value={service}
+                    error={errorService}
                     onChange={(e) => setService(e.target.value)}
                 />
             </div>
@@ -106,6 +127,7 @@ function PasswordPopupAdd({ passwordCategories }) {
                     className={styles['password-add-input']}
                     placeholder="Nom d'utilisateur / Email"
                     value={email}
+                    error={errorEmail}
                     onChange={(e) => setEmail(e.target.value)}
                 />
             </div>
@@ -129,26 +151,22 @@ function PasswordPopupAdd({ passwordCategories }) {
 
             <div className={`form-group ${styles['popup-check-password-buttons']}`}>
                 <div>
-                    <Button onClick={handleBack} color='#576d8c'>Fermer</Button>
+                    <Button onClick={() => handleBack()} color='#576d8c'>Fermer</Button>
                     {mode === 'edit' && (
                         <Button
                             className={styles['password-edit-btn-delete']}
-                            onClick={handleBack}
+                            onClick={handleDelete}
                             color='#c42e2e'
                         >
                             Supprimer
                         </Button>
                     )}
                 </div>
-                <Button onClick={handleAddPassword}>{mode === 'add' ? 'Ajouter' : 'Modifier'}</Button>
+                <Button onClick={handleAddPassword}>
+                    {mode === 'add' ? 'Ajouter' : 'Enregistrer'}
+                </Button>
             </div>
         </Popup>
-    );
-}
-
-function PasswordPopupEdit() {
-    return (
-        <></>
     );
 }
 

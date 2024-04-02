@@ -57,11 +57,12 @@ function ClosePopup(id, data = null) {
  */
 function Popup({ children, id, title = '', style = '', onInputChange = null, onClosePopup = null }) {
     const [ opened, setOpened ] = React.useState(false);
-    const [ inputData, setInputData ] = React.useState(null);
 
     React.useEffect(() => {
         PopupEvents[id] = {
-            setInputData,
+            setInputData: (data) => {
+                onInputChange?.(data);
+            },
             setOpened,
             callback: () => {}
         }
@@ -70,10 +71,6 @@ function Popup({ children, id, title = '', style = '', onInputChange = null, onC
             delete PopupEvents[id];
         };
     }, [id]);
-
-    React.useEffect(() => {
-        onInputChange?.(inputData);
-    }, [onInputChange, inputData]);
 
     /** @type {DetailedHTMLProps['style']} */
     const styleCard = {
