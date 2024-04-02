@@ -26,8 +26,21 @@ import { StrIsJson } from '../Utils/Functions.js';
  * @returns {Promise<TCPRequestReceiveHeader<'get-passwords'>>}
  */
 async function GetPasswords(database, crypt, data) {
-    /** @type {Array<PasswordDatabaseType>} */
-    const passwords = await database.QueryPrepare('SELECT * FROM _Passwords WHERE UserID = ?', [ data.content.userID ]);
+    /** @type {Array<PasswordDatabaseType> | null} */
+    let passwords = null;
+
+    if (data.content.contextID === 0) {
+        passwords = await database.QueryPrepare(
+            'SELECT * FROM _Passwords WHERE UserID = ? AND ContextID IS NULL',
+            [ data.content.userID ]
+        );
+    } else {
+        passwords = await database.QueryPrepare(
+            'SELECT * FROM _Passwords WHERE UserID = ? AND ContextID = ?',
+            [ data.content.userID, data.content.contextID ]
+        );
+    }
+
     if (passwords === null) {
         return {
             action: 'get-passwords',
@@ -76,11 +89,21 @@ async function GetPasswords(database, crypt, data) {
  * @returns {Promise<TCPRequestReceiveHeader<'get-password'>>}
  */
 async function GetPassword(database, crypt, data) {
-    /** @type {Array<PasswordDatabaseType>} */
-    const resultPassword = await database.QueryPrepare(
-        'SELECT * FROM _Passwords WHERE UserID = ? AND ID = ?',
-        [ data.content.userID, data.content.passwordID ]
-    );
+    /** @type {Array<PasswordDatabaseType> | null} */
+    let resultPassword = null;
+
+    if (data.content.contextID === 0) {
+        resultPassword = await database.QueryPrepare(
+            'SELECT * FROM _Passwords WHERE ID = ? AND UserID = ? AND ContextID IS NULL',
+            [ data.content.passwordID, data.content.userID ]
+        );
+    } else {
+        resultPassword = await database.QueryPrepare(
+            'SELECT * FROM _Passwords WHERE ID = ? AND UserID = ? AND ContextID = ?',
+            [ data.content.passwordID, data.content.userID, data.content.contextID ]
+        );
+    }
+
     if (resultPassword === null || resultPassword.length === 0) {
         console.log('Error: Password not found');
         return {

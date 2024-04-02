@@ -36,7 +36,20 @@ async function AddPassword(db, crypt, data) {
         }))
     };
 
-    const result = await db.QueryPrepare('INSERT INTO _Passwords SET `UserID` = ?, `ContextID` = ?, `Content` = ?', [ newPassword.UserID, newPassword.ContextID, newPassword.Content ]);
+    let result = null;
+
+    if (data.content.contextID === 0) {
+        result = await db.QueryPrepare(
+            'INSERT INTO _Passwords SET `UserID` = ?, `ContextID` = NULL, `Content` = ?',
+            [ newPassword.UserID, newPassword.Content ]
+        );
+    } else {
+        result = await db.QueryPrepare(
+            'INSERT INTO _Passwords SET `UserID` = ?, `ContextID` = ?, `Content` = ?',
+            [ newPassword.UserID, newPassword.ContextID, newPassword.Content ]
+        );
+    }
+
     if (result === null) {
         return {
             action: 'add-password',
@@ -83,7 +96,7 @@ async function EditPassword(db, crypt, data) {
     }));
 
     let result = null;
-    if (!data.content.contextID) {
+    if (data.content.contextID === 0) {
         const command = 'UPDATE _Passwords SET `Content` = ? WHERE `ID` = ? AND `UserID` = ? AND `ContextID` IS NULL';
         const args = [ content, password.ID, data.content.userID ];
         result = await db.QueryPrepare(command, args);
@@ -129,7 +142,20 @@ async function EditPassword(db, crypt, data) {
 async function DeletePassword(db, data) {
     const { passwordID } = data.content;
 
-    const result = await db.QueryPrepare('DELETE FROM _Passwords WHERE `ID` = ?', [ passwordID ]);
+    let result = null;
+
+    if (data.content.contextID === 0) {
+        result = await db.QueryPrepare(
+            'DELETE FROM _Passwords WHERE `ID` = ? AND `UserID` = ? AND `ContextID` IS NULL',
+            [ passwordID, data.content.userID ]
+        );
+    } else {
+        result = await db.QueryPrepare(
+            'DELETE FROM _Passwords WHERE `ID` = ? AND `UserID` = ? AND `ContextID` = ?',
+            [ passwordID, data.content.userID, data.content.contextID ]
+        );
+    }
+
     if (result === null) {
         return {
             action: 'delete-password',

@@ -96,6 +96,7 @@ function HomePage({ user, setUser }) {
             <div className="home-right">
                 {context !== null && feature !== null && (
                     <feature.component
+                        key={`${feature.id} ${context.id}`}
                         user={user}
                         setUser={setUser}
                         context={context}

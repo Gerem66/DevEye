@@ -71,6 +71,9 @@ function PasswordPopupAdd({ passwordCategories }) {
         setEmail('');
         setPassword('');
         setStatus('active');
+        setErrorCategory('');
+        setErrorService('');
+        setErrorEmail('');
         ClosePopup('popup-add-password', newPassword);
     }
 

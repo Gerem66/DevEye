@@ -30,6 +30,8 @@ class FeaturePasswordBack extends React.Component {
     refInputUnlock = React.createRef();
 
     state = {
+        loaded: false,
+
         /** @type {boolean} Show popup to ask password or not */
         locked: true,
         inputPassword: '',
@@ -93,7 +95,7 @@ class FeaturePasswordBack extends React.Component {
             }))
             .reduce((acc, cur) => ({ ...acc, ...cur }), {});
 
-        this.setState({ categories, search });
+        this.setState({ loaded: true, categories, search });
     }
 
     /** @param {React.ChangeEvent<HTMLInputElement>} e */

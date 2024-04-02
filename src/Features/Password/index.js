@@ -5,13 +5,12 @@ import PasswordRow from './passwordRow';
 import LoadingTable from './loadingTable';
 import { PasswordPopupAdd } from './popups';
 
-import { OpenPopup } from '../../Components/Popup';
 import { Header, Row, Card, Popup, Button, TextInput } from '../../Components';
 
 class FeaturePassword extends FeaturePasswordBack {
     render() {
         const { context, feature } = this.props;
-        const { search, categories } = this.state;
+        const { loaded, search, categories } = this.state;
 
         return (
             <div className={styles.profile}>
@@ -33,14 +32,14 @@ class FeaturePassword extends FeaturePasswordBack {
                     </Card.Element>
                 </Row>
 
-                {Object.keys(categories).length === 0 && (
+                {!loaded && (
                     <>
                         <LoadingTable key={'loading-table-password-1'} />
                         <LoadingTable key={'loading-table-password-2'} />
                     </>
                 )}
 
-                {Object.keys(categories).map((category) => {
+                {loaded && Object.keys(categories).map((category) => {
                     const passwords = categories[category];
                     if (passwords.length === 0) {
                         return null;
