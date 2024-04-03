@@ -1,54 +1,39 @@
 import { StrIsJson } from '../Utils/Functions.js';
 
 /**
- * @typedef {import('../SQL.js').default} SQL
- * @typedef {import('../Utils/Encryption.js').default} Encryption
- * @typedef {import('Types/TCP.js').SendRequestType} SendRequestType
- * @typedef {import('Types/TCP.js').ReceiveRequestType} ReceiveRequestType
+ * @typedef {import('./types.js').RequestTypes} RequestTypes
  * @typedef {import('Types/Password.js').PasswordType} PasswordType
  * @typedef {import('Types/Password.js').PasswordDatabaseType} PasswordDatabaseType
  */
 
 /**
- * @template {keyof SendRequestType} T
- * @typedef {import('Types/TCP.js').TCPRequestSendHeader<T>} TCPRequestSendHeader
+ * @template {RequestTypes} T
+ * @typedef {import('./types.js').TCPFeatureType<T>} TCPFeatureType
  */
 
-/**
- * @template {keyof ReceiveRequestType} T
- * @typedef {import('Types/TCP.js').TCPRequestReceiveHeader<T>} TCPRequestReceiveHeader
- */
+/** @type {TCPFeatureType<'get-passwords'>} */
+async function GetPasswords({ db, crypt, profile, data }) {
+    const { contextID } = data;
 
-/**
- * @param {SQL} database
- * @param {Encryption} crypt
- * @param {TCPRequestSendHeader<'get-passwords'>} data
- * @returns {Promise<TCPRequestReceiveHeader<'get-passwords'>>}
- */
-async function GetPasswords(database, crypt, data) {
     /** @type {Array<PasswordDatabaseType> | null} */
     let passwords = null;
 
-    if (data.content.contextID === 0) {
-        passwords = await database.QueryPrepare(
+    if (contextID === 0) {
+        passwords = await db.QueryPrepare(
             'SELECT * FROM _Passwords WHERE UserID = ? AND ContextID IS NULL',
-            [ data.content.userID ]
+            [ profile.user?.ID ]
         );
     } else {
-        passwords = await database.QueryPrepare(
+        passwords = await db.QueryPrepare(
             'SELECT * FROM _Passwords WHERE UserID = ? AND ContextID = ?',
-            [ data.content.userID, data.content.contextID ]
+            [ profile.user?.ID, contextID ]
         );
     }
 
     if (passwords === null) {
         return {
-            action: 'get-passwords',
-            content: {
-                status: 1,
-                passwords: []
-            },
-            callbackID: data.callbackID
+            status: 1,
+            passwords: []
         };
     }
 
@@ -73,46 +58,35 @@ async function GetPasswords(database, crypt, data) {
     .filter((p) => p !== null);
 
     return {
-        action: 'get-passwords',
-        content: {
-            status: 0,
-            passwords: passwordsFormatted
-        },
-        callbackID: data.callbackID
+        status: 0,
+        passwords: passwordsFormatted
     };
 }
 
-/**
- * @param {SQL} database
- * @param {Encryption} crypt
- * @param {TCPRequestSendHeader<'get-password'>} data
- * @returns {Promise<TCPRequestReceiveHeader<'get-password'>>}
- */
-async function GetPassword(database, crypt, data) {
+/** @type {TCPFeatureType<'get-password'>} */
+async function GetPassword({ db, crypt, profile, data }) {
+    const { contextID, passwordID } = data;
+
     /** @type {Array<PasswordDatabaseType> | null} */
     let resultPassword = null;
 
-    if (data.content.contextID === 0) {
-        resultPassword = await database.QueryPrepare(
+    if (contextID === 0) {
+        resultPassword = await db.QueryPrepare(
             'SELECT * FROM _Passwords WHERE ID = ? AND UserID = ? AND ContextID IS NULL',
-            [ data.content.passwordID, data.content.userID ]
+            [ passwordID, profile.user?.ID ]
         );
     } else {
-        resultPassword = await database.QueryPrepare(
+        resultPassword = await db.QueryPrepare(
             'SELECT * FROM _Passwords WHERE ID = ? AND UserID = ? AND ContextID = ?',
-            [ data.content.passwordID, data.content.userID, data.content.contextID ]
+            [ passwordID, profile.user?.ID, contextID ]
         );
     }
 
     if (resultPassword === null || resultPassword.length === 0) {
         console.log('Error: Password not found');
         return {
-            action: 'get-password',
-            content: {
-                status: 1,
-                password: null
-            },
-            callbackID: data.callbackID
+            status: 1,
+            password: null
         };
     }
 
@@ -120,12 +94,8 @@ async function GetPassword(database, crypt, data) {
     if (!rawContent || !StrIsJson(rawContent)) {
         console.log('Error: Password content is not valid', rawContent);
         return {
-            action: 'get-password',
-            content: {
-                status: 1,
-                password: null
-            },
-            callbackID: data.callbackID
+            status: 1,
+            password: null
         };
     }
 
@@ -133,25 +103,21 @@ async function GetPassword(database, crypt, data) {
     if (!content.hasOwnProperty('service') || !content.hasOwnProperty('category') || !content.hasOwnProperty('email') || !content.hasOwnProperty('password') || !content.hasOwnProperty('status')) {
         console.log('Error: Password content is not valid2', content);
         return {
-            action: 'get-password',
-            content: {
-                status: 1,
-                password: null
-            },
-            callbackID: data.callbackID
+            status: 1,
+            password: null
         };
     }
 
-    const ID = resultPassword[0].ID;
-    const { category, service, email, password, status } = content;
-
     return {
-        action: 'get-password',
-        content: {
-            status: 0,
-            password: { ID, category, service, email, password, status }
-        },
-        callbackID: data.callbackID
+        status: 0,
+        password: {
+            ID: resultPassword[0].ID,
+            category: content.category,
+            service: content.service,
+            email: content.email,
+            password: content.password,
+            status: content.status
+        }
     };
 }
 

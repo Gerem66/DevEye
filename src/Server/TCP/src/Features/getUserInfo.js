@@ -1,87 +1,62 @@
 import { ffetch } from '../../src/Utils/Request.js';
 
 /**
- * @typedef {import('../../src/SQL.js').default} SQL
- * @typedef {import('Types/TCP.js').SendRequestType} SendRequestType
- * @typedef {import('Types/TCP.js').ReceiveRequestType} ReceiveRequestType
+ * @typedef {import('./types.js').RequestTypes} RequestTypes
  */
 
 /**
- * @template {keyof SendRequestType} T
- * @typedef {import('Types/TCP.js').TCPRequestSendHeader<T>} TCPRequestSendHeader
+ * @template {RequestTypes} T
+ * @typedef {import('./types.js').TCPFeatureType<T>} TCPFeatureType
  */
 
-/**
- * @template {keyof ReceiveRequestType} T
- * @typedef {import('Types/TCP.js').TCPRequestReceiveHeader<T>} TCPRequestReceiveHeader
- */
+/** @type {TCPFeatureType<'login'>} */
+async function Login({ db, data }) {
+    const { token } = data;
 
-/**
- * @param {SQL} database
- * @param {TCPRequestSendHeader<'login'>} data
- * @returns {Promise<TCPRequestReceiveHeader<'login'>>}
- */
-async function Login(database, data) {
     // Check token & code
     const code = 'UJu-79a?:w=4O7mp#sM]yQiOsI/Jb_ag';
-    const token = data.content.token;
     const requestToken = await ffetch('get-token', { code, token });
+
     if (requestToken.status !== 0) {
         // TODO: Alert
         return {
-            action: 'login',
-            content: {
-                status: 1,
-                user: null
-            },
-            callbackID: ''
+            status: 1,
+            user: null
         };
     }
 
-    const user = await database.QueryPrepare('SELECT * FROM Users WHERE Token = ?', [requestToken.content]);
+    const user = await db.QueryPrepare('SELECT * FROM Users WHERE Token = ?', [requestToken.content]);
     if (user === null) {
         // TODO: Alert
         return {
-            action: 'login',
-            content: {
-                status: 1,
-                user: null
-            },
-            callbackID: data.callbackID
+            status: 1,
+            user: null
         };
     }
 
     // Update LastLogin
-    database.QueryPrepare('UPDATE Users SET LastLogin = NOW() WHERE ID = ?', [ user[0].ID ]);
+    db.QueryPrepare('UPDATE Users SET LastLogin = NOW() WHERE ID = ?', [ user[0].ID ]);
 
     user[0].LastLogin = (new Date(user[0].LastLogin)).getTime() / 1000;
     user[0].Created = (new Date(user[0].Created)).getTime() / 1000;
 
     // Load contexts
     /** @type {Array<{ ContextID: number }>} */
-    const rawContextsID = await database.QueryPrepare('SELECT `ContextID` FROM ContextsLinks WHERE UserID = ?', [ user[0].ID ]);
+    const rawContextsID = await db.QueryPrepare('SELECT `ContextID` FROM ContextsLinks WHERE UserID = ?', [ user[0].ID ]);
     if (rawContextsID === null) {
         return {
-            action: 'login',
-            content: {
-                status: 1,
-                user: null
-            },
-            callbackID: data.callbackID
+            status: 1,
+            user: null
         };
     }
 
     const contextsID = rawContextsID.map((c) => c.ContextID);
     /** @type {Array<{ ID: number, Name: string, Logo: string, Features: string }>} */
-    const contexts = await database.ExecQuery(`SELECT * FROM Contexts WHERE ID IN (${contextsID.join(',')})`);
+    const contexts = await db.ExecQuery(`SELECT * FROM Contexts WHERE ID IN (${contextsID.join(',')})`);
     if (contexts === null) {
         return {
-            action: 'login',
-            content: {
-                status: 1,
-                user: null
-            },
-            callbackID: data.callbackID
+            status: 1,
+            user: null
         };
     }
 
@@ -102,12 +77,8 @@ async function Login(database, data) {
     user[0].Contexts = [selfContext, ...userContexts];
 
     return {
-        action:'login',
-        content: {
-            status: 0,
-            user: user[0]
-        },
-        callbackID: data.callbackID
+        status: 0,
+        user: user[0]
     };
 }
 

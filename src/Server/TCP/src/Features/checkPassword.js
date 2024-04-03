@@ -1,36 +1,26 @@
 import bcrypt from 'bcrypt';
 
 /**
- * @typedef {import('../SQL.js').default} SQL
- * @typedef {import('Types/TCP.js').SendRequestType} SendRequestType
- * @typedef {import('Types/TCP.js').ReceiveRequestType} ReceiveRequestType
+ * @typedef {import('./types.js').RequestTypes} RequestTypes
  */
 
 /**
- * @template {keyof SendRequestType} T
- * @typedef {import('Types/TCP.js').TCPRequestSendHeader<T>} TCPRequestSendHeader
+ * @template {RequestTypes} T
+ * @typedef {import('./types.js').TCPFeatureType<T>} TCPFeatureType
  */
 
-/**
- * @template {keyof ReceiveRequestType} T
- * @typedef {import('Types/TCP.js').TCPRequestReceiveHeader<T>} TCPRequestReceiveHeader
- */
+/** @type {TCPFeatureType<'check-password'>} */
+async function CheckPassword({ db, profile, data }) {
+    const { contextID, password } = data;
 
-/**
- * @param {SQL} db
- * @param {TCPRequestSendHeader<'check-password'>} data
- * @returns {Promise<TCPRequestReceiveHeader<'check-password'>>}
- */
-async function CheckPassword(db, data) {
-    const resultUser = await db.QueryPrepare('SELECT `Password` FROM `Users` WHERE `ID` = ?', [ data.content.userID ]);
+    const resultUser = await db.QueryPrepare(
+        'SELECT `Password` FROM `Users` WHERE `ID` = ?',
+        [ profile.user?.ID ]
+    );
     if (resultUser === null || resultUser.length === 0) {
         return {
-            action: 'check-password',
-            content: {
-                status: 1,
-                message: 'User not found'
-            },
-            callbackID: data.callbackID
+            status: 1,
+            message: 'User not found'
         };
     }
 
@@ -44,37 +34,25 @@ async function CheckPassword(db, data) {
 
     let match = false;
     try {
-        match = await bcrypt.compare(data.content.password, userPassword);
+        match = await bcrypt.compare(password, userPassword);
     } catch (error) {
         console.error('Login error:', error);
         return {
-            action: 'check-password',
-            content: {
-                status: 2,
-                message: 'Error while checking password'
-            },
-            callbackID: data.callbackID
+            status: 2,
+            message: 'Error while checking password'
         };
     }
 
     if (!match) {
         return {
-            action: 'check-password',
-            content: {
-                status: 3,
-                message: 'Password does not match'
-            },
-            callbackID: data.callbackID
+            status: 3,
+            message: 'Password does not match'
         };
     }
 
     return {
-        action: 'check-password',
-        content: {
-            status: 0,
-            message: null
-        },
-        callbackID: data.callbackID
+        status: 0,
+        message: null
     };
 }
 

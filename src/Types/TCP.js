@@ -9,12 +9,12 @@
  * 
  * @typedef {Object} SendRequestType
  * @property {{ token: string }} login
- * @property {{ contextID: number, userID: number, password: string }} check-password
- * @property {{ contextID: number, userID: number }} get-passwords
- * @property {{ contextID: number, userID: number, passwordID: number, password: string }} get-password
- * @property {{ contextID: number, userID: number, password: PasswordType }} add-password
- * @property {{ contextID: number, userID: number, password: PasswordType }} edit-password
- * @property {{ contextID: number, userID: number, passwordID: number }} delete-password
+ * @property {{ contextID: number, password: string }} check-password
+ * @property {{ contextID: number }} get-passwords
+ * @property {{ contextID: number, passwordID: number }} get-password
+ * @property {{ contextID: number, password: PasswordType }} add-password
+ * @property {{ contextID: number, password: PasswordType }} edit-password
+ * @property {{ contextID: number, passwordID: number }} delete-password
  * @property {{ contextName: string }} add-context
  * 
  * @typedef {Object} ReceiveRequestType

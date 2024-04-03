@@ -1,7 +1,6 @@
 import React from 'react';
 
 import { tcp } from '../../Utils/TCP';
-import { DefaultUser } from '../../Types/User';
 import { OpenPopup, ClosePopup } from '../../Components/Popup';
 
 /**
@@ -11,7 +10,6 @@ import { OpenPopup, ClosePopup } from '../../Components/Popup';
 
 /** @type {FeatureProps} */
 const FeaturePasswordProps = {
-    user: DefaultUser,
     setUser: () => {},
     //@ts-ignore This variable is necessarily defined
     context: null,
@@ -36,7 +34,6 @@ class FeaturePasswordBack extends React.Component {
         locked: true,
         inputPassword: '',
         errorPassword: '',
-        tmpPassword: '',
 
         search: '',
 
@@ -51,9 +48,9 @@ class FeaturePasswordBack extends React.Component {
     timeoutUnlock = null;
 
     componentDidMount() {
-        const { user, context } = this.props;
+        const { context } = this.props;
 
-        tcp.SendAsync('get-passwords', { contextID: context.id, userID: user.ID })
+        tcp.SendAsync('get-passwords', { contextID: context.id })
             .then(async (response) => {
                 if (response === 'timeout') {
                     console.log('Error: Timeout');
@@ -110,11 +107,11 @@ class FeaturePasswordBack extends React.Component {
             clearTimeout(this.timeoutUnlock);
             this.timeoutUnlock = null;
         }
-        this.setState({ locked: true, tmpPassword: '' });
+        this.setState({ locked: true });
     }
 
     Unlock = async () => {
-        if (!this.state.locked && this.state.tmpPassword !== '') {
+        if (!this.state.locked) {
             if (this.timeoutUnlock !== null) {
                 clearTimeout(this.timeoutUnlock);
             }
@@ -136,19 +133,16 @@ class FeaturePasswordBack extends React.Component {
 
     /** @param {number} ID */
     GetPassword = async (ID) => {
-        const { user, context } = this.props;
+        const { context } = this.props;
 
         const unlocked = await this.Unlock();
         if (!unlocked) {
             return;
         }
 
-        const { tmpPassword } = this.state;
         const response = await tcp.SendAsync('get-password', {
             contextID: context.id,
-            userID: user.ID,
-            passwordID: ID,
-            password: tmpPassword
+            passwordID: ID
         });
         if (response === 'timeout') {
             console.log('Error: Timeout');
@@ -179,7 +173,7 @@ class FeaturePasswordBack extends React.Component {
 
     /** @param {number | null} ID */
     OpenEditPassword = async (ID) => {
-        const { user, context } = this.props;
+        const { context } = this.props;
 
         /** @type {PasswordType} */
         let password = {
@@ -197,12 +191,9 @@ class FeaturePasswordBack extends React.Component {
                 return;
             }
 
-            const { tmpPassword } = this.state;
             const response = await tcp.SendAsync('get-password', {
                 contextID: context.id,
-                userID: user.ID,
-                passwordID: ID,
-                password: tmpPassword
+                passwordID: ID
             });
             if (response === 'timeout') {
                 console.log('Error: Timeout');
@@ -235,7 +226,6 @@ class FeaturePasswordBack extends React.Component {
                 if (ID !== null) {
                     const response = await tcp.SendAsync('delete-password', {
                         contextID: context.id,
-                        userID: user.ID,
                         passwordID: ID
                     });
                     if (response === 'timeout' || response === 'not-sended' || response.status !== 0) {
@@ -250,7 +240,6 @@ class FeaturePasswordBack extends React.Component {
             else if (ID === null) {
                 const response = await tcp.SendAsync('add-password', {
                     contextID: context.id,
-                    userID: user.ID,
                     password: newPassword
                 });
                 if (response === 'timeout' || response === 'not-sended' || response.status !== 0 || response.password === null) {
@@ -264,7 +253,6 @@ class FeaturePasswordBack extends React.Component {
             else {
                 const response = await tcp.SendAsync('edit-password', {
                     contextID: context.id,
-                    userID: user.ID,
                     password: newPassword
                 });
                 if (response === 'timeout' || response === 'not-sended' || response.status !== 0 || response.password === null) {
@@ -297,7 +285,7 @@ class FeaturePasswordBack extends React.Component {
 
     UnlockPopupValidate = async () => {
         const { inputPassword } = this.state;
-        const { user, context } = this.props;
+        const { context } = this.props;
 
         if (!inputPassword) {
             this.setState({ errorPassword: 'Mot de passe vide', inputPassword: '' });
@@ -306,7 +294,6 @@ class FeaturePasswordBack extends React.Component {
 
         const response = await tcp.SendAsync('check-password', {
             contextID: context.id,
-            userID: user.ID,
             password: inputPassword
         });
 
@@ -321,7 +308,7 @@ class FeaturePasswordBack extends React.Component {
             return;
         }
 
-        this.setState({ locked: false, inputPassword: '', tmpPassword: inputPassword }, () => {
+        this.setState({ locked: false, inputPassword: '' }, () => {
             ClosePopup('popup-unlock');
         });
     }

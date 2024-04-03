@@ -7,12 +7,23 @@ import Encryption from './src/Utils/Encryption.js';
 import { Login } from './src/Features/getUserInfo.js';
 import { CheckPassword } from './src/Features/checkPassword.js';
 import { GetPassword, GetPasswords } from './src/Features/getPassword.js';
-import { AddPassword, EditPassword, DeletePassword } from './src/Features/setPassword.js';
+import { AddPassword, EditPassword, DeletePassword } from './src/Features/addPassword.js';
 import { AddContext } from './src/Features/addContext.js';
 
 /**
+ * @typedef {import('./src/Features/types.js').RequestTypes} RequestTypes
  * @typedef {import('./src/Server.js').ProfileType} ProfileType
  */
+
+/**
+ * @template {RequestTypes} T
+ * @typedef {import('./src/Features/types.js').TCPFeatureType<T>} TCPFeatureType
+*/
+
+/**
+ * @template {RequestTypes} T
+ * @typedef {import('./src/Features/types.js').TCPRequestReceiveHeader<T>} TCPRequestReceiveHeader
+*/
 
 const db = new SQL({
     database: process.env.DB_DATABASE || '',
@@ -49,28 +60,44 @@ serv.Listen(8080, {
     },
 
     onMessage: async (connection, profile, data) => {
-        let response = null;
+        /** @type {TCPFeatureType<*> | null} */
+        let action = null;
+
+        /** @type {TCPRequestReceiveHeader<*>['content'] | null} */
+        let result = null;
+
         switch (data.action) {
             case 'login':
-                response = await Login(db, data);
-                if (response.content.status === 0 && response.content.user !== null) {
-                    profile.user = response.content.user;
+                const resultLogin = await Login({ db, crypt, profile, data: data.content });
+                if (resultLogin.status === 0 && resultLogin.user !== null) {
+                    profile.user = resultLogin.user;
                     profile.firstMessage = false;
                     users[`${profile.user.ID}`] = profile;
+                    result = resultLogin;
                 }
                 break;
 
-            case 'check-password':  response = CheckPassword(db, data);                 break;
-            case 'get-passwords':   response = GetPasswords(db, crypt, data);           break;
-            case 'get-password':    response = GetPassword(db, crypt, data);            break;
-            case 'add-password':    response = AddPassword(db, crypt, data);            break;
-            case 'edit-password':   response = EditPassword(db, crypt, data);           break;
-            case 'delete-password': response = DeletePassword(db, data);                break;
-            case 'add-context':     response = AddContext(db, crypt, profile, data);    break;
+            case 'check-password':  action = CheckPassword;     break;
+            case 'get-passwords':   action = GetPasswords;      break;
+            case 'get-password':    action = GetPassword;       break;
+            case 'add-password':    action = AddPassword;       break;
+            case 'edit-password':   action = EditPassword;      break;
+            case 'delete-password': action = DeletePassword;    break;
+            case 'add-context':     action = AddContext;        break;
         }
 
-        if (response !== null) {
-            connection.send(JSON.stringify(await response));
+        if (action !== null) {
+            result = await action({ db, crypt, profile, data: data.content });
+        }
+
+        if (result !== null) {
+            /** @type {TCPRequestReceiveHeader<*>} */
+            const response = {
+                action: data.action,
+                content: result,
+                callbackID: data.callbackID
+            };
+            connection.send(JSON.stringify(response));
         }
     }
 });
