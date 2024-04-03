@@ -19,8 +19,13 @@ class FeaturePassword extends FeaturePasswordBack {
                     feature={feature}
                 />
 
-                <Row style='center'>
-                    <Card.Element title={`Rechercher (${this.allPasswords.length})`} style={styles['search-container']} color='blue-dark' size='1/3'>
+                <Row center>
+                    <Card.Element
+                        title={`Rechercher (${this.allPasswords.length})`}
+                        style={styles['search-container']}
+                        color='blue-dark'
+                        width={500}
+                    >
                         <a className={`link ${styles['add-password']}`} onClick={() => this.OpenEditPassword(null)}>
                             Ajouter un mot de passe
                         </a>
@@ -46,10 +51,10 @@ class FeaturePassword extends FeaturePasswordBack {
                     }
 
                     return (
-                        <Row key={category} style='center'>
+                        <Row key={category} center>
                             <Card.Element
                                 title={`${category} (${passwords.length})`}
-                                size='2/3'
+                                width={1000}
                                 color='blue-dark'
                                 style={styles['password-container']}
                             >

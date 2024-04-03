@@ -1,4 +1,4 @@
-.nav-features .profile {
+.profile {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -19,30 +19,33 @@
     cursor: pointer;
     transition: all 0.1s ease-in-out;
 }
-.nav-features .profile > .icon {
-    background-color: #cacaca;
-}
-.nav-features .profile:hover {
+.profile:hover {
     color: #fff;
 }
-.nav-features .profile:hover > .icon {
+
+.profile-icon {
+    background-color: #cacaca;
+    transition: all 0.1s ease-in-out;
+}
+.profile:hover > .profile-icon {
     background-color: #fff;
 }
-.nav-features .profile .profile-content {
+
+.profile-content {
     display: flex;
     align-items: center;
     justify-content: space-between;
 }
-.nav-features .profile .profile-image {
+.profile-image {
     width: 36px;
     margin-right: 12px;
     border-radius: 4px;
 }
 
-.nav-features .category {
+.category {
     height: 100%;
 }
-.nav-features .category::before {
+.category::before {
     content: attr(data-title);
     display: block;
     padding: 16px 16px 6px;

@@ -6,6 +6,3 @@
 .row > * {
     display: inline-block;
 }
-.row.center {
-    justify-content: center;
-}

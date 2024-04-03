@@ -1,6 +1,6 @@
 import React from 'react';
 
-import './styleFeatures.css';
+import styles from './styleFeatures.module.css';
 import stylesBtn from '../button.module.css';
 import { FEATURES } from '../../../Features/Features';
 
@@ -34,19 +34,19 @@ class NavFeatures extends React.Component {
         const { context, onProfileClick } = this.props;
 
         return (
-            <div className='nav-features'>
+            <div>
 
                 {/* Profile */}
-                <button className='profile' onClick={onProfileClick}>
-                    <div className='profile-content'>
+                <button className={styles.profile} onClick={onProfileClick}>
+                    <div className={styles['profile-content']}>
                         <img
-                            className='profile-image'
+                            className={styles['profile-image']}
                             src={'./images/' + context?.logo}
                             alt='Logo'
                         />
                         <span>{context?.name || 'Context'}</span>
                     </div>
-                    <span className='icon icon-arrow' />
+                    <span className={`icon icon-arrow ${styles['profile-icon']}`} />
                 </button>
 
                 {/* Features */}
@@ -71,7 +71,7 @@ class NavFeatures extends React.Component {
         return (
             <section
                 key={'section-' + context.id}
-                className='category'
+                className={styles.category}
                 data-title={context.name}
             >
                 {features}

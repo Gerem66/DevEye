@@ -20,7 +20,6 @@ function FeatureDashboard({ user, setUser, context, feature }) {
                     title='Nombre total de projets'
                     value='0'
                     color='blue'
-                    size='1/3'
                     icon='details'
                 />
 
@@ -28,7 +27,6 @@ function FeatureDashboard({ user, setUser, context, feature }) {
                     title='Tâches en cours'
                     value='0'
                     color='green'
-                    size='1/3'
                     icon='sandbox'
                 />
 
@@ -36,13 +34,12 @@ function FeatureDashboard({ user, setUser, context, feature }) {
                     title='Mails non lus'
                     value='0'
                     color='yellow'
-                    size='1/3'
                     icon='mail'
                 />
             </Row>
 
             <Row>
-                <Card.Element size='1/2' color='blue-dark'>
+                <Card.Element color='blue-dark'>
                     <h2>Profil</h2>
                     <div className='separator' />
 
@@ -51,7 +48,7 @@ function FeatureDashboard({ user, setUser, context, feature }) {
                     </button>
                 </Card.Element>
 
-                <Card.Element size='1/2' color='blue-dark'>
+                <Card.Element color='blue-dark'>
                     <h2>News</h2>
                     <div className='separator' />
                 </Card.Element>

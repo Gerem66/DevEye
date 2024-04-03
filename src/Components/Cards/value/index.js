@@ -3,7 +3,6 @@ import React from 'react';
 import styles from './style.module.css';
 
 /**
- * @typedef {import('../index').CardSize} CardSize
  * @typedef {import('Styles/colors').Color} Color
  * @typedef {import('Styles/icons').Icon} Icon
  * 
@@ -11,7 +10,7 @@ import styles from './style.module.css';
  * @property {string} title
  * @property {string} value
  * @property {Icon|null} [icon]
- * @property {CardSize} [size]
+ * @property {'auto' | 'unset' | number} [width] The width of the card in percentage
  * @property {Color} [color]
  */
 
@@ -19,11 +18,12 @@ import styles from './style.module.css';
  * @param {CardValueProps} props
  * @returns {React.JSX.Element}
  */
-function CardValue({ title, value, icon = null, size = '1/4', color = 'blue' }) {
-    const sizeNb = `${size.replace('/', '')}`;
-
+function CardValue({ title, value, icon = null, width = 'unset', color = 'blue' }) {
     return (
-        <div className={`${styles.card} bg-${color} col-${sizeNb}`}>
+        <div
+            className={`${styles.card} bg-${color}`}
+            style={{ maxWidth: width }}
+        >
             <p className={styles.title}>{title}</p>
             <p className={styles.value}>{value}</p>
 

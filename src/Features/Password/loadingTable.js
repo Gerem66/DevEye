@@ -5,10 +5,10 @@ import { Card, Row } from '../../Components';
 
 function LoadingTable() {
     return (
-        <Row key={'category-empy'} style='center'>
+        <Row key={'category-empy'} center>
             <Card.Element
                 title={`Chargement en cours`}
-                size='2/3'
+                width={1000}
                 color='blue-dark'
                 style={styles['password-container-loading']}
             >

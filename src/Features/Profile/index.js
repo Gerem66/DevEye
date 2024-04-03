@@ -33,8 +33,8 @@ function FeatureProfile({ user, setUser, context, feature }) {
                 feature={feature}
             />
 
-            <Row style='center'>
-                <Card.Element size='1/3' color='blue-dark'>
+            <Row center>
+                <Card.Element width={550} color='blue-dark'>
                     <div className='profile-header'>
                         <div className='profile-avatar' onClick={ChangeImage}>
                             <img
