@@ -1,4 +1,4 @@
-.navbar .button {
+.button {
     display: block;
     padding: 12px 24px;
     width: 100%;
@@ -24,19 +24,19 @@
 
     cursor: pointer;
 }
-.navbar .button:hover {
+.button:hover {
     color: #fff;
 }
-.navbar .button > .icon {
+.button > .icon {
     width: 18px;
     margin-right: 12px;
     background-color: #cacaca;
     transition: all 0.1s ease-in-out;
 }
-.navbar .button:hover > .icon {
+.button:hover > .icon {
     background-color: #fff;
 }
-.navbar .button.active {
+.button.active {
     font-weight: 600;
     border-left-width: 3px;
     background-color: #1d2531;

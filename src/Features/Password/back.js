@@ -63,10 +63,12 @@ class FeaturePasswordBack extends React.Component {
                     if (response.status === 0) {
                         this.allPasswords = response.passwords;
                         this.updatePasswords();
+                        return;
                     } else {
                         console.log('Error:', response);
                     }
                 }
+                this.setState({ loaded: true });
             });
     }
 

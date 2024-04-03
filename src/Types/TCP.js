@@ -1,5 +1,6 @@
 /**
  * @typedef {import('Types/User').UserType} UserType
+ * @typedef {import('Types/User').ContextType} ContextType
  * @typedef {import('Types/Password').PasswordType} PasswordType
  * 
  * @typedef {'idle' | 'connected' | 'disconnected' | 'error'} ConnectionState
@@ -7,22 +8,24 @@
  * 
  * 
  * @typedef {Object} SendRequestType
- * @property {{ token: string }} get-user-info
+ * @property {{ token: string }} login
  * @property {{ contextID: number, userID: number, password: string }} check-password
  * @property {{ contextID: number, userID: number }} get-passwords
  * @property {{ contextID: number, userID: number, passwordID: number, password: string }} get-password
  * @property {{ contextID: number, userID: number, password: PasswordType }} add-password
  * @property {{ contextID: number, userID: number, password: PasswordType }} edit-password
  * @property {{ contextID: number, userID: number, passwordID: number }} delete-password
+ * @property {{ contextName: string }} add-context
  * 
  * @typedef {Object} ReceiveRequestType
- * @property {{ status: number, user: UserType | null }} get-user-info
+ * @property {{ status: number, user: UserType | null }} login
  * @property {{ status: number, message: string | null }} check-password
  * @property {{ status: number, passwords: Array<PasswordType> }} get-passwords
  * @property {{ status: number, password: PasswordType | null }} get-password
  * @property {{ status: number, password: PasswordType | null }} add-password
  * @property {{ status: number, password: PasswordType | null }} edit-password
  * @property {{ status: number }} delete-password
+ * @property {{ status: number, context: ContextType | null }} add-context
  */
 
 /**

@@ -1,4 +1,7 @@
-import './styleContexts.css';
+import styles from './styleContexts.module.css';
+import stylesBtn from '../button.module.css';
+
+import { OpenPopup } from '../../../Components/Popup';
 
 /**
  * @typedef {import('Types/User').UserType} UserType
@@ -22,12 +25,12 @@ function NavContexts(props = NavContextsProps) {
         <>
             <button
                 key={'context-back'}
-                className='button nav-back-button'
+                className={`${stylesBtn.button} ${styles['nav-back-button']}`}
                 onClick={() => onContextClick(null)}
             >
-                <span className='icon icon-arrow' />
+                <span className={`icon icon-arrow ${styles.icon}`} />
                 <span>Retour</span>
-                <span className='icon icon-blank' />
+                <span className={`icon icon-blank ${styles['icon-blank']}`} />
             </button>
 
             {user?.Contexts.map((context) => (
@@ -37,6 +40,16 @@ function NavContexts(props = NavContextsProps) {
                     onClick={() => onContextClick(context)}
                 />
             ))}
+
+            <button
+                key={'context-add'}
+                className={`${stylesBtn.button} ${styles['nav-add-button']}`}
+                onClick={() => OpenPopup('popup-add-context')}
+            >
+                <span className={`icon icon-add ${stylesBtn.icon}`} />
+                <span>Ajouter</span>
+                <span className={`icon ${styles['icon-blank']}`} />
+            </button>
         </>
     );
 }
@@ -52,11 +65,11 @@ function ContextButton({ context, onClick }) {
     return (
         <button
             key={'context-' + id}
-            className='button nav-context-button'
+            className={`${stylesBtn.button} ${styles['nav-context-button']}`}
             onClick={onClick}
         >
             <img
-                className='nav-context-logo'
+                className={styles['nav-context-logo']}
                 src={'./images/' + logo}
                 alt={name}
             />

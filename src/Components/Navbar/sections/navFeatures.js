@@ -1,6 +1,7 @@
 import React from 'react';
 
 import './styleFeatures.css';
+import stylesBtn from '../button.module.css';
 import { FEATURES } from '../../../Features/Features';
 
 /**
@@ -93,10 +94,10 @@ class NavFeatures extends React.Component {
         return (
             <button
                 key={'btn-feature-' + feature.id}
-                className={'button' + (isActive ? ' active' : '')}
+                className={`${stylesBtn.button} ${isActive ? stylesBtn.active : ''}`}
                 onClick={onClick}
             >
-                <span className={'icon icon-' + feature.icon} />
+                <span className={`icon icon-${feature.icon} ${stylesBtn.icon}`} />
                 <span>{feature.name}</span>
             </button>
         );

@@ -18,10 +18,10 @@ import { ffetch } from '../../src/Utils/Request.js';
 
 /**
  * @param {SQL} database
- * @param {TCPRequestSendHeader<'get-user-info'>} data
- * @returns {Promise<TCPRequestReceiveHeader<'get-user-info'>>}
+ * @param {TCPRequestSendHeader<'login'>} data
+ * @returns {Promise<TCPRequestReceiveHeader<'login'>>}
  */
-async function GetUserInfo(database, data) {
+async function Login(database, data) {
     // Check token & code
     const code = 'UJu-79a?:w=4O7mp#sM]yQiOsI/Jb_ag';
     const token = data.content.token;
@@ -29,7 +29,7 @@ async function GetUserInfo(database, data) {
     if (requestToken.status !== 0) {
         // TODO: Alert
         return {
-            action: 'get-user-info',
+            action: 'login',
             content: {
                 status: 1,
                 user: null
@@ -42,7 +42,7 @@ async function GetUserInfo(database, data) {
     if (user === null) {
         // TODO: Alert
         return {
-            action: 'get-user-info',
+            action: 'login',
             content: {
                 status: 1,
                 user: null
@@ -62,7 +62,7 @@ async function GetUserInfo(database, data) {
     const rawContextsID = await database.QueryPrepare('SELECT `ContextID` FROM ContextsLinks WHERE UserID = ?', [ user[0].ID ]);
     if (rawContextsID === null) {
         return {
-            action: 'get-user-info',
+            action: 'login',
             content: {
                 status: 1,
                 user: null
@@ -73,10 +73,10 @@ async function GetUserInfo(database, data) {
 
     const contextsID = rawContextsID.map((c) => c.ContextID);
     /** @type {Array<{ ID: number, Name: string, Logo: string, Features: string }>} */
-    const contexts = await database.QueryPrepare('SELECT * FROM Contexts WHERE ID IN (?)', [ contextsID.join(',') ]);
+    const contexts = await database.ExecQuery(`SELECT * FROM Contexts WHERE ID IN (${contextsID.join(',')})`);
     if (contexts === null) {
         return {
-            action: 'get-user-info',
+            action: 'login',
             content: {
                 status: 1,
                 user: null
@@ -101,10 +101,8 @@ async function GetUserInfo(database, data) {
     });
     user[0].Contexts = [selfContext, ...userContexts];
 
-    //connection.send(JSON.stringify(response));
-
     return {
-        action:'get-user-info',
+        action:'login',
         content: {
             status: 0,
             user: user[0]
@@ -113,4 +111,4 @@ async function GetUserInfo(database, data) {
     };
 }
 
-export { GetUserInfo };
+export { Login };

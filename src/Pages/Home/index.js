@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import './style.css';
 import { Navbar } from '../../Components';
 import { FEATURES } from '../../Features/Features';
+import AddContextPopup from './addContext';
 
 /**
  * @typedef {import('Types/User').UserType} UserType
@@ -103,6 +104,18 @@ function HomePage({ user, setUser }) {
                         feature={feature}
                     />
                 )}
+
+                <AddContextPopup
+                    AddContext={(context) => {
+                        setUser({
+                            ...user,
+                            Contexts: [
+                                ...user.Contexts,
+                                context
+                            ]
+                        });
+                    }}
+                />
             </div>
         </div>
     );

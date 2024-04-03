@@ -1,7 +1,5 @@
 import React from 'react';
 
-import './style.css';
-import './button.css';
 import { FEATURES } from '../../Features/Features';
 
 /**

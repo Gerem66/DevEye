@@ -1,7 +1,6 @@
-import './style.css';
-import './button.css';
-import NavbarBack from './back';
+import styles from './style.module.css';
 
+import NavbarBack from './back';
 import NavFeatures from './sections/navFeatures';
 import NavContexts from './sections/navContexts';
 
@@ -13,24 +12,27 @@ class Navbar extends NavbarBack {
     render() {
         const { user, context } = this.props;
         const { active, is_navpanel_switch } = this.state;
-        const styleSwitch = is_navpanel_switch ? ' switch' : '';
 
         return (
-            <nav id='navbar' className={`navbar ${user === null ? '' : 'open'}`}>
+            <nav id='navbar' className={`${styles.navbar} ${user === null ? '' : styles.open}`}>
                 {/* Header - Logo & text */}
-                <div className='navbar-header'>
-                    <a href='/' className='navbar-brand'>
-                        <img src='./logo_deveye.png' alt='Logo' />
+                <div className={styles['navbar-header']}>
+                    <a href='/' className={styles['navbar-brand']}>
+                        <img
+                            className={styles['navbar-brand-img']}
+                            src='./logo_deveye.png'
+                            alt='Logo'
+                        />
                         <span>DevEye</span>
                     </a>
-                    <div className='version'>
+                    <div className={styles.version}>
                         <span>{version}</span>
                     </div>
                 </div>
 
                 {/* Navpanel */}
-                <div className={'navpanel' + styleSwitch}>
-                    <div className='navpanel-content'>
+                <div className={`${styles.navpanel} ${is_navpanel_switch ? styles.switch : ''}`}>
+                    <div className={styles['navpanel-content']}>
                         <NavFeatures
                             context={context}
                             active={active}
@@ -38,7 +40,7 @@ class Navbar extends NavbarBack {
                             onProfileClick={this.onProfileClick}
                         />
                     </div>
-                    <div className='navpanel-content'>
+                    <div className={styles['navpanel-content']}>
                         <NavContexts
                             user={user}
                             onContextClick={this.onContextClick}

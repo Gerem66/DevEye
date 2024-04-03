@@ -7,6 +7,12 @@ import { StrIsJson, GetLocalIP } from './Utils/Functions.js';
 
 /**
  * @typedef {import('Types/TCP.js').SendRequestType} SendRequestType
+ * @typedef {import('Types/User.js').UserType} UserType
+ * 
+ * @typedef {Object} ProfileType
+ * @property {UserType | null} user
+ * @property {WebSocket.connection} connection
+ * @property {boolean} firstMessage
  */
 
 /**
@@ -16,10 +22,10 @@ import { StrIsJson, GetLocalIP } from './Utils/Functions.js';
 
 /**
  * @typedef {Object} ServerConnectionCallbacks
- * @property {(connection: WebSocket.connection) => void} callbacks.onConnect
- * @property {(connection: WebSocket.connection) => void} callbacks.onDisconnect
- * @property {(connection: WebSocket.connection, data: TCPRequestSendHeader<*>) => void} callbacks.onMessage
- * @property {(connection: WebSocket.connection, error: Error) => void} callbacks.onError
+ * @property {(connection: WebSocket.connection, profile: ProfileType) => void} callbacks.onConnect
+ * @property {(connection: WebSocket.connection, profile: ProfileType) => void} callbacks.onDisconnect
+ * @property {(connection: WebSocket.connection, profile: ProfileType, data: TCPRequestSendHeader<*>) => void} callbacks.onMessage
+ * @property {(connection: WebSocket.connection, profile: ProfileType, error: Error) => void} callbacks.onError
  */
 
 class Server {
@@ -111,6 +117,13 @@ class Server {
      * @param {ServerConnectionCallbacks} callbacks
      */
     handleNewConnection = (connection, callbacks) => {
+        /** @type {ProfileType} */
+        const profile = {
+            user: null,
+            connection,
+            firstMessage: true
+        };
+
         connection.on('message', async (message) => {
             if (message.type !== 'utf8') {
                 // TODO: Alert
@@ -129,18 +142,24 @@ class Server {
                 return;
             }
 
-            callbacks.onMessage(connection, data);
+            // Unfortunatly, the first message is always a login
+            if (profile.firstMessage && data.action !== 'login') {
+                // TODO: Alert
+                return;
+            }
+
+            callbacks.onMessage(connection, profile, data);
         });
 
         connection.on('close', () =>
-            callbacks.onDisconnect(connection)
+            callbacks.onDisconnect(connection, profile)
         );
 
         connection.on('error', (error) =>
-            callbacks.onError(connection, error)
+            callbacks.onError(connection, profile, error)
         );
 
-        callbacks.onConnect(connection);
+        callbacks.onConnect(connection, profile);
     }
 }
 

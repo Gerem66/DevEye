@@ -26,7 +26,7 @@
     font-family: 'Open Sans';
     border-bottom: .1px solid #b7c0cd4f;
 }
-.navbar-header > .navbar-brand {
+.navbar-brand {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -35,11 +35,11 @@
     text-decoration: none;
     color: #fff;
 }
-.navbar-header > .navbar-brand > img {
+.navbar-brand-img {
     width: 33px;
     margin-right: 12px;
 }
-.navbar-header > .version {
+.version {
     height: 33px;
     margin-left: 4px;
 
@@ -53,12 +53,13 @@
 .navpanel {
     display: flex;
     width: 200%;
+    height: calc(100% - 58px);
     overflow: auto;
     transition: transform 0.4s cubic-bezier(.77,0,.18,1);
 }
-.navpanel > .navpanel-content {
+.navpanel-content {
+    position: relative;
     width: 50%;
-    height: 100%;
 }
 .navpanel.switch {
     transform: translateX(-50%);
