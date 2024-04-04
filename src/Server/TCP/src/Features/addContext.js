@@ -1,5 +1,6 @@
 /**
  * @typedef {import('./types.js').RequestTypes} RequestTypes
+ * @typedef {import('Types/Context.js').DBContextType} DBContextType
  */
 
 /**
@@ -30,6 +31,7 @@ async function AddContext({ db, profile, data }) {
         };
     }
 
+    /** @type {DBContextType[]} */
     const context = await db.QueryPrepare(
         'SELECT * FROM Contexts WHERE `ID` = ?',
         [ result.insertId ]
@@ -59,7 +61,15 @@ async function AddContext({ db, profile, data }) {
             id: context[0].ID,
             name: context[0].Name,
             logo: context[0].Logo,
-            features: JSON.parse(context[0].Features)
+            users: [{
+                ID: profile.user.ID,
+                Username: profile.user.Username,
+                Email: profile.user.Email,
+                Avatar: profile.user.Avatar,
+                Created: profile.user.Created
+            }],
+            features: JSON.parse(context[0].Features),
+            created: context[0].Created
         }
     };
 }

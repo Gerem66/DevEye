@@ -82,6 +82,18 @@ function HomePage({ user, setUser }) {
         return null;
     }
 
+    /** @param {ContextType} context */
+    const AddContext = (context) => {
+        setUser({
+            ...user,
+            Contexts: [
+                ...user.Contexts,
+                context
+            ]
+        });
+        setContext(context);
+    };
+
     return (
         <div id='home' className='home'>
             <div className="home-left">
@@ -108,15 +120,7 @@ function HomePage({ user, setUser }) {
                 )}
 
                 <AddContextPopup
-                    AddContext={(context) => {
-                        setUser({
-                            ...user,
-                            Contexts: [
-                                ...user.Contexts,
-                                context
-                            ]
-                        });
-                    }}
+                    AddContext={AddContext}
                 />
             </div>
         </div>

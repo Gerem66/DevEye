@@ -1,4 +1,4 @@
-import './style.css';
+import styles from './style.module.css';
 
 import { Header, Row, Card, Popup, Button } from '../../Components';
 import { ChangeImage, EditPassword } from './actions';
@@ -34,61 +34,85 @@ function FeatureProfile({ user, setUser, context, feature }) {
             />
 
             <Row center>
-                <Card.Element width={550} color='blue-dark'>
-                    <div className='profile-header'>
-                        <div className='profile-avatar' onClick={ChangeImage}>
+                <Card.Element width={450} color='blue-dark'>
+                    <div className={styles['profile-header']}>
+                        <div className={styles['profile-avatar']} onClick={ChangeImage}>
                             <img
-                                className='profile-avatar-logo'
+                                className={styles['profile-avatar-logo']}
                                 src={'./images/' + context.logo}
                                 alt={context.name}
                             />
                         </div>
-                        <h2 className='profile-avatar-name'>{context.name}</h2>
+                        <h2 className={`${styles.title} ${styles['profile-avatar-name']}`}>{context.name}</h2>
                     </div>
 
-                    <div className='separator' />
-                    <div className='profile-info'>
-                        <h3 className='profile-info-title'>Adresse e-mail</h3>
-                        <p className='profile-info-text'>{user.Email}</p>
+                    <div className={styles.separator} />
+                    <div className={styles['profile-info']}>
+                        <h3 className={styles['profile-info-title']}>Adresse e-mail</h3>
+                        <p className={styles['profile-info-text']}>{user.Email}</p>
                     </div>
 
-                    <div className='separator' />
-                    <div className='profile-info'>
-                        <h3 className='profile-info-title'>Nombre d'entreprises</h3>
-                        <p className='profile-info-text'>{user.Contexts.length - 1}</p>
+                    <div className={styles.separator} />
+                    <div className={styles['profile-info']}>
+                        <h3 className={styles['profile-info-title']}>Nombre d'entreprises</h3>
+                        <p className={styles['profile-info-text']}>{user.Contexts.length - 1}</p>
                     </div>
 
-                    <div className='separator' />
-                    <div className='profile-info'>
-                        <h3 className='profile-info-title'>Mot de passe</h3>
-                        <div className='profile-info-content'>
-                            <Button className='profile-btn-edit' onClick={EditPassword}>
+                    <div className={styles.separator} />
+                    <div className={styles['profile-info']}>
+                        <h3 className={styles['profile-info-title']}>Double authentification</h3>
+                        <div className={styles['profile-info-content']}>
+                            <p className={styles['profile-info-text']}>[Désactivée]</p>
+                            <i className={styles['icon-error']} />
+                            {/*<i className={styles['icon-success']} />*/}
+                        </div>
+                    </div>
+
+                    <div className={styles.separator} />
+                    <div className={styles['profile-info']}>
+                        <h3 className={styles['profile-info-title']}>Chiffrage par mot de passe</h3>
+                        <div className={styles['profile-info-content']}>
+                            <p className={styles['profile-info-text']}>[Désactivée]</p>
+                            <i className={styles['icon-error']} />
+                            {/*<i className={styles['icon-success']} />*/}
+                        </div>
+                    </div>
+
+                    <div className={styles.separator} />
+                    <div className={styles['profile-info']}>
+                        <h3 className={styles['profile-info-title']}>Mot de passe</h3>
+                        <div className={styles['profile-info-content']}>
+                            <Button className={styles['btn-edit']} onClick={EditPassword}>
                                 Modifier le mot de passe
                             </Button>
                         </div>
                     </div>
 
-                    <div className='separator' />
-                    <div className='profile-info'>
-                        <h3 className='profile-info-title'>Dernière connexion</h3>
-                        <p className='profile-info-text'>{dateLastLogin}</p>
+                    <div className={styles.separator} />
+                    <div className={styles['profile-info']}>
+                        <h3 className={styles['profile-info-title']}>Dernière connexion</h3>
+                        <p className={styles['profile-info-text']}>{dateLastLogin}</p>
                     </div>
 
-                    <div className='separator' />
-                    <div className='profile-info'>
-                        <h3 className='profile-info-title'>Créé le</h3>
-                        <p className='profile-info-text'>{dateCreated}</p>
+                    <div className={styles.separator} />
+                    <div className={styles['profile-info']}>
+                        <h3 className={styles['profile-info-title']}>Créé le</h3>
+                        <p className={styles['profile-info-text']}>{dateCreated}</p>
                     </div>
 
-                    <div className='separator' />
-                    <Button className='profile-btn-disconnect' onClick={() => setUser(null)}>
+                    <div className={styles.separator} />
+                    <Button
+                        className={styles['btn-disconnect']}
+                        onClick={() => setUser(null)}
+                        color='#aa3333'
+                    >
                         Se déconnecter
                     </Button>
                 </Card.Element>
             </Row>
 
             <Popup id='in-dev'>
-                <h2>En développement</h2>
+                <h2 className={styles.title}>En développement</h2>
                 <p>
                     Cette fonctionnalité est en cours de développement.
                     <br />

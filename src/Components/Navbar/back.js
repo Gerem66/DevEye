@@ -49,7 +49,8 @@ class NavbarBack extends React.Component {
                     active: {
                         context_id: context.id,
                         feature_id: feature.id
-                    }
+                    },
+                    is_navpanel_switch: false
                 });
             }
         }
