@@ -29,6 +29,8 @@ function FeatureProfile({ user, setUser, context, feature }) {
     return (
         <div className='profile'>
             <Header
+                user={user}
+                setUser={setUser}
                 context={context}
                 feature={feature}
             />

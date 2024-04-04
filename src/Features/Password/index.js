@@ -9,12 +9,14 @@ import { Header, Row, Card, Popup, Button, TextInput } from '../../Components';
 
 class FeaturePassword extends FeaturePasswordBack {
     render() {
-        const { context, feature } = this.props;
+        const { user, setUser, context, feature } = this.props;
         const { loaded, search, categories } = this.state;
 
         return (
             <div className={styles.profile}>
                 <Header
+                    user={user}
+                    setUser={setUser}
                     context={context}
                     feature={feature}
                 />

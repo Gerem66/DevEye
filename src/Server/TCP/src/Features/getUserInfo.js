@@ -127,4 +127,30 @@ async function Login({ db, data }) {
     };
 }
 
-export { Login };
+/** @type {TCPFeatureType<'change-favorite-context'>} */
+async function SetFavorite({ db, profile, data }) {
+    const { contextID, featureID } = data;
+    const { user } = profile;
+
+    if (user === null) {
+        return {
+            status: 1
+        };
+    }
+
+    const result = await db.QueryPrepare(
+        'UPDATE Users SET DefaultContext = ?, DefaultFeature = ? WHERE ID = ?',
+        [ contextID, featureID, user.ID ]
+    );
+    if (result === null || result.affectedRows === 0) {
+        return {
+            status: 2
+        };
+    }
+
+    return {
+        status: 0
+    };
+}
+
+export { Login, SetFavorite };

@@ -36,6 +36,8 @@ function FeatureDashboard({ user, setUser, context, feature, setContext }) {
     return (
         <div className='profile'>
             <Header
+                user={user}
+                setUser={setUser}
                 context={context}
                 feature={feature}
             />

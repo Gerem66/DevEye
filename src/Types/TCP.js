@@ -1,6 +1,7 @@
 /**
  * @typedef {import('Types/User').UserType} UserType
  * @typedef {import('Types/User').ContextType} ContextType
+ * @typedef {import('Types/Feature').FeaturesID} FeaturesID
  * @typedef {import('Types/Password').PasswordType} PasswordType
  * 
  * @typedef {'idle' | 'connected' | 'disconnected' | 'error'} ConnectionState
@@ -17,6 +18,7 @@
  * @property {{ contextID: number, passwordID: number }} delete-password
  * @property {{ contextName: string }} add-context
  * @property {{ contextID: number }} delete-context
+ * @property {{ contextID: number, featureID: FeaturesID }} change-favorite-context
  * 
  * @typedef {Object} ReceiveRequestType
  * @property {{ status: number, user: UserType | null }} login
@@ -28,6 +30,7 @@
  * @property {{ status: number }} delete-password
  * @property {{ status: number, context: ContextType | null }} add-context
  * @property {{ status: number }} delete-context
+ * @property {{ status: number }} change-favorite-context
  */
 
 /**

@@ -4,7 +4,7 @@ import SQL from './src/SQL.js';
 import Server from './src/Server.js';
 import Encryption from './src/Utils/Encryption.js';
 
-import { Login } from './src/Features/getUserInfo.js';
+import { Login, SetFavorite } from './src/Features/getUserInfo.js';
 import { CheckPassword } from './src/Features/checkPassword.js';
 import { GetPassword, GetPasswords } from './src/Features/getPassword.js';
 import { AddPassword, EditPassword, DeletePassword } from './src/Features/addPassword.js';
@@ -66,7 +66,7 @@ serv.Listen(8080, {
         /** @type {TCPRequestReceiveHeader<*>['content'] | null} */
         let result = null;
 
-        switch (data.action) {
+        switch (/** @type {RequestTypes} */ (data.action)) {
             case 'login':
                 const resultLogin = await Login({ db, crypt, profile, data: data.content });
                 if (resultLogin.status === 0 && resultLogin.user !== null) {
@@ -77,14 +77,15 @@ serv.Listen(8080, {
                 }
                 break;
 
-            case 'check-password':  action = CheckPassword;     break;
-            case 'get-passwords':   action = GetPasswords;      break;
-            case 'get-password':    action = GetPassword;       break;
-            case 'add-password':    action = AddPassword;       break;
-            case 'edit-password':   action = EditPassword;      break;
-            case 'delete-password': action = DeletePassword;    break;
-            case 'add-context':     action = AddContext;        break;
-            case 'delete-context':  action = DeleteContext;     break;
+            case 'check-password':          action = CheckPassword;     break;
+            case 'get-passwords':           action = GetPasswords;      break;
+            case 'get-password':            action = GetPassword;       break;
+            case 'add-password':            action = AddPassword;       break;
+            case 'edit-password':           action = EditPassword;      break;
+            case 'delete-password':         action = DeletePassword;    break;
+            case 'add-context':             action = AddContext;        break;
+            case 'delete-context':          action = DeleteContext;     break;
+            case 'change-favorite-context': action = SetFavorite;       break;
         }
 
         if (action !== null) {
