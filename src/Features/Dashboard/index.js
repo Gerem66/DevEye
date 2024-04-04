@@ -86,9 +86,27 @@ function FeatureDashboard({ user, setUser, context, feature, setContext }) {
                     <div className={styles['profile-info']}>
                         <h3 className={styles['profile-info-title']}>Chiffrage par mot de passe</h3>
                         <div className={styles['profile-info-content']}>
-                            <p className={styles['profile-info-text']}>[Désactivée]</p>
-                            <i className={styles['icon-error']} />
-                            {/*<i className={styles['icon-success']} />*/}
+                            {true ? (
+                                <>
+                                    <Button
+                                        className={styles['profile-info-button']}
+                                        onClick={() => OpenPopup('in-dev')}
+                                    >
+                                        Activer
+                                    </Button>
+                                    <i className={styles['icon-error']} />
+                                </>
+                            ) : (
+                                <>
+                                    <Button
+                                        className={styles['profile-info-button']}
+                                        onClick={() => OpenPopup('in-dev')}
+                                    >
+                                        Modifier
+                                    </Button>
+                                    <i className={styles['icon-success']} />
+                                </>
+                            )}
                         </div>
                     </div>
 
@@ -124,6 +142,14 @@ function FeatureDashboard({ user, setUser, context, feature, setContext }) {
                     <Button onClick={CloseDeleteContextPopup} color='#576d8c'>Fermer</Button>
                     <Button onClick={DeleteContext} color='#aa3333'>Supprimer</Button>
                 </div>
+            </Popup>
+
+            <Popup id='in-dev' title='En développement'>
+                <p>
+                    Cette fonctionnalité est en cours de développement.
+                    <br />
+                    Elle sera bientôt disponible.
+                </p>
             </Popup>
         </div>
     );

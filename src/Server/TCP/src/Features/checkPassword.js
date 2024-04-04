@@ -11,7 +11,7 @@ import bcrypt from 'bcrypt';
 
 /** @type {TCPFeatureType<'check-password'>} */
 async function CheckPassword({ db, profile, data }) {
-    const { contextID, password } = data;
+    const { password } = data;
 
     const resultUser = await db.QueryPrepare(
         'SELECT `Password` FROM `Users` WHERE `ID` = ?',

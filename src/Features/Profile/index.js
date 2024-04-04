@@ -113,8 +113,7 @@ function FeatureProfile({ user, setUser, context, feature }) {
                 </Card.Element>
             </Row>
 
-            <Popup id='in-dev'>
-                <h2 className={styles.title}>En développement</h2>
+            <Popup id='in-dev' title='En développement'>
                 <p>
                     Cette fonctionnalité est en cours de développement.
                     <br />

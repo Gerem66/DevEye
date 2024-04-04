@@ -17,16 +17,21 @@
     font-weight: 600;
     color: #b7c0cd;
 }
-.profile-info-text {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 400;
-}
 .profile-info-content {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     justify-content: center;
+}
+.profile-info-text {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 400;
+}
+.profile-info-button {
+    padding-top: 4px;
+    padding-bottom: 4px;
+    margin-right: 6px;
 }
 
 .context-buttons {
