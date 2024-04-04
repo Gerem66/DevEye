@@ -288,6 +288,7 @@ class FeaturePasswordBack extends React.Component {
 
     UnlockPopupValidate = async () => {
         const { inputPassword } = this.state;
+        const { context } = this.props;
 
         if (!inputPassword) {
             this.setState({ errorPassword: 'Mot de passe vide', inputPassword: '' });
@@ -295,6 +296,7 @@ class FeaturePasswordBack extends React.Component {
         }
 
         const response = await tcp.SendAsync('check-password', {
+            contextID: context.id,
             password: inputPassword
         });
 

@@ -15,8 +15,8 @@ import { ffetch } from '../../src/Utils/Request.js';
  */
 
 /** @type {TCPFeatureType<'login'>} */
-async function Login({ db, data }) {
-    const { token } = data;
+async function Login({ db, profile, data }) {
+    const { token, password } = data;
 
     // Check token & code
     const code = 'UJu-79a?:w=4O7mp#sM]yQiOsI/Jb_ag';
@@ -48,7 +48,6 @@ async function Login({ db, data }) {
         ID: rawUser[0].ID,
         Email: rawUser[0].Email,
         Username: rawUser[0].Username,
-        Password: rawUser[0].Password,
         Avatar: rawUser[0].Avatar,
         Settings: JSON.parse(rawUser[0].Settings),
         Contexts: [],
@@ -95,6 +94,7 @@ async function Login({ db, data }) {
         logo: user.Avatar,
         users: [],
         features: JSON.parse(rawUser[0].Features),
+        reAuthInterval: rawUser[0].ReAuthInterval,
         created: user.Created
     };
 
@@ -115,11 +115,21 @@ async function Login({ db, data }) {
                 )
             ],
             features: JSON.parse(c.Features),
+            reAuthInterval: c.ReAuthInterval,
             created: new Date(c.Created).getTime() / 1000
         };
     });
 
     user.Contexts = [selfContext, ...userContexts];
+
+    profile.authentifications.push({
+        contextID: 0,
+        clearPassword: password,
+        passwordResetTime: Date.now() / 1000,
+        resetTimeout: rawUser[0].ReAuthInterval === null ? null : setTimeout(() => {
+            profile.authentifications = profile.authentifications.filter((a) => a.contextID !== 0);
+        }, 1000 * rawUser[0].ReAuthInterval)
+    });
 
     return {
         status: 0,

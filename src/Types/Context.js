@@ -8,6 +8,8 @@
  * @property {string} Name
  * @property {string} Logo
  * @property {string} Features JSON string
+ * @property {string} Password Hash
+ * @property {number | null} ReAuthInterval Interval in seconds for re-authentication (null = never, 0 = always)
  * @property {number} Created
  * 
  * @typedef {Object} ContextType
@@ -16,6 +18,7 @@
  * @property {string} logo
  * @property {TCPUserType[]} users
  * @property {FeaturesID[]} features
+ * @property {number | null} reAuthInterval Interval in seconds for re-authentication (null = never, 0 = always)
  * @property {number} created
  */
 

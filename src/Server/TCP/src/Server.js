@@ -13,6 +13,7 @@ import { StrIsJson, GetLocalIP } from './Utils/Functions.js';
  * @property {UserType | null} user
  * @property {WebSocket.connection} connection
  * @property {boolean} firstMessage
+ * @property {Array<{ contextID: number, clearPassword: string, passwordResetTime: number, resetTimeout: NodeJS.Timeout | null }>} authentifications
  */
 
 /**
@@ -121,7 +122,8 @@ class Server {
         const profile = {
             user: null,
             connection,
-            firstMessage: true
+            firstMessage: true,
+            authentifications: []
         };
 
         connection.on('message', async (message) => {

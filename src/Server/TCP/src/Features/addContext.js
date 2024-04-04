@@ -69,6 +69,7 @@ async function AddContext({ db, profile, data }) {
                 Created: profile.user.Created
             }],
             features: JSON.parse(context[0].Features),
+            reAuthInterval: context[0].ReAuthInterval,
             created: context[0].Created
         }
     };

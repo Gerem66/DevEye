@@ -9,8 +9,8 @@
  * 
  * 
  * @typedef {Object} SendRequestType
- * @property {{ token: string }} login
- * @property {{ password: string }} check-password
+ * @property {{ token: string, password: string }} login
+ * @property {{ contextID: number, password: string }} check-password
  * @property {{ contextID: number }} get-passwords
  * @property {{ contextID: number, passwordID: number }} get-password
  * @property {{ contextID: number, password: PasswordType }} add-password

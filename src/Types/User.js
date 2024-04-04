@@ -7,6 +7,7 @@
  * @property {string} Email
  * @property {string} Username
  * @property {string} Password
+ * @property {number | null} ReAuthInterval Interval in seconds for re-authentication (null = never, 0 = always)
  * @property {string} Avatar
  * @property {string} Features JSON string
  * @property {number} DefaultContext
@@ -20,7 +21,6 @@
  * @property {number} ID
  * @property {string} Email
  * @property {string} Username
- * @property {string} Password
  * @property {string} Avatar
  * @property {ContextType[]} Contexts
  * @property {number} DefaultContext ID of the default context (0 = self)
@@ -43,7 +43,6 @@ const DefaultUser = {
     ID: 0,
     Email: '',
     Username: '',
-    Password: '',
     Avatar: '',
     Settings: [],
     Created: 0,
