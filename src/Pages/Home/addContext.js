@@ -57,6 +57,7 @@ class AddContextPopup extends React.Component {
         }
 
         AddContext(result.context);
+        ClosePopup('popup-add-context');
     }
 
     render() {

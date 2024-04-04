@@ -9,6 +9,8 @@
  * @property {(user: UserType | null) => void} props.setUser
  * @property {ContextType} props.context
  * @property {FeatureType} props.feature
+ * @property {(context: ContextType) => void} props.setContext
+ * @property {(feature: FeatureType) => void} props.setFeature
  * 
  * @typedef {Object} FeatureType
  * @property {FeaturesID} id

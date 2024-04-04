@@ -8,7 +8,7 @@ import { Login } from './src/Features/getUserInfo.js';
 import { CheckPassword } from './src/Features/checkPassword.js';
 import { GetPassword, GetPasswords } from './src/Features/getPassword.js';
 import { AddPassword, EditPassword, DeletePassword } from './src/Features/addPassword.js';
-import { AddContext } from './src/Features/addContext.js';
+import { AddContext, DeleteContext } from './src/Features/addContext.js';
 
 /**
  * @typedef {import('./src/Features/types.js').RequestTypes} RequestTypes
@@ -84,6 +84,7 @@ serv.Listen(8080, {
             case 'edit-password':   action = EditPassword;      break;
             case 'delete-password': action = DeletePassword;    break;
             case 'add-context':     action = AddContext;        break;
+            case 'delete-context':  action = DeleteContext;     break;
         }
 
         if (action !== null) {

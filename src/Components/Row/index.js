@@ -5,7 +5,8 @@ import styles from './style.module.css';
 /**
  * @typedef {Object} RowProps
  * @property {React.ReactNode} children
- * @property {string} [style]
+ * @property {string} [className]
+ * @property {React.CSSProperties} [style]
  * @property {boolean} [center]
  */
 
@@ -13,11 +14,14 @@ import styles from './style.module.css';
  * @param {RowProps} props
  * @returns {React.JSX.Element}
  */
-function Row({ children, style = '', center = false }) {
+function Row({ children, className = '', style = {}, center = false }) {
     return (
         <div
-            className={`${styles.row} ${style}`}
-            style={{ justifyContent: center ? 'center' : 'unset' }}
+            className={`${styles.row} ${className}`}
+            style={{
+                justifyContent: center ? 'center' : 'unset',
+                ...style
+            }}
         >
             {children}
         </div>

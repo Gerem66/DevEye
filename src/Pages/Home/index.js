@@ -102,6 +102,8 @@ function HomePage({ user, setUser }) {
                         setUser={setUser}
                         context={context}
                         feature={feature}
+                        setContext={setContext}
+                        setFeature={setFeature}
                     />
                 )}
 

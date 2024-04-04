@@ -14,7 +14,10 @@ const FeaturePasswordProps = {
     //@ts-ignore This variable is necessarily defined
     context: null,
     //@ts-ignore This variable is necessarily defined
-    feature: null
+    feature: null,
+
+    setContext: () => {},
+    setFeature: () => {},
 };
 
 class FeaturePasswordBack extends React.Component {
@@ -86,7 +89,7 @@ class FeaturePasswordBack extends React.Component {
             .map((category) => category.charAt(0).toUpperCase() + category.slice(1))
             .sort()
             .map((category) => ({ [category]: this.allPasswords
-                .filter((password) => password.category === category)
+                .filter((password) => password.category.toLowerCase() === category.toLowerCase())
                 .filter((password) => password.service.toLowerCase().includes(search.toLowerCase()))
                 .sort((a, b) => a.service.localeCompare(b.service))
                 .sort((a, b) => a.status === b.status ? 0 : a.status === 'active' ? -1 : 1)

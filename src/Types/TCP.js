@@ -16,6 +16,7 @@
  * @property {{ contextID: number, password: PasswordType }} edit-password
  * @property {{ contextID: number, passwordID: number }} delete-password
  * @property {{ contextName: string }} add-context
+ * @property {{ contextID: number }} delete-context
  * 
  * @typedef {Object} ReceiveRequestType
  * @property {{ status: number, user: UserType | null }} login
@@ -26,6 +27,7 @@
  * @property {{ status: number, password: PasswordType | null }} edit-password
  * @property {{ status: number }} delete-password
  * @property {{ status: number, context: ContextType | null }} add-context
+ * @property {{ status: number }} delete-context
  */
 
 /**
