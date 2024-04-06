@@ -4,6 +4,7 @@ import './style.css';
 import { Navbar } from '../../Components';
 import { FEATURES } from '../../Features/Features';
 import AddContextPopup from './addContext';
+import PopupUnlock from './unlock';
 
 /**
  * @typedef {import('Types/User').UserType} UserType
@@ -119,9 +120,8 @@ function HomePage({ user, setUser }) {
                     />
                 )}
 
-                <AddContextPopup
-                    AddContext={AddContext}
-                />
+                <AddContextPopup AddContext={AddContext} />
+                <PopupUnlock context={context} />
             </div>
         </div>
     );

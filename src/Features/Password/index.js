@@ -5,7 +5,7 @@ import PasswordRow from './passwordRow';
 import LoadingTable from './loadingTable';
 import { PasswordPopupAdd } from './popups';
 
-import { Header, Row, Card, Popup, Button, TextInput } from '../../Components';
+import { Header, Row, Card, TextInput } from '../../Components';
 
 class FeaturePassword extends FeaturePasswordBack {
     render() {
@@ -87,30 +87,6 @@ class FeaturePassword extends FeaturePasswordBack {
                         </Row>
                     );
                 })}
-
-                <Popup id='popup-unlock' title='Déverrouiller' onClosePopup={this.UnlockPopupClose}>
-                    <p>
-                        Pour accéder à vos mots de passe, veuillez entrer votre mot de passe principal.
-                    </p>
-    
-                    <div className="form-group">
-                        <TextInput
-                            ref={this.refInputUnlock}
-                            type="password"
-                            placeholder="Mot de passe principal"
-                            value={this.state.inputPassword}
-                            error={this.state.errorPassword}
-                            onChange={this.onUnlockPopupInputChange}
-                            onKeyDown={this.onUnlockPopupInputKeyDown}
-                            enableShowHideButton
-                        />
-                    </div>
-
-                    <div className={`form-group ${styles['popup-check-password-buttons']}`}>
-                        <Button onClick={this.UnlockPopupClose} color='#576d8c'>Fermer</Button>
-                        <Button onClick={this.UnlockPopupValidate}>Déverrouiller</Button>
-                    </div>
-                </Popup>
 
                 <PasswordPopupAdd passwordCategories={Object.keys(categories)} />
             </div>

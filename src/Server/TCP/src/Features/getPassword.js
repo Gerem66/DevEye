@@ -1,4 +1,5 @@
 import { StrIsJson } from '../Utils/Functions.js';
+import { Unlock } from './unlock.js';
 
 /**
  * @typedef {import('./types.js').RequestTypes} RequestTypes
@@ -67,6 +68,20 @@ async function GetPasswords({ db, crypt, profile, data }) {
 async function GetPassword({ db, crypt, profile, data }) {
     const { contextID, passwordID } = data;
 
+    const unlockStatus = await Unlock(db, profile, contextID);
+    if (unlockStatus === 'error') {
+        return {
+            status: 1,
+            password: null
+        };
+    }
+    if (unlockStatus !== 'unlocked') {
+        return {
+            status: 2,
+            password: null
+        };
+    }
+
     /** @type {Array<PasswordDatabaseType> | null} */
     let resultPassword = null;
 
@@ -85,7 +100,7 @@ async function GetPassword({ db, crypt, profile, data }) {
     if (resultPassword === null || resultPassword.length === 0) {
         console.log('Error: Password not found');
         return {
-            status: 1,
+            status: 3,
             password: null
         };
     }
@@ -94,7 +109,7 @@ async function GetPassword({ db, crypt, profile, data }) {
     if (!rawContent || !StrIsJson(rawContent)) {
         console.log('Error: Password content is not valid', rawContent);
         return {
-            status: 1,
+            status: 4,
             password: null
         };
     }
@@ -103,7 +118,7 @@ async function GetPassword({ db, crypt, profile, data }) {
     if (!content.hasOwnProperty('service') || !content.hasOwnProperty('category') || !content.hasOwnProperty('email') || !content.hasOwnProperty('password') || !content.hasOwnProperty('status')) {
         console.log('Error: Password content is not valid2', content);
         return {
-            status: 1,
+            status: 5,
             password: null
         };
     }

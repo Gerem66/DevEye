@@ -15,8 +15,8 @@ import { ffetch } from '../../src/Utils/Request.js';
  */
 
 /** @type {TCPFeatureType<'login'>} */
-async function Login({ db, profile, data }) {
-    const { token, password } = data;
+async function Login({ db, data }) {
+    const { token } = data;
 
     // Check token & code
     const code = 'UJu-79a?:w=4O7mp#sM]yQiOsI/Jb_ag';
@@ -121,15 +121,6 @@ async function Login({ db, profile, data }) {
     });
 
     user.Contexts = [selfContext, ...userContexts];
-
-    profile.authentifications.push({
-        contextID: 0,
-        clearPassword: password,
-        passwordResetTime: Date.now() / 1000,
-        resetTimeout: rawUser[0].ReAuthInterval === null ? null : setTimeout(() => {
-            profile.authentifications = profile.authentifications.filter((a) => a.contextID !== 0);
-        }, 1000 * rawUser[0].ReAuthInterval)
-    });
 
     return {
         status: 0,

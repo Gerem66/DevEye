@@ -9,6 +9,7 @@ import { CheckPassword } from './src/Features/checkPassword.js';
 import { GetPassword, GetPasswords } from './src/Features/getPassword.js';
 import { AddPassword, EditPassword, DeletePassword } from './src/Features/addPassword.js';
 import { AddContext, DeleteContext } from './src/Features/addContext.js';
+import { Unlock } from './src/Features/unlock.js';
 
 /**
  * @typedef {import('./src/Features/types.js').RequestTypes} RequestTypes
@@ -73,6 +74,9 @@ serv.Listen(8080, {
                     profile.user = resultLogin.user;
                     profile.firstMessage = false;
                     users[`${profile.user.ID}`] = profile;
+                    if (!!data.content.password) {
+                        await Unlock(db, profile, 0, data.content.password);
+                    }
                     result = resultLogin;
                 }
                 break;

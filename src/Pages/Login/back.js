@@ -125,7 +125,8 @@ class LoginPageBack extends React.Component {
             connected = await tcp.Connect(() => setUser(null));
             if (connected) {
                 const response = await tcp.SendAsync('login', {
-                    token: data.content
+                    token: data.content,
+                    password: password
                 });
 
                 if (response === 'not-sended' || response === 'timeout' || response.status !== 0) {
@@ -202,7 +203,7 @@ class LoginPageBack extends React.Component {
             return;
         }
 
-        const response = await tcp.SendAsync('login', { token });
+        const response = await tcp.SendAsync('login', { token, password: null });
 
         if (response === 'not-sended' || response === 'timeout' || response.status !== 0) {
             connected = false;
