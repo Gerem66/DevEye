@@ -26,8 +26,8 @@ async function GetPasswords({ db, crypt, profile, data }) {
         );
     } else {
         passwords = await db.QueryPrepare(
-            'SELECT * FROM _Passwords WHERE UserID = ? AND ContextID = ?',
-            [ profile.user?.ID, contextID ]
+            'SELECT * FROM _Passwords WHERE ContextID = ?',
+            [ contextID ]
         );
     }
 
@@ -92,8 +92,8 @@ async function GetPassword({ db, crypt, profile, data }) {
         );
     } else {
         resultPassword = await db.QueryPrepare(
-            'SELECT * FROM _Passwords WHERE ID = ? AND UserID = ? AND ContextID = ?',
-            [ passwordID, profile.user?.ID, contextID ]
+            'SELECT * FROM _Passwords WHERE ID = ? AND ContextID = ?',
+            [ passwordID, contextID ]
         );
     }
 

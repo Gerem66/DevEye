@@ -41,7 +41,7 @@ const users = {};
 
 const crypt = new Encryption(keyA, keyB);
 const serv = new Server();
-serv.Listen(8080, {
+serv.Listen(8888, {
     onConnect: (connection, profile) => {
         console.log('User connected');
     },

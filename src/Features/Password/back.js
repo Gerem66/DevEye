@@ -157,6 +157,12 @@ class FeaturePasswordBack extends React.Component {
             } else if (response === 'not-sended') {
                 console.log('Error: Not sended');
                 return;
+            } else if (response.status === 2) {
+                const a = await OpenPopup('popup-unlock');
+                if (a !== null) {
+                    this.OpenEditPassword(ID);
+                }
+                return;
             } else if (response.status !== 0 || response.password === null) {
                 console.log('Error:', response);
                 return

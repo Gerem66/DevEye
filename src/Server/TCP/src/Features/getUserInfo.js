@@ -77,14 +77,18 @@ async function Login({ db, data }) {
     const tcpUsers = rawContexts.map((c) => c.ID);
 
     /** @type {Array<DBUserType>} */
-    const rawUsers = await db.ExecQuery(
-        `SELECT * FROM Users WHERE ID IN (${tcpUsers.join(',')})`
-    );
-    if (rawUsers === null) {
-        return {
-            status: 1,
-            user: null
-        };
+    let rawUsers = [];
+
+    if (tcpUsers.length > 0) {
+        rawUsers = await db.ExecQuery(
+            `SELECT * FROM Users WHERE ID IN (${tcpUsers.join(',')})`
+        );
+        if (rawUsers === null) {
+            return {
+                status: 1,
+                user: null
+            };
+        }
     }
 
     /** @type {ContextType} */
