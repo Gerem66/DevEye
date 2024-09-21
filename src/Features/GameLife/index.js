@@ -14,28 +14,34 @@ function FeatureGameLife({ user, setUser, context, feature }) {
     const [intervalID, setIntervalID] = useState('');
     const intervalRef = useRef(intervalID);
 
+    // Main variable
     const [userTotalCount, setUserTotalCount] = useState(0);
 
     useEffect(() => {
+        // Send the request to start the loop
         tcp.SendAsync('gamelife-set-loop', { contextID: context.id, type: 'open' }).then((data) => {
             console.log(data);
 
+            // Check if the request was sent correctly
             if (data === 'timeout' || data === 'not-sended' || data.status !== 0) {
                 console.error('Error when sending the request');
                 return;
             }
 
+            // Loop accepted by the server, save the intervalID for callback
             const intervalID = data.intervalID;
             setIntervalID(intervalID);
             intervalRef.current = intervalID;
 
-            /** @param {import('../../Types/TCP').TCPRequestReceiveHeader<'gamelife-data'>} data */
+            // Manually define the callback for this intervalID to update the userTotalCount
+            /** @param {import('../../Types/TCP/TCP').TCPRequestReceiveHeader<'gamelife-data'>} data */
             tcp.callbacks[intervalID] = (data) => {
                 setUserTotalCount(data.content.totalUserCount);
                 return false;
             };
         });
 
+        // Clear the interval when the component is unmounted
         return () => {
             const id = intervalRef.current;
             console.log('End interval', id);

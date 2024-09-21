@@ -5,9 +5,9 @@ const VPS_CREDENTIALS = {
 };
 
 /**
- * @typedef {import('Types/TCP').ConnectionState} ConnectionState
- * @typedef {import('Types/TCP').SendRequestType} SendRequestType
- * @typedef {import('Types/TCP').ReceiveRequestType} ReceiveRequestType
+ * @typedef {import('Types/TCP/TCP').ConnectionState} ConnectionState
+ * @typedef {import('Types/TCP/TCP').RequestClientToServer} RequestClientToServer
+ * @typedef {import('Types/TCP/TCP').RequestServerToClient} RequestServerToClient
  */
 
 class ClientTCP {
@@ -114,9 +114,9 @@ class ClientTCP {
     };
 
     /**
-     * @template {keyof SendRequestType} T
+     * @template {keyof RequestClientToServer} T
      * @param {T} action
-     * @param {SendRequestType[T]} content
+     * @param {RequestClientToServer[T]} content
      * @param {string} [callbackID]
      * @returns {boolean} Whether the message was sent successfully
      */
@@ -137,11 +137,11 @@ class ClientTCP {
     };
 
     /**
-     * @template {keyof SendRequestType} T
+     * @template {keyof RequestClientToServer} T
      * @param {T} action
-     * @param {SendRequestType[T]} data
+     * @param {RequestClientToServer[T]} data
      * @param {number} [timeout] in milliseconds
-     * @returns {Promise<'not-sended' | 'timeout' | ReceiveRequestType[T]>} The result of the callback or 'timeout' if it took too long
+     * @returns {Promise<'not-sended' | 'timeout' | RequestServerToClient[T]>} The result of the callback or 'timeout' if it took too long
      */
     SendAsync = async (action, data, timeout = 10000) => {
         const callbackID = action + '-' + Math.random().toString(36).substring(7);

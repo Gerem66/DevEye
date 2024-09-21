@@ -2,22 +2,22 @@
  * @typedef {import('../SQL.js').default} SQL
  * @typedef {import('../Utils/Encryption.js').default} Encryption
  * @typedef {import('../../src/Server.js').ProfileType} ProfileType
- * @typedef {import('Types/TCP.js').SendRequestType} SendRequestType
- * @typedef {import('Types/TCP.js').ReceiveRequestType} ReceiveRequestType
+ * @typedef {import('Types/TCP/TCP.js').RequestClientToServer} RequestClientToServer
+ * @typedef {import('Types/TCP/TCP.js').RequestServerToClient} RequestServerToClient
  */
 
 /**
- * @template {keyof SendRequestType} T
- * @typedef {import('Types/TCP.js').TCPRequestSendHeader<T>} TCPRequestSendHeader
+ * @template {keyof RequestClientToServer} T
+ * @typedef {import('Types/TCP/TCP.js').TCPRequestSendHeader<T>} TCPRequestSendHeader
  */
 
 /**
- * @template {keyof ReceiveRequestType} T
- * @typedef {import('Types/TCP.js').TCPRequestReceiveHeader<T>} TCPRequestReceiveHeader
+ * @template {keyof RequestServerToClient} T
+ * @typedef {import('Types/TCP/TCP.js').TCPRequestReceiveHeader<T>} TCPRequestReceiveHeader
  */
 
 /**
- * @typedef {keyof SendRequestType | keyof ReceiveRequestType} RequestTypes
+ * @typedef {keyof RequestClientToServer | keyof RequestServerToClient} RequestTypes
  */
 
 /**

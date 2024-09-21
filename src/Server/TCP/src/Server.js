@@ -6,7 +6,7 @@ import { createServer } from 'https';
 import { StrIsJson, GetLocalIP } from './Utils/Functions.js';
 
 /**
- * @typedef {import('Types/TCP.js').SendRequestType} SendRequestType
+ * @typedef {import('Types/TCP/TCP.js').RequestClientToServer} RequestClientToServer
  * @typedef {import('Types/User.js').UserType} UserType
  *
  * @typedef {Object} ProfileType
@@ -17,8 +17,8 @@ import { StrIsJson, GetLocalIP } from './Utils/Functions.js';
  */
 
 /**
- * @template {keyof SendRequestType} T
- * @typedef {import('Types/TCP.js').TCPRequestSendHeader<T>} TCPRequestSendHeader
+ * @template {keyof RequestClientToServer} T
+ * @typedef {import('Types/TCP/TCP.js').TCPRequestSendHeader<T>} TCPRequestSendHeader
  */
 
 /**
