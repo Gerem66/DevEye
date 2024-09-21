@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
-import HomePage from './Pages/Home/index';
-import LoginPage from './Pages/Login/index';
+import HomePage from './Pages/Home/index.js';
+import LoginPage from './Pages/Login/index.js';
 
 import './Styles/sizes.css';
 import './Styles/fonts.css';
@@ -15,7 +15,9 @@ import './Styles/table.css';
  */
 
 function App() {
-    const [ user, setUser ] = useState(/** @type {UserType | null} */ (null));
+    /** @type {[UserType | null, React.Dispatch<React.SetStateAction<UserType | null>>]} */
+    // @ts-ignore
+    const [user, setUser] = useState(null);
 
     return (
         <>

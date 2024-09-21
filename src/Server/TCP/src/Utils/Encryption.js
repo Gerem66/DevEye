@@ -30,7 +30,10 @@ class Encryption {
         const cipher = crypto.createCipheriv(this.cipher_algo, this.keyA, nonce);
         const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
         const keyB = crypto.createHash('ripemd160').update(this.keyB).digest();
-        const mac = crypto.createHmac('sha512', keyB).update(Buffer.concat([nonce, ciphertext])).digest();
+        const mac = crypto
+            .createHmac('sha512', keyB)
+            .update(Buffer.concat([nonce, ciphertext]))
+            .digest();
         return Buffer.concat([mac, nonce, ciphertext]).toString('base64');
     }
 

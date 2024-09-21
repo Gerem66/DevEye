@@ -14,12 +14,7 @@ class FeaturePassword extends FeaturePasswordBack {
 
         return (
             <div className={styles.profile}>
-                <Header
-                    user={user}
-                    setUser={setUser}
-                    context={context}
-                    feature={feature}
-                />
+                <Header user={user} setUser={setUser} context={context} feature={feature} />
 
                 <Row center>
                     <Card.Element
@@ -31,11 +26,7 @@ class FeaturePassword extends FeaturePasswordBack {
                         <a className={`link ${styles['add-password']}`} onClick={() => this.OpenEditPassword(null)}>
                             Ajouter un mot de passe
                         </a>
-                        <TextInput
-                            placeholder="Nom d'un service"
-                            value={search}
-                            onChange={this.onSearchChange}
-                        />
+                        <TextInput placeholder="Nom d'un service" value={search} onChange={this.onSearchChange} />
                     </Card.Element>
                 </Row>
 
@@ -46,47 +37,48 @@ class FeaturePassword extends FeaturePasswordBack {
                     </>
                 )}
 
-                {loaded && Object.keys(categories).map((category) => {
-                    const passwords = categories[category];
-                    if (passwords.length === 0) {
-                        return null;
-                    }
+                {loaded &&
+                    Object.keys(categories).map((category) => {
+                        const passwords = categories[category];
+                        if (passwords.length === 0) {
+                            return null;
+                        }
 
-                    return (
-                        <Row key={category} center>
-                            <Card.Element
-                                title={`${category} (${passwords.length})`}
-                                width={1000}
-                                color='blue-dark'
-                                style={styles['password-container']}
-                            >
-                                <div className={styles['scroll-mode']}>
-                                    <table className={`show-lines ${styles['scroll-mode']}`}>
-                                        <thead>
-                                            <tr>
-                                                <th style={{ width: '20%' }}>Service</th>
-                                                <th>Nom d'utilisateur / Email</th>
-                                                <th style={{ width: '20%' }}>Mot de passe</th>
-                                                <th style={{ width: '10%' }}>Status</th>
-                                                <th style={{ width: '5%' }}></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {passwords.map((password) => (
-                                                <PasswordRow
-                                                    key={password.ID}
-                                                    password={password}
-                                                    onEdit={this.OpenEditPassword}
-                                                    callback={this.GetPassword}
-                                                />
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </Card.Element>
-                        </Row>
-                    );
-                })}
+                        return (
+                            <Row key={category} center>
+                                <Card.Element
+                                    title={`${category} (${passwords.length})`}
+                                    width={1000}
+                                    color='blue-dark'
+                                    style={styles['password-container']}
+                                >
+                                    <div className={styles['scroll-mode']}>
+                                        <table className={`show-lines ${styles['scroll-mode']}`}>
+                                            <thead>
+                                                <tr>
+                                                    <th style={{ width: '20%' }}>Service</th>
+                                                    <th>Nom d'utilisateur / Email</th>
+                                                    <th style={{ width: '20%' }}>Mot de passe</th>
+                                                    <th style={{ width: '10%' }}>Status</th>
+                                                    <th style={{ width: '5%' }}></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {passwords.map((password) => (
+                                                    <PasswordRow
+                                                        key={password.ID}
+                                                        password={password}
+                                                        onEdit={this.OpenEditPassword}
+                                                        callback={this.GetPassword}
+                                                    />
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </Card.Element>
+                            </Row>
+                        );
+                    })}
 
                 <PasswordPopupAdd passwordCategories={Object.keys(categories)} />
             </div>

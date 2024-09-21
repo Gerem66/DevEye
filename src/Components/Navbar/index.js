@@ -6,7 +6,7 @@ import NavContexts from './sections/navContexts';
 
 // @ts-ignore
 import packageJson from '../../../package.json';
-const version = packageJson.version + (process.env.NODE_ENV === 'development' && '-dev' || '');
+const version = packageJson.version + ((process.env.NODE_ENV === 'development' && '-dev') || '');
 
 class Navbar extends NavbarBack {
     render() {
@@ -18,11 +18,7 @@ class Navbar extends NavbarBack {
                 {/* Header - Logo & text */}
                 <div className={styles['navbar-header']}>
                     <a href='/' className={styles['navbar-brand']}>
-                        <img
-                            className={styles['navbar-brand-img']}
-                            src='./logo_deveye.png'
-                            alt='Logo'
-                        />
+                        <img className={styles['navbar-brand-img']} src='./logo_deveye.png' alt='Logo' />
                         <span>DevEye</span>
                     </a>
                     <div className={styles.version}>
@@ -41,10 +37,7 @@ class Navbar extends NavbarBack {
                         />
                     </div>
                     <div className={styles['navpanel-content']}>
-                        <NavContexts
-                            user={user}
-                            onContextClick={this.onContextClick}
-                        />
+                        <NavContexts user={user} onContextClick={this.onContextClick} />
                     </div>
                 </div>
             </nav>

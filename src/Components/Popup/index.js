@@ -5,7 +5,7 @@ import styles from './style.module.css';
 /**
  * @typedef {import('react').HTMLAttributes<HTMLDivElement>} HTMLAttributes
  * @typedef {import('react').DetailedHTMLProps<HTMLAttributes, HTMLDivElement>} DetailedHTMLProps
- * 
+ *
  * @typedef {object} CardValueProps
  * @property {React.JSX.Element|React.JSX.Element[]} children
  * @property {string} id
@@ -56,7 +56,7 @@ function ClosePopup(id, data = null) {
  * @returns {React.JSX.Element}
  */
 function Popup({ children, id, title = '', style = '', onInputChange = null, onClosePopup = null }) {
-    const [ opened, setOpened ] = React.useState(false);
+    const [opened, setOpened] = React.useState(false);
 
     React.useEffect(() => {
         PopupEvents[id] = {
@@ -65,7 +65,7 @@ function Popup({ children, id, title = '', style = '', onInputChange = null, onC
             },
             setOpened,
             callback: () => {}
-        }
+        };
 
         return () => {
             delete PopupEvents[id];
@@ -74,7 +74,7 @@ function Popup({ children, id, title = '', style = '', onInputChange = null, onC
 
     /** @type {DetailedHTMLProps['style']} */
     const styleCard = {
-        paddingTop: !!title ? '52px' : '12px'
+        paddingTop: title ? '52px' : '12px'
     };
 
     /** @param {React.MouseEvent<HTMLDivElement, MouseEvent>} event */
@@ -89,15 +89,8 @@ function Popup({ children, id, title = '', style = '', onInputChange = null, onC
     };
 
     return (
-        <div
-            className={`${styles.popup} ${opened ? styles.opened : ''}`}
-            onClick={onBackgroundClick}
-        >
-            <div
-                className={`${styles.card} bg-blue-dark ${style}`}
-                style={styleCard}
-                data-title={title}
-            >
+        <div className={`${styles.popup} ${opened ? styles.opened : ''}`} onClick={onBackgroundClick}>
+            <div className={`${styles.card} bg-blue-dark ${style}`} style={styleCard} data-title={title}>
                 {children}
             </div>
         </div>

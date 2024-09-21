@@ -8,7 +8,7 @@ import { StrIsJson, GetLocalIP } from './Utils/Functions.js';
 /**
  * @typedef {import('Types/TCP.js').SendRequestType} SendRequestType
  * @typedef {import('Types/User.js').UserType} UserType
- * 
+ *
  * @typedef {Object} ProfileType
  * @property {UserType | null} user
  * @property {WebSocket.connection} connection
@@ -62,15 +62,13 @@ class Server {
         this.wsServer = new WebSocket.server({ httpServer: this.server });
         this.wsServer.addListener('request', this.onRequest);
         this.wsServer.addListener('close', this.onClose);
-        this.wsServer.addListener('connect', (connection) =>
-            this.handleNewConnection(connection, callbacks)
-        );
+        this.wsServer.addListener('connect', (connection) => this.handleNewConnection(connection, callbacks));
 
         this.port = port;
         this.server.listen(port);
 
         console.log('[WebSocket] Listening on', GetLocalIP() + ':' + port);
-    }
+    };
 
     Stop = () => {
         if (this.server.listening) {
@@ -78,12 +76,12 @@ class Server {
             this.server.close();
             console.log('[WebSocket] Closed');
         }
-    }
+    };
 
     /** @param {Error} error */
     onError = (error) => {
         console.error('[WebSocket] Error:', error);
-    }
+    };
 
     /** @param {WebSocket.request} request */
     onRequest = (request) => {
@@ -100,18 +98,18 @@ class Server {
             // TODO: Alert
             request.reject(404, 'Page not found');
         }
-    }
+    };
 
     /**
-     * @param {WebSocket.connection} connection 
-     * @param {number} reason 
-     * @param {string} desc 
+     * @param {WebSocket.connection} connection
+     * @param {number} reason
+     * @param {string} desc
      */
     onClose = (connection, reason, desc) => {
         if (reason !== 1000) {
             console.log('Connection closed:', reason, desc);
         }
-    }
+    };
 
     /**
      * @param {WebSocket.connection} connection
@@ -139,7 +137,10 @@ class Server {
             }
 
             const data = JSON.parse(rawData);
-            if (!data.hasOwnProperty('action') || !data.hasOwnProperty('content')) {
+            if (
+                !Object.prototype.hasOwnProperty.call(data, 'action') ||
+                !Object.prototype.hasOwnProperty.call(data, 'content')
+            ) {
                 // TODO: Alert
                 return;
             }
@@ -153,16 +154,12 @@ class Server {
             callbacks.onMessage(connection, profile, data);
         });
 
-        connection.on('close', () =>
-            callbacks.onDisconnect(connection, profile)
-        );
+        connection.on('close', () => callbacks.onDisconnect(connection, profile));
 
-        connection.on('error', (error) =>
-            callbacks.onError(connection, profile, error)
-        );
+        connection.on('error', (error) => callbacks.onError(connection, profile, error));
 
         callbacks.onConnect(connection, profile);
-    }
+    };
 }
 
 export default Server;

@@ -15,7 +15,7 @@ const LoginPageProps = {
     user: null,
 
     /** @type {(user: UserType | null) => void} */
-    setUser: (user) => {}
+    setUser: () => {}
 };
 
 class LoginPageBack extends React.Component {
@@ -56,19 +56,19 @@ class LoginPageBack extends React.Component {
     /** @param {React.ChangeEvent<HTMLInputElement>} e */
     onInputUsernameChange = (e) => {
         this.setState({ input: { ...this.state.input, username: e.target.value } });
-    }
+    };
 
     /** @param {React.ChangeEvent<HTMLInputElement>} e */
     onInputPasswordChange = (e) => {
         this.setState({ input: { ...this.state.input, password: e.target.value } });
-    }
+    };
 
     /** @param {React.KeyboardEvent<HTMLDivElement>} e */
     onKeyDown = (e) => {
         if (e.key === 'Enter') {
             this.onLogin();
         }
-    }
+    };
 
     StartAnimation = (autoLogin = false) => {
         this.startTimeLoading = Date.now();
@@ -76,7 +76,7 @@ class LoginPageBack extends React.Component {
         if (autoLogin) {
             this.cardLogin.current?.classList.add('auto-login');
         }
-    }
+    };
 
     WaitAnimation = async () => {
         const end = Date.now();
@@ -84,17 +84,19 @@ class LoginPageBack extends React.Component {
         if (elapsed < 2000) {
             await Sleep(2000 - elapsed);
         }
-    }
+    };
 
     StopAnimation = () => {
         this.startTimeLoading = 0;
         this.cardLogin.current?.classList.remove('card-to-progressbar');
         this.cardLogin.current?.classList.remove('auto-login');
-    }
+    };
 
     onLogin = async () => {
         const { setUser } = this.props;
-        const { input: { username, password } } = this.state;
+        const {
+            input: { username, password }
+        } = this.state;
 
         if (tcp === null || this.startTimeLoading !== 0) {
             return;
@@ -104,8 +106,7 @@ class LoginPageBack extends React.Component {
         if (username === '') {
             this.inputUsername.current?.focus();
             return;
-        }
-        else if (password === '') {
+        } else if (password === '') {
             this.inputPassword.current?.focus();
             return;
         }
@@ -170,7 +171,7 @@ class LoginPageBack extends React.Component {
         }
 
         this.StopAnimation();
-    }
+    };
 
     /**
      * @param {string} token
@@ -228,7 +229,7 @@ class LoginPageBack extends React.Component {
         // Wait for home animation to finish
         await Sleep(500);
         this.StopAnimation();
-    }
+    };
 }
 
 LoginPageBack.defaultProps = LoginPageProps;

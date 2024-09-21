@@ -18,13 +18,14 @@ let firstLoad = false;
 /**
  * @param {Object} props
  * @param {UserType | null} props.user
- * @param {(user: UserType | null) => void} props.setUser
+ * @param {React.Dispatch<React.SetStateAction<UserType | null>>} props.setUser
  * @returns {JSX.Element | null}
  */
 function HomePage({ user, setUser }) {
-    const [ context, setContext ] = useState(/** @type {ContextType | null} */ (null));
-    const [ feature, setFeature ] = useState(/** @type {FeatureType | null} */ (null));
-
+    // prettier-ignore
+    const [context, setContext] = useState(/** @type {ContextType | null} */ (null));
+    // prettier-ignore
+    const [feature, setFeature] = useState(/** @type {FeatureType | null} */ (null));
 
     useEffect(() => {
         if (user === null) {
@@ -35,21 +36,21 @@ function HomePage({ user, setUser }) {
         }
 
         if (context === null) {
-            const context = user.Contexts.find(c => c.id === user.DefaultContext) || null;
+            const context = user.Contexts.find((c) => c.id === user.DefaultContext) || null;
             if (context === null || !context.features.includes(user.DefaultFeature)) {
-                const selfContext = user.Contexts.find(f => f.id === 0) || null;
-                const firstFeature = FEATURES.find(f => f.id === selfContext?.features[0]) || null;
+                const selfContext = user.Contexts.find((f) => f.id === 0) || null;
+                const firstFeature = FEATURES.find((f) => f.id === selfContext?.features[0]) || null;
                 setContext(selfContext);
-                setFeature(firstFeature)
+                setFeature(firstFeature);
                 console.error('Context or feature not found');
                 return;
             }
 
-            const feature = FEATURES.find(f => f.id === user.DefaultFeature) || null;
+            const feature = FEATURES.find((f) => f.id === user.DefaultFeature) || null;
             if (feature === null) {
-                const firstFeature = FEATURES.find(f => context.features[0]) || null;
+                const firstFeature = FEATURES.find(() => context.features[0]) || null;
                 setContext(context);
-                setFeature(firstFeature)
+                setFeature(firstFeature);
                 console.error('Feature not found');
                 return;
             }
@@ -57,7 +58,7 @@ function HomePage({ user, setUser }) {
             setContext(context);
             setFeature(feature);
         }
-    }, [ user ]);
+    }, [user]);
 
     useEffect(() => {
         if (context === null) {
@@ -75,9 +76,9 @@ function HomePage({ user, setUser }) {
             return;
         }
 
-        const newFeature = FEATURES.find(f => f.id === context.features[0]) || null;
+        const newFeature = FEATURES.find((f) => f.id === context.features[0]) || null;
         setFeature(newFeature);
-    }, [ context ]);
+    }, [context]);
 
     if (user === null) {
         return null;
@@ -87,17 +88,14 @@ function HomePage({ user, setUser }) {
     const AddContext = (context) => {
         setUser({
             ...user,
-            Contexts: [
-                ...user.Contexts,
-                context
-            ]
+            Contexts: [...user.Contexts, context]
         });
         setContext(context);
     };
 
     return (
         <div id='home' className='home'>
-            <div className="home-left">
+            <div className='home-left'>
                 <Navbar
                     user={user}
                     context={context}
@@ -107,7 +105,7 @@ function HomePage({ user, setUser }) {
                 />
             </div>
 
-            <div className="home-right">
+            <div className='home-right'>
                 {context !== null && feature !== null && (
                     <feature.component
                         key={`${feature.id} ${context.id}`}

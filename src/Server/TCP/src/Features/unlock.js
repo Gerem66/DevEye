@@ -39,15 +39,21 @@ async function Unlock(db, profile, contextID, password = null) {
         }
 
         contextAuth.passwordResetTime = Date.now() / 1000;
-        contextAuth.resetTimeout = context.reAuthInterval === null ? null : setTimeout(() => {
-            const index = profile.authentifications.findIndex((a) => a.contextID === contextID);
-            if (index !== -1) {
-                if (profile.authentifications[index].resetTimeout !== null) {
-                    clearTimeout(profile.authentifications[index].resetTimeout);
-                }
-                profile.authentifications.splice(index, 1);
-            }
-        }, 1000 * 60 * context.reAuthInterval);
+        contextAuth.resetTimeout =
+            context.reAuthInterval === null
+                ? null
+                : setTimeout(
+                      () => {
+                          const index = profile.authentifications.findIndex((a) => a.contextID === contextID);
+                          if (index !== -1) {
+                              if (profile.authentifications[index].resetTimeout !== null) {
+                                  clearTimeout(profile.authentifications[index].resetTimeout);
+                              }
+                              profile.authentifications.splice(index, 1);
+                          }
+                      },
+                      1000 * 60 * context.reAuthInterval
+                  );
 
         return 'unlocked';
     }
@@ -55,19 +61,13 @@ async function Unlock(db, profile, contextID, password = null) {
     // Get target hash
     let targetHash = null;
     if (contextID === 0) {
-        const resultUser = await db.QueryPrepare(
-            'SELECT `Password` FROM `Users` WHERE `ID` = ?',
-            [ profile.user?.ID ]
-        );
+        const resultUser = await db.QueryPrepare('SELECT `Password` FROM `Users` WHERE `ID` = ?', [profile.user?.ID]);
         if (resultUser === null || resultUser.length === 0 || resultUser[0].Password === null) {
             return 'error';
         }
         targetHash = resultUser[0].Password;
     } else {
-        const resultContext = await db.QueryPrepare(
-            'SELECT `Password` FROM `Contexts` WHERE `ID` = ?',
-            [ contextID ]
-        );
+        const resultContext = await db.QueryPrepare('SELECT `Password` FROM `Contexts` WHERE `ID` = ?', [contextID]);
         if (resultContext === null || resultContext.length === 0) {
             return 'error';
         }
@@ -86,9 +86,13 @@ async function Unlock(db, profile, contextID, password = null) {
         if (targetHash.startsWith('$2y$')) {
             targetHash = '$2b$' + targetHash.substring(4);
         }
-        await bcrypt.compare(password, targetHash)
-            .then((result) => { match = result; })
-            .catch((error) => { console.error(error); });
+
+        try {
+            const result = await bcrypt.compareSync(password, targetHash);
+            match = result;
+        } catch (error) {
+            console.error(error);
+        }
     }
 
     if (!match) {
@@ -101,15 +105,21 @@ async function Unlock(db, profile, contextID, password = null) {
             contextID,
             clearPassword: password,
             passwordResetTime: Date.now() / 1000,
-            resetTimeout: context.reAuthInterval === null ? null : setTimeout(() => {
-                const index = profile.authentifications.findIndex((a) => a.contextID === contextID);
-                if (index !== -1) {
-                    if (profile.authentifications[index].resetTimeout !== null) {
-                        clearTimeout(profile.authentifications[index].resetTimeout);
-                    }
-                    profile.authentifications.splice(index, 1);
-                }
-            }, 1000 * 60 * context.reAuthInterval)
+            resetTimeout:
+                context.reAuthInterval === null
+                    ? null
+                    : setTimeout(
+                          () => {
+                              const index = profile.authentifications.findIndex((a) => a.contextID === contextID);
+                              if (index !== -1) {
+                                  if (profile.authentifications[index].resetTimeout !== null) {
+                                      clearTimeout(profile.authentifications[index].resetTimeout);
+                                  }
+                                  profile.authentifications.splice(index, 1);
+                              }
+                          },
+                          1000 * 60 * context.reAuthInterval
+                      )
         });
     }
 

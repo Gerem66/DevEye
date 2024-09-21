@@ -5,7 +5,7 @@ import styles from './style.module.css';
 /**
  * @typedef {import('react').ButtonHTMLAttributes<HTMLButtonElement>} ButtonHTMLAttributes
  * @typedef {import('react').DetailedHTMLProps<ButtonHTMLAttributes, HTMLButtonElement>} DetailedHTMLProps
- * 
+ *
  * @typedef {DetailedHTMLProps & { color?: string }} ButtonProps
  */
 
@@ -19,10 +19,7 @@ function Button(props) {
 
     return (
         <button className={classes} {...rest}>
-            <div
-                className={styles['button-background']}
-                style={{ backgroundColor: color || '#4481dd' }}
-            />
+            <div className={styles['button-background']} style={{ backgroundColor: color || '#4481dd' }} />
             {children}
         </button>
     );

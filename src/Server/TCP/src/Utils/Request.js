@@ -17,7 +17,7 @@ const ffetch = (endpoint, requestInfo = {}) =>
         },
         body: JSON.stringify(requestInfo)
     })
-        .then(res => res.json())
+        .then((res) => res.json())
         .catch((error) => {
             return {
                 status: -1,

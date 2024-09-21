@@ -3,11 +3,11 @@
  * @typedef {import('Types/User').ContextType} ContextType
  * @typedef {import('Types/Feature').FeaturesID} FeaturesID
  * @typedef {import('Types/Password').PasswordType} PasswordType
- * 
+ *
  * @typedef {'idle' | 'connected' | 'disconnected' | 'error'} ConnectionState
- * 
- * 
- * 
+ *
+ *
+ *
  * @typedef {Object} SendRequestType
  * @property {{ token: string, password: string | null }} login
  * @property {{ contextID: number, password: string }} check-password
@@ -19,7 +19,8 @@
  * @property {{ contextName: string }} add-context
  * @property {{ contextID: number }} delete-context
  * @property {{ contextID: number, featureID: FeaturesID }} change-favorite-context
- * 
+ * @property {{ contextID: number, type: 'open' | 'close', intervalID?: string }} gamelife-set-loop
+ *
  * @typedef {Object} ReceiveRequestType
  * @property {{ status: number, user: UserType | null }} login
  * @property {{ status: number, message: string | null }} check-password
@@ -31,6 +32,8 @@
  * @property {{ status: number, context: ContextType | null }} add-context
  * @property {{ status: number }} delete-context
  * @property {{ status: number }} change-favorite-context
+ * @property {{ status: number, intervalID: string }} gamelife-set-loop
+ * @property {{ status: number, totalUserCount: number }} gamelife-data
  */
 
 /**

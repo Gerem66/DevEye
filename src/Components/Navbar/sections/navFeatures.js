@@ -25,8 +25,8 @@ const NavFeaturesProps = {
     /** @type {() => void} */
     onProfileClick: () => {},
 
-    /** @type {(context: number, feature_id: FeaturesID) => void} */
-    onFeatureClick: (context_id, feature_id) => {}
+    /** @type {(context_id: number, feature_id: FeaturesID) => void} */
+    onFeatureClick: () => {}
 };
 
 class NavFeatures extends React.Component {
@@ -35,15 +35,10 @@ class NavFeatures extends React.Component {
 
         return (
             <div>
-
                 {/* Profile */}
                 <button className={styles.profile} onClick={onProfileClick}>
                     <div className={styles['profile-content']}>
-                        <img
-                            className={styles['profile-image']}
-                            src={'./images/' + context?.logo}
-                            alt='Logo'
-                        />
+                        <img className={styles['profile-image']} src={'./images/' + context?.logo} alt='Logo' />
                         <span>{context?.name || 'Context'}</span>
                     </div>
                     <span className={`icon icon-arrow ${styles['profile-icon']}`} />
@@ -51,7 +46,6 @@ class NavFeatures extends React.Component {
 
                 {/* Features */}
                 {this.renderCategory(context)}
-
             </div>
         );
     }
@@ -64,31 +58,26 @@ class NavFeatures extends React.Component {
         if (!context) return null;
 
         const features = context.features
-            .map(id => FEATURES.find(f => f.id === id))
-            .filter(f => f !== undefined)
-            .map(feature => this.renderFeature(context, feature));
+            .map((id) => FEATURES.find((f) => f.id === id))
+            .filter((f) => f !== undefined)
+            .map((feature) => this.renderFeature(context, feature));
 
         return (
-            <section
-                key={'section-' + context.id}
-                className={styles.category}
-                data-title={context.name}
-            >
+            <section key={'section-' + context.id} className={styles.category} data-title={context.name}>
                 {features}
             </section>
         );
-    }
+    };
 
     /**
      * @param {ContextType} context
-     * @param {FeatureType} feature 
+     * @param {FeatureType} feature
      * @returns {JSX.Element}
      */
     renderFeature = (context, feature) => {
         const { active, onFeatureClick } = this.props;
 
-        const isActive = active.feature_id === feature.id &&
-                         active.context_id === context.id;
+        const isActive = active.feature_id === feature.id && active.context_id === context.id;
         const onClick = () => onFeatureClick(context.id, feature.id);
 
         return (
@@ -101,7 +90,7 @@ class NavFeatures extends React.Component {
                 <span>{feature.name}</span>
             </button>
         );
-    }
+    };
 }
 
 NavFeatures.prototype.props = NavFeaturesProps;

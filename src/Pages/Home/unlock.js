@@ -22,19 +22,19 @@ class PopupUnlock extends React.Component {
     state = {
         inputPassword: '',
         errorPassword: ''
-    }
+    };
 
     /** @param {React.ChangeEvent<HTMLInputElement>} e */
     onUnlockPopupInputChange = (e) => {
         this.setState({ inputPassword: e.target.value });
-    }
+    };
 
     /** @param {React.KeyboardEvent<HTMLInputElement>} e */
     onUnlockPopupInputKeyDown = (e) => {
         if (e.key === 'Enter') {
             this.UnlockPopupValidate();
         }
-    }
+    };
 
     UnlockPopupValidate = async () => {
         const { inputPassword } = this.state;
@@ -72,16 +72,16 @@ class PopupUnlock extends React.Component {
         this.setState({ inputPassword: '' }, () => {
             ClosePopup('popup-unlock', true);
         });
-    }
+    };
 
     onUnlockPopupOpen = () => {
         this.refInputUnlock.current?.focus();
-    }
+    };
 
     UnlockPopupClose = () => {
         this.setState({ inputPassword: '', errorPassword: '' });
         ClosePopup('popup-unlock');
-    }
+    };
 
     render() {
         return (
@@ -91,15 +91,13 @@ class PopupUnlock extends React.Component {
                 onInputChange={this.onUnlockPopupOpen}
                 onClosePopup={this.UnlockPopupClose}
             >
-                <p>
-                    Pour accéder à vos mots de passe, veuillez entrer votre mot de passe principal.
-                </p>
+                <p>Pour accéder à vos mots de passe, veuillez entrer votre mot de passe principal.</p>
 
-                <div className="form-group">
+                <div className='form-group'>
                     <TextInput
                         ref={this.refInputUnlock}
-                        type="password"
-                        placeholder="Mot de passe principal"
+                        type='password'
+                        placeholder='Mot de passe principal'
                         value={this.state.inputPassword}
                         error={this.state.errorPassword}
                         onChange={this.onUnlockPopupInputChange}
@@ -109,7 +107,9 @@ class PopupUnlock extends React.Component {
                 </div>
 
                 <div className={`form-group ${styles['popup-check-password-buttons']}`}>
-                    <Button onClick={this.UnlockPopupClose} color='#576d8c'>Fermer</Button>
+                    <Button onClick={this.UnlockPopupClose} color='#576d8c'>
+                        Fermer
+                    </Button>
                     <Button onClick={this.UnlockPopupValidate}>Déverrouiller</Button>
                 </div>
             </Popup>

@@ -10,30 +10,26 @@ import { ChangeImage, EditPassword } from './actions';
 /** @param {FeatureProps} props */
 function FeatureProfile({ user, setUser, context, feature }) {
     /** @type {(time: number) => string} */
-    const convertDate = (time) => new Date(time * 1000)
-        .toLocaleDateString(undefined, {
-            hour: '2-digit',
-            minute: '2-digit',
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        })
-        .split(' ')
-        .map((word) => word.length <= 1 ? word : word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
+    const convertDate = (time) =>
+        new Date(time * 1000)
+            .toLocaleDateString(undefined, {
+                hour: '2-digit',
+                minute: '2-digit',
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            })
+            .split(' ')
+            .map((word) => (word.length <= 1 ? word : word.charAt(0).toUpperCase() + word.slice(1)))
+            .join(' ');
 
     const dateCreated = convertDate(user.Created);
-    const dateLastLogin = !!user.LastLogin ? convertDate(user.LastLogin) : 'Première connexion';
+    const dateLastLogin = user.LastLogin ? convertDate(user.LastLogin) : 'Première connexion';
 
     return (
         <div className='profile'>
-            <Header
-                user={user}
-                setUser={setUser}
-                context={context}
-                feature={feature}
-            />
+            <Header user={user} setUser={setUser} context={context} feature={feature} />
 
             <Row center>
                 <Card.Element width={450} color='blue-dark'>
@@ -103,11 +99,7 @@ function FeatureProfile({ user, setUser, context, feature }) {
                     </div>
 
                     <div className={styles.separator} />
-                    <Button
-                        className={styles['btn-disconnect']}
-                        onClick={() => setUser(null)}
-                        color='#aa3333'
-                    >
+                    <Button className={styles['btn-disconnect']} onClick={() => setUser(null)} color='#aa3333'>
                         Se déconnecter
                     </Button>
                 </Card.Element>

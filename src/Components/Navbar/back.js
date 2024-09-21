@@ -20,10 +20,10 @@ const NavbarProps = {
     feature: null,
 
     /** @type {(context: ContextType) => void} */
-    setContext: (context) => {},
+    setContext: () => {},
 
     /** @type {(feature: FeatureType) => void} */
-    setFeature: (feature) => {}
+    setFeature: () => {}
 };
 
 class NavbarBack extends React.Component {
@@ -42,6 +42,8 @@ class NavbarBack extends React.Component {
 
     /** @param {NavbarProps} prevProps */
     componentDidUpdate(prevProps) {
+        void prevProps;
+
         const { context, feature } = this.props;
         if (context !== null && feature !== null) {
             if (context.id !== this.state.active.context_id || feature.id !== this.state.active.feature_id) {
@@ -58,7 +60,7 @@ class NavbarBack extends React.Component {
 
     onProfileClick = () => {
         this.setState({ is_navpanel_switch: true });
-    }
+    };
 
     /** @param {ContextType | null} context */
     onContextClick = (context = null) => {
@@ -67,7 +69,7 @@ class NavbarBack extends React.Component {
         if (context !== null) {
             this.props.setContext(context);
         }
-    }
+    };
 
     /**
      * @param {number} context_id
@@ -78,23 +80,25 @@ class NavbarBack extends React.Component {
         const { user } = this.props;
 
         // Check if feature is already active
-        if (feature_id === this.state.active.feature_id &&
-            context_id === this.state.active.context_id) {
+        if (feature_id === this.state.active.feature_id && context_id === this.state.active.context_id) {
             return;
         }
 
-        const context = user?.Contexts.find(f => f.id === context_id);
+        const context = user?.Contexts.find((f) => f.id === context_id);
 
         // Check if context & feature exists in this context
-        if (!context)
+        if (!context) {
             throw new Error('Context not found');
-        if (!context.features.includes(feature_id))
+        }
+        if (!context.features.includes(feature_id)) {
             throw new Error('Feature not found');
+        }
 
         // Check if feature exists
-        const feature = FEATURES.find(f => f.id === feature_id);
-        if (!feature)
+        const feature = FEATURES.find((f) => f.id === feature_id);
+        if (!feature) {
             throw new Error('Feature not found');
+        }
 
         // Set active feature
         this.setState({
@@ -108,7 +112,7 @@ class NavbarBack extends React.Component {
         if (sendCallbackToParent) {
             this.props.setFeature(feature);
         }
-    }
+    };
 }
 
 NavbarBack.defaultProps = NavbarProps;

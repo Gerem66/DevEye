@@ -7,17 +7,12 @@ class LoginPage extends LoginPageBack {
         return (
             <div className={'login' + (this.state.show ? '' : ' hide')}>
                 <div className='form'>
-
                     {/* Title */}
                     <span className='title'>
                         <b>Dev</b> <p>Eye</p>
                     </span>
 
-                    <div
-                        ref={this.cardLogin}
-                        className='login-card'
-                        onKeyDown={this.onKeyDown}
-                    >
+                    <div ref={this.cardLogin} className='login-card' onKeyDown={this.onKeyDown}>
                         {/* Progress bar */}
                         <div className='progress-bar' />
 
@@ -46,15 +41,11 @@ class LoginPage extends LoginPageBack {
                         </div>
 
                         {/* Submit button */}
-                        <button
-                            className='submit'
-                            onClick={this.onLogin}
-                        >
+                        <button className='submit' onClick={this.onLogin}>
                             Se connecter
                         </button>
                     </div>
                 </div>
-
             </div>
         );
     }

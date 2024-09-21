@@ -8,6 +8,10 @@
             mask-repeat: no-repeat;
     background-color: #fff;
 }
+.icon-gamelife {
+    -webkit-mask-image: url(../../public/icons/gamelife.svg);
+    mask-image: url(../../public/icons/gamelife.svg);
+}
 .icon-hide {
     opacity: 0.2;
     pointer-events: none;

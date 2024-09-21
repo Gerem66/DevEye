@@ -17,7 +17,7 @@ const FeaturePasswordProps = {
     feature: null,
 
     setContext: () => {},
-    setFeature: () => {},
+    setFeature: () => {}
 };
 
 class FeaturePasswordBack extends React.Component {
@@ -33,8 +33,8 @@ class FeaturePasswordBack extends React.Component {
         search: '',
 
         /** @type {{ [key: string]: PasswordType[] }} Sorted password by categories */
-        categories: {},
-    }
+        categories: {}
+    };
 
     /** @type {NodeJS.Timeout[]} */
     timeoutPasswords = [];
@@ -42,23 +42,22 @@ class FeaturePasswordBack extends React.Component {
     componentDidMount() {
         const { context } = this.props;
 
-        tcp.SendAsync('get-passwords', { contextID: context.id })
-            .then(async (response) => {
-                if (response === 'timeout') {
-                    console.log('Error: Timeout');
-                } else if (response === 'not-sended') {
-                    console.log('Error: Not sended');
+        tcp.SendAsync('get-passwords', { contextID: context.id }).then(async (response) => {
+            if (response === 'timeout') {
+                console.log('Error: Timeout');
+            } else if (response === 'not-sended') {
+                console.log('Error: Not sended');
+            } else {
+                if (response.status === 0) {
+                    this.allPasswords = response.passwords;
+                    this.updatePasswords();
+                    return;
                 } else {
-                    if (response.status === 0) {
-                        this.allPasswords = response.passwords;
-                        this.updatePasswords();
-                        return;
-                    } else {
-                        console.log('Error:', response);
-                    }
+                    console.log('Error:', response);
                 }
-                this.setState({ loaded: true });
-            });
+            }
+            this.setState({ loaded: true });
+        });
     }
 
     componentWillUnmount() {
@@ -74,22 +73,23 @@ class FeaturePasswordBack extends React.Component {
             .filter((value, index, self) => self.indexOf(value) === index)
             .map((category) => category.charAt(0).toUpperCase() + category.slice(1))
             .sort()
-            .map((category) => ({ [category]: this.allPasswords
-                .filter((password) => password.category.toLowerCase() === category.toLowerCase())
-                .filter((password) => password.service.toLowerCase().includes(search.toLowerCase()))
-                .sort((a, b) => a.service.localeCompare(b.service))
-                .sort((a, b) => a.status === b.status ? 0 : a.status === 'active' ? -1 : 1)
-                .map((password) => this.discovered.find((p) => p.ID === password.ID) || password)
+            .map((category) => ({
+                [category]: this.allPasswords
+                    .filter((password) => password.category.toLowerCase() === category.toLowerCase())
+                    .filter((password) => password.service.toLowerCase().includes(search.toLowerCase()))
+                    .sort((a, b) => a.service.localeCompare(b.service))
+                    .sort((a, b) => (a.status === b.status ? 0 : a.status === 'active' ? -1 : 1))
+                    .map((password) => this.discovered.find((p) => p.ID === password.ID) || password)
             }))
             .reduce((acc, cur) => ({ ...acc, ...cur }), {});
 
         this.setState({ loaded: true, categories, search });
-    }
+    };
 
     /** @param {React.ChangeEvent<HTMLInputElement>} e */
     onSearchChange = (e) => {
         this.updatePasswords(e.target.value);
-    }
+    };
 
     /** @param {number} ID */
     GetPassword = async (ID) => {
@@ -113,24 +113,26 @@ class FeaturePasswordBack extends React.Component {
             return;
         } else if (response.status !== 0 || response.password === null) {
             console.log('Error:', response);
-            return
+            return;
         }
 
-        this.timeoutPasswords.push(setTimeout(() => {
-            if (response.password !== null) {
-                this.ResetPassword(response.password.ID);
-            }
-        }, 5000));
+        this.timeoutPasswords.push(
+            setTimeout(() => {
+                if (response.password !== null) {
+                    this.ResetPassword(response.password.ID);
+                }
+            }, 5000)
+        );
 
         this.discovered.push(response.password);
         this.updatePasswords();
-    }
+    };
 
     /** @param {number} ID */
     ResetPassword = (ID) => {
         this.discovered = this.discovered.filter((password) => password.ID !== ID);
         this.updatePasswords();
-    }
+    };
 
     /** @param {number | null} ID */
     OpenEditPassword = async (ID) => {
@@ -165,7 +167,7 @@ class FeaturePasswordBack extends React.Component {
                 return;
             } else if (response.status !== 0 || response.password === null) {
                 console.log('Error:', response);
-                return
+                return;
             }
             password = response.password;
         }
@@ -199,7 +201,12 @@ class FeaturePasswordBack extends React.Component {
                     contextID: context.id,
                     password: newPassword
                 });
-                if (response === 'timeout' || response === 'not-sended' || response.status !== 0 || response.password === null) {
+                if (
+                    response === 'timeout' ||
+                    response === 'not-sended' ||
+                    response.status !== 0 ||
+                    response.password === null
+                ) {
                     console.log('Error:', response);
                     return;
                 }
@@ -212,7 +219,12 @@ class FeaturePasswordBack extends React.Component {
                     contextID: context.id,
                     password: newPassword
                 });
-                if (response === 'timeout' || response === 'not-sended' || response.status !== 0 || response.password === null) {
+                if (
+                    response === 'timeout' ||
+                    response === 'not-sended' ||
+                    response.status !== 0 ||
+                    response.password === null
+                ) {
                     console.log('Error:', response);
                     return;
                 }
@@ -224,7 +236,7 @@ class FeaturePasswordBack extends React.Component {
 
             this.updatePasswords();
         });
-    }
+    };
 }
 
 FeaturePasswordBack.defaultProps = FeaturePasswordProps;

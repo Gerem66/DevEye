@@ -1,7 +1,7 @@
 /**
  * @typedef {import('./Feature').FeaturesID} FeaturesID
  * @typedef {import('./Context').ContextType} ContextType
- * 
+ *
  * @typedef {Object} DBUserType
  * @property {number} ID
  * @property {string} Email
@@ -16,7 +16,7 @@
  * @property {string} Token
  * @property {number} LastLogin
  * @property {number} Created
- * 
+ *
  * @typedef UserType
  * @property {number} ID
  * @property {string} Email
@@ -29,7 +29,7 @@
  * @property {string} Token
  * @property {number} LastLogin
  * @property {number} Created
- * 
+ *
  * @typedef TCPUserType
  * @property {number} ID
  * @property {string} Email

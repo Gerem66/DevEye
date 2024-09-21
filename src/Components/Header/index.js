@@ -20,7 +20,7 @@ import { tcp } from '../../Utils/TCP';
  * @returns {JSX.Element}
  */
 function Header({ user, setUser, context, feature }) {
-    const [ loading, setLoading ] = useState(false);
+    const [loading, setLoading] = useState(false);
     const isFavorite = user.DefaultContext === context.id && user.DefaultFeature === feature.id;
 
     const onFavoriteClick = async () => {
@@ -59,11 +59,7 @@ function Header({ user, setUser, context, feature }) {
                     `}
                     onClick={onFavoriteClick}
                 />
-                <p
-                    className={styles.text}
-                >
-                    {`${context?.name} / ${feature.id}`}
-                </p>
+                <p className={styles.text}>{`${context?.name} / ${feature.id}`}</p>
             </div>
         </header>
     );

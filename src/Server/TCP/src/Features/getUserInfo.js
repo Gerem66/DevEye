@@ -41,7 +41,7 @@ async function Login({ db, data }) {
     }
 
     // Update LastLogin
-    db.QueryPrepare('UPDATE Users SET LastLogin = NOW() WHERE ID = ?', [ rawUser[0].ID ]);
+    db.QueryPrepare('UPDATE Users SET LastLogin = NOW() WHERE ID = ?', [rawUser[0].ID]);
 
     /** @type {UserType} */
     const user = {
@@ -54,8 +54,8 @@ async function Login({ db, data }) {
         DefaultContext: rawUser[0].DefaultContext,
         DefaultFeature: rawUser[0].DefaultFeature,
         Token: rawUser[0].Token,
-        LastLogin: (new Date(rawUser[0].LastLogin)).getTime() / 1000,
-        Created: (new Date(rawUser[0].Created)).getTime() / 1000
+        LastLogin: new Date(rawUser[0].LastLogin).getTime() / 1000,
+        Created: new Date(rawUser[0].Created).getTime() / 1000
     };
 
     // Load contexts
@@ -65,7 +65,7 @@ async function Login({ db, data }) {
             FROM Contexts
             JOIN ContextsLinks ON Contexts.ID = ContextsLinks.ContextID
             WHERE ContextsLinks.UserID = ?`,
-        [ user.ID ]
+        [user.ID]
     );
     if (rawContexts === null) {
         return {
@@ -80,9 +80,7 @@ async function Login({ db, data }) {
     let rawUsers = [];
 
     if (tcpUsers.length > 0) {
-        rawUsers = await db.ExecQuery(
-            `SELECT * FROM Users WHERE ID IN (${tcpUsers.join(',')})`
-        );
+        rawUsers = await db.ExecQuery(`SELECT * FROM Users WHERE ID IN (${tcpUsers.join(',')})`);
         if (rawUsers === null) {
             return {
                 status: 1,
@@ -109,14 +107,15 @@ async function Login({ db, data }) {
             name: c.Name,
             logo: c.Logo,
             users: [
-                ...rawUsers.filter((u) => u.ID === c.ID).map((u) => /** @type {TCPUserType} */ ({
+                ...rawUsers
+                    .filter((u) => u.ID === c.ID)
+                    .map((u) => /** @type {TCPUserType} */ ({
                         ID: u.ID,
                         Email: u.Email,
                         Username: u.Username,
                         Avatar: u.Avatar,
-                        Created: (new Date(u.Created)).getTime() / 1000
-                    })
-                )
+                        Created: new Date(u.Created).getTime() / 1000
+                    }))
             ],
             features: JSON.parse(c.Features),
             reAuthInterval: c.ReAuthInterval,
@@ -143,10 +142,11 @@ async function SetFavorite({ db, profile, data }) {
         };
     }
 
-    const result = await db.QueryPrepare(
-        'UPDATE Users SET DefaultContext = ?, DefaultFeature = ? WHERE ID = ?',
-        [ contextID, featureID, user.ID ]
-    );
+    const result = await db.QueryPrepare('UPDATE Users SET DefaultContext = ?, DefaultFeature = ? WHERE ID = ?', [
+        contextID,
+        featureID,
+        user.ID
+    ]);
     if (result === null || result.affectedRows === 0) {
         return {
             status: 2

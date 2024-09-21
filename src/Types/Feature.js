@@ -1,9 +1,9 @@
 /**
- * @typedef {'dashboard' | 'profile' | 'password'} FeaturesID
+ * @typedef {'dashboard' | 'profile' | 'password' | 'gamelife'} FeaturesID
  * @typedef {import('Styles/icons').Icon} Icon
  * @typedef {import('./User').UserType} UserType
  * @typedef {import('./Context').ContextType} ContextType
- * 
+ *
  * @typedef {Object} FeatureProps
  * @property {UserType} props.user
  * @property {(user: UserType | null) => void} props.setUser
@@ -11,7 +11,7 @@
  * @property {FeatureType} props.feature
  * @property {(context: ContextType) => void} props.setContext
  * @property {(feature: FeatureType) => void} props.setFeature
- * 
+ *
  * @typedef {Object} FeatureType
  * @property {FeaturesID} id
  * @property {string} name

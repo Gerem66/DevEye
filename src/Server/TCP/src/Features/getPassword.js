@@ -20,15 +20,11 @@ async function GetPasswords({ db, crypt, profile, data }) {
     let passwords = null;
 
     if (contextID === 0) {
-        passwords = await db.QueryPrepare(
-            'SELECT * FROM _Passwords WHERE UserID = ? AND ContextID IS NULL',
-            [ profile.user?.ID ]
-        );
+        passwords = await db.QueryPrepare('SELECT * FROM _Passwords WHERE UserID = ? AND ContextID IS NULL', [
+            profile.user?.ID
+        ]);
     } else {
-        passwords = await db.QueryPrepare(
-            'SELECT * FROM _Passwords WHERE ContextID = ?',
-            [ contextID ]
-        );
+        passwords = await db.QueryPrepare('SELECT * FROM _Passwords WHERE ContextID = ?', [contextID]);
     }
 
     if (passwords === null) {
@@ -38,25 +34,34 @@ async function GetPasswords({ db, crypt, profile, data }) {
         };
     }
 
-    const passwordsFormatted = passwords.map(/** @returns {PasswordType | null} */ (p) => {
-        const rawContent = crypt.Decrypt(p.Content);
-        if (!rawContent || !StrIsJson(rawContent)) {
-            console.log('Error: Password content is not valid', rawContent);
-            return null;
-        }
+    const passwordsFormatted = passwords
+        .map(
+            /** @returns {PasswordType | null} */ (p) => {
+                const rawContent = crypt.Decrypt(p.Content);
+                if (!rawContent || !StrIsJson(rawContent)) {
+                    console.log('Error: Password content is not valid', rawContent);
+                    return null;
+                }
 
-        const content = JSON.parse(rawContent);
-        if (!content.hasOwnProperty('service') || !content.hasOwnProperty('category') || !content.hasOwnProperty('email') || !content.hasOwnProperty('password') || !content.hasOwnProperty('status')) {
-            console.log('Error: Password content is not valid2', content);
-            return null;
-        }
+                const content = JSON.parse(rawContent);
+                if (
+                    !Object.prototype.hasOwnProperty.call(content, 'service') ||
+                    !Object.prototype.hasOwnProperty.call(content, 'category') ||
+                    !Object.prototype.hasOwnProperty.call(content, 'email') ||
+                    !Object.prototype.hasOwnProperty.call(content, 'password') ||
+                    !Object.prototype.hasOwnProperty.call(content, 'status')
+                ) {
+                    console.log('Error: Password content is not valid2', content);
+                    return null;
+                }
 
-        const ID = p.ID;
-        const { category, service, email, password: realPassword, status } = content;
-        const password = !!realPassword ? '**********' : '';
-        return { ID, category, service, email, password, status };
-    })
-    .filter((p) => p !== null);
+                const ID = p.ID;
+                const { category, service, email, password: realPassword, status } = content;
+                const password = realPassword ? '**********' : '';
+                return { ID, category, service, email, password, status };
+            }
+        )
+        .filter((p) => p !== null);
 
     return {
         status: 0,
@@ -88,13 +93,13 @@ async function GetPassword({ db, crypt, profile, data }) {
     if (contextID === 0) {
         resultPassword = await db.QueryPrepare(
             'SELECT * FROM _Passwords WHERE ID = ? AND UserID = ? AND ContextID IS NULL',
-            [ passwordID, profile.user?.ID ]
+            [passwordID, profile.user?.ID]
         );
     } else {
-        resultPassword = await db.QueryPrepare(
-            'SELECT * FROM _Passwords WHERE ID = ? AND ContextID = ?',
-            [ passwordID, contextID ]
-        );
+        resultPassword = await db.QueryPrepare('SELECT * FROM _Passwords WHERE ID = ? AND ContextID = ?', [
+            passwordID,
+            contextID
+        ]);
     }
 
     if (resultPassword === null || resultPassword.length === 0) {
@@ -115,7 +120,13 @@ async function GetPassword({ db, crypt, profile, data }) {
     }
 
     const content = JSON.parse(rawContent);
-    if (!content.hasOwnProperty('service') || !content.hasOwnProperty('category') || !content.hasOwnProperty('email') || !content.hasOwnProperty('password') || !content.hasOwnProperty('status')) {
+    if (
+        !Object.prototype.hasOwnProperty.call(content, 'service') ||
+        !Object.prototype.hasOwnProperty.call(content, 'category') ||
+        !Object.prototype.hasOwnProperty.call(content, 'email') ||
+        !Object.prototype.hasOwnProperty.call(content, 'password') ||
+        !Object.prototype.hasOwnProperty.call(content, 'status')
+    ) {
         console.log('Error: Password content is not valid2', content);
         return {
             status: 5,

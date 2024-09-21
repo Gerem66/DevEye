@@ -19,7 +19,7 @@ class ClientTCP {
 
     callbackClose = () => {};
 
-    /** @type {{ [key: string]: (data: any) => void }} */
+    /** @type {{ [key: string]: (data: any) => boolean }} */
     callbacks = {};
 
     /**
@@ -60,7 +60,7 @@ class ClientTCP {
                 resolve(false);
             });
         });
-    }
+    };
 
     Disconnect = () => {
         if (this.socket !== null && this.IsConnected()) {
@@ -68,32 +68,35 @@ class ClientTCP {
         }
         this.socket = null;
         console.log('[TCP] Disconnected from server');
-    }
+    };
 
     IsConnected = () => {
         return this.socket?.readyState === WebSocket.OPEN;
-    }
+    };
 
     /** @param {Event} event */
     onOpen = (event) => {
+        void event;
         console.log('[TCP] Connected to server');
-    }
+    };
 
     /** @param {MessageEvent} event */
     onMessage = (event) => {
         const data = JSON.parse(event.data);
 
-        if (data.hasOwnProperty('callbackID')) {
+        if (Object.prototype.hasOwnProperty.call(data, 'callbackID')) {
             const callbackID = data['callbackID'];
             const callback = this.callbacks[callbackID];
-            if (typeof(callback) === 'function') {
-                callback(data);
-                delete this.callbacks[callbackID];
+            if (typeof callback === 'function') {
+                const removeCallback = callback(data);
+                if (removeCallback) {
+                    delete this.callbacks[callbackID];
+                }
             } else {
                 console.log('[TCP] Callback not found:', callbackID);
             }
         }
-    }
+    };
 
     /** @param {Event} event */
     onError = (event) => {
@@ -101,13 +104,14 @@ class ClientTCP {
         this.state = 'error';
         this.Disconnect();
         this.callbackClose();
-    }
+    };
 
     /** @param {CloseEvent} event */
     onClose = (event) => {
+        void event;
         this.state = 'disconnected';
         this.Disconnect();
-    }
+    };
 
     /**
      * @template {keyof SendRequestType} T
@@ -117,7 +121,7 @@ class ClientTCP {
      * @returns {boolean} Whether the message was sent successfully
      */
     Send = (action, content, callbackID) => {
-        if (typeof(content) !== 'object') {
+        if (typeof content !== 'object') {
             console.log('[TCP] Send socket: Invalid message type.');
             return false;
         }
@@ -130,7 +134,7 @@ class ClientTCP {
         const data = { action, callbackID, content };
         this.socket.send(JSON.stringify(data));
         return true;
-    }
+    };
 
     /**
      * @template {keyof SendRequestType} T
@@ -147,16 +151,17 @@ class ClientTCP {
             return Promise.resolve('not-sended');
         }
 
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             const timer = setTimeout(() => {
                 resolve('timeout');
             }, timeout);
             this.callbacks[callbackID] = (data) => {
                 clearTimeout(timer);
                 resolve(data['content']);
+                return true;
             };
         });
-    }
+    };
 }
 
 const tcp = new ClientTCP();

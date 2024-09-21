@@ -9,6 +9,10 @@ const LOCAL_KEYS = {
  * @param {string | Object} value
  */
 function Save(key, value) {
+    if (Object.keys(LOCAL_KEYS).indexOf(key) === -1) {
+        throw new Error('Invalid key');
+    }
+
     if (typeof value === 'object') {
         localStorage.setItem(key, JSON.stringify(value));
     } else if (typeof value === 'string') {
@@ -23,10 +27,15 @@ function Save(key, value) {
  * @returns {string | Object | null}
  */
 function Load(key) {
+    if (Object.keys(LOCAL_KEYS).indexOf(key) === -1) {
+        throw new Error('Invalid key');
+    }
+
     let value = localStorage.getItem(key);
     if (value !== null && StrIsJson(value)) {
         value = JSON.parse(value);
     }
+
     return value;
 }
 

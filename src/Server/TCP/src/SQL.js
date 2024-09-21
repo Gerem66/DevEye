@@ -6,6 +6,7 @@ import { createPool } from 'mysql2';
  * @property {string} database
  * @property {string} username
  * @property {string} password
+ * @property {number} port
  */
 
 class SQL {
@@ -25,12 +26,13 @@ class SQL {
             database: credentials.database,
             user: credentials.username,
             password: credentials.password,
+            port: credentials.port,
             waitForConnections: true,
             connectionLimit: 10,
             queueLimit: 0
         });
 
-        this.pool.on('connection', (connection) => {
+        this.pool.on('connection', () => {
             console.log('SQL Pool Connection established');
         });
 
@@ -39,7 +41,7 @@ class SQL {
             console.error('SQL Pool Error:', err);
             this.CreatePool(credentials);
         });
-    }
+    };
 
     Unmount = () => {
         if (!this.pool) {
@@ -53,14 +55,14 @@ class SQL {
                 console.log('SQL Pool closed');
             }
         });
-    }
+    };
 
     /**
      * @param {string} query
      * @returns {Promise<any>}
      */
     ExecQuery = (query) => {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             if (!this.pool) {
                 console.warn('SQL Pool not initialized');
                 return null;
@@ -74,14 +76,14 @@ class SQL {
                 }
             });
         });
-    }
+    };
 
     /**
      * @param {string} command
      * @param {Array<any | null>} args
      */
     QueryPrepare = (command, args) => {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             if (!this.pool) {
                 console.warn('SQL Pool not initialized');
                 resolve(null);
@@ -95,7 +97,7 @@ class SQL {
                 }
             });
         });
-    }
+    };
 }
 
 export default SQL;

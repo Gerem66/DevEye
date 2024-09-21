@@ -18,14 +18,12 @@ const SelectInput = React.forwardRef((props, ref) => {
     const classes = `${styles.input} ${props.className || ''}`;
 
     return (
-        <select
-            ref={ref}
-            {...props}
-            className={classes}
-        >
+        <select ref={ref} {...props} className={classes}>
             {props.children}
         </select>
     );
 });
+
+SelectInput.displayName = 'SelectInput';
 
 export default SelectInput;

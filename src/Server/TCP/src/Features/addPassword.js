@@ -21,27 +21,30 @@ async function AddPassword({ db, crypt, profile, data }) {
     const newPassword = {
         UserID: profile.user.ID,
         ContextID: contextID || null,
-        Content: crypt.Encrypt(JSON.stringify({
-            category: password.category,
-            service: password.service,
-            email: password.email,
-            password: password.password,
-            status: password.status
-        }))
+        Content: crypt.Encrypt(
+            JSON.stringify({
+                category: password.category,
+                service: password.service,
+                email: password.email,
+                password: password.password,
+                status: password.status
+            })
+        )
     };
 
     let result = null;
 
     if (contextID === 0) {
-        result = await db.QueryPrepare(
-            'INSERT INTO _Passwords SET `UserID` = ?, `ContextID` = NULL, `Content` = ?',
-            [ newPassword.UserID, newPassword.Content ]
-        );
+        result = await db.QueryPrepare('INSERT INTO _Passwords SET `UserID` = ?, `ContextID` = NULL, `Content` = ?', [
+            newPassword.UserID,
+            newPassword.Content
+        ]);
     } else {
-        result = await db.QueryPrepare(
-            'INSERT INTO _Passwords SET `UserID` = ?, `ContextID` = ?, `Content` = ?',
-            [ newPassword.UserID, newPassword.ContextID, newPassword.Content ]
-        );
+        result = await db.QueryPrepare('INSERT INTO _Passwords SET `UserID` = ?, `ContextID` = ?, `Content` = ?', [
+            newPassword.UserID,
+            newPassword.ContextID,
+            newPassword.Content
+        ]);
     }
 
     if (result === null) {
@@ -75,22 +78,24 @@ async function EditPassword({ db, crypt, profile, data }) {
         };
     }
 
-    const content = crypt.Encrypt(JSON.stringify({
-        category: password.category,
-        service: password.service,
-        email: password.email,
-        password: password.password,
-        status: password.status
-    }));
+    const content = crypt.Encrypt(
+        JSON.stringify({
+            category: password.category,
+            service: password.service,
+            email: password.email,
+            password: password.password,
+            status: password.status
+        })
+    );
 
     let result = null;
     if (contextID === 0) {
         const command = 'UPDATE _Passwords SET `Content` = ? WHERE `ID` = ? AND `UserID` = ? AND `ContextID` IS NULL';
-        const args = [ content, password.ID, profile.user.ID ];
+        const args = [content, password.ID, profile.user.ID];
         result = await db.QueryPrepare(command, args);
     } else {
         const command = 'UPDATE _Passwords SET `Content` = ? WHERE `ID` = ? AND `UserID` = ? AND `ContextID` = ?';
-        const args = [ content, password.ID, profile.user.ID, contextID ];
+        const args = [content, password.ID, profile.user.ID, contextID];
         result = await db.QueryPrepare(command, args);
     }
 
@@ -123,13 +128,14 @@ async function DeletePassword({ db, profile, data }) {
     if (contextID === 0) {
         result = await db.QueryPrepare(
             'DELETE FROM _Passwords WHERE `ID` = ? AND `UserID` = ? AND `ContextID` IS NULL',
-            [ passwordID, profile.user?.ID ]
+            [passwordID, profile.user?.ID]
         );
     } else {
-        result = await db.QueryPrepare(
-            'DELETE FROM _Passwords WHERE `ID` = ? AND `UserID` = ? AND `ContextID` = ?',
-            [ passwordID, profile.user?.ID, contextID ]
-        );
+        result = await db.QueryPrepare('DELETE FROM _Passwords WHERE `ID` = ? AND `UserID` = ? AND `ContextID` = ?', [
+            passwordID,
+            profile.user?.ID,
+            contextID
+        ]);
     }
 
     if (result === null) {

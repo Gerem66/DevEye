@@ -5,7 +5,7 @@ import styles from './style.module.css';
 /**
  * @typedef {import('Styles/colors').Color} Color
  * @typedef {import('Styles/icons').Icon} Icon
- * 
+ *
  * @typedef {object} CardValueProps
  * @property {string} title
  * @property {string} value
@@ -20,14 +20,13 @@ import styles from './style.module.css';
  */
 function CardValue({ title, value, icon = null, width = 'unset', color = 'blue' }) {
     return (
-        <div
-            className={`${styles.card} bg-${color}`}
-            style={{ maxWidth: width }}
-        >
+        <div className={`${styles.card} bg-${color}`} style={{ maxWidth: width }}>
             <p className={styles.title}>{title}</p>
             <p className={styles.value}>{value}</p>
 
-            {icon === null ? <></> : (
+            {icon === null ? (
+                <></>
+            ) : (
                 <div className={styles['icon-container']}>
                     <i className={`${styles.icon} icon-${icon}`} />
                 </div>

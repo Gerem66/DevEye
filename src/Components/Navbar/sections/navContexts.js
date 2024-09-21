@@ -13,9 +13,8 @@ const NavContextsProps = {
     user: null,
 
     /** @type {(context: ContextType | null) => void} */
-    onContextClick: (context) => {}
+    onContextClick: () => {}
 };
-
 
 function NavContexts(props = NavContextsProps) {
     const { onContextClick } = props;
@@ -34,11 +33,7 @@ function NavContexts(props = NavContextsProps) {
             </button>
 
             {user?.Contexts.map((context) => (
-                <ContextButton
-                    key={context.id}
-                    context={context}
-                    onClick={() => onContextClick(context)}
-                />
+                <ContextButton key={context.id} context={context} onClick={() => onContextClick(context)} />
             ))}
 
             <button
@@ -68,11 +63,7 @@ function ContextButton({ context, onClick }) {
             className={`${stylesBtn.button} ${styles['nav-context-button']}`}
             onClick={onClick}
         >
-            <img
-                className={styles['nav-context-logo']}
-                src={'./images/' + logo}
-                alt={name}
-            />
+            <img className={styles['nav-context-logo']} src={'./images/' + logo} alt={name} />
             <span>{name}</span>
         </button>
     );

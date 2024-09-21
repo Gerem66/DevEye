@@ -19,10 +19,7 @@ async function AddContext({ db, profile, data }) {
         };
     }
 
-    const result = await db.QueryPrepare(
-        'INSERT INTO Contexts SET `Name` = ?',
-        [ contextName ]
-    );
+    const result = await db.QueryPrepare('INSERT INTO Contexts SET `Name` = ?', [contextName]);
 
     if (result === null) {
         return {
@@ -32,10 +29,7 @@ async function AddContext({ db, profile, data }) {
     }
 
     /** @type {DBContextType[]} */
-    const context = await db.QueryPrepare(
-        'SELECT * FROM Contexts WHERE `ID` = ?',
-        [ result.insertId ]
-    );
+    const context = await db.QueryPrepare('SELECT * FROM Contexts WHERE `ID` = ?', [result.insertId]);
     if (context === null || context.length === 0) {
         return {
             status: 3,
@@ -43,10 +37,10 @@ async function AddContext({ db, profile, data }) {
         };
     }
 
-    const resultLink = await db.QueryPrepare(
-        'INSERT INTO ContextsLinks SET `UserID` = ?, `ContextID` = ?',
-        [ profile.user.ID, context[0].ID ]
-    );
+    const resultLink = await db.QueryPrepare('INSERT INTO ContextsLinks SET `UserID` = ?, `ContextID` = ?', [
+        profile.user.ID,
+        context[0].ID
+    ]);
 
     if (resultLink === null) {
         return {
@@ -61,13 +55,15 @@ async function AddContext({ db, profile, data }) {
             id: context[0].ID,
             name: context[0].Name,
             logo: context[0].Logo,
-            users: [{
-                ID: profile.user.ID,
-                Username: profile.user.Username,
-                Email: profile.user.Email,
-                Avatar: profile.user.Avatar,
-                Created: profile.user.Created
-            }],
+            users: [
+                {
+                    ID: profile.user.ID,
+                    Username: profile.user.Username,
+                    Email: profile.user.Email,
+                    Avatar: profile.user.Avatar,
+                    Created: profile.user.Created
+                }
+            ],
             features: JSON.parse(context[0].Features),
             reAuthInterval: context[0].ReAuthInterval,
             created: context[0].Created
@@ -76,7 +72,7 @@ async function AddContext({ db, profile, data }) {
 }
 
 /** @type {TCPFeatureType<'delete-context'>} */
-async function DeleteContext({ db, crypt, profile, data }) {
+async function DeleteContext({ db, profile, data }) {
     const { contextID } = data;
 
     if (profile.user === null) {
@@ -94,7 +90,7 @@ async function DeleteContext({ db, crypt, profile, data }) {
     ];
 
     for (let i = 0; i < deleteCommands.length; i++) {
-        const result = await db.QueryPrepare(deleteCommands[i], [ contextID ]);
+        const result = await db.QueryPrepare(deleteCommands[i], [contextID]);
         if (result === null) {
             return {
                 status: 2 + i
@@ -104,7 +100,7 @@ async function DeleteContext({ db, crypt, profile, data }) {
 
     return {
         status: 0
-    }
+    };
 }
 
 export { AddContext, DeleteContext };

@@ -1,10 +1,10 @@
 /**
  * Wait during 'ms' milliseconds
- * @param {Number} ms 
+ * @param {Number} ms
  * @returns {Promise<void>}
  */
 function Sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -12,8 +12,12 @@ function Sleep(ms) {
  * @returns {boolean}
  */
 function StrIsJson(str) {
-    try { JSON.parse(str); }
-    catch (e) { return false; }
+    try {
+        JSON.parse(str);
+    } catch (e) {
+        void e;
+        return false;
+    }
     return true;
 }
 

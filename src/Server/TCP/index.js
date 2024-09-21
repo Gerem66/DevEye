@@ -10,6 +10,7 @@ import { GetPassword, GetPasswords } from './src/Features/getPassword.js';
 import { AddPassword, EditPassword, DeletePassword } from './src/Features/addPassword.js';
 import { AddContext, DeleteContext } from './src/Features/addContext.js';
 import { Unlock } from './src/Features/unlock.js';
+import { GetGameLifeData } from './src/Features/gamelife.js';
 
 /**
  * @typedef {import('./src/Features/types.js').RequestTypes} RequestTypes
@@ -19,18 +20,19 @@ import { Unlock } from './src/Features/unlock.js';
 /**
  * @template {RequestTypes} T
  * @typedef {import('./src/Features/types.js').TCPFeatureType<T>} TCPFeatureType
-*/
+ */
 
 /**
  * @template {RequestTypes} T
  * @typedef {import('./src/Features/types.js').TCPRequestReceiveHeader<T>} TCPRequestReceiveHeader
-*/
+ */
 
 const db = new SQL({
     database: process.env.DB_DATABASE || '',
     hostname: process.env.DB_HOSTNAME || '',
     username: process.env.DB_USERNAME || '',
-    password: process.env.DB_PASSWORD || ''
+    password: process.env.DB_PASSWORD || '',
+    port: parseInt(process.env.DB_PORT || '3306')
 });
 
 const keyA = process.env.DB_KEY_A || '';
@@ -42,13 +44,13 @@ const users = {};
 const crypt = new Encryption(keyA, keyB);
 const serv = new Server();
 serv.Listen(8888, {
-    onConnect: (connection, profile) => {
+    onConnect: () => {
         console.log('User connected');
     },
 
     onDisconnect: (connection, profile) => {
         console.log('User disconnected');
-        if (!!profile?.user) {
+        if (profile?.user) {
             delete users[`${profile.user.ID}`];
         }
     },
@@ -67,29 +69,50 @@ serv.Listen(8888, {
         /** @type {TCPRequestReceiveHeader<*>['content'] | null} */
         let result = null;
 
-        switch (/** @type {RequestTypes} */ (data.action)) {
-            case 'login':
+        switch (/** @type {RequestTypes} */ data.action) {
+            case 'login': {
                 const resultLogin = await Login({ db, crypt, profile, data: data.content });
                 if (resultLogin.status === 0 && resultLogin.user !== null) {
                     profile.user = resultLogin.user;
                     profile.firstMessage = false;
                     users[`${profile.user.ID}`] = profile;
-                    if (!!data.content.password) {
+                    if (data.content.password) {
                         await Unlock(db, profile, 0, data.content.password);
                     }
                     result = resultLogin;
                 }
                 break;
-
-            case 'check-password':          action = CheckPassword;     break;
-            case 'get-passwords':           action = GetPasswords;      break;
-            case 'get-password':            action = GetPassword;       break;
-            case 'add-password':            action = AddPassword;       break;
-            case 'edit-password':           action = EditPassword;      break;
-            case 'delete-password':         action = DeletePassword;    break;
-            case 'add-context':             action = AddContext;        break;
-            case 'delete-context':          action = DeleteContext;     break;
-            case 'change-favorite-context': action = SetFavorite;       break;
+            }
+            case 'check-password':
+                action = CheckPassword;
+                break;
+            case 'get-passwords':
+                action = GetPasswords;
+                break;
+            case 'get-password':
+                action = GetPassword;
+                break;
+            case 'add-password':
+                action = AddPassword;
+                break;
+            case 'edit-password':
+                action = EditPassword;
+                break;
+            case 'delete-password':
+                action = DeletePassword;
+                break;
+            case 'add-context':
+                action = AddContext;
+                break;
+            case 'delete-context':
+                action = DeleteContext;
+                break;
+            case 'change-favorite-context':
+                action = SetFavorite;
+                break;
+            case 'gamelife-set-loop':
+                action = GetGameLifeData;
+                break;
         }
 
         if (action !== null) {

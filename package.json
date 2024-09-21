@@ -7,6 +7,7 @@
     "start": "react-scripts start",
     "server": "cd src/Server && npm start",
     "build": "PUBLIC_URL=/DevEye/ react-scripts build",
+    "lint": "eslint .",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Gerem",
@@ -30,6 +31,17 @@
   },
   "devDependencies": {
     "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
-    "@types/react": "^18.2.64"
+    "@types/babel__traverse": "^7.20.6",
+    "@types/eslint__js": "^8.42.3",
+    "@types/react": "^18.2.64",
+    "@types/stack-utils": "^2.0.3",
+    "ajv": "^8.17.1",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-jsx-a11y": "^6.10.0",
+    "eslint-plugin-prettier": "^5.2.1",
+    "eslint-plugin-react": "^7.36.1",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "globals": "^15.9.0",
+    "prettier": "^3.3.3"
   }
 }

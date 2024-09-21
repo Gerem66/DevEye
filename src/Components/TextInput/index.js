@@ -15,7 +15,7 @@ import styles from './style.module.css';
  * @type {React.ForwardRefExoticComponent<TextInputProps & { enableShowHideButton?: boolean, error?: string }>}
  */
 const TextInput = React.forwardRef((props, ref) => {
-    const [ hidden, setHidden ] = React.useState(true);
+    const [hidden, setHidden] = React.useState(true);
 
     const { enableShowHideButton, className, type, value, error, ...rest } = props;
     const classes = `${styles.input} ${className || ''} ${error ? styles['input-error'] : ''}`;
@@ -24,7 +24,7 @@ const TextInput = React.forwardRef((props, ref) => {
         if (type === 'password' && value === '' && !hidden) {
             setHidden(true);
         }
-    }, [ value ]);
+    }, [value]);
 
     return (
         <div className={styles['input-container']}>
@@ -44,5 +44,7 @@ const TextInput = React.forwardRef((props, ref) => {
         </div>
     );
 });
+
+TextInput.displayName = 'TextInput';
 
 export default TextInput;
