@@ -1,0 +1,122 @@
+import { JSX, useEffect, useState } from 'react';
+
+import './style.css';
+import { Navbar } from '../../Components';
+import { FEATURES } from '../../Features/Features';
+import AddContextPopup from './addContext';
+import PopupUnlock from './unlock';
+
+type UserType = import('Types/User').UserType;
+type ContextType = import('Types/Context').ContextType;
+type FeatureType = import('Types/Feature').FeatureType;
+type ClientTCP = import('Utils/TCP').default;
+
+let firstLoad = false;
+
+interface HomePageProps {
+    user: UserType | null;
+    setUser: React.Dispatch<React.SetStateAction<UserType | null>>;
+}
+
+function HomePage({ user, setUser }: HomePageProps): JSX.Element | null {
+    const [context, setContext] = useState<ContextType | null>(null);
+    const [feature, setFeature] = useState<FeatureType | null>(null);
+
+    useEffect(() => {
+        if (user === null) {
+            setContext(null);
+            setFeature(null);
+            firstLoad = false;
+            return;
+        }
+
+        if (context === null) {
+            const context = user.Contexts.find((c) => c.id === user.DefaultContext) || null;
+            if (context === null || !context.features.includes(user.DefaultFeature)) {
+                const selfContext = user.Contexts.find((f) => f.id === 0) || null;
+                const firstFeature = FEATURES.find((f) => f.id === selfContext?.features[0]) || null;
+                setContext(selfContext);
+                setFeature(firstFeature);
+                console.error('Context or feature not found');
+                return;
+            }
+
+            const feature = FEATURES.find((f) => f.id === user.DefaultFeature) || null;
+            if (feature === null) {
+                const firstFeature = FEATURES.find(() => context.features[0]) || null;
+                setContext(context);
+                setFeature(firstFeature);
+                console.error('Feature not found');
+                return;
+            }
+
+            setContext(context);
+            setFeature(feature);
+        }
+    }, [user]);
+
+    useEffect(() => {
+        if (context === null) {
+            return;
+        }
+
+        // Disable auto-load feature on first render
+        if (!firstLoad) {
+            firstLoad = true;
+            return;
+        }
+
+        if (context.features.length <= 0) {
+            setFeature(null);
+            return;
+        }
+
+        const newFeature = FEATURES.find((f) => f.id === context.features[0]) || null;
+        setFeature(newFeature);
+    }, [context]);
+
+    if (user === null) {
+        return null;
+    }
+
+    const AddContext = (context: ContextType) => {
+        setUser({
+            ...user,
+            Contexts: [...user.Contexts, context]
+        });
+        setContext(context);
+    };
+
+    return (
+        <div id='home' className='home'>
+            <div className='home-left'>
+                <Navbar
+                    user={user}
+                    context={context}
+                    feature={feature}
+                    setContext={setContext}
+                    setFeature={setFeature}
+                />
+            </div>
+
+            <div className='home-right'>
+                {context !== null && feature !== null && (
+                    <feature.component
+                        key={`${feature.id} ${context.id}`}
+                        user={user}
+                        setUser={setUser}
+                        context={context}
+                        feature={feature}
+                        setContext={setContext}
+                        setFeature={setFeature}
+                    />
+                )}
+
+                <AddContextPopup AddContext={AddContext} />
+                <PopupUnlock context={context} />
+            </div>
+        </div>
+    );
+}
+
+export default HomePage;

@@ -1,0 +1,14 @@
+# Visual Studio Code
+.vscode
+
+# React
+node_modules
+package-lock.json
+build
+*.css.d.ts
+
+# Configs
+.env
+
+# Old files
+_*/

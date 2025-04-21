@@ -1,0 +1,68 @@
+.nav-context-button {
+    display: flex;
+    align-items: center;
+    height: auto;
+}
+.nav-context-logo {
+    width: 36px;
+    height: 36px;
+    margin-right: 12px;
+    border-radius: 4px;
+}
+.nav-back-button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    height: 64px;
+    padding-left: 22px;
+    padding-right: 22px;
+
+    color: #cacaca;
+    border: none;
+    border-bottom: .1px solid #b7c0cd4f;
+    outline: none;
+    background-color: transparent;
+
+    font-size: 16px;
+    font-family: 'Open Sans';
+
+    cursor: pointer;
+    transition: all 0.1s ease-in-out;
+}
+
+.nav-add-button {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    height: 64px;
+    padding-left: 22px;
+    padding-right: 22px;
+
+    color: #cacaca;
+    border-top: .1px solid #b7c0cd4f;
+    outline: none;
+    background-color: transparent;
+
+    font-size: 16px;
+    font-family: 'Open Sans';
+
+    cursor: pointer;
+    transition: all 0.1s ease-in-out;
+}
+
+.icon {
+    width: 18px;
+    margin-right: 12px;
+    background-color: #cacaca;
+    transform: rotateZ(180deg);
+}
+
+.icon-blank {
+    background-color: transparent !important;
+}
