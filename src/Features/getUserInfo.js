@@ -1,4 +1,4 @@
-import { ffetch } from '../../src/Utils/Request.js';
+import { ffetch } from '../Utils/Request.js';
 
 /**
  * @typedef {import('./types.js').RequestTypes} RequestTypes

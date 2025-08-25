@@ -2,7 +2,7 @@ import bcrypt from 'bcrypt';
 
 /**
  * @typedef {import('../SQL.js').default} SQL
- * @typedef {import('../Server').ProfileType} ProfileType
+ * @typedef {import('../Server.js').ProfileType} ProfileType
  */
 
 /**

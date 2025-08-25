@@ -1,7 +1,7 @@
 /**
  * @typedef {import('../SQL.js').default} SQL
  * @typedef {import('../Utils/Encryption.js').default} Encryption
- * @typedef {import('../../src/Server.js').ProfileType} ProfileType
+ * @typedef {import('../Server.js').ProfileType} ProfileType
  * @typedef {import('Types/TCP/TCP.js').RequestClientToServer} RequestClientToServer
  * @typedef {import('Types/TCP/TCP.js').RequestServerToClient} RequestServerToClient
  */
