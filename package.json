@@ -2,10 +2,13 @@
   "name": "deveye-server",
   "version": "0.1.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/index.js",
   "type": "module",
   "scripts": {
-    "start": "node index.js",
+    "build": "tsc",
+    "start": "npm run build && node dist/index.js",
+    "dev": "ts-node index.ts",
+    "watch": "tsc --watch",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Gerem",
@@ -17,6 +20,19 @@
     "websocket": "^1.0.34"
   },
   "devDependencies": {
-    "@types/websocket": "^1.0.10"
+    "@eslint/js": "^9.34.0",
+    "@types/websocket": "^1.0.10",
+    "@typescript-eslint/eslint-plugin": "^8.41.0",
+    "@typescript-eslint/parser": "^8.41.0",
+    "eslint": "^9.34.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^16.3.0",
+    "prettier": "^3.6.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.41.0"
   }
 }

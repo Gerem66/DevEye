@@ -1,28 +1,39 @@
-const globals = require('globals');
-const pluginJs = require('@eslint/js');
-const react = require('eslint-plugin-react');
-const configPrettier = require('eslint-config-prettier');
-const prettier = require('eslint-plugin-prettier');
+import react from 'eslint-plugin-react';
+import globals from 'globals';
+import js from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import prettierPlugin from 'eslint-plugin-prettier';
 
-module.exports = [
-    { files: ['**/*.{js,mjs,cjs,ts}'] },
-    { languageOptions: { globals: { ...globals.browser, ...globals.node } } },
-    pluginJs.configs.recommended,
-    react.configs.flat.recommended,
-    configPrettier,
-    //react.configs.recommended,
-    //pluginReactHooks.configs.recommended,
-
+export default [
+    { files: ['**/*.{js,mjs,cjs,ts,tsx}'] },
     {
-        settings: {
-            react: {
-                version: 'detect'
+        languageOptions: {
+            globals: {
+                ...globals.browser,
+                ...globals.node
+            },
+            parserOptions: {
+                ecmaFeatures: {
+                    jsx: true
+                }
             }
+        }
+    },
+    js.configs.recommended,
+    ...tseslint.configs.recommended,
+    {
+        plugins: {
+            react: react,
+            prettier: prettierPlugin
         },
-        files: ['**/*.{js,mjs,cjs,ts,tsx}'],
-        plugins: { prettier, react },
         rules: {
+            ...react.configs.recommended.rules,
+            'react/react-in-jsx-scope': 'off', // React 17+ doesn't need React import
+            'react/prop-types': 'off', // Using TypeScript instead
             semi: ['warn', 'always'],
+            'object-curly-spacing': ['warn', 'always'], // Spaces between { }
+            '@typescript-eslint/no-unused-vars': 'warn',
+            '@typescript-eslint/no-explicit-any': 'warn',
             quotes: [
                 'warn',
                 'single',
@@ -31,20 +42,13 @@ module.exports = [
                     allowTemplateLiterals: true
                 }
             ],
-            //resolve: {
-            //    fullySpecified: false
-            //},
-            //indent: ['warn', 4],
-            'react/no-unescaped-entities': 'off',
-            'react/prop-types': 'off',
-            'react/react-in-jsx-scope': 'off',
             'no-control-regex': 'off',
             'jsx-quotes': ['warn', 'prefer-single'],
             'comma-dangle': ['warn', 'never'],
             'eol-last': ['warn', 'always'],
             'dot-notation': 'off',
             'no-bitwise': 'off',
-            curly: ['warn', 'multi-line'],
+            // curly: ['warn', 'multi-line'],
             '@typescript-eslint/no-empty-object-type': 'off',
             'max-len': [
                 'error',
@@ -60,14 +64,18 @@ module.exports = [
                 'warn',
                 {
                     singleQuote: true,
-                    parser: 'typescript',
                     tabWidth: 4,
                     jsxSingleQuote: true,
-                    avoidEscape: true,
                     trailingComma: 'none',
-                    printWidth: 120
+                    printWidth: 120,
+                    bracketSpacing: true
                 }
             ]
+        },
+        settings: {
+            react: {
+                version: 'detect'
+            }
         }
     }
 ];

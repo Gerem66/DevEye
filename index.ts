@@ -12,20 +12,13 @@ import { AddContext, DeleteContext } from './src/Features/addContext.js';
 import { Unlock } from './src/Features/unlock.js';
 import { GetGameLifeData } from './src/Features/gamelife.js';
 
-/**
- * @typedef {import('./src/Features/types.js').RequestTypes} RequestTypes
- * @typedef {import('./src/Server.js').ProfileType} ProfileType
- */
+type RequestTypes = import('./src/Features/types.js').RequestTypes;
 
-/**
- * @template {RequestTypes} T
- * @typedef {import('./src/Features/types.js').TCPFeatureType<T>} TCPFeatureType
- */
+type ProfileType = import('./src/Server.js').ProfileType;
 
-/**
- * @template {RequestTypes} T
- * @typedef {import('./src/Features/types.js').TCPRequestReceiveHeader<T>} TCPRequestReceiveHeader
- */
+type TCPFeatureType<T extends RequestTypes> = import('./src/Features/types.js').TCPFeatureType<T>;
+
+type TCPRequestReceiveHeader<T extends RequestTypes> = import('./src/Features/types.js').TCPRequestReceiveHeader<T>;
 
 const db = new SQL({
     database: process.env.DB_DATABASE || '',
@@ -34,6 +27,7 @@ const db = new SQL({
     password: process.env.DB_PASSWORD || '',
     port: parseInt(process.env.DB_PORT || '3306')
 });
+
 console.log('SQL Pool created', {
     database: process.env.DB_DATABASE,
     hostname: process.env.DB_HOSTNAME,
@@ -45,11 +39,11 @@ console.log('SQL Pool created', {
 const keyA = process.env.DB_KEY_A || '';
 const keyB = process.env.DB_KEY_B || '';
 
-/** @type {Object<string, ProfileType>} */
-const users = {};
+const users: { [key: string]: ProfileType } = {};
 
 const crypt = new Encryption(keyA, keyB);
 const serv = new Server();
+
 serv.Listen(8888, {
     onConnect: () => {
         console.log('User connected');
@@ -74,13 +68,10 @@ serv.Listen(8888, {
     },
 
     onMessage: async (connection, profile, data) => {
-        /** @type {TCPFeatureType<*> | null} */
-        let action = null;
+        let action: TCPFeatureType<RequestTypes> | null = null;
+        let result: TCPRequestReceiveHeader<RequestTypes>['content'] | null = null;
 
-        /** @type {TCPRequestReceiveHeader<*>['content'] | null} */
-        let result = null;
-
-        switch (/** @type {RequestTypes} */ data.action) {
+        switch (data.action) {
             case 'login': {
                 console.log('User login');
                 const resultLogin = await Login({ db, crypt, profile, data: data.content });
@@ -133,8 +124,7 @@ serv.Listen(8888, {
         }
 
         if (result !== null) {
-            /** @type {TCPRequestReceiveHeader<*>} */
-            const response = {
+            const response: TCPRequestReceiveHeader<RequestTypes> = {
                 action: data.action,
                 content: result,
                 callbackID: data.callbackID

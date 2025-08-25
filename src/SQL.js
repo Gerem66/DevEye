@@ -10,6 +10,9 @@ import { createPool } from 'mysql2';
  */
 
 class SQL {
+    /** @type {import('mysql2').Pool | null} */
+    pool = null;
+
     /**
      * @param {credentials} credentials
      */
