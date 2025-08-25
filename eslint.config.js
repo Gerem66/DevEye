@@ -1,28 +1,38 @@
 import react from 'eslint-plugin-react';
-import { browser, node } from 'globals';
-import { configs } from '@eslint/js';
-import { configs as _configs } from 'eslint-plugin-react';
-import configPrettier from 'eslint-config-prettier';
-import prettier from 'eslint-plugin-prettier';
+import globals from 'globals';
+import js from '@eslint/js';
+import tseslint from 'typescript-eslint';
 
 export default [
-    { files: ['**/*.{js,mjs,cjs,ts}'] },
-    { languageOptions: { globals: { ...browser, ...node } } },
-    configs.recommended,
-    _configs.recommended,
-    configPrettier,
-
-    {
-        settings: {
-            react: {
-                version: 'detect'
+    { files: ['**/*.{js,mjs,cjs,ts,tsx}'] },
+    { 
+        languageOptions: { 
+            globals: { 
+                ...globals.browser, 
+                ...globals.node 
+            },
+            parserOptions: {
+                ecmaFeatures: {
+                    jsx: true
+                }
             }
+        } 
+    },
+    js.configs.recommended,
+    ...tseslint.configs.recommended,
+    {
+        plugins: {
+            react: react
         },
-        files: ['**/*.{js,mjs,cjs,ts,tsx}'],
-        plugins: { prettier, react },
         rules: {
-            semi: ['warn', 'always'],
-            quotes: [
+            ...react.configs.recommended.rules,
+            'react/react-in-jsx-scope': 'off', // React 17+ doesn't need React import
+            'react/prop-types': 'off', // Using TypeScript instead
+            'indent': ['warn', 4],
+            'semi': ['warn', 'always'],
+            '@typescript-eslint/no-unused-vars': 'warn',
+            '@typescript-eslint/no-explicit-any': 'warn',
+            'quotes': [
                 'warn',
                 'single',
                 {
@@ -30,13 +40,6 @@ export default [
                     allowTemplateLiterals: true
                 }
             ],
-            //resolve: {
-            //    fullySpecified: false
-            //},
-            //indent: ['warn', 4],
-            'react/no-unescaped-entities': 'off',
-            'react/prop-types': 'off',
-            'react/react-in-jsx-scope': 'off',
             'no-control-regex': 'off',
             'jsx-quotes': ['warn', 'prefer-single'],
             'comma-dangle': ['warn', 'never'],
@@ -54,19 +57,12 @@ export default [
                     ignoreStrings: true,
                     ignoreTemplateLiterals: true
                 }
-            ],
-            'prettier/prettier': [
-                'warn',
-                {
-                    singleQuote: true,
-                    parser: 'typescript',
-                    tabWidth: 4,
-                    jsxSingleQuote: true,
-                    avoidEscape: true,
-                    trailingComma: 'none',
-                    printWidth: 120
-                }
             ]
+        },
+        settings: {
+            react: {
+                version: 'detect'
+            }
         }
     }
 ];
