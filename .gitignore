@@ -1,17 +1,10 @@
 # Visual Studio Code
 .vscode
 
-# React
-node_modules
-package-lock.json
-build
-
 # Configs
 .env
 
-# Old files
-_*/
-
-# All md files except README.md
-*.md
-!README.md
+# React
+build
+node_modules
+package-lock.json
