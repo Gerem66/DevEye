@@ -4,7 +4,7 @@ const LOCAL_KEYS = {
     token: 'data/token'
 };
 
-function Save(key: keyof typeof LOCAL_KEYS, value: string | Object): void {
+function Save(key: keyof typeof LOCAL_KEYS, value: string | object): void {
     if (Object.keys(LOCAL_KEYS).indexOf(key) === -1) {
         throw new Error('Invalid key');
     }
@@ -18,7 +18,7 @@ function Save(key: keyof typeof LOCAL_KEYS, value: string | Object): void {
     }
 }
 
-function Load(key: keyof typeof LOCAL_KEYS): string | Object | null {
+function Load(key: keyof typeof LOCAL_KEYS): string | object | null {
     if (Object.keys(LOCAL_KEYS).indexOf(key) === -1) {
         throw new Error('Invalid key');
     }
