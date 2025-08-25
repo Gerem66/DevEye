@@ -10,7 +10,7 @@ import './Styles/colors.css';
 import './Styles/input.css';
 import './Styles/table.css';
 
-type UserType = import('Types/User').UserType;
+import type { UserType } from 'deveye-types';
 
 function App() {
     const [user, setUser] = useState<UserType | null>(null);

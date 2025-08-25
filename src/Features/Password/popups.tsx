@@ -5,8 +5,7 @@ import styles from './style.module.css';
 import { ClosePopup } from '../../Components/Popup';
 import { Popup, Button, TextInput, SelectInput } from '../../Components';
 
-type PasswordType = import('Types/Password').PasswordType;
-type PasswordStatus = import('Types/Password').PasswordStatus;
+import type { PasswordType, PasswordStatus } from 'deveye-types';
 
 interface PasswordPopupAddProps {
     /** List of password categories */

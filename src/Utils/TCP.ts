@@ -4,9 +4,7 @@ const VPS_CREDENTIALS = {
     port: process.env.REACT_APP_VPS_PORT
 };
 
-type ConnectionState = import('Types/TCP/TCP').ConnectionState;
-type RequestClientToServer = import('Types/TCP/TCP').RequestClientToServer;
-type RequestServerToClient = import('Types/TCP/TCP').RequestServerToClient;
+import type { ConnectionState, RequestClientToServer, RequestServerToClient } from 'deveye-types';
 
 class ClientTCP {
     socket: WebSocket | null = null;

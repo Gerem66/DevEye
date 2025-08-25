@@ -1,17 +1,17 @@
 import React from 'react';
 
-import { DefaultUser } from '../../Types/User';
+import { DefaultUser } from 'deveye-types/User';
 import { tcp } from '../../Utils/TCP';
 import { ffetch } from '../../Utils/Request';
 import { Sleep } from '../../Utils/Functions';
 import { Clear, Load, Save } from '../../Utils/Storage';
 
-type UserType = import('Types/User').UserType;
+import type { UserType } from 'deveye-types';
 
 interface LoginPageProps {
     user: UserType | null;
     setUser: (user: UserType | null) => void;
-};
+}
 
 class LoginPageBack extends React.Component<LoginPageProps> {
     state = {

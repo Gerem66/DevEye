@@ -3,7 +3,7 @@ import styles from './style.module.css';
 import { Header, Row, Card, Popup, Button } from '../../Components';
 import { ChangeImage, EditPassword } from './actions';
 
-type FeatureProps = import('Types/Feature').FeatureProps;
+import type { FeatureProps } from 'deveye-types';
 
 function FeatureProfile({ user, setUser, context, feature }: FeatureProps) {
     const convertDate = (time: number): string =>

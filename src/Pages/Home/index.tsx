@@ -6,10 +6,7 @@ import { FEATURES } from '../../Features/Features';
 import AddContextPopup from './addContext';
 import PopupUnlock from './unlock';
 
-type UserType = import('Types/User').UserType;
-type ContextType = import('Types/Context').ContextType;
-type FeatureType = import('Types/Feature').FeatureType;
-type ClientTCP = import('Utils/TCP').default;
+import type { UserType, ContextType, FeatureType } from 'deveye-types';
 
 let firstLoad = false;
 

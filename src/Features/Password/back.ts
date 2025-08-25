@@ -3,8 +3,7 @@ import React from 'react';
 import { tcp } from '../../Utils/TCP';
 import { OpenPopup } from '../../Components/Popup';
 
-type FeatureProps = import('Types/Feature').FeatureProps;
-type PasswordType = import('Types/Password').PasswordType;
+import type { FeatureProps, PasswordType } from 'deveye-types';
 
 const FeaturePasswordProps: FeatureProps = {
     setUser: () => {},

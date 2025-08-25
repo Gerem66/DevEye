@@ -4,9 +4,7 @@ import styles from './styleFeatures.module.css';
 import stylesBtn from '../button.module.css';
 import { FEATURES } from '../../../Features/Features';
 
-type FeaturesID = import('Types/Feature').FeaturesID;
-type FeatureType = import('Types/Feature').FeatureType;
-type ContextType = import('Types/Context').ContextType;
+import type { FeaturesID, FeatureType, ContextType } from 'deveye-types';
 
 const NavFeaturesProps = {
     context: null as ContextType | null,

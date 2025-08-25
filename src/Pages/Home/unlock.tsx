@@ -6,7 +6,7 @@ import { Button, TextInput } from '../../Components';
 
 import styles from './style.module.css';
 
-type ContextType = import('Types/Context').ContextType;
+import type { ContextType } from 'deveye-types';
 
 interface PopupUnlockProps {
     context: ContextType | null;

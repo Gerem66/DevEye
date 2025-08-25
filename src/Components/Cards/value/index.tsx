@@ -2,15 +2,15 @@ import { JSX } from 'react';
 
 import styles from './style.module.css';
 
-type Color = keyof typeof import('Styles/colors.css');
-type Icon = keyof typeof import('Styles/icons.css');
+import type Color from 'Styles/colors.css';
+import type Icon from 'Styles/icons.css';
 
 interface CardValueProps {
     title: string;
     value: string;
-    icon?: Icon | null;
+    icon?: keyof typeof Icon | null;
     width?: 'auto' | 'unset' | number;
-    color?: Color;
+    color?: keyof typeof Color;
 }
 
 function CardValue({ title, value, icon = null, width = 'unset', color = 'bg-blue' }: CardValueProps): JSX.Element {

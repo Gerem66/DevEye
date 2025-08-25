@@ -2,10 +2,7 @@ import React from 'react';
 
 import { FEATURES } from '../../Features/Features';
 
-type UserType = import('Types/User').UserType;
-type FeaturesID = import('Types/Feature').FeaturesID;
-type FeatureType = import('Types/Feature').FeatureType;
-type ContextType = import('Types/Context').ContextType;
+import type { UserType, FeaturesID, FeatureType, ContextType } from 'deveye-types';
 
 const NavbarProps = {
     user: null as UserType | null,

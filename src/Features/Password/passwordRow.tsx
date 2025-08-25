@@ -1,6 +1,6 @@
 import styles from './style.module.css';
 
-type PasswordType = import('Types/Password').PasswordType;
+import type { PasswordType } from 'deveye-types';
 
 interface PasswordRowProps {
     password: PasswordType | null;

@@ -5,7 +5,7 @@ import { Popup, Button, TextInput } from '../../Components/index.js';
 import { ClosePopup } from '../../Components/Popup';
 import { tcp } from '../../Utils/TCP';
 
-type ContextType = import('Types/Context').ContextType;
+import type { ContextType } from 'deveye-types';
 
 interface AddContextPopupProps {
     AddContext: (context: ContextType) => void;

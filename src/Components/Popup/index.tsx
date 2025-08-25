@@ -2,8 +2,7 @@ import React from 'react';
 
 import styles from './style.module.css';
 
-type HTMLAttributes = import('react').HTMLAttributes<HTMLDivElement>;
-type DetailedHTMLProps = import('react').DetailedHTMLProps<HTMLAttributes, HTMLDivElement>;
+import type { HTMLAttributes } from 'react';
 
 interface CardValueProps {
     children: React.JSX.Element | React.JSX.Element[];
@@ -12,7 +11,14 @@ interface CardValueProps {
     style?: string;
 }
 
-const PopupEvents: Record<string, { setInputData: React.Dispatch<React.SetStateAction<any | null>>, setOpened: React.Dispatch<React.SetStateAction<boolean>>, callback?: (data: any) => void }> = {};
+const PopupEvents: Record<
+    string,
+    {
+        setInputData: React.Dispatch<React.SetStateAction<any | null>>;
+        setOpened: React.Dispatch<React.SetStateAction<boolean>>;
+        callback?: (data: any) => void;
+    }
+> = {};
 
 function OpenPopup<T extends object>(id: string, inputData: any = null): Promise<T | null> {
     if (PopupEvents[id]) {
@@ -42,7 +48,14 @@ type PopupProps = CardValueProps & {
     onClosePopup?: ((id: string) => void) | null;
 };
 
-function Popup({ children, id, title = '', style = '', onInputChange = null, onClosePopup = null }: PopupProps): React.JSX.Element {
+function Popup({
+    children,
+    id,
+    title = '',
+    style = '',
+    onInputChange = null,
+    onClosePopup = null
+}: PopupProps): React.JSX.Element {
     const [opened, setOpened] = React.useState(false);
 
     React.useEffect(() => {
@@ -59,8 +72,7 @@ function Popup({ children, id, title = '', style = '', onInputChange = null, onC
         };
     }, [id]);
 
-    /** @type {DetailedHTMLProps['style']} */
-    const styleCard = {
+    const styleCard: HTMLAttributes<HTMLDivElement>['style'] = {
         paddingTop: title ? '52px' : '12px'
     };
 

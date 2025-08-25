@@ -4,7 +4,7 @@ import { Header, Row, Card, Popup, Button } from '../../Components';
 import { OpenPopup, ClosePopup } from '../../Components/Popup';
 import { tcp } from '../../Utils/TCP';
 
-type FeatureProps = import('Types/Feature').FeatureProps;
+import type { FeatureProps } from 'deveye-types/Feature';
 
 function FeatureDashboard({ user, setUser, context, feature, setContext }: FeatureProps) {
     const OpenDeleteContextPopup = () => {

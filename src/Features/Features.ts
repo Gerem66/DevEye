@@ -3,7 +3,7 @@ import FeaturePassword from './Password';
 import FeatureProfile from './Profile';
 import FeatureGameLife from './GameLife';
 
-type FeatureType = import('Types/Feature').FeatureType;
+import type { FeatureType } from 'deveye-types/Feature';
 
 const FEATURES: FeatureType[] = [
     {

@@ -3,8 +3,7 @@ import stylesBtn from '../button.module.css';
 
 import { OpenPopup } from '../../Popup';
 
-type UserType = import('Types/User').UserType;
-type ContextType = import('Types/Context').ContextType;
+import type { UserType, ContextType } from 'deveye-types';
 
 const NavContextsProps = {
     user: null as UserType | null,

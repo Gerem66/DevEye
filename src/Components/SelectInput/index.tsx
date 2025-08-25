@@ -2,9 +2,9 @@ import React from 'react';
 
 import styles from './style.module.css';
 
-type SelectHTMLAttributes = import('react').SelectHTMLAttributes<HTMLSelectElement>;
-type DetailedHTMLProps = import('react').DetailedHTMLProps<SelectHTMLAttributes, HTMLSelectElement>;
-type SelectInputProps = DetailedHTMLProps;
+import type { SelectHTMLAttributes, DetailedHTMLProps } from 'react';
+
+type SelectInputProps = DetailedHTMLProps<SelectHTMLAttributes<HTMLSelectElement>, HTMLSelectElement>;
 
 const SelectInput = React.forwardRef<HTMLSelectElement, SelectInputProps>((props, ref) => {
     const classes = `${styles.input} ${props.className || ''}`;

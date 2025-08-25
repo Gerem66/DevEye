@@ -2,9 +2,10 @@ import React from 'react';
 
 import styles from './style.module.css';
 
-type InputHTMLAttributes = import('react').InputHTMLAttributes<HTMLInputElement>;
-type DetailedHTMLProps = import('react').DetailedHTMLProps<InputHTMLAttributes, HTMLInputElement>;
-type TextInputProps = DetailedHTMLProps & { enableShowHideButton?: boolean, error?: string };
+import type { InputHTMLAttributes, DetailedHTMLProps } from 'react';
+
+type CustomHTMLProps = DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>;
+type TextInputProps = CustomHTMLProps & { enableShowHideButton?: boolean; error?: string };
 
 const TextInput = React.forwardRef<HTMLInputElement, TextInputProps>((props, ref) => {
     const [hidden, setHidden] = React.useState(true);

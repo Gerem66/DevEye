@@ -2,9 +2,11 @@ import React from 'react';
 
 import styles from './style.module.css';
 
-type ButtonHTMLAttributes = import('react').ButtonHTMLAttributes<HTMLButtonElement>;
-type DetailedHTMLProps = import('react').DetailedHTMLProps<ButtonHTMLAttributes, HTMLButtonElement>;
-type ButtonProps = DetailedHTMLProps & { color?: string; };
+import type { ButtonHTMLAttributes, DetailedHTMLProps } from 'react';
+
+type ButtonAttributes = ButtonHTMLAttributes<HTMLButtonElement>;
+type DetailedButtonProps = DetailedHTMLProps<ButtonAttributes, HTMLButtonElement>;
+type ButtonProps = DetailedButtonProps & { color?: string; };
 
 function Button(props: ButtonProps): React.JSX.Element {
     const { children, color, className, ...rest } = props;

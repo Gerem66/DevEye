@@ -2,12 +2,11 @@ import { JSX, useState } from 'react';
 
 import styles from './style.module.css';
 
-import { tcp } from '../../Utils/TCP';
+import { tcp } from 'Utils/TCP';
 
-type UserType = import('Types/User').UserType;
+import type { UserType, ContextType, FeatureType } from 'deveye-types';
+
 type SetUserType = (use: UserType) => void;
-type ContextType = import('Types/Context').ContextType;
-type FeatureType = import('Types/Feature').FeatureType;
 
 interface HeaderProps {
     user: UserType;

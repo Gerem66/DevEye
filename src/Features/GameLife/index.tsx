@@ -1,11 +1,12 @@
-import styles from './style.module.css';
-
-import { Header, Row, Card, Popup, Button } from '../../Components';
-import { OpenPopup } from '../../Components/Popup';
-import { tcp } from '../../Utils/TCP';
 import { useEffect, useRef, useState } from 'react';
 
-type FeatureProps = import('Types/Feature').FeatureProps;
+import styles from './style.module.css';
+
+import { Header, Row, Card, Popup, Button } from 'Components';
+import { OpenPopup } from 'Components/Popup';
+import { tcp } from 'Utils/TCP';
+
+import type { FeatureProps, TCPRequestReceiveHeader } from 'deveye-types';
 
 function FeatureGameLife({ user, setUser, context, feature }: FeatureProps) {
     const [intervalID, setIntervalID] = useState('');
@@ -31,8 +32,7 @@ function FeatureGameLife({ user, setUser, context, feature }: FeatureProps) {
             intervalRef.current = intervalID;
 
             // Manually define the callback for this intervalID to update the userTotalCount
-            /** @param {import('../../Types/TCP/TCP').TCPRequestReceiveHeader<'gamelife-data'>} data */
-            tcp.callbacks[intervalID] = (data) => {
+            tcp.callbacks[intervalID] = (data: TCPRequestReceiveHeader<'gamelife-data'>) => {
                 setUserTotalCount(data.content.totalUserCount);
                 return false;
             };
