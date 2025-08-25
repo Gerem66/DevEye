@@ -50,7 +50,7 @@ function FeatureDashboard({ user, setUser, context, feature, setContext }: Featu
 
                     <div className={styles.separator} />
                     <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>Nombre d'utilisateurs</h3>
+                        <h3 className={styles['profile-info-title']}>{"Nombre d'utilisateurs"}</h3>
                         <p className={styles['profile-info-text']}>{context.users.length}</p>
                     </div>
 

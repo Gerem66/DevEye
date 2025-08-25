@@ -68,7 +68,7 @@ function FeatureGameLife({ user, setUser, context, feature }: FeatureProps) {
                 <Card.Element title={`Prod - ${context.name}`} color='bg-blue-dark' width={600}>
                     <div className={styles['profile-info']}>
                         <h3 className={styles['profile-info-title']}>
-                            Nombre d'utilisateurs [Live] (vraie valeur (normalement))
+                            {"Nombre d'utilisateurs [Live] (vraie valeur (normalement))"}
                         </h3>
                         <p className={styles['profile-info-text']}>{userTotalCount}</p>
                     </div>

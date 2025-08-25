@@ -1,7 +1,7 @@
 const VPS_CREDENTIALS = {
-    env: process.env.NODE_ENV,
-    host: process.env.REACT_APP_VPS_IP,
-    port: process.env.REACT_APP_VPS_PORT
+    env: import.meta.env.MODE,
+    host: import.meta.env.VITE_VPS_IP,
+    port: import.meta.env.VITE_VPS_PORT
 };
 
 import type { ConnectionState, RequestClientToServer, RequestServerToClient } from 'deveye-types';

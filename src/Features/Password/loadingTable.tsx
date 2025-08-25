@@ -17,7 +17,7 @@ function LoadingTable() {
                         <thead>
                             <tr>
                                 <th style={{ width: '20%' }}>Service</th>
-                                <th>Nom d'utilisateur / Email</th>
+                                <th>{"Nom d'utilisateur / Email"}</th>
                                 <th style={{ width: '20%' }}>Mot de passe</th>
                                 <th style={{ width: '10%' }}>Status</th>
                                 <th style={{ width: '5%' }}></th>

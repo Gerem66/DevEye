@@ -48,7 +48,7 @@ function FeatureProfile({ user, setUser, context, feature }: FeatureProps) {
 
                     <div className={styles.separator} />
                     <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>Nombre d'entreprises</h3>
+                        <h3 className={styles['profile-info-title']}>{"Nombre d'entreprises"}</h3>
                         <p className={styles['profile-info-text']}>{user.Contexts.length - 1}</p>
                     </div>
 

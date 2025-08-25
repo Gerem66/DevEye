@@ -15,7 +15,7 @@ interface CardValueProps {
 function CardElement({ children, title = '', style = '', width = 'unset', color = 'bg-blue' }: CardValueProps): React.JSX.Element {
     return (
         <div
-            className={`card-element ${styles.card} bg-${color} ${style}`}
+            className={`card-element ${styles.card} ${color} ${style}`}
             style={{
                 paddingTop: title ? '52px' : '12px',
                 maxWidth: width
