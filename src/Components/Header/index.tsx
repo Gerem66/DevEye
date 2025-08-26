@@ -2,7 +2,7 @@ import { JSX, useState } from 'react';
 
 import styles from './style.module.css';
 
-import { tcp } from 'Utils/TCP';
+import { tcp } from '@/Utils/TCP';
 
 import type { UserType, ContextType, FeatureType } from 'deveye-types';
 

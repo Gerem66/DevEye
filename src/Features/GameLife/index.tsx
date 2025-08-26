@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 
 import styles from './style.module.css';
 
-import { Header, Row, Card, Popup, Button } from 'Components';
-import { OpenPopup } from 'Components/Popup';
-import { tcp } from 'Utils/TCP';
+import { Header, Row, Card, Popup, Button } from '@/Components';
+import { OpenPopup } from '@/Components/Popup';
+import { tcp } from '@/Utils/TCP';
 
 import type { FeatureProps, TCPRequestReceiveHeader } from 'deveye-types';
 

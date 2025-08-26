@@ -1,10 +1,10 @@
 import React from 'react';
 
-import { DefaultUser } from 'deveye-types/User';
-import { tcp } from '../../Utils/TCP';
-import { ffetch } from '../../Utils/Request';
-import { Sleep } from '../../Utils/Functions';
-import { Clear, Load, Save } from '../../Utils/Storage';
+import { DefaultUser } from 'deveye-types';
+import { tcp } from '@/Utils/TCP';
+import { ffetch } from '@/Utils/Request';
+import { Sleep } from '@/Utils/Functions';
+import { Clear, Load, Save } from '@/Utils/Storage';
 
 import type { UserType } from 'deveye-types';
 
