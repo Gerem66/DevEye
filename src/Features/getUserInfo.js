@@ -1,5 +1,3 @@
-import { ffetch } from '../Utils/Request.js';
-
 /**
  * @typedef {import('./types.js').RequestTypes} RequestTypes
  * @typedef {import('Types/User.js').UserType} UserType
@@ -20,7 +18,10 @@ async function Login({ db, data }) {
 
     // Check token & code
     const code = 'UJu-79a?:w=4O7mp#sM]yQiOsI/Jb_ag';
-    const requestToken = await ffetch('get-token', { code, token });
+
+    // TODO: Decrypt token
+    // const requestToken = await ffetch('get-token', { code, token });
+    const requestToken = { status: 0 };
 
     if (requestToken.status !== 0) {
         // TODO: Alert
@@ -109,13 +110,16 @@ async function Login({ db, data }) {
             users: [
                 ...rawUsers
                     .filter((u) => u.ID === c.ID)
-                    .map((u) => /** @type {TCPUserType} */ ({
-                        ID: u.ID,
-                        Email: u.Email,
-                        Username: u.Username,
-                        Avatar: u.Avatar,
-                        Created: new Date(u.Created).getTime() / 1000
-                    }))
+                    .map(
+                        (u) =>
+                            /** @type {TCPUserType} */ ({
+                                ID: u.ID,
+                                Email: u.Email,
+                                Username: u.Username,
+                                Avatar: u.Avatar,
+                                Created: new Date(u.Created).getTime() / 1000
+                            })
+                    )
             ],
             features: JSON.parse(c.Features),
             reAuthInterval: c.ReAuthInterval,

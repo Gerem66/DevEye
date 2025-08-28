@@ -47,10 +47,6 @@ const serv = new Server();
 serv.Listen(8888, {
     onConnect: () => {
         console.log('User connected');
-        // const A = crypt.Decrypt(
-        //     '3kWB4ocUrcV9rMKjwpTa4+m1PGlF2AdKhdPmubCTq+6MLCFih9+lzhuFLKxt+6zb8fhaKgyHdvoGxmkG4zkdoLyRATiazvp/I7EXz/ZW5AAKKthc69dLIxcrTfrewjc4E/0pe61pQ4Q2FVk6UuLaXEQ1dETP6297YhShsCsb2frym0iSaGZf1/mpetaYvBirtR9407o6g6rivPurGj5rGK20i4VoJyUnv9tKc/qWsjQnf8Vj0AaqoHDd7NVo5RBZff4CtbP8dZZyRGFjMYkdaw47fUIK05EohL4idIYNmVqVRDJ6hSCmewXrKQUBatqgmWN0s+C2+nmm+F2PCYYGa4wF/QN87opJimlFzSbqlqaTG4PGdrMDGAwTB7IHV/c9KOCOeleZaoB8PEPy6FvMkN5crSwlKoH2Zop6h9itMuOHdQSOiFNxgdrKD/oJTeeZ2bsNT/RpLkkXs0hyecBUyy+oPVQVLfXjLYIKeAvB'
-        // );
-        // console.log(A);
     },
 
     onDisconnect: (connection, profile) => {

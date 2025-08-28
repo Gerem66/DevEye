@@ -1,6 +1,5 @@
 import SQL from '../SQL.js';
 import { RandomString } from '../Utils/Functions.js';
-import { SendData } from '../Utils/Request.js';
 
 /**
  * @template {import('./types.js').RequestTypes} T
@@ -52,11 +51,12 @@ async function GetGameLifeData({ profile, data }) {
 
                 // Data changed => Update the lastCount and send the data
                 intervals[intervalID].lastCount = newValue;
-                SendData(profile.connection, 'gamelife-data', {
+                const data = {
                     action: 'gamelife-data',
                     content: { status: 0, totalUserCount: newValue },
                     callbackID: intervalID
-                });
+                };
+                profile.connection.send(JSON.stringify(data));
                 console.log('Send data');
             }, 1000)
         };
