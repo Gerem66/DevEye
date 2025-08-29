@@ -1,31 +1,28 @@
 import crypto from 'crypto';
 
 class Encryption {
-    /**
-     * @param {string} key
-     * @param {string} secondKey
-     */
-    constructor(key, secondKey) {
+    keyA: string;
+    keyB: string;
+    cipher_algo: string;
+
+    constructor(key: string, secondKey: string) {
         this.keyA = key;
         this.keyB = secondKey;
         this.cipher_algo = 'aes-256-ctr';
     }
 
-    /** @param {string} secondKey */
-    defineSecondKey(secondKey) {
+    defineSecondKey(secondKey: string) {
         this.keyB = secondKey;
     }
 
-    /** @param {string} password */
-    static hashPassword(password) {
+    static hashPassword(password: string) {
         if (password.length === 0) {
             return '';
         }
         return crypto.createHash('sha512').update(password).digest('hex');
     }
 
-    /** @param {string} plaintext */
-    Encrypt(plaintext) {
+    Encrypt(plaintext: string) {
         const nonce = crypto.randomBytes(16);
         const cipher = crypto.createCipheriv(this.cipher_algo, this.keyA, nonce);
         const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
@@ -37,8 +34,7 @@ class Encryption {
         return Buffer.concat([mac, nonce, ciphertext]).toString('base64');
     }
 
-    /** @param {string} message */
-    Decrypt(message) {
+    Decrypt(message: string) {
         const decoded = Buffer.from(message, 'base64');
         //const mac = decoded.subarray(0, 64);
         const nonce = decoded.subarray(64, 80);

@@ -1,4 +1,4 @@
-import SQL from '../SQL.js';
+import SQL from '../Services/SQL.js';
 import { RandomString } from '../Utils/Functions.js';
 
 /**

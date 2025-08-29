@@ -12,16 +12,25 @@
  * @typedef {import('./types.js').TCPFeatureType<T>} TCPFeatureType
  */
 
+// TEMP: Replace HTTP request with internal function
+const ffetch = (token = '') => {
+    const url = 'https://wyrmo.com/DevEye/get-token.php';
+    const data = {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: 'UJu-79a?:w=4O7mp#sM]yQiOsI/Jb_ag', token })
+    };
+
+    return fetch(url, data)
+        .then((res) => res.json())
+        .catch((_error) => ({ status: -1 }));
+};
+
 /** @type {TCPFeatureType<'login'>} */
 async function Login({ db, data }) {
     const { token } = data;
 
-    // Check token & code
-    const code = 'UJu-79a?:w=4O7mp#sM]yQiOsI/Jb_ag';
-
-    // TODO: Decrypt token
-    // const requestToken = await ffetch('get-token', { code, token });
-    const requestToken = { status: 0 };
+    const requestToken = await ffetch(token);
 
     if (requestToken.status !== 0) {
         // TODO: Alert

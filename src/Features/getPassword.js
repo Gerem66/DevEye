@@ -1,4 +1,4 @@
-import { StrIsJson } from '../Utils/Functions.js';
+import { StrIsJson } from '@/Utils/Types';
 import { Unlock } from './unlock.js';
 
 /**

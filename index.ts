@@ -1,47 +1,47 @@
-import 'dotenv/config';
+import Server from '@/Server';
+import SQL from '@/Services/SQL';
+import Encryption from '@/Services/Encryption';
+import { createPool } from 'mysql2/promise';
 
-import SQL from './src/SQL.js';
-import Server from './src/Server.js';
-import Encryption from './src/Utils/Encryption.js';
+import { Login, SetFavorite } from '@/Features/getUserInfo';
+import { CheckPassword } from '@/Features/checkPassword';
+import { GetPassword, GetPasswords } from '@/Features/getPassword';
+import { AddPassword, EditPassword, DeletePassword } from '@/Features/addPassword';
+import { AddContext, DeleteContext } from '@/Features/addContext';
+import { Unlock } from '@/Features/unlock';
+import { GetGameLifeData } from '@/Features/gamelife';
+import { env } from '@/Utils/Env';
 
-import { Login, SetFavorite } from './src/Features/getUserInfo.js';
-import { CheckPassword } from './src/Features/checkPassword.js';
-import { GetPassword, GetPasswords } from './src/Features/getPassword.js';
-import { AddPassword, EditPassword, DeletePassword } from './src/Features/addPassword.js';
-import { AddContext, DeleteContext } from './src/Features/addContext.js';
-import { Unlock } from './src/Features/unlock.js';
-import { GetGameLifeData } from './src/Features/gamelife.js';
+type RequestTypes = import('@/Features/types').RequestTypes;
 
-type RequestTypes = import('./src/Features/types.js').RequestTypes;
+type ProfileType = import('@/Server').ProfileType;
 
-type ProfileType = import('./src/Server.js').ProfileType;
+type TCPFeatureType<T extends RequestTypes> = import('@/Features/types').TCPFeatureType<T>;
 
-type TCPFeatureType<T extends RequestTypes> = import('./src/Features/types.js').TCPFeatureType<T>;
-
-type TCPRequestReceiveHeader<T extends RequestTypes> = import('./src/Features/types.js').TCPRequestReceiveHeader<T>;
+type TCPRequestReceiveHeader<T extends RequestTypes> = import('@/Features/types').TCPRequestReceiveHeader<T>;
 
 const db = new SQL({
-    database: process.env.DB_DATABASE || '',
-    hostname: process.env.DB_HOSTNAME || '',
-    username: process.env.DB_USERNAME || '',
-    password: process.env.DB_PASSWORD || '',
-    port: parseInt(process.env.DB_PORT || '3306')
+    name: 'MainDatabase',
+    pool: createPool({
+        database: env.DB_DATABASE || '',
+        host: env.DB_HOSTNAME || '',
+        user: env.DB_USERNAME || '',
+        password: env.DB_PASSWORD || '',
+        port: env.DB_PORT
+    })
 });
 
 console.log('SQL Pool created', {
-    database: process.env.DB_DATABASE,
-    hostname: process.env.DB_HOSTNAME,
-    username: process.env.DB_USERNAME,
-    password: process.env.DB_PASSWORD,
-    port: parseInt(process.env.DB_PORT || '3306')
+    database: env.DB_DATABASE,
+    hostname: env.DB_HOSTNAME,
+    username: env.DB_USERNAME,
+    password: env.DB_PASSWORD,
+    port: env.DB_PORT
 });
-
-const keyA = process.env.DB_KEY_A || '';
-const keyB = process.env.DB_KEY_B || '';
 
 const users: { [key: string]: ProfileType } = {};
 
-const crypt = new Encryption(keyA, keyB);
+const crypt = new Encryption(env.DB_KEY_A, env.DB_KEY_B);
 const serv = new Server();
 
 serv.Listen(8888, {
@@ -49,14 +49,14 @@ serv.Listen(8888, {
         console.log('User connected');
     },
 
-    onDisconnect: (connection, profile) => {
+    onDisconnect: (_connection, profile) => {
         console.log('User disconnected');
         if (profile?.user) {
             delete users[`${profile.user.ID}`];
         }
     },
 
-    onError: (connection, profile, error) => {
+    onError: (_connection, profile, error) => {
         console.error('Connection error:', error);
         if (profile.user !== null) {
             delete users[`${profile.user.ID}`];

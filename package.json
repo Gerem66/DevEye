@@ -7,15 +7,19 @@
   "scripts": {
     "build": "tsc",
     "start": "npm run build && node dist/index.js",
-    "dev": "ts-node index.ts",
+    "dev": "tsx index.ts",
     "watch": "tsc --watch",
+    "clean": "rm -rf package-lock.json dist node_modules",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Gerem",
   "license": "ISC",
   "dependencies": {
     "bcrypt": "^5.1.1",
-    "dotenv": "^16.4.5",
+    "deveye-types": "file:../DevEye-Types",
+    "dotenv": "^17.2.1",
+    "dotenv-oxy": "^1.0.4",
+    "inversify": "^7.9.1",
     "mysql2": "^3.9.2",
     "websocket": "^1.0.34"
   },
@@ -31,7 +35,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "globals": "^16.3.0",
     "prettier": "^3.6.2",
-    "ts-node": "^10.9.2",
+    "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.41.0"
   }

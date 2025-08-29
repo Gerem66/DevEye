@@ -3,35 +3,41 @@ import WebSocket from 'websocket';
 import { createServer as createHTTPServer } from 'http';
 import { createServer } from 'https';
 
-import { StrIsJson, GetLocalIP } from './Utils/Functions.js';
+import { GetLocalIP } from '@/Utils/Functions';
+import { StrIsJson } from '@/Utils/Types';
 
-/**
- * @typedef {import('Types/TCP/TCP.js').RequestClientToServer} RequestClientToServer
- * @typedef {import('Types/User.js').UserType} UserType
- *
- * @typedef {Object} ProfileType
- * @property {UserType | null} user
- * @property {WebSocket.connection} connection
- * @property {boolean} firstMessage
- * @property {Array<{ contextID: number, clearPassword: string, passwordResetTime: number, resetTimeout: NodeJS.Timeout | null }>} authentifications
- */
+import type { Server as HTTPServer } from 'http';
+import type { Server as HTTPSServer } from 'https';
 
-/**
- * @template {keyof RequestClientToServer} T
- * @typedef {import('Types/TCP/TCP.js').TCPRequestSendHeader<T>} TCPRequestSendHeader
- */
+import type { TCPRequestSendHeader } from 'deveye-types';
+import type { UserType, RequestClientToServer } from 'deveye-types';
 
-/**
- * @typedef {Object} ServerConnectionCallbacks
- * @property {(connection: WebSocket.connection, profile: ProfileType) => void} callbacks.onConnect
- * @property {(connection: WebSocket.connection, profile: ProfileType) => void} callbacks.onDisconnect
- * @property {(connection: WebSocket.connection, profile: ProfileType, data: TCPRequestSendHeader<*>) => void} callbacks.onMessage
- * @property {(connection: WebSocket.connection, profile: ProfileType, error: Error) => void} callbacks.onError
- */
+interface ProfileType {
+    user: UserType | null;
+    connection: WebSocket.connection;
+    firstMessage: boolean;
+    authentifications: Array<{
+        contextID: number;
+        clearPassword: string;
+        passwordResetTime: number;
+        resetTimeout: NodeJS.Timeout | null;
+    }>;
+}
+
+interface ServerConnectionCallbacks<T extends keyof RequestClientToServer> {
+    onConnect: (connection: WebSocket.connection, profile: ProfileType) => void;
+    onDisconnect: (connection: WebSocket.connection, profile: ProfileType) => void;
+    onMessage: (connection: WebSocket.connection, profile: ProfileType, data: TCPRequestSendHeader<T>) => void;
+    onError: (connection: WebSocket.connection, profile: ProfileType, error: Error) => void;
+}
 
 class Server {
+    server: HTTPServer | HTTPSServer;
+    port: number;
+    wsServer: WebSocket.server | null;
+
     constructor() {
-        const ENV = process.env.ENV;
+        const ENV = process.env.ENVIRONMENT;
 
         if (ENV === 'dev') {
             this.server = createHTTPServer({});
@@ -44,16 +50,11 @@ class Server {
         }
 
         this.port = 0;
-        /** @type {WebSocket.server | null} */
         this.wsServer = null;
         this.server.on('error', this.onError);
     }
 
-    /**
-     * @param {number} port
-     * @param {ServerConnectionCallbacks} callbacks
-     */
-    Listen = (port, callbacks) => {
+    Listen = (port: number, callbacks: ServerConnectionCallbacks<keyof RequestClientToServer>) => {
         if (this.server.listening) {
             console.log('[WebSocket] Already listening on port', this.port);
             return;
@@ -78,13 +79,11 @@ class Server {
         }
     };
 
-    /** @param {Error} error */
-    onError = (error) => {
+    onError = (error: Error) => {
         console.error('[WebSocket] Error:', error);
     };
 
-    /** @param {WebSocket.request} request */
-    onRequest = (request) => {
+    onRequest = (request: WebSocket.request) => {
         const protocols = request.requestedProtocols;
 
         // Accept the deveye-only-TX0-CR7 protocol
@@ -100,24 +99,17 @@ class Server {
         }
     };
 
-    /**
-     * @param {WebSocket.connection} connection
-     * @param {number} reason
-     * @param {string} desc
-     */
-    onClose = (connection, reason, desc) => {
+    onClose = (_connection: WebSocket.connection, reason: number, desc: string) => {
         if (reason !== 1000) {
             console.log('Connection closed:', reason, desc);
         }
     };
 
-    /**
-     * @param {WebSocket.connection} connection
-     * @param {ServerConnectionCallbacks} callbacks
-     */
-    handleNewConnection = (connection, callbacks) => {
-        /** @type {ProfileType} */
-        const profile = {
+    handleNewConnection = (
+        connection: WebSocket.connection,
+        callbacks: ServerConnectionCallbacks<keyof RequestClientToServer>
+    ) => {
+        const profile: ProfileType = {
             user: null,
             connection,
             firstMessage: true,

@@ -1,22 +1,6 @@
 import os from 'os';
 
-/**
- * @param {string} str
- * @returns {boolean}
- */
-function StrIsJson(str) {
-    try {
-        JSON.parse(str);
-    } catch (e) {
-        return false;
-    }
-    return true;
-}
-
-/**
- * @returns {string} Local IP address
- */
-function GetLocalIP() {
+function GetLocalIP(): string {
     const ifaces = os.networkInterfaces();
     let localIP = '';
 
@@ -34,12 +18,11 @@ function GetLocalIP() {
 }
 
 /**
- * @param {Number} length
- * @returns {string}
+ * @returns A random non-cryptographic string of the specified length.
  */
-function RandomString(length) {
+function RandomString(length: number): string {
     const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     return Array.from({ length }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
 }
 
-export { StrIsJson, GetLocalIP, RandomString };
+export { GetLocalIP, RandomString };

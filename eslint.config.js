@@ -32,7 +32,6 @@ export default [
             'react/prop-types': 'off', // Using TypeScript instead
             semi: ['warn', 'always'],
             'object-curly-spacing': ['warn', 'always'], // Spaces between { }
-            '@typescript-eslint/no-unused-vars': 'warn',
             '@typescript-eslint/no-explicit-any': 'warn',
             quotes: [
                 'warn',
@@ -58,6 +57,18 @@ export default [
                     ignoreComments: true,
                     ignoreStrings: true,
                     ignoreTemplateLiterals: true
+                }
+            ],
+            '@typescript-eslint/no-unused-vars': [
+                'error',
+                {
+                    args: 'all',
+                    argsIgnorePattern: '^_',
+                    caughtErrors: 'all',
+                    caughtErrorsIgnorePattern: '^_',
+                    destructuredArrayIgnorePattern: '^_',
+                    varsIgnorePattern: '^_',
+                    ignoreRestSiblings: true
                 }
             ],
             'prettier/prettier': [
