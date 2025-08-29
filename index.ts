@@ -41,7 +41,7 @@ console.log('SQL Pool created', {
 
 const users: { [key: string]: ProfileType } = {};
 
-const crypt = new Encryption(env.DB_KEY_A, env.DB_KEY_B);
+const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
 const serv = new Server();
 
 serv.Listen(8888, {

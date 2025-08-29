@@ -7,7 +7,9 @@
   "scripts": {
     "build": "tsc",
     "start": "npm run build && node dist/index.js",
-    "dev": "tsx index.ts",
+    "dev": "npm run dev:http & npm run dev:tcp",
+    "dev:tcp": "tsx index.ts",
+    "dev:http": "php -S localhost:8080 -t api",
     "watch": "tsc --watch",
     "clean": "rm -rf package-lock.json dist node_modules",
     "test": "echo \"Error: no test specified\" && exit 1"

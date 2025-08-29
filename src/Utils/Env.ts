@@ -4,7 +4,8 @@ export const env = {
     // Environment
     ENVIRONMENT: getEnvVar('ENVIRONMENT', 'enum', ['dev', 'test', 'prod']),
 
-    // Domain & Ports
+    // Servers
+    HTTP_SERVER_URL: getEnvVar('HTTP_SERVER_URL', 'string'),
     LISTEN_PORT: getEnvVar('LISTEN_PORT', 'number'),
     MAX_CONNECTIONS: getEnvVar('MAX_CONNECTIONS', 'number'),
 
@@ -31,7 +32,5 @@ export const env = {
     // Encryption configuration
     CRYPT_METHOD: getEnvVar('CRYPT_METHOD', 'enum', ['aes-128-gcm']),
     CRYPT_KEY_A: getEnvVar('CRYPT_KEY_A', 'string'),
-    CRYPT_KEY_B: getEnvVar('CRYPT_KEY_B', 'string'),
-    DB_KEY_A: getEnvVar('DB_KEY_A', 'string', false) || '',
-    DB_KEY_B: getEnvVar('DB_KEY_B', 'string', false) || ''
+    CRYPT_KEY_B: getEnvVar('CRYPT_KEY_B', 'string')
 };

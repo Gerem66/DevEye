@@ -2,7 +2,8 @@
 .vscode
 
 # Configs
-.env
+.env*
+!.env.template
 
 # React
 dist

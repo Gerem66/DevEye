@@ -1,0 +1,3 @@
+[submodule "api/lib/PHP-SQL"]
+	path = api/lib/PHP-SQL
+	url = https://github.com/Gerem66/PHP-SQL
