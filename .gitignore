@@ -8,7 +8,8 @@ build
 *.css.d.ts
 
 # Configs
-.env
+.env*
+!.env.template
 
 # Old files
 _*/
