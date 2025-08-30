@@ -12,13 +12,10 @@ import { Unlock } from '@/Features/unlock';
 import { GetGameLifeData } from '@/Features/gamelife';
 import { env } from '@/Utils/Env';
 
-type RequestTypes = import('@/Features/types').RequestTypes;
-
-type ProfileType = import('@/Server').ProfileType;
-
-type TCPFeatureType<T extends RequestTypes> = import('@/Features/types').TCPFeatureType<T>;
-
-type TCPRequestReceiveHeader<T extends RequestTypes> = import('@/Features/types').TCPRequestReceiveHeader<T>;
+import type { ProfileType } from '@/Server';
+import type { RequestTypes } from '@/Features/types';
+import type { TCPFeatureType } from '@/Features/types';
+import type { TCPRequestReceiveHeader } from '@/Features/types';
 
 const db = new SQL({
     name: 'MainDatabase',

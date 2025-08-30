@@ -47,7 +47,6 @@ export default [
             'eol-last': ['warn', 'always'],
             'dot-notation': 'off',
             'no-bitwise': 'off',
-            // curly: ['warn', 'multi-line'],
             '@typescript-eslint/no-empty-object-type': 'off',
             'max-len': [
                 'error',

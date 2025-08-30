@@ -30,7 +30,7 @@ export const env = {
     DB_PASSWORD: getEnvVar('DB_PASSWORD', 'string'),
 
     // Encryption configuration
-    CRYPT_METHOD: getEnvVar('CRYPT_METHOD', 'enum', ['aes-128-gcm']),
+    CRYPT_METHOD: getEnvVar('CRYPT_METHOD', 'enum', ['aes-128-gcm', 'aes-256-ctr']),
     CRYPT_KEY_A: getEnvVar('CRYPT_KEY_A', 'string'),
     CRYPT_KEY_B: getEnvVar('CRYPT_KEY_B', 'string')
 };

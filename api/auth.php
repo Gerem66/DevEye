@@ -18,19 +18,21 @@ function GenerateToken($length = 32) {
 }
 
 // Initialize the database
-$db = new DataBase();
+$db = new DataBase(true, __DIR__.'/config.json');
 
 // Get the input data
 $input = file_get_contents('php://input');
-$data = json_decode($input, true);
+$data = json_decode($input, true) or array();
 
-$username = $data['username'];
-$password = $data['password'];
-if (!isset($username, $password)) {
+// Data, username and password must be set
+if (!isset($data['username']) || !isset($data['password'])) {
     // Try to reverse engineer the input ?
     AddLog($db, 0, 2, 'hack', 'Enpoint /auth - Invalid input data');
     Done(1, 'Invalid username or password');
 }
+
+$username = $data['username'];
+$password = $data['password'];
 
 // Get the user
 $resultUser = $db->QueryPrepare('Users', 'SELECT `ID`, `Password` FROM TABLE WHERE `Username` = ?', 's', [ $username ]);
@@ -50,23 +52,31 @@ if (!password_verify($password, $userPassword)) {
 }
 
 // Update the user token
-$currentTimestamp = time();
 $newToken = GenerateToken();
-$args = array(
-    $newToken,
-    $currentTimestamp,
-    $userID
+$resultToken = $db->QueryPrepare(
+    'Users',
+    'UPDATE TABLE SET `Token` = ?, `LastLogin` = CURRENT_TIMESTAMP() WHERE `ID` = ?',
+    'si',
+    [
+        $newToken,
+        $userID
+    ]
 );
-$resultToken = $db->QueryPrepare('Users', 'UPDATE TABLE SET `Token` = ?, `LastLogin` = ? WHERE `ID` = ?', 'sii', $args);
+
 if ($resultToken === false) {
-    AddLog($db, 0, 0, 'login', "User connection failed - User \"$username\" token update failed");
+    $args = [
+        $newToken,
+        $userID
+    ];
+    $err = $db->GetError();
+    AddLog($db, 0, 0, 'login', "User connection failed - User \"$username\" token update failed - " . $err);
     Done(1, 'Invalid username or password');
 }
 
 $userToken = json_encode(array(
     'Token' => $newToken,
     'UserID' => $userID,
-    'LastLogin' => $currentTimestamp
+    'LastLogin' => time()
 ));
 
 $data = $db->encryption->Encrypt($userToken);

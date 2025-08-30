@@ -1,18 +1,13 @@
-/**
- * @typedef {import('./types.js').RequestTypes} RequestTypes
- * @typedef {import('Types/User.js').UserType} UserType
- * @typedef {import('Types/User.js').DBUserType} DBUserType
- * @typedef {import('Types/User.js').TCPUserType} TCPUserType
- * @typedef {import('Types/Context.js').ContextType} ContextType
- * @typedef {import('Types/Context.js').DBContextType} DBContextType
- */
+import { ResultSetHeader } from 'mysql2';
 
-/**
- * @template {RequestTypes} T
- * @typedef {import('./types.js').TCPFeatureType<T>} TCPFeatureType
- */
+import type { TCPFeatureType } from './types.js';
+import type { UserType } from 'deveye-types';
+import type { DBUserType } from 'deveye-types';
+import type { TCPUserType } from 'deveye-types';
+import type { ContextType } from 'deveye-types';
+import type { DBContextType } from 'deveye-types';
 
-// TEMP: Replace HTTP request with internal function
+// TODO: Replace HTTP request with internal function
 const ffetch = (token = '') => {
     const url = 'https://wyrmo.com/DevEye/get-token.php';
     const data = {
@@ -26,8 +21,7 @@ const ffetch = (token = '') => {
         .catch((_error) => ({ status: -1 }));
 };
 
-/** @type {TCPFeatureType<'login'>} */
-async function Login({ db, data }) {
+const Login: TCPFeatureType<'login'> = async ({ db, data }) => {
     const { token } = data;
 
     const requestToken = await ffetch(token);
@@ -40,8 +34,7 @@ async function Login({ db, data }) {
         };
     }
 
-    /** @type {Array<DBUserType>} */
-    const rawUser = await db.QueryPrepare('SELECT * FROM Users WHERE Token = ?', [requestToken.content]);
+    const rawUser = await db.QueryPrepare<DBUserType[]>('SELECT * FROM Users WHERE Token = ?', [requestToken.content]);
     if (rawUser === null || rawUser.length === 0) {
         // TODO: Alert
         return {
@@ -53,8 +46,7 @@ async function Login({ db, data }) {
     // Update LastLogin
     db.QueryPrepare('UPDATE Users SET LastLogin = NOW() WHERE ID = ?', [rawUser[0].ID]);
 
-    /** @type {UserType} */
-    const user = {
+    const user: UserType = {
         ID: rawUser[0].ID,
         Email: rawUser[0].Email,
         Username: rawUser[0].Username,
@@ -69,8 +61,7 @@ async function Login({ db, data }) {
     };
 
     // Load contexts
-    /** @type {Array<DBContextType>} */
-    const rawContexts = await db.QueryPrepare(
+    const rawContexts = await db.QueryPrepare<DBContextType[]>(
         `SELECT Contexts.*
             FROM Contexts
             JOIN ContextsLinks ON Contexts.ID = ContextsLinks.ContextID
@@ -86,11 +77,10 @@ async function Login({ db, data }) {
 
     const tcpUsers = rawContexts.map((c) => c.ID);
 
-    /** @type {Array<DBUserType>} */
-    let rawUsers = [];
+    let rawUsers: DBUserType[] = [];
 
     if (tcpUsers.length > 0) {
-        rawUsers = await db.ExecQuery(`SELECT * FROM Users WHERE ID IN (${tcpUsers.join(',')})`);
+        rawUsers = await db.ExecQuery<DBUserType[]>(`SELECT * FROM Users WHERE ID IN (${tcpUsers.join(',')})`);
         if (rawUsers === null) {
             return {
                 status: 1,
@@ -99,8 +89,7 @@ async function Login({ db, data }) {
         }
     }
 
-    /** @type {ContextType} */
-    const selfContext = {
+    const selfContext: ContextType = {
         id: 0,
         name: user.Username,
         logo: user.Avatar,
@@ -110,8 +99,7 @@ async function Login({ db, data }) {
         created: user.Created
     };
 
-    /** @type {Array<ContextType>} */
-    const userContexts = rawContexts.map((c) => {
+    const userContexts: ContextType[] = rawContexts.map((c) => {
         return {
             id: c.ID,
             name: c.Name,
@@ -120,14 +108,13 @@ async function Login({ db, data }) {
                 ...rawUsers
                     .filter((u) => u.ID === c.ID)
                     .map(
-                        (u) =>
-                            /** @type {TCPUserType} */ ({
-                                ID: u.ID,
-                                Email: u.Email,
-                                Username: u.Username,
-                                Avatar: u.Avatar,
-                                Created: new Date(u.Created).getTime() / 1000
-                            })
+                        (u): TCPUserType => ({
+                            ID: u.ID,
+                            Email: u.Email,
+                            Username: u.Username,
+                            Avatar: u.Avatar,
+                            Created: new Date(u.Created).getTime() / 1000
+                        })
                     )
             ],
             features: JSON.parse(c.Features),
@@ -142,10 +129,9 @@ async function Login({ db, data }) {
         status: 0,
         user: user
     };
-}
+};
 
-/** @type {TCPFeatureType<'change-favorite-context'>} */
-async function SetFavorite({ db, profile, data }) {
+const SetFavorite: TCPFeatureType<'change-favorite-context'> = async ({ db, profile, data }) => {
     const { contextID, featureID } = data;
     const { user } = profile;
 
@@ -155,11 +141,10 @@ async function SetFavorite({ db, profile, data }) {
         };
     }
 
-    const result = await db.QueryPrepare('UPDATE Users SET DefaultContext = ?, DefaultFeature = ? WHERE ID = ?', [
-        contextID,
-        featureID,
-        user.ID
-    ]);
+    const result = await db.QueryPrepare<ResultSetHeader>(
+        'UPDATE Users SET DefaultContext = ?, DefaultFeature = ? WHERE ID = ?',
+        [contextID, featureID, user.ID]
+    );
     if (result === null || result.affectedRows === 0) {
         return {
             status: 2
@@ -169,6 +154,6 @@ async function SetFavorite({ db, profile, data }) {
     return {
         status: 0
     };
-}
+};
 
 export { Login, SetFavorite };

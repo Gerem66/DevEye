@@ -12,7 +12,7 @@ import type { Server as HTTPSServer } from 'https';
 import type { TCPRequestSendHeader } from 'deveye-types';
 import type { UserType, RequestClientToServer } from 'deveye-types';
 
-interface ProfileType {
+export interface ProfileType {
     user: UserType | null;
     connection: WebSocket.connection;
     firstMessage: boolean;

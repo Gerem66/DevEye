@@ -9,7 +9,7 @@ require_once(__DIR__.'/functions.php');
 require_once(__DIR__.'/PHP-SQL/sql.php');
 
 // Initialize the database
-$db = new DataBase();
+$db = new DataBase(true, __DIR__.'/config.json');
 
 // Get the input data
 $input = file_get_contents('php://input');

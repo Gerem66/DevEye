@@ -8,7 +8,7 @@
         "esModuleInterop": true,
         "allowSyntheticDefaultImports": true,
         "strict": false,
-        "noImplicitAny": false,
+        "noImplicitAny": true,
         "forceConsistentCasingInFileNames": true,
         "module": "esnext",
         "moduleResolution": "bundler",
