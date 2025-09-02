@@ -17,7 +17,7 @@ function FeatureGameLife({ user, setUser, context, feature }: FeatureProps) {
 
     useEffect(() => {
         // Send the request to start the loop
-        tcp.SendAsync('gamelife-set-loop', { contextID: context.id, type: 'open' }).then((data) => {
+        tcp.SendAndWait('gamelife-set-loop', { contextID: context.id, type: 'open' }).then((data) => {
             console.log(data);
 
             // Check if the request was sent correctly

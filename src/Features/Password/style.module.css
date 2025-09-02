@@ -60,7 +60,7 @@
 }
 .scroll-mode > thead {
     position: sticky;
-    top: 0px;
+    top: -2px; /* to cover the border */
     background-color: #223142;
     z-index: 5;
 }

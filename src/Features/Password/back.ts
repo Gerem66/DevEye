@@ -35,7 +35,7 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
     componentDidMount() {
         const { context } = this.props;
 
-        tcp.SendAsync('get-passwords', { contextID: context.id }).then(async (response) => {
+        tcp.SendAndWait('get-passwords', { contextID: context.id }).then(async (response) => {
             if (response === 'timeout') {
                 console.log('Error: Timeout');
             } else if (response === 'not-sended') {
@@ -86,7 +86,7 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
     GetPassword = async (ID: number) => {
         const { context } = this.props;
 
-        const response = await tcp.SendAsync('get-password', {
+        const response = await tcp.SendAndWait('get-password', {
             contextID: context.id,
             passwordID: ID
         });
@@ -138,7 +138,7 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
         };
 
         if (ID !== null) {
-            const response = await tcp.SendAsync('get-password', {
+            const response = await tcp.SendAndWait('get-password', {
                 contextID: context.id,
                 passwordID: ID
             });
@@ -171,7 +171,7 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
             // Remove password
             if (newPassword === 'delete') {
                 if (ID !== null) {
-                    const response = await tcp.SendAsync('delete-password', {
+                    const response = await tcp.SendAndWait('delete-password', {
                         contextID: context.id,
                         passwordID: ID
                     });
@@ -185,7 +185,7 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
 
             // Add password
             else if (ID === null) {
-                const response = await tcp.SendAsync('add-password', {
+                const response = await tcp.SendAndWait('add-password', {
                     contextID: context.id,
                     password: newPassword
                 });
@@ -203,7 +203,7 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
 
             // Edit password
             else {
-                const response = await tcp.SendAsync('edit-password', {
+                const response = await tcp.SendAndWait('edit-password', {
                     contextID: context.id,
                     password: newPassword
                 });

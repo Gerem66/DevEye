@@ -1,13 +1,9 @@
 import type { Endpoints, EndpointTypes } from 'deveye-types';
 
-// TODO: Remove
-/**
- * @deprecated
- */
 const ffetch = <T extends Endpoints>(
     endpoint: T,
-    requestInfo: object = {}
-): Promise<{ status: number; message: string; content: EndpointTypes[T] }> =>
+    requestInfo: EndpointTypes[T]['input']
+): Promise<EndpointTypes[T]['output']> =>
     fetch(import.meta.env.VITE_SERVER_URL + '/' + endpoint + '.php', {
         method: 'POST',
         headers: {

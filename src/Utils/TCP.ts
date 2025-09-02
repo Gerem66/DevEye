@@ -4,7 +4,8 @@ const VPS_CREDENTIALS = {
     port: import.meta.env.VITE_VPS_PORT
 };
 
-import type { ConnectionState, RequestClientToServer, RequestServerToClient } from 'deveye-types';
+import type { ConnectionState, RequestCommands, TCPRequestReceiveHeader } from 'deveye-types';
+import { RandomString } from './Functions';
 
 class ClientTCP {
     socket: WebSocket | null = null;
@@ -13,7 +14,7 @@ class ClientTCP {
 
     callbackClose = () => {};
 
-    callbacks: { [key: string]: (data: any) => boolean } = {};
+    private callbacks: { [key: string]: (data: TCPRequestReceiveHeader<keyof RequestCommands>) => boolean } = {};
 
     Connect = async (onCloseCallback: () => void): Promise<boolean> => {
         // If already connected, or if the user is not connected to the server
@@ -63,12 +64,12 @@ class ClientTCP {
         return this.socket?.readyState === WebSocket.OPEN;
     };
 
-    onOpen = (event: Event) => {
+    private onOpen = (event: Event) => {
         void event;
         console.log('[TCP] Connected to server');
     };
 
-    onMessage = (event: MessageEvent) => {
+    private onMessage = (event: MessageEvent) => {
         const data = JSON.parse(event.data);
 
         if (Object.prototype.hasOwnProperty.call(data, 'callbackID')) {
@@ -85,26 +86,30 @@ class ClientTCP {
         }
     };
 
-    onError = (event: Event) => {
+    private onError = (event: Event) => {
         console.log('[TCP] TCP server:', event);
         this.state = 'error';
     };
 
-    onClose = (event: CloseEvent) => {
+    private onClose = (event: CloseEvent) => {
         void event;
         this.state = 'disconnected';
         this.Disconnect();
         this.callbackClose();
     };
 
-    Send = (action: keyof RequestClientToServer, content: RequestClientToServer[typeof action], callbackID?: string): boolean => {
+    Send = (
+        action: keyof RequestCommands,
+        content: RequestCommands[typeof action]['input'],
+        callbackID?: string
+    ): boolean => {
         if (typeof content !== 'object') {
-            console.log('[TCP] Send socket: Invalid message type.');
+            console.warn('[TCP] Send socket: Invalid message type.');
             return false;
         }
 
         if (this.socket === null || !this.IsConnected()) {
-            console.log('[TCP] Send socket: Not connected.');
+            console.warn('[TCP] Send socket: Not connected.');
             return false;
         }
 
@@ -113,8 +118,12 @@ class ClientTCP {
         return true;
     };
 
-    SendAsync = async (action: keyof RequestClientToServer, data: RequestClientToServer[typeof action], timeout = 10000): Promise<'not-sended' | 'timeout' | RequestServerToClient[typeof action]> => {
-        const callbackID = action + '-' + Math.random().toString(36).substring(7);
+    SendAndWait = async <T extends keyof RequestCommands>(
+        action: T,
+        data: RequestCommands[T]['input'],
+        timeout = 10000
+    ): Promise<'not-sended' | 'timeout' | RequestCommands[T]['output']> => {
+        const callbackID = RandomString(8);
         const sended = this.Send(action, data, callbackID);
 
         if (sended === false) {
@@ -123,11 +132,13 @@ class ClientTCP {
 
         return new Promise((resolve) => {
             const timer = setTimeout(() => {
+                delete this.callbacks[callbackID];
                 resolve('timeout');
             }, timeout);
+
             this.callbacks[callbackID] = (data) => {
                 clearTimeout(timer);
-                resolve(data['content']);
+                resolve(data.content);
                 return true;
             };
         });

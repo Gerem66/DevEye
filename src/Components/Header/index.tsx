@@ -25,7 +25,7 @@ function Header({ user, setUser, context, feature }: HeaderProps): JSX.Element {
         }
 
         setLoading(true);
-        const result = await tcp.SendAsync('change-favorite-context', {
+        const result = await tcp.SendAndWait('change-favorite-context', {
             contextID: context.id,
             featureID: feature.id
         });

@@ -42,7 +42,7 @@ class AddContextPopup extends React.Component<AddContextPopupProps> {
             return;
         }
 
-        const result = await tcp.SendAsync('add-context', {
+        const result = await tcp.SendAndWait('add-context', {
             contextName: inputContext
         });
 

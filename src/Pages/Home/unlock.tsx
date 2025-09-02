@@ -44,7 +44,7 @@ class PopupUnlock extends React.Component<PopupUnlockProps> {
             return;
         }
 
-        const response = await tcp.SendAsync('check-password', {
+        const response = await tcp.SendAndWait('check-password', {
             contextID: context.id,
             password: inputPassword
         });

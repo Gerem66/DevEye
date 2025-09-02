@@ -5,7 +5,10 @@ import NavFeatures from './sections/navFeatures';
 import NavContexts from './sections/navContexts';
 
 import packageJson from '../../../package.json';
-const version = packageJson.version + ((import.meta.env.MODE === 'development' && '-dev') || '');
+
+const ENV = import.meta.env.VITE_ENV;
+const ENV_IS_DEV = ENV === 'dev';
+const version = packageJson.version + ((ENV_IS_DEV && '-dev') || '');
 
 class Navbar extends NavbarBack {
     render() {

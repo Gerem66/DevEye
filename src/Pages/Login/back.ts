@@ -109,10 +109,10 @@ class LoginPageBack extends React.Component<LoginPageProps> {
         let newUser = DefaultUser;
 
         let connected = false;
-        if (data.status === 0) {
+        if (data.status === 0 && data.content !== null) {
             connected = await tcp.Connect(() => setUser(null));
             if (connected) {
-                const response = await tcp.SendAsync('login', {
+                const response = await tcp.SendAndWait('login', {
                     token: data.content,
                     password: password
                 });
@@ -188,7 +188,7 @@ class LoginPageBack extends React.Component<LoginPageProps> {
             return;
         }
 
-        const response = await tcp.SendAsync('login', { token, password: null });
+        const response = await tcp.SendAndWait('login', { token, password: null });
 
         if (response === 'not-sended' || response === 'timeout' || response.status !== 0) {
             connected = false;
