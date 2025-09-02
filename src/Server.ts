@@ -3,32 +3,20 @@ import WebSocket from 'websocket';
 import { createServer as createHTTPServer } from 'http';
 import { createServer } from 'https';
 
-import { GetLocalIP } from '@/Utils/Functions';
 import { StrIsJson } from '@/Utils/Types';
+import { GetLocalIP } from '@/Utils/Functions';
 
 import type { Server as HTTPServer } from 'http';
 import type { Server as HTTPSServer } from 'https';
 
-import type { UserType } from 'deveye-types';
 import type { RequestCommands } from 'deveye-types';
-
-export interface ProfileType {
-    user: UserType | null;
-    connection: WebSocket.connection;
-    firstMessage: boolean;
-    authentifications: Array<{
-        contextID: number;
-        clearPassword: string;
-        passwordResetTime: number;
-        resetTimeout: NodeJS.Timeout | null;
-    }>;
-}
+import type { ClientSession } from './Interfaces/IClient';
 
 interface ServerConnectionCallbacks<T extends keyof RequestCommands> {
-    onConnect: (connection: WebSocket.connection, profile: ProfileType) => void;
-    onDisconnect: (connection: WebSocket.connection, profile: ProfileType) => void;
-    onMessage: (connection: WebSocket.connection, profile: ProfileType, data: RequestCommands[T]['output']) => void;
-    onError: (connection: WebSocket.connection, profile: ProfileType, error: Error) => void;
+    onConnect: (connection: WebSocket.connection, profile: ClientSession) => void;
+    onDisconnect: (connection: WebSocket.connection, profile: ClientSession) => void;
+    onMessage: (connection: WebSocket.connection, profile: ClientSession, data: RequestCommands[T]['output']) => void;
+    onError: (connection: WebSocket.connection, profile: ClientSession, error: Error) => void;
 }
 
 class Server {
@@ -109,7 +97,7 @@ class Server {
         connection: WebSocket.connection,
         callbacks: ServerConnectionCallbacks<keyof RequestCommands>
     ) => {
-        const profile: ProfileType = {
+        const profile: ClientSession = {
             user: null,
             connection,
             firstMessage: true,

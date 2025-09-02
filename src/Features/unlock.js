@@ -2,14 +2,14 @@ import bcrypt from 'bcrypt';
 
 /**
  * @typedef {import('../Services/SQL.js').default} SQL
- * @typedef {import('../Server.js').ProfileType} ProfileType
+ * @typedef {import('../Server.js').ClientSession} ClientSession
  */
 
 /**
  * Get authentification
- * @param {ProfileType} profile
+ * @param {ClientSession} profile
  * @param {number} contextID
- * @returns {ProfileType['authentifications'][0] | null} Authentification
+ * @returns {ClientSession['authentifications'][0] | null} Authentification
  */
 function GetAuth(profile, contextID) {
     return profile.authentifications.find((a) => a.contextID === contextID) || null;
@@ -18,7 +18,7 @@ function GetAuth(profile, contextID) {
 /**
  * Unlock context
  * @param {SQL} db
- * @param {ProfileType} profile
+ * @param {ClientSession} profile
  * @param {number} contextID
  * @param {string | null} password
  * @returns {Promise<'unlocked' | 'wrong-user' | 'wrong-password' | 'error'>} Context unlocked

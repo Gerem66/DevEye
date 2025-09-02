@@ -3,18 +3,17 @@ import SQL from '@/Services/SQL';
 import Encryption from '@/Services/Encryption';
 import { createPool } from 'mysql2/promise';
 
+import { userManager } from '@/Services/UserManager';
 import { Login } from '@/Features/login';
 import { SetFavorite } from '@/Features/set-favorite-context';
 import { CheckPassword } from '@/Features/checkPassword';
 import { GetPassword, GetPasswords } from '@/Features/getPassword';
 import { AddPassword, EditPassword, DeletePassword } from '@/Features/addPassword';
 import { AddContext, DeleteContext } from '@/Features/addContext';
-import { Unlock } from '@/Features/unlock';
 import { GetGameLifeData } from '@/Features/gamelife';
 import { env } from '@/Utils/Env';
 
 import type { RequestCommands, TCPRequestReceiveHeader } from 'deveye-types';
-import type { ProfileType } from '@/Server';
 import type { TCPFeatureType } from '@/Features/types';
 
 const db = new SQL({
@@ -36,8 +35,6 @@ console.log('SQL Pool created', {
     port: env.DB_PORT
 });
 
-const users: { [key: string]: ProfileType } = {};
-
 const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
 const serv = new Server();
 
@@ -49,14 +46,14 @@ serv.Listen(8888, {
     onDisconnect: (_connection, profile) => {
         console.log('User disconnected');
         if (profile?.user) {
-            delete users[`${profile.user.ID}`];
+            userManager.remove(profile.user.ID);
         }
     },
 
     onError: (_connection, profile, error) => {
         console.error('Connection error:', error);
         if (profile.user !== null) {
-            delete users[`${profile.user.ID}`];
+            userManager.remove(profile.user.ID);
         }
     },
 
@@ -65,21 +62,9 @@ serv.Listen(8888, {
         let result: TCPRequestReceiveHeader<keyof RequestCommands>['content'] | null = null;
 
         switch (data.action) {
-            case 'login': {
-                console.log('User login');
-                const resultLogin = await Login({ db, crypt, profile, data: data.content });
-                console.log('User login =>', resultLogin);
-                if (resultLogin.status === 0 && resultLogin.user !== null) {
-                    profile.user = resultLogin.user;
-                    profile.firstMessage = false;
-                    users[`${profile.user.ID}`] = profile;
-                    if (data.content.password) {
-                        await Unlock(db, profile, 0, data.content.password);
-                    }
-                    result = resultLogin;
-                }
+            case 'login':
+                action = Login;
                 break;
-            }
             case 'check-password':
                 action = CheckPassword;
                 break;

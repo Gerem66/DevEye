@@ -1,17 +1,17 @@
-import type SQL from '../Services/SQL';
-import type Encryption from '../Services/Encryption';
-import type { ProfileType } from '../Server';
-
 import type { RequestCommands } from 'deveye-types';
 import type { TCPRequestSendHeader } from 'deveye-types';
 import type { TCPRequestReceiveHeader } from 'deveye-types';
+
+import type SQL from '@/Services/SQL';
+import type Encryption from '@/Services/Encryption';
+import type { ClientSession } from '@/Interfaces/IClient';
 
 export type RequestTypes = keyof RequestCommands;
 
 export interface TCPFeatureProps<T extends keyof RequestCommands> {
     db: SQL;
     crypt: Encryption;
-    profile: ProfileType;
+    profile: ClientSession;
     data: TCPRequestSendHeader<T>['content'];
 }
 
