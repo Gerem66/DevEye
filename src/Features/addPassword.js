@@ -1,9 +1,9 @@
 /**
- * @typedef {import('./types.js').RequestTypes} RequestTypes
+ * @typedef {import('deveye-types').RequestCommands} RequestCommands
  */
 
 /**
- * @template {RequestTypes} T
+ * @template {keyof RequestCommands} T
  * @typedef {import('./types.js').TCPFeatureType<T>} TCPFeatureType
  */
 

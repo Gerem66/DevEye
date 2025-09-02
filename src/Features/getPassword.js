@@ -2,13 +2,13 @@ import { StrIsJson } from '@/Utils/Types';
 import { Unlock } from './unlock.js';
 
 /**
- * @typedef {import('./types.js').RequestTypes} RequestTypes
+ * @typedef {import('deveye-types').RequestCommands} RequestCommands
  * @typedef {import('Types/Password.js').PasswordType} PasswordType
  * @typedef {import('Types/Password.js').PasswordDatabaseType} PasswordDatabaseType
  */
 
 /**
- * @template {RequestTypes} T
+ * @template {RequestCommands} T
  * @typedef {import('./types.js').TCPFeatureType<T>} TCPFeatureType
  */
 

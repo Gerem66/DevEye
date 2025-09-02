@@ -2,7 +2,11 @@ import SQL from '../Services/SQL.js';
 import { RandomString } from '../Utils/Functions.js';
 
 /**
- * @template {import('./types.js').RequestTypes} T
+ * @typedef {import('deveye-types').RequestCommands} RequestCommands
+ */
+
+/**
+ * @template {keyof RequestCommands} T
  * @typedef {import('./types.js').TCPFeatureType<T>} TCPFeatureType
  */
 

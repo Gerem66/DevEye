@@ -9,8 +9,8 @@ import { StrIsJson } from '@/Utils/Types';
 import type { Server as HTTPServer } from 'http';
 import type { Server as HTTPSServer } from 'https';
 
-import type { TCPRequestSendHeader } from 'deveye-types';
-import type { UserType, RequestClientToServer } from 'deveye-types';
+import type { UserType } from 'deveye-types';
+import type { RequestCommands } from 'deveye-types';
 
 export interface ProfileType {
     user: UserType | null;
@@ -24,10 +24,10 @@ export interface ProfileType {
     }>;
 }
 
-interface ServerConnectionCallbacks<T extends keyof RequestClientToServer> {
+interface ServerConnectionCallbacks<T extends keyof RequestCommands> {
     onConnect: (connection: WebSocket.connection, profile: ProfileType) => void;
     onDisconnect: (connection: WebSocket.connection, profile: ProfileType) => void;
-    onMessage: (connection: WebSocket.connection, profile: ProfileType, data: TCPRequestSendHeader<T>) => void;
+    onMessage: (connection: WebSocket.connection, profile: ProfileType, data: RequestCommands[T]['output']) => void;
     onError: (connection: WebSocket.connection, profile: ProfileType, error: Error) => void;
 }
 
@@ -54,7 +54,7 @@ class Server {
         this.server.on('error', this.onError);
     }
 
-    Listen = (port: number, callbacks: ServerConnectionCallbacks<keyof RequestClientToServer>) => {
+    Listen = (port: number, callbacks: ServerConnectionCallbacks<keyof RequestCommands>) => {
         if (this.server.listening) {
             console.log('[WebSocket] Already listening on port', this.port);
             return;
@@ -107,7 +107,7 @@ class Server {
 
     handleNewConnection = (
         connection: WebSocket.connection,
-        callbacks: ServerConnectionCallbacks<keyof RequestClientToServer>
+        callbacks: ServerConnectionCallbacks<keyof RequestCommands>
     ) => {
         const profile: ProfileType = {
             user: null,

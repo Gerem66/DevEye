@@ -6,27 +6,14 @@ import type { DBUserType } from 'deveye-types';
 import type { TCPUserType } from 'deveye-types';
 import type { ContextType } from 'deveye-types';
 import type { DBContextType } from 'deveye-types';
-
-// TODO: Replace HTTP request with internal function
-const ffetch = (token = '') => {
-    const url = 'https://wyrmo.com/DevEye/get-token.php';
-    const data = {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: 'UJu-79a?:w=4O7mp#sM]yQiOsI/Jb_ag', token })
-    };
-
-    return fetch(url, data)
-        .then((res) => res.json())
-        .catch((_error) => ({ status: -1 }));
-};
+import { ffetch } from '@/Utils/Request.js';
 
 const Login: TCPFeatureType<'login'> = async ({ db, data }) => {
     const { token } = data;
 
-    const requestToken = await ffetch(token);
+    const requestToken = await ffetch('get-token', { code: 'UJu-79a?:w=4O7mp#sM]yQiOsI/Jb_ag', token });
 
-    if (requestToken.status !== 0) {
+    if (requestToken.status !== 0 || !requestToken.content) {
         // TODO: Alert
         return {
             status: 1,
@@ -80,8 +67,11 @@ const Login: TCPFeatureType<'login'> = async ({ db, data }) => {
     let rawUsers: DBUserType[] = [];
 
     if (tcpUsers.length > 0) {
-        rawUsers = await db.ExecQuery<DBUserType[]>(`SELECT * FROM Users WHERE ID IN (${tcpUsers.join(',')})`);
-        if (rawUsers === null) {
+        try {
+            rawUsers = await db.ExecQuery<DBUserType[] | null>(
+                `SELECT * FROM Users WHERE ID IN (${tcpUsers.join(',')})`
+            );
+        } catch {
             return {
                 status: 1,
                 user: null

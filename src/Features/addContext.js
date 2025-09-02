@@ -1,10 +1,10 @@
 /**
- * @typedef {import('./types.js').RequestTypes} RequestTypes
+ * @typedef {import('deveye-types').RequestCommands} RequestCommands
  * @typedef {import('Types/Context.js').DBContextType} DBContextType
  */
 
 /**
- * @template {RequestTypes} T
+ * @template {keyof RequestCommands} T
  * @typedef {import('./types.js').TCPFeatureType<T>} TCPFeatureType
  */
 

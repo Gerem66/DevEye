@@ -12,10 +12,9 @@ import { Unlock } from '@/Features/unlock';
 import { GetGameLifeData } from '@/Features/gamelife';
 import { env } from '@/Utils/Env';
 
+import type { RequestCommands, TCPRequestReceiveHeader } from 'deveye-types';
 import type { ProfileType } from '@/Server';
-import type { RequestTypes } from '@/Features/types';
 import type { TCPFeatureType } from '@/Features/types';
-import type { TCPRequestReceiveHeader } from '@/Features/types';
 
 const db = new SQL({
     name: 'MainDatabase',
@@ -61,8 +60,8 @@ serv.Listen(8888, {
     },
 
     onMessage: async (connection, profile, data) => {
-        let action: TCPFeatureType<RequestTypes> | null = null;
-        let result: TCPRequestReceiveHeader<RequestTypes>['content'] | null = null;
+        let action: TCPFeatureType<keyof RequestCommands> | null = null;
+        let result: TCPRequestReceiveHeader<keyof RequestCommands>['content'] | null = null;
 
         switch (data.action) {
             case 'login': {
@@ -117,7 +116,7 @@ serv.Listen(8888, {
         }
 
         if (result !== null) {
-            const response: TCPRequestReceiveHeader<RequestTypes> = {
+            const response: TCPRequestReceiveHeader<keyof RequestCommands> = {
                 action: data.action,
                 content: result,
                 callbackID: data.callbackID

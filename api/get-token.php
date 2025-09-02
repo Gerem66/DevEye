@@ -5,8 +5,7 @@ header("Access-Control-Allow-Methods: POST");
 header("Access-Control-Allow-Headers: Content-Type");
 
 require_once(__DIR__.'/utils.php');
-require_once(__DIR__.'/functions.php');
-require_once(__DIR__.'/PHP-SQL/sql.php');
+require_once(__DIR__.'/lib/PHP-SQL/sql.php');
 
 // Initialize the database
 $db = new DataBase(true, __DIR__.'/config.json');
