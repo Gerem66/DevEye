@@ -3,7 +3,8 @@ import SQL from '@/Services/SQL';
 import Encryption from '@/Services/Encryption';
 import { createPool } from 'mysql2/promise';
 
-import { Login, SetFavorite } from '@/Features/getUserInfo';
+import { Login } from '@/Features/login';
+import { SetFavorite } from '@/Features/set-favorite-context';
 import { CheckPassword } from '@/Features/checkPassword';
 import { GetPassword, GetPasswords } from '@/Features/getPassword';
 import { AddPassword, EditPassword, DeletePassword } from '@/Features/addPassword';
@@ -103,7 +104,7 @@ serv.Listen(8888, {
             case 'delete-context':
                 action = DeleteContext;
                 break;
-            case 'change-favorite-context':
+            case 'set-favorite-context':
                 action = SetFavorite;
                 break;
             case 'gamelife-set-loop':

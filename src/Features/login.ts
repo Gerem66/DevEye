@@ -1,14 +1,15 @@
 import { ResultSetHeader } from 'mysql2';
 
-import type { TCPFeatureType } from './types.js';
 import type { UserType } from 'deveye-types';
 import type { DBUserType } from 'deveye-types';
 import type { TCPUserType } from 'deveye-types';
 import type { ContextType } from 'deveye-types';
 import type { DBContextType } from 'deveye-types';
+
+import type { TCPFeatureType } from './types.js';
 import { ffetch } from '@/Utils/Request.js';
 
-const Login: TCPFeatureType<'login'> = async ({ db, data }) => {
+export const Login: TCPFeatureType<'login'> = async ({ db, data }) => {
     const { token } = data;
 
     const requestToken = await ffetch('get-token', { code: 'UJu-79a?:w=4O7mp#sM]yQiOsI/Jb_ag', token });
@@ -31,7 +32,7 @@ const Login: TCPFeatureType<'login'> = async ({ db, data }) => {
     }
 
     // Update LastLogin
-    db.QueryPrepare('UPDATE Users SET LastLogin = NOW() WHERE ID = ?', [rawUser[0].ID]);
+    db.QueryPrepare<ResultSetHeader>('UPDATE Users SET LastLogin = NOW() WHERE ID = ?', [rawUser[0].ID]);
 
     const user: UserType = {
         ID: rawUser[0].ID,
@@ -120,30 +121,3 @@ const Login: TCPFeatureType<'login'> = async ({ db, data }) => {
         user: user
     };
 };
-
-const SetFavorite: TCPFeatureType<'change-favorite-context'> = async ({ db, profile, data }) => {
-    const { contextID, featureID } = data;
-    const { user } = profile;
-
-    if (user === null) {
-        return {
-            status: 1
-        };
-    }
-
-    const result = await db.QueryPrepare<ResultSetHeader>(
-        'UPDATE Users SET DefaultContext = ?, DefaultFeature = ? WHERE ID = ?',
-        [contextID, featureID, user.ID]
-    );
-    if (result === null || result.affectedRows === 0) {
-        return {
-            status: 2
-        };
-    }
-
-    return {
-        status: 0
-    };
-};
-
-export { Login, SetFavorite };
