@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.34.0",
+    "@types/bcrypt": "^6.0.0",
     "@types/websocket": "^1.0.10",
     "@typescript-eslint/eslint-plugin": "^8.41.0",
     "@typescript-eslint/parser": "^8.41.0",

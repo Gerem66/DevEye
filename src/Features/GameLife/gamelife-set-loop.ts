@@ -1,31 +1,29 @@
-import SQL from '../Services/SQL.js';
-import { RandomString } from '../Utils/Functions.js';
+import { createPool } from 'mysql2/promise';
+import SQL from '@/Services/SQL';
+import { RandomString } from '@/Utils/Functions';
 
-/**
- * @typedef {import('deveye-types').RequestCommands} RequestCommands
- */
-
-/**
- * @template {keyof RequestCommands} T
- * @typedef {import('./types.js').TCPFeatureType<T>} TCPFeatureType
- */
+import type { IFeature } from '@/Interfaces/IFeature';
 
 const db_GL = new SQL({
-    database: process.env.DB_GL_DATABASE || '',
-    hostname: process.env.DB_GL_HOSTNAME || '',
-    username: process.env.DB_GL_USERNAME || '',
-    password: process.env.DB_GL_PASSWORD || '',
-    port: parseInt(process.env.DB_GL_PORT || '3306')
+    name: 'DB-DevEye',
+    pool: createPool({
+        host: process.env.DB_GL_HOSTNAME || '',
+        port: parseInt(process.env.DB_GL_PORT || '3306'),
+        database: process.env.DB_GL_DATABASE || '',
+        user: process.env.DB_GL_USERNAME || '',
+        password: process.env.DB_GL_PASSWORD || '',
+        enableKeepAlive: true,
+        waitForConnections: true,
+        connectionLimit: 10,
+        queueLimit: 0,
+        idleTimeout: 30000
+    })
 });
 
-/**
- * Store all sessions with ID as key and value is: lastCount (for cache) and interval to check changes
- * @type {Object<string, { lastCount: number, interval: NodeJS.Timeout }>}
- */
-const intervals = {};
+/** Store all sessions with ID as key and value is: lastCount (for cache) and interval to check changes */
+const intervals: { [key: string]: { lastCount: number; interval: NodeJS.Timeout } } = {};
 
-/** @type {TCPFeatureType<'gamelife-set-loop'>} */
-async function GetGameLifeData({ profile, data }) {
+export const GetGameLifeData: IFeature<'gamelife-set-loop'> = async ({ profile, data }) => {
     // User listening to changes
     if (data.type === 'open') {
         // Generate a random ID
@@ -41,7 +39,7 @@ async function GetGameLifeData({ profile, data }) {
             lastCount: 0, // Cache
             interval: setInterval(async () => {
                 // Get the total count of accounts
-                const request = await db_GL.ExecQuery('SELECT COUNT(*) as count FROM Accounts');
+                const request = await db_GL.ExecQuery<{ count: number }[]>('SELECT COUNT(*) as count FROM Accounts');
 
                 // Check errors and if the data changed
                 if (!request || !request.length) return;
@@ -77,6 +75,4 @@ async function GetGameLifeData({ profile, data }) {
 
     // Error
     return { status: 1, intervalID: '' };
-}
-
-export { GetGameLifeData };
+};

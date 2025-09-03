@@ -9,13 +9,13 @@ import { GetLocalIP } from '@/Utils/Functions';
 import type { Server as HTTPServer } from 'http';
 import type { Server as HTTPSServer } from 'https';
 
-import type { RequestCommands } from 'deveye-types';
+import type { RequestCommands, TCPRequestSendHeader } from 'deveye-types';
 import type { ClientSession } from './Interfaces/IClient';
 
 interface ServerConnectionCallbacks<T extends keyof RequestCommands> {
     onConnect: (connection: WebSocket.connection, profile: ClientSession) => void;
     onDisconnect: (connection: WebSocket.connection, profile: ClientSession) => void;
-    onMessage: (connection: WebSocket.connection, profile: ClientSession, data: RequestCommands[T]['output']) => void;
+    onMessage: (connection: WebSocket.connection, profile: ClientSession, data: TCPRequestSendHeader<T>) => void;
     onError: (connection: WebSocket.connection, profile: ClientSession, error: Error) => void;
 }
 

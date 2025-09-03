@@ -1,8 +1,8 @@
 import { ResultSetHeader } from 'mysql2';
 
-import type { TCPFeatureType } from './types.js';
+import type { IFeature } from '../../Interfaces/IFeature.js';
 
-export const SetFavorite: TCPFeatureType<'set-favorite-context'> = async ({ db, profile, data }) => {
+export const SetFavorite: IFeature<'set-favorite-context'> = async ({ db, profile, data }) => {
     const { contextID, featureID } = data;
     const { user } = profile;
 

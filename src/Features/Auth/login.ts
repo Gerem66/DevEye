@@ -6,12 +6,12 @@ import type { TCPUserType } from 'deveye-types';
 import type { ContextType } from 'deveye-types';
 import type { DBContextType } from 'deveye-types';
 
-import { Unlock } from './unlock.js';
+import { Unlock } from '@/Features/Utils/unlock';
 import { ffetch } from '@/Utils/Request.js';
-import type { TCPFeatureType } from './types.js';
+import type { IFeature } from '../../Interfaces/IFeature.js';
 import { userManager } from '@/Services/UserManager.js';
 
-export const Login: TCPFeatureType<'login'> = async ({ db, profile, data }) => {
+export const Login: IFeature<'login'> = async ({ db, profile, data }) => {
     const { token } = data;
 
     const requestToken = await ffetch('get-token', { code: 'UJu-79a?:w=4O7mp#sM]yQiOsI/Jb_ag', token });

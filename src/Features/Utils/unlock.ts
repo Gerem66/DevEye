@@ -1,29 +1,21 @@
 import bcrypt from 'bcrypt';
 
-/**
- * @typedef {import('../Services/SQL.js').default} SQL
- * @typedef {import('../Server.js').ClientSession} ClientSession
- */
+import type SQL from '@/Services/SQL';
+import type { ClientSession } from '@/Interfaces/IClient';
 
-/**
- * Get authentification
- * @param {ClientSession} profile
- * @param {number} contextID
- * @returns {ClientSession['authentifications'][0] | null} Authentification
- */
-function GetAuth(profile, contextID) {
+function GetAuth(profile: ClientSession, contextID: number): ClientSession['authentifications'][0] | null {
     return profile.authentifications.find((a) => a.contextID === contextID) || null;
 }
 
 /**
- * Unlock context
- * @param {SQL} db
- * @param {ClientSession} profile
- * @param {number} contextID
- * @param {string | null} password
- * @returns {Promise<'unlocked' | 'wrong-user' | 'wrong-password' | 'error'>} Context unlocked
+ * @description Temporary unlock the context
  */
-async function Unlock(db, profile, contextID, password = null) {
+export async function Unlock(
+    db: SQL,
+    profile: ClientSession,
+    contextID: number,
+    password: string | null = null
+): Promise<'unlocked' | 'wrong-user' | 'wrong-password' | 'error'> {
     const context = profile.user?.Contexts.find((c) => c.id === contextID) || null;
     const contextAuth = GetAuth(profile, contextID);
 
@@ -61,13 +53,19 @@ async function Unlock(db, profile, contextID, password = null) {
     // Get target hash
     let targetHash = null;
     if (contextID === 0) {
-        const resultUser = await db.QueryPrepare('SELECT `Password` FROM `Users` WHERE `ID` = ?', [profile.user?.ID]);
+        const resultUser = await db.QueryPrepare<{ Password: string }[]>(
+            'SELECT `Password` FROM `Users` WHERE `ID` = ?',
+            [profile.user?.ID]
+        );
         if (resultUser === null || resultUser.length === 0 || resultUser[0].Password === null) {
             return 'error';
         }
         targetHash = resultUser[0].Password;
     } else {
-        const resultContext = await db.QueryPrepare('SELECT `Password` FROM `Contexts` WHERE `ID` = ?', [contextID]);
+        const resultContext = await db.QueryPrepare<{ Password: string }[]>(
+            'SELECT `Password` FROM `Contexts` WHERE `ID` = ?',
+            [contextID]
+        );
         if (resultContext === null || resultContext.length === 0) {
             return 'error';
         }
@@ -125,5 +123,3 @@ async function Unlock(db, profile, contextID, password = null) {
 
     return 'unlocked';
 }
-
-export { Unlock, GetAuth };

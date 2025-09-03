@@ -1,16 +1,8 @@
-import { Unlock } from './unlock.js';
+import { Unlock } from '@/Features/Utils/unlock';
 
-/**
- * @typedef {import('deveye-types').RequestCommands} RequestCommands
- */
+import type { IFeature } from '@/Interfaces/IFeature';
 
-/**
- * @template {RequestCommands} T
- * @typedef {import('./types.js').TCPFeatureType<T>} TCPFeatureType
- */
-
-/** @type {TCPFeatureType<'check-password'>} */
-async function CheckPassword({ db, profile, data }) {
+export const CheckPassword: IFeature<'check-password'> = async ({ db, profile, data }) => {
     const { password, contextID } = data;
 
     const unlockStatus = await Unlock(db, profile, contextID, password);
@@ -31,6 +23,4 @@ async function CheckPassword({ db, profile, data }) {
         status: 0,
         message: null
     };
-}
-
-export { CheckPassword };
+};
