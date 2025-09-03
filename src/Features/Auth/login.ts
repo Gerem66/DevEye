@@ -34,6 +34,7 @@ export const Login: IFeature<'login'> = async ({ db, profile, data }) => {
     }
 
     // Update LastLogin
+    // TODO: Check update
     db.QueryPrepare<ResultSetHeader>('UPDATE Users SET LastLogin = NOW() WHERE ID = ?', [rawUser[0].ID]);
 
     const user: UserType = {
@@ -121,6 +122,8 @@ export const Login: IFeature<'login'> = async ({ db, profile, data }) => {
     profile.user = user;
     profile.firstMessage = false;
 
+    // TODO: Add verification
+    // const userAdded =
     userManager.add(profile);
     await Unlock(db, profile, 0, data.password);
 

@@ -32,5 +32,12 @@ export const env = {
     // Encryption configuration
     CRYPT_METHOD: getEnvVar('CRYPT_METHOD', 'enum', ['aes-128-gcm', 'aes-256-ctr']),
     CRYPT_KEY_A: getEnvVar('CRYPT_KEY_A', 'string'),
-    CRYPT_KEY_B: getEnvVar('CRYPT_KEY_B', 'string')
+    CRYPT_KEY_B: getEnvVar('CRYPT_KEY_B', 'string'),
+
+    // GameLife Database configuration
+    DB_GL_HOSTNAME: getEnvVar('DB_GL_HOSTNAME', 'string', false),
+    DB_GL_PORT: getEnvVar('DB_GL_PORT', 'number', false) || 3306,
+    DB_GL_DATABASE: getEnvVar('DB_GL_DATABASE', 'string', false),
+    DB_GL_USERNAME: getEnvVar('DB_GL_USERNAME', 'string', false),
+    DB_GL_PASSWORD: getEnvVar('DB_GL_PASSWORD', 'string', false)
 };

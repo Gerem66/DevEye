@@ -11,3 +11,7 @@ dist
 build
 node_modules
 package-lock.json
+
+# Logs
+logs
+*.log

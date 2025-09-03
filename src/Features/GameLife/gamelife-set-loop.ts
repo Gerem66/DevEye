@@ -1,29 +1,56 @@
 import { createPool } from 'mysql2/promise';
+
 import SQL from '@/Services/SQL';
+import GLogs from '@/Utils/Logs';
+import { env } from '@/Utils/Env';
 import { RandomString } from '@/Utils/Functions';
 
 import type { IFeature } from '@/Interfaces/IFeature';
 
-const db_GL = new SQL({
-    name: 'DB-DevEye',
-    pool: createPool({
-        host: process.env.DB_GL_HOSTNAME || '',
-        port: parseInt(process.env.DB_GL_PORT || '3306'),
-        database: process.env.DB_GL_DATABASE || '',
-        user: process.env.DB_GL_USERNAME || '',
-        password: process.env.DB_GL_PASSWORD || '',
-        enableKeepAlive: true,
-        waitForConnections: true,
-        connectionLimit: 10,
-        queueLimit: 0,
-        idleTimeout: 30000
-    })
-});
+let db_GL: SQL | null = null;
+
+export const InitializeGameLifeDB = () => {
+    if (db_GL !== null) {
+        GLogs.warn('[gamelife-set-loop] GameLife DB already initialized');
+        return;
+    }
+
+    if (!env.DB_GL_HOSTNAME || !env.DB_GL_DATABASE || !env.DB_GL_USERNAME) {
+        GLogs.warn('[gamelife-set-loop] GameLife DB configuration not set, skipping initialization');
+        return;
+    }
+
+    db_GL = new SQL({
+        name: 'DB-DevEye',
+        pool: createPool({
+            host: env.DB_GL_HOSTNAME || '',
+            port: env.DB_GL_PORT,
+            database: env.DB_GL_DATABASE || '',
+            user: env.DB_GL_USERNAME || '',
+            password: env.DB_GL_PASSWORD || '',
+            enableKeepAlive: true,
+            waitForConnections: true,
+            connectionLimit: 10,
+            queueLimit: 0,
+            idleTimeout: 30000
+        })
+    });
+
+    if (!db_GL.connected) {
+        GLogs.error('GameLife DB connection failed');
+        db_GL = null;
+    }
+};
 
 /** Store all sessions with ID as key and value is: lastCount (for cache) and interval to check changes */
 const intervals: { [key: string]: { lastCount: number; interval: NodeJS.Timeout } } = {};
 
 export const GetGameLifeData: IFeature<'gamelife-set-loop'> = async ({ profile, data }) => {
+    if (db_GL === null) {
+        GLogs.error('[gamelife-set-loop] GameLife DB not initialized');
+        return { status: 1, intervalID: '' };
+    }
+
     // User listening to changes
     if (data.type === 'open') {
         // Generate a random ID
@@ -38,6 +65,11 @@ export const GetGameLifeData: IFeature<'gamelife-set-loop'> = async ({ profile, 
         intervals[intervalID] = {
             lastCount: 0, // Cache
             interval: setInterval(async () => {
+                if (db_GL === null) {
+                    clearInterval(intervals[intervalID].interval);
+                    return;
+                }
+
                 // Get the total count of accounts
                 const request = await db_GL.ExecQuery<{ count: number }[]>('SELECT COUNT(*) as count FROM Accounts');
 

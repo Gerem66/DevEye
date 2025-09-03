@@ -42,3 +42,5 @@ npm start
 - [PHP](https://www.php.net/docs.php)
 - [MySQLi](https://www.php.net/manual/en/book.mysqli.php)
 - [Node.js](https://nodejs.org/en/docs/)
+
+TODO : Faire un schéma d'architecture sur Figma

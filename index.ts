@@ -1,13 +1,19 @@
+import path from 'path';
 import Server from '@/Server';
 import SQL from '@/Services/SQL';
 import Encryption from '@/Services/Encryption';
 import { createPool } from 'mysql2/promise';
 
+import GLogs from '@/Utils/Logs';
 import { env } from '@/Utils/Env';
 import { Features } from '@/Features';
 import { userManager } from '@/Services/UserManager';
 
 import type { TCPRequestReceiveHeader } from 'deveye-types';
+import { InitializeGameLifeDB } from '@/Features/GameLife/gamelife-set-loop';
+
+const logsDir = path.join(env.LOG_PATH, env.ENVIRONMENT);
+GLogs.OpenLogs(env.LOG_LEVEL, logsDir, env.LOG_KEEP_DAYS);
 
 const db = new SQL({
     name: 'DB-DevEye',
@@ -20,24 +26,26 @@ const db = new SQL({
     })
 });
 
+InitializeGameLifeDB();
+
 const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
 
 const serv = new Server();
 
 serv.Listen(8888, {
     onConnect: () => {
-        console.log('User connected');
+        GLogs.info('[DevEye] User connected');
     },
 
     onDisconnect: (_connection, profile) => {
-        console.log('User disconnected');
+        GLogs.info('[DevEye] User disconnected');
         if (profile?.user) {
             userManager.remove(profile.user.ID);
         }
     },
 
     onError: (_connection, profile, error) => {
-        console.error('Connection error:', error);
+        GLogs.error(`[DevEye] Connection error:' ${error.message}`);
         if (profile.user !== null) {
             userManager.remove(profile.user.ID);
         }
@@ -45,25 +53,31 @@ serv.Listen(8888, {
 
     onMessage: async (connection, profile, data) => {
         if (typeof data.action !== 'string') {
-            console.warn('Invalid action type:', typeof data.action);
+            GLogs.warn(`[DevEye] Invalid action type: ${typeof data.action}`);
             return;
         }
 
         const feature = Features[data.action];
         if (!feature) {
             // TODO: Log
-            console.warn(`Feature not implemented: ${data.action}`);
+            GLogs.warn(`[DevEye] Feature not implemented: ${data.action}`);
             return;
         }
 
-        // TODO: Wring data content type ? :thinking:
-        const result = await feature({ db, crypt, profile, data: data.content });
-
         const response: TCPRequestReceiveHeader<typeof data.action> = {
             action: data.action,
-            content: result,
+            content: { status: 1, message: 'Feature not implemented' },
             callbackID: data.callbackID
         };
+
+        try {
+            // TODO: Wring data content type ? :thinking:
+            response.content = await feature({ db, crypt, profile, data: data.content });
+        } catch (error) {
+            GLogs.error(`[DevEye] Error processing feature ${data.action}: ${(error as Error).message}`);
+            response.content = { status: 500, message: 'Internal server error' };
+        }
+
         connection.send(JSON.stringify(response));
     }
 });
