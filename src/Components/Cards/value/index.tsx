@@ -2,8 +2,8 @@ import { JSX } from 'react';
 
 import styles from './style.module.css';
 
-import type Color from 'Styles/colors.css';
-import type Icon from 'Styles/icons.css';
+import type Color from '@/Styles/colors.css';
+import type Icon from '@/Styles/icons.css';
 
 interface CardValueProps {
     title: string;
@@ -15,7 +15,7 @@ interface CardValueProps {
 
 function CardValue({ title, value, icon = null, width = 'unset', color = 'bg-blue' }: CardValueProps): JSX.Element {
     return (
-        <div className={`${styles.card} bg-${color}`} style={{ maxWidth: width }}>
+        <div className={`${styles.card} ${color}`} style={{ maxWidth: width }}>
             <p className={styles.title}>{title}</p>
             <p className={styles.value}>{value}</p>
 

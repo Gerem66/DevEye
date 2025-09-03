@@ -2,7 +2,7 @@ import React from 'react';
 
 import styles from './style.module.css';
 
-import type Color from 'Styles/colors.css';
+import type Color from '@/Styles/colors.css';
 
 interface CardValueProps {
     children: React.JSX.Element | React.JSX.Element[];
@@ -12,7 +12,13 @@ interface CardValueProps {
     style?: string;
 }
 
-function CardElement({ children, title = '', style = '', width = 'unset', color = 'bg-blue' }: CardValueProps): React.JSX.Element {
+function CardElement({
+    children,
+    title = '',
+    style = '',
+    width = 'unset',
+    color = 'bg-blue'
+}: CardValueProps): React.JSX.Element {
     return (
         <div
             className={`card-element ${styles.card} ${color} ${style}`}
