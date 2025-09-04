@@ -48,7 +48,7 @@ const intervals: { [key: string]: { lastCount: number; interval: NodeJS.Timeout 
 export const GetGameLifeData: IFeature<'gamelife-set-loop'> = async ({ profile, data }) => {
     if (db_GL === null) {
         GLogs.error('[gamelife-set-loop] GameLife DB not initialized');
-        return { status: 1, intervalID: '' };
+        return { status: 'error' };
     }
 
     // User listening to changes
@@ -58,7 +58,7 @@ export const GetGameLifeData: IFeature<'gamelife-set-loop'> = async ({ profile, 
 
         // Already exists, return error
         if (intervals[intervalID] !== undefined) {
-            return { status: 1, intervalID: '' };
+            return { status: 'error' };
         }
 
         // Create a new interval loop
@@ -96,7 +96,7 @@ export const GetGameLifeData: IFeature<'gamelife-set-loop'> = async ({ profile, 
         };
 
         // Instant response, to confirm the loop is open
-        return { status: 0, intervalID };
+        return { status: 'success', intervalID };
     }
 
     // User stop listening
@@ -106,5 +106,5 @@ export const GetGameLifeData: IFeature<'gamelife-set-loop'> = async ({ profile, 
     }
 
     // Error
-    return { status: 1, intervalID: '' };
+    return { status: 'error' };
 };

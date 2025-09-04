@@ -6,8 +6,7 @@ export const EditPassword: IFeature<'edit-password'> = async ({ db, crypt, profi
 
     if (profile.user === null) {
         return {
-            status: 1,
-            password: null
+            status: 'error'
         };
     }
 
@@ -34,13 +33,12 @@ export const EditPassword: IFeature<'edit-password'> = async ({ db, crypt, profi
 
     if (result === null || result.affectedRows === 0) {
         return {
-            status: 1,
-            password: null
+            status: 'error'
         };
     }
 
     return {
-        status: 0,
+        status: 'success',
         password: {
             ID: password.ID,
             category: password.category,

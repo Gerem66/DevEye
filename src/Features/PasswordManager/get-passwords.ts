@@ -1,3 +1,4 @@
+import GLogs from '@/Utils/Logs';
 import { StrIsJson } from '@/Utils/Types';
 
 import type { IFeature } from '@/Interfaces/IFeature';
@@ -5,6 +6,13 @@ import type { PasswordType, PasswordDatabaseType } from 'deveye-types';
 
 export const GetPasswords: IFeature<'get-passwords'> = async ({ db, crypt, profile, data }) => {
     const { contextID } = data;
+
+    if (profile.user === null) {
+        GLogs.error('[get-passwords] No user in profile');
+        return {
+            status: 'error'
+        };
+    }
 
     let passwords: PasswordDatabaseType[] | null = null;
 
@@ -21,8 +29,7 @@ export const GetPasswords: IFeature<'get-passwords'> = async ({ db, crypt, profi
 
     if (passwords === null) {
         return {
-            status: 1,
-            passwords: []
+            status: 'error'
         };
     }
 
@@ -30,7 +37,7 @@ export const GetPasswords: IFeature<'get-passwords'> = async ({ db, crypt, profi
         .map((p): PasswordType | null => {
             const rawContent = crypt.Decrypt(p.Content);
             if (!rawContent || !StrIsJson(rawContent)) {
-                console.log('Error: Password content is not valid', rawContent);
+                GLogs.error('[get-passwords] Error: Password content is not valid');
                 return null;
             }
 
@@ -42,7 +49,7 @@ export const GetPasswords: IFeature<'get-passwords'> = async ({ db, crypt, profi
                 !Object.prototype.hasOwnProperty.call(content, 'password') ||
                 !Object.prototype.hasOwnProperty.call(content, 'status')
             ) {
-                console.log('Error: Password content is not valid2', content);
+                GLogs.error('[get-passwords] Error: Password content is not valid2', { rawContent });
                 return null;
             }
 
@@ -54,7 +61,7 @@ export const GetPasswords: IFeature<'get-passwords'> = async ({ db, crypt, profi
         .filter((p) => p !== null);
 
     return {
-        status: 0,
+        status: 'success',
         passwords: passwordsFormatted
     };
 };

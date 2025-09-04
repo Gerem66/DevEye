@@ -19,8 +19,7 @@ export const Login: IFeature<'login'> = async ({ db, profile, data }) => {
     if (requestToken.status !== 0 || !requestToken.content) {
         // TODO: Alert
         return {
-            status: 1,
-            user: null
+            status: 'error'
         };
     }
 
@@ -28,8 +27,7 @@ export const Login: IFeature<'login'> = async ({ db, profile, data }) => {
     if (rawUser === null || rawUser.length === 0) {
         // TODO: Alert
         return {
-            status: 1,
-            user: null
+            status: 'error'
         };
     }
 
@@ -61,8 +59,7 @@ export const Login: IFeature<'login'> = async ({ db, profile, data }) => {
     );
     if (rawContexts === null) {
         return {
-            status: 1,
-            user: null
+            status: 'error'
         };
     }
 
@@ -72,13 +69,10 @@ export const Login: IFeature<'login'> = async ({ db, profile, data }) => {
 
     if (tcpUsers.length > 0) {
         try {
-            rawUsers = await db.ExecQuery<DBUserType[] | null>(
-                `SELECT * FROM Users WHERE ID IN (${tcpUsers.join(',')})`
-            );
+            rawUsers = await db.ExecQuery<DBUserType[]>(`SELECT * FROM Users WHERE ID IN (${tcpUsers.join(',')})`);
         } catch {
             return {
-                status: 1,
-                user: null
+                status: 'error'
             };
         }
     }
@@ -128,7 +122,7 @@ export const Login: IFeature<'login'> = async ({ db, profile, data }) => {
     await Unlock(db, profile, 0, data.password);
 
     return {
-        status: 0,
+        status: 'success',
         user: user
     };
 };

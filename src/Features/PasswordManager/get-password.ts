@@ -1,5 +1,6 @@
-import { StrIsJson } from '@/Utils/Types';
 import { Unlock } from '@/Features/Utils/unlock';
+import GLogs from '@/Utils/Logs';
+import { StrIsJson } from '@/Utils/Types';
 
 import type { IFeature } from '@/Interfaces/IFeature';
 import type { PasswordDatabaseType } from 'deveye-types';
@@ -7,17 +8,26 @@ import type { PasswordDatabaseType } from 'deveye-types';
 export const GetPassword: IFeature<'get-password'> = async ({ db, crypt, profile, data }) => {
     const { contextID, passwordID } = data;
 
-    const unlockStatus = await Unlock(db, profile, contextID);
-    if (unlockStatus === 'error') {
+    if (profile.user === null) {
         return {
-            status: 1,
-            password: null
+            status: 'error'
         };
     }
-    if (unlockStatus !== 'unlocked') {
+
+    const unlockStatus = await Unlock(db, profile, contextID);
+
+    if (unlockStatus === 'wrong-user' || unlockStatus === 'wrong-password') {
         return {
-            status: 2,
-            password: null
+            status: 'unlock-failed'
+        };
+    } else if (unlockStatus === 'error') {
+        return {
+            status: 'error'
+        };
+    } else if (unlockStatus !== 'unlocked') {
+        GLogs.warn('[get-password] Unknown unlock status:', unlockStatus);
+        return {
+            status: 'error'
         };
     }
 
@@ -36,19 +46,17 @@ export const GetPassword: IFeature<'get-password'> = async ({ db, crypt, profile
     }
 
     if (resultPassword === null || resultPassword.length === 0) {
-        console.log('Error: Password not found');
+        GLogs.error('[get-password] Password not found:', { contextID, passwordID });
         return {
-            status: 3,
-            password: null
+            status: 'unlock-failed'
         };
     }
 
     const rawContent = crypt.Decrypt(resultPassword[0].Content);
     if (!rawContent || !StrIsJson(rawContent)) {
-        console.log('Error: Password content is not valid', rawContent);
+        GLogs.error('[get-password] Error: Password content is not valid', { rawContent });
         return {
-            status: 4,
-            password: null
+            status: 'error'
         };
     }
 
@@ -60,15 +68,14 @@ export const GetPassword: IFeature<'get-password'> = async ({ db, crypt, profile
         !Object.prototype.hasOwnProperty.call(content, 'password') ||
         !Object.prototype.hasOwnProperty.call(content, 'status')
     ) {
-        console.log('Error: Password content is not valid2', content);
+        GLogs.error('[get-password] Error: Password content is not valid2');
         return {
-            status: 5,
-            password: null
+            status: 'error'
         };
     }
 
     return {
-        status: 0,
+        status: 'success',
         password: {
             ID: resultPassword[0].ID,
             category: content.category,

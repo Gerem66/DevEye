@@ -1,3 +1,6 @@
+import GLogs from '@/Utils/Logs';
+
+import type { ResultSetHeader } from 'mysql2';
 import type { IFeature } from '@/Interfaces/IFeature';
 
 export const DeleteContext: IFeature<'delete-context'> = async ({ db, profile, data }) => {
@@ -5,10 +8,11 @@ export const DeleteContext: IFeature<'delete-context'> = async ({ db, profile, d
 
     if (profile.user === null) {
         return {
-            status: 1
+            status: 'error'
         };
     }
 
+    // TODO: One transaction for all these queries?
     const deleteCommands = [
         'DELETE FROM _Mails WHERE `ContextID` = ?',
         'DELETE FROM _Notes WHERE `ContextID` = ?',
@@ -18,15 +22,17 @@ export const DeleteContext: IFeature<'delete-context'> = async ({ db, profile, d
     ];
 
     for (let i = 0; i < deleteCommands.length; i++) {
-        const result = await db.QueryPrepare(deleteCommands[i], [contextID]);
-        if (result === null) {
+        try {
+            await db.QueryPrepare<ResultSetHeader>(deleteCommands[i], [contextID]);
+        } catch (error) {
+            GLogs.error(`[delete-context] Error executing command: ${deleteCommands[i]}`, { error });
             return {
-                status: 2 + i
+                status: 'error'
             };
         }
     }
 
     return {
-        status: 0
+        status: 'success'
     };
 };

@@ -7,8 +7,7 @@ export const AddContext: IFeature<'add-context'> = async ({ db, profile, data })
 
     if (profile.user === null) {
         return {
-            status: 1,
-            context: null
+            status: 'error'
         };
     }
 
@@ -16,16 +15,14 @@ export const AddContext: IFeature<'add-context'> = async ({ db, profile, data })
 
     if (result === null) {
         return {
-            status: 2,
-            context: null
+            status: 'error'
         };
     }
 
     const context = await db.QueryPrepare<DBContextType[]>('SELECT * FROM Contexts WHERE `ID` = ?', [result.insertId]);
     if (context === null || context.length === 0) {
         return {
-            status: 3,
-            context: null
+            status: 'error'
         };
     }
 
@@ -36,13 +33,12 @@ export const AddContext: IFeature<'add-context'> = async ({ db, profile, data })
 
     if (resultLink === null) {
         return {
-            status: 4,
-            context: null
+            status: 'error'
         };
     }
 
     return {
-        status: 0,
+        status: 'success',
         context: {
             id: context[0].ID,
             name: context[0].Name,

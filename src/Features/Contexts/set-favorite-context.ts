@@ -1,5 +1,6 @@
-import { ResultSetHeader } from 'mysql2';
+import GLogs from '@/Utils/Logs.js';
 
+import type { ResultSetHeader } from 'mysql2';
 import type { IFeature } from '../../Interfaces/IFeature.js';
 
 export const SetFavorite: IFeature<'set-favorite-context'> = async ({ db, profile, data }) => {
@@ -8,7 +9,7 @@ export const SetFavorite: IFeature<'set-favorite-context'> = async ({ db, profil
 
     if (user === null) {
         return {
-            status: 1
+            status: 'error'
         };
     }
 
@@ -17,12 +18,13 @@ export const SetFavorite: IFeature<'set-favorite-context'> = async ({ db, profil
         [contextID, featureID, user.ID]
     );
     if (result === null || result.affectedRows === 0) {
+        GLogs.error(`[set-favorite-context] Failed to set favorite context/feature for user ID ${user.ID}`);
         return {
-            status: 2
+            status: 'error'
         };
     }
 
     return {
-        status: 0
+        status: 'success'
     };
 };

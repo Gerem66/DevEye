@@ -6,21 +6,23 @@ export const CheckPassword: IFeature<'check-password'> = async ({ db, profile, d
     const { password, contextID } = data;
 
     const unlockStatus = await Unlock(db, profile, contextID, password);
-    if (unlockStatus === 'error') {
-        return {
-            status: 1,
-            message: 'Une erreur est survenue'
-        };
-    }
-    if (unlockStatus !== 'unlocked') {
-        return {
-            status: 2,
-            message: 'Mot de passe incorrect'
-        };
-    }
 
-    return {
-        status: 0,
-        message: null
-    };
+    switch (unlockStatus) {
+        case 'unlocked':
+            return {
+                status: 'unlocked'
+            };
+        case 'wrong-user':
+        case 'wrong-password':
+            return {
+                status: 'wrong-user-or-password',
+                message: 'Incorrect information'
+            };
+        case 'error':
+        default:
+            return {
+                status: 'error',
+                message: 'An error occurred'
+            };
+    }
 };
