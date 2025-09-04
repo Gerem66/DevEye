@@ -1,8 +1,8 @@
 import React from 'react';
 
-import { tcp } from '../../Utils/TCP';
-import Popup, { ClosePopup } from '../../Components/Popup';
-import { Button, TextInput } from '../../Components';
+import { tcp } from '@/Utils/TCP';
+import Popup, { ClosePopup } from '@/Components/Popup';
+import { Button, TextInput } from '@/Components';
 
 import styles from './style.module.css';
 

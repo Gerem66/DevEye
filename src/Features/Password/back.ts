@@ -1,18 +1,9 @@
 import React from 'react';
 
-import { tcp } from '../../Utils/TCP';
-import { OpenPopup } from '../../Components/Popup';
+import { tcp } from '@/Utils/TCP';
+import { OpenPopup } from '@/Components/Popup';
 
 import type { FeatureProps, PasswordType } from 'deveye-types';
-
-const FeaturePasswordProps: FeatureProps = {
-    setUser: () => {},
-    context: null,
-    feature: null,
-
-    setContext: () => {},
-    setFeature: () => {}
-};
 
 class FeaturePasswordBack extends React.Component<FeatureProps> {
     /** All password storage */
@@ -33,24 +24,7 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
     timeoutPasswords: NodeJS.Timeout[] = [];
 
     componentDidMount() {
-        const { context } = this.props;
-
-        tcp.SendAndWait('get-passwords', { contextID: context.id }).then(async (response) => {
-            if (response === 'timeout') {
-                console.log('Error: Timeout');
-            } else if (response === 'not-sended') {
-                console.log('Error: Not sended');
-            } else {
-                if (response.status === 0) {
-                    this.allPasswords = response.passwords;
-                    this.updatePasswords();
-                    return;
-                } else {
-                    console.log('Error:', response);
-                }
-            }
-            this.setState({ loaded: true });
-        });
+        this.loadPasswords();
     }
 
     componentWillUnmount() {
@@ -59,8 +33,32 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
         }
     }
 
-    /** @param {string} [search] */
-    updatePasswords = (search = this.state.search) => {
+    loadPasswords = async () => {
+        const { context } = this.props;
+
+        const response = await tcp.SendAndWait('get-passwords', { contextID: context.id });
+
+        this.setState({ loaded: true });
+
+        if (response === 'timeout' || response === 'not-sended') {
+            console.warn('Error: Could not load passwords');
+            return;
+        }
+
+        if (response.status !== 0 || !response.passwords) {
+            console.error('Error:', response);
+            return;
+        }
+
+        this.allPasswords = response.passwords;
+        this.UpdatePasswords();
+    };
+
+    onSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        this.UpdatePasswords(e.target.value);
+    };
+
+    UpdatePasswords = (search: string = this.state.search) => {
         const categories = this.allPasswords
             .map((password) => password.category)
             .filter((value, index, self) => self.indexOf(value) === index)
@@ -77,10 +75,6 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
             .reduce((acc, cur) => ({ ...acc, ...cur }), {});
 
         this.setState({ loaded: true, categories, search });
-    };
-
-    onSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        this.updatePasswords(e.target.value);
     };
 
     GetPassword = async (ID: number) => {
@@ -116,19 +110,18 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
         );
 
         this.discovered.push(response.password);
-        this.updatePasswords();
+        this.UpdatePasswords();
     };
 
     ResetPassword = (ID: number) => {
         this.discovered = this.discovered.filter((password) => password.ID !== ID);
-        this.updatePasswords();
+        this.UpdatePasswords();
     };
 
     OpenEditPassword = async (ID: number | null) => {
         const { context } = this.props;
 
-        /** @type {PasswordType} */
-        let password = {
+        let password: PasswordType = {
             ID: 0,
             category: '',
             service: '',
@@ -161,69 +154,67 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
             password = response.password;
         }
 
-        const popup: Promise<'delete' | PasswordType | null> = OpenPopup('popup-add-password', password);
+        const newPassword = await OpenPopup<'delete' | PasswordType | null>('popup-add-password', password);
 
-        popup.then(async (newPassword) => {
-            if (newPassword === null) {
+        if (newPassword === null) {
+            return;
+        }
+
+        // Remove password
+        if (newPassword === 'delete') {
+            if (ID !== null) {
+                const response = await tcp.SendAndWait('delete-password', {
+                    contextID: context.id,
+                    passwordID: ID
+                });
+                if (response === 'timeout' || response === 'not-sended' || response.status !== 0) {
+                    console.log('Error:', response);
+                    return;
+                }
+                this.allPasswords = this.allPasswords.filter((p) => p.ID !== ID);
+            }
+        }
+
+        // Add password
+        else if (ID === null) {
+            const response = await tcp.SendAndWait('add-password', {
+                contextID: context.id,
+                password: newPassword
+            });
+            if (
+                response === 'timeout' ||
+                response === 'not-sended' ||
+                response.status !== 0 ||
+                response.password === null
+            ) {
+                console.log('Error:', response);
                 return;
             }
+            this.allPasswords.push(response.password);
+        }
 
-            // Remove password
-            if (newPassword === 'delete') {
-                if (ID !== null) {
-                    const response = await tcp.SendAndWait('delete-password', {
-                        contextID: context.id,
-                        passwordID: ID
-                    });
-                    if (response === 'timeout' || response === 'not-sended' || response.status !== 0) {
-                        console.log('Error:', response);
-                        return;
-                    }
-                    this.allPasswords = this.allPasswords.filter((p) => p.ID !== ID);
-                }
+        // Edit password
+        else {
+            const response = await tcp.SendAndWait('edit-password', {
+                contextID: context.id,
+                password: newPassword
+            });
+            if (
+                response === 'timeout' ||
+                response === 'not-sended' ||
+                response.status !== 0 ||
+                response.password === null
+            ) {
+                console.log('Error:', response);
+                return;
             }
-
-            // Add password
-            else if (ID === null) {
-                const response = await tcp.SendAndWait('add-password', {
-                    contextID: context.id,
-                    password: newPassword
-                });
-                if (
-                    response === 'timeout' ||
-                    response === 'not-sended' ||
-                    response.status !== 0 ||
-                    response.password === null
-                ) {
-                    console.log('Error:', response);
-                    return;
-                }
-                this.allPasswords.push(response.password);
+            const index = this.allPasswords.findIndex((p) => p.ID === ID);
+            if (index !== -1) {
+                this.allPasswords[index] = response.password;
             }
+        }
 
-            // Edit password
-            else {
-                const response = await tcp.SendAndWait('edit-password', {
-                    contextID: context.id,
-                    password: newPassword
-                });
-                if (
-                    response === 'timeout' ||
-                    response === 'not-sended' ||
-                    response.status !== 0 ||
-                    response.password === null
-                ) {
-                    console.log('Error:', response);
-                    return;
-                }
-                const index = this.allPasswords.findIndex((p) => p.ID === ID);
-                if (index !== -1) {
-                    this.allPasswords[index] = response.password;
-                }
-            }
-
-            this.updatePasswords();
-        });
+        this.UpdatePasswords();
     };
 }
 

@@ -2,8 +2,8 @@ import { useState } from 'react';
 
 import styles from './style.module.css';
 
-import { ClosePopup } from '../../Components/Popup';
-import { Popup, Button, TextInput, SelectInput } from '../../Components';
+import { ClosePopup } from '@/Components/Popup';
+import { Popup, Button, TextInput, SelectInput } from '@/Components';
 
 import type { PasswordType, PasswordStatus } from 'deveye-types';
 

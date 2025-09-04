@@ -1,10 +1,10 @@
 import { JSX, useEffect, useState } from 'react';
 
 import './style.css';
-import { Navbar } from '../../Components';
-import { FEATURES } from '../../Features/Features';
-import AddContextPopup from './addContext';
-import PopupUnlock from './unlock';
+import { Navbar } from '@/Components';
+import { FEATURES } from '@/Features/Features';
+import AddContextPopup from './popup-add-context';
+import PopupUnlock from './popup-unlock';
 
 import type { UserType, ContextType, FeatureType } from 'deveye-types';
 

@@ -1,9 +1,9 @@
 import React from 'react';
 
 import styles from './style.module.css';
-import { Popup, Button, TextInput } from '../../Components/index.js';
-import { ClosePopup } from '../../Components/Popup';
-import { tcp } from '../../Utils/TCP';
+import { Popup, Button, TextInput } from '@/Components/index.js';
+import { ClosePopup } from '@/Components/Popup';
+import { tcp } from '@/Utils/TCP';
 
 import type { ContextType } from 'deveye-types';
 

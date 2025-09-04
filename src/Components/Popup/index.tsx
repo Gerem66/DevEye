@@ -20,7 +20,7 @@ const PopupEvents: Record<
     }
 > = {};
 
-function OpenPopup<T extends object>(id: string, inputData: any = null): Promise<T | null> {
+function OpenPopup<T = object>(id: string, inputData: any = null): Promise<T | null> {
     if (PopupEvents[id]) {
         return new Promise((resolve) => {
             PopupEvents[id].setInputData(inputData);

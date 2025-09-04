@@ -3,7 +3,7 @@ import styles from './style.module.css';
 import FeaturePasswordBack from './back';
 import PasswordRow from './passwordRow';
 import LoadingTable from './loadingTable';
-import { PasswordPopupAdd } from './popups';
+import { PasswordPopupAdd } from './popups-add-password';
 
 import { Header, Row, Card, TextInput } from '../../Components';
 
