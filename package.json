@@ -9,6 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "test": "echo \"Error: no test specified\" && exit 1",
     "gen:css-types": "tcm src --include '**/*.module.css'",
     "clean": "rm -rf ./build ./dist ./node_modules package-lock.json"

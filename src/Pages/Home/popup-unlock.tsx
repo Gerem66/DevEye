@@ -55,7 +55,7 @@ class PopupUnlock extends React.Component<PopupUnlockProps> {
         } else if (response === 'not-sended') {
             this.setState({ errorPassword: 'Not sended', inputPassword: '' });
             return;
-        } else if (response.status !== 0) {
+        } else if (response.status !== 'unlocked') {
             this.setState({
                 errorPassword: response.message || 'Mot de passe incorrect',
                 inputPassword: ''

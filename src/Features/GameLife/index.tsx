@@ -21,7 +21,7 @@ function FeatureGameLife({ user, setUser, context, feature }: FeatureProps) {
             console.log(data);
 
             // Check if the request was sent correctly
-            if (data === 'timeout' || data === 'not-sended' || data.status !== 0) {
+            if (data === 'timeout' || data === 'not-sended' || data.status !== 'success') {
                 console.error('Error when sending the request');
                 return;
             }

@@ -117,7 +117,7 @@ class LoginPageBack extends React.Component<LoginPageProps> {
                     password: password
                 });
 
-                if (response === 'not-sended' || response === 'timeout' || response.status !== 0) {
+                if (response === 'not-sended' || response === 'timeout' || response.status !== 'success') {
                     connected = false;
                     tcp.Disconnect();
                 } else {
@@ -190,7 +190,7 @@ class LoginPageBack extends React.Component<LoginPageProps> {
 
         const response = await tcp.SendAndWait('login', { token, password: null });
 
-        if (response === 'not-sended' || response === 'timeout' || response.status !== 0) {
+        if (response === 'not-sended' || response === 'timeout' || response.status !== 'success') {
             connected = false;
             tcp.Disconnect();
             Clear('token');

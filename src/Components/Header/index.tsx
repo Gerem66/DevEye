@@ -30,7 +30,7 @@ function Header({ user, setUser, context, feature }: HeaderProps): JSX.Element {
             featureID: feature.id
         });
 
-        if (result === 'not-sended' || result === 'timeout' || result.status !== 0) {
+        if (result === 'not-sended' || result === 'timeout' || result.status !== 'success') {
             setLoading(false);
             return;
         }

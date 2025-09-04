@@ -45,7 +45,7 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
             return;
         }
 
-        if (response.status !== 0 || !response.passwords) {
+        if (response.status !== 'success') {
             console.error('Error:', response);
             return;
         }
@@ -90,13 +90,13 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
         } else if (response === 'not-sended') {
             console.log('Error: Not sended');
             return;
-        } else if (response.status === 2) {
+        } else if (response.status === 'unlock-failed') {
             const a = await OpenPopup('popup-unlock');
             if (a !== null) {
                 this.GetPassword(ID);
             }
             return;
-        } else if (response.status !== 0 || response.password === null) {
+        } else if (response.status !== 'success') {
             console.log('Error:', response);
             return;
         }
@@ -141,13 +141,13 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
             } else if (response === 'not-sended') {
                 console.log('Error: Not sended');
                 return;
-            } else if (response.status === 2) {
+            } else if (response.status === 'unlock-failed') {
                 const a = await OpenPopup('popup-unlock');
                 if (a !== null) {
                     this.OpenEditPassword(ID);
                 }
                 return;
-            } else if (response.status !== 0 || response.password === null) {
+            } else if (response.status !== 'success') {
                 console.log('Error:', response);
                 return;
             }
@@ -167,7 +167,7 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
                     contextID: context.id,
                     passwordID: ID
                 });
-                if (response === 'timeout' || response === 'not-sended' || response.status !== 0) {
+                if (response === 'timeout' || response === 'not-sended' || response.status !== 'success') {
                     console.log('Error:', response);
                     return;
                 }
@@ -181,12 +181,7 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
                 contextID: context.id,
                 password: newPassword
             });
-            if (
-                response === 'timeout' ||
-                response === 'not-sended' ||
-                response.status !== 0 ||
-                response.password === null
-            ) {
+            if (response === 'timeout' || response === 'not-sended' || response.status !== 'success') {
                 console.log('Error:', response);
                 return;
             }
@@ -199,12 +194,7 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
                 contextID: context.id,
                 password: newPassword
             });
-            if (
-                response === 'timeout' ||
-                response === 'not-sended' ||
-                response.status !== 0 ||
-                response.password === null
-            ) {
+            if (response === 'timeout' || response === 'not-sended' || response.status !== 'success') {
                 console.log('Error:', response);
                 return;
             }

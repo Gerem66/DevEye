@@ -46,7 +46,7 @@ class AddContextPopup extends React.Component<AddContextPopupProps> {
             contextName: inputContext
         });
 
-        if (result === 'timeout' || result === 'not-sended' || result.status !== 0 || result.context === null) {
+        if (result === 'timeout' || result === 'not-sended' || result.status !== 'success') {
             this.setState({ errorContext: "Erreur lors de l'ajout de l'entreprise" });
             return;
         }

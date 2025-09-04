@@ -16,7 +16,7 @@ function FeatureDashboard({ user, setUser, context, feature, setContext }: Featu
 
     const DeleteContext = () => {
         tcp.SendAndWait('delete-context', { contextID: context.id }).then((result) => {
-            if (result === 'timeout' || result === 'not-sended' || result.status !== 0) {
+            if (result === 'timeout' || result === 'not-sended' || result.status !== 'success') {
                 return;
             }
 
