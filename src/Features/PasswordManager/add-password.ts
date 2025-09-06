@@ -2,7 +2,7 @@ import type { ResultSetHeader } from 'mysql2';
 import type { IFeature } from '@/Interfaces/IFeature';
 
 export const AddPassword: IFeature<'add-password'> = async ({ db, crypt, profile, data }) => {
-    const { contextID, password } = data;
+    const { workspaceID, password } = data;
 
     if (profile.user === null) {
         return {
@@ -12,7 +12,7 @@ export const AddPassword: IFeature<'add-password'> = async ({ db, crypt, profile
 
     const newPassword = {
         UserID: profile.user.ID,
-        ContextID: contextID || null,
+        WorkspaceID: workspaceID || null,
         Content: crypt.Encrypt(
             JSON.stringify({
                 category: password.category,
@@ -26,15 +26,15 @@ export const AddPassword: IFeature<'add-password'> = async ({ db, crypt, profile
 
     let result = null;
 
-    if (contextID === 0) {
-        result = await db.QueryPrepare<ResultSetHeader>(
-            'INSERT INTO _Passwords SET `UserID` = ?, `ContextID` = NULL, `Content` = ?',
+    if (workspaceID === 0) {
+        result = await db.sql.QueryPrepare<ResultSetHeader>(
+            'INSERT INTO _Passwords SET `UserID` = ?, `WorkspaceID` = NULL, `Content` = ?',
             [newPassword.UserID, newPassword.Content]
         );
     } else {
-        result = await db.QueryPrepare<ResultSetHeader>(
-            'INSERT INTO _Passwords SET `UserID` = ?, `ContextID` = ?, `Content` = ?',
-            [newPassword.UserID, newPassword.ContextID, newPassword.Content]
+        result = await db.sql.QueryPrepare<ResultSetHeader>(
+            'INSERT INTO _Passwords SET `UserID` = ?, `WorkspaceID` = ?, `Content` = ?',
+            [newPassword.UserID, newPassword.WorkspaceID, newPassword.Content]
         );
     }
 

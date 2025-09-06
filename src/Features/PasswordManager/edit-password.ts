@@ -2,7 +2,7 @@ import type { ResultSetHeader } from 'mysql2';
 import type { IFeature } from '@/Interfaces/IFeature';
 
 export const EditPassword: IFeature<'edit-password'> = async ({ db, crypt, profile, data }) => {
-    const { contextID, password } = data;
+    const { workspaceID, password } = data;
 
     if (profile.user === null) {
         return {
@@ -21,14 +21,14 @@ export const EditPassword: IFeature<'edit-password'> = async ({ db, crypt, profi
     );
 
     let result = null;
-    if (contextID === 0) {
-        const command = 'UPDATE _Passwords SET `Content` = ? WHERE `ID` = ? AND `UserID` = ? AND `ContextID` IS NULL';
+    if (workspaceID === 0) {
+        const command = 'UPDATE _Passwords SET `Content` = ? WHERE `ID` = ? AND `UserID` = ? AND `WorkspaceID` IS NULL';
         const args = [content, password.ID, profile.user.ID];
-        result = await db.QueryPrepare<ResultSetHeader>(command, args);
+        result = await db.sql.QueryPrepare<ResultSetHeader>(command, args);
     } else {
-        const command = 'UPDATE _Passwords SET `Content` = ? WHERE `ID` = ? AND `UserID` = ? AND `ContextID` = ?';
-        const args = [content, password.ID, profile.user.ID, contextID];
-        result = await db.QueryPrepare<ResultSetHeader>(command, args);
+        const command = 'UPDATE _Passwords SET `Content` = ? WHERE `ID` = ? AND `UserID` = ? AND `WorkspaceID` = ?';
+        const args = [content, password.ID, profile.user.ID, workspaceID];
+        result = await db.sql.QueryPrepare<ResultSetHeader>(command, args);
     }
 
     if (result === null || result.affectedRows === 0) {

@@ -1,42 +1,42 @@
 import bcrypt from 'bcrypt';
 
-import type SQL from '@/Services/SQL';
+import type { Database } from '@/Database';
 import type { ClientSession } from '@/Interfaces/IClient';
 
-function GetAuth(profile: ClientSession, contextID: number): ClientSession['authentifications'][0] | null {
-    return profile.authentifications.find((a) => a.contextID === contextID) || null;
+function GetAuth(profile: ClientSession, workspaceID: number): ClientSession['authentifications'][0] | null {
+    return profile.authentifications.find((a) => a.workspaceID === workspaceID) || null;
 }
 
 /**
- * @description Temporary unlock the context
+ * @description Temporary unlock the workspace
  */
 export async function Unlock(
-    db: SQL,
+    db: Database,
     profile: ClientSession,
-    contextID: number,
+    workspaceID: number,
     password: string | null = null
 ): Promise<'unlocked' | 'wrong-user' | 'wrong-password' | 'error'> {
-    const context = profile.user?.Contexts.find((c) => c.id === contextID) || null;
-    const contextAuth = GetAuth(profile, contextID);
+    const workspace = profile.user?.Workspaces.find((c) => c.id === workspaceID) || null;
+    const workspaceAuth = GetAuth(profile, workspaceID);
 
     // Not user
-    if (profile.user === null || context === null) {
+    if (profile.user === null || workspace === null) {
         return 'wrong-user';
     }
 
     // Already unlocked
-    if (contextAuth !== null) {
-        if (contextAuth.resetTimeout !== null) {
-            clearTimeout(contextAuth.resetTimeout);
+    if (workspaceAuth !== null) {
+        if (workspaceAuth.resetTimeout !== null) {
+            clearTimeout(workspaceAuth.resetTimeout);
         }
 
-        contextAuth.passwordResetTime = Date.now() / 1000;
-        contextAuth.resetTimeout =
-            context.reAuthInterval === null
+        workspaceAuth.passwordResetTime = Date.now() / 1000;
+        workspaceAuth.resetTimeout =
+            workspace.reAuthInterval === null
                 ? null
                 : setTimeout(
                       () => {
-                          const index = profile.authentifications.findIndex((a) => a.contextID === contextID);
+                          const index = profile.authentifications.findIndex((a) => a.workspaceID === workspaceID);
                           if (index !== -1) {
                               if (profile.authentifications[index].resetTimeout !== null) {
                                   clearTimeout(profile.authentifications[index].resetTimeout);
@@ -44,7 +44,7 @@ export async function Unlock(
                               profile.authentifications.splice(index, 1);
                           }
                       },
-                      1000 * 60 * context.reAuthInterval
+                      1000 * 60 * workspace.reAuthInterval
                   );
 
         return 'unlocked';
@@ -52,27 +52,26 @@ export async function Unlock(
 
     // Get target hash
     let targetHash = null;
-    if (contextID === 0) {
-        const resultUser = await db.QueryPrepare<{ Password: string }[]>(
-            'SELECT `Password` FROM `Users` WHERE `ID` = ?',
-            [profile.user?.ID]
-        );
-        if (resultUser === null || resultUser.length === 0 || resultUser[0].Password === null) {
+    if (workspaceID === 0) {
+        if (!profile.user?.ID) {
             return 'error';
         }
-        targetHash = resultUser[0].Password;
+        const users = await db.users.Get({ ID: profile.user.ID });
+        if (users.length === 0 || !users[0].Password) {
+            return 'error';
+        }
+        targetHash = users[0].Password;
     } else {
-        const resultContext = await db.QueryPrepare<{ Password: string }[]>(
-            'SELECT `Password` FROM `Contexts` WHERE `ID` = ?',
-            [contextID]
-        );
-        if (resultContext === null || resultContext.length === 0) {
+        const workspaces = await db.workspaces.Get({ ID: workspaceID });
+        if (workspaces.length === 0) {
             return 'error';
         }
-        if (resultContext[0].Password === null) {
+
+        const workspace = workspaces[0];
+        if (!workspace.Password || workspace.Password === '') {
             return 'unlocked';
         }
-        targetHash = resultContext[0].Password;
+        targetHash = workspace.Password;
     }
 
     if (password === null) {
@@ -98,17 +97,17 @@ export async function Unlock(
     }
 
     // Unlock
-    if (contextAuth === null) {
+    if (workspaceAuth === null) {
         profile.authentifications.push({
-            contextID,
+            workspaceID,
             clearPassword: password,
             passwordResetTime: Date.now() / 1000,
             resetTimeout:
-                context.reAuthInterval === null
+                workspace.reAuthInterval === null
                     ? null
                     : setTimeout(
                           () => {
-                              const index = profile.authentifications.findIndex((a) => a.contextID === contextID);
+                              const index = profile.authentifications.findIndex((a) => a.workspaceID === workspaceID);
                               if (index !== -1) {
                                   if (profile.authentifications[index].resetTimeout !== null) {
                                       clearTimeout(profile.authentifications[index].resetTimeout);
@@ -116,7 +115,7 @@ export async function Unlock(
                                   profile.authentifications.splice(index, 1);
                               }
                           },
-                          1000 * 60 * context.reAuthInterval
+                          1000 * 60 * workspace.reAuthInterval
                       )
         });
     }

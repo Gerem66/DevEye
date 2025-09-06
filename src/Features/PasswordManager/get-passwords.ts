@@ -5,7 +5,7 @@ import type { IFeature } from '@/Interfaces/IFeature';
 import type { PasswordType, PasswordDatabaseType } from 'deveye-types';
 
 export const GetPasswords: IFeature<'get-passwords'> = async ({ db, crypt, profile, data }) => {
-    const { contextID } = data;
+    const { workspaceID } = data;
 
     if (profile.user === null) {
         GLogs.error('[get-passwords] No user in profile');
@@ -16,15 +16,16 @@ export const GetPasswords: IFeature<'get-passwords'> = async ({ db, crypt, profi
 
     let passwords: PasswordDatabaseType[] | null = null;
 
-    if (contextID === 0) {
-        passwords = await db.QueryPrepare<PasswordDatabaseType[]>(
-            'SELECT * FROM _Passwords WHERE UserID = ? AND ContextID IS NULL',
+    if (workspaceID === 0) {
+        passwords = await db.sql.QueryPrepare<PasswordDatabaseType[]>(
+            'SELECT * FROM _Passwords WHERE UserID = ? AND WorkspaceID IS NULL',
             [profile.user?.ID]
         );
     } else {
-        passwords = await db.QueryPrepare<PasswordDatabaseType[]>('SELECT * FROM _Passwords WHERE ContextID = ?', [
-            contextID
-        ]);
+        passwords = await db.sql.QueryPrepare<PasswordDatabaseType[]>(
+            'SELECT * FROM _Passwords WHERE WorkspaceID = ?',
+            [workspaceID]
+        );
     }
 
     if (passwords === null) {

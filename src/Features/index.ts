@@ -4,10 +4,10 @@ import { IFeature } from '@/Interfaces/IFeature';
 // Authentification
 import { Login } from '@/Features/Auth/login';
 
-// Contexts
-import { AddContext } from '@/Features/Contexts/add-context';
-import { DeleteContext } from '@/Features/Contexts/delete-context';
-import { SetFavorite } from '@/Features/Contexts/set-favorite-context';
+// Workspaces
+import { AddWorkspace } from '@/Features/Workspaces/add-workspace';
+import { DeleteWorkspace } from '@/Features/Workspaces/delete-workspace';
+import { SetFavoriteWorkspace } from '@/Features/Workspaces/set-favorite-workspace';
 
 // Passwords
 import { AddPassword } from '@/Features/PasswordManager/add-password';
@@ -28,10 +28,10 @@ export const Features: FeaturesType = {
     // Authentification
     login: Login,
 
-    // Contexts
-    'add-context': AddContext,
-    'delete-context': DeleteContext,
-    'set-favorite-context': SetFavorite,
+    // Workspaces
+    'add-workspace': AddWorkspace,
+    'delete-workspace': DeleteWorkspace,
+    'set-favorite-workspace': SetFavoriteWorkspace,
 
     // Passwords
     'add-password': AddPassword,

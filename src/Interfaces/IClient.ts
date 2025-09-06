@@ -1,13 +1,13 @@
 import WebSocket from 'websocket';
 
-import type { UserType } from 'deveye-types';
+import type { DBType_User } from 'deveye-types';
 
 export interface ClientSession {
-    user: UserType | null;
+    user: DBType_User | null;
     connection: WebSocket.connection;
     firstMessage: boolean;
     authentifications: Array<{
-        contextID: number;
+        workspaceID: number;
         clearPassword: string;
         passwordResetTime: number;
         resetTimeout: NodeJS.Timeout | null;

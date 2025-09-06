@@ -2,7 +2,7 @@ import type { ResultSetHeader } from 'mysql2';
 import type { IFeature } from '@/Interfaces/IFeature';
 
 export const DeletePassword: IFeature<'delete-password'> = async ({ db, profile, data }) => {
-    const { contextID, passwordID } = data;
+    const { workspaceID, passwordID } = data;
 
     if (profile.user === null) {
         console.error('[delete-password] DeletePassword: No user in profile');
@@ -13,15 +13,15 @@ export const DeletePassword: IFeature<'delete-password'> = async ({ db, profile,
 
     let result = null;
 
-    if (contextID === 0) {
-        result = await db.QueryPrepare<ResultSetHeader>(
-            'DELETE FROM _Passwords WHERE `ID` = ? AND `UserID` = ? AND `ContextID` IS NULL',
+    if (workspaceID === 0) {
+        result = await db.sql.QueryPrepare<ResultSetHeader>(
+            'DELETE FROM _Passwords WHERE `ID` = ? AND `UserID` = ? AND `WorkspaceID` IS NULL',
             [passwordID, profile.user?.ID]
         );
     } else {
-        result = await db.QueryPrepare<ResultSetHeader>(
-            'DELETE FROM _Passwords WHERE `ID` = ? AND `UserID` = ? AND `ContextID` = ?',
-            [passwordID, profile.user?.ID, contextID]
+        result = await db.sql.QueryPrepare<ResultSetHeader>(
+            'DELETE FROM _Passwords WHERE `ID` = ? AND `UserID` = ? AND `WorkspaceID` = ?',
+            [passwordID, profile.user?.ID, workspaceID]
         );
     }
 

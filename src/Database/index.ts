@@ -1,23 +1,23 @@
 import SQL from '@/Services/SQL';
 import { UsersTable } from './UsersTable';
-import { ContextsTable } from './ContextsTable';
-import { ContextsLinksTable } from './ContextsLinksTable';
+import { WorkspacesTable } from './WorkspacesTable';
+import { WorkspaceMembersTable } from './WorkspaceMembersTable';
 import { LogsTable } from './LogsTable';
 
 export class Database {
     sql: SQL;
 
     users: UsersTable;
-    contexts: ContextsTable;
-    contextsLinks: ContextsLinksTable;
+    workspaces: WorkspacesTable;
+    workspaceMembers: WorkspaceMembersTable;
     logs: LogsTable;
 
     constructor(sql: SQL) {
         this.sql = sql;
 
         this.users = new UsersTable(sql);
-        this.contexts = new ContextsTable(sql);
-        this.contextsLinks = new ContextsLinksTable(sql);
+        this.workspaces = new WorkspacesTable(sql);
+        this.workspaceMembers = new WorkspaceMembersTable(sql);
         this.logs = new LogsTable(sql);
     }
 }

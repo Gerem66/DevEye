@@ -1,15 +1,15 @@
-import { ResultSetHeader } from 'mysql2';
-
-import type { UserType } from 'deveye-types';
-import type { DBUserType } from 'deveye-types';
-import type { TCPUserType } from 'deveye-types';
-import type { ContextType } from 'deveye-types';
-import type { DBContextType } from 'deveye-types';
-
 import { Unlock } from '@/Features/Utils/unlock';
-import { ffetch } from '@/Utils/Request.js';
-import type { IFeature } from '../../Interfaces/IFeature.js';
 import { userManager } from '@/Services/UserManager.js';
+import { ffetch } from '@/Utils/Request.js';
+
+import type {
+    DBType_Workspace,
+    DBType_User,
+    DBType_User_Raw,
+    MinimalUserType,
+    DBType_Workspace_Raw
+} from 'deveye-types';
+import type { IFeature } from '@/Interfaces/IFeature.js';
 
 export const Login: IFeature<'login'> = async ({ db, profile, data }) => {
     const { token } = data;
@@ -23,95 +23,28 @@ export const Login: IFeature<'login'> = async ({ db, profile, data }) => {
         };
     }
 
-    const rawUser = await db.QueryPrepare<DBUserType[]>('SELECT * FROM Users WHERE Token = ?', [requestToken.content]);
-    if (rawUser === null || rawUser.length === 0) {
+    const rawUsers = await db.users.Get({ Token: requestToken.content });
+    if (rawUsers.length === 0) {
         // TODO: Alert
         return {
             status: 'error'
         };
     }
 
+    const rawUser = rawUsers[0];
+
     // Update LastLogin
-    // TODO: Check update
-    db.QueryPrepare<ResultSetHeader>('UPDATE Users SET LastLogin = NOW() WHERE ID = ?', [rawUser[0].ID]);
+    await db.users.UpdateLastLogin(rawUser.ID);
 
-    const user: UserType = {
-        ID: rawUser[0].ID,
-        Email: rawUser[0].Email,
-        Username: rawUser[0].Username,
-        Avatar: rawUser[0].Avatar,
-        Settings: JSON.parse(rawUser[0].Settings),
-        Contexts: [],
-        DefaultContext: rawUser[0].DefaultContext,
-        DefaultFeature: rawUser[0].DefaultFeature,
-        Token: rawUser[0].Token,
-        LastLogin: new Date(rawUser[0].LastLogin).getTime() / 1000,
-        Created: new Date(rawUser[0].Created).getTime() / 1000
-    };
-
-    // Load contexts
-    const rawContexts = await db.QueryPrepare<DBContextType[]>(
-        `SELECT Contexts.*
-            FROM Contexts
-            JOIN ContextsLinks ON Contexts.ID = ContextsLinks.ContextID
-            WHERE ContextsLinks.UserID = ?`,
-        [user.ID]
-    );
-    if (rawContexts === null) {
-        return {
-            status: 'error'
-        };
+    // Load workspaces
+    const rawWorkspaces = await db.workspaces.GetWorkspacesWithUserAccess(rawUser.ID);
+    if (rawWorkspaces.length === 0) {
+        throw new Error('No workspace found for user ' + rawUser.ID);
     }
 
-    const tcpUsers = rawContexts.map((c) => c.ID);
-
-    let rawUsers: DBUserType[] = [];
-
-    if (tcpUsers.length > 0) {
-        try {
-            rawUsers = await db.ExecQuery<DBUserType[]>(`SELECT * FROM Users WHERE ID IN (${tcpUsers.join(',')})`);
-        } catch {
-            return {
-                status: 'error'
-            };
-        }
-    }
-
-    const selfContext: ContextType = {
-        id: 0,
-        name: user.Username,
-        logo: user.Avatar,
-        users: [],
-        features: JSON.parse(rawUser[0].Features),
-        reAuthInterval: rawUser[0].ReAuthInterval,
-        created: user.Created
-    };
-
-    const userContexts: ContextType[] = rawContexts.map((c) => {
-        return {
-            id: c.ID,
-            name: c.Name,
-            logo: c.Logo,
-            users: [
-                ...rawUsers
-                    .filter((u) => u.ID === c.ID)
-                    .map(
-                        (u): TCPUserType => ({
-                            ID: u.ID,
-                            Email: u.Email,
-                            Username: u.Username,
-                            Avatar: u.Avatar,
-                            Created: new Date(u.Created).getTime() / 1000
-                        })
-                    )
-            ],
-            features: JSON.parse(c.Features),
-            reAuthInterval: c.ReAuthInterval,
-            created: new Date(c.Created).getTime() / 1000
-        };
-    });
-
-    user.Contexts = [selfContext, ...userContexts];
+    const workspaceIds = rawWorkspaces.map((c) => c.ID);
+    const otherUsers = await db.users.GetByIds(workspaceIds);
+    const user = CreateUser(rawUser, rawWorkspaces, otherUsers);
 
     profile.user = user;
     profile.firstMessage = false;
@@ -126,3 +59,57 @@ export const Login: IFeature<'login'> = async ({ db, profile, data }) => {
         user: user
     };
 };
+
+function CreateUser(
+    rawUser: DBType_User_Raw,
+    rawWorkspaces: DBType_Workspace_Raw[],
+    usersInWorkspace: DBType_User_Raw[]
+): DBType_User {
+    const user: DBType_User = {
+        ID: rawUser.ID,
+        Email: rawUser.Email,
+        Username: rawUser.Username,
+        Avatar: rawUser.Avatar,
+        Settings: JSON.parse(rawUser.Settings),
+        Workspaces: [],
+        DefaultWorkspace: rawUser.DefaultWorkspace,
+        DefaultFeature: rawUser.DefaultFeature,
+        Token: rawUser.Token,
+        LastLogin: new Date(rawUser.LastLogin).getTime() / 1000,
+        Created: new Date(rawUser.Created).getTime() / 1000
+    };
+
+    const selfWorkspace: DBType_Workspace = {
+        id: 0,
+        name: rawUser.Username,
+        logo: rawUser.Avatar,
+        users: [],
+        features: JSON.parse(rawUser.Features),
+        reAuthInterval: rawUser.ReAuthInterval,
+        created: new Date(rawUser.Created).getTime() / 1000
+    };
+
+    const userWorkspaces: DBType_Workspace[] = rawWorkspaces.map((c) => ({
+        id: c.ID,
+        name: c.Name,
+        logo: c.Logo,
+        users: usersInWorkspace
+            .filter((u) => u.ID === c.ID)
+            .map(
+                (u): MinimalUserType => ({
+                    ID: u.ID,
+                    Email: u.Email,
+                    Username: u.Username,
+                    Avatar: u.Avatar,
+                    Created: new Date(u.Created).getTime() / 1000
+                })
+            ),
+        features: JSON.parse(c.Features),
+        reAuthInterval: c.ReAuthInterval,
+        created: new Date(c.Created).getTime() / 1000
+    }));
+
+    user.Workspaces = [selfWorkspace, ...userWorkspaces];
+
+    return user;
+}

@@ -6,7 +6,7 @@ import type { IFeature } from '@/Interfaces/IFeature';
 import type { PasswordDatabaseType } from 'deveye-types';
 
 export const GetPassword: IFeature<'get-password'> = async ({ db, crypt, profile, data }) => {
-    const { contextID, passwordID } = data;
+    const { workspaceID, passwordID } = data;
 
     if (profile.user === null) {
         return {
@@ -14,7 +14,7 @@ export const GetPassword: IFeature<'get-password'> = async ({ db, crypt, profile
         };
     }
 
-    const unlockStatus = await Unlock(db, profile, contextID);
+    const unlockStatus = await Unlock(db, profile, workspaceID);
 
     if (unlockStatus === 'wrong-user' || unlockStatus === 'wrong-password') {
         return {
@@ -33,20 +33,20 @@ export const GetPassword: IFeature<'get-password'> = async ({ db, crypt, profile
 
     let resultPassword: PasswordDatabaseType[] | null = null;
 
-    if (contextID === 0) {
-        resultPassword = await db.QueryPrepare<PasswordDatabaseType[]>(
-            'SELECT * FROM _Passwords WHERE ID = ? AND UserID = ? AND ContextID IS NULL',
+    if (workspaceID === 0) {
+        resultPassword = await db.sql.QueryPrepare<PasswordDatabaseType[]>(
+            'SELECT * FROM _Passwords WHERE ID = ? AND UserID = ? AND WorkspaceID IS NULL',
             [passwordID, profile.user?.ID]
         );
     } else {
-        resultPassword = await db.QueryPrepare<PasswordDatabaseType[]>(
-            'SELECT * FROM _Passwords WHERE ID = ? AND ContextID = ?',
-            [passwordID, contextID]
+        resultPassword = await db.sql.QueryPrepare<PasswordDatabaseType[]>(
+            'SELECT * FROM _Passwords WHERE ID = ? AND WorkspaceID = ?',
+            [passwordID, workspaceID]
         );
     }
 
     if (resultPassword === null || resultPassword.length === 0) {
-        GLogs.error('[get-password] Password not found:', { contextID, passwordID });
+        GLogs.error('[get-password] Password not found:', { workspaceID, passwordID });
         return {
             status: 'unlock-failed'
         };

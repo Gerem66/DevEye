@@ -9,13 +9,15 @@ import { env } from '@/Utils/Env';
 import { Features } from '@/Features';
 import { userManager } from '@/Services/UserManager';
 
-import type { TCPRequestReceiveHeader } from 'deveye-types';
+import { Database } from '@/Database';
 import { InitializeGameLifeDB } from '@/Features/GameLife/gamelife-set-loop';
+
+import type { TCPRequestReceiveHeader } from 'deveye-types';
 
 const logsDir = path.join(env.LOG_PATH, env.ENVIRONMENT);
 GLogs.OpenLogs(env.LOG_LEVEL, logsDir, env.LOG_KEEP_DAYS);
 
-const db = new SQL({
+const sql = new SQL({
     name: 'DB-DevEye',
     pool: createPool({
         database: env.DB_DATABASE || '',
@@ -25,6 +27,8 @@ const db = new SQL({
         port: env.DB_PORT
     })
 });
+
+const db = new Database(sql);
 
 InitializeGameLifeDB();
 
@@ -66,7 +70,7 @@ serv.Listen(8888, {
 
         const response: TCPRequestReceiveHeader<typeof data.action> = {
             action: data.action,
-            content: { status: 1, message: 'Feature not implemented' },
+            content: { status: 'error', message: 'Feature not implemented' },
             callbackID: data.callbackID
         };
 
@@ -75,7 +79,7 @@ serv.Listen(8888, {
             response.content = await feature({ db, crypt, profile, data: data.content });
         } catch (error) {
             GLogs.error(`[DevEye] Error processing feature ${data.action}: ${(error as Error).message}`);
-            response.content = { status: 500, message: 'Internal server error' };
+            response.content = { status: 'error', message: 'Internal server error' };
         }
 
         connection.send(JSON.stringify(response));

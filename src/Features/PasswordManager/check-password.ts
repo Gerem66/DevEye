@@ -3,9 +3,9 @@ import { Unlock } from '@/Features/Utils/unlock';
 import type { IFeature } from '@/Interfaces/IFeature';
 
 export const CheckPassword: IFeature<'check-password'> = async ({ db, profile, data }) => {
-    const { password, contextID } = data;
+    const { password, workspaceID } = data;
 
-    const unlockStatus = await Unlock(db, profile, contextID, password);
+    const unlockStatus = await Unlock(db, profile, workspaceID, password);
 
     switch (unlockStatus) {
         case 'unlocked':
