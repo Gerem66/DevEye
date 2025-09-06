@@ -8,7 +8,7 @@ import { tcp } from '@/Utils/TCP';
 
 import type { FeatureProps, TCPRequestReceiveHeader } from 'deveye-types';
 
-function FeatureGameLife({ user, setUser, context, feature }: FeatureProps) {
+function FeatureGameLife({ user, setUser, workspace, feature }: FeatureProps) {
     const [intervalID, setIntervalID] = useState('');
     const intervalRef = useRef(intervalID);
 
@@ -17,7 +17,7 @@ function FeatureGameLife({ user, setUser, context, feature }: FeatureProps) {
 
     useEffect(() => {
         // Send the request to start the loop
-        tcp.SendAndWait('gamelife-set-loop', { contextID: context.id, type: 'open' }).then((data) => {
+        tcp.SendAndWait('gamelife-set-loop', { workspaceID: workspace.id, type: 'open' }).then((data) => {
             console.log(data);
 
             // Check if the request was sent correctly
@@ -42,14 +42,14 @@ function FeatureGameLife({ user, setUser, context, feature }: FeatureProps) {
         return () => {
             const id = intervalRef.current;
             console.log('End interval', id);
-            tcp.Send('gamelife-set-loop', { contextID: context.id, type: 'close', intervalID: id });
+            tcp.Send('gamelife-set-loop', { workspaceID: workspace.id, type: 'close', intervalID: id });
             delete tcp.callbacks[id];
         };
-    }, [context.id]);
+    }, [workspace.id]);
 
     return (
         <div className='profile'>
-            <Header user={user} setUser={setUser} context={context} feature={feature} />
+            <Header user={user} setUser={setUser} workspace={workspace} feature={feature} />
 
             <Row>
                 <Card.Value
@@ -65,7 +65,7 @@ function FeatureGameLife({ user, setUser, context, feature }: FeatureProps) {
             </Row>
 
             <Row style={{ justifyContent: 'space-evenly' }}>
-                <Card.Element title={`Prod - ${context.name}`} color='bg-blue-dark' width={600}>
+                <Card.Element title={`Prod - ${workspace.name}`} color='bg-blue-dark' width={600}>
                     <div className={styles['profile-info']}>
                         <h3 className={styles['profile-info-title']}>
                             {"Nombre d'utilisateurs [Live] (vraie valeur (normalement))"}
@@ -89,7 +89,7 @@ function FeatureGameLife({ user, setUser, context, feature }: FeatureProps) {
                     <div className={styles['profile-info']}>
                         <h3 className={styles['profile-info-title']}>Depuis le</h3>
                         <p className={styles['profile-info-text']}>
-                            {new Date(context.created * 1000).toLocaleDateString()}
+                            {new Date(workspace.created * 1000).toLocaleDateString()}
                         </p>
                     </div>
 

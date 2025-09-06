@@ -2,7 +2,7 @@ import styles from './style.module.css';
 
 import NavbarBack from './back';
 import NavFeatures from './sections/navFeatures';
-import NavContexts from './sections/navContexts';
+import NavWorkspaces from './sections/navWorkspaces';
 
 import packageJson from '../../../package.json';
 
@@ -12,7 +12,7 @@ const version = packageJson.version + ((ENV_IS_DEV && '-dev') || '');
 
 class Navbar extends NavbarBack {
     render() {
-        const { user, context } = this.props;
+        const { user, workspace } = this.props;
         const { active, is_navpanel_switch } = this.state;
 
         return (
@@ -32,14 +32,14 @@ class Navbar extends NavbarBack {
                 <div className={`${styles.navpanel} ${is_navpanel_switch ? styles.switch : ''}`}>
                     <div className={styles['navpanel-content']}>
                         <NavFeatures
-                            context={context}
+                            workspace={workspace}
                             active={active}
                             onFeatureClick={this.onFeatureClick}
                             onProfileClick={this.onProfileClick}
                         />
                     </div>
                     <div className={styles['navpanel-content']}>
-                        <NavContexts user={user} onContextClick={this.onContextClick} />
+                        <NavWorkspaces user={user} onWorkspaceClick={this.onWorkspaceClick} />
                     </div>
                 </div>
             </nav>

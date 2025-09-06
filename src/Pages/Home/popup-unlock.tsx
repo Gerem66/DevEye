@@ -6,10 +6,10 @@ import { Button, TextInput } from '@/Components';
 
 import styles from './style.module.css';
 
-import type { ContextType } from 'deveye-types';
+import type { DBType_Workspace } from 'deveye-types';
 
 interface PopupUnlockProps {
-    context: ContextType | null;
+    workspace: DBType_Workspace | null;
 }
 
 class PopupUnlock extends React.Component<PopupUnlockProps> {
@@ -32,10 +32,10 @@ class PopupUnlock extends React.Component<PopupUnlockProps> {
 
     UnlockPopupValidate = async () => {
         const { inputPassword } = this.state;
-        const { context } = this.props;
+        const { workspace } = this.props;
 
-        if (!context) {
-            this.setState({ errorPassword: 'Context not found', inputPassword: '' });
+        if (!workspace) {
+            this.setState({ errorPassword: 'Workspace not found', inputPassword: '' });
             return;
         }
 
@@ -45,7 +45,7 @@ class PopupUnlock extends React.Component<PopupUnlockProps> {
         }
 
         const response = await tcp.SendAndWait('check-password', {
-            contextID: context.id,
+            workspaceID: workspace.id,
             password: inputPassword
         });
 

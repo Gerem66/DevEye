@@ -1,9 +1,9 @@
-.nav-context-button {
+.nav-workspace-button {
     display: flex;
     align-items: center;
     height: auto;
 }
-.nav-context-logo {
+.nav-workspace-logo {
     width: 36px;
     height: 36px;
     margin-right: 12px;

@@ -4,59 +4,59 @@ import styles from './styleFeatures.module.css';
 import stylesBtn from '../button.module.css';
 import { FEATURES } from '../../../Features/Features';
 
-import type { FeaturesID, FeatureType, ContextType } from 'deveye-types';
+import type { FeaturesID, FeatureType, DBType_Workspace } from 'deveye-types';
 
 const NavFeaturesProps = {
-    context: null as ContextType | null,
+    workspace: null as DBType_Workspace | null,
     active: {
         feature_id: null as FeaturesID | null,
-        context_id: 0
+        workspace_id: 0
     },
     onProfileClick: (() => {}) as () => void,
-    onFeatureClick: (() => {}) as (context_id: number, feature_id: FeaturesID) => void
+    onFeatureClick: (() => {}) as (workspace_id: number, feature_id: FeaturesID) => void
 };
 
 class NavFeatures extends React.Component<typeof NavFeaturesProps> {
     render() {
-        const { context, onProfileClick } = this.props;
+        const { workspace, onProfileClick } = this.props;
 
         return (
             <div>
                 {/* Profile */}
                 <button className={styles.profile} onClick={onProfileClick}>
                     <div className={styles['profile-content']}>
-                        <img className={styles['profile-image']} src={'./images/' + context?.logo} alt='Logo' />
-                        <span>{context?.name || 'Context'}</span>
+                        <img className={styles['profile-image']} src={'./images/' + workspace?.logo} alt='Logo' />
+                        <span>{workspace?.name || 'Workspace'}</span>
                     </div>
                     <span className={`icon icon-arrow ${styles['profile-icon']}`} />
                 </button>
 
                 {/* Features */}
-                {this.renderCategory(context)}
+                {this.renderCategory(workspace)}
             </div>
         );
     }
 
-    renderCategory = (context: ContextType | null): JSX.Element | null => {
-        if (!context) return null;
+    renderCategory = (workspace: DBType_Workspace | null): JSX.Element | null => {
+        if (!workspace) return null;
 
-        const features = context.features
+        const features = workspace.features
             .map((id) => FEATURES.find((f) => f.id === id))
             .filter((f) => f !== undefined)
-            .map((feature) => this.renderFeature(context, feature));
+            .map((feature) => this.renderFeature(workspace, feature));
 
         return (
-            <section key={'section-' + context.id} className={styles.category} data-title={context.name}>
+            <section key={'section-' + workspace.id} className={styles.category} data-title={workspace.name}>
                 {features}
             </section>
         );
     };
 
-    renderFeature = (context: ContextType, feature: FeatureType): JSX.Element => {
+    renderFeature = (workspace: DBType_Workspace, feature: FeatureType): JSX.Element => {
         const { active, onFeatureClick } = this.props;
 
-        const isActive = active.feature_id === feature.id && active.context_id === context.id;
-        const onClick = () => onFeatureClick(context.id, feature.id);
+        const isActive = active.feature_id === feature.id && active.workspace_id === workspace.id;
+        const onClick = () => onFeatureClick(workspace.id, feature.id);
 
         return (
             <button

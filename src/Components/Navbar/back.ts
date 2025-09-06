@@ -2,20 +2,20 @@ import React from 'react';
 
 import { FEATURES } from '../../Features/Features';
 
-import type { UserType, FeaturesID, FeatureType, ContextType } from 'deveye-types';
+import type { DBType_User, FeaturesID, FeatureType, DBType_Workspace } from 'deveye-types';
 
 const NavbarProps = {
-    user: null as UserType | null,
-    context: null as ContextType | null,
+    user: null as DBType_User | null,
+    workspace: null as DBType_Workspace | null,
     feature: null as FeatureType | null,
-    setContext: (() => {}) as (context: ContextType) => void,
+    setWorkspace: (() => {}) as (workspace: DBType_Workspace) => void,
     setFeature: (() => {}) as (feature: FeatureType) => void
 };
 
 class NavbarBack extends React.Component<typeof NavbarProps> {
     state = {
         active: {
-            context_id: 0,
+            workspace_id: 0,
             feature_id: null as FeaturesID | null
         },
 
@@ -26,12 +26,12 @@ class NavbarBack extends React.Component<typeof NavbarProps> {
     componentDidUpdate(prevProps: typeof NavbarProps) {
         void prevProps;
 
-        const { context, feature } = this.props;
-        if (context !== null && feature !== null) {
-            if (context.id !== this.state.active.context_id || feature.id !== this.state.active.feature_id) {
+        const { workspace, feature } = this.props;
+        if (workspace !== null && feature !== null) {
+            if (workspace.id !== this.state.active.workspace_id || feature.id !== this.state.active.feature_id) {
                 this.setState({
                     active: {
-                        context_id: context.id,
+                        workspace_id: workspace.id,
                         feature_id: feature.id
                     },
                     is_navpanel_switch: false
@@ -44,29 +44,29 @@ class NavbarBack extends React.Component<typeof NavbarProps> {
         this.setState({ is_navpanel_switch: true });
     };
 
-    onContextClick = (context: ContextType | null = null) => {
+    onWorkspaceClick = (workspace: DBType_Workspace | null = null) => {
         this.setState({ is_navpanel_switch: false });
 
-        if (context !== null) {
-            this.props.setContext(context);
+        if (workspace !== null) {
+            this.props.setWorkspace(workspace);
         }
     };
 
-    onFeatureClick = (context_id: number, feature_id: FeaturesID, sendCallbackToParent: boolean = true) => {
+    onFeatureClick = (workspace_id: number, feature_id: FeaturesID, sendCallbackToParent: boolean = true) => {
         const { user } = this.props;
 
         // Check if feature is already active
-        if (feature_id === this.state.active.feature_id && context_id === this.state.active.context_id) {
+        if (feature_id === this.state.active.feature_id && workspace_id === this.state.active.workspace_id) {
             return;
         }
 
-        const context = user?.Contexts.find((f) => f.id === context_id);
+        const workspace = user?.Workspaces.find((f) => f.id === workspace_id);
 
-        // Check if context & feature exists in this context
-        if (!context) {
-            throw new Error('Context not found');
+        // Check if workspace & feature exists in this workspace
+        if (!workspace) {
+            throw new Error('Workspace not found');
         }
-        if (!context.features.includes(feature_id)) {
+        if (!workspace.features.includes(feature_id)) {
             throw new Error('Feature not found');
         }
 
@@ -80,7 +80,7 @@ class NavbarBack extends React.Component<typeof NavbarProps> {
         this.setState({
             active: {
                 feature_id: feature.id,
-                context_id: context.id
+                workspace_id: workspace.id
             }
         });
 

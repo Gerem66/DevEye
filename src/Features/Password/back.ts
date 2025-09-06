@@ -34,9 +34,9 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
     }
 
     loadPasswords = async () => {
-        const { context } = this.props;
+        const { workspace } = this.props;
 
-        const response = await tcp.SendAndWait('get-passwords', { contextID: context.id });
+        const response = await tcp.SendAndWait('get-passwords', { workspaceID: workspace.id });
 
         this.setState({ loaded: true });
 
@@ -78,10 +78,10 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
     };
 
     GetPassword = async (ID: number) => {
-        const { context } = this.props;
+        const { workspace } = this.props;
 
         const response = await tcp.SendAndWait('get-password', {
-            contextID: context.id,
+            workspaceID: workspace.id,
             passwordID: ID
         });
         if (response === 'timeout') {
@@ -119,7 +119,7 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
     };
 
     OpenEditPassword = async (ID: number | null) => {
-        const { context } = this.props;
+        const { workspace } = this.props;
 
         let password: PasswordType = {
             ID: 0,
@@ -132,7 +132,7 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
 
         if (ID !== null) {
             const response = await tcp.SendAndWait('get-password', {
-                contextID: context.id,
+                workspaceID: workspace.id,
                 passwordID: ID
             });
             if (response === 'timeout') {
@@ -164,7 +164,7 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
         if (newPassword === 'delete') {
             if (ID !== null) {
                 const response = await tcp.SendAndWait('delete-password', {
-                    contextID: context.id,
+                    workspaceID: workspace.id,
                     passwordID: ID
                 });
                 if (response === 'timeout' || response === 'not-sended' || response.status !== 'success') {
@@ -178,7 +178,7 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
         // Add password
         else if (ID === null) {
             const response = await tcp.SendAndWait('add-password', {
-                contextID: context.id,
+                workspaceID: workspace.id,
                 password: newPassword
             });
             if (response === 'timeout' || response === 'not-sended' || response.status !== 'success') {
@@ -191,7 +191,7 @@ class FeaturePasswordBack extends React.Component<FeatureProps> {
         // Edit password
         else {
             const response = await tcp.SendAndWait('edit-password', {
-                contextID: context.id,
+                workspaceID: workspace.id,
                 password: newPassword
             });
             if (response === 'timeout' || response === 'not-sended' || response.status !== 'success') {

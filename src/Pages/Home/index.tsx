@@ -3,57 +3,57 @@ import { JSX, useEffect, useState } from 'react';
 import './style.css';
 import { Navbar } from '@/Components';
 import { FEATURES } from '@/Features/Features';
-import AddContextPopup from './popup-add-context';
+import AddWorkspacePopup from './popup-add-workspace';
 import PopupUnlock from './popup-unlock';
 
-import type { UserType, ContextType, FeatureType } from 'deveye-types';
+import type { DBType_User, DBType_Workspace, FeatureType } from 'deveye-types';
 
 let firstLoad = false;
 
 interface HomePageProps {
-    user: UserType | null;
-    setUser: React.Dispatch<React.SetStateAction<UserType | null>>;
+    user: DBType_User | null;
+    setUser: React.Dispatch<React.SetStateAction<DBType_User | null>>;
 }
 
 function HomePage({ user, setUser }: HomePageProps): JSX.Element | null {
-    const [context, setContext] = useState<ContextType | null>(null);
+    const [workspace, setWorkspace] = useState<DBType_Workspace | null>(null);
     const [feature, setFeature] = useState<FeatureType | null>(null);
 
     useEffect(() => {
         if (user === null) {
-            setContext(null);
+            setWorkspace(null);
             setFeature(null);
             firstLoad = false;
             return;
         }
 
-        if (context === null) {
-            const context = user.Contexts.find((c) => c.id === user.DefaultContext) || null;
-            if (context === null || !context.features.includes(user.DefaultFeature)) {
-                const selfContext = user.Contexts.find((f) => f.id === 0) || null;
-                const firstFeature = FEATURES.find((f) => f.id === selfContext?.features[0]) || null;
-                setContext(selfContext);
+        if (workspace === null) {
+            const workspace = user.Workspaces.find((c) => c.id === user.DefaultWorkspace) || null;
+            if (workspace === null || !workspace.features.includes(user.DefaultFeature)) {
+                const selfWorkspace = user.Workspaces.find((f) => f.id === 0) || null;
+                const firstFeature = FEATURES.find((f) => f.id === selfWorkspace?.features[0]) || null;
+                setWorkspace(selfWorkspace);
                 setFeature(firstFeature);
-                console.error('Context or feature not found');
+                console.error('Workspace or feature not found');
                 return;
             }
 
             const feature = FEATURES.find((f) => f.id === user.DefaultFeature) || null;
             if (feature === null) {
-                const firstFeature = FEATURES.find(() => context.features[0]) || null;
-                setContext(context);
+                const firstFeature = FEATURES.find(() => workspace.features[0]) || null;
+                setWorkspace(workspace);
                 setFeature(firstFeature);
                 console.error('Feature not found');
                 return;
             }
 
-            setContext(context);
+            setWorkspace(workspace);
             setFeature(feature);
         }
     }, [user]);
 
     useEffect(() => {
-        if (context === null) {
+        if (workspace === null) {
             return;
         }
 
@@ -63,25 +63,25 @@ function HomePage({ user, setUser }: HomePageProps): JSX.Element | null {
             return;
         }
 
-        if (context.features.length <= 0) {
+        if (workspace.features.length <= 0) {
             setFeature(null);
             return;
         }
 
-        const newFeature = FEATURES.find((f) => f.id === context.features[0]) || null;
+        const newFeature = FEATURES.find((f) => f.id === workspace.features[0]) || null;
         setFeature(newFeature);
-    }, [context]);
+    }, [workspace]);
 
     if (user === null) {
         return null;
     }
 
-    const AddContext = (context: ContextType) => {
+    const AddWorkspace = (workspace: DBType_Workspace) => {
         setUser({
             ...user,
-            Contexts: [...user.Contexts, context]
+            Workspaces: [...user.Workspaces, workspace]
         });
-        setContext(context);
+        setWorkspace(workspace);
     };
 
     return (
@@ -89,28 +89,28 @@ function HomePage({ user, setUser }: HomePageProps): JSX.Element | null {
             <div className='home-left'>
                 <Navbar
                     user={user}
-                    context={context}
+                    workspace={workspace}
                     feature={feature}
-                    setContext={setContext}
+                    setWorkspace={setWorkspace}
                     setFeature={setFeature}
                 />
             </div>
 
             <div className='home-right'>
-                {context !== null && feature !== null && (
+                {workspace !== null && feature !== null && (
                     <feature.component
-                        key={`${feature.id} ${context.id}`}
+                        key={`${feature.id} ${workspace.id}`}
                         user={user}
                         setUser={setUser}
-                        context={context}
+                        workspace={workspace}
                         feature={feature}
-                        setContext={setContext}
+                        setWorkspace={setWorkspace}
                         setFeature={setFeature}
                     />
                 )}
 
-                <AddContextPopup AddContext={AddContext} />
-                <PopupUnlock context={context} />
+                <AddWorkspacePopup AddWorkspace={AddWorkspace} />
+                <PopupUnlock workspace={workspace} />
             </div>
         </div>
     );

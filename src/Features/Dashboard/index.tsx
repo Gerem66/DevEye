@@ -6,32 +6,32 @@ import { tcp } from '../../Utils/TCP';
 
 import type { FeatureProps } from 'deveye-types/Feature';
 
-function FeatureDashboard({ user, setUser, context, feature, setContext }: FeatureProps) {
-    const OpenDeleteContextPopup = () => {
-        OpenPopup('popup-delete-context');
+function FeatureDashboard({ user, setUser, workspace, feature, setWorkspace }: FeatureProps) {
+    const OpenDeleteWorkspacePopup = () => {
+        OpenPopup('popup-delete-workspace');
     };
-    const CloseDeleteContextPopup = () => {
-        ClosePopup('popup-delete-context');
+    const CloseDeleteWorkspacePopup = () => {
+        ClosePopup('popup-delete-workspace');
     };
 
-    const DeleteContext = () => {
-        tcp.SendAndWait('delete-context', { contextID: context.id }).then((result) => {
+    const DeleteWorkspace = () => {
+        tcp.SendAndWait('delete-workspace', { workspaceID: workspace.id }).then((result) => {
             if (result === 'timeout' || result === 'not-sended' || result.status !== 'success') {
                 return;
             }
 
             setUser({
                 ...user,
-                Contexts: user.Contexts.filter((c) => c.id !== context.id)
+                Workspaces: user.Workspaces.filter((c) => c.id !== workspace.id)
             });
-            setContext(user.Contexts[0]);
-            CloseDeleteContextPopup();
+            setWorkspace(user.Workspaces[0]);
+            CloseDeleteWorkspacePopup();
         });
     };
 
     return (
         <div className='profile'>
-            <Header user={user} setUser={setUser} context={context} feature={feature} />
+            <Header user={user} setUser={setUser} workspace={workspace} feature={feature} />
 
             <Row>
                 <Card.Value title='Nombre total de projets' value='0' color='bg-blue' icon='details' />
@@ -42,16 +42,16 @@ function FeatureDashboard({ user, setUser, context, feature, setContext }: Featu
             </Row>
 
             <Row style={{ justifyContent: 'space-evenly' }}>
-                <Card.Element color='bg-blue-dark' width={600} title='Contexte'>
+                <Card.Element color='bg-blue-dark' width={600} title='Workspace'>
                     <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>Nom du contexte</h3>
-                        <p className={styles['profile-info-text']}>{context.name}</p>
+                        <h3 className={styles['profile-info-title']}>Nom du workspace</h3>
+                        <p className={styles['profile-info-text']}>{workspace.name}</p>
                     </div>
 
                     <div className={styles.separator} />
                     <div className={styles['profile-info']}>
                         <h3 className={styles['profile-info-title']}>{"Nombre d'utilisateurs"}</h3>
-                        <p className={styles['profile-info-text']}>{context.users.length}</p>
+                        <p className={styles['profile-info-text']}>{workspace.users.length}</p>
                     </div>
 
                     <div className={styles.separator} />
@@ -90,30 +90,30 @@ function FeatureDashboard({ user, setUser, context, feature, setContext }: Featu
                     <div className={styles['profile-info']}>
                         <h3 className={styles['profile-info-title']}>Créé le</h3>
                         <p className={styles['profile-info-text']}>
-                            {new Date(context.created * 1000).toLocaleDateString()}
+                            {new Date(workspace.created * 1000).toLocaleDateString()}
                         </p>
                     </div>
 
                     <div className={styles.separator} />
-                    <div className={styles['context-buttons']}>
-                        <Button onClick={OpenDeleteContextPopup} color='#aa3333'>
-                            Supprimer le contexte
+                    <div className={styles['workspace-buttons']}>
+                        <Button onClick={OpenDeleteWorkspacePopup} color='#aa3333'>
+                            Supprimer le workspace
                         </Button>
                     </div>
                 </Card.Element>
             </Row>
 
-            <Popup id='popup-delete-context' title='Supprimer le contexte'>
+            <Popup id='popup-delete-workspace' title='Supprimer le workspace'>
                 <p>
-                    Êtes-vous sûr de vouloir supprimer le contexte ? Cette action est irréversible et supprimera
+                    Êtes-vous sûr de vouloir supprimer le workspace ? Cette action est irréversible et supprimera
                     définitivement tous les projets, tâches, mots de passes... associés.
                 </p>
 
-                <div className={`form-group ${styles['popup-delete-contexte-buttons']}`}>
-                    <Button onClick={CloseDeleteContextPopup} color='#576d8c'>
+                <div className={`form-group ${styles['popup-delete-workspace-buttons']}`}>
+                    <Button onClick={CloseDeleteWorkspacePopup} color='#576d8c'>
                         Fermer
                     </Button>
-                    <Button onClick={DeleteContext} color='#aa3333'>
+                    <Button onClick={DeleteWorkspace} color='#aa3333'>
                         Supprimer
                     </Button>
                 </div>

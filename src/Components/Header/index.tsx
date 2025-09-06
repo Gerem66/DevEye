@@ -4,20 +4,20 @@ import styles from './style.module.css';
 
 import { tcp } from '@/Utils/TCP';
 
-import type { UserType, ContextType, FeatureType } from 'deveye-types';
+import type { DBType_User, DBType_Workspace, FeatureType } from 'deveye-types';
 
-type SetUserType = (use: UserType) => void;
+type SetUserType = (use: DBType_User) => void;
 
 interface HeaderProps {
-    user: UserType;
+    user: DBType_User;
     setUser: SetUserType;
-    context: ContextType;
+    workspace: DBType_Workspace;
     feature: FeatureType;
 }
 
-function Header({ user, setUser, context, feature }: HeaderProps): JSX.Element {
+function Header({ user, setUser, workspace, feature }: HeaderProps): JSX.Element {
     const [loading, setLoading] = useState(false);
-    const isFavorite = user.DefaultContext === context.id && user.DefaultFeature === feature.id;
+    const isFavorite = user.DefaultWorkspace === workspace.id && user.DefaultFeature === feature.id;
 
     const onFavoriteClick = async () => {
         if (loading || isFavorite) {
@@ -25,8 +25,8 @@ function Header({ user, setUser, context, feature }: HeaderProps): JSX.Element {
         }
 
         setLoading(true);
-        const result = await tcp.SendAndWait('set-favorite-context', {
-            contextID: context.id,
+        const result = await tcp.SendAndWait('set-favorite-workspace', {
+            workspaceID: workspace.id,
             featureID: feature.id
         });
 
@@ -37,7 +37,7 @@ function Header({ user, setUser, context, feature }: HeaderProps): JSX.Element {
 
         setUser({
             ...user,
-            DefaultContext: context.id,
+            DefaultWorkspace: workspace.id,
             DefaultFeature: feature.id
         });
 
@@ -55,7 +55,7 @@ function Header({ user, setUser, context, feature }: HeaderProps): JSX.Element {
                     `}
                     onClick={onFavoriteClick}
                 />
-                <p className={styles.text}>{`${context?.name} / ${feature.id}`}</p>
+                <p className={styles.text}>{`${workspace?.name} / ${feature.id}`}</p>
             </div>
         </header>
     );

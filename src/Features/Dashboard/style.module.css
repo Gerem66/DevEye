@@ -34,7 +34,7 @@
     margin-right: 6px;
 }
 
-.context-buttons {
+.workspace-buttons {
     display: flex;
     justify-content: flex-end;
     margin-top: 12px;
@@ -55,7 +55,7 @@
     background-image: url(/public/icons/error.svg);
 }
 
-.popup-delete-contexte-buttons {
+.popup-delete-workspace-buttons {
     display: flex;
     justify-content: space-between;
 }

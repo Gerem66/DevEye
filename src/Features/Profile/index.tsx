@@ -5,7 +5,7 @@ import { ChangeImage, EditPassword } from './actions';
 
 import type { FeatureProps } from 'deveye-types';
 
-function FeatureProfile({ user, setUser, context, feature }: FeatureProps) {
+function FeatureProfile({ user, setUser, workspace, feature }: FeatureProps) {
     const convertDate = (time: number): string =>
         new Date(time * 1000)
             .toLocaleDateString(undefined, {
@@ -25,7 +25,7 @@ function FeatureProfile({ user, setUser, context, feature }: FeatureProps) {
 
     return (
         <div className='profile'>
-            <Header user={user} setUser={setUser} context={context} feature={feature} />
+            <Header user={user} setUser={setUser} workspace={workspace} feature={feature} />
 
             <Row center>
                 <Card.Element width={450} color='bg-blue-dark'>
@@ -33,11 +33,11 @@ function FeatureProfile({ user, setUser, context, feature }: FeatureProps) {
                         <div className={styles['profile-avatar']} onClick={ChangeImage}>
                             <img
                                 className={styles['profile-avatar-logo']}
-                                src={'./images/' + context.logo}
-                                alt={context.name}
+                                src={'./images/' + workspace.logo}
+                                alt={workspace.name}
                             />
                         </div>
-                        <h2 className={`${styles.title} ${styles['profile-avatar-name']}`}>{context.name}</h2>
+                        <h2 className={`${styles.title} ${styles['profile-avatar-name']}`}>{workspace.name}</h2>
                     </div>
 
                     <div className={styles.separator} />
@@ -49,7 +49,7 @@ function FeatureProfile({ user, setUser, context, feature }: FeatureProps) {
                     <div className={styles.separator} />
                     <div className={styles['profile-info']}>
                         <h3 className={styles['profile-info-title']}>{"Nombre d'entreprises"}</h3>
-                        <p className={styles['profile-info-text']}>{user.Contexts.length - 1}</p>
+                        <p className={styles['profile-info-text']}>{user.Workspaces.length - 1}</p>
                     </div>
 
                     <div className={styles.separator} />
