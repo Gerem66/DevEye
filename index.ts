@@ -6,7 +6,7 @@ import { createPool } from 'mysql2/promise';
 
 import GLogs from '@/Utils/Logs';
 import { env } from '@/Utils/Env';
-import { Features } from '@/Features';
+import { ExecuteFeature } from '@/Features';
 import { userManager } from '@/Services/UserManager';
 
 import { Database } from '@/Database';
@@ -57,26 +57,21 @@ serv.Listen(8888, {
 
     onMessage: async (connection, profile, data) => {
         if (typeof data.action !== 'string') {
-            GLogs.warn(`[DevEye] Invalid action type: ${typeof data.action}`);
+            GLogs.warn(`[DevEye] Invalid action type: ${typeof data}`);
             return;
         }
 
-        const feature = Features[data.action];
-        if (!feature) {
-            // TODO: Log
-            GLogs.warn(`[DevEye] Feature not implemented: ${data.action}`);
-            return;
-        }
-
-        const response: TCPRequestReceiveHeader<typeof data.action> = {
+        const response: TCPRequestReceiveHeader = {
             action: data.action,
-            content: { status: 'error', message: 'Feature not implemented' },
+            content: {
+                status: 'error',
+                message: 'Unknown error' // Detect unhandled errors
+            },
             callbackID: data.callbackID
         };
 
         try {
-            // TODO: Wring data content type ? :thinking:
-            response.content = await feature({ db, crypt, profile, data: data.content });
+            response.content = await ExecuteFeature(data.action, { db, crypt, profile, data: data.content });
         } catch (error) {
             GLogs.error(`[DevEye] Error processing feature ${data.action}: ${(error as Error).message}`);
             response.content = { status: 'error', message: 'Internal server error' };

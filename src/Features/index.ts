@@ -1,46 +1,18 @@
-import { RequestCommands } from 'deveye-types';
-import { IFeature } from '@/Interfaces/IFeature';
+import { FeatureRegistry } from './feature-registry';
 
-// Authentification
-import { Login } from '@/Features/Auth/login';
+import type { RequestCommands } from 'deveye-types';
+import type Encryption from '@/Services/Encryption';
+import type { Database } from '@/Database';
+import type { ClientSession } from '@/Interfaces/IClient';
 
-// Workspaces
-import { AddWorkspace } from '@/Features/Workspaces/add-workspace';
-import { DeleteWorkspace } from '@/Features/Workspaces/delete-workspace';
-import { SetFavoriteWorkspace } from '@/Features/Workspaces/set-favorite-workspace';
-
-// Passwords
-import { AddPassword } from '@/Features/PasswordManager/add-password';
-import { EditPassword } from '@/Features/PasswordManager/edit-password';
-import { DeletePassword } from '@/Features/PasswordManager/delete-password';
-import { GetPassword } from '@/Features/PasswordManager/get-password';
-import { GetPasswords } from '@/Features/PasswordManager/get-passwords';
-import { CheckPassword } from '@/Features/PasswordManager/check-password';
-
-// GameLife
-import { GetGameLifeData } from '@/Features/GameLife/gamelife-set-loop';
-
-type FeaturesType = {
-    [K in keyof RequestCommands]: IFeature<K>;
-};
-
-export const Features: FeaturesType = {
-    // Authentification
-    login: Login,
-
-    // Workspaces
-    'add-workspace': AddWorkspace,
-    'delete-workspace': DeleteWorkspace,
-    'set-favorite-workspace': SetFavoriteWorkspace,
-
-    // Passwords
-    'add-password': AddPassword,
-    'edit-password': EditPassword,
-    'delete-password': DeletePassword,
-    'get-password': GetPassword,
-    'get-passwords': GetPasswords,
-    'check-password': CheckPassword,
-
-    // GameLife
-    'gamelife-set-loop': GetGameLifeData
-};
+/** Helper function to handle typed feature execution */
+export async function ExecuteFeature<T extends keyof RequestCommands>(
+    action: T,
+    params: { db: Database; crypt: Encryption; profile: ClientSession; data: RequestCommands[T]['input'] }
+): Promise<RequestCommands[T]['output'] | { status: 'error'; message: string }> {
+    const feature = FeatureRegistry[action];
+    if (!feature) {
+        return { status: 'error', message: 'Feature not implemented' };
+    }
+    return await feature(params);
+}

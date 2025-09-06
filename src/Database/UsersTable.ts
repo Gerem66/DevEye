@@ -10,25 +10,18 @@ export class UsersTable {
         this.sql = sql;
     }
 
-    async Create(userData: Omit<DBType_User, 'ID' | 'Created'>): Promise<number> {
-        const query = `
-            INSERT INTO Users (Email, Username, Password, Avatar, Features, DefaultWorkspace, DefaultFeature, Settings, Token, LastLogin)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `;
-        const values = [
-            userData.Email,
-            userData.Username,
-            userData.Password,
-            userData.Avatar,
-            userData.Features,
-            userData.DefaultWorkspace,
-            userData.DefaultFeature,
-            userData.Settings,
-            userData.Token,
-            userData.LastLogin
-        ];
-
-        const result = await this.sql.QueryPrepare<ResultSetHeader>(query, values);
+    async Create(
+        email: DBType_User['Email'],
+        username: DBType_User['Username'],
+        encryptedPassword: string
+    ): Promise<number> {
+        const result = await this.sql.QueryPrepare<ResultSetHeader>(
+            `
+            INSERT INTO Users (Email, Username, Password)
+            VALUES (?, ?, ?)
+        `,
+            [email, username, encryptedPassword]
+        );
         return result.insertId;
     }
 

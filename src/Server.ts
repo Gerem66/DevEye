@@ -9,13 +9,13 @@ import { GetLocalIP } from '@/Utils/Functions';
 import type { Server as HTTPServer } from 'http';
 import type { Server as HTTPSServer } from 'https';
 
-import type { RequestCommands, TCPRequestSendHeader } from 'deveye-types';
+import type { TCPRequestSendHeader } from 'deveye-types';
 import type { ClientSession } from './Interfaces/IClient';
 
-interface ServerConnectionCallbacks<T extends keyof RequestCommands> {
+interface ServerConnectionCallbacks {
     onConnect: (connection: WebSocket.connection, profile: ClientSession) => void;
     onDisconnect: (connection: WebSocket.connection, profile: ClientSession) => void;
-    onMessage: (connection: WebSocket.connection, profile: ClientSession, data: TCPRequestSendHeader<T>) => void;
+    onMessage: (connection: WebSocket.connection, profile: ClientSession, data: TCPRequestSendHeader) => void;
     onError: (connection: WebSocket.connection, profile: ClientSession, error: Error) => void;
 }
 
@@ -42,7 +42,7 @@ class Server {
         this.server.on('error', this.onError);
     }
 
-    Listen = (port: number, callbacks: ServerConnectionCallbacks<keyof RequestCommands>) => {
+    Listen = (port: number, callbacks: ServerConnectionCallbacks) => {
         if (this.server.listening) {
             console.log('[WebSocket] Already listening on port', this.port);
             return;
@@ -93,10 +93,7 @@ class Server {
         }
     };
 
-    handleNewConnection = (
-        connection: WebSocket.connection,
-        callbacks: ServerConnectionCallbacks<keyof RequestCommands>
-    ) => {
+    handleNewConnection = (connection: WebSocket.connection, callbacks: ServerConnectionCallbacks) => {
         const profile: ClientSession = {
             user: null,
             connection,
