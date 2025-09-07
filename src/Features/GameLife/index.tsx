@@ -6,7 +6,9 @@ import { Header, Row, Card, Popup, Button } from '@/Components';
 import { OpenPopup } from '@/Components/Popup';
 import { tcp } from '@/Utils/TCP';
 
-import type { FeatureProps, TCPRequestReceiveHeader } from 'deveye-types';
+import type { FeatureProps } from 'deveye-types';
+
+// TODO: Fix cette feature
 
 function FeatureGameLife({ user, setUser, workspace, feature }: FeatureProps) {
     const [intervalID, setIntervalID] = useState('');
@@ -17,13 +19,13 @@ function FeatureGameLife({ user, setUser, workspace, feature }: FeatureProps) {
 
     useEffect(() => {
         // Send the request to start the loop
-        tcp.SendAndWait('gamelife-set-loop', { workspaceID: workspace.id, type: 'open' }).then((data) => {
+        tcp.SendAndWait('gamelife-set-loop', { workspaceID: workspace.id, type: 'open' }, (data) => {
             console.log(data);
 
             // Check if the request was sent correctly
-            if (data === 'timeout' || data === 'not-sended' || data.status !== 'success') {
+            if (data.status !== 'success') {
                 console.error('Error when sending the request');
-                return;
+                return true; // Remove the callback
             }
 
             // Loop accepted by the server, save the intervalID for callback
@@ -31,15 +33,15 @@ function FeatureGameLife({ user, setUser, workspace, feature }: FeatureProps) {
             setIntervalID(intervalID);
             intervalRef.current = intervalID;
 
-            // Manually define the callback for this intervalID to update the userTotalCount
-            tcp.callbacks[intervalID] = (data: TCPRequestReceiveHeader<'gamelife-data'>) => {
-                setUserTotalCount(data.content.totalUserCount);
-                return false;
-            };
+            // TODO
+            // setUserTotalCount(data.content.totalUserCount);
+
+            return false; // Keep the callback
         });
 
         // Clear the interval when the component is unmounted
         return () => {
+            // TODO Cancel the loop on the server
             const id = intervalRef.current;
             console.log('End interval', id);
             tcp.Send('gamelife-set-loop', { workspaceID: workspace.id, type: 'close', intervalID: id });

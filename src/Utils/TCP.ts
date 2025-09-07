@@ -1,11 +1,12 @@
+import { RandomString } from './Functions';
+
+import type { ConnectionState, RequestCommands, TCPRequestReceiveHeader } from 'deveye-types';
+
 const VPS_CREDENTIALS = {
     env: import.meta.env.MODE,
     host: import.meta.env.VITE_VPS_IP,
     port: import.meta.env.VITE_VPS_PORT
 };
-
-import type { ConnectionState, RequestCommands, TCPRequestReceiveHeader } from 'deveye-types';
-import { RandomString } from './Functions';
 
 class ClientTCP {
     socket: WebSocket | null = null;
@@ -14,7 +15,9 @@ class ClientTCP {
 
     callbackClose = () => {};
 
-    private callbacks: { [key: string]: (data: TCPRequestReceiveHeader<keyof RequestCommands>) => boolean } = {};
+    private callbacks: {
+        [key: string]: <T extends keyof RequestCommands>(data: RequestCommands[T]['output']) => boolean;
+    } = {};
 
     Connect = async (onCloseCallback: () => void): Promise<boolean> => {
         // If already connected, or if the user is not connected to the server
@@ -70,13 +73,13 @@ class ClientTCP {
     };
 
     private onMessage = (event: MessageEvent) => {
-        const data = JSON.parse(event.data);
+        const data = JSON.parse(event.data) as TCPRequestReceiveHeader;
 
-        if (Object.prototype.hasOwnProperty.call(data, 'callbackID')) {
-            const callbackID = data['callbackID'];
+        if (Object.prototype.hasOwnProperty.call(data, 'callbackID') && data.callbackID) {
+            const callbackID = data.callbackID;
             const callback = this.callbacks[callbackID];
             if (typeof callback === 'function') {
-                const removeCallback = callback(data);
+                const removeCallback = callback(data.content);
                 if (removeCallback) {
                     delete this.callbacks[callbackID];
                 }
@@ -118,9 +121,14 @@ class ClientTCP {
         return true;
     };
 
+    /**
+     * @param callback A callback function that will be called when the response is received. If it returns true, the callback will be removed.
+     * @param timeout in ms
+     */
     SendAndWait = async <T extends keyof RequestCommands>(
         action: T,
         data: RequestCommands[T]['input'],
+        callback: (data: RequestCommands[T]['output']) => boolean = () => true,
         timeout = 10000
     ): Promise<'not-sended' | 'timeout' | RequestCommands[T]['output']> => {
         const callbackID = RandomString(8);
@@ -136,10 +144,16 @@ class ClientTCP {
                 resolve('timeout');
             }, timeout);
 
-            this.callbacks[callbackID] = (data) => {
-                clearTimeout(timer);
-                resolve(data.content);
-                return true;
+            this.callbacks[callbackID] = (data: RequestCommands[T]['output']) => {
+                const finished = callback(data);
+
+                if (finished) {
+                    clearTimeout(timer);
+                    resolve(data);
+                    return true;
+                }
+
+                return false;
             };
         });
     };
