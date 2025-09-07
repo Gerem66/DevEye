@@ -6,17 +6,17 @@ import { FEATURES } from '../../../Features/Features';
 
 import type { FeaturesID, FeatureType, DBType_Workspace } from 'deveye-types';
 
-const NavFeaturesProps = {
-    workspace: null as DBType_Workspace | null,
+interface NavFeaturesProps {
+    workspace: DBType_Workspace | null;
     active: {
-        feature_id: null as FeaturesID | null,
-        workspace_id: 0
-    },
-    onProfileClick: (() => {}) as () => void,
-    onFeatureClick: (() => {}) as (workspace_id: number, feature_id: FeaturesID) => void
-};
+        feature_id: FeaturesID | null;
+        workspace_id: number;
+    };
+    onProfileClick: () => void;
+    onFeatureClick: (workspace_id: number, feature_id: FeaturesID) => void;
+}
 
-class NavFeatures extends React.Component<typeof NavFeaturesProps> {
+class NavFeatures extends React.Component<NavFeaturesProps> {
     render() {
         const { workspace, onProfileClick } = this.props;
 
