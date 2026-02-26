@@ -1,11 +1,17 @@
 import FeatureDashboard from './Dashboard';
+import FeatureGameLife from './GameLife';
 import FeaturePassword from './Password';
 import FeatureProfile from './Profile';
-import FeatureGameLife from './GameLife';
 
 import type { FeatureType } from 'deveye-types/Feature';
 
 const FEATURES: FeatureType[] = [
+    {
+        id: 'profile',
+        name: 'Profil',
+        icon: 'user',
+        component: FeatureProfile
+    },
     {
         id: 'dashboard',
         name: 'Dashboard',
@@ -17,12 +23,6 @@ const FEATURES: FeatureType[] = [
         name: 'Mot de passe',
         icon: 'lock',
         component: FeaturePassword
-    },
-    {
-        id: 'profile',
-        name: 'Profil',
-        icon: 'user',
-        component: FeatureProfile
     },
     {
         id: 'gamelife',
