@@ -39,9 +39,9 @@ function FeatureDashboard({ user, workspace, feature, setWorkspace, setFeature }
             <Header user={user} workspace={workspace} feature={feature} />
 
             <Row>
-                <Card.Value title='Nombre total de projets' value='0' color='bg-blue' icon='icon-details' />
-                <Card.Value title='Tâches en cours' value='0' color='bg-green' icon='icon-sandbox' />
-                <Card.Value title='Mails non lus' value='0' color='bg-yellow' icon='icon-mail' />
+                <Card.Value title='Nombre total de projets' value='0' color='bg-blue' icon='details' />
+                <Card.Value title='Tâches en cours' value='0' color='bg-green' icon='sandbox' />
+                <Card.Value title='Mails non lus' value='0' color='bg-yellow' icon='mail' />
             </Row>
 
             <Row style={{ justifyContent: 'space-evenly' }}>

@@ -17,12 +17,12 @@ function FeatureGameLife({ user, workspace, feature }: FeatureProps) {
                     title='Nombre total de joueurs'
                     value={userTotalCount.toString()}
                     color='bg-blue'
-                    icon='icon-details'
+                    icon='details'
                 />
 
-                <Card.Value title='Moulaga mensuelle' value='—' color='bg-green' icon='icon-mail' />
+                <Card.Value title='Moulaga mensuelle' value='—' color='bg-green' icon='mail' />
 
-                <Card.Value title='Taille de la bdd' value='—' color='bg-yellow' icon='icon-sandbox' />
+                <Card.Value title='Taille de la bdd' value='—' color='bg-yellow' icon='sandbox' />
             </Row>
 
             <Row style={{ justifyContent: 'space-evenly' }}>

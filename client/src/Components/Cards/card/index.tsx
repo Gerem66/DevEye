@@ -2,13 +2,13 @@ import React from 'react';
 
 import styles from './style.module.css';
 
-import type Color from '@/Styles/colors.css';
+import type { ColorClass } from '@/Styles/classNames';
 
 interface CardValueProps {
     children: React.JSX.Element | React.JSX.Element[];
     title?: string;
     width?: 'auto' | 'unset' | number;
-    color?: keyof typeof Color;
+    color?: ColorClass;
     style?: string;
 }
 
