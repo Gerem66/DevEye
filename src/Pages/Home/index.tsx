@@ -1,94 +1,71 @@
-import { JSX, useEffect, useState } from 'react';
+import { JSX, useEffect, useMemo, useState } from 'react';
 
-import './style.css';
+import { useAuth } from '@/auth/AuthProvider';
 import { Navbar } from '@/Components';
-import { FEATURES } from '@/Features/Features';
+import { FEATURE_BY_ID, FEATURES } from '@/Features/Features';
 import AddWorkspacePopup from './popup-add-workspace';
 import PopupUnlock from './popup-unlock';
+import './style.css';
 
-import type { DBType_User, DBType_Workspace, FeatureType } from 'deveye-types';
+import type { FeatureType } from '@/Features/types';
+import type { Workspace } from 'deveye-types';
 
-let firstLoad = false;
-
-interface HomePageProps {
-    user: DBType_User | null;
-    setUser: React.Dispatch<React.SetStateAction<DBType_User | null>>;
-}
-
-function HomePage({ user, setUser }: HomePageProps): JSX.Element | null {
-    const [workspace, setWorkspace] = useState<DBType_Workspace | null>(null);
+function HomePage(): JSX.Element | null {
+    const { user, workspaces } = useAuth();
+    const [workspace, setWorkspace] = useState<Workspace | null>(null);
     const [feature, setFeature] = useState<FeatureType | null>(null);
 
+    const workspacesById = useMemo(() => {
+        const m = new Map<number, Workspace>();
+        for (const w of workspaces) m.set(w.id, w);
+        return m;
+    }, [workspaces]);
+
+    /** Initial selection from user defaults; revalidated on workspace/user changes. */
     useEffect(() => {
-        if (user === null) {
+        if (!user) {
             setWorkspace(null);
             setFeature(null);
-            firstLoad = false;
             return;
         }
+        if (workspace && workspacesById.has(workspace.id)) return;
 
-        if (workspace === null) {
-            const workspace = user.Workspaces.find((c) => c.id === user.DefaultWorkspace) || null;
-            if (workspace === null || !workspace.features.includes(user.DefaultFeature)) {
-                const selfWorkspace = user.Workspaces.find((f) => f.id === 0) || null;
-                const firstFeature = FEATURES.find((f) => f.id === selfWorkspace?.features[0]) || null;
-                setWorkspace(selfWorkspace);
-                setFeature(firstFeature);
-                console.error('Workspace or feature not found');
-                return;
-            }
+        const preferred = workspacesById.get(user.defaultWorkspace);
+        const next =
+            preferred ??
+            workspacesById.get(0) ??
+            workspaces[0] ??
+            null;
+        setWorkspace(next ?? null);
+    }, [user, workspaces, workspace, workspacesById]);
 
-            const feature = FEATURES.find((f) => f.id === user.DefaultFeature) || null;
-            if (feature === null) {
-                const firstFeature = FEATURES.find(() => workspace.features[0]) || null;
-                setWorkspace(workspace);
-                setFeature(firstFeature);
-                console.error('Feature not found');
-                return;
-            }
-
-            setWorkspace(workspace);
-            setFeature(feature);
-        }
-    }, [user]);
-
+    /** Keep `feature` consistent with the currently selected workspace. */
     useEffect(() => {
-        if (workspace === null) {
-            return;
-        }
-
-        // Disable auto-load feature on first render
-        if (!firstLoad) {
-            firstLoad = true;
-            return;
-        }
-
-        if (workspace.features.length <= 0) {
+        if (!workspace) {
             setFeature(null);
             return;
         }
 
-        const newFeature = FEATURES.find((f) => f.id === workspace.features[0]) || null;
-        setFeature(newFeature);
-    }, [workspace]);
+        const stillAvailable = feature && workspace.features.includes(feature.id);
+        if (stillAvailable) return;
 
-    if (user === null) {
-        return null;
-    }
+        const defaultId = user?.defaultFeature;
+        if (defaultId && workspace.features.includes(defaultId) && FEATURE_BY_ID[defaultId]) {
+            setFeature(FEATURE_BY_ID[defaultId]);
+            return;
+        }
 
-    const AddWorkspace = (workspace: DBType_Workspace) => {
-        setUser({
-            ...user,
-            Workspaces: [...user.Workspaces, workspace]
-        });
-        setWorkspace(workspace);
-    };
+        const firstId = workspace.features[0];
+        const fallback = (firstId && FEATURE_BY_ID[firstId]) || FEATURES.find((f) => f.id === 'profile') || null;
+        setFeature(fallback);
+    }, [workspace, user, feature]);
+
+    if (!user) return null;
 
     return (
         <div id='home' className='home'>
             <div className='home-left'>
                 <Navbar
-                    user={user}
                     workspace={workspace}
                     feature={feature}
                     setWorkspace={setWorkspace}
@@ -101,7 +78,6 @@ function HomePage({ user, setUser }: HomePageProps): JSX.Element | null {
                     <feature.component
                         key={`${feature.id} ${workspace.id}`}
                         user={user}
-                        setUser={setUser}
                         workspace={workspace}
                         feature={feature}
                         setWorkspace={setWorkspace}
@@ -109,7 +85,7 @@ function HomePage({ user, setUser }: HomePageProps): JSX.Element | null {
                     />
                 )}
 
-                <AddWorkspacePopup AddWorkspace={AddWorkspace} />
+                <AddWorkspacePopup onCreated={setWorkspace} />
                 <PopupUnlock workspace={workspace} />
             </div>
         </div>

@@ -1,25 +1,30 @@
-import { useState } from 'react';
-
 import HomePage from './Pages/Home/index.js';
 import LoginPage from './Pages/Login/index.js';
+import { AuthProvider, useAuth } from './auth/AuthProvider';
 
-import './Styles/sizes.css';
+import './Styles/colors.css';
 import './Styles/fonts.css';
 import './Styles/icons.css';
-import './Styles/colors.css';
 import './Styles/input.css';
+import './Styles/sizes.css';
 import './Styles/table.css';
 
-import type { UserType } from 'deveye-types';
-
-function App() {
-    const [user, setUser] = useState<UserType | null>(null);
+function AppRoot() {
+    const { status } = useAuth();
 
     return (
         <>
-            <HomePage user={user} setUser={setUser} />
-            <LoginPage user={user} setUser={setUser} />
+            {status === 'authenticated' && <HomePage />}
+            <LoginPage />
         </>
+    );
+}
+
+function App() {
+    return (
+        <AuthProvider>
+            <AppRoot />
+        </AuthProvider>
     );
 }
 

@@ -1,11 +1,13 @@
 import styles from './style.module.css';
 
-import type { PasswordType } from 'deveye-types';
+import type { PasswordEntry, PasswordEntryMasked } from 'deveye-types';
+
+type RowPassword = PasswordEntry | PasswordEntryMasked;
 
 interface PasswordRowProps {
-    password: PasswordType | null;
-    onEdit?: (ID: number) => void;
-    callback?: (ID: number) => void;
+    password: RowPassword | null;
+    onEdit?: (id: number) => void;
+    callback?: (id: number) => void;
 }
 
 function PasswordRow({ password, onEdit = () => {}, callback = () => {} }: PasswordRowProps) {
@@ -21,17 +23,17 @@ function PasswordRow({ password, onEdit = () => {}, callback = () => {} }: Passw
         );
     }
 
+    const isMasked = password.password === '';
+
     return (
-        <tr data-id={`${password.ID}`}>
+        <tr data-id={`${password.id}`}>
             <td>{password.service}</td>
 
             <td>{password.email}</td>
 
             <td className={styles['password-cell']}>
-                <p>{password.password}</p>
-                {password.password !== '**********' ? null : (
-                    <i className='icon icon-eye-open' onClick={() => callback(password.ID)} />
-                )}
+                <p>{isMasked ? '••••••••' : password.password}</p>
+                {isMasked ? <i className='icon icon-eye-open' onClick={() => callback(password.id)} /> : null}
             </td>
 
             {password.status === 'active' ? (
@@ -43,10 +45,11 @@ function PasswordRow({ password, onEdit = () => {}, callback = () => {} }: Passw
             )}
 
             <td className={styles['edit-cell']}>
-                <i className='icon icon-other' onClick={() => onEdit(password.ID)} />
+                <i className='icon icon-other' onClick={() => onEdit(password.id)} />
             </td>
         </tr>
     );
 }
 
 export default PasswordRow;
+export type { RowPassword };

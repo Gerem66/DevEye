@@ -17,9 +17,10 @@
   "author": "Gerem",
   "license": "ISC",
   "dependencies": {
-    "deveye-types": "file:../DevEye-Types/dist",
+    "deveye-types": "file:../DevEye-Types",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "zod": "^4.4.3"
   },
   "browserslist": {
     "production": [

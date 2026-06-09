@@ -1,23 +1,22 @@
-import styles from './styleWorkspaces.module.css';
 import stylesBtn from '../button.module.css';
+import styles from './styleWorkspaces.module.css';
 
+import { useAuth } from '@/auth/AuthProvider';
 import { OpenPopup } from '../../Popup';
 
-import type { DBType_User, DBType_Workspace } from 'deveye-types';
+import type { Workspace } from 'deveye-types';
 
-const NavWorkspacesProps = {
-    user: null as DBType_User | null,
-    onWorkspaceClick: (() => {}) as (workspace: DBType_Workspace | null) => void
-};
+interface NavWorkspacesProps {
+    onWorkspaceClick: (workspace: Workspace | null) => void;
+}
 
-function NavWorkspaces(props = NavWorkspacesProps) {
-    const { onWorkspaceClick } = props;
-    const { user } = props;
+function NavWorkspaces({ onWorkspaceClick }: NavWorkspacesProps) {
+    const { workspaces } = useAuth();
 
     return (
         <>
             <button
-                key={'workspace-back'}
+                key='workspace-back'
                 className={`${stylesBtn.button} ${styles['nav-back-button']}`}
                 onClick={() => onWorkspaceClick(null)}
             >
@@ -26,12 +25,16 @@ function NavWorkspaces(props = NavWorkspacesProps) {
                 <span className={`icon icon-blank ${styles['icon-blank']}`} />
             </button>
 
-            {user?.Workspaces.map((workspace) => (
-                <WorkspaceButton key={workspace.id} workspace={workspace} onClick={() => onWorkspaceClick(workspace)} />
+            {workspaces.map((workspace) => (
+                <WorkspaceButton
+                    key={workspace.id}
+                    workspace={workspace}
+                    onClick={() => onWorkspaceClick(workspace)}
+                />
             ))}
 
             <button
-                key={'workspace-add'}
+                key='workspace-add'
                 className={`${stylesBtn.button} ${styles['nav-add-button']}`}
                 onClick={() => OpenPopup('popup-add-workspace')}
             >
@@ -43,9 +46,8 @@ function NavWorkspaces(props = NavWorkspacesProps) {
     );
 }
 
-function WorkspaceButton({ workspace, onClick }: { workspace: DBType_Workspace; onClick: () => void }) {
+function WorkspaceButton({ workspace, onClick }: { workspace: Workspace; onClick: () => void }) {
     const { id, name, logo } = workspace;
-
     return (
         <button
             key={'workspace-' + id}

@@ -1,44 +1,47 @@
 import styles from './style.module.css';
 
-import { Header, Row, Card, Popup, Button } from '../../Components';
-import { OpenPopup, ClosePopup } from '../../Components/Popup';
-import { tcp } from '../../Utils/TCP';
+import { ws, WsError } from '@/api/ws';
+import { useAuth } from '@/auth/AuthProvider';
+import { FEATURE_BY_ID, FEATURES } from '@/Features/Features';
+import { Button, Card, Header, Popup, Row } from '../../Components';
+import { ClosePopup, OpenPopup } from '../../Components/Popup';
 
-import type { FeatureProps } from 'deveye-types/Feature';
+import type { FeatureProps } from '@/Features/types';
 
-function FeatureDashboard({ user, setUser, workspace, feature, setWorkspace }: FeatureProps) {
-    const OpenDeleteWorkspacePopup = () => {
-        OpenPopup('popup-delete-workspace');
-    };
-    const CloseDeleteWorkspacePopup = () => {
-        ClosePopup('popup-delete-workspace');
-    };
+function FeatureDashboard({ user, workspace, feature, setWorkspace, setFeature }: FeatureProps) {
+    const { workspaces, setWorkspaces } = useAuth();
 
-    const DeleteWorkspace = () => {
-        tcp.SendAndWait('delete-workspace', { workspaceID: workspace.id }).then((result) => {
-            if (result === 'timeout' || result === 'not-sended' || result.status !== 'success') {
-                return;
-            }
+    const OpenDeleteWorkspacePopup = () => OpenPopup('popup-delete-workspace');
+    const CloseDeleteWorkspacePopup = () => ClosePopup('popup-delete-workspace');
 
-            setUser({
-                ...user,
-                Workspaces: user.Workspaces.filter((c) => c.id !== workspace.id)
-            });
-            setWorkspace(user.Workspaces[0]);
-            CloseDeleteWorkspacePopup();
-        });
+    const DeleteWorkspace = async () => {
+        try {
+            await ws.send('workspace.delete', { workspaceId: workspace.id });
+        } catch (e) {
+            if (!(e instanceof WsError)) throw e;
+            return;
+        }
+        const remaining = workspaces.filter((w) => w.id !== workspace.id);
+        setWorkspaces(() => remaining);
+
+        const next = remaining.find((w) => w.id === 0) ?? remaining[0];
+        if (next) {
+            setWorkspace(next);
+            const nextFeatureId = next.features[0];
+            const nextFeature = (nextFeatureId && FEATURE_BY_ID[nextFeatureId]) || FEATURES[0];
+            if (nextFeature) setFeature(nextFeature);
+        }
+        CloseDeleteWorkspacePopup();
     };
 
     return (
         <div className='profile'>
-            <Header user={user} setUser={setUser} workspace={workspace} feature={feature} />
+            <Header user={user} workspace={workspace} feature={feature} />
 
             <Row>
-                <Card.Value title='Nombre total de projets' value='0' color='bg-blue' icon='details' />
-
-                <Card.Value title='Tâches en cours' value='0' color='bg-green' icon='sandbox' />
-
-                <Card.Value title='Mails non lus' value='0' color='bg-yellow' icon='mail' />
+                <Card.Value title='Nombre total de projets' value='0' color='bg-blue' icon='icon-details' />
+                <Card.Value title='Tâches en cours' value='0' color='bg-green' icon='icon-sandbox' />
+                <Card.Value title='Mails non lus' value='0' color='bg-yellow' icon='icon-mail' />
             </Row>
 
             <Row style={{ justifyContent: 'space-evenly' }}>
@@ -58,31 +61,10 @@ function FeatureDashboard({ user, setUser, workspace, feature, setWorkspace }: F
                     <div className={styles['profile-info']}>
                         <h3 className={styles['profile-info-title']}>Chiffrage par mot de passe</h3>
                         <div className={styles['profile-info-content']}>
-                            {
-                                // TODO: Finish
-                                // eslint-disable-next-line no-constant-condition
-                                true ? (
-                                    <>
-                                        <Button
-                                            className={styles['profile-info-button']}
-                                            onClick={() => OpenPopup('in-dev')}
-                                        >
-                                            Activer
-                                        </Button>
-                                        <i className={styles['icon-error']} />
-                                    </>
-                                ) : (
-                                    <>
-                                        <Button
-                                            className={styles['profile-info-button']}
-                                            onClick={() => OpenPopup('in-dev')}
-                                        >
-                                            Modifier
-                                        </Button>
-                                        <i className={styles['icon-success']} />
-                                    </>
-                                )
-                            }
+                            <Button className={styles['profile-info-button']} onClick={() => OpenPopup('in-dev')}>
+                                Activer
+                            </Button>
+                            <i className={styles['icon-error']} />
                         </div>
                     </div>
 

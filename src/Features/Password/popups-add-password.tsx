@@ -2,19 +2,20 @@ import { useState } from 'react';
 
 import styles from './style.module.css';
 
+import { Button, Popup, SelectInput, TextInput } from '@/Components';
 import { ClosePopup } from '@/Components/Popup';
-import { Popup, Button, TextInput, SelectInput } from '@/Components';
 
-import type { PasswordType, PasswordStatus } from 'deveye-types';
+import type { PasswordEntry, PasswordStatus } from 'deveye-types';
+
+type PopupResult = PasswordEntry | 'delete' | null;
 
 interface PasswordPopupAddProps {
-    /** List of password categories */
     passwordCategories: string[];
 }
 
 function PasswordPopupAdd({ passwordCategories }: PasswordPopupAddProps) {
     const [mode, setMode] = useState<'add' | 'edit'>('add');
-    const [ID, setID] = useState(0);
+    const [id, setId] = useState(0);
     const [category, setCategory] = useState('');
     const [service, setService] = useState('');
     const [email, setEmail] = useState('');
@@ -25,19 +26,25 @@ function PasswordPopupAdd({ passwordCategories }: PasswordPopupAddProps) {
     const [errorService, setErrorService] = useState('');
     const [errorEmail, setErrorEmail] = useState('');
 
-    function handleOpenPopup(password: PasswordType | null) {
-        if (!password || password.ID === 0) {
+    function handleOpenPopup(input: PasswordEntry | null) {
+        if (!input || input.id === 0) {
             setMode('add');
+            setId(0);
+            setCategory('');
+            setService('');
+            setEmail('');
+            setPassword('');
+            setStatus('active');
             return;
         }
 
         setMode('edit');
-        setID(password.ID);
-        setCategory(password.category);
-        setService(password.service);
-        setEmail(password.email);
-        setPassword(password.password);
-        setStatus(password.status);
+        setId(input.id);
+        setCategory(input.category);
+        setService(input.service);
+        setEmail(input.email);
+        setPassword(input.password);
+        setStatus(input.status);
     }
 
     function handleAddPassword() {
@@ -48,19 +55,12 @@ function PasswordPopupAdd({ passwordCategories }: PasswordPopupAddProps) {
             return;
         }
 
-        const newPassword: PasswordType = {
-            ID,
-            category,
-            service,
-            email,
-            password,
-            status
-        };
-        handleBack(newPassword);
+        const entry: PasswordEntry = { id, category, service, email, password, status };
+        handleBack(entry);
     }
 
-    function handleBack(newPassword: PasswordType | null = null) {
-        setID(0);
+    function handleBack(result: PopupResult = null) {
+        setId(0);
         setCategory('');
         setService('');
         setEmail('');
@@ -69,11 +69,11 @@ function PasswordPopupAdd({ passwordCategories }: PasswordPopupAddProps) {
         setErrorCategory('');
         setErrorService('');
         setErrorEmail('');
-        ClosePopup('popup-add-password', newPassword);
+        ClosePopup('popup-add-password', result);
     }
 
     function handleDelete() {
-        ClosePopup('popup-add-password', 'delete');
+        handleBack('delete');
     }
 
     function handleStatusPassword(e: React.ChangeEvent<HTMLSelectElement>) {
@@ -88,7 +88,7 @@ function PasswordPopupAdd({ passwordCategories }: PasswordPopupAddProps) {
             onClosePopup={() => handleBack()}
         >
             <p>
-                Stocker un mot de passe est une bonne pratique pour protéger vos compte.
+                Stocker un mot de passe est une bonne pratique pour protéger vos comptes.
                 <br />
                 Les informations concernant les mots de passe sont chiffrées.
             </p>
@@ -102,8 +102,8 @@ function PasswordPopupAdd({ passwordCategories }: PasswordPopupAddProps) {
                 onChange={(e) => setCategory(e.target.value)}
             />
             <datalist id='category'>
-                {passwordCategories.map((category) => (
-                    <option key={category} value={category} />
+                {passwordCategories.map((c) => (
+                    <option key={c} value={c} />
                 ))}
             </datalist>
 
@@ -164,3 +164,5 @@ function PasswordPopupAdd({ passwordCategories }: PasswordPopupAddProps) {
 }
 
 export { PasswordPopupAdd };
+export type { PopupResult };
+

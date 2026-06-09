@@ -1,84 +1,80 @@
-import React from 'react';
+import { useState } from 'react';
 
-import styles from './style.module.css';
-import { Popup, Button, TextInput } from '@/Components/index.js';
+import { ws, WsError } from '@/api/ws';
+import { useAuth } from '@/auth/AuthProvider';
+import { Button, Popup, TextInput } from '@/Components/index.js';
 import { ClosePopup } from '@/Components/Popup';
-import { tcp } from '@/Utils/TCP';
+import styles from './style.module.css';
 
-import type { DBType_Workspace } from 'deveye-types';
+import type { Workspace } from 'deveye-types';
 
 interface AddWorkspacePopupProps {
-    AddWorkspace: (workspace: DBType_Workspace) => void;
+    onCreated?: (workspace: Workspace) => void;
 }
 
-class AddWorkspacePopup extends React.Component<AddWorkspacePopupProps> {
-    state = {
-        inputWorkspace: '',
-        errorWorkspace: ''
-    };
+function AddWorkspacePopup({ onCreated }: AddWorkspacePopupProps) {
+    const { setWorkspaces } = useAuth();
+    const [name, setName] = useState('');
+    const [error, setError] = useState('');
+    const [submitting, setSubmitting] = useState(false);
 
-    onInputWorkspaceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        this.setState({ inputWorkspace: e.target.value });
-        this.setState({ errorWorkspace: '' });
-    };
-
-    oninputWorkspaceKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter') {
-            this.WorkspacePopupValidate();
-        }
-    };
-
-    WorkspacePopupClose = () => {
-        this.setState({ inputWorkspace: '', errorWorkspace: '' });
+    const close = () => {
+        setName('');
+        setError('');
         ClosePopup('popup-add-workspace');
     };
 
-    WorkspacePopupValidate = async () => {
-        const { AddWorkspace } = this.props;
-        const { inputWorkspace } = this.state;
-
-        if (inputWorkspace === '') {
-            this.setState({ errorWorkspace: "Le nom de l'entreprise ne peut pas être vide" });
+    const submit = async () => {
+        const trimmed = name.trim();
+        if (trimmed === '') {
+            setError("Le nom de l'entreprise ne peut pas être vide");
             return;
         }
-
-        const result = await tcp.SendAndWait('add-workspace', {
-            workspaceName: inputWorkspace
-        });
-
-        if (result === 'timeout' || result === 'not-sended' || result.status !== 'success') {
-            this.setState({ errorWorkspace: "Erreur lors de l'ajout de l'entreprise" });
-            return;
+        if (submitting) return;
+        setSubmitting(true);
+        setError('');
+        try {
+            const res = await ws.send('workspace.add', { name: trimmed });
+            setWorkspaces((prev) => [...prev, res.workspace]);
+            onCreated?.(res.workspace);
+            setName('');
+            ClosePopup('popup-add-workspace');
+        } catch (e) {
+            setError(e instanceof WsError ? e.message : "Erreur lors de l'ajout de l'entreprise");
+        } finally {
+            setSubmitting(false);
         }
-
-        AddWorkspace(result.workspace);
-        ClosePopup('popup-add-workspace');
     };
 
-    render() {
-        return (
-            <Popup id='popup-add-workspace' title='Ajouter une entreprise' onClosePopup={this.WorkspacePopupClose}>
-                <p>Quel est le nom de la nouvelle entreprise ?</p>
+    const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') void submit();
+    };
 
-                <div className='form-group'>
-                    <TextInput
-                        placeholder='Entreprise X'
-                        value={this.state.inputWorkspace}
-                        error={this.state.errorWorkspace}
-                        onChange={this.onInputWorkspaceChange}
-                        onKeyDown={this.oninputWorkspaceKeyDown}
-                    />
-                </div>
+    return (
+        <Popup id='popup-add-workspace' title='Ajouter une entreprise' onClosePopup={close}>
+            <p>Quel est le nom de la nouvelle entreprise ?</p>
 
-                <div className={`form-group ${styles['popup-check-password-buttons']}`}>
-                    <Button onClick={this.WorkspacePopupClose} color='#576d8c'>
-                        Fermer
-                    </Button>
-                    <Button onClick={this.WorkspacePopupValidate}>Déverrouiller</Button>
-                </div>
-            </Popup>
-        );
-    }
+            <div className='form-group'>
+                <TextInput
+                    placeholder='Entreprise X'
+                    value={name}
+                    error={error}
+                    onChange={(e) => {
+                        setName(e.target.value);
+                        setError('');
+                    }}
+                    onKeyDown={onKeyDown}
+                />
+            </div>
+
+            <div className={`form-group ${styles['popup-check-password-buttons']}`}>
+                <Button onClick={close} color='#576d8c'>
+                    Fermer
+                </Button>
+                <Button onClick={submit}>{submitting ? '…' : 'Créer'}</Button>
+            </div>
+        </Popup>
+    );
 }
 
 export default AddWorkspacePopup;

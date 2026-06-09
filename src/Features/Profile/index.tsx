@@ -1,11 +1,14 @@
 import styles from './style.module.css';
 
-import { Header, Row, Card, Popup, Button } from '../../Components';
+import { useAuth } from '@/auth/AuthProvider';
+import { Button, Card, Header, Popup, Row } from '../../Components';
 import { ChangeImage, EditPassword } from './actions';
 
-import type { FeatureProps } from 'deveye-types';
+import type { FeatureProps } from '@/Features/types';
 
-function FeatureProfile({ user, setUser, workspace, feature }: FeatureProps) {
+function FeatureProfile({ user, workspace, feature }: FeatureProps) {
+    const { workspaces, logout } = useAuth();
+
     const convertDate = (time: number): string =>
         new Date(time * 1000)
             .toLocaleDateString(undefined, {
@@ -20,12 +23,12 @@ function FeatureProfile({ user, setUser, workspace, feature }: FeatureProps) {
             .map((word) => (word.length <= 1 ? word : word.charAt(0).toUpperCase() + word.slice(1)))
             .join(' ');
 
-    const dateCreated = convertDate(user.Created);
-    const dateLastLogin = user.LastLogin ? convertDate(user.LastLogin) : 'Première connexion';
+    const dateCreated = convertDate(user.created);
+    const dateLastLogin = user.lastLogin ? convertDate(user.lastLogin) : 'Première connexion';
 
     return (
         <div className='profile'>
-            <Header user={user} setUser={setUser} workspace={workspace} feature={feature} />
+            <Header user={user} workspace={workspace} feature={feature} />
 
             <Row center>
                 <Card.Element width={450} color='bg-blue-dark'>
@@ -43,13 +46,13 @@ function FeatureProfile({ user, setUser, workspace, feature }: FeatureProps) {
                     <div className={styles.separator} />
                     <div className={styles['profile-info']}>
                         <h3 className={styles['profile-info-title']}>Adresse e-mail</h3>
-                        <p className={styles['profile-info-text']}>{user.Email}</p>
+                        <p className={styles['profile-info-text']}>{user.email}</p>
                     </div>
 
                     <div className={styles.separator} />
                     <div className={styles['profile-info']}>
                         <h3 className={styles['profile-info-title']}>{"Nombre d'entreprises"}</h3>
-                        <p className={styles['profile-info-text']}>{user.Workspaces.length - 1}</p>
+                        <p className={styles['profile-info-text']}>{Math.max(workspaces.length - 1, 0)}</p>
                     </div>
 
                     <div className={styles.separator} />
@@ -58,7 +61,6 @@ function FeatureProfile({ user, setUser, workspace, feature }: FeatureProps) {
                         <div className={styles['profile-info-content']}>
                             <p className={styles['profile-info-text']}>[Désactivée]</p>
                             <i className={styles['icon-error']} />
-                            {/*<i className={styles['icon-success']} />*/}
                         </div>
                     </div>
 
@@ -68,7 +70,6 @@ function FeatureProfile({ user, setUser, workspace, feature }: FeatureProps) {
                         <div className={styles['profile-info-content']}>
                             <p className={styles['profile-info-text']}>[Désactivée]</p>
                             <i className={styles['icon-error']} />
-                            {/*<i className={styles['icon-success']} />*/}
                         </div>
                     </div>
 
@@ -95,7 +96,13 @@ function FeatureProfile({ user, setUser, workspace, feature }: FeatureProps) {
                     </div>
 
                     <div className={styles.separator} />
-                    <Button className={styles['btn-disconnect']} onClick={() => setUser(null)} color='#aa3333'>
+                    <Button
+                        className={styles['btn-disconnect']}
+                        onClick={() => {
+                            void logout();
+                        }}
+                        color='#aa3333'
+                    >
                         Se déconnecter
                     </Button>
                 </Card.Element>

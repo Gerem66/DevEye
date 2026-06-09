@@ -1,90 +1,35 @@
-import { useEffect, useRef, useState } from 'react';
-
 import styles from './style.module.css';
 
-import { Header, Row, Card, Popup, Button } from '@/Components';
+import { Button, Card, Header, Popup, Row } from '@/Components';
 import { OpenPopup } from '@/Components/Popup';
-import { tcp } from '@/Utils/TCP';
 
-import type { FeatureProps } from 'deveye-types';
+import type { FeatureProps } from '@/Features/types';
 
-// TODO: Fix cette feature
-
-function FeatureGameLife({ user, setUser, workspace, feature }: FeatureProps) {
-    const [intervalID, setIntervalID] = useState('');
-    const intervalRef = useRef(intervalID);
-
-    // Main variable
-    const [userTotalCount, setUserTotalCount] = useState(0);
-
-    useEffect(() => {
-        // Send the request to start the loop
-        tcp.SendAndWait('gamelife-set-loop', { workspaceID: workspace.id, type: 'open' }, (data) => {
-            console.log(data);
-
-            // Check if the request was sent correctly
-            if (data.status !== 'success') {
-                console.error('Error when sending the request');
-                return true; // Remove the callback
-            }
-
-            // Loop accepted by the server, save the intervalID for callback
-            const intervalID = data.intervalID;
-            setIntervalID(intervalID);
-            intervalRef.current = intervalID;
-
-            // TODO
-            // setUserTotalCount(data.content.totalUserCount);
-
-            return false; // Keep the callback
-        });
-
-        // Clear the interval when the component is unmounted
-        return () => {
-            // TODO Cancel the loop on the server
-            const id = intervalRef.current;
-            console.log('End interval', id);
-            tcp.Send('gamelife-set-loop', { workspaceID: workspace.id, type: 'close', intervalID: id });
-            delete tcp.callbacks[id];
-        };
-    }, [workspace.id]);
+function FeatureGameLife({ user, workspace, feature }: FeatureProps) {
+    const userTotalCount = 0;
 
     return (
         <div className='profile'>
-            <Header user={user} setUser={setUser} workspace={workspace} feature={feature} />
+            <Header user={user} workspace={workspace} feature={feature} />
 
             <Row>
                 <Card.Value
                     title='Nombre total de joueurs'
                     value={userTotalCount.toString()}
                     color='bg-blue'
-                    icon='details'
+                    icon='icon-details'
                 />
 
-                <Card.Value title='Moulaga mensuelle' value='9999999 €' color='bg-green' icon='mail' />
+                <Card.Value title='Moulaga mensuelle' value='—' color='bg-green' icon='icon-mail' />
 
-                <Card.Value title='Taille de la bdd' value='10 Mo' color='bg-yellow' icon='sandbox' />
+                <Card.Value title='Taille de la bdd' value='—' color='bg-yellow' icon='icon-sandbox' />
             </Row>
 
             <Row style={{ justifyContent: 'space-evenly' }}>
                 <Card.Element title={`Prod - ${workspace.name}`} color='bg-blue-dark' width={600}>
                     <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>
-                            {"Nombre d'utilisateurs [Live] (vraie valeur (normalement))"}
-                        </h3>
+                        <h3 className={styles['profile-info-title']}>{"Nombre d'utilisateurs (live)"}</h3>
                         <p className={styles['profile-info-text']}>{userTotalCount}</p>
-                    </div>
-
-                    <div className={styles.separator} />
-                    <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>Nombre de nouveaux utilisateurs</h3>
-                        <p className={styles['profile-info-text']}>-256</p>
-                    </div>
-
-                    <div className={styles.separator} />
-                    <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>Nombre random</h3>
-                        <p className={styles['profile-info-text']}>123456</p>
                     </div>
 
                     <div className={styles.separator} />

@@ -2,46 +2,37 @@ import { JSX, useState } from 'react';
 
 import styles from './style.module.css';
 
-import { tcp } from '@/Utils/TCP';
+import { ws } from '@/api/ws';
+import { useAuth } from '@/auth/AuthProvider';
 
-import type { DBType_User, DBType_Workspace, FeatureType } from 'deveye-types';
-
-type SetUserType = (use: DBType_User) => void;
+import type { FeatureType } from '@/Features/types';
+import type { User, Workspace } from 'deveye-types';
 
 interface HeaderProps {
-    user: DBType_User;
-    setUser: SetUserType;
-    workspace: DBType_Workspace;
+    user: User;
+    workspace: Workspace;
     feature: FeatureType;
 }
 
-function Header({ user, setUser, workspace, feature }: HeaderProps): JSX.Element {
+function Header({ user, workspace, feature }: HeaderProps): JSX.Element {
+    const { updateUser } = useAuth();
     const [loading, setLoading] = useState(false);
-    const isFavorite = user.DefaultWorkspace === workspace.id && user.DefaultFeature === feature.id;
+    const isFavorite = user.defaultWorkspace === workspace.id && user.defaultFeature === feature.id;
 
     const onFavoriteClick = async () => {
-        if (loading || isFavorite) {
-            return;
-        }
-
+        if (loading || isFavorite) return;
         setLoading(true);
-        const result = await tcp.SendAndWait('set-favorite-workspace', {
-            workspaceID: workspace.id,
-            featureID: feature.id
-        });
-
-        if (result === 'not-sended' || result === 'timeout' || result.status !== 'success') {
+        try {
+            await ws.send('workspace.setFavoriteFeature', {
+                workspaceId: workspace.id,
+                featureId: feature.id,
+            });
+            updateUser({ defaultWorkspace: workspace.id, defaultFeature: feature.id });
+        } catch {
+            /* swallow: UI will simply remain non-favorite */
+        } finally {
             setLoading(false);
-            return;
         }
-
-        setUser({
-            ...user,
-            DefaultWorkspace: workspace.id,
-            DefaultFeature: feature.id
-        });
-
-        setLoading(false);
     };
 
     return (
