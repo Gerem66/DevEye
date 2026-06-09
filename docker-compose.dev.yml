@@ -1,0 +1,74 @@
+# DevEye — development stack.
+#
+#   docker compose -f docker-compose.dev.yml up --build
+#
+# Brings up an EMPTY but PERSISTENT MySQL database (named volume) plus the app.
+# On first boot the app runs migrations and seeds a development account
+# (SEED_DEV=true). No real data is imported. The app serves the built web client
+# and the API on the same origin: http://localhost:8081
+#
+# For a hot-reload workflow instead, run the app on the host with `npm run dev`
+# (Vite on :3000 proxies /api and /ws to the server on :8081).
+
+name: deveye-dev
+
+services:
+  db:
+    image: mysql:8
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-devroot}
+      MYSQL_DATABASE: ${DB_DATABASE:-DevEye}
+      MYSQL_USER: ${DB_USERNAME:-deveye}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-deveye}
+    ports:
+      # Exposed on 5001 to avoid clashing with a host MySQL on 5000.
+      - "${DB_PORT_HOST:-5001}:3306"
+    volumes:
+      - deveye_dev_db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${DB_ROOT_PASSWORD:-devroot}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      # Context is the PARENT dir so deveye-types (file: dependency) is included.
+      context: ..
+      dockerfile: DevEye/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: dev
+      SEED_DEV: "true"
+      HTTP_PORT: "8081"
+      PUBLIC_ORIGIN: http://localhost:8081
+      LOG_LEVEL: debug
+      LOG_PATH: ./logs
+      DB_HOSTNAME: db
+      DB_PORT: "3306"
+      DB_DATABASE: ${DB_DATABASE:-DevEye}
+      DB_USERNAME: ${DB_USERNAME:-deveye}
+      DB_PASSWORD: ${DB_PASSWORD:-deveye}
+      DB_POOL_MAX: "10"
+      # Dev-only placeholder secrets. DO NOT use in production.
+      CRYPT_KEY_A: ${CRYPT_KEY_A:-0123456789abcdef0123456789abcdef}
+      CRYPT_KEY_B: ${CRYPT_KEY_B:-abcdef0123456789abcdef0123456789}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-me-please-00000000}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-me-please-0000000}
+      JWT_ACCESS_TTL_SECONDS: "900"
+      JWT_REFRESH_TTL_SECONDS: "2592000"
+      RATE_LIMIT_MAX: "1000"
+      RATE_LIMIT_WINDOW: 1 minute
+      # Dev account credentials (override as needed).
+      SEED_DEV_USERNAME: ${SEED_DEV_USERNAME:-dev}
+      SEED_DEV_EMAIL: ${SEED_DEV_EMAIL:-dev@deveye.local}
+      SEED_DEV_PASSWORD: ${SEED_DEV_PASSWORD:-devdevdev}
+    ports:
+      - "${HTTP_PORT_HOST:-8081}:8081"
+
+volumes:
+  deveye_dev_db:

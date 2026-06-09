@@ -4,6 +4,7 @@
 # Configs
 .env*
 !.env.template
+!.env.prod.template
 config*.json
 
 # React

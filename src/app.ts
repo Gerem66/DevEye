@@ -1,7 +1,11 @@
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import fastifyCookie from '@fastify/cookie';
 import fastifyCors from '@fastify/cors';
 import fastifyHelmet from '@fastify/helmet';
 import fastifyRateLimit from '@fastify/rate-limit';
+import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 
@@ -58,6 +62,37 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
     await authRoutes(app, { db: deps.db });
     await registerWS(app, { db: deps.db, crypt: deps.crypt });
+
+    // Serve the built web client from the same origin as the API whenever a
+    // build is present (production, or the dockerised dev stack). On the host
+    // dev workflow there is no build dir: Vite (port 3000) serves the client
+    // and proxies /api and /ws to this server.
+    const clientDir = process.env.CLIENT_DIR
+        ? resolve(process.env.CLIENT_DIR)
+        : resolve(process.cwd(), 'client', 'build');
+
+    if (existsSync(clientDir)) {
+        await app.register(fastifyStatic, {
+            root: clientDir,
+            wildcard: false,
+            index: ['index.html']
+        });
+
+        // SPA fallback: any non-API/WS GET that didn't match a static asset
+        // returns index.html so client-side routing can take over.
+        app.setNotFoundHandler((req, reply) => {
+            if (
+                req.method === 'GET' &&
+                !req.url.startsWith('/api') &&
+                !req.url.startsWith('/ws')
+            ) {
+                return reply.sendFile('index.html');
+            }
+            return reply.code(404).send({ error: 'not_found' });
+        });
+    } else {
+        app.log.debug({ clientDir }, 'No client build found; static serving disabled (host dev uses Vite)');
+    }
 
     return app;
 }

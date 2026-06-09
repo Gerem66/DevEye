@@ -1,5 +1,5 @@
 {
-  "name": "deveye-interface",
+  "name": "deveye-client",
   "version": "0.1.0",
   "description": "Tool management tools",
   "type": "module",
@@ -17,7 +17,7 @@
   "author": "Gerem",
   "license": "ISC",
   "dependencies": {
-    "deveye-types": "file:../DevEye-Types",
+    "deveye-types": "file:../../DevEye-Types",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "zod": "^4.4.3"
