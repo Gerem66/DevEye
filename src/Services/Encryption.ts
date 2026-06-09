@@ -34,23 +34,31 @@ class Encryption {
         return Buffer.concat([mac, nonce, ciphertext]).toString('base64');
     }
 
-    Decrypt(message: string) {
+    Decrypt(message: string): string | null {
         const decoded = Buffer.from(message, 'base64');
-        //const mac = decoded.subarray(0, 64);
+        if (decoded.length < 80) return null;
+
+        const mac = decoded.subarray(0, 64);
         const nonce = decoded.subarray(64, 80);
         const ciphertext = decoded.subarray(80);
-        //const keyB = crypto.createHash('ripemd160').update(this.keyB).digest();
-        //const calc = crypto.createHmac('sha512', keyB).update(Buffer.concat([nonce, ciphertext])).digest();
 
-        // Disabled for now to decrypt old data
-        //if (!crypto.timingSafeEqual(calc, mac)) {
-        //if (calc.toString() !== mac.toString()) {
-        //    return null;
-        //}
+        const keyB = crypto.createHash('ripemd160').update(this.keyB).digest();
+        const calc = crypto
+            .createHmac('sha512', keyB)
+            .update(Buffer.concat([nonce, ciphertext]))
+            .digest();
 
-        const decipher = crypto.createDecipheriv(this.cipher_algo, this.keyA, nonce);
-        const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-        return plaintext.toString('utf8');
+        if (calc.length !== mac.length || !crypto.timingSafeEqual(calc, mac)) {
+            return null;
+        }
+
+        try {
+            const decipher = crypto.createDecipheriv(this.cipher_algo, this.keyA, nonce);
+            const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+            return plaintext.toString('utf8');
+        } catch {
+            return null;
+        }
     }
 }
 

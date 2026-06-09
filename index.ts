@@ -1,82 +1,46 @@
-import path from 'path';
-import Server from '@/Server';
-import SQL from '@/Services/SQL';
-import Encryption from '@/Services/Encryption';
-import { createPool } from 'mysql2/promise';
-
-import GLogs from '@/Utils/Logs';
 import { env } from '@/Utils/Env';
-import { ExecuteFeature } from '@/Features';
-import { userManager } from '@/Services/UserManager';
+import { buildApp } from '@/app';
+import { logger } from '@/logger';
 
-import { Database } from '@/Database';
-import { InitializeGameLifeDB } from '@/Features/GameLife/gamelife-set-loop';
+import Encryption from '@/Services/Encryption';
+import { createDatabase } from '@/db';
+import { runMigrations } from '@/db/migrate';
+import { createDbPool, getQueryable, testConnection } from '@/db/pool';
 
-import type { TCPRequestReceiveHeader } from 'deveye-types';
-
-const logsDir = path.join(env.LOG_PATH, env.ENVIRONMENT);
-GLogs.OpenLogs(env.LOG_LEVEL, logsDir, env.LOG_KEEP_DAYS);
-
-const sql = new SQL({
-    name: 'DB-DevEye',
-    pool: createPool({
-        database: env.DB_DATABASE || '',
-        host: env.DB_HOSTNAME || '',
-        user: env.DB_USERNAME || '',
-        password: env.DB_PASSWORD || '',
-        port: env.DB_PORT
-    })
-});
-
-const db = new Database(sql);
-
-InitializeGameLifeDB();
-
-const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
-
-const serv = new Server();
-
-serv.Listen(8888, {
-    onConnect: () => {
-        GLogs.info('[DevEye] User connected');
-    },
-
-    onDisconnect: (_connection, profile) => {
-        GLogs.info('[DevEye] User disconnected');
-        if (profile?.user) {
-            userManager.remove(profile.user.ID);
-        }
-    },
-
-    onError: (_connection, profile, error) => {
-        GLogs.error(`[DevEye] Connection error:' ${error.message}`);
-        if (profile.user !== null) {
-            userManager.remove(profile.user.ID);
-        }
-    },
-
-    onMessage: async (connection, profile, data) => {
-        if (typeof data.action !== 'string') {
-            GLogs.warn(`[DevEye] Invalid action type: ${typeof data}`);
-            return;
-        }
-
-        const response: TCPRequestReceiveHeader = {
-            action: data.action,
-            content: {
-                status: 'error',
-                message: 'Unknown error' // Detect unhandled errors
-            },
-            callbackID: data.callbackID
-        };
-
-        try {
-            response.content = await ExecuteFeature(data.action, { db, crypt, profile, data: data.content });
-        } catch (error) {
-            GLogs.error(`[DevEye] Error processing feature ${data.action}: ${(error as Error).message}`);
-            response.content = { status: 'error', message: 'Internal server error' };
-        }
-
-        connection.send(JSON.stringify(response));
+async function main() {
+    const pool = createDbPool();
+    const dbReady = await testConnection(pool);
+    if (!dbReady) {
+        logger.fatal('Database connection failed; aborting startup');
+        process.exit(1);
     }
+
+    await runMigrations(pool);
+
+    const db = createDatabase(getQueryable(pool));
+    const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
+
+    const app = await buildApp({ db, crypt });
+
+    const shutdown = async (signal: string) => {
+        logger.info({ signal }, 'Shutting down');
+        try {
+            await app.close();
+            await pool.end();
+            process.exit(0);
+        } catch (e) {
+            logger.error({ err: (e as Error).message }, 'Error during shutdown');
+            process.exit(1);
+        }
+    };
+    process.on('SIGINT', () => void shutdown('SIGINT'));
+    process.on('SIGTERM', () => void shutdown('SIGTERM'));
+
+    await app.listen({ port: env.HTTP_PORT, host: '0.0.0.0' });
+    logger.info({ port: env.HTTP_PORT }, 'DevEye server ready');
+}
+
+main().catch((e) => {
+    logger.fatal({ err: e instanceof Error ? e.message : String(e) }, 'Fatal startup error');
+    process.exit(1);
 });

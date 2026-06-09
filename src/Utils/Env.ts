@@ -1,43 +1,39 @@
 import { getEnvVar } from 'dotenv-oxy';
 
 export const env = {
-    // Environment
     ENVIRONMENT: getEnvVar('ENVIRONMENT', 'enum', ['dev', 'test', 'prod']),
 
-    // Servers
-    HTTP_SERVER_URL: getEnvVar('HTTP_SERVER_URL', 'string'),
-    LISTEN_PORT: getEnvVar('LISTEN_PORT', 'number'),
-    MAX_CONNECTIONS: getEnvVar('MAX_CONNECTIONS', 'number'),
+    HTTP_PORT: getEnvVar('HTTP_PORT', 'number'),
+    PUBLIC_ORIGIN: getEnvVar('PUBLIC_ORIGIN', 'string'),
 
-    // Logs management
-    LOG_LEVEL: getEnvVar('LOG_LEVEL', 'enum', ['minimal', 'normal', 'all']),
-    LOG_PATH: getEnvVar('LOG_PATH', 'string'),
-    LOG_KEEP_DAYS: getEnvVar('LOG_KEEP_DAYS', 'number'),
+    LOG_LEVEL: getEnvVar('LOG_LEVEL', 'enum', ['fatal', 'error', 'warn', 'info', 'debug', 'trace']),
+    LOG_PATH: getEnvVar('LOG_PATH', 'string', false) || './logs',
 
-    // Network configuration
-    MAX_RECEIVED_FRAME_SIZE: getEnvVar('MAX_RECEIVED_FRAME_SIZE', 'number'),
-    MAX_RECEIVED_MESSAGE_SIZE: getEnvVar('MAX_RECEIVED_MESSAGE_SIZE', 'number'),
-
-    // SSL configuration
     SSL_PRIVATE_KEY_PATH: getEnvVar('SSL_PRIVATE_KEY_PATH', 'string', false),
     SSL_CERTIFICATE_PATH: getEnvVar('SSL_CERTIFICATE_PATH', 'string', false),
 
-    // Database configuration
+    // MySQL database
     DB_HOSTNAME: getEnvVar('DB_HOSTNAME', 'string'),
     DB_PORT: getEnvVar('DB_PORT', 'number', false) || 3306,
     DB_DATABASE: getEnvVar('DB_DATABASE', 'string'),
     DB_USERNAME: getEnvVar('DB_USERNAME', 'string'),
     DB_PASSWORD: getEnvVar('DB_PASSWORD', 'string'),
+    DB_POOL_MAX: getEnvVar('DB_POOL_MAX', 'number', false) || 10,
 
-    // Encryption configuration
-    CRYPT_METHOD: getEnvVar('CRYPT_METHOD', 'enum', ['aes-128-gcm', 'aes-256-ctr']),
+    // Symmetric encryption used by feature payloads (passwords, etc.)
     CRYPT_KEY_A: getEnvVar('CRYPT_KEY_A', 'string'),
     CRYPT_KEY_B: getEnvVar('CRYPT_KEY_B', 'string'),
 
-    // GameLife Database configuration
-    DB_GL_HOSTNAME: getEnvVar('DB_GL_HOSTNAME', 'string', false),
-    DB_GL_PORT: getEnvVar('DB_GL_PORT', 'number', false) || 3306,
-    DB_GL_DATABASE: getEnvVar('DB_GL_DATABASE', 'string', false),
-    DB_GL_USERNAME: getEnvVar('DB_GL_USERNAME', 'string', false),
-    DB_GL_PASSWORD: getEnvVar('DB_GL_PASSWORD', 'string', false)
+    // Auth (JWT + refresh). Use base64url-encoded random secrets, >= 32 bytes.
+    JWT_ACCESS_SECRET: getEnvVar('JWT_ACCESS_SECRET', 'string'),
+    JWT_REFRESH_SECRET: getEnvVar('JWT_REFRESH_SECRET', 'string'),
+    JWT_ACCESS_TTL_SECONDS: getEnvVar('JWT_ACCESS_TTL_SECONDS', 'number', false) || 60 * 15,
+    JWT_REFRESH_TTL_SECONDS: getEnvVar('JWT_REFRESH_TTL_SECONDS', 'number', false) || 60 * 60 * 24 * 30,
+
+    COOKIE_DOMAIN: getEnvVar('COOKIE_DOMAIN', 'string', false),
+
+    RATE_LIMIT_MAX: getEnvVar('RATE_LIMIT_MAX', 'number', false) || 200,
+    RATE_LIMIT_WINDOW: getEnvVar('RATE_LIMIT_WINDOW', 'string', false) || '1 minute'
 };
+
+export const isDev = env.ENVIRONMENT === 'dev';
