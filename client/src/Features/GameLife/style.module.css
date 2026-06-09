@@ -1,0 +1,61 @@
+.separator {
+    width: 100%;
+    height: 1px;
+    background-color: #b7c0cd4f;
+}
+
+.profile-info {
+    margin: 12px 6px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+}
+.profile-info-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #b7c0cd;
+}
+.profile-info-content {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+}
+.profile-info-text {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 400;
+}
+.profile-info-button {
+    padding-top: 4px;
+    padding-bottom: 4px;
+    margin-right: 6px;
+}
+
+.workspace-buttons {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 12px;
+
+}
+.icon-success {
+    display: inline-block;
+    width: 18px;
+    aspect-ratio: 1;
+    margin-left: 6px;
+    background-image: url(/public/icons/success.svg);
+}
+.icon-error {
+    display: inline-block;
+    width: 18px;
+    aspect-ratio: 1;
+    margin-left: 6px;
+    background-image: url(/public/icons/error.svg);
+}
+
+.popup-delete-workspace-buttons {
+    display: flex;
+    justify-content: space-between;
+}

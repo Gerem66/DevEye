@@ -1,0 +1,134 @@
+.icon {
+    display: inline-block;
+    width: 18px;
+    aspect-ratio: 1;
+    -webkit-mask-size: contain;
+            mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+            mask-repeat: no-repeat;
+    background-color: #fff;
+}
+.icon.icon-gamelife {
+    -webkit-mask-image: url(/icons/gamelife.svg);
+    mask-image: url(/icons/gamelife.svg);
+}
+.icon.icon-hide {
+    opacity: 0.2;
+    pointer-events: none;
+}
+.icon.icon-add {
+    -webkit-mask-image: url(/icons/add.svg);
+    mask-image: url(/icons/add.svg);
+}
+.icon.icon-arrow {
+    -webkit-mask-image: url(/icons/arrow.svg);
+    mask-image: url(/icons/arrow.svg);
+}
+.icon.icon-chevron {
+    -webkit-mask-image: url(/icons/chevron.svg);
+    mask-image: url(/icons/chevron.svg);
+}
+.icon.icon-database {
+    -webkit-mask-image: url(/icons/database.svg);
+    mask-image: url(/icons/database.svg);
+}
+.icon.icon-details {
+    -webkit-mask-image: url(/icons/details.svg);
+    mask-image: url(/icons/details.svg);
+}
+.icon.icon-drag {
+    -webkit-mask-image: url(/icons/drag.svg);
+    mask-image: url(/icons/drag.svg);
+}
+.icon.icon-edit {
+    -webkit-mask-image: url(/icons/edit.svg);
+    mask-image: url(/icons/edit.svg);
+}
+.icon.icon-error {
+    -webkit-mask-image: url(/icons/error.svg);
+    mask-image: url(/icons/error.svg);
+}
+.icon.icon-eye-open {
+    -webkit-mask-image: url(/icons/eye-open.svg);
+    mask-image: url(/icons/eye-open.svg);
+}
+.icon.icon-eye-close {
+    -webkit-mask-image: url(/icons/eye-close.svg);
+    mask-image: url(/icons/eye-close.svg);
+}
+.icon.icon-home {
+    -webkit-mask-image: url(/icons/home.svg);
+    mask-image: url(/icons/home.svg);
+}
+.icon.icon-lock {
+    -webkit-mask-image: url(/icons/lock.svg);
+    mask-image: url(/icons/lock.svg);
+}
+.icon.icon-logs {
+    -webkit-mask-image: url(/icons/logs.svg);
+    mask-image: url(/icons/logs.svg);
+}
+.icon.icon-mail {
+    -webkit-mask-image: url(/icons/mail.svg);
+    mask-image: url(/icons/mail.svg);
+}
+.icon.icon-menu {
+    -webkit-mask-image: url(/icons/menu.svg);
+    mask-image: url(/icons/menu.svg);
+}
+.icon.icon-menu-left {
+    -webkit-mask-image: url(/icons/menu_left.svg);
+    mask-image: url(/icons/menu_left.svg);
+}
+.icon.icon-move-to-right {
+    -webkit-mask-image: url(/icons/move-to-right.svg);
+    mask-image: url(/icons/move-to-right.svg);
+}
+.icon.icon-notes {
+    -webkit-mask-image: url(/icons/notes.svg);
+    mask-image: url(/icons/notes.svg);
+}
+.icon.icon-other {
+    -webkit-mask-image: url(/icons/other.svg);
+    mask-image: url(/icons/other.svg);
+}
+.icon.icon-refresh {
+    -webkit-mask-image: url(/icons/refresh.svg);
+    mask-image: url(/icons/refresh.svg);
+}
+.icon.icon-sandbox {
+    -webkit-mask-image: url(/icons/sandbox.svg);
+    mask-image: url(/icons/sandbox.svg);
+}
+.icon.icon-square-check {
+    -webkit-mask-image: url(/icons/square-check.svg);
+    mask-image: url(/icons/square-check.svg);
+}
+.icon.icon-square-empty {
+    -webkit-mask-image: url(/icons/square-empty.svg);
+    mask-image: url(/icons/square-empty.svg);
+}
+.icon.icon-success {
+    -webkit-mask-image: url(/icons/success.svg);
+    mask-image: url(/icons/success.svg);
+}
+.icon.icon-trash {
+    -webkit-mask-image: url(/icons/trash.svg);
+    mask-image: url(/icons/trash.svg);
+}
+.icon.icon-user {
+    -webkit-mask-image: url(/icons/user.svg);
+    mask-image: url(/icons/user.svg);
+}
+.icon.icon-users {
+    -webkit-mask-image: url(/icons/users.svg);
+    mask-image: url(/icons/users.svg);
+}
+.icon.icon-v {
+    -webkit-mask-image: url(/icons/v.svg);
+    mask-image: url(/icons/v.svg);
+}
+.icon.icon-x {
+    -webkit-mask-image: url(/icons/x.svg);
+    mask-image: url(/icons/x.svg);
+}
