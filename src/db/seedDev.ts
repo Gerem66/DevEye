@@ -17,10 +17,7 @@ const DEV_FEATURES = ['profile', 'password', 'servicemonitor', 'projects'];
 export async function seedDevAccount(pool: DbPool): Promise<void> {
     const q = getQueryable(pool);
 
-    const existing = await q.query<{ id: number }>(
-        'SELECT id FROM users WHERE username = ? LIMIT 1',
-        [DEV_USERNAME]
-    );
+    const existing = await q.query<{ id: number }>('SELECT id FROM users WHERE username = ? LIMIT 1', [DEV_USERNAME]);
     if (existing.rows.length > 0) {
         logger.info({ username: DEV_USERNAME }, 'Dev seed: account already present');
         return;

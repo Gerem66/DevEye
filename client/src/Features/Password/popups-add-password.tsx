@@ -165,4 +165,3 @@ function PasswordPopupAdd({ passwordCategories }: PasswordPopupAddProps) {
 
 export { PasswordPopupAdd };
 export type { PopupResult };
-

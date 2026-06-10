@@ -25,7 +25,7 @@ function Header({ user, workspace, feature }: HeaderProps): JSX.Element {
         try {
             await ws.send('workspace.setFavoriteFeature', {
                 workspaceId: workspace.id,
-                featureId: feature.id,
+                featureId: feature.id
             });
             updateUser({ defaultWorkspace: workspace.id, defaultFeature: feature.id });
         } catch {

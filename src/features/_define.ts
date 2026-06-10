@@ -29,21 +29,15 @@ export class FeatureError extends Error {
     }
 }
 
-export interface FeatureDefinition<
-    Cmd extends string,
-    I extends z.ZodTypeAny,
-    O extends z.ZodTypeAny
-> {
+export interface FeatureDefinition<Cmd extends string, I extends z.ZodTypeAny, O extends z.ZodTypeAny> {
     command: Cmd;
     input: I;
     output: O;
     handler: (ctx: FeatureContext, input: z.infer<I>) => Promise<z.infer<O>>;
 }
 
-export function defineFeature<
-    Cmd extends string,
-    I extends z.ZodTypeAny,
-    O extends z.ZodTypeAny
->(def: FeatureDefinition<Cmd, I, O>): FeatureDefinition<Cmd, I, O> {
+export function defineFeature<Cmd extends string, I extends z.ZodTypeAny, O extends z.ZodTypeAny>(
+    def: FeatureDefinition<Cmd, I, O>
+): FeatureDefinition<Cmd, I, O> {
     return def;
 }

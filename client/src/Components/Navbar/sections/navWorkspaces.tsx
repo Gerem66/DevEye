@@ -26,11 +26,7 @@ function NavWorkspaces({ onWorkspaceClick }: NavWorkspacesProps) {
             </button>
 
             {workspaces.map((workspace) => (
-                <WorkspaceButton
-                    key={workspace.id}
-                    workspace={workspace}
-                    onClick={() => onWorkspaceClick(workspace)}
-                />
+                <WorkspaceButton key={workspace.id} workspace={workspace} onClick={() => onWorkspaceClick(workspace)} />
             ))}
 
             <button

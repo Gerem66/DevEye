@@ -9,9 +9,7 @@ export async function loadUserBundle(
     if (!row) return null;
 
     const wsRows = await db.workspaces.findAccessibleByUser(userId);
-    const memberRows = wsRows.length
-        ? await db.workspaceMembers.listByWorkspaceIds(wsRows.map((w) => w.id))
-        : [];
+    const memberRows = wsRows.length ? await db.workspaceMembers.listByWorkspaceIds(wsRows.map((w) => w.id)) : [];
 
     const memberIds = Array.from(new Set(memberRows.map((m) => m.user_id)));
     const memberUserRows = memberIds.length ? await db.users.findByIds(memberIds) : [];
@@ -58,7 +56,6 @@ export async function loadUserBundle(
         reAuthInterval: null,
         created: Number(row.created)
     };
-
 
     const user: User = {
         id: row.id,

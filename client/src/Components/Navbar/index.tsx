@@ -26,14 +26,14 @@ function Navbar({ workspace, feature, setWorkspace, setFeature }: NavbarProps) {
     const { user, workspaces } = useAuth();
     const [active, setActive] = useState<{ workspaceId: number; featureId: string | null }>({
         workspaceId: workspace?.id ?? 0,
-        featureId: feature?.id ?? null,
+        featureId: feature?.id ?? null
     });
     const [isNavpanelSwitch, setIsNavpanelSwitch] = useState(false);
 
     useEffect(() => {
         setActive({
             workspaceId: workspace?.id ?? 0,
-            featureId: feature?.id ?? null,
+            featureId: feature?.id ?? null
         });
     }, [workspace, feature]);
 
@@ -55,8 +55,7 @@ function Navbar({ workspace, feature, setWorkspace, setFeature }: NavbarProps) {
             return;
         }
         setWorkspace(next);
-        const defaultId =
-            user && next.features.includes(user.defaultFeature) ? user.defaultFeature : next.features[0];
+        const defaultId = user && next.features.includes(user.defaultFeature) ? user.defaultFeature : next.features[0];
         const nextFeature = (defaultId && FEATURE_BY_ID[defaultId]) || FEATURES[0];
         if (nextFeature) setFeature(nextFeature);
         setIsNavpanelSwitch(false);

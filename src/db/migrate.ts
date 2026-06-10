@@ -21,9 +21,7 @@ export async function runMigrations(pool: DbPool): Promise<void> {
     const res = await q.query<{ name: string }>('SELECT name FROM _migrations');
     const applied = new Set(res.rows.map((r) => r.name));
 
-    const files = (await fs.readdir(MIGRATIONS_DIR))
-        .filter((f) => f.endsWith('.sql'))
-        .sort();
+    const files = (await fs.readdir(MIGRATIONS_DIR)).filter((f) => f.endsWith('.sql')).sort();
 
     for (const file of files) {
         if (applied.has(file)) continue;
@@ -37,4 +35,3 @@ export async function runMigrations(pool: DbPool): Promise<void> {
     }
     logger.info('Migrations up to date');
 }
-

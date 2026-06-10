@@ -8,11 +8,7 @@ export interface UsersRepo {
     findByUsername(username: string): Promise<UserRow | null>;
     findByEmail(email: string): Promise<UserRow | null>;
     findByIds(ids: number[]): Promise<UserRow[]>;
-    create(input: {
-        email: string;
-        username: string;
-        passwordHash: string;
-    }): Promise<UserRow>;
+    create(input: { email: string; username: string; passwordHash: string }): Promise<UserRow>;
     updateLastLogin(id: number, lastLogin: number): Promise<void>;
     setDefaults(id: number, defaults: { defaultWorkspace: number; defaultFeature: string }): Promise<void>;
     updatePasswordHash(id: number, passwordHash: string): Promise<void>;
@@ -50,10 +46,11 @@ export function usersRepo(pool: Q): UsersRepo {
             await pool.query('UPDATE users SET last_login = ? WHERE id = ?', [lastLogin, id]);
         },
         async setDefaults(id, { defaultWorkspace, defaultFeature }) {
-            await pool.query(
-                'UPDATE users SET default_workspace = ?, default_feature = ? WHERE id = ?',
-                [defaultWorkspace, defaultFeature, id]
-            );
+            await pool.query('UPDATE users SET default_workspace = ?, default_feature = ? WHERE id = ?', [
+                defaultWorkspace,
+                defaultFeature,
+                id
+            ]);
         },
         async updatePasswordHash(id, passwordHash) {
             await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, id]);

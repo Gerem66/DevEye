@@ -30,10 +30,7 @@ export function logsRepo(pool: Q): LogsRepo {
             }
             const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
             params.push(limit);
-            const r = await pool.query<LogRow>(
-                `SELECT * FROM logs ${where} ORDER BY date DESC LIMIT ?`,
-                params
-            );
+            const r = await pool.query<LogRow>(`SELECT * FROM logs ${where} ORDER BY date DESC LIMIT ?`, params);
             return r.rows;
         }
     };

@@ -100,10 +100,7 @@ export async function testConnection(pool: DbPool): Promise<boolean> {
         } finally {
             conn.release();
         }
-        logger.info(
-            { host: env.DB_HOSTNAME, port: env.DB_PORT, db: env.DB_DATABASE },
-            'MySQL connected'
-        );
+        logger.info({ host: env.DB_HOSTNAME, port: env.DB_PORT, db: env.DB_DATABASE }, 'MySQL connected');
         return true;
     } catch (err) {
         logger.error({ err: serializeConnectionError(err) }, 'MySQL connection failed');
@@ -111,10 +108,7 @@ export async function testConnection(pool: DbPool): Promise<boolean> {
     }
 }
 
-export async function withTransaction<T>(
-    pool: DbPool,
-    fn: (q: Queryable) => Promise<T>
-): Promise<T> {
+export async function withTransaction<T>(pool: DbPool, fn: (q: Queryable) => Promise<T>): Promise<T> {
     const conn = await pool.getConnection();
     try {
         await conn.beginTransaction();

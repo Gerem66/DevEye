@@ -31,11 +31,7 @@ function HomePage(): JSX.Element | null {
         if (workspace && workspacesById.has(workspace.id)) return;
 
         const preferred = workspacesById.get(user.defaultWorkspace);
-        const next =
-            preferred ??
-            workspacesById.get(0) ??
-            workspaces[0] ??
-            null;
+        const next = preferred ?? workspacesById.get(0) ?? workspaces[0] ?? null;
         setWorkspace(next ?? null);
     }, [user, workspaces, workspace, workspacesById]);
 
@@ -65,12 +61,7 @@ function HomePage(): JSX.Element | null {
     return (
         <div id='home' className='home'>
             <div className='home-left'>
-                <Navbar
-                    workspace={workspace}
-                    feature={feature}
-                    setWorkspace={setWorkspace}
-                    setFeature={setFeature}
-                />
+                <Navbar workspace={workspace} feature={feature} setWorkspace={setWorkspace} setFeature={setFeature} />
             </div>
 
             <div className='home-right'>

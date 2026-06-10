@@ -12,9 +12,6 @@ const FEATURES: FeatureType[] = [
     { id: 'gamelife', name: 'GameLife', icon: 'gamelife', component: FeatureGameLife }
 ];
 
-const FEATURE_BY_ID: Record<string, FeatureType> = Object.fromEntries(
-    FEATURES.map((f) => [f.id, f])
-);
+const FEATURE_BY_ID: Record<string, FeatureType> = Object.fromEntries(FEATURES.map((f) => [f.id, f]));
 
 export { FEATURE_BY_ID, FEATURES };
-

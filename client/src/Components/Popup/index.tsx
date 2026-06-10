@@ -14,26 +14,26 @@ interface CardValueProps {
 const PopupEvents: Record<
     string,
     {
-        setInputData: React.Dispatch<React.SetStateAction<any | null>>;
+        setInputData: (data: unknown) => void;
         setOpened: React.Dispatch<React.SetStateAction<boolean>>;
-        callback?: (data: any) => void;
+        callback?: (data: unknown) => void;
     }
 > = {};
 
-function OpenPopup<T = object>(id: string, inputData: any = null): Promise<T | null> {
+function OpenPopup<T = object>(id: string, inputData: unknown = null): Promise<T | null> {
     if (PopupEvents[id]) {
         return new Promise((resolve) => {
             PopupEvents[id].setInputData(inputData);
             PopupEvents[id].setOpened(true);
             PopupEvents[id].callback = (data) => {
-                resolve(data);
+                resolve(data as T);
             };
         });
     }
     return Promise.resolve(null);
 }
 
-function ClosePopup(id: string, data: any | null = null) {
+function ClosePopup(id: string, data: unknown = null) {
     if (PopupEvents[id]) {
         PopupEvents[id].setInputData(null);
         PopupEvents[id].setOpened(false);
@@ -43,25 +43,25 @@ function ClosePopup(id: string, data: any | null = null) {
     }
 }
 
-type PopupProps = CardValueProps & {
-    onInputChange?: ((input: any) => void) | null;
+type PopupProps<TInput> = CardValueProps & {
+    onInputChange?: ((input: TInput) => void) | null;
     onClosePopup?: ((id: string) => void) | null;
 };
 
-function Popup({
+function Popup<TInput = unknown>({
     children,
     id,
     title = '',
     style = '',
     onInputChange = null,
     onClosePopup = null
-}: PopupProps): React.JSX.Element {
+}: PopupProps<TInput>): React.JSX.Element {
     const [opened, setOpened] = React.useState(false);
 
     React.useEffect(() => {
         PopupEvents[id] = {
             setInputData: (data) => {
-                onInputChange?.(data);
+                onInputChange?.(data as TInput);
             },
             setOpened,
             callback: () => {}

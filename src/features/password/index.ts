@@ -1,21 +1,7 @@
 import { verifyPassword } from '@/auth/argon';
-import {
-    passwordAdd,
-    passwordDelete,
-    passwordEdit,
-    passwordGet,
-    passwordList,
-    passwordUnlock
-} from 'deveye-types';
+import { passwordAdd, passwordDelete, passwordEdit, passwordGet, passwordList, passwordUnlock } from 'deveye-types';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
-import {
-    decryptPayload,
-    encryptPayload,
-    isUnlocked,
-    markUnlocked,
-    toEntry,
-    toMaskedEntry
-} from './_shared';
+import { decryptPayload, encryptPayload, isUnlocked, markUnlocked, toEntry, toMaskedEntry } from './_shared';
 
 /**
  * Workspace id 0 is the caller's private/personal workspace: it has no row in

@@ -61,11 +61,7 @@ export async function verifyAccessToken(token: string): Promise<AccessClaims | n
 export async function verifyRefreshToken(token: string): Promise<RefreshClaims | null> {
     try {
         const { payload } = await jwtVerify(token, refreshSecret, { issuer, audience });
-        if (
-            typeof payload.sub !== 'string' ||
-            typeof payload.sid !== 'string' ||
-            typeof payload.jti !== 'string'
-        ) {
+        if (typeof payload.sub !== 'string' || typeof payload.sid !== 'string' || typeof payload.jti !== 'string') {
             return null;
         }
         return { sub: payload.sub, sid: payload.sid, jti: payload.jti };

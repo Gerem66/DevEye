@@ -29,19 +29,14 @@ export function workspacesRepo(pool: Q): WorkspacesRepo {
         },
         async create({ name }) {
             const res = await pool.query('INSERT INTO workspaces (name) VALUES (?)', [name]);
-            const r = await pool.query<WorkspaceRow>('SELECT * FROM workspaces WHERE id = ?', [
-                res.insertId
-            ]);
+            const r = await pool.query<WorkspaceRow>('SELECT * FROM workspaces WHERE id = ?', [res.insertId]);
             return r.rows[0];
         },
         async delete(id) {
             await pool.query('DELETE FROM workspaces WHERE id = ?', [id]);
         },
         async updateFeatures(id, features) {
-            await pool.query('UPDATE workspaces SET features = ? WHERE id = ?', [
-                JSON.stringify(features),
-                id
-            ]);
+            await pool.query('UPDATE workspaces SET features = ? WHERE id = ?', [JSON.stringify(features), id]);
         }
     };
 }
@@ -69,17 +64,16 @@ export function workspaceMembersRepo(pool: Q): WorkspaceMembersRepo {
                  VALUES (?, ?, ?)`,
                 [userId, workspaceId, JSON.stringify(roles)]
             );
-            const r = await pool.query<WorkspaceMemberRow>(
-                'SELECT * FROM workspace_members WHERE id = ?',
-                [res.insertId]
-            );
+            const r = await pool.query<WorkspaceMemberRow>('SELECT * FROM workspace_members WHERE id = ?', [
+                res.insertId
+            ]);
             return r.rows[0];
         },
         async remove(userId, workspaceId) {
-            await pool.query(
-                'DELETE FROM workspace_members WHERE user_id = ? AND workspace_id = ?',
-                [userId, workspaceId]
-            );
+            await pool.query('DELETE FROM workspace_members WHERE user_id = ? AND workspace_id = ?', [
+                userId,
+                workspaceId
+            ]);
         },
         async isMember(userId, workspaceId) {
             const r = await pool.query<{ count: number }>(

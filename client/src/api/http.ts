@@ -26,11 +26,7 @@ export class ApiError extends Error {
     }
 }
 
-async function request<TOut>(
-    path: string,
-    init: RequestInit,
-    outputSchema: z.ZodType<TOut>
-): Promise<TOut> {
+async function request<TOut>(path: string, init: RequestInit, outputSchema: z.ZodType<TOut>): Promise<TOut> {
     let res: Response;
     try {
         res = await fetch(`${BASE_URL}${path}`, {
@@ -64,11 +60,7 @@ export function refresh(): Promise<RefreshResponse> {
 }
 
 export function logout(): Promise<{ loggedOut: true }> {
-    return request(
-        '/api/auth/logout',
-        { method: 'POST' },
-        z.object({ loggedOut: z.literal(true) })
-    );
+    return request('/api/auth/logout', { method: 'POST' }, z.object({ loggedOut: z.literal(true) }));
 }
 
 export function me(): Promise<MeResponse> {

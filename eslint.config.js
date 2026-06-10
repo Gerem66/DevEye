@@ -1,4 +1,3 @@
-import react from 'eslint-plugin-react';
 import globals from 'globals';
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
@@ -23,13 +22,9 @@ export default [
     ...tseslint.configs.recommended,
     {
         plugins: {
-            react: react,
             prettier: prettierPlugin
         },
         rules: {
-            ...react.configs.recommended.rules,
-            'react/react-in-jsx-scope': 'off', // React 17+ doesn't need React import
-            'react/prop-types': 'off', // Using TypeScript instead
             semi: ['warn', 'always'],
             'object-curly-spacing': ['warn', 'always'], // Spaces between { }
             '@typescript-eslint/no-explicit-any': 'warn',
@@ -81,11 +76,6 @@ export default [
                     bracketSpacing: true
                 }
             ]
-        },
-        settings: {
-            react: {
-                version: 'detect'
-            }
         }
     }
 ];
