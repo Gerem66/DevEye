@@ -132,7 +132,10 @@ export class DevEyeWs {
                 clearTimeout(pending.timer);
                 this.pending.delete(msg.requestId);
                 if (msg.payload.ok) pending.resolve(msg.payload.data);
-                else pending.reject(new WsError(msg.payload.error.code, msg.payload.error.message, msg.payload.error.details));
+                else
+                    pending.reject(
+                        new WsError(msg.payload.error.code, msg.payload.error.message, msg.payload.error.details)
+                    );
                 return;
             }
         }

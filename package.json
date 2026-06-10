@@ -12,7 +12,9 @@
     "start": "tsx index.ts",
     "build": "npm run build:client",
     "build:client": "npm --prefix client run build",
+    "lint": "eslint index.ts src",
     "typecheck": "tsc --noEmit",
+    "ci": "npm run lint && npm run typecheck",
     "clean": "rm -rf node_modules client/node_modules client/build package-lock.json",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

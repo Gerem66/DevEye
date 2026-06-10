@@ -5,6 +5,7 @@ import tseslint from 'typescript-eslint';
 import prettierPlugin from 'eslint-plugin-prettier';
 
 export default [
+    { ignores: ['build', 'dist', 'node_modules'] },
     { files: ['**/*.{js,mjs,cjs,ts,tsx}'] },
     {
         languageOptions: {
