@@ -6,13 +6,13 @@ import { defineConfig } from 'vite';
 export default defineConfig({
     plugins: [react()],
     server: {
-        port: 3000,
+        port: 5173,
         open: true,
         // Same-origin dev: proxy API + WebSocket to the Fastify server so the
-        // browser only ever talks to localhost:3000 (no CORS, cookies just work).
+        // browser only ever talks to localhost:5173 (no CORS, cookies just work).
         proxy: {
-            '/api': { target: 'http://localhost:8081', changeOrigin: true },
-            '/ws': { target: 'http://localhost:8081', ws: true, changeOrigin: true }
+            '/api': { target: 'http://localhost:3000', changeOrigin: true },
+            '/ws': { target: 'http://localhost:3000', ws: true, changeOrigin: true }
         }
     },
     build: {

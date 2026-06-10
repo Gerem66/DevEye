@@ -35,6 +35,6 @@ ENV NODE_ENV=production
 WORKDIR /app/DevEye
 # App + installed dependencies + built client.
 COPY --from=build /app/DevEye ./
-EXPOSE 8081
+EXPOSE 3000
 # Run the server through tsx (transpiles TS source on import).
 CMD ["npm", "run", "start"]
