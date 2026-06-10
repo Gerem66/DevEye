@@ -1,6 +1,6 @@
+import js from '@eslint/js';
 import react from 'eslint-plugin-react';
 import globals from 'globals';
-import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import prettierPlugin from 'eslint-plugin-prettier';
 
