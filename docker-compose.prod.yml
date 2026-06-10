@@ -53,3 +53,9 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+    networks:
+      - dokploy-network
+
+networks:
+  dokploy-network:
+    external: true
