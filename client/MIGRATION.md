@@ -29,13 +29,13 @@ renommés (`DBType_User`, `DBType_Workspace`, `FeatureType`, `FeaturesID`,
 
 À réécrire (mapping des types) :
 
-| Ancien                       | Nouveau (`deveye-types`)                |
-| ---------------------------- | ---------------------------------------- |
-| `UserType`, `DBType_User`    | `User`                                   |
-| `DBType_Workspace`           | `Workspace`                              |
-| `FeatureType`, `FeaturesID`  | descriptor `featureCommandRegistry`      |
-| `FeatureProps`               | à concevoir : un type local de Layout    |
-| `PasswordType`               | `PasswordEntry` (+ `PasswordEntryMasked`)|
+| Ancien                      | Nouveau (`deveye-types`)                  |
+| --------------------------- | ----------------------------------------- |
+| `UserType`, `DBType_User`   | `User`                                    |
+| `DBType_Workspace`          | `Workspace`                               |
+| `FeatureType`, `FeaturesID` | descriptor `featureCommandRegistry`       |
+| `FeatureProps`              | à concevoir : un type local de Layout     |
+| `PasswordType`              | `PasswordEntry` (+ `PasswordEntryMasked`) |
 
 Pages/composants à migrer :
 

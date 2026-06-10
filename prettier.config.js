@@ -5,5 +5,11 @@ export default {
     jsxSingleQuote: true,
     trailingComma: 'none',
     printWidth: 120,
-    bracketSpacing: true
+    bracketSpacing: true,
+    overrides: [
+        {
+            files: ['*.json', '*.jsonc', '*.yml'],
+            options: { tabWidth: 2 }
+        }
+    ]
 };
