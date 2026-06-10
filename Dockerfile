@@ -16,6 +16,7 @@ FROM node:22-slim AS deps
 WORKDIR /app
 ARG GITHUB_PACKAGES_TOKEN
 ENV GITHUB_PACKAGES_TOKEN=${GITHUB_PACKAGES_TOKEN}
+ENV NPM_CONFIG_USERCONFIG=/app/DevEye/.npmrc
 COPY .npmrc ./DevEye/.npmrc
 COPY package.json ./DevEye/
 COPY client/package.json ./DevEye/client/
