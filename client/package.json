@@ -18,7 +18,7 @@
   "author": "Gerem",
   "license": "ISC",
   "dependencies": {
-    "deveye-types": "file:../../DevEye-Types",
+    "deveye-types": "npm:@gerem66/deveye-types@^0.1.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "zod": "^4.4.3"

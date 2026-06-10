@@ -4,14 +4,12 @@
 # Configs
 .env*
 !.env.template
-!.env.prod.template
 config*.json
 
 # React
 dist
 build
 node_modules
-package-lock.json
 
 # Logs
 logs

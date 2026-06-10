@@ -60,16 +60,15 @@ Au premier démarrage : migrations + création d'un compte de dev (`SEED_DEV=tru
 identifiants `dev` / `devdevdev` par défaut). L'app sert le client et l'API sur la
 même origine : http://localhost:8081
 
-### Prod — same-origin, MySQL interne
+### Prod — same-origin, DB externe (Dockploy)
 
 ```bash
-cp .env.prod.template .env.prod   # renseigner les secrets
+cp .env.template .env.prod   # renseigner les secrets
 docker compose --env-file .env.prod -f docker-compose.prod.yml up --build -d
 ```
 
-L'app sert le client buildé + l'API sur `HTTP_PORT` (8081). MySQL tourne dans un
-conteneur interne (aucun port publié), volume persistant `deveye_prod_db`,
-healthcheck sur `/api/health`.
+L'app sert le client buildé + l'API sur `HTTP_PORT` (8081) et se connecte à une
+base MySQL externe (ex: DB managée par Dockploy), healthcheck sur `/api/health`.
 
 ## Licence
 
