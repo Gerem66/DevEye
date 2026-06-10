@@ -27,16 +27,25 @@ services:
     volumes:
       - deveye_dev_db:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${DB_ROOT_PASSWORD:-devroot}"]
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-p${DB_ROOT_PASSWORD:-devroot}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 20
 
   app:
     build:
-      # Context is the PARENT dir so deveye-types (file: dependency) is included.
-      context: ..
-      dockerfile: DevEye/Dockerfile
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GITHUB_PACKAGES_TOKEN: ${GITHUB_PACKAGES_TOKEN:?set GITHUB_PACKAGES_TOKEN}
     restart: unless-stopped
     depends_on:
       db:
