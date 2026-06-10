@@ -3,10 +3,9 @@
 #   cp .env.template .env
 #   docker compose -f docker-compose.prod.yml up --build -d
 #
-# The app serves the built web client and the API on the same origin
-# (HTTP_PORT, default 3000) and connects to an external MySQL database
-# (for example the managed DB from Dockploy). Provide real secrets via a
-# `.env` file copied from `.env.template`.
+# The app is intentionally NOT exposed to the internet: it binds to
+# 127.0.0.1 only (localhost). Access it via SSH tunnel or from the host
+# directly. The DB is an external MySQL instance.
 
 name: deveye-prod
 
@@ -22,7 +21,7 @@ services:
       - path: .env
         required: false
     ports:
-      - '${HTTP_PORT_HOST:-3000}:${HTTP_PORT:-3000}'
+      - '127.0.0.1:${HTTP_PORT_HOST:-3000}:${HTTP_PORT:-3000}'
     healthcheck:
       test:
         [
@@ -35,9 +34,3 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
-    networks:
-      - dokploy-network
-
-networks:
-  dokploy-network:
-    external: true
