@@ -5,10 +5,10 @@
 # Brings up an EMPTY but PERSISTENT MySQL database (named volume) plus the app.
 # On first boot the app runs migrations and seeds a development account
 # (SEED_DEV=true). No real data is imported. The app serves the built web client
-# and the API on the same origin: http://localhost:8081
+# and the API on the same origin: http://localhost:3000
 #
 # For a hot-reload workflow instead, run the app on the host with `npm run dev`
-# (Vite on :3000 proxies /api and /ws to the server on :8081).
+# (Vite on :5173 proxies /api and /ws to the server on :3000).
 
 name: deveye-dev
 
@@ -53,8 +53,8 @@ services:
     environment:
       ENVIRONMENT: dev
       SEED_DEV: "true"
-      HTTP_PORT: "8081"
-      PUBLIC_ORIGIN: http://localhost:8081
+      HTTP_PORT: "3000"
+      PUBLIC_ORIGIN: http://localhost:3000
       LOG_LEVEL: debug
       LOG_PATH: ./logs
       DB_HOSTNAME: db
@@ -77,7 +77,7 @@ services:
       SEED_DEV_EMAIL: ${SEED_DEV_EMAIL:-dev@deveye.local}
       SEED_DEV_PASSWORD: ${SEED_DEV_PASSWORD:-devdevdev}
     ports:
-      - "${HTTP_PORT_HOST:-8081}:8081"
+      - "${HTTP_PORT_HOST:-3000}:3000"
 
 volumes:
   deveye_dev_db:

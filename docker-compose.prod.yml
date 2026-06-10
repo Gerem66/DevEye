@@ -1,12 +1,12 @@
 # DevEye — production stack.
 #
-#   cp .env.template .env.prod
-#   docker compose --env-file .env.prod -f docker-compose.prod.yml up --build -d
+#   cp .env.template .env
+#   docker compose -f docker-compose.prod.yml up --build -d
 #
 # The app serves the built web client and the API on the same origin
-# (HTTP_PORT, default 8081) and connects to an external MySQL database
+# (HTTP_PORT, default 3000) and connects to an external MySQL database
 # (for example the managed DB from Dockploy). Provide real secrets via a
-# `.env.prod` file copied from `.env.template` and passed with `--env-file`.
+# `.env` file copied from `.env.template`.
 
 name: deveye-prod
 
@@ -18,36 +18,18 @@ services:
       args:
         GITHUB_PACKAGES_TOKEN: ${GITHUB_PACKAGES_TOKEN:?set GITHUB_PACKAGES_TOKEN}
     restart: unless-stopped
-    environment:
-      ENVIRONMENT: prod
-      HTTP_PORT: "8081"
-      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-      LOG_PATH: ./logs
-      DB_HOSTNAME: ${DB_HOSTNAME:?set DB_HOSTNAME}
-      DB_PORT: ${DB_PORT:-3306}
-      DB_DATABASE: ${DB_DATABASE}
-      DB_USERNAME: ${DB_USERNAME}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_POOL_MAX: ${DB_POOL_MAX:-10}
-      CRYPT_KEY_A: ${CRYPT_KEY_A:?set CRYPT_KEY_A}
-      CRYPT_KEY_B: ${CRYPT_KEY_B:?set CRYPT_KEY_B}
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET}
-      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
-      JWT_REFRESH_TTL_SECONDS: ${JWT_REFRESH_TTL_SECONDS:-2592000}
-      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
-      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-200}
-      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-1 minute}
+    env_file:
+      - path: .env
+        required: false
     ports:
-      - "${HTTP_PORT_HOST:-8081}:8081"
+      - "${HTTP_PORT_HOST:-3000}:${HTTP_PORT:-3000}"
     healthcheck:
       test:
         [
           "CMD",
           "node",
           "-e",
-          "fetch('http://localhost:8081/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://localhost:${HTTP_PORT:-3000}/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 15s
       timeout: 5s

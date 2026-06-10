@@ -40,12 +40,12 @@ npm run install:all
 
 ```bash
 npm run dev
-# Serveur : tsx watch index.ts (migrations auto au démarrage)  -> http://localhost:8081
-# Client  : Vite                                               -> http://localhost:3000
+# Serveur : tsx watch index.ts (migrations auto au démarrage)  -> http://localhost:3000
+# Client  : Vite                                               -> http://localhost:5173
 ```
 
-En dev, Vite (port 3000) sert le client et **proxifie** `/api` et `/ws` vers le
-serveur (port 8081) : le navigateur ne parle qu'à `localhost:3000` (pas de CORS).
+En dev, Vite (port 5173) sert le client et **proxifie** `/api` et `/ws` vers le
+serveur (port 3000) : le navigateur ne parle qu'à `localhost:5173` (pas de CORS).
 
 ## Docker
 
@@ -58,17 +58,19 @@ docker compose -f docker-compose.dev.yml up --build
 Démarre un MySQL **vide et persistant** (volume nommé `deveye_dev_db`) puis l'app.
 Au premier démarrage : migrations + création d'un compte de dev (`SEED_DEV=true`,
 identifiants `dev` / `devdevdev` par défaut). L'app sert le client et l'API sur la
-même origine : http://localhost:8081
+même origine : http://localhost:3000
 
 ### Prod — same-origin, DB externe (Dockploy)
 
 ```bash
-cp .env.template .env.prod   # renseigner les secrets
-docker compose --env-file .env.prod -f docker-compose.prod.yml up --build -d
+cp .env.template .env   # renseigner les secrets
+docker compose -f docker-compose.prod.yml up --build -d
 ```
 
-L'app sert le client buildé + l'API sur `HTTP_PORT` (8081) et se connecte à une
-base MySQL externe (ex: DB managée par Dockploy), healthcheck sur `/api/health`.
+Sur Dockploy, les variables sont injectées via l'UI (onglet Environment), donc le
+fichier `.env` est optionnel (`required: false`). L'app sert le client buildé +
+l'API sur `HTTP_PORT` (3000) et se connecte à une base MySQL externe (ex: DB
+managée par Dockploy), healthcheck sur `/api/health`.
 
 ## Licence
 

@@ -1,20 +1,16 @@
 import js from '@eslint/js';
+import eslintConfigPrettier from 'eslint-config-prettier';
+import prettierPlugin from 'eslint-plugin-prettier';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
-import prettierPlugin from 'eslint-plugin-prettier';
 
 export default [
-    { files: ['**/*.{js,mjs,cjs,ts,tsx}'] },
+    { ignores: ['dist', 'node_modules'] },
+    { files: ['**/*.{js,mjs,cjs,ts}'] },
     {
         languageOptions: {
             globals: {
-                ...globals.browser,
                 ...globals.node
-            },
-            parserOptions: {
-                ecmaFeatures: {
-                    jsx: true
-                }
             }
         }
     },
@@ -25,21 +21,8 @@ export default [
             prettier: prettierPlugin
         },
         rules: {
-            semi: ['warn', 'always'],
-            'object-curly-spacing': ['warn', 'always'], // Spaces between { }
             '@typescript-eslint/no-explicit-any': 'warn',
-            quotes: [
-                'warn',
-                'single',
-                {
-                    avoidEscape: true,
-                    allowTemplateLiterals: true
-                }
-            ],
             'no-control-regex': 'off',
-            'jsx-quotes': ['warn', 'prefer-single'],
-            'comma-dangle': ['warn', 'never'],
-            'eol-last': ['warn', 'always'],
             'dot-notation': 'off',
             'no-bitwise': 'off',
             '@typescript-eslint/no-empty-object-type': 'off',
@@ -65,17 +48,8 @@ export default [
                     ignoreRestSiblings: true
                 }
             ],
-            'prettier/prettier': [
-                'warn',
-                {
-                    singleQuote: true,
-                    tabWidth: 4,
-                    jsxSingleQuote: true,
-                    trailingComma: 'none',
-                    printWidth: 120,
-                    bracketSpacing: true
-                }
-            ]
+            'prettier/prettier': 'warn'
         }
-    }
+    },
+    eslintConfigPrettier
 ];
