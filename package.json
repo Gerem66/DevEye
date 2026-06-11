@@ -8,7 +8,7 @@
     "install:all": "npm install && npm --prefix client install",
     "dev": "concurrently -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "tsx watch index.ts",
-    "dev:client": "wait-on tcp:3000 && npm --prefix client run dev",
+    "dev:client": "wait-on tcp:8081 && npm --prefix client run dev",
     "start": "tsx index.ts",
     "build": "npm run build:client",
     "build:client": "npm --prefix client run build",

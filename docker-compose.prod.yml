@@ -34,6 +34,8 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+    volumes:
+      - /srv/OxyCloud/WebServer/certs/oxyfoo.fr:/certs:ro
     networks:
       default:
       dokploy-network:
