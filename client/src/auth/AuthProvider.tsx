@@ -93,6 +93,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         void refresh();
     }, [refresh]);
 
+    useEffect(() => {
+        return ws.onUnauthorized(() => setAnonymous());
+    }, [setAnonymous]);
+
     const value = useMemo<AuthContextValue>(
         () => ({ ...state, login, logout, refresh, updateUser, setWorkspaces }),
         [state, login, logout, refresh, updateUser, setWorkspaces]

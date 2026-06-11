@@ -50,6 +50,7 @@ export class DevEyeWs {
     private readonly stateListeners = new Set<(s: ConnectionState) => void>();
     private reconnectAttempt = 0;
     private intentionallyClosed = false;
+    private readonly unauthorizedListeners = new Set<() => void>();
 
     get state(): ConnectionState {
         return this._state;
@@ -63,6 +64,11 @@ export class DevEyeWs {
     onStateChange(fn: (s: ConnectionState) => void): () => void {
         this.stateListeners.add(fn);
         return () => this.stateListeners.delete(fn);
+    }
+
+    onUnauthorized(fn: () => void): () => void {
+        this.unauthorizedListeners.add(fn);
+        return () => this.unauthorizedListeners.delete(fn);
     }
 
     private setState(s: ConnectionState): void {
@@ -81,7 +87,6 @@ export class DevEyeWs {
             this.socket = ws;
 
             ws.addEventListener('open', () => {
-                this.reconnectAttempt = 0;
                 this.setState('open');
                 resolve();
             });
@@ -95,6 +100,11 @@ export class DevEyeWs {
             ws.addEventListener('close', (ev) => {
                 this.setState('closed');
                 this.failAllPending(new WsError('closed', `WS closed (${ev.code})`));
+                if (ev.code === 4401) {
+                    this.intentionallyClosed = true;
+                    for (const fn of this.unauthorizedListeners) fn();
+                    return;
+                }
                 if (!this.intentionallyClosed) this.scheduleReconnect();
             });
         });
@@ -125,6 +135,10 @@ export class DevEyeWs {
         const parsed = serverMessageSchema.safeParse(data);
         if (!parsed.success) return;
         const msg = parsed.data;
+
+        if (msg.command === 'session' && msg.payload.ok) {
+            this.reconnectAttempt = 0;
+        }
 
         if (msg.requestId) {
             const pending = this.pending.get(msg.requestId);
