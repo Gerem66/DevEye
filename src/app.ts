@@ -58,7 +58,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         }
     });
 
-    app.get('/api/health', async () => ({ ok: true }));
+    app.get('/api/health', { logLevel: 'silent' }, async () => ({ ok: true }));
 
     await authRoutes(app, { db: deps.db });
     await registerWS(app, { db: deps.db, crypt: deps.crypt });
