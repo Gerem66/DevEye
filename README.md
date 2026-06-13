@@ -69,7 +69,7 @@ docker compose -f docker-compose.prod.yml up --build -d
 
 Sur Dockploy, les variables sont injectées via l'UI (onglet Environment), donc le
 fichier `.env` est optionnel (`required: false`). L'app sert le client buildé +
-l'API sur `HTTP_PORT` (3000) et se connecte à une base MySQL externe (ex: DB
+l'API sur `LISTEN_PORT` (3000) et se connecte à une base MySQL externe (ex: DB
 managée par Dockploy), healthcheck sur `/api/health`.
 
 ## Licence

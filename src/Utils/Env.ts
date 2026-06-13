@@ -3,7 +3,7 @@ import { getEnvVar } from 'dotenv-oxy';
 export const env = {
     ENVIRONMENT: getEnvVar('ENVIRONMENT', 'enum', ['dev', 'test', 'prod']),
 
-    HTTP_PORT: getEnvVar('HTTP_PORT', 'number'),
+    LISTEN_PORT: getEnvVar('LISTEN_PORT', 'number'),
     PUBLIC_ORIGIN: getEnvVar('PUBLIC_ORIGIN', 'string'),
 
     LOG_LEVEL: getEnvVar('LOG_LEVEL', 'enum', ['fatal', 'error', 'warn', 'info', 'debug', 'trace']),

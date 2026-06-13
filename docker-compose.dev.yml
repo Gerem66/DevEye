@@ -45,7 +45,7 @@ services:
     environment:
       ENVIRONMENT: dev
       SEED_DEV: 'true'
-      HTTP_PORT: '3000'
+      LISTEN_PORT: '3000'
       PUBLIC_ORIGIN: http://localhost:3000
       LOG_LEVEL: debug
       LOG_PATH: ./logs

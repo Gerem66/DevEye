@@ -41,8 +41,8 @@ async function main() {
     process.on('SIGINT', () => void shutdown('SIGINT'));
     process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
-    await app.listen({ port: env.HTTP_PORT, host: '0.0.0.0' });
-    logger.info({ port: env.HTTP_PORT }, 'DevEye server ready');
+    await app.listen({ port: env.LISTEN_PORT, host: '0.0.0.0' });
+    logger.info({ port: env.LISTEN_PORT }, 'DevEye server ready');
 }
 
 main().catch((e) => {

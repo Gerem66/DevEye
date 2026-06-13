@@ -21,14 +21,14 @@ services:
       - path: .env
         required: false
     ports:
-      - '127.0.0.1:${HTTP_PORT_HOST:-3000}:${HTTP_PORT:-3000}'
+      - '127.0.0.1:${HTTP_PORT_HOST:-3000}:${LISTEN_PORT:-3000}'
     healthcheck:
       test:
         [
           'CMD',
           'node',
           '-e',
-          "fetch('http://localhost:${HTTP_PORT:-3000}/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+          "fetch('http://localhost:${LISTEN_PORT:-3000}/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
         ]
       interval: 15s
       timeout: 5s

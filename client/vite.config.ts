@@ -2,7 +2,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig } from 'vite';
 
-const serverPort = process.env.HTTP_PORT ?? '3000';
+const serverPort = process.env.LISTEN_PORT ?? '3000';
 const serverOrigin = `http://localhost:${serverPort}`;
 
 // https://vitejs.dev/config/
