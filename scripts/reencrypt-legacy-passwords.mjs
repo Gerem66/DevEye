@@ -1,16 +1,19 @@
 /**
- * One-off re-encryption migration for passwords stored with the old WebCrypto
- * HMAC format (raw keyB bytes) introduced by Crypt.js (pre-March 2024).
+ * One-off re-encryption migration.
  *
- * The new Encryption.ts uses ripemd160(keyB) as the HMAC key, which breaks
- * any row whose MAC was computed with the old raw-keyB method.
+ * Decrypts every password row using the OLD keys (tries both HMAC variants:
+ * ripemd160(keyB) and raw keyB bytes) then re-encrypts with the NEW keys.
  *
- * Strategy per row:
- *   1. Try new decrypt (ripemd160 HMAC)  → already fine, skip.
- *   2. Try old decrypt (raw keyB HMAC)   → migrate: re-encrypt and UPDATE.
- *   3. Both fail                          → log as unrecoverable, skip.
+ * Required env vars:
+ *   OLD_KEY_A / OLD_KEY_B  — keys used when data was originally encrypted
+ *   NEW_KEY_A / NEW_KEY_B  — new clean keys (32 hex chars recommended)
  *
- * Run once with: node scripts/reencrypt-legacy-passwords.mjs
+ * DB connection: DB_HOSTNAME / DB_PORT / DB_USERNAME / DB_PASSWORD / DB_DATABASE
+ * (loaded from .env if present, overridable via env vars)
+ *
+ * Run:
+ *   OLD_KEY_A='...' OLD_KEY_B='...' NEW_KEY_A='...' NEW_KEY_B='...' \
+ *     node scripts/reencrypt-legacy-passwords.mjs
  */
 
 import 'dotenv/config';
@@ -90,21 +93,33 @@ function encryptNew(keyA, keyB, plaintext) {
 // Main
 // ---------------------------------------------------------------------------
 
-const keyA = process.env.CRYPT_KEY_A;
-const keyB = process.env.CRYPT_KEY_B;
+const oldKeyA = process.env.OLD_KEY_A;
+const oldKeyB = process.env.OLD_KEY_B;
+const newKeyA = process.env.NEW_KEY_A;
+const newKeyB = process.env.NEW_KEY_B;
 
-if (!keyA || !keyB) {
-    console.error('Missing CRYPT_KEY_A or CRYPT_KEY_B in environment.');
+if (!oldKeyA || !oldKeyB || !newKeyA || !newKeyB) {
+    console.error('Required: OLD_KEY_A, OLD_KEY_B, NEW_KEY_A, NEW_KEY_B');
+    console.error('');
+    console.error('Suggested new keys (run this to generate):');
+    console.error("  node -e \"const c=require('crypto');");
+    console.error("    console.log('NEW_KEY_A=' + c.randomBytes(16).toString('hex'));");
+    console.error("    console.log('NEW_KEY_B=' + c.randomBytes(16).toString('hex'));\"");
     process.exit(1);
 }
-if (Buffer.byteLength(keyA, 'utf8') !== 32) {
-    console.error(`CRYPT_KEY_A must be exactly 32 bytes (got ${Buffer.byteLength(keyA, 'utf8')}).`);
+if (Buffer.byteLength(oldKeyA, 'utf8') !== 32) {
+    console.error(`OLD_KEY_A must be exactly 32 bytes (got ${Buffer.byteLength(oldKeyA, 'utf8')}).`);
+    process.exit(1);
+}
+if (Buffer.byteLength(newKeyA, 'utf8') !== 32) {
+    console.error(`NEW_KEY_A must be exactly 32 bytes (got ${Buffer.byteLength(newKeyA, 'utf8')}).`);
     process.exit(1);
 }
 
-// Print partial key info so you can verify the right keys are loaded
-console.log(`CRYPT_KEY_A: ${keyA.slice(0, 4)}... (${Buffer.byteLength(keyA, 'utf8')} bytes)`);
-console.log(`CRYPT_KEY_B: ${keyB.slice(0, 4)}... (${Buffer.byteLength(keyB, 'utf8')} bytes)`);
+console.log(`OLD_KEY_A: ${oldKeyA.slice(0, 4)}... (${Buffer.byteLength(oldKeyA, 'utf8')} bytes)`);
+console.log(`OLD_KEY_B: ${oldKeyB.slice(0, 4)}... (${Buffer.byteLength(oldKeyB, 'utf8')} bytes)`);
+console.log(`NEW_KEY_A: ${newKeyA.slice(0, 4)}... (${Buffer.byteLength(newKeyA, 'utf8')} bytes)`);
+console.log(`NEW_KEY_B: ${newKeyB.slice(0, 4)}... (${Buffer.byteLength(newKeyB, 'utf8')} bytes)`);
 
 const conn = await mysql.createConnection({
     host: process.env.DB_HOSTNAME ?? 'localhost',
@@ -128,33 +143,31 @@ if (rows.length > 0) {
     }
 }
 
-let ok = 0;
 let migrated = 0;
 let failed = 0;
 
 for (const row of rows) {
     const { id, user_id, content } = row;
 
-    // 1. Already valid with new format?
-    if (decryptNew(keyA, keyB, content) !== null) {
-        ok++;
+    // Try to decrypt with old keys (ripemd160 HMAC first, then raw-bytes HMAC)
+    const plain = decryptNew(oldKeyA, oldKeyB, content) ?? decryptOld(oldKeyA, oldKeyB, content);
+
+    if (plain === null) {
+        console.warn(`  [FAILED]   id=${id} user_id=${user_id}  — cannot decrypt with old keys, skipping`);
+        failed++;
         continue;
     }
 
-    // 2. Recoverable with old format?
-    const plain = decryptOld(keyA, keyB, content);
-    if (plain !== null) {
-        const newContent = encryptNew(keyA, keyB, plain);
-        await conn.query('UPDATE passwords SET content = ? WHERE id = ?', [newContent, id]);
-        console.log(`  [MIGRATED] id=${id} user_id=${user_id}`);
-        migrated++;
-        continue;
-    }
-
-    // 3. Unrecoverable
-    console.warn(`  [FAILED]   id=${id} user_id=${user_id}  — cannot decrypt with old or new key, skipping`);
-    failed++;
+    // Re-encrypt with new keys
+    const newContent = encryptNew(newKeyA, newKeyB, plain);
+    await conn.query('UPDATE passwords SET content = ? WHERE id = ?', [newContent, id]);
+    console.log(`  [MIGRATED] id=${id} user_id=${user_id}`);
+    migrated++;
 }
 
-console.log(`\nDone: ${ok} already OK, ${migrated} migrated, ${failed} unrecoverable.`);
+console.log(`\nDone: ${migrated} migrated, ${failed} unrecoverable.`);
+console.log('');
+console.log('Update your server config with:');
+console.log(`  CRYPT_KEY_A=${newKeyA}`);
+console.log(`  CRYPT_KEY_B=${newKeyB}`);
 await conn.end();
