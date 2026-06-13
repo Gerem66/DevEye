@@ -102,6 +102,10 @@ if (Buffer.byteLength(keyA, 'utf8') !== 32) {
     process.exit(1);
 }
 
+// Print partial key info so you can verify the right keys are loaded
+console.log(`CRYPT_KEY_A: ${keyA.slice(0, 4)}... (${Buffer.byteLength(keyA, 'utf8')} bytes)`);
+console.log(`CRYPT_KEY_B: ${keyB.slice(0, 4)}... (${Buffer.byteLength(keyB, 'utf8')} bytes)`);
+
 const conn = await mysql.createConnection({
     host: process.env.DB_HOSTNAME ?? 'localhost',
     port: Number(process.env.DB_PORT ?? 5000),
@@ -113,6 +117,16 @@ const conn = await mysql.createConnection({
 console.log('Connected to DB.');
 
 const [rows] = await conn.query('SELECT id, user_id, content FROM passwords ORDER BY id ASC');
+
+// Print a sample content to help diagnose key/format issues
+if (rows.length > 0) {
+    const sample = rows[0].content;
+    const decoded = Buffer.from(sample, 'base64');
+    console.log(`Sample row id=${rows[0].id}: content length=${sample.length}, decoded bytes=${decoded.length}`);
+    if (decoded.length < 80) {
+        console.warn('  WARNING: decoded length < 80, not a valid encrypted blob');
+    }
+}
 
 let ok = 0;
 let migrated = 0;
