@@ -21,7 +21,7 @@ services:
       - path: .env
         required: false
     ports:
-      - '127.0.0.1:${HTTP_PORT_HOST:-3000}:${LISTEN_PORT:-3000}'
+      - '127.0.0.1:${LISTEN_PORT:-3000}:${LISTEN_PORT:-3000}'
     healthcheck:
       test:
         [

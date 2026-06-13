@@ -42,34 +42,16 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    env_file:
+      - path: .env
+        required: true
     environment:
-      ENVIRONMENT: dev
-      SEED_DEV: 'true'
-      LISTEN_PORT: '3000'
-      PUBLIC_ORIGIN: http://localhost:3000
-      LOG_LEVEL: debug
-      LOG_PATH: ./logs
+      # Docker-specific overrides: DB is the 'db' service, not localhost.
       DB_HOSTNAME: db
       DB_PORT: '3306'
-      DB_DATABASE: ${DB_DATABASE:-DevEye}
-      DB_USERNAME: ${DB_USERNAME:-deveye}
-      DB_PASSWORD: ${DB_PASSWORD:-deveye}
-      DB_POOL_MAX: '10'
-      # Dev-only placeholder secrets. DO NOT use in production.
-      CRYPT_KEY_A: ${CRYPT_KEY_A:-0123456789abcdef0123456789abcdef}
-      CRYPT_KEY_B: ${CRYPT_KEY_B:-abcdef0123456789abcdef0123456789}
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-me-please-00000000}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-me-please-0000000}
-      JWT_ACCESS_TTL_SECONDS: '900'
-      JWT_REFRESH_TTL_SECONDS: '2592000'
-      RATE_LIMIT_MAX: '1000'
-      RATE_LIMIT_WINDOW: 1 minute
-      # Dev account credentials (override as needed).
-      SEED_DEV_USERNAME: ${SEED_DEV_USERNAME:-dev}
-      SEED_DEV_EMAIL: ${SEED_DEV_EMAIL:-dev@deveye.local}
-      SEED_DEV_PASSWORD: ${SEED_DEV_PASSWORD:-devdevdev}
+      SEED_DEV: 'true'
     ports:
-      - '${HTTP_PORT_HOST:-3000}:3000'
+      - '${LISTEN_PORT:-3000}:${LISTEN_PORT:-3000}'
 
 volumes:
   deveye_dev_db:
