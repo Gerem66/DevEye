@@ -65,7 +65,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
     // Serve the built web client from the same origin as the API whenever a
     // build is present (production, or the dockerised dev stack). On the host
-    // dev workflow there is no build dir: Vite (port 3000) serves the client
+    // dev workflow there is no build dir: Vite (port 5173) serves the client
     // and proxies /api and /ws to this server.
     const clientDir = process.env.CLIENT_DIR
         ? resolve(process.env.CLIENT_DIR)
