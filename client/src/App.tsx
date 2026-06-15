@@ -2,6 +2,7 @@ import HomePage from './Pages/Home/index.js';
 import LoginPage from './Pages/Login/index.js';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 
+import './Styles/theme.css';
 import './Styles/colors.css';
 import './Styles/fonts.css';
 import './Styles/icons.css';

@@ -149,3 +149,51 @@ body {
         margin-left: 0px;
     }
 }
+
+/* 2FA styles */
+.login .twofa-prompt {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+    text-align: center;
+    margin: 0 0 1rem;
+    line-height: 1.4;
+}
+
+.login .submit,
+.login .cancel {
+    display: block;
+    width: 100%;
+    padding: 0.7rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-top: 0.5rem;
+}
+
+.login .submit {
+    background: #3585df;
+    color: white;
+}
+
+.login .submit:hover:not(:disabled) {
+    background: #4a9af0;
+}
+
+.login .submit:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.login .cancel {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.login .cancel:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.8);
+}

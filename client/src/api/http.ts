@@ -66,3 +66,11 @@ export function logout(): Promise<{ loggedOut: true }> {
 export function me(): Promise<MeResponse> {
     return request('/api/auth/me', { method: 'GET' }, meResponseSchema);
 }
+
+export function post<T>(
+    path: string,
+    body: unknown,
+    outputSchema: z.ZodType<T> = z.unknown() as z.ZodType<T>
+): Promise<T> {
+    return request(path, { method: 'POST', body: JSON.stringify(body) }, outputSchema);
+}

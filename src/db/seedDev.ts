@@ -6,7 +6,7 @@ import { getQueryable, type DbPool } from './pool';
 const DEV_USERNAME = process.env.SEED_DEV_USERNAME ?? 'dev';
 const DEV_EMAIL = process.env.SEED_DEV_EMAIL ?? 'dev@deveye.local';
 const DEV_PASSWORD = process.env.SEED_DEV_PASSWORD ?? 'devdevdev';
-const DEV_FEATURES = ['profile', 'password', 'servicemonitor', 'projects'];
+const DEV_FEATURES = ['profile', 'monitoring', 'clients', 'weather', 'twofa', 'password'];
 
 /**
  * Idempotently create a development account on an otherwise empty database.
@@ -25,8 +25,8 @@ export async function seedDevAccount(pool: DbPool): Promise<void> {
 
     const passwordHash = await hashPassword(DEV_PASSWORD);
     await q.query(
-        `INSERT INTO users (email, username, password_hash, settings, features, default_workspace, default_feature)
-         VALUES (?, ?, ?, CAST(? AS JSON), CAST(? AS JSON), 0, 'profile')`,
+        `INSERT INTO users (email, username, password_hash, role, settings, features, default_workspace, default_feature)
+         VALUES (?, ?, ?, 'admin', CAST(? AS JSON), CAST(? AS JSON), 0, 'profile')`,
         [DEV_EMAIL, DEV_USERNAME, passwordHash, JSON.stringify([]), JSON.stringify(DEV_FEATURES)]
     );
 

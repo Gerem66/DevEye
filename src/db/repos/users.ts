@@ -8,10 +8,11 @@ export interface UsersRepo {
     findByUsername(username: string): Promise<UserRow | null>;
     findByEmail(email: string): Promise<UserRow | null>;
     findByIds(ids: number[]): Promise<UserRow[]>;
-    create(input: { email: string; username: string; passwordHash: string }): Promise<UserRow>;
+    create(input: { email: string; username: string; passwordHash: string; role?: 'user' | 'admin' }): Promise<UserRow>;
     updateLastLogin(id: number, lastLogin: number): Promise<void>;
     setDefaults(id: number, defaults: { defaultWorkspace: number; defaultFeature: string }): Promise<void>;
     updatePasswordHash(id: number, passwordHash: string): Promise<void>;
+    setRole(id: number, role: 'user' | 'admin'): Promise<void>;
 }
 
 export function usersRepo(pool: Q): UsersRepo {
@@ -33,11 +34,11 @@ export function usersRepo(pool: Q): UsersRepo {
             const r = await pool.query<UserRow>('SELECT * FROM users WHERE id IN (?)', [ids]);
             return r.rows;
         },
-        async create({ email, username, passwordHash }) {
+        async create({ email, username, passwordHash, role = 'user' }) {
             const res = await pool.query(
-                `INSERT INTO users (email, username, password_hash)
-                 VALUES (?, ?, ?)`,
-                [email, username, passwordHash]
+                `INSERT INTO users (email, username, password_hash, role, settings, features)
+                 VALUES (?, ?, ?, ?, CAST('[]' AS JSON), CAST('[]' AS JSON))`,
+                [email, username, passwordHash, role]
             );
             const r = await pool.query<UserRow>('SELECT * FROM users WHERE id = ?', [res.insertId]);
             return r.rows[0];
@@ -54,6 +55,9 @@ export function usersRepo(pool: Q): UsersRepo {
         },
         async updatePasswordHash(id, passwordHash) {
             await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, id]);
+        },
+        async setRole(id, role) {
+            await pool.query('UPDATE users SET role = ? WHERE id = ?', [role, id]);
         }
     };
 }

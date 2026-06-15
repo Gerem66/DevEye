@@ -1,0 +1,370 @@
+/* Widget compact view */
+.widgetContent {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.stat {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+}
+
+.statValue {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+.statLabel {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.deviceList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.deviceItem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.miniDot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.miniDot.online {
+    background: var(--success);
+}
+
+.miniDot.offline {
+    background: var(--text-muted);
+}
+
+.deviceName {
+    color: var(--text-secondary);
+}
+
+.moreDevices {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Full view */
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-xs) 0;
+}
+
+.subtitle {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin: 0 0 var(--space-lg) 0;
+}
+
+.loader {
+    color: var(--text-muted);
+    text-align: center;
+    padding: var(--space-xl);
+}
+
+.empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-xl);
+    color: var(--text-muted);
+    text-align: center;
+    gap: var(--space-sm);
+}
+
+.empty span {
+    font-size: 3rem;
+    opacity: 0.3;
+}
+
+.hint {
+    font-size: 0.85rem;
+    opacity: 0.7;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: var(--space-lg);
+    flex: 1;
+}
+
+@media (max-width: 768px) {
+    .grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.deviceListFull {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.deviceCard {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+    text-align: left;
+    color: var(--text-primary);
+}
+
+.deviceCard:hover {
+    background: var(--glass-bg);
+}
+
+.deviceCard.selected {
+    border-color: var(--accent);
+    background: rgba(64, 153, 255, 0.1);
+}
+
+.statusDot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.statusDot.online {
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success);
+}
+
+.statusDot.offline {
+    background: var(--text-muted);
+}
+
+.deviceCardInfo {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.deviceCardName {
+    font-size: 0.9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.deviceCardPlatform {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.metricsPanel {
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.metricsPanelHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.metricsPanel h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.onlineBadge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+}
+
+.onlineBadge.online {
+    background: rgba(52, 211, 153, 0.15);
+    color: var(--success);
+    border: 1px solid var(--success);
+}
+
+.onlineBadge.offline {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger);
+    border: 1px solid var(--danger);
+}
+
+.offlineMsg,
+.waitingMsg {
+    color: var(--text-muted);
+    font-style: italic;
+    padding: var(--space-md) 0;
+}
+
+/* ─── Metric bars ─────────────────────────────────────────────────────────── */
+
+.metricRow {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.metricHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.metricLabel {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.metricValue {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.barTrack {
+    height: 6px;
+    background: var(--glass-bg-light);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.barFill {
+    height: 100%;
+    border-radius: 3px;
+    min-width: 2px;
+}
+
+/* ─── CPU sparkline ───────────────────────────────────────────────────────── */
+
+.cpuSection {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.sparkline {
+    width: 100%;
+    height: 36px;
+    display: block;
+    opacity: 0.7;
+}
+
+/* ─── Info cards (network, users) ─────────────────────────────────────────── */
+
+.infoRow {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-sm);
+}
+
+.infoCard {
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: center;
+}
+
+.infoLabel {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.infoVal {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.noMetrics {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.noMetrics.offline {
+    color: var(--danger);
+}
+
+.deviceMeta {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--glass-border);
+}
+
+.metricRow {
+    display: grid;
+    grid-template-columns: 60px 1fr auto;
+    align-items: center;
+    gap: var(--space-md);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.bar {
+    height: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.barFill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+    border-radius: 4px;
+}

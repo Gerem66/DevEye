@@ -1,16 +1,42 @@
-import { err, loginRequestSchema, loginResponseSchema, ok } from 'deveye-types';
+import {
+    err,
+    loginRequestSchema,
+    loginResponseSchema,
+    ok,
+    registerRequestSchema,
+    twoFactorChallengeRequestSchema
+} from 'deveye-types';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import { env } from '@/Utils/Env';
+import { sha256hex } from '@/Utils/hash';
+import { normalizeBackupCode, verifyTotp } from '@/Services/Totp';
+import type Encryption from '@/Services/Encryption';
 import { hashPassword, needsRehash, verifyPassword } from './argon';
-import { ACCESS_COOKIE, REFRESH_COOKIE, clearAuthCookies, setAuthCookies } from './cookies';
-import { signAccessToken, signRefreshToken, verifyAccessToken, verifyRefreshToken } from './jwt';
+import {
+    ACCESS_COOKIE,
+    REFRESH_COOKIE,
+    TWOFA_COOKIE,
+    clearAuthCookies,
+    clearTwoFactorChallengeCookie,
+    setAuthCookies,
+    setTwoFactorChallengeCookie
+} from './cookies';
+import {
+    signAccessToken,
+    signRefreshToken,
+    signTwoFactorChallenge,
+    verifyAccessToken,
+    verifyRefreshToken,
+    verifyTwoFactorChallenge
+} from './jwt';
 import { loadUserBundle } from './loadUserBundle';
 
 import type { Database } from '@/db';
 
 interface AuthDeps {
     db: Database;
+    crypt: Encryption;
 }
 
 /**
@@ -36,7 +62,33 @@ async function issueSession(reply: FastifyReply, db: Database, userId: number): 
     return sessionId;
 }
 
-export async function authRoutes(app: FastifyInstance, { db }: AuthDeps): Promise<void> {
+export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps): Promise<void> {
+    app.post('/api/auth/register', async (req, reply) => {
+        const parsed = registerRequestSchema.safeParse(req.body);
+        if (!parsed.success) {
+            return reply.code(400).send(err('validation', 'Invalid registration payload', parsed.error.flatten()));
+        }
+        const { username, email, password } = parsed.data;
+
+        const [existingByName, existingByEmail] = await Promise.all([
+            db.users.findByUsername(username),
+            db.users.findByEmail(email)
+        ]);
+        if (existingByName || existingByEmail) {
+            return reply.code(409).send(err('conflict', 'Username or email already in use'));
+        }
+
+        const passwordHash = await hashPassword(password);
+        const row = await db.users.create({ email, username, passwordHash, role: 'user' });
+
+        await issueSession(reply, db, row.id);
+        const bundle = await loadUserBundle(db, row.id);
+        if (!bundle) {
+            return reply.code(500).send(err('internal', 'Unable to load user'));
+        }
+        return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: false, ...bundle })));
+    });
+
     app.post('/api/auth/login', async (req, reply) => {
         const parsed = loginRequestSchema.safeParse(req.body);
         if (!parsed.success) {
@@ -63,6 +115,14 @@ export async function authRoutes(app: FastifyInstance, { db }: AuthDeps): Promis
             }
         }
 
+        // If 2FA is enabled, defer session issuance behind a TOTP challenge.
+        const twoFa = await db.twoFactor.get(row.id);
+        if (twoFa?.enabled) {
+            const challenge = await signTwoFactorChallenge(row.id);
+            setTwoFactorChallengeCookie(reply, challenge);
+            return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: true })));
+        }
+
         await db.users.updateLastLogin(row.id, Math.floor(Date.now() / 1000));
         const bundle = await loadUserBundle(db, row.id);
         if (!bundle) {
@@ -70,8 +130,59 @@ export async function authRoutes(app: FastifyInstance, { db }: AuthDeps): Promis
         }
 
         await issueSession(reply, db, row.id);
-        const body = loginResponseSchema.parse(bundle);
-        return reply.send(ok(body));
+        return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: false, ...bundle })));
+    });
+
+    app.post('/api/auth/2fa/challenge', async (req, reply) => {
+        const challengeToken = req.cookies[TWOFA_COOKIE];
+        if (!challengeToken) {
+            return reply.code(401).send(err('auth_required', 'No 2FA challenge in progress'));
+        }
+        const challenge = await verifyTwoFactorChallenge(challengeToken);
+        if (!challenge) {
+            clearTwoFactorChallengeCookie(reply);
+            return reply.code(401).send(err('auth_expired', '2FA challenge expired'));
+        }
+
+        const parsed = twoFactorChallengeRequestSchema.safeParse(req.body);
+        if (!parsed.success) {
+            return reply.code(400).send(err('validation', 'Invalid 2FA payload', parsed.error.flatten()));
+        }
+
+        const userId = Number(challenge.sub);
+        const twoFa = await db.twoFactor.get(userId);
+        if (!twoFa?.enabled) {
+            clearTwoFactorChallengeCookie(reply);
+            return reply.code(400).send(err('conflict', '2FA is not enabled'));
+        }
+
+        const code = parsed.data.code.trim();
+        const secret = crypt.Decrypt(twoFa.secret_enc);
+        let accepted = false;
+        if (secret && verifyTotp(code, secret)) {
+            accepted = true;
+        } else {
+            // Fall back to single-use recovery codes.
+            const codeHash = sha256hex(normalizeBackupCode(code));
+            const backup = await db.twoFactor.findUnusedBackupCode(userId, codeHash);
+            if (backup) {
+                await db.twoFactor.markBackupCodeUsed(backup.id);
+                accepted = true;
+            }
+        }
+
+        if (!accepted) {
+            return reply.code(401).send(err('auth_invalid', 'Invalid 2FA code'));
+        }
+
+        clearTwoFactorChallengeCookie(reply);
+        await db.users.updateLastLogin(userId, Math.floor(Date.now() / 1000));
+        const bundle = await loadUserBundle(db, userId);
+        if (!bundle) {
+            return reply.code(500).send(err('internal', 'Unable to load user'));
+        }
+        await issueSession(reply, db, userId);
+        return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: false, ...bundle })));
     });
 
     app.post('/api/auth/refresh', async (req, reply) => {

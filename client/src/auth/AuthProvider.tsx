@@ -1,4 +1,4 @@
-import type { LoginResponse, MeResponse, User, Workspace } from 'deveye-types';
+import type { User, Workspace } from 'deveye-types';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ApiError, login as apiLogin, logout as apiLogout, me as apiMe, refresh as apiRefresh } from '../api/http';
 import { ws } from '../api/ws';
@@ -9,8 +9,12 @@ interface AuthState {
     workspaces: Workspace[];
 }
 
+export interface LoginResult {
+    twoFactorRequired: boolean;
+}
+
 interface AuthContextValue extends AuthState {
-    login: (username: string, password: string) => Promise<void>;
+    login: (username: string, password: string) => Promise<LoginResult>;
     logout: () => Promise<void>;
     refresh: () => Promise<void>;
     updateUser: (patch: Partial<User>) => void;
@@ -19,7 +23,9 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function applyBundle(bundle: LoginResponse | MeResponse): AuthState {
+type FullBundle = { user: User; workspaces: Workspace[] };
+
+function applyBundle(bundle: FullBundle): AuthState {
     return {
         status: 'authenticated',
         user: bundle.user,
@@ -66,10 +72,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, [setAnonymous]);
 
-    const login = useCallback(async (username: string, password: string) => {
+    const login = useCallback(async (username: string, password: string): Promise<LoginResult> => {
         const bundle = await apiLogin({ username, password });
+        if (bundle.twoFactorRequired) {
+            return { twoFactorRequired: true };
+        }
         setState(applyBundle(bundle));
         await ws.connect().catch(() => {});
+        return { twoFactorRequired: false };
     }, []);
 
     const logout = useCallback(async () => {

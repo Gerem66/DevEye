@@ -1,21 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { ApiError } from '../../api/http';
+import { ApiError, post } from '../../api/http';
 import { useAuth } from '../../auth/AuthProvider';
 import { TextInput } from '../../Components';
 import { Sleep } from '../../Utils/Functions';
+import { z } from 'zod';
 import './style.css';
 
+const twoFaResponseSchema = z.object({
+    user: z.unknown(),
+    workspaces: z.unknown()
+});
+
 function LoginPage() {
-    const { status, login } = useAuth();
+    const { status, login, refresh } = useAuth();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [twoFaRequired, setTwoFaRequired] = useState(false);
+    const [twoFaCode, setTwoFaCode] = useState('');
 
     const cardRef = useRef<HTMLDivElement | null>(null);
     const inputUsername = useRef<HTMLInputElement | null>(null);
     const inputPassword = useRef<HTMLInputElement | null>(null);
+    const inputTwoFa = useRef<HTMLInputElement | null>(null);
 
     const show = status !== 'authenticated';
 
@@ -53,10 +62,16 @@ function LoginPage() {
         const startedAt = Date.now();
 
         try {
-            await login(username, password);
-            const elapsed = Date.now() - startedAt;
-            if (elapsed < 1500) await Sleep(1500 - elapsed);
-            setPassword('');
+            const result = await login(username, password);
+            if (result.twoFactorRequired) {
+                stopAnim();
+                setTwoFaRequired(true);
+                setTimeout(() => inputTwoFa.current?.focus(), 50);
+            } else {
+                const elapsed = Date.now() - startedAt;
+                if (elapsed < 1500) await Sleep(1500 - elapsed);
+                setPassword('');
+            }
         } catch (e) {
             const elapsed = Date.now() - startedAt;
             if (elapsed < 800) await Sleep(800 - elapsed);
@@ -73,8 +88,38 @@ function LoginPage() {
         }
     };
 
+    const onSubmit2FA = async () => {
+        if (loading || twoFaCode.length !== 6) return;
+        setError('');
+        setLoading(true);
+        startAnim();
+        const startedAt = Date.now();
+        try {
+            await post('/api/auth/2fa/challenge', { code: twoFaCode }, twoFaResponseSchema);
+            await refresh();
+            const elapsed = Date.now() - startedAt;
+            if (elapsed < 1500) await Sleep(1500 - elapsed);
+        } catch (e) {
+            const elapsed = Date.now() - startedAt;
+            if (elapsed < 800) await Sleep(800 - elapsed);
+            if (e instanceof ApiError) {
+                setError('Code invalide');
+            } else {
+                setError('Erreur réseau');
+            }
+            setTwoFaCode('');
+            inputTwoFa.current?.focus();
+            stopAnim();
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-        if (e.key === 'Enter') void onSubmit();
+        if (e.key === 'Enter') {
+            if (twoFaRequired) void onSubmit2FA();
+            else void onSubmit();
+        }
     };
 
     return (
@@ -87,32 +132,70 @@ function LoginPage() {
                 <div ref={cardRef} className='login-card' onKeyDown={onKeyDown}>
                     <div className='progress-bar' />
 
-                    <div className='input-group'>
-                        <TextInput
-                            ref={inputUsername}
-                            placeholder="Nom d'utilisateur"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            autoFocus
-                        />
-                        <span className='icon icon-user'></span>
-                    </div>
+                    {!twoFaRequired ? (
+                        <>
+                            <div className='input-group'>
+                                <TextInput
+                                    ref={inputUsername}
+                                    placeholder="Nom d'utilisateur"
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value)}
+                                    autoFocus
+                                />
+                                <span className='icon icon-user'></span>
+                            </div>
 
-                    <div className='input-group'>
-                        <TextInput
-                            ref={inputPassword}
-                            type='password'
-                            placeholder='Mot de passe'
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            error={error}
-                        />
-                        <span className='icon icon-lock' />
-                    </div>
+                            <div className='input-group'>
+                                <TextInput
+                                    ref={inputPassword}
+                                    type='password'
+                                    placeholder='Mot de passe'
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    error={error}
+                                />
+                                <span className='icon icon-lock' />
+                            </div>
 
-                    <button className='submit' onClick={onSubmit} disabled={loading}>
-                        Se connecter
-                    </button>
+                            <button className='submit' onClick={onSubmit} disabled={loading}>
+                                Se connecter
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <p className='twofa-prompt'>
+                                Entrez le code à 6 chiffres de votre application d&apos;authentification
+                            </p>
+                            <div className='input-group'>
+                                <TextInput
+                                    ref={inputTwoFa}
+                                    placeholder='000000'
+                                    value={twoFaCode}
+                                    onChange={(e) => setTwoFaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                    error={error}
+                                />
+                                <span className='icon icon-shield' />
+                            </div>
+
+                            <button
+                                className='submit'
+                                onClick={onSubmit2FA}
+                                disabled={loading || twoFaCode.length !== 6}
+                            >
+                                Vérifier
+                            </button>
+                            <button
+                                className='cancel'
+                                onClick={() => {
+                                    setTwoFaRequired(false);
+                                    setTwoFaCode('');
+                                    setError('');
+                                }}
+                            >
+                                Retour
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
         </div>

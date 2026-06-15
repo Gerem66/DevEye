@@ -1,86 +1,203 @@
-import { JSX, useEffect, useMemo, useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
-import { Navbar } from '@/Components';
-import { FEATURE_BY_ID, FEATURES } from '@/Features/Features';
-import AddWorkspacePopup from './popup-add-workspace';
-import PopupUnlock from './popup-unlock';
-import './style.css';
+import { TopNavbar } from '@/Components/TopNavbar';
+import { Widget } from '@/Components/Widget';
+import { WidgetGrid } from '@/Components/WidgetGrid';
+import { WidgetPopup } from '@/Components/WidgetPopup';
 
-import type { FeatureType } from '@/Features/types';
-import type { Workspace } from 'deveye-types';
+// Widget content (compact)
+import { MonitoringWidget } from '@/Features/Monitoring';
+import { WeatherWidget } from '@/Features/Weather';
+import { ClientsWidget } from '@/Features/Clients';
+import { TwoFactorWidget } from '@/Features/TwoFactor';
 
-function HomePage(): JSX.Element | null {
-    const { user, workspaces } = useAuth();
-    const [workspace, setWorkspace] = useState<Workspace | null>(null);
-    const [feature, setFeature] = useState<FeatureType | null>(null);
+// Full feature components
+import Monitoring from '@/Features/Monitoring';
+import Weather from '@/Features/Weather';
+import Clients from '@/Features/Clients';
+import TwoFactor from '@/Features/TwoFactor';
+import FeatureProfile from '@/Features/Profile';
+import FeaturePassword from '@/Features/Password';
 
-    const workspacesById = useMemo(() => {
-        const m = new Map<number, Workspace>();
-        for (const w of workspaces) m.set(w.id, w);
-        return m;
-    }, [workspaces]);
+import type { FeatureProps } from '@/Features/types';
+import styles from './Dashboard.module.css';
 
-    /** Initial selection from user defaults; revalidated on workspace/user changes. */
-    useEffect(() => {
-        if (!user) {
-            setWorkspace(null);
-            setFeature(null);
-            return;
-        }
-        if (workspace && workspacesById.has(workspace.id)) return;
+interface WidgetConfig {
+    id: string;
+    title: string;
+    icon: string;
+    WidgetContent: React.ComponentType;
+    FullComponent: React.ComponentType<FeatureProps>;
+}
 
-        const preferred = workspacesById.get(user.defaultWorkspace);
-        const next = preferred ?? workspacesById.get(0) ?? workspaces[0] ?? null;
-        setWorkspace(next ?? null);
-    }, [user, workspaces, workspace, workspacesById]);
+const WIDGETS: WidgetConfig[] = [
+    {
+        id: 'monitoring',
+        title: 'Monitoring',
+        icon: 'activity',
+        WidgetContent: MonitoringWidget,
+        FullComponent: Monitoring
+    },
+    {
+        id: 'weather',
+        title: 'Météo',
+        icon: 'cloud',
+        WidgetContent: WeatherWidget,
+        FullComponent: Weather
+    },
+    {
+        id: 'clients',
+        title: 'Appareils',
+        icon: 'server',
+        WidgetContent: ClientsWidget,
+        FullComponent: Clients
+    },
+    {
+        id: 'twofa',
+        title: 'Sécurité 2FA',
+        icon: 'shield',
+        WidgetContent: TwoFactorWidget,
+        FullComponent: TwoFactor
+    },
+    {
+        id: 'profile',
+        title: 'Profil',
+        icon: 'user',
+        WidgetContent: () => <ProfileWidgetContent />,
+        FullComponent: FeatureProfile
+    },
+    {
+        id: 'password',
+        title: 'Mot de passe',
+        icon: 'lock',
+        WidgetContent: () => <PasswordWidgetContent />,
+        FullComponent: FeaturePassword
+    }
+];
 
-    /** Keep `feature` consistent with the currently selected workspace. */
-    useEffect(() => {
-        if (!workspace) {
-            setFeature(null);
-            return;
-        }
-
-        const stillAvailable = feature && workspace.features.includes(feature.id);
-        if (stillAvailable) return;
-
-        const defaultId = user?.defaultFeature;
-        if (defaultId && workspace.features.includes(defaultId) && FEATURE_BY_ID[defaultId]) {
-            setFeature(FEATURE_BY_ID[defaultId]);
-            return;
-        }
-
-        const firstId = workspace.features[0];
-        const fallback = (firstId && FEATURE_BY_ID[firstId]) || FEATURES.find((f) => f.id === 'profile') || null;
-        setFeature(fallback);
-    }, [workspace, user, feature]);
-
-    if (!user) return null;
-
+function ProfileWidgetContent() {
+    const { user } = useAuth();
     return (
-        <div id='home' className='home'>
-            <div className='home-left'>
-                <Navbar workspace={workspace} feature={feature} setWorkspace={setWorkspace} setFeature={setFeature} />
-            </div>
-
-            <div className='home-right'>
-                {workspace !== null && feature !== null && (
-                    <feature.component
-                        key={`${feature.id} ${workspace.id}`}
-                        user={user}
-                        workspace={workspace}
-                        feature={feature}
-                        setWorkspace={setWorkspace}
-                        setFeature={setFeature}
-                    />
-                )}
-
-                <AddWorkspacePopup onCreated={setWorkspace} />
-                <PopupUnlock workspace={workspace} />
-            </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <span style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{user?.username}</span>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{user?.email}</span>
         </div>
     );
 }
 
-export default HomePage;
+function PasswordWidgetContent() {
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Modifier votre mot de passe</span>
+        </div>
+    );
+}
+
+function getGreeting(): string {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Bonjour';
+    if (hour < 18) return 'Bon après-midi';
+    return 'Bonsoir';
+}
+
+function formatDate(): string {
+    return new Date().toLocaleDateString('fr-FR', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long'
+    });
+}
+
+export default function HomePage() {
+    const { user, workspaces, setWorkspaces } = useAuth();
+    const [expandedWidget, setExpandedWidget] = useState<string | null>(null);
+
+    const currentWorkspace = useMemo(() => {
+        return workspaces.find((w) => w.id === user?.defaultWorkspace) ?? workspaces[0] ?? null;
+    }, [workspaces, user]);
+
+    const handleExpand = useCallback((widgetId: string) => {
+        setExpandedWidget(widgetId);
+    }, []);
+
+    const handleClose = useCallback(() => {
+        setExpandedWidget(null);
+    }, []);
+
+    const expandedConfig = expandedWidget ? WIDGETS.find((w) => w.id === expandedWidget) : null;
+
+    if (!user) return null;
+
+    // Build FeatureProps for full component
+    const featureProps: FeatureProps = {
+        user,
+        workspace: currentWorkspace ?? {
+            id: 0,
+            name: 'Default',
+            logo: '',
+            users: [],
+            features: [],
+            reAuthInterval: null,
+            created: 0
+        },
+        feature: {
+            id: expandedConfig?.id ?? '',
+            name: expandedConfig?.title ?? '',
+            icon: expandedConfig?.icon ?? '',
+            component: expandedConfig?.FullComponent ?? (() => null)
+        },
+        setWorkspace: (ws) => {
+            setWorkspaces((prev) => prev.map((w) => (w.id === ws.id ? ws : w)));
+        },
+        setFeature: () => {}
+    };
+
+    return (
+        <div className={styles.dashboard}>
+            <div className={styles.wallpaper} />
+
+            <TopNavbar viewTitle={expandedConfig?.title} onBack={expandedWidget ? handleClose : undefined} />
+
+            <main className={styles.main}>
+                {!expandedWidget && (
+                    <>
+                        <header className={styles.greeting}>
+                            <h1 className={styles.greetingText}>
+                                {getGreeting()}, {user.username}
+                            </h1>
+                            <p className={styles.dateText}>{formatDate()}</p>
+                        </header>
+
+                        <WidgetGrid>
+                            {WIDGETS.map((config) => (
+                                <Widget
+                                    key={config.id}
+                                    widgetId={config.id}
+                                    title={config.title}
+                                    icon={config.icon}
+                                    onExpand={() => handleExpand(config.id)}
+                                >
+                                    <config.WidgetContent />
+                                </Widget>
+                            ))}
+                        </WidgetGrid>
+                    </>
+                )}
+            </main>
+
+            {/* Popup for expanded widget */}
+            {expandedConfig && (
+                <WidgetPopup
+                    layoutId={expandedConfig.id}
+                    open={!!expandedWidget}
+                    onClose={handleClose}
+                    title={expandedConfig.title}
+                    icon={expandedConfig.icon}
+                >
+                    <expandedConfig.FullComponent {...featureProps} />
+                </WidgetPopup>
+            )}
+        </div>
+    );
+}

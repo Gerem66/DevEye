@@ -1,5 +1,5 @@
 import type { Database } from '@/db';
-import type { MinimalUser, User, Workspace } from 'deveye-types';
+import type { MinimalUser, User, UserRole, Workspace } from 'deveye-types';
 
 export async function loadUserBundle(
     db: Database,
@@ -62,6 +62,7 @@ export async function loadUserBundle(
         email: row.email,
         username: row.username,
         avatar: row.avatar,
+        role: (row.role === 'admin' ? 'admin' : 'user') as UserRole,
         settings: parseStringArray(row.settings),
         defaultWorkspace: row.default_workspace,
         defaultFeature: row.default_feature,

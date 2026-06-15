@@ -1,5 +1,6 @@
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
+import type { MonitorTransport } from '@/agent/hub';
 import type { ErrorCode } from 'deveye-types';
 import type { Logger } from 'pino';
 import type { z } from 'zod';
@@ -11,6 +12,8 @@ export interface FeatureContext {
     sessionId: string;
     logger: Logger;
     requestId: string;
+    /** Present only on the live WS connection; enables metric subscriptions. */
+    monitor?: MonitorTransport;
 }
 
 /**

@@ -1,4 +1,6 @@
 import type { FeatureDefinition } from './_define';
+import { deviceFeatures } from './devices';
+import { metricsFeatures } from './metrics';
 import {
     passwordAddFeature,
     passwordDeleteFeature,
@@ -7,6 +9,8 @@ import {
     passwordListFeature,
     passwordUnlockFeature
 } from './password';
+import { twoFactorFeatures } from './twofa';
+import { weatherFeatures } from './weather';
 import { workspaceAddFeature } from './workspace/add';
 import { workspaceDeleteFeature } from './workspace/delete';
 import { workspaceSetFavoriteFeatureFeature } from './workspace/setFavoriteFeature';
@@ -21,7 +25,11 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     passwordAddFeature,
     passwordEditFeature,
     passwordDeleteFeature,
-    passwordUnlockFeature
+    passwordUnlockFeature,
+    ...deviceFeatures,
+    ...metricsFeatures,
+    ...twoFactorFeatures,
+    ...weatherFeatures
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

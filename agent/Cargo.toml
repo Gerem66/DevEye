@@ -1,0 +1,34 @@
+[package]
+name = "deveye-agent"
+version = "0.1.0"
+edition = "2021"
+description = "DevEye Agent — lightweight Linux monitoring daemon"
+license = "ISC"
+
+[[bin]]
+name = "deveye-agent"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal", "net"] }
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+futures-util = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+sysinfo = "0.32"
+dirs = "5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
+base64 = "0.22"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+panic = "abort"
