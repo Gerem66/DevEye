@@ -20,7 +20,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'Open Sans';
+    font-family: var(--font-sans);
     background:
         radial-gradient(900px circle at 15% -10%, rgba(34, 211, 238, 0.18), transparent 55%),
         radial-gradient(1000px circle at 110% 115%, rgba(11, 188, 214, 0.14), transparent 55%),

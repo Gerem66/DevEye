@@ -70,6 +70,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
+    margin-bottom: var(--space-lg);
 }
 
 .sectionLabel {
@@ -85,35 +86,77 @@
     line-height: 1.5;
 }
 
-.previewRow {
+/* Accent swatches */
+.swatchRow {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--space-sm);
 }
 
-.preview {
-    flex: 1;
-    height: 84px;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--glass-border);
-    background:
-        radial-gradient(420px circle at 18% -20%, rgba(34, 211, 238, 0.22), transparent 60%),
-        linear-gradient(160deg, #06080f, #0a1622 60%, #070f18);
-    background-size: cover;
-    background-position: center;
-    position: relative;
-    overflow: hidden;
+.swatch {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    box-shadow: 0 0 0 1px var(--glass-border);
+    cursor: pointer;
+    padding: 0;
+    transition: transform var(--transition-fast);
 }
 
-.previewLabel {
+.swatch:hover {
+    transform: scale(1.12);
+}
+
+.swatch.active {
+    border-color: var(--text-primary);
+    box-shadow: 0 0 0 2px var(--text-primary);
+}
+
+/* Background preset swatches */
+.bgGrid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-sm);
+}
+
+.bgSwatch {
+    position: relative;
+    height: 56px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--glass-border);
+    background-size: cover;
+    background-position: center;
+    cursor: pointer;
+    overflow: hidden;
+    transition: border-color var(--transition-fast);
+}
+
+.bgSwatch:hover {
+    border-color: var(--glass-border-strong);
+}
+
+.bgSwatch.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
+.bgLabel {
     position: absolute;
-    left: var(--space-sm);
-    bottom: var(--space-xs);
-    font-size: 0.72rem;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 3px 6px;
+    font-size: 0.68rem;
     font-weight: 600;
     color: var(--text-secondary);
     background: rgba(4, 7, 12, 0.55);
-    padding: 2px 8px;
-    border-radius: var(--radius-pill);
+    text-align: center;
+}
+
+.imageActive {
+    font-size: 0.78rem;
+    color: var(--accent);
 }
 
 .inputRow {

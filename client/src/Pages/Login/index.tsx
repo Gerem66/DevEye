@@ -31,7 +31,10 @@ function LoginPage() {
     useEffect(() => {
         if (status === 'unknown') {
             cardRef.current?.classList.add('card-to-progressbar', 'auto-login');
-        } else {
+        } else if (status !== 'authenticated') {
+            // Reset the card only when the form is (re)shown. When authenticated the
+            // login page is fading out, so keep the card collapsed — reverting it here
+            // would flash the card back open during the fade.
             cardRef.current?.classList.remove('card-to-progressbar', 'auto-login');
         }
     }, [status]);

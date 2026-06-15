@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useWallpaper } from '@/stores/wallpaper';
+import { useTheme, setTheme, ACCENT_PRESETS, BG_PRESETS } from '@/stores/theme';
 import styles from './SettingsPanel.module.css';
 
 export interface SettingsPanelProps {
@@ -8,17 +8,17 @@ export interface SettingsPanelProps {
     onClose: () => void;
 }
 
-/** App settings dialog. Currently: optional dashboard wallpaper image. */
+const DEFAULT_ACCENT = '#22d3ee';
+
+/** App settings dialog: accent color + dashboard background. */
 export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
-    const { image, setImage } = useWallpaper();
-    const [draft, setDraft] = useState(image ?? '');
+    const theme = useTheme();
+    const [draftUrl, setDraftUrl] = useState(theme.bgImage ?? '');
 
-    // Sync the draft with the active value whenever the dialog opens.
     useEffect(() => {
-        if (open) setDraft(image ?? '');
-    }, [open, image]);
+        if (open) setDraftUrl(theme.bgImage ?? '');
+    }, [open, theme.bgImage]);
 
-    // Close on Escape
     useEffect(() => {
         if (!open) return;
         const handler = (e: KeyboardEvent) => {
@@ -28,13 +28,13 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
         return () => window.removeEventListener('keydown', handler);
     }, [open, onClose]);
 
-    const apply = () => setImage(draft.trim() || null);
-    const reset = () => {
-        setDraft('');
-        setImage(null);
+    const activeAccent = (theme.accent ?? DEFAULT_ACCENT).toLowerCase();
+    const applyImage = () => setTheme({ bgImage: draftUrl.trim() || null });
+    const customized = Boolean(theme.accent || theme.bgPreset || theme.bgImage);
+    const resetAll = () => {
+        setDraftUrl('');
+        setTheme({ accent: null, bgPreset: null, bgImage: null });
     };
-
-    const previewStyle = draft.trim() ? { backgroundImage: `url("${draft.trim().replace(/"/g, '%22')}")` } : undefined;
 
     return (
         <AnimatePresence>
@@ -68,40 +68,70 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                         </div>
 
                         <div className={styles.section}>
-                            <span className={styles.sectionLabel}>Fond d&apos;écran</span>
-                            <p className={styles.sectionHint}>
-                                Laissez vide pour le dégradé par défaut, ou collez l&apos;URL d&apos;une image pour
-                                passer en mode photo.
-                            </p>
+                            <span className={styles.sectionLabel}>Couleur d&apos;accent</span>
+                            <div className={styles.swatchRow}>
+                                {ACCENT_PRESETS.map((p) => (
+                                    <button
+                                        key={p.key}
+                                        type='button'
+                                        className={`${styles.swatch} ${activeAccent === p.hex.toLowerCase() ? styles.active : ''}`}
+                                        style={{ background: p.hex }}
+                                        onClick={() => setTheme({ accent: p.hex })}
+                                        title={p.label}
+                                        aria-label={p.label}
+                                    />
+                                ))}
+                            </div>
+                        </div>
 
-                            <div className={styles.previewRow}>
-                                <div className={styles.preview} style={previewStyle}>
-                                    <span className={styles.previewLabel}>{draft.trim() ? 'Image' : 'Dégradé'}</span>
-                                </div>
+                        <div className={styles.section}>
+                            <span className={styles.sectionLabel}>Fond d&apos;écran</span>
+                            <div className={styles.bgGrid}>
+                                {BG_PRESETS.map((p) => {
+                                    const active = !theme.bgImage && (theme.bgPreset ?? 'auto') === p.key;
+                                    const preview =
+                                        p.css ??
+                                        `radial-gradient(120px circle at 28% -10%, var(--accent-glow), transparent 60%), linear-gradient(160deg, #06080f, #0a1622)`;
+                                    return (
+                                        <button
+                                            key={p.key}
+                                            type='button'
+                                            className={`${styles.bgSwatch} ${active ? styles.active : ''}`}
+                                            style={{ background: preview }}
+                                            onClick={() =>
+                                                setTheme({ bgPreset: p.key === 'auto' ? null : p.key, bgImage: null })
+                                            }
+                                        >
+                                            <span className={styles.bgLabel}>{p.label}</span>
+                                        </button>
+                                    );
+                                })}
                             </div>
 
+                            <p className={styles.sectionHint}>Ou collez l&apos;URL d&apos;une image :</p>
                             <div className={styles.inputRow}>
                                 <input
                                     type='url'
                                     className={styles.input}
                                     placeholder='https://exemple.com/image.jpg'
-                                    value={draft}
-                                    onChange={(e) => setDraft(e.target.value)}
+                                    value={draftUrl}
+                                    onChange={(e) => setDraftUrl(e.target.value)}
                                     onKeyDown={(e) => {
-                                        if (e.key === 'Enter') apply();
+                                        if (e.key === 'Enter') applyImage();
                                     }}
                                 />
-                                <button className={styles.applyBtn} onClick={apply}>
+                                <button className={styles.applyBtn} onClick={applyImage}>
                                     Appliquer
                                 </button>
                             </div>
-
-                            {image && (
-                                <button className={styles.resetBtn} onClick={reset}>
-                                    Réinitialiser le fond
-                                </button>
-                            )}
+                            {theme.bgImage && <span className={styles.imageActive}>Image active comme fond.</span>}
                         </div>
+
+                        {customized && (
+                            <button className={styles.resetBtn} onClick={resetAll}>
+                                Réinitialiser
+                            </button>
+                        )}
                     </motion.div>
                 </>
             )}

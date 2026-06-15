@@ -103,25 +103,60 @@ export default function TopNavbar({ viewTitle, onBack, onOpenProfile, onOpenSett
 
     return (
         <nav className={`${styles.navbar} ${inFeature ? styles.blurred : ''}`}>
-            {/* Left section */}
-            <div className={styles.left}>
-                {inFeature && onBack && (
-                    <button className={styles.backBtn} onClick={onBack} aria-label='Retour au dashboard'>
-                        <span className='icon icon-arrow-left' />
-                    </button>
-                )}
-                <a href='/' className={styles.brand}>
+            {/* Left section — entering/leaving a feature animates smoothly */}
+            <motion.div layout className={styles.left}>
+                <AnimatePresence initial={false} mode='popLayout'>
+                    {inFeature && onBack && (
+                        <motion.button
+                            key='back'
+                            layout
+                            className={styles.backBtn}
+                            onClick={onBack}
+                            aria-label='Retour au dashboard'
+                            initial={{ opacity: 0, scale: 0.6 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.6 }}
+                            transition={{ duration: 0.2 }}
+                        >
+                            <span className='icon icon-arrow-left' />
+                        </motion.button>
+                    )}
+                </AnimatePresence>
+
+                <motion.a layout href='/' className={styles.brand}>
                     <img src='/logo_deveye.png' alt='DevEye' className={styles.logo} />
                     <span className={styles.brandText}>DevEye</span>
-                </a>
-                {!inFeature && <span className={styles.version}>{version}</span>}
-                {inFeature && viewTitle && (
-                    <>
-                        <span className={styles.diviserDot} />
-                        <span className={styles.viewTitle}>{viewTitle}</span>
-                    </>
-                )}
-            </div>
+                </motion.a>
+
+                <AnimatePresence initial={false} mode='popLayout'>
+                    {inFeature && viewTitle ? (
+                        <motion.span
+                            key='viewTitle'
+                            layout
+                            className={styles.viewTitleWrap}
+                            initial={{ opacity: 0, x: -6 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -6 }}
+                            transition={{ duration: 0.2 }}
+                        >
+                            <span className={styles.diviserDot} />
+                            <span className={styles.viewTitle}>{viewTitle}</span>
+                        </motion.span>
+                    ) : (
+                        <motion.span
+                            key='version'
+                            layout
+                            className={styles.version}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                        >
+                            {version}
+                        </motion.span>
+                    )}
+                </AnimatePresence>
+            </motion.div>
 
             {/* Right section: live status + user profile */}
             <div className={styles.right} ref={menuRef}>

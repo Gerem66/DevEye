@@ -96,6 +96,13 @@
     flex-shrink: 0;
 }
 
+.viewTitleWrap {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-width: 0;
+}
+
 .viewTitle {
     font-size: 0.95rem;
     font-weight: 600;

@@ -3,10 +3,12 @@
     inset: 0;
     z-index: var(--z-wallpaper);
     overflow: hidden;
-    background:
-        radial-gradient(900px circle at 12% -8%, rgba(34, 211, 238, 0.16), transparent 55%),
-        radial-gradient(1100px circle at 108% 112%, rgba(11, 188, 214, 0.13), transparent 55%),
-        linear-gradient(160deg, #06080f 0%, #0a1622 48%, #070f18 100%);
+    background: var(
+        --wallpaper-bg,
+        radial-gradient(900px circle at 12% -8%, var(--accent-glow), transparent 55%),
+        radial-gradient(1100px circle at 108% 112%, var(--accent-glow), transparent 55%),
+        linear-gradient(160deg, #06080f 0%, #0a1622 48%, #070f18 100%)
+    );
 }
 
 .image {

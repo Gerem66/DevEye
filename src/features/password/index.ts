@@ -1,7 +1,15 @@
 import { verifyPassword } from '@/auth/argon';
 import { passwordAdd, passwordDelete, passwordEdit, passwordGet, passwordList, passwordUnlock } from 'deveye-types';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
-import { decryptPayload, encryptPayload, isUnlocked, markUnlocked, toEntry, toMaskedEntry } from './_shared';
+import {
+    decryptPayload,
+    encryptPayload,
+    isUnlocked,
+    markUnlocked,
+    toEntry,
+    toMaskedEntry,
+    tryDecryptPayload
+} from './_shared';
 
 /**
  * Workspace id 0 is the caller's private/personal workspace: it has no row in
@@ -42,7 +50,20 @@ export const passwordListFeature: FeatureDefinition<
         await assertWorkspaceMember(ctx, input.workspaceId);
         const rows = await ctx.db.passwords.listByUser(ctx.userId);
         const filtered = rows.filter((r) => rowInWorkspace(r.workspace_id, input.workspaceId));
-        const entries = filtered.map((r) => toMaskedEntry(r.id, decryptPayload(ctx.crypt, r.content)));
+        // A single undecryptable row (e.g. legacy/foreign-key data) must not break
+        // the whole list — skip it with a warning instead of failing the feature.
+        let skipped = 0;
+        const entries = filtered.flatMap((r) => {
+            const payload = tryDecryptPayload(ctx.crypt, r.content);
+            if (!payload) {
+                skipped += 1;
+                return [];
+            }
+            return [toMaskedEntry(r.id, payload)];
+        });
+        if (skipped > 0) {
+            ctx.logger.warn({ skipped, total: filtered.length }, 'password.list: skipped undecryptable rows');
+        }
         return { entries };
     }
 });

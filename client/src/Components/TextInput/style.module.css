@@ -10,7 +10,7 @@
     padding-right: 48px;
     font-size: 1em;
     font-weight: 400;
-    font-family: 'Open Sans';
+    font-family: var(--font-sans);
     line-height: 1.5;
     color: var(--text-primary);
     background-color: var(--input-bg);

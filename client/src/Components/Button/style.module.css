@@ -4,7 +4,7 @@
     border: none;
     border-radius: var(--radius-sm);
     color: var(--on-accent);
-    font-family: 'Open Sans';
+    font-family: var(--font-sans);
     font-weight: 600;
     font-size: 16px;
     background-color: transparent;

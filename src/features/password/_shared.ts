@@ -31,6 +31,15 @@ export function decryptPayload(crypt: Encryption, content: string): StoredPayloa
     }
 }
 
+/** Non-throwing variant: returns null instead of failing (e.g. legacy rows). */
+export function tryDecryptPayload(crypt: Encryption, content: string): StoredPayload | null {
+    try {
+        return decryptPayload(crypt, content);
+    } catch {
+        return null;
+    }
+}
+
 export function toEntry(id: number, payload: StoredPayload): PasswordEntry {
     return passwordEntrySchema.parse({ id, ...payload });
 }

@@ -60,6 +60,10 @@
   --space-lg: 24px;
   --space-xl: 32px;
 
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
   /* Layout */
   --navbar-height: 56px;
 
@@ -78,8 +82,15 @@
   --transition-slow: 400ms ease;
 }
 
+html,
+body {
+  font-family: var(--font-sans);
+}
+
 body {
   background: #06080f;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Global glass card utility */

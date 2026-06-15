@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { TopNavbar } from '@/Components/TopNavbar';
@@ -31,6 +31,8 @@ interface WidgetConfig {
     icon: string;
     WidgetContent: React.ComponentType;
     FullComponent: React.ComponentType<FeatureProps>;
+    /** Openable (e.g. from the topbar) but not shown as a grid card. */
+    hideOnGrid?: boolean;
 }
 
 const WIDGETS: WidgetConfig[] = [
@@ -67,7 +69,8 @@ const WIDGETS: WidgetConfig[] = [
         title: 'Profil',
         icon: 'user',
         WidgetContent: () => <ProfileWidgetContent />,
-        FullComponent: FeatureProfile
+        FullComponent: FeatureProfile,
+        hideOnGrid: true
     },
     {
         id: 'password',
@@ -77,6 +80,8 @@ const WIDGETS: WidgetConfig[] = [
         FullComponent: FeaturePassword
     }
 ];
+
+const GRID_WIDGETS = WIDGETS.filter((w) => !w.hideOnGrid);
 
 function ProfileWidgetContent() {
     const { user } = useAuth();
@@ -128,11 +133,18 @@ export default function HomePage() {
         setExpandedWidget(null);
     }, []);
 
-    const expandedConfig = expandedWidget ? WIDGETS.find((w) => w.id === expandedWidget) : null;
+    const expandedConfig = expandedWidget ? (WIDGETS.find((w) => w.id === expandedWidget) ?? null) : null;
+
+    // Keep the popup's config mounted through its close animation so the panel
+    // (high z-index) is what morphs back into the card — never the grid widget.
+    const [popupConfig, setPopupConfig] = useState<WidgetConfig | null>(null);
+    useEffect(() => {
+        if (expandedConfig) setPopupConfig(expandedConfig);
+    }, [expandedConfig]);
 
     if (!user) return null;
 
-    // Build FeatureProps for full component
+    // Build FeatureProps for the full component (uses the persisted popup config).
     const featureProps: FeatureProps = {
         user,
         workspace: currentWorkspace ?? {
@@ -145,10 +157,10 @@ export default function HomePage() {
             created: 0
         },
         feature: {
-            id: expandedConfig?.id ?? '',
-            name: expandedConfig?.title ?? '',
-            icon: expandedConfig?.icon ?? '',
-            component: expandedConfig?.FullComponent ?? (() => null)
+            id: popupConfig?.id ?? '',
+            name: popupConfig?.title ?? '',
+            icon: popupConfig?.icon ?? '',
+            component: popupConfig?.FullComponent ?? (() => null)
         },
         setWorkspace: (ws) => {
             setWorkspaces((prev) => prev.map((w) => (w.id === ws.id ? ws : w)));
@@ -167,37 +179,37 @@ export default function HomePage() {
                 onOpenSettings={() => setSettingsOpen(true)}
             />
 
+            {/* The grid stays mounted under the popup so the shared-element morph
+                back into a card is smooth and never dips behind sibling cards. */}
             <main className={styles.main}>
-                {!expandedWidget && (
-                    <div className={styles.content}>
-                        <header className={styles.greeting}>
-                            <h1 className={styles.greetingText}>
-                                {getGreeting()}, {user.username}
-                            </h1>
-                            <p className={styles.dateText}>{formatDate()}</p>
-                        </header>
+                <div className={styles.content}>
+                    <header className={styles.greeting}>
+                        <h1 className={styles.greetingText}>
+                            {getGreeting()}, {user.username}
+                        </h1>
+                        <p className={styles.dateText}>{formatDate()}</p>
+                    </header>
 
-                        <WidgetGrid>
-                            {WIDGETS.map((config) => (
-                                <Widget
-                                    key={config.id}
-                                    widgetId={config.id}
-                                    title={config.title}
-                                    icon={config.icon}
-                                    onExpand={() => handleExpand(config.id)}
-                                >
-                                    <config.WidgetContent />
-                                </Widget>
-                            ))}
-                        </WidgetGrid>
-                    </div>
-                )}
+                    <WidgetGrid>
+                        {GRID_WIDGETS.map((config) => (
+                            <Widget
+                                key={config.id}
+                                widgetId={config.id}
+                                title={config.title}
+                                icon={config.icon}
+                                onExpand={() => handleExpand(config.id)}
+                            >
+                                <config.WidgetContent />
+                            </Widget>
+                        ))}
+                    </WidgetGrid>
+                </div>
             </main>
 
-            {/* Popup for expanded widget — the topbar owns the title + back action */}
-            {expandedConfig && (
-                <WidgetPopup layoutId={expandedConfig.id} open={!!expandedWidget} onClose={handleClose}>
-                    <expandedConfig.FullComponent {...featureProps} />
+            {/* Popup for the expanded widget — the topbar owns the title + back action */}
+            {popupConfig && (
+                <WidgetPopup layoutId={popupConfig.id} open={!!expandedWidget} onClose={handleClose}>
+                    <popupConfig.FullComponent {...featureProps} />
                 </WidgetPopup>
             )}
 

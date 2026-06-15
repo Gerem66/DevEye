@@ -315,7 +315,7 @@
     background: var(--glass-bg);
     padding: var(--space-xs) var(--space-sm);
     border-radius: var(--radius-sm);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 0.85rem;
     color: var(--accent);
     word-break: break-all;
@@ -334,7 +334,7 @@
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 1.25rem;
     letter-spacing: 0.2em;
     text-align: center;
@@ -408,7 +408,7 @@
     padding: var(--space-sm);
     background: var(--glass-bg);
     border-radius: var(--radius-sm);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 0.9rem;
     color: var(--text-primary);
     text-align: center;
