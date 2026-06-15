@@ -1,41 +1,57 @@
 /* Glassmorphism design tokens */
 :root {
   /* Base palette */
-  --glass-bg: rgba(30, 30, 45, 0.65);
-  --glass-bg-light: rgba(50, 50, 70, 0.5);
-  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-bg: rgba(18, 26, 38, 0.62);
+  --glass-bg-light: rgba(38, 52, 68, 0.5);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --glass-border-strong: rgba(255, 255, 255, 0.16);
   --glass-blur: 16px;
 
   /* Surfaces */
   --surface-widget: var(--glass-bg);
-  --surface-popup: rgba(25, 25, 40, 0.92);
-  --surface-navbar: rgba(15, 15, 25, 0.75);
+  --surface-popup: rgba(14, 21, 32, 0.92);
+  --surface-navbar: rgba(9, 14, 22, 0.78);
+  --surface-subtle: rgba(255, 255, 255, 0.04);
 
   /* Text */
   --text-primary: rgba(255, 255, 255, 0.95);
-  --text-secondary: rgba(255, 255, 255, 0.65);
-  --text-muted: rgba(255, 255, 255, 0.4);
+  --text-secondary: rgba(255, 255, 255, 0.66);
+  --text-muted: rgba(255, 255, 255, 0.42);
 
-  /* Accent */
-  --accent: #4099ff;
-  --accent-hover: #5aa8ff;
-  --accent-glow: rgba(64, 153, 255, 0.35);
+  /* Accent — cyan/teal (DevEye brand) */
+  --accent: #22d3ee;
+  --accent-hover: #4fe3f5;
+  --accent-strong: #0bbcd6;
+  --accent-glow: rgba(34, 211, 238, 0.35);
+  --accent-bg: rgba(34, 211, 238, 0.14);
+  --on-accent: #05222a;
 
   /* Status */
   --success: #2ed8b6;
+  --success-bg: rgba(46, 216, 182, 0.14);
   --warning: #ffb64d;
+  --warning-bg: rgba(255, 182, 77, 0.14);
   --danger: #ff5370;
+  --danger-bg: rgba(255, 83, 112, 0.13);
+
+  /* Inputs */
+  --input-bg: rgba(255, 255, 255, 0.04);
+  --input-border: var(--glass-border);
+  --input-focus: var(--accent);
+  --input-placeholder: var(--text-muted);
 
   /* Shadows */
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.25);
-  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.28);
+  --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.42);
+  --shadow-glow: 0 0 0 1px var(--accent-bg), 0 8px 32px var(--accent-glow);
 
   /* Radii */
   --radius-sm: 8px;
   --radius-md: 12px;
-  --radius-lg: 20px;
-  --radius-xl: 28px;
+  --radius-lg: 18px;
+  --radius-xl: 26px;
+  --radius-pill: 999px;
 
   /* Spacing */
   --space-xs: 4px;
@@ -44,10 +60,26 @@
   --space-lg: 24px;
   --space-xl: 32px;
 
+  /* Layout */
+  --navbar-height: 56px;
+
+  /* Z-index scale */
+  --z-wallpaper: -1;
+  --z-base: 1;
+  --z-popup-overlay: 900;
+  --z-popup: 1000;
+  --z-navbar: 1200;
+  --z-modal: 1400;
+  --z-toast: 1600;
+
   /* Transitions */
   --transition-fast: 150ms ease;
   --transition-normal: 250ms ease;
   --transition-slow: 400ms ease;
+}
+
+body {
+  background: #06080f;
 }
 
 /* Global glass card utility */
@@ -59,28 +91,18 @@
   border-radius: var(--radius-md);
 }
 
-/* Wallpaper container */
-.wallpaper {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
-  background-size: cover;
-  background-position: center;
-}
-
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--glass-border);
-  border-radius: 3px;
+  background: var(--glass-border-strong);
+  border-radius: var(--radius-pill);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.28);
 }

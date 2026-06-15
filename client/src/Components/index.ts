@@ -13,3 +13,5 @@ export { TopNavbar } from './TopNavbar';
 export { Widget } from './Widget';
 export { WidgetGrid } from './WidgetGrid';
 export { WidgetPopup } from './WidgetPopup';
+export { Wallpaper } from './Wallpaper';
+export { StatusBadge } from './StatusBadge';

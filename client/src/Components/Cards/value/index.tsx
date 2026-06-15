@@ -22,7 +22,7 @@ function CardValue({ title, value, icon = null, width = 'unset', color = 'bg-blu
                 <></>
             ) : (
                 <div className={styles['icon-container']}>
-                    <i className={`${styles.icon} icon-${icon}`} />
+                    <i className={`icon ${styles.icon} icon-${icon}`} />
                 </div>
             )}
         </div>

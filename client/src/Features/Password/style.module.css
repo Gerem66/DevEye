@@ -6,7 +6,7 @@
     width: 100%;
     height: 1px;
     margin: 12px 0;
-    background-color: #b7c0cd4f;
+    background-color: var(--glass-border);
 }
 .search-container {
     padding-bottom: 24px;
@@ -46,13 +46,13 @@
     opacity: 1;
 }
 .cell-active {
-    color: #2ecc71;
+    color: var(--success);
 }
 .cell-inactive {
-    color: #e74c3c;
+    color: var(--danger);
 }
 .cell-none {
-    color: #aab0b1;
+    color: var(--text-muted);
 }
 .scroll-mode {
     max-height: 400px;
@@ -61,7 +61,7 @@
 .scroll-mode > thead {
     position: sticky;
     top: -2px; /* to cover the border */
-    background-color: #223142;
+    background-color: var(--surface-popup);
     z-index: 5;
 }
 

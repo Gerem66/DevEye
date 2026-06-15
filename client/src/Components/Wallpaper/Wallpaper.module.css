@@ -1,0 +1,35 @@
+.wallpaper {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-wallpaper);
+    overflow: hidden;
+    background:
+        radial-gradient(900px circle at 12% -8%, rgba(34, 211, 238, 0.16), transparent 55%),
+        radial-gradient(1100px circle at 108% 112%, rgba(11, 188, 214, 0.13), transparent 55%),
+        linear-gradient(160deg, #06080f 0%, #0a1622 48%, #070f18 100%);
+}
+
+.image {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    animation: fade-in var(--transition-slow) ease both;
+}
+
+/* Scrim over the photo for card/text legibility */
+.image::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(rgba(6, 9, 15, 0.5), rgba(6, 9, 15, 0.64));
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}

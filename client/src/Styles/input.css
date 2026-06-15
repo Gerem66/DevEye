@@ -1,7 +1,6 @@
 button.submit {
     width: 100%;
-    font-weight: 400;
-    color: #212529;
+    font-weight: 600;
     text-align: center;
     vertical-align: middle;
     cursor: pointer;
@@ -9,31 +8,34 @@ button.submit {
     -moz-user-select: none;
     -ms-user-select: none;
     user-select: none;
-    background-color: transparent;
     border: none;
-    padding: 0.375rem 0.75rem;
+    padding: 0.5rem 0.75rem;
     font-size: 1em;
     line-height: 1.5;
-    border-radius: 0.25rem;
+    border-radius: var(--radius-sm);
     transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
-    cursor: pointer;
-    color: #fff;
-    background-color: #007bff;
+    color: var(--on-accent);
+    background-color: var(--accent);
 }
 button.submit:hover {
-    background-color: #0069d9;
+    background-color: var(--accent-hover);
 }
 button.submit:active {
-    background-color: #0062cc;
+    background-color: var(--accent-strong);
 }
 button.submit:disabled {
     opacity: 0.65;
     cursor: not-allowed;
-    background-color: #81858a;
+    background-color: var(--glass-bg-light);
+    color: var(--text-secondary);
 }
 
 a.link {
-    color: #42a5f5;
+    color: var(--accent);
     text-decoration: none;
     cursor: pointer;
+}
+
+a.link:hover {
+    color: var(--accent-hover);
 }

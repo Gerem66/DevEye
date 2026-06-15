@@ -7,22 +7,19 @@ export interface WidgetPopupProps {
     layoutId: string;
     /** Whether the popup is currently shown. */
     open: boolean;
-    /** Called when the user requests to close (back button, escape, overlay click). */
+    /** Called when the user requests to close (Escape, overlay click). */
     onClose: () => void;
-    /** Title displayed in the popup header. */
-    title?: string;
-    /** Icon class name for the header. */
-    icon?: string;
-    /** Popup content. */
+    /** Popup content (the feature provides its own heading). */
     children?: ReactNode;
 }
 
 /**
- * Full-screen (with padding) popup that animates from the originating Widget via
- * framer-motion's `layoutId`. The overlay fades in; the content morphs.
+ * Full-screen feature panel that animates from the originating Widget via
+ * framer-motion's `layoutId`. It deliberately has no header of its own: the
+ * TopNavbar stays above it (higher z-index) and owns the back action + title,
+ * so the topbar always provides the main context. Closes on Escape / overlay.
  */
-export default function WidgetPopup({ layoutId, open, onClose, title, icon, children }: WidgetPopupProps) {
-    // Close on Escape
+export default function WidgetPopup({ layoutId, open, onClose, children }: WidgetPopupProps) {
     useEffect(() => {
         if (!open) return;
         const handler = (e: KeyboardEvent) => {
@@ -36,7 +33,7 @@ export default function WidgetPopup({ layoutId, open, onClose, title, icon, chil
         <AnimatePresence>
             {open && (
                 <>
-                    {/* Overlay */}
+                    {/* Overlay (below the navbar — navbar stays bright & clickable) */}
                     <motion.div
                         className={styles.overlay}
                         initial={{ opacity: 0 }}
@@ -46,19 +43,12 @@ export default function WidgetPopup({ layoutId, open, onClose, title, icon, chil
                         onClick={onClose}
                     />
 
-                    {/* Popup content */}
+                    {/* Panel */}
                     <motion.div
                         layoutId={layoutId}
                         className={styles.popup}
                         transition={{ type: 'spring', stiffness: 350, damping: 35 }}
                     >
-                        <header className={styles.header}>
-                            <button className={styles.backBtn} onClick={onClose} aria-label='Retour'>
-                                <span className='icon-arrow-left' />
-                            </button>
-                            {icon && <span className={`icon-${icon} ${styles.icon}`} />}
-                            {title && <h2 className={styles.title}>{title}</h2>}
-                        </header>
                         <div className={styles.body}>{children}</div>
                     </motion.div>
                 </>

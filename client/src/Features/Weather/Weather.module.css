@@ -8,12 +8,18 @@
     gap: var(--space-sm);
     color: var(--text-muted);
     height: 100%;
+    text-align: center;
+}
+
+.widgetEmptyIcon {
+    font-size: 2rem;
+    opacity: 0.6;
 }
 
 .widgetContent {
     display: flex;
     flex-direction: column;
-    gap: var(--space-sm);
+    gap: var(--space-xs);
 }
 
 .mainTemp {
@@ -23,13 +29,15 @@
 }
 
 .weatherIcon {
-    font-size: 2.5rem;
+    font-size: 2.4rem;
+    line-height: 1;
 }
 
 .temperature {
     font-size: 2.5rem;
     font-weight: 700;
     color: var(--text-primary);
+    line-height: 1;
 }
 
 .location {
@@ -39,9 +47,11 @@
 
 .details {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--space-md);
     font-size: 0.8rem;
     color: var(--text-muted);
+    margin-top: var(--space-xs);
 }
 
 /* Full view */
@@ -61,14 +71,15 @@
 .searchForm {
     display: flex;
     gap: var(--space-sm);
-    margin-bottom: var(--space-lg);
+    margin-bottom: var(--space-md);
 }
 
 .searchInput {
     flex: 1;
+    min-width: 0;
     padding: var(--space-sm) var(--space-md);
-    background: var(--glass-bg-light);
-    border: 1px solid var(--glass-border);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
     font-size: 0.9rem;
@@ -77,11 +88,11 @@
 }
 
 .searchInput:focus {
-    border-color: var(--accent);
+    border-color: var(--input-focus);
 }
 
 .searchInput::placeholder {
-    color: var(--text-muted);
+    color: var(--input-placeholder);
 }
 
 .searchBtn {
@@ -93,7 +104,7 @@
     background: var(--accent);
     border: none;
     border-radius: var(--radius-sm);
-    color: white;
+    color: var(--on-accent);
     cursor: pointer;
     transition: background var(--transition-fast);
     flex-shrink: 0;
@@ -111,14 +122,26 @@
 .spinner {
     width: 14px;
     height: 14px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-top-color: white;
+    border: 2px solid var(--glass-border);
+    border-top-color: currentColor;
     border-radius: 50%;
     animation: spin 0.7s linear infinite;
 }
 
 @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.errorBanner {
+    background: var(--danger-bg);
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    font-size: 0.85rem;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-md);
 }
 
 /* Location tabs */
@@ -131,19 +154,28 @@
 
 .locationTabWrapper {
     display: flex;
-    align-items: center;
+    align-items: stretch;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    transition: border-color var(--transition-fast);
+}
+
+.locationTabWrapper.activeTab {
+    border-color: var(--accent);
+    background: var(--accent-bg);
 }
 
 .locationTab {
     padding: var(--space-xs) var(--space-md);
     background: var(--glass-bg-light);
-    border: 1px solid var(--glass-border);
-    border-right: none;
-    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+    border: none;
     color: var(--text-secondary);
     font-size: 0.85rem;
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
 }
 
 .locationTab:hover {
@@ -151,27 +183,34 @@
     color: var(--text-primary);
 }
 
-.locationTab.activeTab {
-    background: rgba(64, 153, 255, 0.15);
-    border-color: var(--accent);
+.activeTab .locationTab {
+    background: transparent;
     color: var(--accent);
+    font-weight: 600;
 }
 
 .removeTabBtn {
     padding: var(--space-xs) var(--space-sm);
     background: var(--glass-bg-light);
-    border: 1px solid var(--glass-border);
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    border: none;
+    border-left: 1px solid var(--glass-border);
     color: var(--text-muted);
     font-size: 1rem;
     cursor: pointer;
     line-height: 1;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
 }
 
 .removeTabBtn:hover {
-    background: rgba(255, 83, 112, 0.1);
+    background: var(--danger-bg);
     color: var(--danger);
+}
+
+.activeTab .removeTabBtn {
+    background: transparent;
+    border-left-color: var(--accent);
 }
 
 .loader {
@@ -185,14 +224,16 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    flex: 1;
     padding: var(--space-xl);
     color: var(--text-muted);
     gap: var(--space-md);
+    text-align: center;
 }
 
 .emptyIcon {
     font-size: 4rem;
-    opacity: 0.3;
+    opacity: 0.35;
 }
 
 .weatherContent {
@@ -216,16 +257,18 @@
 }
 
 .bigIcon {
-    font-size: 5rem;
+    font-size: 4.5rem;
+    line-height: 1;
 }
 
 .tempBlock {
     display: flex;
     flex-direction: column;
+    min-width: 0;
 }
 
 .bigTemp {
-    font-size: 3.5rem;
+    font-size: clamp(2.6rem, 2rem + 2.5vw, 3.5rem);
     font-weight: 700;
     color: var(--text-primary);
     line-height: 1;
@@ -239,7 +282,7 @@
 
 .detailsGrid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
     gap: var(--space-md);
 }
 
@@ -248,7 +291,7 @@
     flex-direction: column;
     align-items: center;
     padding: var(--space-md);
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--surface-subtle);
     border-radius: var(--radius-sm);
 }
 
@@ -284,7 +327,7 @@
 
 .forecastGrid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
     gap: var(--space-md);
 }
 

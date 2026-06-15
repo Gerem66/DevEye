@@ -1,5 +1,5 @@
-.bg-blue        { background-color: #4099ff; }
-.bg-red         { background-color: #ff5370; }
-.bg-green       { background-color: #2ed8b6; }
-.bg-yellow      { background-color: #ffb64d; }
-.bg-blue-dark   { background-color: #223142; }
+.bg-blue        { background-color: var(--accent); }
+.bg-red         { background-color: var(--danger); }
+.bg-green       { background-color: var(--success); }
+.bg-yellow      { background-color: var(--warning); }
+.bg-blue-dark   { background-color: var(--glass-bg); }

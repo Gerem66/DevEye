@@ -4,7 +4,7 @@
     width: 100%;
     flex-wrap: wrap;
     padding: 12px 24px;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
 }
 .card:not(:last-child) {
     margin-right: 12px;
@@ -17,7 +17,7 @@
     padding: 0;
     font-size: 1.2rem;
     font-weight: 400;
-    color: #fff;
+    color: var(--text-secondary);
 
     text-shadow: 0 1px 1px rgba(0, 0, 0, 0.4);
 }
@@ -26,7 +26,7 @@
     padding: 0;
     font-size: 1.5rem;
     font-weight: 600;
-    color: #fff;
+    color: var(--text-primary);
 }
 .icon-container {
     position: absolute;

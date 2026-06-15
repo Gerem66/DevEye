@@ -7,7 +7,7 @@ export interface WidgetProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
     widgetId: string;
     /** Widget heading/title shown in the header. */
     title?: string;
-    /** Optional icon (class name) displayed before the title. */
+    /** Optional icon (name) displayed before the title. */
     icon?: string;
     /** Content rendered inside the widget body. */
     children?: ReactNode;
@@ -31,15 +31,20 @@ const Widget = forwardRef<HTMLDivElement, WidgetProps>(function Widget(
             layoutId={widgetId}
             className={`${styles.widget} ${className ?? ''}`}
             onClick={onExpand}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={{ y: -4 }}
+            whileTap={{ scale: 0.985 }}
             transition={{ type: 'spring', stiffness: 400, damping: 30 }}
             {...motionProps}
         >
             {title && (
                 <div className={styles.header}>
-                    {icon && <span className={`icon-${icon} ${styles.icon}`} />}
+                    {icon && (
+                        <span className={styles.iconWrap}>
+                            <span className={`icon icon-${icon} ${styles.icon}`} />
+                        </span>
+                    )}
                     <span className={styles.title}>{title}</span>
+                    <span className={`icon icon-arrow ${styles.expandHint}`} aria-hidden='true' />
                 </div>
             )}
             <div className={styles.body}>{children}</div>

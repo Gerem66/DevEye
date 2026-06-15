@@ -1,60 +1,48 @@
 import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ws } from '@/api/ws';
+import { wmoIcon } from './wmoIcon';
 import type { WeatherLocation, WeatherReport } from 'deveye-types';
 import type { FeatureProps } from '../types';
 import styles from './Weather.module.css';
 
-/** WMO weather codes → emoji */
-const WMO_ICONS: Record<number, string> = {
-    0: '☀️',
-    1: '🌤️',
-    2: '⛅',
-    3: '☁️',
-    45: '🌫️',
-    48: '🌫️',
-    51: '🌦️',
-    53: '🌦️',
-    55: '🌧️',
-    61: '🌧️',
-    63: '🌧️',
-    65: '🌧️',
-    71: '🌨️',
-    73: '🌨️',
-    75: '❄️',
-    80: '🌦️',
-    81: '🌧️',
-    82: '🌧️',
-    95: '⛈️',
-    96: '⛈️',
-    99: '⛈️'
-};
-
-function wmoIcon(code: number) {
-    return WMO_ICONS[code] ?? '🌡️';
-}
+const REFRESH_MS = 10 * 60 * 1000;
 
 export function WeatherWidget() {
     const [report, setReport] = useState<WeatherReport | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        ws.send('weather.list', {})
-            .then(async (res) => {
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const res = await ws.send('weather.list', {});
                 const first = res.locations[0];
-                if (!first) return;
+                if (!first) {
+                    if (!cancelled) setReport(null);
+                    return;
+                }
                 const r = await ws.send('weather.get', { id: first.id });
-                setReport(r.report);
-            })
-            .catch(() => {})
-            .finally(() => setLoading(false));
+                if (!cancelled) setReport(r.report);
+            } catch {
+                // ignore
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+        void load();
+        const t = setInterval(load, REFRESH_MS);
+        return () => {
+            cancelled = true;
+            clearInterval(t);
+        };
     }, []);
 
-    if (loading) return <div className={styles.widgetLoading}>Chargement...</div>;
+    if (loading) return <div className={styles.widgetLoading}>Chargement…</div>;
     if (!report?.current)
         return (
             <div className={styles.widgetEmpty}>
-                <span>🌡️</span>
+                <span className={styles.widgetEmptyIcon}>🌡️</span>
                 <span>Aucune météo configurée</span>
             </div>
         );
@@ -84,48 +72,61 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
     const [loadingReport, setLoadingReport] = useState(false);
     const [searchInput, setSearchInput] = useState('');
     const [adding, setAdding] = useState(false);
+    const [addError, setAddError] = useState<string | null>(null);
 
-    const fetchLocations = useCallback(async () => {
-        try {
-            const res = await ws.send('weather.list', {});
-            setLocations(res.locations);
-            if (res.locations.length > 0 && selectedId === null) {
-                const first = res.locations[0];
-                setSelectedId(first.id);
-                await fetchReport(first.id);
-            }
-        } catch {
-            // ignore
-        } finally {
-            setLoading(false);
-        }
-    }, [selectedId]);
-
-    const fetchReport = async (id: string) => {
-        setLoadingReport(true);
+    const loadReport = useCallback(async (id: string, opts?: { silent?: boolean }) => {
+        if (!opts?.silent) setLoadingReport(true);
         try {
             const res = await ws.send('weather.get', { id });
             setReport(res.report);
         } catch {
-            setReport(null);
+            if (!opts?.silent) setReport(null);
         } finally {
-            setLoadingReport(false);
+            if (!opts?.silent) setLoadingReport(false);
         }
-    };
-
-    useEffect(() => {
-        void fetchLocations();
     }, []);
+
+    // Initial load: list locations, select the first, fetch its report.
+    useEffect(() => {
+        let cancelled = false;
+        void (async () => {
+            try {
+                const res = await ws.send('weather.list', {});
+                if (cancelled) return;
+                setLocations(res.locations);
+                const first = res.locations[0];
+                if (first) {
+                    setSelectedId(first.id);
+                    await loadReport(first.id);
+                }
+            } catch {
+                // ignore
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [loadReport]);
+
+    // Keep the selected report fresh in the background.
+    useEffect(() => {
+        if (!selectedId) return;
+        const t = setInterval(() => void loadReport(selectedId, { silent: true }), REFRESH_MS);
+        return () => clearInterval(t);
+    }, [selectedId, loadReport]);
 
     const handleSelectLocation = async (id: string) => {
         setSelectedId(id);
-        await fetchReport(id);
+        await loadReport(id);
     };
 
     const handleAdd = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!searchInput.trim()) return;
         setAdding(true);
+        setAddError(null);
         try {
             const res = await ws.send('weather.add', {
                 query: searchInput.trim(),
@@ -136,9 +137,9 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
             setLocations((prev) => [...prev, res.location]);
             setSearchInput('');
             setSelectedId(res.location.id);
-            await fetchReport(res.location.id);
+            await loadReport(res.location.id);
         } catch {
-            // ignore
+            setAddError('Ville introuvable. Vérifiez l’orthographe et réessayez.');
         } finally {
             setAdding(false);
         }
@@ -149,11 +150,10 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
             await ws.send('weather.remove', { id });
             setLocations((prev) => prev.filter((l) => l.id !== id));
             if (selectedId === id) {
-                const remaining = locations.filter((l) => l.id !== id);
-                const next = remaining[0] ?? null;
+                const next = locations.find((l) => l.id !== id) ?? null;
                 setSelectedId(next?.id ?? null);
                 setReport(null);
-                if (next) await fetchReport(next.id);
+                if (next) await loadReport(next.id);
             }
         } catch {
             // ignore
@@ -170,15 +170,20 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
                     className={styles.searchInput}
                     placeholder='Ajouter une ville…'
                     value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
+                    onChange={(e) => {
+                        setSearchInput(e.target.value);
+                        if (addError) setAddError(null);
+                    }}
                 />
                 <button type='submit' className={styles.searchBtn} disabled={adding}>
-                    {adding ? <span className={styles.spinner} /> : <span className='icon-plus' />}
+                    {adding ? <span className={styles.spinner} /> : <span className='icon icon-plus' />}
                 </button>
             </form>
 
+            {addError && <div className={styles.errorBanner}>{addError}</div>}
+
             {loading ? (
-                <div className={styles.loader}>Chargement...</div>
+                <div className={styles.loader}>Chargement…</div>
             ) : locations.length === 0 ? (
                 <div className={styles.empty}>
                     <span className={styles.emptyIcon}>🌡️</span>
@@ -189,11 +194,11 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
                     {/* Location tabs */}
                     <div className={styles.locationTabs}>
                         {locations.map((loc) => (
-                            <div key={loc.id} className={styles.locationTabWrapper}>
-                                <button
-                                    className={`${styles.locationTab} ${loc.id === selectedId ? styles.activeTab : ''}`}
-                                    onClick={() => handleSelectLocation(loc.id)}
-                                >
+                            <div
+                                key={loc.id}
+                                className={`${styles.locationTabWrapper} ${loc.id === selectedId ? styles.activeTab : ''}`}
+                            >
+                                <button className={styles.locationTab} onClick={() => handleSelectLocation(loc.id)}>
                                     {loc.label}
                                 </button>
                                 <button
@@ -217,7 +222,7 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
                         <motion.div
                             key={report.locationId}
                             className={styles.currentWeather}
-                            initial={{ opacity: 0, y: 20 }}
+                            initial={{ opacity: 0, y: 16 }}
                             animate={{ opacity: 1, y: 0 }}
                         >
                             <div className={styles.currentMain}>
@@ -262,9 +267,9 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
                                             <motion.div
                                                 key={day.date}
                                                 className={styles.forecastCard}
-                                                initial={{ opacity: 0, y: 20 }}
+                                                initial={{ opacity: 0, y: 16 }}
                                                 animate={{ opacity: 1, y: 0 }}
-                                                transition={{ delay: i * 0.07 }}
+                                                transition={{ delay: i * 0.06 }}
                                             >
                                                 <span className={styles.forecastDay}>
                                                     {new Date(day.date).toLocaleDateString('fr-FR', {

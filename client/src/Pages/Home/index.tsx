@@ -5,6 +5,8 @@ import { TopNavbar } from '@/Components/TopNavbar';
 import { Widget } from '@/Components/Widget';
 import { WidgetGrid } from '@/Components/WidgetGrid';
 import { WidgetPopup } from '@/Components/WidgetPopup';
+import { Wallpaper } from '@/Components/Wallpaper';
+import { SettingsPanel } from '@/Components/SettingsPanel';
 
 // Widget content (compact)
 import { MonitoringWidget } from '@/Features/Monitoring';
@@ -79,17 +81,17 @@ const WIDGETS: WidgetConfig[] = [
 function ProfileWidgetContent() {
     const { user } = useAuth();
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <span style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{user?.username}</span>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{user?.email}</span>
+        <div className={styles.profileWidget}>
+            <span className={styles.profileName}>{user?.username}</span>
+            <span className={styles.profileEmail}>{user?.email}</span>
         </div>
     );
 }
 
 function PasswordWidgetContent() {
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Modifier votre mot de passe</span>
+        <div className={styles.profileWidget}>
+            <span className={styles.simpleHint}>Modifier votre mot de passe</span>
         </div>
     );
 }
@@ -112,6 +114,7 @@ function formatDate(): string {
 export default function HomePage() {
     const { user, workspaces, setWorkspaces } = useAuth();
     const [expandedWidget, setExpandedWidget] = useState<string | null>(null);
+    const [settingsOpen, setSettingsOpen] = useState(false);
 
     const currentWorkspace = useMemo(() => {
         return workspaces.find((w) => w.id === user?.defaultWorkspace) ?? workspaces[0] ?? null;
@@ -155,13 +158,18 @@ export default function HomePage() {
 
     return (
         <div className={styles.dashboard}>
-            <div className={styles.wallpaper} />
+            <Wallpaper />
 
-            <TopNavbar viewTitle={expandedConfig?.title} onBack={expandedWidget ? handleClose : undefined} />
+            <TopNavbar
+                viewTitle={expandedConfig?.title}
+                onBack={expandedWidget ? handleClose : undefined}
+                onOpenProfile={() => handleExpand('profile')}
+                onOpenSettings={() => setSettingsOpen(true)}
+            />
 
             <main className={styles.main}>
                 {!expandedWidget && (
-                    <>
+                    <div className={styles.content}>
                         <header className={styles.greeting}>
                             <h1 className={styles.greetingText}>
                                 {getGreeting()}, {user.username}
@@ -182,22 +190,18 @@ export default function HomePage() {
                                 </Widget>
                             ))}
                         </WidgetGrid>
-                    </>
+                    </div>
                 )}
             </main>
 
-            {/* Popup for expanded widget */}
+            {/* Popup for expanded widget — the topbar owns the title + back action */}
             {expandedConfig && (
-                <WidgetPopup
-                    layoutId={expandedConfig.id}
-                    open={!!expandedWidget}
-                    onClose={handleClose}
-                    title={expandedConfig.title}
-                    icon={expandedConfig.icon}
-                >
+                <WidgetPopup layoutId={expandedConfig.id} open={!!expandedWidget} onClose={handleClose}>
                     <expandedConfig.FullComponent {...featureProps} />
                 </WidgetPopup>
             )}
+
+            <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
         </div>
     );
 }

@@ -188,7 +188,7 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                 <div className={styles.loader}>Chargement...</div>
             ) : devices.length === 0 ? (
                 <div className={styles.empty}>
-                    <span className='icon-server' />
+                    <span className={`icon icon-server ${styles.emptyIcon}`} />
                     <p>Aucun appareil configuré</p>
                     <p className={styles.hint}>Liez un agent depuis l&apos;onglet &quot;Appareils&quot;.</p>
                 </div>

@@ -1,19 +1,28 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ws } from '@/api/ws';
 import { post } from '@/api/http';
-import { linkCodeResponseSchema, type Device, type LinkCodeResponse } from 'deveye-types';
+import { StatusBadge } from '@/Components/StatusBadge';
+import { useDevices, removeDeviceLocal } from '@/stores/devices';
+import { linkCodeResponseSchema, type LinkCodeResponse } from 'deveye-types';
 import type { FeatureProps } from '../types';
 import styles from './Clients.module.css';
 
-export function ClientsWidget() {
-    const [devices, setDevices] = useState<Device[]>([]);
+function formatLastSeen(ts: number | null): string {
+    if (ts === null) return 'Jamais';
+    const diffMs = Date.now() - ts;
+    const minutes = Math.floor(diffMs / 60000);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    if (minutes < 1) return "À l'instant";
+    if (minutes < 60) return `Il y a ${minutes} min`;
+    if (hours < 24) return `Il y a ${hours}h`;
+    return `Il y a ${days}j`;
+}
 
-    useEffect(() => {
-        ws.send('device.list', {})
-            .then((res) => setDevices(res.devices))
-            .catch(() => {});
-    }, []);
+export function ClientsWidget() {
+    const { devices } = useDevices();
+    const onlineCount = devices.filter((d) => d.online).length;
 
     return (
         <div className={styles.widgetContent}>
@@ -21,78 +30,81 @@ export function ClientsWidget() {
                 <span className={styles.statValue}>{devices.length}</span>
                 <span className={styles.statLabel}>appareil{devices.length !== 1 ? 's' : ''}</span>
             </div>
-            <div className={styles.miniList}>
-                {devices.slice(0, 3).map((d) => (
-                    <div key={d.id} className={styles.miniItem}>
-                        <span className={`${styles.dot} ${d.online ? styles.online : ''}`} />
-                        <span>{d.name}</span>
+            {devices.length > 0 ? (
+                <>
+                    <div className={styles.miniList}>
+                        {devices.slice(0, 3).map((d) => (
+                            <div key={d.id} className={styles.miniItem}>
+                                <span className={`${styles.dot} ${d.online ? styles.online : ''}`} />
+                                <span className={styles.miniName}>{d.name}</span>
+                            </div>
+                        ))}
+                        {devices.length > 3 && <span className={styles.more}>+{devices.length - 3} autres</span>}
                     </div>
-                ))}
-            </div>
+                    <span className={styles.widgetFootnote}>{onlineCount} en ligne</span>
+                </>
+            ) : (
+                <span className={styles.widgetEmpty}>Aucun appareil lié</span>
+            )}
         </div>
     );
 }
 
 export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
-    const [devices, setDevices] = useState<Device[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { devices, loading, error, refresh } = useDevices();
     const [linkCode, setLinkCode] = useState<LinkCodeResponse | null>(null);
     const [showLinkModal, setShowLinkModal] = useState(false);
     const [generatingCode, setGeneratingCode] = useState(false);
-
-    const fetchDevices = useCallback(async () => {
-        try {
-            const res = await ws.send('device.list', {});
-            setDevices(res.devices);
-        } catch {
-            // ignore
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        void fetchDevices();
-    }, [fetchDevices]);
+    const [actionError, setActionError] = useState<string | null>(null);
+    const [copied, setCopied] = useState(false);
 
     const generateLinkCode = async () => {
         setGeneratingCode(true);
+        setActionError(null);
         try {
             const res = await post('/api/devices/link', {}, linkCodeResponseSchema);
             setLinkCode(res);
+            setCopied(false);
             setShowLinkModal(true);
         } catch {
-            // ignore
+            setActionError('Impossible de générer un code de liaison. Réessayez.');
         } finally {
             setGeneratingCode(false);
         }
     };
 
     const removeDevice = async (id: string) => {
+        setActionError(null);
         try {
             await ws.send('device.delete', { deviceId: id });
-            setDevices((prev) => prev.filter((d) => d.id !== id));
+            removeDeviceLocal(id);
         } catch {
-            // ignore
+            setActionError('Suppression impossible.');
+            void refresh();
         }
     };
 
-    const formatLastSeen = (ts: number | null): string => {
-        if (ts === null) return 'Jamais';
-        const diffMs = Date.now() - ts;
-        const minutes = Math.floor(diffMs / 60000);
-        const hours = Math.floor(minutes / 60);
-        const days = Math.floor(hours / 24);
-        if (minutes < 1) return "À l'instant";
-        if (minutes < 60) return `Il y a ${minutes} min`;
-        if (hours < 24) return `Il y a ${hours}h`;
-        return `Il y a ${days}j`;
+    const closeModal = () => {
+        setShowLinkModal(false);
+        // A device may have paired while the dialog was open — reflect it now.
+        void refresh();
+    };
+
+    const copyCode = async () => {
+        if (!linkCode) return;
+        try {
+            await navigator.clipboard.writeText(linkCode.code);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1800);
+        } catch {
+            // clipboard may be unavailable
+        }
     };
 
     return (
         <div className={styles.container}>
             <div className={styles.header}>
-                <div>
+                <div className={styles.headerText}>
                     <h2 className={styles.title}>Appareils</h2>
                     <p className={styles.subtitle}>Gérez vos agents DevEye</p>
                 </div>
@@ -101,15 +113,22 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                         <span className={styles.spinner} />
                     ) : (
                         <>
-                            <span className='icon-plus' />
+                            <span className='icon icon-plus' />
                             Ajouter un appareil
                         </>
                     )}
                 </button>
             </div>
 
-            {loading ? (
-                <div className={styles.loader}>Chargement...</div>
+            {actionError && <div className={styles.errorBanner}>{actionError}</div>}
+
+            {loading && devices.length === 0 ? (
+                <div className={styles.loader}>Chargement…</div>
+            ) : error && devices.length === 0 ? (
+                <div className={styles.empty}>
+                    <span className={styles.emptyIcon}>⚠️</span>
+                    <p>{error}</p>
+                </div>
             ) : devices.length === 0 ? (
                 <div className={styles.empty}>
                     <span className={styles.emptyIcon}>🖥️</span>
@@ -120,45 +139,50 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                 </div>
             ) : (
                 <div className={styles.deviceGrid}>
-                    {devices.map((device) => (
-                        <motion.div
-                            key={device.id}
-                            className={styles.deviceCard}
-                            layout
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                        >
-                            <div className={styles.deviceHeader}>
-                                <div className={`${styles.statusIndicator} ${device.online ? styles.online : ''}`} />
-                                <span className={styles.deviceName}>{device.name}</span>
-                            </div>
+                    <AnimatePresence mode='popLayout'>
+                        {devices.map((device) => (
+                            <motion.div
+                                key={device.id}
+                                className={styles.deviceCard}
+                                layout
+                                initial={{ opacity: 0, scale: 0.96 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.96 }}
+                            >
+                                <div className={styles.deviceHeader}>
+                                    <span className={styles.deviceName}>{device.name}</span>
+                                    <StatusBadge tone={device.online ? 'online' : 'offline'}>
+                                        {device.online ? 'En ligne' : 'Hors ligne'}
+                                    </StatusBadge>
+                                </div>
 
-                            <div className={styles.deviceInfo}>
-                                <div className={styles.infoRow}>
-                                    <span className='icon-cpu' />
-                                    <span>{device.platform}</span>
+                                <div className={styles.deviceInfo}>
+                                    <div className={styles.infoRow}>
+                                        <span className='icon icon-cpu' />
+                                        <span>{device.platform}</span>
+                                    </div>
+                                    <div className={styles.infoRow}>
+                                        <span className='icon icon-shield' />
+                                        <span>{device.status}</span>
+                                    </div>
+                                    <div className={styles.infoRow}>
+                                        <span className='icon icon-clock' />
+                                        <span>{device.online ? 'En ligne' : formatLastSeen(device.lastSeen)}</span>
+                                    </div>
                                 </div>
-                                <div className={styles.infoRow}>
-                                    <span className='icon-shield' />
-                                    <span>{device.status}</span>
-                                </div>
-                                <div className={styles.infoRow}>
-                                    <span className='icon-clock' />
-                                    <span>{device.online ? 'En ligne' : formatLastSeen(device.lastSeen)}</span>
-                                </div>
-                            </div>
 
-                            <div className={styles.deviceActions}>
-                                <button
-                                    className={styles.actionBtn}
-                                    onClick={() => removeDevice(device.id)}
-                                    title='Supprimer'
-                                >
-                                    <span className='icon-trash' />
-                                </button>
-                            </div>
-                        </motion.div>
-                    ))}
+                                <div className={styles.deviceActions}>
+                                    <button
+                                        className={styles.actionBtn}
+                                        onClick={() => removeDevice(device.id)}
+                                        title='Supprimer'
+                                    >
+                                        <span className='icon icon-trash' />
+                                    </button>
+                                </div>
+                            </motion.div>
+                        ))}
+                    </AnimatePresence>
                 </div>
             )}
 
@@ -170,7 +194,7 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
-                            onClick={() => setShowLinkModal(false)}
+                            onClick={closeModal}
                         />
                         <motion.div
                             className={styles.modal}
@@ -178,17 +202,18 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.9, y: 20 }}
                         >
-                            <h3>Code de liaison</h3>
+                            <h3 className={styles.modalTitle}>Code de liaison</h3>
                             <p className={styles.modalText}>
                                 Utilisez ce code dans l&apos;agent DevEye pour lier un nouvel appareil.
                             </p>
                             <div className={styles.codeDisplay}>
                                 <code>{linkCode.code}</code>
                                 <button
-                                    className={styles.copyBtn}
-                                    onClick={() => navigator.clipboard.writeText(linkCode.code)}
+                                    className={`${styles.copyBtn} ${copied ? styles.copied : ''}`}
+                                    onClick={copyCode}
+                                    title='Copier'
                                 >
-                                    <span className='icon-copy' />
+                                    <span className={`icon ${copied ? 'icon-success' : 'icon-copy'}`} />
                                 </button>
                             </div>
                             <p className={styles.expiry}>
@@ -204,7 +229,7 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                                     <li>L&apos;appareil apparaîtra automatiquement ici</li>
                                 </ol>
                             </div>
-                            <button className={styles.closeBtn} onClick={() => setShowLinkModal(false)}>
+                            <button className={styles.closeBtn} onClick={closeModal}>
                                 Fermer
                             </button>
                         </motion.div>

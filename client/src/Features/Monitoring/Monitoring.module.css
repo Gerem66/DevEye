@@ -103,6 +103,13 @@
     opacity: 0.3;
 }
 
+.emptyIcon {
+    width: 52px;
+    height: 52px;
+    color: var(--text-secondary);
+    opacity: 0.45;
+}
+
 .hint {
     font-size: 0.85rem;
     opacity: 0.7;
@@ -147,7 +154,7 @@
 
 .deviceCard.selected {
     border-color: var(--accent);
-    background: rgba(64, 153, 255, 0.1);
+    background: var(--accent-bg);
 }
 
 .statusDot {
