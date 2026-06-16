@@ -8,7 +8,8 @@ import { PasswordPopupAdd, type PopupResult } from './popups-add-password';
 
 import { OpenPopup } from '@/Components/Popup';
 import { ws, WsError } from '@/api/ws';
-import { Card, Header, Row, TextInput } from '../../Components';
+import TextInput from '@/Components/TextInput';
+import Button from '@/Components/Button';
 
 import type { FeatureProps } from '@/Features/types';
 import type { PasswordEntry, PasswordEntryMasked } from 'deveye-types';
@@ -22,7 +23,7 @@ function humanizeError(e: unknown, fallback: string): string {
     return fallback;
 }
 
-function FeaturePassword({ user, workspace, feature }: FeatureProps) {
+function FeaturePassword({ workspace }: FeatureProps) {
     const [loaded, setLoaded] = useState(false);
     const [search, setSearch] = useState('');
     const [allPasswords, setAllPasswords] = useState<RowPassword[]>([]);
@@ -168,81 +169,74 @@ function FeaturePassword({ user, workspace, feature }: FeatureProps) {
         return out;
     }, [allPasswords, search]);
 
+    const visibleCategories = Object.keys(categories).filter((c) => categories[c].length > 0);
+
     return (
-        <div className={styles.profile}>
-            <Header user={user} workspace={workspace} feature={feature} />
+        <div className={styles.container}>
+            <header className={styles.header}>
+                <div className={styles.headerText}>
+                    <h2 className={styles.title}>Mots de passe</h2>
+                    <p className={styles.subtitle}>
+                        {allPasswords.length} entrée{allPasswords.length !== 1 ? 's' : ''} enregistrée
+                        {allPasswords.length !== 1 ? 's' : ''}
+                    </p>
+                </div>
+                <Button icon='plus' onClick={() => void openEditPopup(null)}>
+                    Ajouter
+                </Button>
+            </header>
 
-            <Row center>
-                <Card.Element
-                    title={`Rechercher (${allPasswords.length})`}
-                    style={styles['search-container']}
-                    color='bg-blue-dark'
-                    width={500}
-                >
-                    <a className={`link ${styles['add-password']}`} onClick={() => void openEditPopup(null)}>
-                        Ajouter un mot de passe
-                    </a>
-                    <TextInput
-                        placeholder="Nom d'un service"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                    />
-                </Card.Element>
-            </Row>
+            <div className={styles.searchBar}>
+                <TextInput
+                    placeholder='Rechercher un service, un email, une catégorie…'
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                />
+            </div>
 
-            {actionError && (
-                <Row center>
-                    <div className={styles['action-error']}>{actionError}</div>
-                </Row>
-            )}
+            {actionError && <div className={styles.errorBanner}>{actionError}</div>}
 
-            {!loaded && (
-                <>
-                    <LoadingTable key='loading-table-password-1' />
-                    <LoadingTable key='loading-table-password-2' />
-                </>
-            )}
+            {!loaded && <LoadingTable />}
 
             {loaded &&
-                Object.keys(categories).map((category) => {
-                    const passwords = categories[category];
-                    if (passwords.length === 0) return null;
+                visibleCategories.map((category) => (
+                    <section key={category} className={styles.categoryCard}>
+                        <h3 className={styles.categoryTitle}>
+                            {category}
+                            <span className={styles.count}>{categories[category].length}</span>
+                        </h3>
+                        <div className={styles.tableWrap}>
+                            <table className={styles.table}>
+                                <thead>
+                                    <tr>
+                                        <th style={{ width: '20%' }}>Service</th>
+                                        <th>{"Nom d'utilisateur / Email"}</th>
+                                        <th style={{ width: '20%' }}>Mot de passe</th>
+                                        <th style={{ width: '10%' }}>Statut</th>
+                                        <th style={{ width: '5%' }}></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {categories[category].map((password) => (
+                                        <PasswordRow
+                                            key={password.id}
+                                            password={password}
+                                            onEdit={(id) => void openEditPopup(id)}
+                                            callback={(id) => void getPassword(id)}
+                                        />
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                ))}
 
-                    return (
-                        <Row key={category} center>
-                            <Card.Element
-                                title={`${category} (${passwords.length})`}
-                                width={1000}
-                                color='bg-blue-dark'
-                                style={styles['password-container']}
-                            >
-                                <div className={styles['scroll-mode']}>
-                                    <table className={`show-lines ${styles['scroll-mode']}`}>
-                                        <thead>
-                                            <tr>
-                                                <th style={{ width: '20%' }}>Service</th>
-                                                <th>{"Nom d'utilisateur / Email"}</th>
-                                                <th style={{ width: '20%' }}>Mot de passe</th>
-                                                <th style={{ width: '10%' }}>Status</th>
-                                                <th style={{ width: '5%' }}></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {passwords.map((password) => (
-                                                <PasswordRow
-                                                    key={password.id}
-                                                    password={password}
-                                                    onEdit={(id) => void openEditPopup(id)}
-                                                    callback={(id) => void getPassword(id)}
-                                                />
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </Card.Element>
-                        </Row>
-                    );
-                })}
+            {loaded && visibleCategories.length === 0 && (
+                <div className={styles.empty}>
+                    <span className={styles.emptyIcon}>🔒</span>
+                    <p>{search ? 'Aucun résultat' : 'Aucun mot de passe enregistré'}</p>
+                </div>
+            )}
 
             <PasswordPopupAdd passwordCategories={Object.keys(categories)} />
         </div>

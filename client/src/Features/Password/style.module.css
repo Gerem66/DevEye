@@ -1,90 +1,207 @@
-.profile h2 {
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-lg);
+}
+
+.headerText {
+    min-width: 0;
+}
+
+.title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-xs) 0;
+}
+
+.subtitle {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
     margin: 0;
 }
-.profile .separator {
-    margin: 0 8px;
-    width: 100%;
-    height: 1px;
-    margin: 12px 0;
-    background-color: var(--glass-border);
+
+.searchBar {
+    max-width: 420px;
+    margin-bottom: var(--space-md);
 }
-.search-container {
-    padding-bottom: 24px;
-}
-.action-error {
-    width: 500px;
-    max-width: 90%;
-    padding: 10px 16px;
+
+.errorBanner {
     background: var(--danger-bg);
     border: 1px solid var(--danger);
-    border-radius: var(--radius-sm);
     color: var(--danger);
-    font-size: 0.88rem;
-    text-align: center;
+    font-size: 0.85rem;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-md);
 }
-.password-container {
-    padding-top: 48px !important;
+
+/* Category block */
+.categoryCard {
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    margin-bottom: var(--space-md);
 }
-.password-container-loading {
-    padding-top: 48px !important;
-    opacity: 0.7;
-    filter: blur(1px);
+
+.categoryTitle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-sm) 0;
 }
-.add-password {
-    position: absolute;
-    top: 12px;
-    right: 24px;
-    font-size: 14px;
+
+.count {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--surface-subtle);
+    padding: 1px 8px;
+    border-radius: var(--radius-pill);
 }
+
+.loadingCard {
+    opacity: 0.6;
+}
+
+/* Table */
+.tableWrap {
+    max-height: 420px;
+    overflow: auto;
+    border-radius: var(--radius-sm);
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    white-space: nowrap;
+    font-size: 0.875rem;
+}
+
+.table p {
+    margin: 0;
+}
+
+.table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--surface-popup);
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--glass-border-strong);
+    z-index: 1;
+}
+
+.table tbody td {
+    padding: 12px;
+    border-bottom: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+}
+
+.table tbody tr {
+    transition: background var(--transition-fast);
+}
+
+.table tbody tr:hover {
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+}
+
+.table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Row cells (see passwordRow.tsx) */
 .password-cell > p {
     display: inline;
 }
-.password-cell > i {
+
+.password-cell > i,
+.edit-cell > i {
     margin-left: 12px;
     opacity: 0.7;
     vertical-align: middle;
     cursor: pointer;
+    transition:
+        opacity var(--transition-fast),
+        color var(--transition-fast);
 }
-.password-cell > i:hover {
-    opacity: 1;
-}
+
 .edit-cell > i {
-    opacity: 0.7;
-    vertical-align: middle;
-    cursor: pointer;
+    margin-left: 0;
 }
+
+.password-cell > i:hover,
 .edit-cell > i:hover {
     opacity: 1;
+    color: var(--accent);
 }
+
 .cell-active {
     color: var(--success);
 }
+
 .cell-inactive {
     color: var(--danger);
 }
+
 .cell-none {
     color: var(--text-muted);
 }
-.scroll-mode {
-    max-height: 400px;
-    overflow-y: auto;
-}
-.scroll-mode > thead {
-    position: sticky;
-    top: -2px; /* to cover the border */
-    background-color: var(--surface-popup);
-    z-index: 5;
+
+/* Empty state */
+.empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    padding: var(--space-xl);
+    color: var(--text-muted);
+    gap: var(--space-sm);
+    text-align: center;
 }
 
-.popup-check-password-buttons {
+.emptyIcon {
+    font-size: 3rem;
+    opacity: 0.4;
+}
+
+/* Add/edit dialog */
+.popupHint {
+    margin: 0 0 var(--space-md) 0;
+}
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.popupActions {
     display: flex;
     justify-content: space-between;
-    margin-top: 24px;
-    margin-bottom: 12px;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-top: var(--space-lg);
 }
-.password-add-input {
-    margin-bottom: 12px;
-}
-.password-edit-btn-delete {
-    margin-left: 12px;
+
+.popupActionsLeft {
+    display: flex;
+    gap: var(--space-sm);
 }

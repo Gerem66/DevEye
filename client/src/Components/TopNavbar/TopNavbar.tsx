@@ -11,8 +11,11 @@ import packageJson from '../../../package.json';
 const ENV = import.meta.env.VITE_ENV;
 const version = packageJson.version + (ENV === 'dev' ? '-dev' : '');
 
-/** Shared motion timings so every part of the navbar morphs in sync. */
-const SLIDE = { type: 'spring', stiffness: 380, damping: 34, mass: 0.85 } as const;
+/** Shared motion timings so every part of the navbar morphs in sync.
+ *  A tween (not a spring) is used for the back button so its width, opacity and
+ *  margin all reach their target on the exact same frame — a spring settles each
+ *  value independently, which left the arrow blinking out then snapping. */
+const COLLAPSE = { duration: 0.28, ease: [0.22, 1, 0.36, 1] } as const;
 const FADE = { duration: 0.22, ease: [0.22, 1, 0.36, 1] } as const;
 const BACK_BTN_SIZE = 34;
 
@@ -121,7 +124,7 @@ export default function TopNavbar({ viewTitle, onBack, onOpenProfile, onOpenSett
                             initial={{ width: 0, opacity: 0, marginRight: 0 }}
                             animate={{ width: BACK_BTN_SIZE, opacity: 1, marginRight: 8 }}
                             exit={{ width: 0, opacity: 0, marginRight: 0 }}
-                            transition={SLIDE}
+                            transition={COLLAPSE}
                         >
                             <span className='icon icon-arrow-left' />
                         </motion.button>

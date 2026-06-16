@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ws } from '@/api/ws';
 import { post } from '@/api/http';
 import { StatusBadge } from '@/Components/StatusBadge';
+import { Dialog } from '@/Components/Dialog';
+import Button from '@/Components/Button';
 import { useDevices, removeDeviceLocal } from '@/stores/devices';
 import { linkCodeResponseSchema, type LinkCodeResponse } from 'deveye-types';
 import type { FeatureProps } from '../types';
@@ -139,15 +141,16 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                 </div>
             ) : (
                 <div className={styles.deviceGrid}>
-                    <AnimatePresence mode='popLayout'>
+                    {/* No entrance/layout animation here: the cards are plain children of
+                        the popup so they morph in and out *with* it (the shared-element
+                        transition). Only deletions animate, via exit. */}
+                    <AnimatePresence initial={false}>
                         {devices.map((device) => (
                             <motion.div
                                 key={device.id}
                                 className={styles.deviceCard}
-                                layout
-                                initial={{ opacity: 0, scale: 0.96 }}
-                                animate={{ opacity: 1, scale: 1 }}
                                 exit={{ opacity: 0, scale: 0.96 }}
+                                transition={{ duration: 0.2, ease: 'easeOut' }}
                             >
                                 <div className={styles.deviceHeader}>
                                     <span className={styles.deviceName}>{device.name}</span>
@@ -186,56 +189,45 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                 </div>
             )}
 
-            <AnimatePresence>
-                {showLinkModal && linkCode && (
+            <Dialog
+                open={showLinkModal && !!linkCode}
+                onClose={closeModal}
+                title='Code de liaison'
+                description="Utilisez ce code dans l'agent DevEye pour lier un nouvel appareil."
+                footer={
+                    <Button variant='secondary' onClick={closeModal}>
+                        Fermer
+                    </Button>
+                }
+            >
+                {linkCode && (
                     <>
-                        <motion.div
-                            className={styles.modalOverlay}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={closeModal}
-                        />
-                        <motion.div
-                            className={styles.modal}
-                            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                        >
-                            <h3 className={styles.modalTitle}>Code de liaison</h3>
-                            <p className={styles.modalText}>
-                                Utilisez ce code dans l&apos;agent DevEye pour lier un nouvel appareil.
-                            </p>
-                            <div className={styles.codeDisplay}>
-                                <code>{linkCode.code}</code>
-                                <button
-                                    className={`${styles.copyBtn} ${copied ? styles.copied : ''}`}
-                                    onClick={copyCode}
-                                    title='Copier'
-                                >
-                                    <span className={`icon ${copied ? 'icon-success' : 'icon-copy'}`} />
-                                </button>
-                            </div>
-                            <p className={styles.expiry}>
-                                Expire le {new Date(linkCode.expiresAt * 1000).toLocaleString('fr-FR')}
-                            </p>
-                            <div className={styles.instructions}>
-                                <h4>Instructions :</h4>
-                                <ol>
-                                    <li>Installez l&apos;agent DevEye sur votre appareil</li>
-                                    <li>
-                                        Exécutez <code>deveye link {linkCode.code}</code>
-                                    </li>
-                                    <li>L&apos;appareil apparaîtra automatiquement ici</li>
-                                </ol>
-                            </div>
-                            <button className={styles.closeBtn} onClick={closeModal}>
-                                Fermer
+                        <div className={styles.codeDisplay}>
+                            <code>{linkCode.code}</code>
+                            <button
+                                className={`${styles.copyBtn} ${copied ? styles.copied : ''}`}
+                                onClick={copyCode}
+                                title='Copier'
+                            >
+                                <span className={`icon ${copied ? 'icon-success' : 'icon-copy'}`} />
                             </button>
-                        </motion.div>
+                        </div>
+                        <p className={styles.expiry}>
+                            Expire le {new Date(linkCode.expiresAt * 1000).toLocaleString('fr-FR')}
+                        </p>
+                        <div className={styles.instructions}>
+                            <h4>Instructions :</h4>
+                            <ol>
+                                <li>Installez l&apos;agent DevEye sur votre appareil</li>
+                                <li>
+                                    Exécutez <code>deveye link {linkCode.code}</code>
+                                </li>
+                                <li>L&apos;appareil apparaîtra automatiquement ici</li>
+                            </ol>
+                        </div>
                     </>
                 )}
-            </AnimatePresence>
+            </Dialog>
         </div>
     );
 }

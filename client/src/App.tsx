@@ -3,12 +3,9 @@ import LoginPage from './Pages/Login/index.js';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 
 import './Styles/theme.css';
-import './Styles/colors.css';
 import './Styles/fonts.css';
 import './Styles/icons.css';
 import './Styles/input.css';
-import './Styles/sizes.css';
-import './Styles/table.css';
 
 function AppRoot() {
     const { status } = useAuth();

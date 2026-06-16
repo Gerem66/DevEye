@@ -12,6 +12,10 @@
     z-index: var(--z-navbar);
     /* Subtle scrim so brand/profile stay legible over the wallpaper on home. */
     background: linear-gradient(to bottom, rgba(6, 9, 15, 0.55), rgba(6, 9, 15, 0));
+    /* Border is always present (transparent) so only its *color* animates in —
+       declaring it only in .blurred would transition from the inherited color
+       and flash white for a frame. */
+    border-bottom: 1px solid transparent;
     transition:
         background var(--transition-normal),
         border-color var(--transition-normal),
@@ -22,7 +26,7 @@
     background: var(--surface-navbar);
     backdrop-filter: blur(var(--glass-blur));
     -webkit-backdrop-filter: blur(var(--glass-blur));
-    border-bottom: 1px solid var(--glass-border);
+    border-bottom-color: var(--glass-border);
 }
 
 .left {
@@ -36,7 +40,9 @@
     align-items: center;
     justify-content: center;
     height: 34px;
-    /* width is driven by framer-motion (collapses to 0 when leaving). */
+    /* width is driven by framer-motion (collapses to 0 when leaving); border-box
+       so the 1px border is included and width truly reaches 0 with no residue. */
+    box-sizing: border-box;
     background: var(--glass-bg-light);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);

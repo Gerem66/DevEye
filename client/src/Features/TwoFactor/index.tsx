@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ws } from '@/api/ws';
+import { Dialog } from '@/Components/Dialog';
+import Button from '@/Components/Button';
 import type { TwoFactorStatus } from 'deveye-types';
 import type { FeatureProps } from '../types';
 import styles from './TwoFactor.module.css';
@@ -21,7 +23,7 @@ export function TwoFactorWidget() {
     return (
         <div className={styles.widgetContent}>
             <div className={`${styles.statusBadge} ${status.enabled ? styles.enabled : styles.disabled}`}>
-                <span className={status.enabled ? 'icon-shield-check' : 'icon-shield-off'} />
+                <span className='icon icon-shield' />
                 <span>{status.enabled ? 'Activé' : 'Désactivé'}</span>
             </div>
             {status.enabled && (
@@ -129,7 +131,7 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
                 <div className={styles.content}>
                     <div className={styles.statusCard}>
                         <div className={`${styles.statusIcon} ${status?.enabled ? styles.enabled : ''}`}>
-                            <span className={status?.enabled ? 'icon-shield-check' : 'icon-shield-off'} />
+                            <span className='icon icon-shield' />
                         </div>
                         <div className={styles.statusInfo}>
                             <h3>{status?.enabled ? '2FA Activé' : '2FA Désactivé'}</h3>
@@ -140,13 +142,11 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
                             </p>
                         </div>
                         {!status?.enabled ? (
-                            <button className={styles.primaryBtn} onClick={startSetup}>
-                                Activer
-                            </button>
+                            <Button onClick={startSetup}>Activer</Button>
                         ) : (
-                            <button className={styles.dangerBtn} onClick={() => setShowDisableConfirm(true)}>
+                            <Button variant='danger' onClick={() => setShowDisableConfirm(true)}>
                                 Désactiver
-                            </button>
+                            </Button>
                         )}
                     </div>
 
@@ -157,9 +157,9 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
                                 Utilisez ces codes si vous perdez l&apos;accès à votre application
                                 d&apos;authentification.
                             </p>
-                            <button className={styles.secondaryBtn} onClick={regenerateBackupCodes}>
+                            <Button variant='secondary' onClick={regenerateBackupCodes}>
                                 Régénérer les codes de secours
-                            </button>
+                            </Button>
                         </div>
                     )}
 
@@ -212,113 +212,79 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
                                                     onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, ''))}
                                                     placeholder='000000'
                                                 />
-                                                <button
-                                                    className={styles.primaryBtn}
+                                                <Button
                                                     onClick={verifyAndEnable}
                                                     disabled={verifyCode.length !== 6 || verifying}
                                                 >
                                                     {verifying ? 'Vérification...' : 'Vérifier et activer'}
-                                                </button>
+                                                </Button>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <button className={styles.cancelBtn} onClick={() => setSetupData(null)}>
+                                <Button variant='ghost' onClick={() => setSetupData(null)}>
                                     Annuler
-                                </button>
+                                </Button>
                             </motion.div>
                         )}
                     </AnimatePresence>
 
-                    <AnimatePresence>
-                        {showBackupCodes && backupCodes.length > 0 && (
+                    <Dialog
+                        open={showBackupCodes && backupCodes.length > 0}
+                        onClose={() => setShowBackupCodes(false)}
+                        title='Codes de secours'
+                        description='⚠️ Sauvegardez ces codes dans un endroit sûr. Ils ne seront plus affichés après fermeture.'
+                        footer={
                             <>
-                                <motion.div
-                                    className={styles.modalOverlay}
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    onClick={() => setShowBackupCodes(false)}
-                                />
-                                <motion.div
-                                    className={styles.modal}
-                                    initial={{ opacity: 0, scale: 0.9 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.9 }}
+                                <Button
+                                    variant='secondary'
+                                    onClick={() => void navigator.clipboard.writeText(backupCodes.join('\n'))}
                                 >
-                                    <h3>Codes de secours</h3>
-                                    <p className={styles.warning}>
-                                        ⚠️ Sauvegardez ces codes dans un endroit sûr. Ils ne seront plus affichés après
-                                        fermeture.
-                                    </p>
-                                    <div className={styles.codesGrid}>
-                                        {backupCodes.map((code, i) => (
-                                            <code key={i} className={styles.backupCode}>
-                                                {code}
-                                            </code>
-                                        ))}
-                                    </div>
-                                    <button
-                                        className={styles.primaryBtn}
-                                        onClick={() => navigator.clipboard.writeText(backupCodes.join('\n'))}
-                                    >
-                                        Copier tous les codes
-                                    </button>
-                                    <button className={styles.secondaryBtn} onClick={() => setShowBackupCodes(false)}>
-                                        J&apos;ai sauvegardé mes codes
-                                    </button>
-                                </motion.div>
+                                    Copier tous les codes
+                                </Button>
+                                <Button onClick={() => setShowBackupCodes(false)}>
+                                    J&apos;ai sauvegardé mes codes
+                                </Button>
                             </>
-                        )}
-                    </AnimatePresence>
+                        }
+                    >
+                        <div className={styles.codesGrid}>
+                            {backupCodes.map((code, i) => (
+                                <code key={i} className={styles.backupCode}>
+                                    {code}
+                                </code>
+                            ))}
+                        </div>
+                    </Dialog>
 
-                    <AnimatePresence>
-                        {showDisableConfirm && (
+                    <Dialog
+                        open={showDisableConfirm}
+                        onClose={() => setShowDisableConfirm(false)}
+                        title='Désactiver la 2FA'
+                        description='⚠️ Votre compte sera moins sécurisé. Entrez un code de votre application pour confirmer.'
+                        footer={
                             <>
-                                <motion.div
-                                    className={styles.modalOverlay}
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    onClick={() => setShowDisableConfirm(false)}
-                                />
-                                <motion.div
-                                    className={styles.modal}
-                                    initial={{ opacity: 0, scale: 0.9 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.9 }}
-                                >
-                                    <h3>Désactiver la 2FA</h3>
-                                    <p className={styles.warning}>⚠️ Votre compte sera moins sécurisé.</p>
-                                    <p>Entrez un code de votre application pour confirmer :</p>
-                                    <input
-                                        type='text'
-                                        inputMode='numeric'
-                                        pattern='[0-9]*'
-                                        maxLength={6}
-                                        className={styles.codeInput}
-                                        value={disableCode}
-                                        onChange={(e) => setDisableCode(e.target.value.replace(/\D/g, ''))}
-                                        placeholder='000000'
-                                    />
-                                    <button
-                                        className={styles.dangerBtn}
-                                        onClick={disable2FA}
-                                        disabled={disableCode.length !== 6}
-                                    >
-                                        Confirmer la désactivation
-                                    </button>
-                                    <button
-                                        className={styles.secondaryBtn}
-                                        onClick={() => setShowDisableConfirm(false)}
-                                    >
-                                        Annuler
-                                    </button>
-                                </motion.div>
+                                <Button variant='ghost' onClick={() => setShowDisableConfirm(false)}>
+                                    Annuler
+                                </Button>
+                                <Button variant='danger' onClick={disable2FA} disabled={disableCode.length !== 6}>
+                                    Confirmer la désactivation
+                                </Button>
                             </>
-                        )}
-                    </AnimatePresence>
+                        }
+                    >
+                        <input
+                            type='text'
+                            inputMode='numeric'
+                            pattern='[0-9]*'
+                            maxLength={6}
+                            className={styles.codeInput}
+                            value={disableCode}
+                            onChange={(e) => setDisableCode(e.target.value.replace(/\D/g, ''))}
+                            placeholder='000000'
+                        />
+                    </Dialog>
                 </div>
             )}
         </div>

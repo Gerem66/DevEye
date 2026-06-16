@@ -1,109 +1,124 @@
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.header {
+    margin-bottom: var(--space-lg);
+}
+
 .title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-xs) 0;
+}
+
+.subtitle {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
     margin: 0;
 }
-.separator {
+
+.card {
     width: 100%;
-    height: 1px;
-    background-color: var(--glass-border);
+    max-width: 560px;
+    margin: 0 auto;
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    padding: var(--space-lg);
 }
-.profile-header {
-    width: 100%;
-    margin: 12px 0;
+
+.identity {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    gap: var(--space-sm);
+    padding-bottom: var(--space-lg);
 }
-.profile-avatar {
+
+.avatar {
     position: relative;
     width: 96px;
     height: 96px;
-    padding: 3px;
+    padding: 0;
     border: 2px solid var(--glass-border-strong);
     border-radius: 50%;
+    background: none;
     cursor: pointer;
-    transition: border-color 0.1s;
+    overflow: hidden;
+    transition: border-color var(--transition-fast);
 }
-.profile-avatar:hover:after {
-    content: 'Modifier l\'image';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    text-align: center;
-    color: var(--text-primary);
-    font-size: 14px;
-    font-weight: 400;
-    pointer-events: none;
-    transition: filter 0.2s;
-}
-.profile-avatar-logo {
+
+.avatar img {
     width: 100%;
     height: 100%;
     border-radius: 50%;
-    transition: filter 0.2s;
-}
-.profile-avatar:hover .profile-avatar-logo {
-    filter: brightness(0.2);
-}
-.profile-avatar:hover {
-    border-color: var(--accent);
-}
-.profile-avatar-name {
-    margin-top: 8px;
-    font-size: 18px;
-    font-weight: 400;
+    object-fit: cover;
+    transition: filter var(--transition-fast);
 }
 
-.profile-info {
-    margin: 12px 6px;
+.avatar:hover {
+    border-color: var(--accent);
+}
+
+.avatar:hover img {
+    filter: brightness(0.3);
+}
+
+.avatarHint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition-fast);
+}
+
+.avatar:hover .avatarHint {
+    opacity: 1;
+}
+
+.name {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.info {
+    margin: 0;
+}
+
+.row {
     display: flex;
     flex-wrap: wrap;
+    gap: var(--space-sm);
     align-items: center;
     justify-content: space-between;
+    padding: var(--space-md) 0;
+    border-top: 1px solid var(--glass-border);
 }
-.profile-info-title {
-    margin: 0;
-    font-size: 16px;
+
+.row dt {
+    font-size: 0.9rem;
     font-weight: 600;
     color: var(--text-secondary);
 }
-.profile-info-text {
+
+.row dd {
     margin: 0;
-    font-size: 16px;
-    font-weight: 400;
-}
-.profile-info-content {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
+    font-size: 0.9rem;
+    color: var(--text-primary);
 }
 
-.btn-edit {
-    padding: 4px 12px;
-    font-size: 12px;
-}
-.btn-disconnect {
-    width: calc(100% - 96px);
-    margin: 24px 48px 12px;
-}
-
-.icon-success {
-    display: inline-block;
-    width: 18px;
-    aspect-ratio: 1;
-    margin-left: 6px;
-    -webkit-mask: url(/icons/success.svg) center / contain no-repeat;
-    mask: url(/icons/success.svg) center / contain no-repeat;
-    background-color: var(--success);
-}
-.icon-error {
-    display: inline-block;
-    width: 18px;
-    aspect-ratio: 1;
-    margin-left: 6px;
-    -webkit-mask: url(/icons/error.svg) center / contain no-repeat;
-    mask: url(/icons/error.svg) center / contain no-repeat;
-    background-color: var(--danger);
+.logout {
+    width: 100%;
+    margin-top: var(--space-lg);
 }

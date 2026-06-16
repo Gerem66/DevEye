@@ -1,16 +1,17 @@
 import React from 'react';
 
-import styles from './style.module.css';
+import { Dialog } from '@/Components/Dialog';
 
-import type { HTMLAttributes } from 'react';
+import type { ReactNode } from 'react';
 
-interface CardValueProps {
-    children: React.JSX.Element | React.JSX.Element[];
-    id: string;
-    title?: string;
-    style?: string;
-}
-
+/**
+ * Imperative dialog layer over the shared <Dialog/> UI.
+ *
+ * A feature mounts a <Popup id=… /> wrapping its form once; other code then
+ * drives it with `OpenPopup(id, input)` / `ClosePopup(id, result)`. `OpenPopup`
+ * returns a promise that resolves with whatever `ClosePopup` passes, which keeps
+ * request/response flows (unlock, add/edit password…) linear and readable.
+ */
 const PopupEvents: Record<
     string,
     {
@@ -43,16 +44,22 @@ function ClosePopup(id: string, data: unknown = null) {
     }
 }
 
-type PopupProps<TInput> = CardValueProps & {
+interface PopupProps<TInput> {
+    children: ReactNode;
+    id: string;
+    title?: string;
+    width?: number;
+    /** Receives the `inputData` passed to OpenPopup whenever the popup opens. */
     onInputChange?: ((input: TInput) => void) | null;
+    /** Overrides the default close (which resolves OpenPopup with null). */
     onClosePopup?: ((id: string) => void) | null;
-};
+}
 
 function Popup<TInput = unknown>({
     children,
     id,
     title = '',
-    style = '',
+    width,
     onInputChange = null,
     onClosePopup = null
 }: PopupProps<TInput>): React.JSX.Element {
@@ -72,26 +79,15 @@ function Popup<TInput = unknown>({
         };
     }, [id]);
 
-    const styleCard: HTMLAttributes<HTMLDivElement>['style'] = {
-        paddingTop: title ? '52px' : '12px'
-    };
-
-    const onBackgroundClick = (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-        if (event.target === event.currentTarget) {
-            if (onClosePopup === null) {
-                ClosePopup(id);
-            } else {
-                onClosePopup(id);
-            }
-        }
+    const handleClose = () => {
+        if (onClosePopup === null) ClosePopup(id);
+        else onClosePopup(id);
     };
 
     return (
-        <div className={`${styles.popup} ${opened ? styles.opened : ''}`} onClick={onBackgroundClick}>
-            <div className={`${styles.card} bg-blue-dark ${style}`} style={styleCard} data-title={title}>
-                {children}
-            </div>
-        </div>
+        <Dialog open={opened} onClose={handleClose} title={title} width={width}>
+            {children}
+        </Dialog>
     );
 }
 

@@ -1,122 +1,101 @@
-import styles from './style.module.css';
+import { useState } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
-import { Button, Card, Header, Popup, Row } from '../../Components';
-import { ChangeImage, EditPassword } from './actions';
+import { Dialog } from '@/Components/Dialog';
+import { StatusBadge } from '@/Components/StatusBadge';
+import Button from '@/Components/Button';
 
 import type { FeatureProps } from '@/Features/types';
+import styles from './style.module.css';
 
-function FeatureProfile({ user, workspace, feature }: FeatureProps) {
+function formatDate(time: number): string {
+    const str = new Date(time * 1000).toLocaleDateString('fr-FR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+export default function FeatureProfile({ user, workspace }: FeatureProps) {
     const { workspaces, logout } = useAuth();
-
-    const convertDate = (time: number): string =>
-        new Date(time * 1000)
-            .toLocaleDateString(undefined, {
-                hour: '2-digit',
-                minute: '2-digit',
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-            })
-            .split(' ')
-            .map((word) => (word.length <= 1 ? word : word.charAt(0).toUpperCase() + word.slice(1)))
-            .join(' ');
-
-    const dateCreated = convertDate(user.created);
-    const dateLastLogin = user.lastLogin ? convertDate(user.lastLogin) : 'Première connexion';
+    const [inDevOpen, setInDevOpen] = useState(false);
 
     return (
-        <div className='profile'>
-            <Header user={user} workspace={workspace} feature={feature} />
+        <div className={styles.container}>
+            <header className={styles.header}>
+                <h2 className={styles.title}>Profil</h2>
+                <p className={styles.subtitle}>Vos informations personnelles</p>
+            </header>
 
-            <Row center>
-                <Card.Element width={450} color='bg-blue-dark'>
-                    <div className={styles['profile-header']}>
-                        <div className={styles['profile-avatar']} onClick={ChangeImage}>
-                            <img
-                                className={styles['profile-avatar-logo']}
-                                src={'./images/' + workspace.logo}
-                                alt={workspace.name}
-                            />
-                        </div>
-                        <h2 className={`${styles.title} ${styles['profile-avatar-name']}`}>{workspace.name}</h2>
+            <div className={styles.card}>
+                <div className={styles.identity}>
+                    <button className={styles.avatar} onClick={() => setInDevOpen(true)} aria-label="Modifier l'image">
+                        <img src={`./images/${workspace.logo}`} alt={workspace.name} />
+                        <span className={styles.avatarHint}>Modifier</span>
+                    </button>
+                    <span className={styles.name}>{workspace.name}</span>
+                </div>
+
+                <dl className={styles.info}>
+                    <div className={styles.row}>
+                        <dt>Adresse e-mail</dt>
+                        <dd>{user.email}</dd>
                     </div>
-
-                    <div className={styles.separator} />
-                    <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>Adresse e-mail</h3>
-                        <p className={styles['profile-info-text']}>{user.email}</p>
+                    <div className={styles.row}>
+                        <dt>Nombre d&apos;entreprises</dt>
+                        <dd>{Math.max(workspaces.length - 1, 0)}</dd>
                     </div>
-
-                    <div className={styles.separator} />
-                    <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>{"Nombre d'entreprises"}</h3>
-                        <p className={styles['profile-info-text']}>{Math.max(workspaces.length - 1, 0)}</p>
+                    <div className={styles.row}>
+                        <dt>Double authentification</dt>
+                        <dd>
+                            <StatusBadge tone='warning' dot={false}>
+                                Désactivée
+                            </StatusBadge>
+                        </dd>
                     </div>
-
-                    <div className={styles.separator} />
-                    <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>Double authentification</h3>
-                        <div className={styles['profile-info-content']}>
-                            <p className={styles['profile-info-text']}>[Désactivée]</p>
-                            <i className={styles['icon-error']} />
-                        </div>
+                    <div className={styles.row}>
+                        <dt>Chiffrage par mot de passe</dt>
+                        <dd>
+                            <StatusBadge tone='warning' dot={false}>
+                                Désactivé
+                            </StatusBadge>
+                        </dd>
                     </div>
-
-                    <div className={styles.separator} />
-                    <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>Chiffrage par mot de passe</h3>
-                        <div className={styles['profile-info-content']}>
-                            <p className={styles['profile-info-text']}>[Désactivée]</p>
-                            <i className={styles['icon-error']} />
-                        </div>
-                    </div>
-
-                    <div className={styles.separator} />
-                    <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>Mot de passe</h3>
-                        <div className={styles['profile-info-content']}>
-                            <Button className={styles['btn-edit']} onClick={EditPassword}>
-                                Modifier le mot de passe
+                    <div className={styles.row}>
+                        <dt>Mot de passe</dt>
+                        <dd>
+                            <Button variant='secondary' onClick={() => setInDevOpen(true)}>
+                                Modifier
                             </Button>
-                        </div>
+                        </dd>
                     </div>
-
-                    <div className={styles.separator} />
-                    <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>Dernière connexion</h3>
-                        <p className={styles['profile-info-text']}>{dateLastLogin}</p>
+                    <div className={styles.row}>
+                        <dt>Dernière connexion</dt>
+                        <dd>{user.lastLogin ? formatDate(user.lastLogin) : 'Première connexion'}</dd>
                     </div>
-
-                    <div className={styles.separator} />
-                    <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>Créé le</h3>
-                        <p className={styles['profile-info-text']}>{dateCreated}</p>
+                    <div className={styles.row}>
+                        <dt>Créé le</dt>
+                        <dd>{formatDate(user.created)}</dd>
                     </div>
+                </dl>
 
-                    <div className={styles.separator} />
-                    <Button
-                        className={styles['btn-disconnect']}
-                        onClick={() => {
-                            void logout();
-                        }}
-                        color='#aa3333'
-                    >
-                        Se déconnecter
-                    </Button>
-                </Card.Element>
-            </Row>
+                <Button variant='danger' icon='logout' className={styles.logout} onClick={() => void logout()}>
+                    Se déconnecter
+                </Button>
+            </div>
 
-            <Popup id='in-dev' title='En développement'>
-                <p>
-                    Cette fonctionnalité est en cours de développement.
-                    <br />
-                    Elle sera bientôt disponible.
-                </p>
-            </Popup>
+            <Dialog
+                open={inDevOpen}
+                onClose={() => setInDevOpen(false)}
+                title='En développement'
+                footer={<Button onClick={() => setInDevOpen(false)}>Compris</Button>}
+            >
+                Cette fonctionnalité est en cours de développement. Elle sera bientôt disponible.
+            </Dialog>
         </div>
     );
 }
-
-export default FeatureProfile;
