@@ -63,9 +63,9 @@ export default function WidgetPopup({ layoutId, open, onClose, bodyRef, onExitCo
                     <motion.div
                         layoutId={layoutId}
                         className={styles.popup}
-                        initial={layoutId ? false : { opacity: 0, scale: 0.97, y: 12 }}
-                        animate={layoutId ? undefined : { opacity: 1, scale: 1, y: 0 }}
-                        exit={layoutId ? undefined : { opacity: 0, scale: 0.97, y: 12 }}
+                        initial={layoutId ? false : { opacity: 0, scale: 0.95 }}
+                        animate={layoutId ? undefined : { opacity: 1, scale: 1 }}
+                        exit={layoutId ? undefined : { opacity: 0, scale: 0.95 }}
                         transition={{ type: 'spring', stiffness: 280, damping: 32, mass: 0.9 }}
                     >
                         <div className={styles.body} ref={bodyRef}>

@@ -190,7 +190,7 @@ export default function TopNavbar({
                                     setMenuOpen(false);
                                 }}
                             >
-                                <span className='icon icon-user' /> Profil
+                                <span className='icon icon-user-outline' /> Profil
                             </button>
                             <button
                                 className={styles.menuItem}

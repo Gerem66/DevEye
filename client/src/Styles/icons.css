@@ -124,6 +124,10 @@
     -webkit-mask-image: url(/icons/user.svg);
     mask-image: url(/icons/user.svg);
 }
+.icon.icon-user-outline {
+    -webkit-mask-image: url(/icons/user-outline.svg);
+    mask-image: url(/icons/user-outline.svg);
+}
 .icon.icon-users {
     -webkit-mask-image: url(/icons/users.svg);
     mask-image: url(/icons/users.svg);

@@ -147,6 +147,10 @@ export default function HomePage() {
     // The feature whose popup is currently animating out (policy applied on exit).
     const closingFeatureRef = useRef<string | null>(null);
 
+    // Feature expand requested while another popup is still open / animating out.
+    // Applied in handleExitComplete once the current popup finishes closing.
+    const pendingExpandRef = useRef<{ widgetId: string; forceReset: boolean } | null>(null);
+
     const currentWorkspace = useMemo(() => {
         return workspaces.find((w) => w.id === user?.defaultWorkspace) ?? workspaces[0] ?? null;
     }, [workspaces, user]);
@@ -167,15 +171,12 @@ export default function HomePage() {
         });
     }, []);
 
-    const handleExpand = useCallback((widgetId: string, forceReset = false) => {
-        // Re-opening cancels any pending TTL unload for this feature.
+    const doExpand = useCallback((widgetId: string, forceReset: boolean) => {
         clearTimeout(ttlTimers.current.get(widgetId));
         ttlTimers.current.delete(widgetId);
         if (closingFeatureRef.current === widgetId) closingFeatureRef.current = null;
 
         if (forceReset) {
-            // Bump the generation so the cached instance is torn down (its
-            // onUnmount fires) and a fresh one mounts and reloads normally.
             setFeatureGen((prev) => {
                 const next = new Map(prev);
                 next.set(widgetId, (prev.get(widgetId) ?? 0) + 1);
@@ -186,6 +187,21 @@ export default function HomePage() {
         setMountedFeatures((prev) => new Set(prev).add(widgetId));
         setExpandedWidget(widgetId);
     }, []);
+
+    const handleExpand = useCallback(
+        (widgetId: string, forceReset = false) => {
+            // If a popup is already open (or animating out), close it first and
+            // defer the new open until the exit animation completes.
+            if (expandedWidget && expandedWidget !== widgetId) {
+                pendingExpandRef.current = { widgetId, forceReset };
+                closingFeatureRef.current = expandedWidget;
+                setExpandedWidget(null);
+                return;
+            }
+            doExpand(widgetId, forceReset);
+        },
+        [expandedWidget, doExpand]
+    );
 
     const handleClose = useCallback(() => {
         // Remember which feature is closing; the unload policy is applied once
@@ -206,16 +222,20 @@ export default function HomePage() {
         const duration = config.cacheDurationMinutes;
 
         if (duration === 0) {
-            // Unmount immediately on close (legacy behaviour).
             unmountFeature(featureId);
         } else if (duration !== undefined) {
-            // Schedule auto-unmount after the feature's TTL.
             clearTimeout(ttlTimers.current.get(featureId));
             const timer = setTimeout(() => unmountFeature(featureId), duration * 60 * 1000);
             ttlTimers.current.set(featureId, timer);
         }
-        // undefined → keep mounted indefinitely, no timer.
-    }, [unmountFeature]);
+
+        // If another feature was waiting to open, trigger it now.
+        const pending = pendingExpandRef.current;
+        if (pending) {
+            pendingExpandRef.current = null;
+            doExpand(pending.widgetId, pending.forceReset);
+        }
+    }, [unmountFeature, doExpand]);
 
     // Clean up all timers on unmount.
     useEffect(() => {
@@ -233,6 +253,7 @@ export default function HomePage() {
     useEffect(() => {
         if (expandedConfig) setLastConfig(expandedConfig);
     }, [expandedConfig]);
+
     const popupConfig = expandedConfig ?? lastConfig;
 
     if (!user) return null;
@@ -296,6 +317,7 @@ export default function HomePage() {
                 morph from/back to their grid card; pages have no card and fade. */}
             {popupConfig && (
                 <WidgetPopup
+                    key={FEATURES.some((f) => f.id === popupConfig.id) ? popupConfig.id : 'page'}
                     layoutId={FEATURES.some((f) => f.id === popupConfig.id) ? popupConfig.id : undefined}
                     open={!!expandedWidget}
                     onClose={handleClose}
