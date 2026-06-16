@@ -25,8 +25,8 @@ export async function seedDevAccount(pool: DbPool): Promise<void> {
 
     const passwordHash = await hashPassword(DEV_PASSWORD);
     await q.query(
-        `INSERT INTO users (email, username, password_hash, role, settings, features, default_workspace, default_feature)
-         VALUES (?, ?, ?, 'admin', CAST(? AS JSON), CAST(? AS JSON), 0, 'profile')`,
+        `INSERT INTO users (email, username, password_hash, role, settings, features, default_workspace)
+         VALUES (?, ?, ?, 'admin', CAST(? AS JSON), CAST(? AS JSON), 0)`,
         [DEV_EMAIL, DEV_USERNAME, passwordHash, JSON.stringify([]), JSON.stringify(DEV_FEATURES)]
     );
 

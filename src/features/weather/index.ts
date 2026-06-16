@@ -3,7 +3,9 @@ import {
     weatherGet,
     weatherList,
     weatherRemove,
+    weatherReorder,
     weatherSetKey,
+    weatherSetPrimary,
     weatherUpdate,
     type WeatherLocation,
     type WeatherLocationRow,
@@ -22,7 +24,8 @@ function toLocation(row: WeatherLocationRow): WeatherLocation {
         format: row.format,
         days: row.days,
         provider: row.provider,
-        position: row.position
+        position: row.position,
+        isPrimary: row.is_primary === 1
     };
 }
 
@@ -110,6 +113,32 @@ export const weatherRemoveFeature: FeatureDefinition<
     }
 });
 
+export const weatherReorderFeature: FeatureDefinition<
+    typeof weatherReorder.command,
+    typeof weatherReorder.input,
+    typeof weatherReorder.output
+> = defineFeature({
+    ...weatherReorder,
+    handler: async (ctx, input) => {
+        const rows = await ctx.db.weather.reorderLocations(ctx.userId, input.ids);
+        return { locations: rows.map(toLocation) };
+    }
+});
+
+export const weatherSetPrimaryFeature: FeatureDefinition<
+    typeof weatherSetPrimary.command,
+    typeof weatherSetPrimary.input,
+    typeof weatherSetPrimary.output
+> = defineFeature({
+    ...weatherSetPrimary,
+    handler: async (ctx, input) => {
+        const target = await ctx.db.weather.findLocation(input.id, ctx.userId);
+        if (!target) throw new FeatureError('not_found', 'Weather location not found');
+        const rows = await ctx.db.weather.setPrimaryLocation(ctx.userId, input.id);
+        return { locations: rows.map(toLocation) };
+    }
+});
+
 export const weatherGetFeature: FeatureDefinition<
     typeof weatherGet.command,
     typeof weatherGet.input,
@@ -161,6 +190,8 @@ export const weatherFeatures: FeatureDefinition<string, any, any>[] = [
     weatherAddFeature,
     weatherUpdateFeature,
     weatherRemoveFeature,
+    weatherReorderFeature,
+    weatherSetPrimaryFeature,
     weatherGetFeature,
     weatherSetKeyFeature
 ];

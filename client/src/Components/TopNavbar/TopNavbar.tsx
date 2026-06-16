@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/auth/AuthProvider';
 import { useDevices } from '@/stores/devices';
-import { ws } from '@/api/ws';
+import { useWeather } from '@/stores/weather';
 import { wmoIcon } from '@/Features/Weather/wmoIcon';
 import styles from './TopNavbar.module.css';
 
@@ -32,49 +32,21 @@ export interface TopNavbarProps {
     onOpenSettings?: () => void;
 }
 
-/** Always-visible main info: current weather + online device count. */
+/** Always-visible main info: current weather (primary city) + online devices. */
 function TopbarStatus() {
     const { devices } = useDevices();
-    const [weather, setWeather] = useState<{ temp: number; code: number } | null>(null);
-
-    useEffect(() => {
-        let cancelled = false;
-        const load = async () => {
-            try {
-                const list = await ws.send('weather.list', {});
-                const first = list.locations[0];
-                if (!first) {
-                    if (!cancelled) setWeather(null);
-                    return;
-                }
-                const res = await ws.send('weather.get', { id: first.id });
-                if (!cancelled && res.report?.current) {
-                    setWeather({
-                        temp: Math.round(res.report.current.temperature),
-                        code: res.report.current.code
-                    });
-                }
-            } catch {
-                // non-critical
-            }
-        };
-        void load();
-        const t = setInterval(load, 10 * 60 * 1000);
-        return () => {
-            cancelled = true;
-            clearInterval(t);
-        };
-    }, []);
+    const { report } = useWeather();
+    const current = report?.current ?? null;
 
     const onlineCount = devices.filter((d) => d.online).length;
-    if (devices.length === 0 && !weather) return null;
+    if (devices.length === 0 && !current) return null;
 
     return (
         <div className={styles.status}>
-            {weather && (
-                <span className={styles.statusItem} title='Météo'>
+            {current && (
+                <span className={styles.statusItem} title={report?.label ?? 'Météo'}>
                     <span className={styles.statusTemp}>
-                        {wmoIcon(weather.code)} {weather.temp}°
+                        {wmoIcon(current.code)} {Math.round(current.temperature)}°
                     </span>
                 </span>
             )}

@@ -13,13 +13,11 @@ import { twoFactorFeatures } from './twofa';
 import { weatherFeatures } from './weather';
 import { workspaceAddFeature } from './workspace/add';
 import { workspaceDeleteFeature } from './workspace/delete';
-import { workspaceSetFavoriteFeatureFeature } from './workspace/setFavoriteFeature';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>> = [
     workspaceAddFeature,
     workspaceDeleteFeature,
-    workspaceSetFavoriteFeatureFeature,
     passwordListFeature,
     passwordGetFeature,
     passwordAddFeature,

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { motion, Reorder, useDragControls } from 'framer-motion';
 import { ws } from '@/api/ws';
+import { useWeather, syncWeatherLocations } from '@/stores/weather';
 import { wmoIcon } from './wmoIcon';
 import type { WeatherLocation, WeatherReport } from 'deveye-types';
 import type { FeatureProps } from '../types';
@@ -8,38 +9,33 @@ import styles from './Weather.module.css';
 
 const REFRESH_MS = 10 * 60 * 1000;
 
+/** Local date + time in the location's timezone (e.g. "lundi 16 juin · 14:32"). */
+function localDateTime(report: WeatherReport): { date: string; time: string } {
+    const when = new Date(report.fetchedAt * 1000);
+    try {
+        return {
+            date: when.toLocaleDateString('fr-FR', {
+                timeZone: report.timezone,
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long'
+            }),
+            time: when.toLocaleTimeString('fr-FR', {
+                timeZone: report.timezone,
+                hour: '2-digit',
+                minute: '2-digit'
+            })
+        };
+    } catch {
+        return { date: '', time: '' };
+    }
+}
+
 export function WeatherWidget() {
-    const [report, setReport] = useState<WeatherReport | null>(null);
-    const [loading, setLoading] = useState(true);
+    const { report, loading, primary } = useWeather();
 
-    useEffect(() => {
-        let cancelled = false;
-        const load = async () => {
-            try {
-                const res = await ws.send('weather.list', {});
-                const first = res.locations[0];
-                if (!first) {
-                    if (!cancelled) setReport(null);
-                    return;
-                }
-                const r = await ws.send('weather.get', { id: first.id });
-                if (!cancelled) setReport(r.report);
-            } catch {
-                // ignore
-            } finally {
-                if (!cancelled) setLoading(false);
-            }
-        };
-        void load();
-        const t = setInterval(load, REFRESH_MS);
-        return () => {
-            cancelled = true;
-            clearInterval(t);
-        };
-    }, []);
-
-    if (loading) return <div className={styles.widgetLoading}>Chargement…</div>;
-    if (!report?.current)
+    if (loading && !report) return <div className={styles.widgetLoading}>Chargement…</div>;
+    if (!primary || !report?.current)
         return (
             <div className={styles.widgetEmpty}>
                 <span className={styles.widgetEmptyIcon}>🌡️</span>
@@ -64,6 +60,69 @@ export function WeatherWidget() {
     );
 }
 
+/** A draggable location tab: select, set-primary and remove controls. */
+function LocationTab({
+    loc,
+    active,
+    onSelect,
+    onSetPrimary,
+    onRemove
+}: {
+    loc: WeatherLocation;
+    active: boolean;
+    onSelect: () => void;
+    onSetPrimary: () => void;
+    onRemove: () => void;
+}) {
+    const controls = useDragControls();
+    return (
+        <Reorder.Item
+            value={loc}
+            dragListener={false}
+            dragControls={controls}
+            className={`${styles.locationTabWrapper} ${active ? styles.activeTab : ''} ${
+                loc.isPrimary ? styles.primaryTab : ''
+            }`}
+            whileDrag={{ scale: 1.04 }}
+        >
+            <button
+                className={styles.dragHandle}
+                onPointerDown={(e) => controls.start(e)}
+                aria-label='Déplacer'
+                title='Glisser pour réordonner'
+            >
+                <span className='icon icon-drag' />
+            </button>
+            <button className={styles.locationTab} onClick={onSelect}>
+                {loc.label}
+            </button>
+            <button
+                className={`${styles.primaryBtn} ${loc.isPrimary ? styles.isPrimary : ''}`}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onSetPrimary();
+                }}
+                aria-label='Ville principale'
+                title={loc.isPrimary ? 'Ville principale' : 'Définir comme ville principale'}
+            >
+                {loc.isPrimary ? '★' : '☆'}
+            </button>
+            {!loc.isPrimary && (
+                <button
+                    className={styles.removeTabBtn}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onRemove();
+                    }}
+                    aria-label='Supprimer'
+                >
+                    ×
+                </button>
+            )}
+        </Reorder.Item>
+    );
+}
+
 export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
     const [locations, setLocations] = useState<WeatherLocation[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -73,6 +132,10 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
     const [searchInput, setSearchInput] = useState('');
     const [adding, setAdding] = useState(false);
     const [addError, setAddError] = useState<string | null>(null);
+
+    // The order persisted on the server; lets us skip a redundant reorder call
+    // when a drag ends without actually changing anything.
+    const persistedOrder = useRef<string>('');
 
     const loadReport = useCallback(async (id: string, opts?: { silent?: boolean }) => {
         if (!opts?.silent) setLoadingReport(true);
@@ -86,6 +149,12 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
         }
     }, []);
 
+    const applyLocations = useCallback((next: WeatherLocation[]) => {
+        setLocations(next);
+        persistedOrder.current = next.map((l) => l.id).join(',');
+        syncWeatherLocations(next);
+    }, []);
+
     // Initial load: list locations, select the first, fetch its report.
     useEffect(() => {
         let cancelled = false;
@@ -94,6 +163,7 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
                 const res = await ws.send('weather.list', {});
                 if (cancelled) return;
                 setLocations(res.locations);
+                persistedOrder.current = res.locations.map((l) => l.id).join(',');
                 const first = res.locations[0];
                 if (first) {
                     setSelectedId(first.id);
@@ -134,7 +204,7 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
                 days: 7,
                 provider: 'open-meteo'
             });
-            setLocations((prev) => [...prev, res.location]);
+            applyLocations([...locations, res.location]);
             setSearchInput('');
             setSelectedId(res.location.id);
             await loadReport(res.location.id);
@@ -147,14 +217,39 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
 
     const handleRemove = async (id: string) => {
         try {
-            await ws.send('weather.remove', { id });
-            setLocations((prev) => prev.filter((l) => l.id !== id));
+            const res = await ws.send('weather.remove', { id });
+            const next = locations.filter((l) => l.id !== res.id);
+            applyLocations(next);
             if (selectedId === id) {
-                const next = locations.find((l) => l.id !== id) ?? null;
-                setSelectedId(next?.id ?? null);
+                const fallback = next[0] ?? null;
+                setSelectedId(fallback?.id ?? null);
                 setReport(null);
-                if (next) await loadReport(next.id);
+                if (fallback) await loadReport(fallback.id);
             }
+        } catch {
+            // ignore
+        }
+    };
+
+    const handleSetPrimary = async (id: string) => {
+        // Optimistic flag flip; the server response reconciles the full list.
+        setLocations((prev) => prev.map((l) => ({ ...l, isPrimary: l.id === id })));
+        try {
+            const res = await ws.send('weather.setPrimary', { id });
+            applyLocations(res.locations);
+        } catch {
+            // ignore — next list refresh reconciles
+        }
+    };
+
+    // Persist a drag-reorder once it settles, if the order actually changed.
+    const persistOrder = async () => {
+        const order = locations.map((l) => l.id);
+        if (order.join(',') === persistedOrder.current) return;
+        persistedOrder.current = order.join(',');
+        try {
+            const res = await ws.send('weather.reorder', { ids: order });
+            applyLocations(res.locations);
         } catch {
             // ignore
         }
@@ -191,29 +286,25 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
                 </div>
             ) : (
                 <div className={styles.weatherContent}>
-                    {/* Location tabs */}
-                    <div className={styles.locationTabs}>
+                    {/* Location tabs — draggable to reorder, star to pick primary */}
+                    <Reorder.Group
+                        axis='x'
+                        values={locations}
+                        onReorder={setLocations}
+                        className={styles.locationTabs}
+                        onPointerUp={() => void persistOrder()}
+                    >
                         {locations.map((loc) => (
-                            <div
+                            <LocationTab
                                 key={loc.id}
-                                className={`${styles.locationTabWrapper} ${loc.id === selectedId ? styles.activeTab : ''}`}
-                            >
-                                <button className={styles.locationTab} onClick={() => handleSelectLocation(loc.id)}>
-                                    {loc.label}
-                                </button>
-                                <button
-                                    className={styles.removeTabBtn}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        void handleRemove(loc.id);
-                                    }}
-                                    aria-label='Supprimer'
-                                >
-                                    ×
-                                </button>
-                            </div>
+                                loc={loc}
+                                active={loc.id === selectedId}
+                                onSelect={() => void handleSelectLocation(loc.id)}
+                                onSetPrimary={() => void handleSetPrimary(loc.id)}
+                                onRemove={() => void handleRemove(loc.id)}
+                            />
                         ))}
-                    </div>
+                    </Reorder.Group>
 
                     {/* Report */}
                     {loadingReport ? (
@@ -231,6 +322,15 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
                                     <span className={styles.bigTemp}>{Math.round(report.current.temperature)}°C</span>
                                     <span className={styles.locationLarge}>{report.label}</span>
                                 </div>
+                                {(() => {
+                                    const { date, time } = localDateTime(report);
+                                    return (
+                                        <span className={styles.localDate}>
+                                            <span className={styles.localDateDay}>{date}</span>
+                                            <span className={styles.localDateTime}>{time}</span>
+                                        </span>
+                                    );
+                                })()}
                             </div>
 
                             <div className={styles.detailsGrid}>

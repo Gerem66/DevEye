@@ -65,7 +65,6 @@ export async function loadUserBundle(
         role: (row.role === 'admin' ? 'admin' : 'user') as UserRole,
         settings: parseStringArray(row.settings),
         defaultWorkspace: row.default_workspace,
-        defaultFeature: row.default_feature,
         lastLogin: Number(row.last_login),
         created: Number(row.created)
     };

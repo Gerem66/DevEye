@@ -88,14 +88,15 @@ const PAGES: ViewConfig[] = [
         id: 'profile',
         title: 'Profil',
         icon: 'user',
-        FullComponent: FeatureProfile
+        FullComponent: FeatureProfile,
+        cacheDurationMinutes: 0
     },
     {
         id: 'twofa',
         title: 'Sécurité 2FA',
         icon: 'shield',
         FullComponent: TwoFactor,
-        cacheDurationMinutes: 5
+        cacheDurationMinutes: 1
     }
 ];
 

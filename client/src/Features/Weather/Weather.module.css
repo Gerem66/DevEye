@@ -149,7 +149,9 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-sm);
-    margin-bottom: var(--space-lg);
+    margin: 0 0 var(--space-lg) 0;
+    padding: 0;
+    list-style: none;
 }
 
 .locationTabWrapper {
@@ -158,7 +160,9 @@
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
     overflow: hidden;
+    background: var(--glass-bg-light);
     transition: border-color var(--transition-fast);
+    list-style: none;
 }
 
 .locationTabWrapper.activeTab {
@@ -166,9 +170,59 @@
     background: var(--accent-bg);
 }
 
+.locationTabWrapper.primaryTab {
+    border-color: var(--accent);
+}
+
+.dragHandle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 var(--space-xs);
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--glass-border);
+    color: var(--text-muted);
+    cursor: grab;
+    touch-action: none;
+    font-size: 0.85rem;
+    transition: color var(--transition-fast);
+}
+
+.dragHandle:hover {
+    color: var(--text-primary);
+}
+
+.dragHandle:active {
+    cursor: grabbing;
+}
+
+.primaryBtn {
+    padding: var(--space-xs) var(--space-xs);
+    background: transparent;
+    border: none;
+    border-left: 1px solid var(--glass-border);
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.primaryBtn:hover {
+    background: var(--glass-bg);
+    color: var(--accent);
+}
+
+.primaryBtn.isPrimary {
+    color: var(--accent);
+}
+
 .locationTab {
     padding: var(--space-xs) var(--space-md);
-    background: var(--glass-bg-light);
+    background: transparent;
     border: none;
     color: var(--text-secondary);
     font-size: 0.85rem;
@@ -191,7 +245,7 @@
 
 .removeTabBtn {
     padding: var(--space-xs) var(--space-sm);
-    background: var(--glass-bg-light);
+    background: transparent;
     border: none;
     border-left: 1px solid var(--glass-border);
     color: var(--text-muted);
@@ -254,6 +308,29 @@
     align-items: center;
     gap: var(--space-lg);
     margin-bottom: var(--space-lg);
+}
+
+/* Local date + time of the city, aligned to the top-right of the current card. */
+.localDate {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    align-self: flex-start;
+    margin-left: auto;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.localDateDay {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-transform: capitalize;
+}
+
+.localDateTime {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text-secondary);
 }
 
 .bigIcon {

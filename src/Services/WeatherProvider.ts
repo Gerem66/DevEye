@@ -52,6 +52,7 @@ interface OpenMeteoGeocode {
 }
 
 interface OpenMeteoForecast {
+    timezone?: string;
     current?: {
         weather_code: number;
         temperature_2m: number;
@@ -126,7 +127,14 @@ const openMeteoAdapter: WeatherProviderAdapter = {
             }
         }
 
-        return { locationId, label, fetchedAt: Math.floor(Date.now() / 1000), current, daily };
+        return {
+            locationId,
+            label,
+            fetchedAt: Math.floor(Date.now() / 1000),
+            timezone: data.timezone ?? 'UTC',
+            current,
+            daily
+        };
     }
 };
 

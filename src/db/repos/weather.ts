@@ -24,6 +24,10 @@ export interface WeatherRepo {
         patch: { format?: WeatherFormat; days?: number; position?: number }
     ): Promise<WeatherLocationRow | null>;
     deleteLocation(id: string, userId: number): Promise<boolean>;
+    /** Reorder by assigning `position` to each id by its index in `ids`. */
+    reorderLocations(userId: number, ids: string[]): Promise<WeatherLocationRow[]>;
+    /** Mark `id` as the user's primary location and clear it on the others. */
+    setPrimaryLocation(userId: number, id: string): Promise<WeatherLocationRow[]>;
     getKey(userId: number, provider: WeatherProvider): Promise<WeatherProviderKeyRow | null>;
     setKey(userId: number, provider: WeatherProvider, keyEnc: string): Promise<void>;
     deleteKey(userId: number, provider: WeatherProvider): Promise<void>;
@@ -52,10 +56,12 @@ export function weatherRepo(pool: Q): WeatherRepo {
                 [userId]
             );
             const position = Number(posRow.rows[0]?.next ?? 0);
+            // The first city a user adds is automatically their primary one.
+            const isPrimary = position === 0 ? 1 : 0;
             await pool.query(
-                `INSERT INTO weather_locations (id, user_id, label, latitude, longitude, format, days, provider, position)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [id, userId, label, latitude, longitude, format, days, provider, position]
+                `INSERT INTO weather_locations (id, user_id, label, latitude, longitude, format, days, provider, position, is_primary)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [id, userId, label, latitude, longitude, format, days, provider, position, isPrimary]
             );
             const r = await pool.query<WeatherLocationRow>('SELECT * FROM weather_locations WHERE id = ?', [id]);
             return r.rows[0];
@@ -85,8 +91,36 @@ export function weatherRepo(pool: Q): WeatherRepo {
             return this.findLocation(id, userId);
         },
         async deleteLocation(id, userId) {
+            const target = await this.findLocation(id, userId);
             const r = await pool.query('DELETE FROM weather_locations WHERE id = ? AND user_id = ?', [id, userId]);
-            return r.rowCount > 0;
+            if (r.rowCount === 0) return false;
+            // If the primary city was removed, promote the first remaining one.
+            if (target?.is_primary === 1) {
+                const next = await this.listLocations(userId);
+                if (next[0]) {
+                    await pool.query('UPDATE weather_locations SET is_primary = 1 WHERE id = ? AND user_id = ?', [
+                        next[0].id,
+                        userId
+                    ]);
+                }
+            }
+            return true;
+        },
+        async reorderLocations(userId, ids) {
+            // Assign each id its position by index; only rows owned by the user
+            // are touched, so stray ids are silently ignored.
+            for (let i = 0; i < ids.length; i++) {
+                await pool.query('UPDATE weather_locations SET position = ? WHERE id = ? AND user_id = ?', [
+                    i,
+                    ids[i],
+                    userId
+                ]);
+            }
+            return this.listLocations(userId);
+        },
+        async setPrimaryLocation(userId, id) {
+            await pool.query('UPDATE weather_locations SET is_primary = (id = ?) WHERE user_id = ?', [id, userId]);
+            return this.listLocations(userId);
         },
         async getKey(userId, provider) {
             const r = await pool.query<WeatherProviderKeyRow>(
