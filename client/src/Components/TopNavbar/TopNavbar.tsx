@@ -11,6 +11,11 @@ import packageJson from '../../../package.json';
 const ENV = import.meta.env.VITE_ENV;
 const version = packageJson.version + (ENV === 'dev' ? '-dev' : '');
 
+/** Shared motion timings so every part of the navbar morphs in sync. */
+const SLIDE = { type: 'spring', stiffness: 380, damping: 34, mass: 0.85 } as const;
+const FADE = { duration: 0.22, ease: [0.22, 1, 0.36, 1] } as const;
+const BACK_BTN_SIZE = 34;
+
 export interface TopNavbarProps {
     /** Optional: current view title (shown when in a feature popup). */
     viewTitle?: string;
@@ -103,65 +108,62 @@ export default function TopNavbar({ viewTitle, onBack, onOpenProfile, onOpenSett
 
     return (
         <nav className={`${styles.navbar} ${inFeature ? styles.blurred : ''}`}>
-            {/* Left section — entering/leaving a feature animates smoothly */}
-            <motion.div layout transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }} className={styles.left}>
-                <AnimatePresence initial={false} mode='popLayout'>
+            {/* Left section — the back button collapses its own width so the brand
+                slides smoothly in/out of feature mode (no nested layout jank). */}
+            <div className={styles.left}>
+                <AnimatePresence initial={false}>
                     {inFeature && onBack && (
                         <motion.button
                             key='back'
-                            layout
                             className={styles.backBtn}
                             onClick={onBack}
                             aria-label='Retour au dashboard'
-                            initial={{ opacity: 0, scale: 0.6 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.6 }}
-                            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                            initial={{ width: 0, opacity: 0, marginRight: 0 }}
+                            animate={{ width: BACK_BTN_SIZE, opacity: 1, marginRight: 8 }}
+                            exit={{ width: 0, opacity: 0, marginRight: 0 }}
+                            transition={SLIDE}
                         >
                             <span className='icon icon-arrow-left' />
                         </motion.button>
                     )}
                 </AnimatePresence>
 
-                <motion.a
-                    layout
-                    href='/'
-                    className={styles.brand}
-                    transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-                >
+                <a href='/' className={styles.brand}>
                     <img src='/logo_deveye.png' alt='DevEye' className={styles.logo} />
                     <span className={styles.brandText}>DevEye</span>
-                </motion.a>
+                </a>
 
-                <AnimatePresence initial={false} mode='popLayout'>
-                    {inFeature && viewTitle ? (
-                        <motion.span
-                            key='viewTitle'
-                            layout
-                            className={styles.viewTitleWrap}
-                            initial={{ opacity: 0, x: -6 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -6 }}
-                            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                        >
-                            <span className={styles.diviserDot} />
-                            <span className={styles.viewTitle}>{viewTitle}</span>
-                        </motion.span>
-                    ) : (
-                        <motion.span
-                            key='version'
-                            layout
-                            className={styles.version}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                        >
-                            {version}
-                        </motion.span>
-                    )}
-                </AnimatePresence>
-            </motion.div>
+                {/* Version pill on home, feature title once a feature is open —
+                    swapped in place with a crossfade. */}
+                <div className={styles.metaSlot}>
+                    <AnimatePresence initial={false} mode='popLayout'>
+                        {inFeature && viewTitle ? (
+                            <motion.span
+                                key='viewTitle'
+                                className={styles.viewTitleWrap}
+                                initial={{ opacity: 0, x: -6 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -6 }}
+                                transition={FADE}
+                            >
+                                <span className={styles.diviserDot} />
+                                <span className={styles.viewTitle}>{viewTitle}</span>
+                            </motion.span>
+                        ) : (
+                            <motion.span
+                                key='version'
+                                className={styles.version}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={FADE}
+                            >
+                                {version}
+                            </motion.span>
+                        )}
+                    </AnimatePresence>
+                </div>
+            </div>
 
             {/* Right section: live status + user profile */}
             <div className={styles.right} ref={menuRef}>

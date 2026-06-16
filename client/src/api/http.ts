@@ -31,8 +31,8 @@ async function request<TOut>(path: string, init: RequestInit, outputSchema: z.Zo
     try {
         res = await fetch(`${BASE_URL}${path}`, {
             credentials: 'include',
-            headers: { 'Content-Type': 'application/json', ...init.headers },
-            ...init
+            ...init,
+            headers: { 'Content-Type': 'application/json', ...init.headers }
         });
     } catch (e) {
         throw new ApiError('network', (e as Error).message);

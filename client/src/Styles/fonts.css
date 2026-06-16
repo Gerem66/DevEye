@@ -1,17 +1,35 @@
+/* Open Sans — the app's sans-serif family (see --font-sans in theme.css). */
 @font-face {
     font-family: 'Open Sans';
     font-weight: 400;
-    src: url('/fonts/open-sans/OpenSans-Light.ttf');
+    font-display: swap;
+    src: url('/fonts/open-sans/OpenSans-Regular.ttf');
+}
+
+@font-face {
+    font-family: 'Open Sans';
+    font-weight: 500;
+    font-display: swap;
+    src: url('/fonts/open-sans/OpenSans-Medium.ttf');
 }
 
 @font-face {
     font-family: 'Open Sans';
     font-weight: 600;
+    font-display: swap;
     src: url('/fonts/open-sans/OpenSans-SemiBold.ttf');
 }
 
 @font-face {
     font-family: 'Open Sans';
-    font-weight: 800;
+    font-weight: 700;
+    font-display: swap;
     src: url('/fonts/open-sans/OpenSans-Bold.ttf');
+}
+
+@font-face {
+    font-family: 'Open Sans';
+    font-weight: 800;
+    font-display: swap;
+    src: url('/fonts/open-sans/OpenSans-ExtraBold.ttf');
 }

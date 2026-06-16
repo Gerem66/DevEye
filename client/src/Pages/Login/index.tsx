@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react';
 import { ApiError, post } from '../../api/http';
 import { useAuth } from '../../auth/AuthProvider';
 import { TextInput } from '../../Components';
-import { Sleep } from '../../Utils/Functions';
 import { z } from 'zod';
 import './style.css';
 
@@ -14,6 +13,15 @@ const twoFaResponseSchema = z.object({
 
 /** Total duration of the card → progress-bar fill (0.5s delay + 1s fill). */
 const PROGRESS_MS = 1500;
+/** Minimum visible time for a failed attempt before the error shows. */
+const ERROR_MS = 800;
+
+/** Block until at least `minMs` has elapsed since `startedAt` (keeps the
+ *  progress/error animations from flashing on fast responses). */
+function waitUntil(startedAt: number, minMs: number): Promise<void> {
+    const remaining = minMs - (Date.now() - startedAt);
+    return remaining > 0 ? new Promise((resolve) => setTimeout(resolve, remaining)) : Promise.resolve();
+}
 
 function LoginPage() {
     const { status, login, refresh } = useAuth();
@@ -88,13 +96,11 @@ function LoginPage() {
                 setTwoFaRequired(true);
                 setTimeout(() => inputTwoFa.current?.focus(), 50);
             } else {
-                const elapsed = Date.now() - startedAt;
-                if (elapsed < 1500) await Sleep(1500 - elapsed);
+                await waitUntil(startedAt, PROGRESS_MS);
                 setPassword('');
             }
         } catch (e) {
-            const elapsed = Date.now() - startedAt;
-            if (elapsed < 800) await Sleep(800 - elapsed);
+            await waitUntil(startedAt, ERROR_MS);
             if (e instanceof ApiError) {
                 setError(humanizeAuthError(e));
             } else {
@@ -117,11 +123,9 @@ function LoginPage() {
         try {
             await post('/api/auth/2fa/challenge', { code: twoFaCode }, twoFaResponseSchema);
             await refresh();
-            const elapsed = Date.now() - startedAt;
-            if (elapsed < 1500) await Sleep(1500 - elapsed);
+            await waitUntil(startedAt, PROGRESS_MS);
         } catch (e) {
-            const elapsed = Date.now() - startedAt;
-            if (elapsed < 800) await Sleep(800 - elapsed);
+            await waitUntil(startedAt, ERROR_MS);
             if (e instanceof ApiError) {
                 setError('Code invalide');
             } else {
