@@ -13,8 +13,6 @@ import PopupUnlock from './popup-unlock';
 import { MonitoringWidget } from '@/Features/Monitoring';
 import { WeatherWidget } from '@/Features/Weather';
 import { ClientsWidget } from '@/Features/Clients';
-import { TwoFactorWidget } from '@/Features/TwoFactor';
-
 // Full feature components
 import Monitoring from '@/Features/Monitoring';
 import Weather from '@/Features/Weather';
@@ -26,24 +24,29 @@ import FeaturePassword from '@/Features/Password';
 import type { FeatureProps } from '@/Features/types';
 import styles from './Dashboard.module.css';
 
-interface WidgetConfig {
+/** A view that can be opened full-screen in the popup. */
+interface ViewConfig {
     id: string;
     title: string;
     icon: string;
-    WidgetContent: React.ComponentType;
     FullComponent: React.ComponentType<FeatureProps>;
-    /** Openable (e.g. from the topbar) but not shown as a grid card. */
-    hideOnGrid?: boolean;
     /**
-     * How long (minutes) the feature stays mounted after its popup closes.
-     * - `0`       → unmount immediately on close (default).
-     * - `> 0`     → keep mounted for that many minutes, then auto-unmount.
-     * - `undefined` → keep mounted indefinitely (until forced Ctrl+click reset).
+     * How long (minutes) the view stays mounted after its popup closes.
+     * - `0`         → unmount immediately on close.
+     * - `> 0`       → keep mounted for that many minutes, then auto-unmount.
+     * - `undefined` → keep mounted indefinitely (until a Ctrl+click reset).
      */
     cacheDurationMinutes?: number;
 }
 
-const WIDGETS: WidgetConfig[] = [
+/** A modular feature: a view that also shows as a card on the home grid. */
+interface FeatureConfig extends ViewConfig {
+    WidgetContent: React.ComponentType;
+}
+
+// Modular features — shown as cards on the home grid; their popup morphs open
+// from the card via a shared-element transition.
+const FEATURES: FeatureConfig[] = [
     {
         id: 'monitoring',
         title: 'Monitoring',
@@ -69,23 +72,6 @@ const WIDGETS: WidgetConfig[] = [
         cacheDurationMinutes: 5
     },
     {
-        id: 'twofa',
-        title: 'Sécurité 2FA',
-        icon: 'shield',
-        WidgetContent: TwoFactorWidget,
-        FullComponent: TwoFactor,
-        cacheDurationMinutes: 5
-    },
-    {
-        id: 'profile',
-        title: 'Profil',
-        icon: 'user',
-        WidgetContent: () => <ProfileWidgetContent />,
-        FullComponent: FeatureProfile,
-        hideOnGrid: true,
-        cacheDurationMinutes: undefined
-    },
-    {
         id: 'password',
         title: 'Mot de passe',
         icon: 'lock',
@@ -95,17 +81,25 @@ const WIDGETS: WidgetConfig[] = [
     }
 ];
 
-const GRID_WIDGETS = WIDGETS.filter((w) => !w.hideOnGrid);
+// Structural DevEye pages — part of the app itself, reached from the navbar
+// menu rather than the grid; they fade in (no card to morph from).
+const PAGES: ViewConfig[] = [
+    {
+        id: 'profile',
+        title: 'Profil',
+        icon: 'user',
+        FullComponent: FeatureProfile
+    },
+    {
+        id: 'twofa',
+        title: 'Sécurité 2FA',
+        icon: 'shield',
+        FullComponent: TwoFactor,
+        cacheDurationMinutes: 5
+    }
+];
 
-function ProfileWidgetContent() {
-    const { user } = useAuth();
-    return (
-        <div className={styles.profileWidget}>
-            <span className={styles.profileName}>{user?.username}</span>
-            <span className={styles.profileEmail}>{user?.email}</span>
-        </div>
-    );
-}
+const VIEWS: ViewConfig[] = [...FEATURES, ...PAGES];
 
 function PasswordWidgetContent() {
     return (
@@ -205,7 +199,7 @@ export default function HomePage() {
         closingFeatureRef.current = null;
         if (!featureId) return;
 
-        const config = WIDGETS.find((w) => w.id === featureId);
+        const config = VIEWS.find((v) => v.id === featureId);
         if (!config) return;
 
         const duration = config.cacheDurationMinutes;
@@ -229,12 +223,12 @@ export default function HomePage() {
         };
     }, []);
 
-    const expandedConfig = expandedWidget ? (WIDGETS.find((w) => w.id === expandedWidget) ?? null) : null;
+    const expandedConfig = expandedWidget ? (VIEWS.find((v) => v.id === expandedWidget) ?? null) : null;
 
     // Keep the last opened config around so the panel still has content (and the
     // correct layoutId) during its close animation. While open we always use the
     // *current* config, so a freshly opened card morphs from its own position.
-    const [lastConfig, setLastConfig] = useState<WidgetConfig | null>(null);
+    const [lastConfig, setLastConfig] = useState<ViewConfig | null>(null);
     useEffect(() => {
         if (expandedConfig) setLastConfig(expandedConfig);
     }, [expandedConfig]);
@@ -264,6 +258,7 @@ export default function HomePage() {
                 viewTitle={expandedConfig?.title}
                 onBack={expandedWidget ? handleClose : undefined}
                 onOpenProfile={() => handleExpand('profile')}
+                onOpenTwoFactor={() => handleExpand('twofa')}
                 onOpenSettings={() => setSettingsOpen(true)}
             />
 
@@ -279,7 +274,7 @@ export default function HomePage() {
                     </header>
 
                     <WidgetGrid>
-                        {GRID_WIDGETS.map((config) => (
+                        {FEATURES.map((config) => (
                             <Widget
                                 key={config.id}
                                 widgetId={config.id}
@@ -294,13 +289,13 @@ export default function HomePage() {
                 </div>
             </main>
 
-            {/* The animated popup shell (morphs from/back to the card). It stays
-                visually empty — the active feature's content is portaled into its
-                body by the keep-alive layer below, so closing the popup never
-                unmounts the feature. */}
+            {/* The animated popup shell. It stays visually empty — the active
+                view's content is portaled into its body by the keep-alive layer
+                below, so closing the popup never unmounts the view. Features
+                morph from/back to their grid card; pages have no card and fade. */}
             {popupConfig && (
                 <WidgetPopup
-                    layoutId={popupConfig.id}
+                    layoutId={FEATURES.some((f) => f.id === popupConfig.id) ? popupConfig.id : undefined}
                     open={!!expandedWidget}
                     onClose={handleClose}
                     bodyRef={setPopupBodyEl}
@@ -312,7 +307,7 @@ export default function HomePage() {
                 portaled into the open popup body when active, or parked hidden
                 otherwise — preserving its state across close/reopen. */}
             {[...mountedFeatures].map((id) => {
-                const config = WIDGETS.find((w) => w.id === id);
+                const config = VIEWS.find((v) => v.id === id);
                 if (!config) return null;
 
                 const featureProps: FeatureProps = {

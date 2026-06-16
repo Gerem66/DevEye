@@ -26,6 +26,8 @@ export interface TopNavbarProps {
     onBack?: () => void;
     /** Open the profile feature. */
     onOpenProfile?: () => void;
+    /** Open the 2FA security feature. */
+    onOpenTwoFactor?: () => void;
     /** Open the settings panel. */
     onOpenSettings?: () => void;
 }
@@ -90,7 +92,13 @@ function TopbarStatus() {
  * Top navbar: always on top (above the feature popup) so it keeps providing the
  * main info. Transparent-with-scrim on home, surfaced when a feature is open.
  */
-export default function TopNavbar({ viewTitle, onBack, onOpenProfile, onOpenSettings }: TopNavbarProps) {
+export default function TopNavbar({
+    viewTitle,
+    onBack,
+    onOpenProfile,
+    onOpenTwoFactor,
+    onOpenSettings
+}: TopNavbarProps) {
     const { user, logout } = useAuth();
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
@@ -211,6 +219,15 @@ export default function TopNavbar({ viewTitle, onBack, onOpenProfile, onOpenSett
                                 }}
                             >
                                 <span className='icon icon-user' /> Profil
+                            </button>
+                            <button
+                                className={styles.menuItem}
+                                onClick={() => {
+                                    onOpenTwoFactor?.();
+                                    setMenuOpen(false);
+                                }}
+                            >
+                                <span className='icon icon-shield' /> Sécurité 2FA
                             </button>
                             <button
                                 className={styles.menuItem}

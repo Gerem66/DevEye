@@ -7,35 +7,6 @@ import type { TwoFactorStatus } from 'deveye-types';
 import type { FeatureProps } from '../types';
 import styles from './TwoFactor.module.css';
 
-export function TwoFactorWidget() {
-    const [status, setStatus] = useState<TwoFactorStatus | null>(null);
-
-    useEffect(() => {
-        ws.send('twofa.status', {})
-            .then((res) => setStatus(res.status))
-            .catch(() => {});
-    }, []);
-
-    if (!status) {
-        return <div className={styles.widgetLoading}>Chargement...</div>;
-    }
-
-    return (
-        <div className={styles.widgetContent}>
-            <div className={`${styles.statusBadge} ${status.enabled ? styles.enabled : styles.disabled}`}>
-                <span className='icon icon-shield' />
-                <span>{status.enabled ? 'Activé' : 'Désactivé'}</span>
-            </div>
-            {status.enabled && (
-                <div className={styles.backupInfo}>
-                    <span className={styles.backupCount}>{status.backupCodesRemaining}</span>
-                    <span className={styles.backupLabel}>codes de secours</span>
-                </div>
-            )}
-        </div>
-    );
-}
-
 interface SetupData {
     secret: string;
     otpauthUrl: string;

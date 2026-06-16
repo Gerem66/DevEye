@@ -3,8 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import styles from './WidgetPopup.module.css';
 
 export interface WidgetPopupProps {
-    /** Must match the widget's `widgetId` for the shared-element animation. */
-    layoutId: string;
+    /**
+     * Grid card `widgetId` to morph from via framer-motion's shared-element
+     * transition. Omit for views with no card (structural pages) — the panel
+     * then fades + scales in instead.
+     */
+    layoutId?: string;
     /** Whether the popup is currently shown. */
     open: boolean;
     /** Called when the user requests to close (Escape, overlay click). */
@@ -54,10 +58,14 @@ export default function WidgetPopup({ layoutId, open, onClose, bodyRef, onExitCo
                         onClick={onClose}
                     />
 
-                    {/* Panel */}
+                    {/* Panel — morphs from the grid card when a `layoutId` is
+                        given, otherwise fades + scales in (structural pages). */}
                     <motion.div
                         layoutId={layoutId}
                         className={styles.popup}
+                        initial={layoutId ? false : { opacity: 0, scale: 0.97, y: 12 }}
+                        animate={layoutId ? undefined : { opacity: 1, scale: 1, y: 0 }}
+                        exit={layoutId ? undefined : { opacity: 0, scale: 0.97, y: 12 }}
                         transition={{ type: 'spring', stiffness: 280, damping: 32, mass: 0.9 }}
                     >
                         <div className={styles.body} ref={bodyRef}>
