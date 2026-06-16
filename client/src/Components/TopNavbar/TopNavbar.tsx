@@ -131,10 +131,20 @@ export default function TopNavbar({ viewTitle, onBack, onOpenProfile, onOpenSett
                     )}
                 </AnimatePresence>
 
-                <a href='/' className={styles.brand}>
+                <button
+                    className={styles.brand}
+                    onClick={() => {
+                        if (inFeature && onBack) {
+                            onBack();
+                        } else {
+                            window.location.href = '/';
+                        }
+                    }}
+                    aria-label='Accueil DevEye'
+                >
                     <img src='/logo_deveye.png' alt='DevEye' className={styles.logo} />
                     <span className={styles.brandText}>DevEye</span>
-                </a>
+                </button>
 
                 {/* Version pill on home, feature title once a feature is open —
                     swapped in place with a crossfade. */}
