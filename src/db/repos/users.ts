@@ -12,6 +12,7 @@ export interface UsersRepo {
     updateLastLogin(id: number, lastLogin: number): Promise<void>;
     setDefaultWorkspace(id: number, defaultWorkspace: number): Promise<void>;
     updatePasswordHash(id: number, passwordHash: string): Promise<void>;
+    updateAvatar(id: number, avatar: string): Promise<void>;
     setRole(id: number, role: 'user' | 'admin'): Promise<void>;
 }
 
@@ -51,6 +52,9 @@ export function usersRepo(pool: Q): UsersRepo {
         },
         async updatePasswordHash(id, passwordHash) {
             await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, id]);
+        },
+        async updateAvatar(id, avatar) {
+            await pool.query('UPDATE users SET avatar = ? WHERE id = ?', [avatar, id]);
         },
         async setRole(id, role) {
             await pool.query('UPDATE users SET role = ? WHERE id = ?', [role, id]);

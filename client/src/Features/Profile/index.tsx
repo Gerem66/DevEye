@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
+import { ws } from '@/api/ws';
 import { Dialog } from '@/Components/Dialog';
 import { StatusBadge } from '@/Components/StatusBadge';
 import Button from '@/Components/Button';
 
 import type { FeatureProps } from '@/Features/types';
+import { ACCEPTED_TYPES, avatarSrc, fileToAvatarDataUrl } from './avatar';
 import styles from './style.module.css';
 
 function formatDate(time: number): string {
@@ -21,8 +23,33 @@ function formatDate(time: number): string {
 }
 
 export default function FeatureProfile({ user, workspace }: FeatureProps) {
-    const { workspaces, logout } = useAuth();
+    const { workspaces, logout, updateUser } = useAuth();
     const [inDevOpen, setInDevOpen] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [avatarError, setAvatarError] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const onPickAvatar = () => {
+        if (uploading) return;
+        fileInputRef.current?.click();
+    };
+
+    const onAvatarSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = ''; // allow re-selecting the same file later
+        if (!file) return;
+
+        setUploading(true);
+        try {
+            const avatar = await fileToAvatarDataUrl(file);
+            await ws.send('user.setAvatar', { avatar });
+            updateUser({ avatar });
+        } catch (err) {
+            setAvatarError(err instanceof Error ? err.message : "La mise à jour de l'image a échoué.");
+        } finally {
+            setUploading(false);
+        }
+    };
 
     return (
         <div className={styles.container}>
@@ -33,10 +60,22 @@ export default function FeatureProfile({ user, workspace }: FeatureProps) {
 
             <div className={styles.card}>
                 <div className={styles.identity}>
-                    <button className={styles.avatar} onClick={() => setInDevOpen(true)} aria-label="Modifier l'image">
-                        <img src={`./images/${workspace.logo}`} alt={workspace.name} />
-                        <span className={styles.avatarHint}>Modifier</span>
+                    <button
+                        className={styles.avatar}
+                        onClick={onPickAvatar}
+                        disabled={uploading}
+                        aria-label="Modifier l'image de profil"
+                    >
+                        <img src={avatarSrc(user.avatar)} alt={user.username} />
+                        <span className={styles.avatarHint}>{uploading ? 'Envoi…' : 'Modifier'}</span>
                     </button>
+                    <input
+                        ref={fileInputRef}
+                        type='file'
+                        accept={ACCEPTED_TYPES.join(',')}
+                        hidden
+                        onChange={(e) => void onAvatarSelected(e)}
+                    />
                     <span className={styles.name}>{workspace.name}</span>
                 </div>
 
@@ -95,6 +134,15 @@ export default function FeatureProfile({ user, workspace }: FeatureProps) {
                 footer={<Button onClick={() => setInDevOpen(false)}>Compris</Button>}
             >
                 Cette fonctionnalité est en cours de développement. Elle sera bientôt disponible.
+            </Dialog>
+
+            <Dialog
+                open={avatarError !== null}
+                onClose={() => setAvatarError(null)}
+                title="Modification de l'image"
+                footer={<Button onClick={() => setAvatarError(null)}>Compris</Button>}
+            >
+                {avatarError}
             </Dialog>
         </div>
     );

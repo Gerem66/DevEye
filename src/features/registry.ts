@@ -10,6 +10,7 @@ import {
     passwordUnlockFeature
 } from './password';
 import { twoFactorFeatures } from './twofa';
+import { userSetAvatarFeature } from './user/setAvatar';
 import { weatherFeatures } from './weather';
 import { workspaceAddFeature } from './workspace/add';
 import { workspaceDeleteFeature } from './workspace/delete';
@@ -18,6 +19,7 @@ import { workspaceDeleteFeature } from './workspace/delete';
 export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>> = [
     workspaceAddFeature,
     workspaceDeleteFeature,
+    userSetAvatarFeature,
     passwordListFeature,
     passwordGetFeature,
     passwordAddFeature,
