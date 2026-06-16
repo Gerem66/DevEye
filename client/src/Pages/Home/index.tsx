@@ -7,6 +7,7 @@ import { WidgetGrid } from '@/Components/WidgetGrid';
 import { WidgetPopup } from '@/Components/WidgetPopup';
 import { Wallpaper } from '@/Components/Wallpaper';
 import { SettingsPanel } from '@/Components/SettingsPanel';
+import PopupUnlock from './popup-unlock';
 
 // Widget content (compact)
 import { MonitoringWidget } from '@/Features/Monitoring';
@@ -135,12 +136,14 @@ export default function HomePage() {
 
     const expandedConfig = expandedWidget ? (WIDGETS.find((w) => w.id === expandedWidget) ?? null) : null;
 
-    // Keep the popup's config mounted through its close animation so the panel
-    // (high z-index) is what morphs back into the card — never the grid widget.
-    const [popupConfig, setPopupConfig] = useState<WidgetConfig | null>(null);
+    // Keep the last opened config around so the panel still has content (and the
+    // correct layoutId) during its close animation. While open we always use the
+    // *current* config, so a freshly opened card morphs from its own position.
+    const [lastConfig, setLastConfig] = useState<WidgetConfig | null>(null);
     useEffect(() => {
-        if (expandedConfig) setPopupConfig(expandedConfig);
+        if (expandedConfig) setLastConfig(expandedConfig);
     }, [expandedConfig]);
+    const popupConfig = expandedConfig ?? lastConfig;
 
     if (!user) return null;
 
@@ -214,6 +217,10 @@ export default function HomePage() {
             )}
 
             <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+            {/* Password unlock dialog — registered globally so the Password feature
+                can request it on demand. */}
+            <PopupUnlock workspace={currentWorkspace} />
         </div>
     );
 }

@@ -104,7 +104,7 @@ export default function TopNavbar({ viewTitle, onBack, onOpenProfile, onOpenSett
     return (
         <nav className={`${styles.navbar} ${inFeature ? styles.blurred : ''}`}>
             {/* Left section — entering/leaving a feature animates smoothly */}
-            <motion.div layout className={styles.left}>
+            <motion.div layout transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }} className={styles.left}>
                 <AnimatePresence initial={false} mode='popLayout'>
                     {inFeature && onBack && (
                         <motion.button
@@ -116,14 +116,19 @@ export default function TopNavbar({ viewTitle, onBack, onOpenProfile, onOpenSett
                             initial={{ opacity: 0, scale: 0.6 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.6 }}
-                            transition={{ duration: 0.2 }}
+                            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
                         >
                             <span className='icon icon-arrow-left' />
                         </motion.button>
                     )}
                 </AnimatePresence>
 
-                <motion.a layout href='/' className={styles.brand}>
+                <motion.a
+                    layout
+                    href='/'
+                    className={styles.brand}
+                    transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+                >
                     <img src='/logo_deveye.png' alt='DevEye' className={styles.logo} />
                     <span className={styles.brandText}>DevEye</span>
                 </motion.a>
@@ -137,7 +142,7 @@ export default function TopNavbar({ viewTitle, onBack, onOpenProfile, onOpenSett
                             initial={{ opacity: 0, x: -6 }}
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: -6 }}
-                            transition={{ duration: 0.2 }}
+                            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
                         >
                             <span className={styles.diviserDot} />
                             <span className={styles.viewTitle}>{viewTitle}</span>
@@ -150,7 +155,7 @@ export default function TopNavbar({ viewTitle, onBack, onOpenProfile, onOpenSett
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
-                            transition={{ duration: 0.2 }}
+                            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
                         >
                             {version}
                         </motion.span>

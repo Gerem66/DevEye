@@ -13,11 +13,22 @@ import { Card, Header, Row, TextInput } from '../../Components';
 import type { FeatureProps } from '@/Features/types';
 import type { PasswordEntry, PasswordEntryMasked } from 'deveye-types';
 
+function humanizeError(e: unknown, fallback: string): string {
+    if (e instanceof WsError) {
+        if (e.code === 'auth_required') return 'Déverrouillage requis.';
+        if (e.code === 'auth_invalid') return 'Mot de passe principal incorrect.';
+        if (e.code === 'forbidden') return 'Accès refusé.';
+    }
+    return fallback;
+}
+
 function FeaturePassword({ user, workspace, feature }: FeatureProps) {
     const [loaded, setLoaded] = useState(false);
     const [search, setSearch] = useState('');
     const [allPasswords, setAllPasswords] = useState<RowPassword[]>([]);
+    const [actionError, setActionError] = useState<string | null>(null);
     const reloadRef = useRef<Promise<void> | null>(null);
+    const unlockedRef = useRef(false);
 
     const reload = useCallback(async () => {
         if (reloadRef.current) return reloadRef.current;
@@ -40,10 +51,30 @@ function FeaturePassword({ user, workspace, feature }: FeatureProps) {
     }, [workspace.id]);
 
     useEffect(() => {
+        unlockedRef.current = false;
         setLoaded(false);
         setAllPasswords([]);
+        setActionError(null);
         void reload();
     }, [reload]);
+
+    /**
+     * Ensure the workspace is unlocked before a reveal/add/edit. Personal and
+     * password-less workspaces unlock transparently (no prompt); protected ones
+     * ask for the master password via the unlock popup.
+     */
+    const ensureUnlocked = useCallback(async (): Promise<boolean> => {
+        if (unlockedRef.current) return true;
+        try {
+            await ws.send('password.unlock', { workspaceId: workspace.id, password: '' });
+            unlockedRef.current = true;
+            return true;
+        } catch {
+            const ok = await OpenPopup<boolean>('popup-unlock');
+            if (ok) unlockedRef.current = true;
+            return ok === true;
+        }
+    }, [workspace.id]);
 
     /** Replace a single entry inside the cache, used after on-demand unlock. */
     const replaceEntry = useCallback((entry: PasswordEntry) => {
@@ -52,46 +83,34 @@ function FeaturePassword({ user, workspace, feature }: FeatureProps) {
 
     const getPassword = useCallback(
         async (id: number) => {
-            const run = async () => {
+            setActionError(null);
+            if (!(await ensureUnlocked())) return;
+            try {
                 const res = await ws.send('password.get', { workspaceId: workspace.id, passwordId: id });
                 replaceEntry(res.entry);
-            };
-            try {
-                await run();
             } catch (e) {
-                if (e instanceof WsError && e.code === 'auth_required') {
-                    const unlocked = await OpenPopup<boolean>('popup-unlock');
-                    if (unlocked) await run().catch(() => {});
-                }
+                setActionError(humanizeError(e, 'Impossible de récupérer le mot de passe.'));
             }
         },
-        [workspace.id, replaceEntry]
+        [ensureUnlocked, workspace.id, replaceEntry]
     );
 
     const openEditPopup = useCallback(
         async (id: number | null) => {
+            setActionError(null);
             let initial: PasswordEntry | null = null;
 
             if (id !== null) {
-                // Need the real entry (clear password) before editing
+                // Need the real entry (clear password) before editing.
+                if (!(await ensureUnlocked())) return;
                 try {
                     const res = await ws.send('password.get', { workspaceId: workspace.id, passwordId: id });
                     initial = res.entry;
+                    replaceEntry(initial);
                 } catch (e) {
-                    if (e instanceof WsError && e.code === 'auth_required') {
-                        const unlocked = await OpenPopup<boolean>('popup-unlock');
-                        if (!unlocked) return;
-                        try {
-                            const res = await ws.send('password.get', { workspaceId: workspace.id, passwordId: id });
-                            initial = res.entry;
-                        } catch {
-                            return;
-                        }
-                    } else {
-                        return;
-                    }
+                    setActionError(humanizeError(e, 'Impossible de récupérer le mot de passe.'));
+                    return;
                 }
-                if (initial) replaceEntry(initial);
             }
 
             const result = await OpenPopup<PopupResult>('popup-add-password', initial);
@@ -101,13 +120,14 @@ function FeaturePassword({ user, workspace, feature }: FeatureProps) {
                 try {
                     await ws.send('password.delete', { workspaceId: workspace.id, passwordId: id });
                     setAllPasswords((prev) => prev.filter((p) => p.id !== id));
-                } catch {
-                    /* ignore */
+                } catch (e) {
+                    setActionError(humanizeError(e, 'Suppression impossible.'));
                 }
                 return;
             }
 
             if (typeof result === 'object') {
+                if (!(await ensureUnlocked())) return;
                 try {
                     if (id === null || result.id === 0) {
                         const { id: _omit, ...entry } = result;
@@ -121,12 +141,12 @@ function FeaturePassword({ user, workspace, feature }: FeatureProps) {
                         });
                         replaceEntry(res.entry);
                     }
-                } catch {
-                    /* ignore */
+                } catch (e) {
+                    setActionError(humanizeError(e, 'Enregistrement impossible.'));
                 }
             }
         },
-        [workspace.id, replaceEntry]
+        [ensureUnlocked, workspace.id, replaceEntry]
     );
 
     /** Categories grouped + filtered by search. */
@@ -169,6 +189,12 @@ function FeaturePassword({ user, workspace, feature }: FeatureProps) {
                     />
                 </Card.Element>
             </Row>
+
+            {actionError && (
+                <Row center>
+                    <div className={styles['action-error']}>{actionError}</div>
+                </Row>
+            )}
 
             {!loaded && (
                 <>

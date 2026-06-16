@@ -11,6 +11,17 @@
 .search-container {
     padding-bottom: 24px;
 }
+.action-error {
+    width: 500px;
+    max-width: 90%;
+    padding: 10px 16px;
+    background: var(--danger-bg);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-sm);
+    color: var(--danger);
+    font-size: 0.88rem;
+    text-align: center;
+}
 .password-container {
     padding-top: 48px !important;
 }

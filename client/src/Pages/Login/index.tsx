@@ -12,6 +12,9 @@ const twoFaResponseSchema = z.object({
     workspaces: z.unknown()
 });
 
+/** Total duration of the card → progress-bar fill (0.5s delay + 1s fill). */
+const PROGRESS_MS = 1500;
+
 function LoginPage() {
     const { status, login, refresh } = useAuth();
     const [username, setUsername] = useState('');
@@ -25,8 +28,9 @@ function LoginPage() {
     const inputUsername = useRef<HTMLInputElement | null>(null);
     const inputPassword = useRef<HTMLInputElement | null>(null);
     const inputTwoFa = useRef<HTMLInputElement | null>(null);
+    const animStartRef = useRef<number>(Date.now());
 
-    const show = status !== 'authenticated';
+    const [hide, setHide] = useState(false);
 
     useEffect(() => {
         if (status === 'unknown') {
@@ -39,7 +43,20 @@ function LoginPage() {
         }
     }, [status]);
 
+    // Fade to the homepage only once authenticated AND the progress-bar animation
+    // has fully played — the transition must wait for the animation to finish.
+    useEffect(() => {
+        if (status !== 'authenticated') {
+            setHide(false);
+            return;
+        }
+        const remaining = Math.max(0, PROGRESS_MS - (Date.now() - animStartRef.current));
+        const timer = setTimeout(() => setHide(true), remaining);
+        return () => clearTimeout(timer);
+    }, [status]);
+
     const startAnim = () => {
+        animStartRef.current = Date.now();
         cardRef.current?.classList.add('card-to-progressbar');
     };
     const stopAnim = () => {
@@ -126,7 +143,7 @@ function LoginPage() {
     };
 
     return (
-        <div className={'login' + (show ? '' : ' hide')}>
+        <div className={'login' + (hide ? ' hide' : '')}>
             <div className='form'>
                 <span className='title'>
                     <b>Dev</b> <p>Eye</p>

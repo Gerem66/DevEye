@@ -39,7 +39,7 @@ export default function WidgetPopup({ layoutId, open, onClose, children }: Widge
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        transition={{ duration: 0.2 }}
+                        transition={{ duration: 0.28, ease: 'easeOut' }}
                         onClick={onClose}
                     />
 
@@ -47,7 +47,7 @@ export default function WidgetPopup({ layoutId, open, onClose, children }: Widge
                     <motion.div
                         layoutId={layoutId}
                         className={styles.popup}
-                        transition={{ type: 'spring', stiffness: 350, damping: 35 }}
+                        transition={{ type: 'spring', stiffness: 280, damping: 32, mass: 0.9 }}
                     >
                         <div className={styles.body}>{children}</div>
                     </motion.div>

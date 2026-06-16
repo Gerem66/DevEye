@@ -33,7 +33,7 @@ const Widget = forwardRef<HTMLDivElement, WidgetProps>(function Widget(
             onClick={onExpand}
             whileHover={{ y: -4 }}
             whileTap={{ scale: 0.985 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 26, mass: 0.8 }}
             {...motionProps}
         >
             {title && (
