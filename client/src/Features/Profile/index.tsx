@@ -3,11 +3,11 @@ import { useRef, useState } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
 import { ws } from '@/api/ws';
 import { Dialog } from '@/Components/Dialog';
-import { StatusBadge } from '@/Components/StatusBadge';
 import Button from '@/Components/Button';
 
 import type { FeatureProps } from '@/Features/types';
 import { ACCEPTED_TYPES, avatarSrc, fileToAvatarDataUrl } from './avatar';
+import { PasswordDialog } from './PasswordDialog';
 import styles from './style.module.css';
 
 function formatDate(time: number): string {
@@ -24,7 +24,7 @@ function formatDate(time: number): string {
 
 export default function FeatureProfile({ user, workspace }: FeatureProps) {
     const { workspaces, logout, updateUser } = useAuth();
-    const [inDevOpen, setInDevOpen] = useState(false);
+    const [passwordOpen, setPasswordOpen] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [avatarError, setAvatarError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -85,29 +85,13 @@ export default function FeatureProfile({ user, workspace }: FeatureProps) {
                         <dd>{user.email}</dd>
                     </div>
                     <div className={styles.row}>
-                        <dt>Nombre d&apos;entreprises</dt>
+                        <dt>Espaces de travail</dt>
                         <dd>{Math.max(workspaces.length - 1, 0)}</dd>
                     </div>
-                    <div className={styles.row}>
-                        <dt>Double authentification</dt>
-                        <dd>
-                            <StatusBadge tone='warning' dot={false}>
-                                Désactivée
-                            </StatusBadge>
-                        </dd>
-                    </div>
-                    <div className={styles.row}>
-                        <dt>Chiffrage par mot de passe</dt>
-                        <dd>
-                            <StatusBadge tone='warning' dot={false}>
-                                Désactivé
-                            </StatusBadge>
-                        </dd>
-                    </div>
-                    <div className={styles.row}>
+                    <div className={`${styles.row} ${styles.rowAction}`}>
                         <dt>Mot de passe</dt>
                         <dd>
-                            <Button variant='secondary' onClick={() => setInDevOpen(true)}>
+                            <Button variant='secondary' onClick={() => setPasswordOpen(true)}>
                                 Modifier
                             </Button>
                         </dd>
@@ -127,14 +111,7 @@ export default function FeatureProfile({ user, workspace }: FeatureProps) {
                 </Button>
             </div>
 
-            <Dialog
-                open={inDevOpen}
-                onClose={() => setInDevOpen(false)}
-                title='En développement'
-                footer={<Button onClick={() => setInDevOpen(false)}>Compris</Button>}
-            >
-                Cette fonctionnalité est en cours de développement. Elle sera bientôt disponible.
-            </Dialog>
+            <PasswordDialog open={passwordOpen} onClose={() => setPasswordOpen(false)} />
 
             <Dialog
                 open={avatarError !== null}

@@ -1,9 +1,13 @@
 import {
+    changePasswordRequestSchema,
+    changePasswordResponseSchema,
     loginRequestSchema,
     loginResponseSchema,
     meResponseSchema,
     refreshResponseSchema,
     resultSchema,
+    type ChangePasswordRequest,
+    type ChangePasswordResponse,
     type ErrorCode,
     type LoginRequest,
     type LoginResponse,
@@ -65,6 +69,15 @@ export function logout(): Promise<{ loggedOut: true }> {
 
 export function me(): Promise<MeResponse> {
     return request('/api/auth/me', { method: 'GET' }, meResponseSchema);
+}
+
+export function changePassword(payload: ChangePasswordRequest): Promise<ChangePasswordResponse> {
+    const body = changePasswordRequestSchema.parse(payload);
+    return request(
+        '/api/auth/change-password',
+        { method: 'POST', body: JSON.stringify(body) },
+        changePasswordResponseSchema
+    );
 }
 
 export function post<T>(

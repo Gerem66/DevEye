@@ -118,6 +118,43 @@
     color: var(--text-primary);
 }
 
+/* Rows whose value is a button: trim vertical padding so the taller control
+   doesn't make the row stand out against the plain text rows. */
+.rowAction {
+    padding-top: var(--space-sm);
+    padding-bottom: var(--space-sm);
+}
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.fieldLabel {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.formError {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--danger);
+}
+
+.formSuccess {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
 .logout {
     width: 100%;
     margin-top: var(--space-lg);

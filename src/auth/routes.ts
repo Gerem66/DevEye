@@ -1,4 +1,5 @@
 import {
+    changePasswordRequestSchema,
     err,
     loginRequestSchema,
     loginResponseSchema,
@@ -242,5 +243,35 @@ export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps):
         if (!bundle) return reply.code(401).send(err('auth_invalid', 'Unknown user'));
 
         return reply.send(ok(bundle));
+    });
+
+    app.post('/api/auth/change-password', async (req, reply) => {
+        const accessToken = req.cookies[ACCESS_COOKIE];
+        if (!accessToken) return reply.code(401).send(err('auth_required', 'No session'));
+
+        const claims = await verifyAccessToken(accessToken);
+        if (!claims) return reply.code(401).send(err('auth_expired', 'Access token expired'));
+
+        const parsed = changePasswordRequestSchema.safeParse(req.body);
+        if (!parsed.success) {
+            return reply.code(400).send(err('validation', 'Invalid password payload', parsed.error.flatten()));
+        }
+        const { currentPassword, newPassword } = parsed.data;
+
+        const row = await db.users.findById(Number(claims.sub));
+        if (!row) return reply.code(401).send(err('auth_invalid', 'Unknown user'));
+
+        const valid = row.password_hash ? await verifyPassword(row.password_hash, currentPassword) : false;
+        if (!valid) {
+            return reply.code(401).send(err('auth_invalid', 'Current password is incorrect'));
+        }
+
+        if (currentPassword === newPassword) {
+            return reply.code(400).send(err('validation', 'New password must differ from the current one'));
+        }
+
+        await db.users.updatePasswordHash(row.id, await hashPassword(newPassword));
+
+        return reply.send(ok({ changed: true as const }));
     });
 }

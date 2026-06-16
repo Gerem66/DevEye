@@ -14,7 +14,7 @@ const twoFaResponseSchema = z.object({
 /** Total duration of the card → progress-bar fill (0.5s delay + 1s fill). */
 const PROGRESS_MS = 1500;
 /** Minimum visible time for a failed attempt before the error shows. */
-const ERROR_MS = 800;
+const ERROR_MS = PROGRESS_MS;
 
 /** Block until at least `minMs` has elapsed since `startedAt` (keeps the
  *  progress/error animations from flashing on fast responses). */
