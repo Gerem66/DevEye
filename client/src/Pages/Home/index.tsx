@@ -1,10 +1,10 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { TopNavbar } from '@/Components/TopNavbar';
 import { Widget } from '@/Components/Widget';
 import { WidgetGrid } from '@/Components/WidgetGrid';
-import { WidgetPopup } from '@/Components/WidgetPopup';
+import { WidgetPopup, FeatureKeepAlive } from '@/Components/WidgetPopup';
 import { Wallpaper } from '@/Components/Wallpaper';
 import { SettingsPanel } from '@/Components/SettingsPanel';
 import PopupUnlock from './popup-unlock';
@@ -34,6 +34,13 @@ interface WidgetConfig {
     FullComponent: React.ComponentType<FeatureProps>;
     /** Openable (e.g. from the topbar) but not shown as a grid card. */
     hideOnGrid?: boolean;
+    /**
+     * How long (minutes) the feature stays mounted after its popup closes.
+     * - `0`       → unmount immediately on close (default).
+     * - `> 0`     → keep mounted for that many minutes, then auto-unmount.
+     * - `undefined` → keep mounted indefinitely (until forced Ctrl+click reset).
+     */
+    cacheDurationMinutes?: number;
 }
 
 const WIDGETS: WidgetConfig[] = [
@@ -42,28 +49,32 @@ const WIDGETS: WidgetConfig[] = [
         title: 'Monitoring',
         icon: 'activity',
         WidgetContent: MonitoringWidget,
-        FullComponent: Monitoring
+        FullComponent: Monitoring,
+        cacheDurationMinutes: 5
     },
     {
         id: 'weather',
         title: 'Météo',
         icon: 'cloud',
         WidgetContent: WeatherWidget,
-        FullComponent: Weather
+        FullComponent: Weather,
+        cacheDurationMinutes: 10
     },
     {
         id: 'clients',
         title: 'Appareils',
         icon: 'server',
         WidgetContent: ClientsWidget,
-        FullComponent: Clients
+        FullComponent: Clients,
+        cacheDurationMinutes: 5
     },
     {
         id: 'twofa',
         title: 'Sécurité 2FA',
         icon: 'shield',
         WidgetContent: TwoFactorWidget,
-        FullComponent: TwoFactor
+        FullComponent: TwoFactor,
+        cacheDurationMinutes: 5
     },
     {
         id: 'profile',
@@ -71,14 +82,16 @@ const WIDGETS: WidgetConfig[] = [
         icon: 'user',
         WidgetContent: () => <ProfileWidgetContent />,
         FullComponent: FeatureProfile,
-        hideOnGrid: true
+        hideOnGrid: true,
+        cacheDurationMinutes: undefined
     },
     {
         id: 'password',
         title: 'Mot de passe',
         icon: 'lock',
         WidgetContent: () => <PasswordWidgetContent />,
-        FullComponent: FeaturePassword
+        FullComponent: FeaturePassword,
+        cacheDurationMinutes: 0
     }
 ];
 
@@ -122,16 +135,98 @@ export default function HomePage() {
     const [expandedWidget, setExpandedWidget] = useState<string | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
 
+    // Set of feature ids whose components are currently mounted (cached).
+    const [mountedFeatures, setMountedFeatures] = useState<Set<string>>(new Set());
+
+    // Per-feature "generation" counter. Bumping it changes the component key,
+    // forcing React to fully unmount (running the feature's onUnmount cleanup)
+    // and remount a fresh instance — used for the Ctrl+click forced reset.
+    const [featureGen, setFeatureGen] = useState<Map<string, number>>(new Map());
+
+    // The open popup's body element — feature content is portaled into it.
+    const [popupBodyEl, setPopupBodyEl] = useState<HTMLDivElement | null>(null);
+
+    // Timers for TTL-based auto-unmount, keyed by feature id.
+    const ttlTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+    // The feature whose popup is currently animating out (policy applied on exit).
+    const closingFeatureRef = useRef<string | null>(null);
+
     const currentWorkspace = useMemo(() => {
         return workspaces.find((w) => w.id === user?.defaultWorkspace) ?? workspaces[0] ?? null;
     }, [workspaces, user]);
 
-    const handleExpand = useCallback((widgetId: string) => {
+    /**
+     * Remove a feature from the DOM. React unmounts the component, which runs
+     * its `useFeatureLifecycle` cleanup (onUnmount) — so save/teardown happens
+     * automatically regardless of why the feature is being unloaded.
+     */
+    const unmountFeature = useCallback((featureId: string) => {
+        clearTimeout(ttlTimers.current.get(featureId));
+        ttlTimers.current.delete(featureId);
+        setMountedFeatures((prev) => {
+            if (!prev.has(featureId)) return prev;
+            const next = new Set(prev);
+            next.delete(featureId);
+            return next;
+        });
+    }, []);
+
+    const handleExpand = useCallback((widgetId: string, forceReset = false) => {
+        // Re-opening cancels any pending TTL unload for this feature.
+        clearTimeout(ttlTimers.current.get(widgetId));
+        ttlTimers.current.delete(widgetId);
+        if (closingFeatureRef.current === widgetId) closingFeatureRef.current = null;
+
+        if (forceReset) {
+            // Bump the generation so the cached instance is torn down (its
+            // onUnmount fires) and a fresh one mounts and reloads normally.
+            setFeatureGen((prev) => {
+                const next = new Map(prev);
+                next.set(widgetId, (prev.get(widgetId) ?? 0) + 1);
+                return next;
+            });
+        }
+
+        setMountedFeatures((prev) => new Set(prev).add(widgetId));
         setExpandedWidget(widgetId);
     }, []);
 
     const handleClose = useCallback(() => {
+        // Remember which feature is closing; the unload policy is applied once
+        // the morph-back animation finishes (handleExitComplete), so the content
+        // stays visible *inside* the panel during the close animation.
+        closingFeatureRef.current = expandedWidget;
         setExpandedWidget(null);
+    }, [expandedWidget]);
+
+    const handleExitComplete = useCallback(() => {
+        const featureId = closingFeatureRef.current;
+        closingFeatureRef.current = null;
+        if (!featureId) return;
+
+        const config = WIDGETS.find((w) => w.id === featureId);
+        if (!config) return;
+
+        const duration = config.cacheDurationMinutes;
+
+        if (duration === 0) {
+            // Unmount immediately on close (legacy behaviour).
+            unmountFeature(featureId);
+        } else if (duration !== undefined) {
+            // Schedule auto-unmount after the feature's TTL.
+            clearTimeout(ttlTimers.current.get(featureId));
+            const timer = setTimeout(() => unmountFeature(featureId), duration * 60 * 1000);
+            ttlTimers.current.set(featureId, timer);
+        }
+        // undefined → keep mounted indefinitely, no timer.
+    }, [unmountFeature]);
+
+    // Clean up all timers on unmount.
+    useEffect(() => {
+        return () => {
+            ttlTimers.current.forEach((t) => clearTimeout(t));
+        };
     }, []);
 
     const expandedConfig = expandedWidget ? (WIDGETS.find((w) => w.id === expandedWidget) ?? null) : null;
@@ -147,28 +242,18 @@ export default function HomePage() {
 
     if (!user) return null;
 
-    // Build FeatureProps for the full component (uses the persisted popup config).
-    const featureProps: FeatureProps = {
-        user,
-        workspace: currentWorkspace ?? {
-            id: 0,
-            name: 'Default',
-            logo: '',
-            users: [],
-            features: [],
-            reAuthInterval: null,
-            created: 0
-        },
-        feature: {
-            id: popupConfig?.id ?? '',
-            name: popupConfig?.title ?? '',
-            icon: popupConfig?.icon ?? '',
-            component: popupConfig?.FullComponent ?? (() => null)
-        },
-        setWorkspace: (ws) => {
-            setWorkspaces((prev) => prev.map((w) => (w.id === ws.id ? ws : w)));
-        },
-        setFeature: () => {}
+    const defaultWorkspace = currentWorkspace ?? {
+        id: 0,
+        name: 'Default',
+        logo: '',
+        users: [],
+        features: [],
+        reAuthInterval: null,
+        created: 0
+    };
+
+    const handleSetWorkspace = (ws: typeof defaultWorkspace) => {
+        setWorkspaces((prev) => prev.map((w) => (w.id === ws.id ? ws : w)));
     };
 
     return (
@@ -200,7 +285,7 @@ export default function HomePage() {
                                 widgetId={config.id}
                                 title={config.title}
                                 icon={config.icon}
-                                onExpand={() => handleExpand(config.id)}
+                                onExpand={(e) => handleExpand(config.id, e.ctrlKey)}
                             >
                                 <config.WidgetContent />
                             </Widget>
@@ -209,12 +294,54 @@ export default function HomePage() {
                 </div>
             </main>
 
-            {/* Popup for the expanded widget — the topbar owns the title + back action */}
+            {/* The animated popup shell (morphs from/back to the card). It stays
+                visually empty — the active feature's content is portaled into its
+                body by the keep-alive layer below, so closing the popup never
+                unmounts the feature. */}
             {popupConfig && (
-                <WidgetPopup layoutId={popupConfig.id} open={!!expandedWidget} onClose={handleClose}>
-                    <popupConfig.FullComponent {...featureProps} />
-                </WidgetPopup>
+                <WidgetPopup
+                    layoutId={popupConfig.id}
+                    open={!!expandedWidget}
+                    onClose={handleClose}
+                    bodyRef={setPopupBodyEl}
+                    onExitComplete={handleExitComplete}
+                />
             )}
+
+            {/* Keep-alive layer: every cached feature stays mounted here and is
+                portaled into the open popup body when active, or parked hidden
+                otherwise — preserving its state across close/reopen. */}
+            {[...mountedFeatures].map((id) => {
+                const config = WIDGETS.find((w) => w.id === id);
+                if (!config) return null;
+
+                const featureProps: FeatureProps = {
+                    user,
+                    workspace: defaultWorkspace,
+                    feature: {
+                        id: config.id,
+                        name: config.title,
+                        icon: config.icon,
+                        component: config.FullComponent
+                    },
+                    setWorkspace: handleSetWorkspace,
+                    setFeature: () => {}
+                };
+
+                const gen = featureGen.get(id) ?? 0;
+                // Portal into the popup body while this feature owns the popup
+                // (open *or* animating out); otherwise keep it parked hidden.
+                const target = popupConfig?.id === id ? popupBodyEl : null;
+
+                return (
+                    // The generation in the key forces a fresh remount on a forced
+                    // reset (Ctrl+click): old instance unmounts (onUnmount fires)
+                    // and a fresh one mounts, reloading the feature from scratch.
+                    <FeatureKeepAlive key={`${id}-${gen}`} target={target}>
+                        <config.FullComponent {...featureProps} />
+                    </FeatureKeepAlive>
+                );
+            })}
 
             <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 

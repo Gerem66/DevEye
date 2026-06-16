@@ -1,4 +1,4 @@
-import { forwardRef, type ReactNode } from 'react';
+import { forwardRef, type ReactNode, type MouseEvent } from 'react';
 import { motion, type HTMLMotionProps } from 'framer-motion';
 import styles from './Widget.module.css';
 
@@ -12,7 +12,7 @@ export interface WidgetProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
     /** Content rendered inside the widget body. */
     children?: ReactNode;
     /** Called when the widget is clicked (e.g., to expand into popup). */
-    onExpand?: () => void;
+    onExpand?: (e: React.MouseEvent<HTMLDivElement>) => void;
     /** Additional className for the outer wrapper. */
     className?: string;
 }
@@ -30,7 +30,7 @@ const Widget = forwardRef<HTMLDivElement, WidgetProps>(function Widget(
             ref={ref}
             layoutId={widgetId}
             className={`${styles.widget} ${className ?? ''}`}
-            onClick={onExpand}
+            onClick={(e: MouseEvent<HTMLDivElement>) => onExpand?.(e)}
             whileHover={{ y: -4 }}
             whileTap={{ scale: 0.985 }}
             transition={{ type: 'spring', stiffness: 300, damping: 26, mass: 0.8 }}

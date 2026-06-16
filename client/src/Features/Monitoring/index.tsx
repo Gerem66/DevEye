@@ -10,6 +10,7 @@ import {
     type MetricsPush
 } from 'deveye-types';
 import type { FeatureProps } from '../types';
+import { useFeatureLifecycle } from '../useFeatureLifecycle';
 import styles from './Monitoring.module.css';
 
 const HISTORY_SIZE = 30;
@@ -136,7 +137,10 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
         void fetchDevices();
     }, [fetchDevices]);
 
-    // Subscribe / unsubscribe on device selection
+    // Subscribe on device selection; unsubscribe from the previous one.
+    // The teardown when the feature itself is unloaded is handled once in
+    // useFeatureLifecycle below (so the live subscription stops when the cache
+    // expires / is reset), avoiding a double unsubscribe here.
     useEffect(() => {
         const prev = prevSelectedId.current;
         prevSelectedId.current = selectedId;
@@ -149,11 +153,18 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
         setSnapshot(null);
         setCpuHistory([]);
         ws.send('metrics.subscribe', { deviceIds: [selectedId] }).catch(() => {});
-
-        return () => {
-            ws.send('metrics.unsubscribe', { deviceIds: [selectedId] }).catch(() => {});
-        };
     }, [selectedId]);
+
+    // Feature unloaded (cache TTL expiry, Ctrl+click reset, or leaving the
+    // dashboard) — drop the live metrics subscription cleanly. Note: while the
+    // feature is merely closed-but-cached it stays subscribed so reopening is
+    // instant; the subscription only stops when the instance is truly unloaded.
+    useFeatureLifecycle({
+        onUnmount: () => {
+            const active = prevSelectedId.current;
+            if (active) ws.send('metrics.unsubscribe', { deviceIds: [active] }).catch(() => {});
+        }
+    });
 
     // Listen for push events
     useEffect(() => {

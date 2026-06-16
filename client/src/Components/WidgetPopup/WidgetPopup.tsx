@@ -9,7 +9,14 @@ export interface WidgetPopupProps {
     open: boolean;
     /** Called when the user requests to close (Escape, overlay click). */
     onClose: () => void;
-    /** Popup content (the feature provides its own heading). */
+    /**
+     * Receives the panel body element. The dashboard portals the (kept-alive)
+     * feature content into it, so the feature's React state survives close.
+     */
+    bodyRef?: (el: HTMLDivElement | null) => void;
+    /** Called once the close (exit) animation has fully completed. */
+    onExitComplete?: () => void;
+    /** Optional fallback content rendered directly in the body. */
     children?: ReactNode;
 }
 
@@ -18,8 +25,12 @@ export interface WidgetPopupProps {
  * framer-motion's `layoutId`. It deliberately has no header of its own: the
  * TopNavbar stays above it (higher z-index) and owns the back action + title,
  * so the topbar always provides the main context. Closes on Escape / overlay.
+ *
+ * The panel itself mounts/unmounts with `open` (so the shared-element morph
+ * plays both ways). Feature *content* is kept alive across opens by portaling
+ * it into `bodyRef` from the dashboard, rather than being a normal child here.
  */
-export default function WidgetPopup({ layoutId, open, onClose, children }: WidgetPopupProps) {
+export default function WidgetPopup({ layoutId, open, onClose, bodyRef, onExitComplete, children }: WidgetPopupProps) {
     useEffect(() => {
         if (!open) return;
         const handler = (e: KeyboardEvent) => {
@@ -30,7 +41,7 @@ export default function WidgetPopup({ layoutId, open, onClose, children }: Widge
     }, [open, onClose]);
 
     return (
-        <AnimatePresence>
+        <AnimatePresence onExitComplete={onExitComplete}>
             {open && (
                 <>
                     {/* Overlay (below the navbar — navbar stays bright & clickable) */}
@@ -49,7 +60,9 @@ export default function WidgetPopup({ layoutId, open, onClose, children }: Widge
                         className={styles.popup}
                         transition={{ type: 'spring', stiffness: 280, damping: 32, mass: 0.9 }}
                     >
-                        <div className={styles.body}>{children}</div>
+                        <div className={styles.body} ref={bodyRef}>
+                            {children}
+                        </div>
                     </motion.div>
                 </>
             )}
