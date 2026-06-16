@@ -11,11 +11,11 @@ import packageJson from '../../../package.json';
 const ENV = import.meta.env.VITE_ENV;
 const version = packageJson.version + (ENV === 'dev' ? '-dev' : '');
 
-/** Shared motion timings so every part of the navbar morphs in sync.
- *  A tween (not a spring) is used for the back button so its width, opacity and
- *  margin all reach their target on the exact same frame — a spring settles each
- *  value independently, which left the arrow blinking out then snapping. */
+/** Ease-out used for entering elements (fast arrival). */
 const COLLAPSE = { duration: 0.28, ease: [0.22, 1, 0.36, 1] } as const;
+/** Ease-in used when the back button exits: the button shrinks slowly at first
+ *  so the opacity has time to reach zero before the icon gets clipped. */
+const COLLAPSE_EXIT = { duration: 0.22, ease: [0.55, 0, 1, 0.45] } as const;
 const FADE = { duration: 0.22, ease: [0.22, 1, 0.36, 1] } as const;
 const BACK_BTN_SIZE = 34;
 
@@ -123,7 +123,7 @@ export default function TopNavbar({ viewTitle, onBack, onOpenProfile, onOpenSett
                             aria-label='Retour au dashboard'
                             initial={{ width: 0, opacity: 0, marginRight: 0 }}
                             animate={{ width: BACK_BTN_SIZE, opacity: 1, marginRight: 8 }}
-                            exit={{ width: 0, opacity: 0, marginRight: 0 }}
+                            exit={{ width: 0, opacity: 0, marginRight: 0, transition: COLLAPSE_EXIT }}
                             transition={COLLAPSE}
                         >
                             <span className='icon icon-arrow-left' />
