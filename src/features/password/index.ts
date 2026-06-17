@@ -2,7 +2,6 @@ import { verifyPassword } from '@/auth/argon';
 import { passwordAdd, passwordDelete, passwordEdit, passwordGet, passwordList, passwordUnlock } from 'deveye-types';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import {
-    decryptPayload,
     encryptPayload,
     isUnlocked,
     markUnlocked,
@@ -107,7 +106,9 @@ export const passwordGetFeature: FeatureDefinition<
         if (!row || !rowInWorkspace(row.workspace_id, input.workspaceId)) {
             throw new FeatureError('not_found', 'Password not found');
         }
-        return { entry: toEntry(row.id, await decryptPayload(ctx.secure, row.content)) };
+        const payload = await tryDecryptPayload(ctx.secure, row.content);
+        if (!payload) throw new FeatureError('internal', 'Failed to decrypt password content');
+        return { entry: toEntry(row.id, payload) };
     }
 });
 
