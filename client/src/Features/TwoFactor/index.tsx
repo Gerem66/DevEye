@@ -28,6 +28,7 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
     const [backupCodes, setBackupCodes] = useState<string[]>([]);
     const [showDisableConfirm, setShowDisableConfirm] = useState(false);
     const [disableCode, setDisableCode] = useState('');
+    const [showRegenConfirm, setShowRegenConfirm] = useState(false);
     const [secrecy, setSecrecy] = useState<SecrecyStatus | null>(null);
     const [securityOpen, setSecurityOpen] = useState(false);
     const [infoOpen, setInfoOpen] = useState<'2fa' | 'encryption' | null>(null);
@@ -93,8 +94,14 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
         setError(null);
         try {
             await ws.send('twofa.enable', { code: verifyCode.trim() });
+            // Surface the backup codes minted during setup, shown only once.
+            const codes = setupData?.backupCodes ?? [];
             closeSetup();
             await fetchStatus();
+            if (codes.length > 0) {
+                setBackupCodes(codes);
+                setShowBackupCodes(true);
+            }
         } catch {
             setError('Code invalide. Vérifiez et réessayez.');
         } finally {
@@ -118,11 +125,13 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
     const regenerateBackupCodes = async () => {
         setError(null);
         try {
-            const res = await ws.send('twofa.regenBackup', { code: '' });
+            const res = await ws.send('twofa.regenBackup', {});
+            setShowRegenConfirm(false);
             setBackupCodes(res.backupCodes);
             setShowBackupCodes(true);
             await fetchStatus();
         } catch {
+            setShowRegenConfirm(false);
             setError('Erreur lors de la régénération des codes');
         }
     };
@@ -160,9 +169,18 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
                         {!status?.enabled ? (
                             <Button onClick={startSetup}>Activer</Button>
                         ) : (
-                            <Button variant='danger' onClick={() => setShowDisableConfirm(true)}>
-                                Désactiver
-                            </Button>
+                            <>
+                                <button
+                                    className={styles.resetBtn}
+                                    onClick={() => setShowRegenConfirm(true)}
+                                    title='Régénérer les codes de secours'
+                                >
+                                    <span className='icon icon-refresh' />
+                                </button>
+                                <Button variant='danger' onClick={() => setShowDisableConfirm(true)}>
+                                    Désactiver
+                                </Button>
+                            </>
                         )}
                     </div>
 
@@ -193,19 +211,6 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
                             {secrecy?.enabled ? 'Désactiver' : 'Activer'}
                         </Button>
                     </div>
-
-                    {status?.enabled && (
-                        <div className={styles.backupSection}>
-                            <h3>Codes de secours</h3>
-                            <p>
-                                Utilisez ces codes si vous perdez l&apos;accès à votre application
-                                d&apos;authentification.
-                            </p>
-                            <Button variant='secondary' onClick={regenerateBackupCodes}>
-                                Régénérer les codes de secours
-                            </Button>
-                        </div>
-                    )}
 
                     {error && <div className={styles.error}>{error}</div>}
 
@@ -331,6 +336,23 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
                             placeholder='000000'
                         />
                     </Dialog>
+
+                    <Dialog
+                        open={showRegenConfirm}
+                        onClose={() => setShowRegenConfirm(false)}
+                        title='Réinitialiser les codes de secours'
+                        description='⚠️ Vos anciens codes de secours seront définitivement invalidés et de nouveaux seront générés. Continuer ?'
+                        footer={
+                            <>
+                                <Button variant='ghost' onClick={() => setShowRegenConfirm(false)}>
+                                    Non
+                                </Button>
+                                <Button variant='danger' onClick={regenerateBackupCodes}>
+                                    Oui, réinitialiser
+                                </Button>
+                            </>
+                        }
+                    />
 
                     <Dialog
                         open={infoOpen === '2fa'}

@@ -204,6 +204,34 @@
     width: 16px;
 }
 
+.resetBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: transparent;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+        color var(--transition-fast),
+        border-color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.resetBtn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--glass-bg);
+}
+
+.resetBtn .icon {
+    width: 18px;
+}
+
 .infoContent {
     display: flex;
     flex-direction: column;
@@ -238,26 +266,6 @@
     border-radius: var(--radius-sm);
     color: var(--danger);
     font-size: 0.85rem;
-}
-
-.backupSection {
-    background: var(--glass-bg-light);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-md);
-    padding: var(--space-lg);
-}
-
-.backupSection h3 {
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0 0 var(--space-xs) 0;
-}
-
-.backupSection p {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    margin: 0 0 var(--space-md) 0;
 }
 
 /* 2FA setup steps (rendered inside the setup Dialog). */

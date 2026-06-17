@@ -111,8 +111,9 @@ export const twoFactorRegenBackupFeature: FeatureDefinition<
     typeof twoFactorRegenBackup.output
 > = defineFeature({
     ...twoFactorRegenBackup,
-    handler: async (ctx, input) => {
-        await assertValidCode(ctx, input.code);
+    handler: async (ctx) => {
+        const row = await ctx.db.twoFactor.get(ctx.userId);
+        if (!row || !row.enabled) throw new FeatureError('conflict', '2FA is not enabled');
         const backupCodes = generateBackupCodes();
         await ctx.db.twoFactor.replaceBackupCodes(
             ctx.userId,
