@@ -1,5 +1,6 @@
 import type { Database } from '@/db';
-import type { MinimalUser, User, UserRole, Workspace } from 'deveye-types';
+import type { MinimalUser, ThemeStateDTO, User, UserRole, Workspace } from 'deveye-types';
+import { themeStateSchema } from 'deveye-types';
 
 export async function loadUserBundle(
     db: Database,
@@ -74,10 +75,21 @@ export async function loadUserBundle(
         security,
         defaultWorkspace: row.default_workspace,
         lastLogin: Number(row.last_login),
-        created: Number(row.created)
+        created: Number(row.created),
+        theme: parseTheme(row.theme)
     };
 
     return { user, workspaces: [personalWorkspace, ...workspaces] };
+}
+
+function parseTheme(raw: string | null | undefined): ThemeStateDTO | null {
+    if (!raw) return null;
+    try {
+        const parsed = themeStateSchema.safeParse(JSON.parse(raw));
+        return parsed.success ? parsed.data : null;
+    } catch {
+        return null;
+    }
 }
 
 function parseStringArray(raw: unknown): string[] {

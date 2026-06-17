@@ -1,9 +1,11 @@
 import { useSyncExternalStore } from 'react';
+import type { ThemeStateDTO } from 'deveye-types';
+import { ws } from '@/api/ws';
 
 /**
- * Frontend-only theme personalization (accent color + dashboard background).
- * Persisted in localStorage and applied as CSS custom properties on :root, so
- * the whole token system follows along. Kept deliberately sober.
+ * Frontend theme personalization (accent color + dashboard background).
+ * Persisted in localStorage for instant paint on load, and synced to the
+ * server so settings follow the user across devices.
  */
 const KEY = 'deveye:theme';
 
@@ -139,12 +141,43 @@ function persist(): void {
     }
 }
 
+// Debounced server sync: coalesce rapid changes (slider drag, etc.) into one WS call.
+let syncTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleSyncToServer(s: ThemeState): void {
+    if (syncTimer) clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => {
+        syncTimer = null;
+        if (ws.state !== 'open') return;
+        void ws.send('user.setTheme', s).catch(() => {});
+    }, 1000);
+}
+
 export function getTheme(): ThemeState {
     return state;
 }
 
 export function setTheme(patch: Partial<ThemeState>): void {
     state = { ...state, ...patch };
+    persist();
+    applyTheme(state);
+    scheduleSyncToServer(state);
+    for (const fn of listeners) fn();
+}
+
+/**
+ * Called by AuthProvider when a user bundle is received (login, refresh, /me).
+ * The server state wins over localStorage so cross-device settings propagate.
+ * Skips overwrite if the server has no saved theme (first login, or legacy user).
+ */
+export function syncThemeFromServer(serverTheme: ThemeStateDTO | null): void {
+    if (!serverTheme) return;
+    state = {
+        accent: serverTheme.accent,
+        bgPreset: serverTheme.bgPreset,
+        bgImage: serverTheme.bgImage,
+        bgDim: serverTheme.bgDim,
+        bgBlur: serverTheme.bgBlur
+    };
     persist();
     applyTheme(state);
     for (const fn of listeners) fn();

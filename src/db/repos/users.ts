@@ -14,6 +14,7 @@ export interface UsersRepo {
     updatePasswordHash(id: number, passwordHash: string): Promise<void>;
     updateAvatar(id: number, avatar: string): Promise<void>;
     setRole(id: number, role: 'user' | 'admin'): Promise<void>;
+    setTheme(id: number, theme: string): Promise<void>;
 }
 
 export function usersRepo(pool: Q): UsersRepo {
@@ -58,6 +59,9 @@ export function usersRepo(pool: Q): UsersRepo {
         },
         async setRole(id, role) {
             await pool.query('UPDATE users SET role = ? WHERE id = ?', [role, id]);
+        },
+        async setTheme(id, theme) {
+            await pool.query('UPDATE users SET theme = ? WHERE id = ?', [theme, id]);
         }
     };
 }

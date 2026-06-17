@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { ApiError, login as apiLogin, logout as apiLogout, me as apiMe, refresh as apiRefresh } from '../api/http';
 import { ws } from '../api/ws';
 import { refreshSecrecyStatus, setUnlocked } from '../stores/secrecy';
+import { syncThemeFromServer } from '../stores/theme';
 
 interface AuthState {
     status: 'unknown' | 'authenticated' | 'anonymous';
@@ -27,6 +28,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 type FullBundle = { user: User; workspaces: Workspace[] };
 
 function applyBundle(bundle: FullBundle): AuthState {
+    syncThemeFromServer(bundle.user.theme);
     return {
         status: 'authenticated',
         user: bundle.user,

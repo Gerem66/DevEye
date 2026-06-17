@@ -12,6 +12,7 @@ import {
 import { secrecyFeatures } from './secrecy';
 import { twoFactorFeatures } from './twofa';
 import { userSetAvatarFeature } from './user/setAvatar';
+import { userSetThemeFeature } from './user/setTheme';
 import { weatherFeatures } from './weather';
 import { workspaceAddFeature } from './workspace/add';
 import { workspaceDeleteFeature } from './workspace/delete';
@@ -21,6 +22,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     workspaceAddFeature,
     workspaceDeleteFeature,
     userSetAvatarFeature,
+    userSetThemeFeature,
     passwordListFeature,
     passwordGetFeature,
     passwordAddFeature,
