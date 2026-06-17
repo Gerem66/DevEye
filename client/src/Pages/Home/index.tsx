@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
+import { ws } from '@/api/ws';
 import { TopNavbar } from '@/Components/TopNavbar';
 import { Widget } from '@/Components/Widget';
 import { WidgetGrid } from '@/Components/WidgetGrid';
@@ -37,6 +38,15 @@ interface ViewConfig {
      * - `undefined` → keep mounted indefinitely (until a Ctrl+click reset).
      */
     cacheDurationMinutes?: number;
+    /**
+     * Whether to mount this view eagerly at page load (parked hidden), before
+     * it is ever opened — so its content is already loaded the first time the
+     * user opens it. The preloaded instance respects `cacheDurationMinutes`:
+     * its TTL timer starts immediately, so a view that is never opened within
+     * its duration is auto-unmounted (`cacheDurationMinutes: 0` is therefore
+     * meaningless to preload and is ignored).
+     */
+    preload?: boolean;
 }
 
 /** A modular feature: a view that also shows as a card on the home grid. */
@@ -53,7 +63,8 @@ const FEATURES: FeatureConfig[] = [
         icon: 'activity',
         WidgetContent: MonitoringWidget,
         FullComponent: Monitoring,
-        cacheDurationMinutes: 5
+        cacheDurationMinutes: 5,
+        preload: true
     },
     {
         id: 'weather',
@@ -61,7 +72,8 @@ const FEATURES: FeatureConfig[] = [
         icon: 'cloud',
         WidgetContent: WeatherWidget,
         FullComponent: Weather,
-        cacheDurationMinutes: 10
+        cacheDurationMinutes: 10,
+        preload: true
     },
     {
         id: 'clients',
@@ -236,6 +248,45 @@ export default function HomePage() {
             doExpand(pending.widgetId, pending.forceReset);
         }
     }, [unmountFeature, doExpand]);
+
+    // Eagerly mount preload views (parked hidden), so their content is already
+    // loaded the first time the user opens them. Each starts its TTL timer
+    // immediately — a preloaded view that is never opened within its
+    // `cacheDurationMinutes` is auto-unmounted, just like one left to expire
+    // after a close.
+    //
+    // Gated on the WS being `open`: features fetch their data on mount via
+    // `ws.send`, which rejects (and isn't retried) while the socket is still
+    // connecting. Mounting them only once connected guarantees their initial
+    // load actually succeeds. Runs once, the first time the WS is open.
+    const preloadedRef = useRef(false);
+    useEffect(() => {
+        const preload = () => {
+            if (preloadedRef.current) return;
+            preloadedRef.current = true;
+            VIEWS.forEach((config) => {
+                const duration = config.cacheDurationMinutes;
+                // `0` (unmount-on-close) can't be preloaded; `undefined` keeps
+                // it mounted indefinitely with no timer.
+                if (!config.preload || duration === 0) return;
+
+                setMountedFeatures((prev) => new Set(prev).add(config.id));
+
+                if (duration !== undefined) {
+                    const timer = setTimeout(() => unmountFeature(config.id), duration * 60 * 1000);
+                    ttlTimers.current.set(config.id, timer);
+                }
+            });
+        };
+
+        if (ws.state === 'open') {
+            preload();
+            return;
+        }
+        return ws.onStateChange((s) => {
+            if (s === 'open') preload();
+        });
+    }, [unmountFeature]);
 
     // Clean up all timers on unmount.
     useEffect(() => {
