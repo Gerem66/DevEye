@@ -1,4 +1,11 @@
-import type { WeatherCondition, WeatherDay, WeatherFormat, WeatherProvider, WeatherReport } from 'deveye-types';
+import type {
+    WeatherCondition,
+    WeatherDay,
+    WeatherFormat,
+    WeatherHour,
+    WeatherProvider,
+    WeatherReport
+} from 'deveye-types';
 
 /**
  * Weather provider abstraction. Open-Meteo needs no API key and provides free
@@ -61,6 +68,12 @@ interface OpenMeteoForecast {
         wind_speed_10m?: number;
         is_day?: number;
     };
+    hourly?: {
+        time: string[];
+        weather_code: number[];
+        temperature_2m: number[];
+        precipitation_probability?: number[];
+    };
     daily?: {
         time: string[];
         weather_code: number[];
@@ -92,11 +105,12 @@ const openMeteoAdapter: WeatherProviderAdapter = {
         const label = [hit.name, hit.admin1, hit.country].filter(Boolean).join(', ');
         return { label, latitude: hit.latitude, longitude: hit.longitude };
     },
-    async fetchReport({ locationId, label, latitude, longitude, days }) {
+    async fetchReport({ locationId, label, latitude, longitude, days, provider }) {
         const params = new URLSearchParams({
             latitude: String(latitude),
             longitude: String(longitude),
             current: 'weather_code,temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,is_day',
+            hourly: 'weather_code,temperature_2m,precipitation_probability',
             daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
             forecast_days: String(Math.min(Math.max(days, 1), 16)),
             timezone: 'auto'
@@ -113,6 +127,24 @@ const openMeteoAdapter: WeatherProviderAdapter = {
                   isDay: data.current.is_day === undefined ? null : data.current.is_day === 1
               }
             : null;
+
+        const hourly: WeatherHour[] = [];
+        if (data.hourly) {
+            // Open-Meteo returns local-time hours (timezone=auto). Show the whole
+            // current local day (from 00:00) onward so the client can highlight the
+            // current hour and scroll it into view; cap the window at 32 hours.
+            const todayLocal = new Date().toLocaleString('sv-SE', { timeZone: data.timezone ?? 'UTC' }).slice(0, 10); // "YYYY-MM-DD"
+            const startIdx = data.hourly.time.findIndex((t) => t.slice(0, 10) >= todayLocal);
+            const from = startIdx === -1 ? 0 : startIdx;
+            for (let i = from; i < Math.min(from + 32, data.hourly.time.length); i++) {
+                hourly.push({
+                    time: data.hourly.time[i],
+                    code: data.hourly.weather_code[i],
+                    temperature: data.hourly.temperature_2m[i],
+                    precipitationProbability: data.hourly.precipitation_probability?.[i] ?? null
+                });
+            }
+        }
 
         const daily: WeatherDay[] = [];
         if (data.daily) {
@@ -132,20 +164,165 @@ const openMeteoAdapter: WeatherProviderAdapter = {
             label,
             fetchedAt: Math.floor(Date.now() / 1000),
             timezone: data.timezone ?? 'UTC',
+            provider,
             current,
+            hourly,
             daily
         };
     }
 };
 
+/* ----------------------------- OpenWeatherMap ----------------------------- */
+
+const OWM_GEOCODE_URL = 'https://api.openweathermap.org/geo/1.0/direct';
+const OWM_ONECALL_URL = 'https://api.openweathermap.org/data/3.0/onecall';
+
 /**
- * OpenWeatherMap stub: enrollment of a key is supported, but the provider falls
- * back to Open-Meteo's free endpoints unless a key is configured. Implemented as
- * a thin pass-through for now so the contract is stable; extend as needed.
+ * Map an OpenWeatherMap condition id to the closest WMO code, so the shared
+ * `wmoIcon` mapping keeps working regardless of provider.
+ * See https://openweathermap.org/weather-conditions
  */
+function owmToWmo(id: number): number {
+    if (id >= 200 && id < 300) return 95; // thunderstorm
+    if (id >= 300 && id < 400) return 51; // drizzle
+    if (id >= 500 && id < 600) {
+        if (id >= 502) return 65; // heavy rain
+        return 61; // rain
+    }
+    if (id >= 600 && id < 700) return 71; // snow
+    if (id >= 700 && id < 800) return 45; // atmosphere (fog/mist/haze)
+    if (id === 800) return 0; // clear
+    if (id === 801) return 1; // few clouds
+    if (id === 802) return 2; // scattered clouds
+    if (id >= 803) return 3; // broken/overcast
+    return 3;
+}
+
+interface OwmGeocode {
+    name: string;
+    lat: number;
+    lon: number;
+    country?: string;
+    state?: string;
+}
+
+interface OwmWeatherEntry {
+    id: number;
+}
+
+interface OwmOneCall {
+    timezone?: string;
+    current?: {
+        temp: number;
+        feels_like?: number;
+        humidity?: number;
+        wind_speed?: number;
+        weather: OwmWeatherEntry[];
+    };
+    hourly?: Array<{
+        dt: number;
+        temp: number;
+        pop?: number;
+        weather: OwmWeatherEntry[];
+    }>;
+    daily?: Array<{
+        dt: number;
+        temp: { min: number; max: number };
+        pop?: number;
+        weather: OwmWeatherEntry[];
+    }>;
+}
+
+/** Format a unix timestamp as a local "YYYY-MM-DDTHH:00" string in `tz`. */
+function localHourIso(unixSeconds: number, tz: string): string {
+    // "sv-SE" gives "YYYY-MM-DD HH:mm:ss"; reshape to the ISO-ish form the client expects.
+    const s = new Date(unixSeconds * 1000).toLocaleString('sv-SE', { timeZone: tz });
+    return `${s.slice(0, 10)}T${s.slice(11, 13)}:00`;
+}
+
+/** Format a unix timestamp as a local "YYYY-MM-DD" date string in `tz`. */
+function localDateIso(unixSeconds: number, tz: string): string {
+    return new Date(unixSeconds * 1000).toLocaleString('sv-SE', { timeZone: tz }).slice(0, 10);
+}
+
+const openWeatherMapAdapter: WeatherProviderAdapter = {
+    async geocode(query, apiKey) {
+        if (!apiKey) throw new WeatherError('geocoding_failed', 'OpenWeatherMap requires an API key');
+        const url = `${OWM_GEOCODE_URL}?q=${encodeURIComponent(query)}&limit=1&appid=${encodeURIComponent(apiKey)}`;
+        const data = await getJson<OwmGeocode[]>(url);
+        const hit = data[0];
+        if (!hit) throw new WeatherError('not_found', `No location matched "${query}"`);
+        const label = [hit.name, hit.state, hit.country].filter(Boolean).join(', ');
+        return { label, latitude: hit.lat, longitude: hit.lon };
+    },
+    async fetchReport({ locationId, label, latitude, longitude, provider, apiKey }) {
+        if (!apiKey) throw new WeatherError('fetch_failed', 'OpenWeatherMap requires an API key');
+        const params = new URLSearchParams({
+            lat: String(latitude),
+            lon: String(longitude),
+            units: 'metric',
+            exclude: 'minutely,alerts',
+            appid: apiKey
+        });
+        const data = await getJson<OwmOneCall>(`${OWM_ONECALL_URL}?${params.toString()}`);
+        const tz = data.timezone ?? 'UTC';
+
+        const current: WeatherCondition | null = data.current
+            ? {
+                  code: owmToWmo(data.current.weather[0]?.id ?? 800),
+                  temperature: data.current.temp,
+                  apparentTemperature: data.current.feels_like ?? null,
+                  humidity: data.current.humidity ?? null,
+                  windSpeed: data.current.wind_speed ?? null,
+                  isDay: null
+              }
+            : null;
+
+        const hourly: WeatherHour[] = [];
+        if (data.hourly) {
+            // Keep the current local day onward (matching Open-Meteo's behaviour),
+            // capped at 32 hours.
+            const todayLocal = new Date().toLocaleString('sv-SE', { timeZone: tz }).slice(0, 10);
+            const fromToday = data.hourly.filter((h) => localDateIso(h.dt, tz) >= todayLocal);
+            for (const h of fromToday.slice(0, 32)) {
+                hourly.push({
+                    time: localHourIso(h.dt, tz),
+                    code: owmToWmo(h.weather[0]?.id ?? 800),
+                    temperature: h.temp,
+                    precipitationProbability: h.pop != null ? Math.round(h.pop * 100) : null
+                });
+            }
+        }
+
+        const daily: WeatherDay[] = [];
+        if (data.daily) {
+            for (const d of data.daily) {
+                daily.push({
+                    date: localDateIso(d.dt, tz),
+                    code: owmToWmo(d.weather[0]?.id ?? 800),
+                    tempMin: d.temp.min,
+                    tempMax: d.temp.max,
+                    precipitationProbability: d.pop != null ? Math.round(d.pop * 100) : null
+                });
+            }
+        }
+
+        return {
+            locationId,
+            label,
+            fetchedAt: Math.floor(Date.now() / 1000),
+            timezone: tz,
+            provider,
+            current,
+            hourly,
+            daily
+        };
+    }
+};
+
 const adapters: Record<WeatherProvider, WeatherProviderAdapter> = {
     'open-meteo': openMeteoAdapter,
-    openweathermap: openMeteoAdapter
+    openweathermap: openWeatherMapAdapter
 };
 
 export function getWeatherAdapter(provider: WeatherProvider): WeatherProviderAdapter {

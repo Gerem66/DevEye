@@ -28,11 +28,27 @@
     overflow: hidden;
 }
 
+/*
+ * Padded frame around the scroll area. It does NOT scroll itself, so its padding
+ * — including the bottom — is always painted (a scroll container's own
+ * `padding-bottom` is dropped by Chromium/WebKit once the content overflows, so
+ * the bottom gap lives on this non-scrolling frame). The right padding is omitted
+ * here and applied on `.scroll` instead, so the scrollbar hugs the popup edge
+ * while the content keeps its inset.
+ */
 .body {
     flex: 1;
-    padding: var(--space-xl);
-    overflow-y: auto;
+    min-height: 0;
+    display: flex;
+    padding: var(--space-xl) 0 var(--space-xl) var(--space-xl);
     color: var(--text-secondary);
+}
+
+.scroll {
+    flex: 1;
+    min-height: 0;
+    padding-right: var(--space-xl);
+    overflow-y: auto;
 }
 
 @media (max-width: 640px) {
@@ -45,6 +61,10 @@
     }
 
     .body {
-        padding: var(--space-lg);
+        padding: var(--space-lg) 0 var(--space-lg) var(--space-lg);
+    }
+
+    .scroll {
+        padding-right: var(--space-lg);
     }
 }

@@ -68,8 +68,10 @@ export default function WidgetPopup({ layoutId, open, onClose, bodyRef, onExitCo
                         exit={layoutId ? undefined : { opacity: 0, scale: 0.95 }}
                         transition={{ type: 'spring', stiffness: 280, damping: 32, mass: 0.9 }}
                     >
-                        <div className={styles.body} ref={bodyRef}>
-                            {children}
+                        <div className={styles.body}>
+                            <div className={styles.scroll} ref={bodyRef}>
+                                {children}
+                            </div>
                         </div>
                     </motion.div>
                 </>

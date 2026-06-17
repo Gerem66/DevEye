@@ -8,8 +8,7 @@ import {
     weatherSetPrimary,
     weatherUpdate,
     type WeatherLocation,
-    type WeatherLocationRow,
-    type WeatherProvider
+    type WeatherLocationRow
 } from 'deveye-types';
 
 import { getWeatherAdapter, WeatherError } from '@/Services/WeatherProvider';
@@ -25,15 +24,19 @@ function toLocation(row: WeatherLocationRow): WeatherLocation {
         days: row.days,
         provider: row.provider,
         position: row.position,
-        isPrimary: row.is_primary === 1
+        isPrimary: row.is_primary === 1,
+        hasApiKey: row.api_key_enc != null && row.api_key_enc.length > 0
     };
 }
 
-/** Decrypt the per-account API key for a provider, if one is configured. */
-async function resolveKey(ctx: FeatureContext, provider: WeatherProvider): Promise<string | null> {
-    const row = await ctx.db.weather.getKey(ctx.userId, provider);
-    if (!row) return null;
-    return ctx.crypt.Decrypt(row.key_enc);
+/**
+ * Decrypt the API key to use for a location: its own per-city key if set,
+ * otherwise the legacy per-account key for the provider, if any.
+ */
+async function resolveLocationKey(ctx: FeatureContext, row: WeatherLocationRow): Promise<string | null> {
+    if (row.api_key_enc) return ctx.crypt.Decrypt(row.api_key_enc);
+    const accountKey = await ctx.db.weather.getKey(ctx.userId, row.provider);
+    return accountKey ? ctx.crypt.Decrypt(accountKey.key_enc) : null;
 }
 
 function mapWeatherError(e: unknown): FeatureError {
@@ -63,7 +66,7 @@ export const weatherAddFeature: FeatureDefinition<
 > = defineFeature({
     ...weatherAdd,
     handler: async (ctx, input) => {
-        const apiKey = await resolveKey(ctx, input.provider);
+        const apiKey = input.apiKey?.trim() || null;
         let geo;
         try {
             geo = await getWeatherAdapter(input.provider).geocode(input.query, apiKey);
@@ -77,7 +80,8 @@ export const weatherAddFeature: FeatureDefinition<
             longitude: geo.longitude,
             format: input.format,
             days: input.days,
-            provider: input.provider
+            provider: input.provider,
+            apiKeyEnc: apiKey ? ctx.crypt.Encrypt(apiKey) : null
         });
         return { location: toLocation(row) };
     }
@@ -90,10 +94,18 @@ export const weatherUpdateFeature: FeatureDefinition<
 > = defineFeature({
     ...weatherUpdate,
     handler: async (ctx, input) => {
+        // apiKey: undefined = leave; "" = clear; non-empty = encrypt + store.
+        let apiKeyEnc: string | null | undefined;
+        if (input.apiKey !== undefined) {
+            const trimmed = input.apiKey.trim();
+            apiKeyEnc = trimmed ? ctx.crypt.Encrypt(trimmed) : null;
+        }
         const row = await ctx.db.weather.updateLocation(input.id, ctx.userId, {
             format: input.format,
             days: input.days,
-            position: input.position
+            position: input.position,
+            provider: input.provider,
+            apiKeyEnc
         });
         if (!row) throw new FeatureError('not_found', 'Weather location not found');
         return { location: toLocation(row) };
@@ -148,7 +160,7 @@ export const weatherGetFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         const row = await ctx.db.weather.findLocation(input.id, ctx.userId);
         if (!row) throw new FeatureError('not_found', 'Weather location not found');
-        const apiKey = await resolveKey(ctx, row.provider);
+        const apiKey = await resolveLocationKey(ctx, row);
         try {
             const report = await getWeatherAdapter(row.provider).fetchReport({
                 locationId: row.id,

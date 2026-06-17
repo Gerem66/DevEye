@@ -1,13 +1,30 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, Reorder, useDragControls } from 'framer-motion';
 import { ws } from '@/api/ws';
+import { Dialog, TextInput } from '@/Components';
+import Button from '@/Components/Button';
 import { useWeather, syncWeatherLocations } from '@/stores/weather';
 import { wmoIcon } from './wmoIcon';
-import type { WeatherLocation, WeatherReport } from 'deveye-types';
+import type { WeatherLocation, WeatherProvider, WeatherReport } from 'deveye-types';
 import type { FeatureProps } from '../types';
 import styles from './Weather.module.css';
 
 const REFRESH_MS = 10 * 60 * 1000;
+
+/** Human label for each weather provider. */
+const PROVIDER_LABELS: Record<WeatherProvider, string> = {
+    'open-meteo': 'Open-Meteo',
+    openweathermap: 'OpenWeatherMap'
+};
+
+/**
+ * Providers offered in the settings popup. To support another provider, add a
+ * row here and a matching adapter server-side — no other client change needed.
+ */
+const PROVIDERS: { value: WeatherProvider; label: string; needsKey: boolean }[] = [
+    { value: 'open-meteo', label: 'Open-Meteo', needsKey: false },
+    { value: 'openweathermap', label: 'OpenWeatherMap', needsKey: true }
+];
 
 /** Local date + time in the location's timezone (e.g. "lundi 16 juin · 14:32"). */
 function localDateTime(report: WeatherReport): { date: string; time: string } {
@@ -29,6 +46,180 @@ function localDateTime(report: WeatherReport): { date: string; time: string } {
     } catch {
         return { date: '', time: '' };
     }
+}
+
+/** Hour label (e.g. "14h") from a local ISO time like "2026-06-17T14:00". */
+function hourLabel(time: string): string {
+    const hh = time.slice(11, 13);
+    return hh ? `${Number(hh)}h` : time;
+}
+
+/** True when `time` (local ISO in `tz`) falls in the current hour of that timezone. */
+function isCurrentHour(time: string, tz: string): boolean {
+    const nowLocal = new Date().toLocaleString('sv-SE', { timeZone: tz });
+    // Compare "YYYY-MM-DDTHH" against "YYYY-MM-DD HH".
+    return time.slice(0, 13).replace('T', ' ') === nowLocal.slice(0, 13);
+}
+
+/**
+ * Hour-by-hour row. The current hour is highlighted and scrolled to the left edge
+ * on mount, so the most relevant (now + upcoming) hours are seen first.
+ */
+function HourlyRow({ report }: { report: WeatherReport }) {
+    const rowRef = useRef<HTMLDivElement>(null);
+    const nowRef = useRef<HTMLDivElement>(null);
+    // True until the current hour has been scrolled into view at least once for
+    // this location, so we keep the user's manual scroll afterwards.
+    const alignedRef = useRef(false);
+
+    useLayoutEffect(() => {
+        alignedRef.current = false;
+    }, [report.locationId]);
+
+    useLayoutEffect(() => {
+        const row = rowRef.current;
+        if (!row) return;
+        const align = () => {
+            const now = nowRef.current;
+            // The feature is first rendered in a hidden (display:none) holder, where
+            // every offset is 0; only act once the row has a real width — i.e. when
+            // it becomes visible inside the popup.
+            if (alignedRef.current || !now || row.clientWidth === 0) return;
+            row.scrollLeft = now.offsetLeft - row.offsetLeft;
+            alignedRef.current = true;
+        };
+        align();
+        // Re-run when the row gains/changes size (hidden→visible, popup resize),
+        // which is exactly when the geometry first becomes measurable.
+        const ro = new ResizeObserver(align);
+        ro.observe(row);
+        return () => ro.disconnect();
+    }, [report.locationId, report.hourly.length]);
+
+    return (
+        <div className={styles.hourlyRow} ref={rowRef}>
+            {report.hourly.map((hour) => {
+                const current = isCurrentHour(hour.time, report.timezone);
+                return (
+                    <div
+                        key={hour.time}
+                        ref={current ? nowRef : undefined}
+                        className={`${styles.hourlyCard} ${current ? styles.hourlyCurrent : ''}`}
+                    >
+                        <span className={styles.hourlyTime}>{current ? 'Maint.' : hourLabel(hour.time)}</span>
+                        <span className={styles.hourlyIcon}>{wmoIcon(hour.code)}</span>
+                        <span className={styles.hourlyTemp}>{Math.round(hour.temperature)}°</span>
+                        {hour.precipitationProbability !== null && hour.precipitationProbability > 0 && (
+                            <span className={styles.hourlyPrecip}>💧{hour.precipitationProbability}%</span>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+/** Settings popup for one location: provider choice + API key. Uses the shared Dialog. */
+function WeatherSettingsModal({
+    loc,
+    onClose,
+    onSave
+}: {
+    loc: WeatherLocation;
+    onClose: () => void;
+    onSave: (id: string, patch: { provider: WeatherProvider; apiKey?: string }) => Promise<void>;
+}) {
+    const [provider, setProvider] = useState<WeatherProvider>(loc.provider);
+    const [apiKey, setApiKey] = useState('');
+    // Whether the key field was touched; if not, we leave the stored key as-is.
+    const [keyTouched, setKeyTouched] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const needsKey = provider !== 'open-meteo';
+
+    const submit = async () => {
+        if (saving) return;
+        setSaving(true);
+        setError(null);
+        try {
+            await onSave(loc.id, {
+                provider,
+                apiKey: keyTouched ? apiKey.trim() : undefined
+            });
+            onClose();
+        } catch {
+            setError('Échec de l’enregistrement. Vérifiez la clé API et le fournisseur.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <Dialog
+            open
+            onClose={onClose}
+            title={`Réglages — ${loc.label}`}
+            footer={
+                <>
+                    <Button variant='secondary' onClick={onClose} disabled={saving}>
+                        Annuler
+                    </Button>
+                    <Button onClick={() => void submit()} disabled={saving}>
+                        {saving ? 'Enregistrement…' : 'Enregistrer'}
+                    </Button>
+                </>
+            }
+        >
+            <div className={styles.settingsForm}>
+                <span className={styles.settingsLabel}>Fournisseur météo</span>
+                <div className={styles.providerOptions}>
+                    {PROVIDERS.map((p) => (
+                        <label
+                            key={p.value}
+                            className={`${styles.providerOption} ${provider === p.value ? styles.providerOptionActive : ''}`}
+                        >
+                            <input
+                                type='radio'
+                                name='provider'
+                                value={p.value}
+                                checked={provider === p.value}
+                                onChange={() => setProvider(p.value)}
+                            />
+                            <span className={styles.providerOptionName}>{p.label}</span>
+                            <span className={styles.providerOptionMeta}>
+                                {p.needsKey ? 'Clé API requise' : 'Gratuit, sans clé'}
+                            </span>
+                        </label>
+                    ))}
+                </div>
+
+                {needsKey && (
+                    <label className={styles.settingsField}>
+                        <span className={styles.settingsLabel}>Clé API</span>
+                        <TextInput
+                            type='password'
+                            enableShowHideButton
+                            autoComplete='off'
+                            placeholder={
+                                loc.hasApiKey ? '•••••••• (laisser vide pour conserver)' : 'Collez votre clé API'
+                            }
+                            value={apiKey}
+                            onChange={(e) => {
+                                setApiKey(e.target.value);
+                                setKeyTouched(true);
+                            }}
+                        />
+                        {loc.hasApiKey && keyTouched && apiKey.trim() === '' && (
+                            <span className={styles.settingsHint}>La clé enregistrée sera supprimée.</span>
+                        )}
+                    </label>
+                )}
+
+                {error && <p className={styles.settingsError}>{error}</p>}
+            </div>
+        </Dialog>
+    );
 }
 
 export function WeatherWidget() {
@@ -132,6 +323,8 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
     const [searchInput, setSearchInput] = useState('');
     const [adding, setAdding] = useState(false);
     const [addError, setAddError] = useState<string | null>(null);
+    // The location whose settings popup is open, if any.
+    const [settingsFor, setSettingsFor] = useState<WeatherLocation | null>(null);
 
     // The order persisted on the server; lets us skip a redundant reorder call
     // when a drag ends without actually changing anything.
@@ -240,6 +433,14 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
         } catch {
             // ignore — next list refresh reconciles
         }
+    };
+
+    // Save provider/API-key changes from the settings popup. `apiKey` undefined
+    // leaves the key untouched; "" clears it; a string sets it.
+    const handleSaveSettings = async (id: string, patch: { provider: WeatherProvider; apiKey?: string }) => {
+        const res = await ws.send('weather.update', { id, ...patch });
+        applyLocations(locations.map((l) => (l.id === res.location.id ? res.location : l)));
+        if (selectedId === id) await loadReport(id);
     };
 
     // Persist a drag-reorder once it settles, if the order actually changed.
@@ -359,6 +560,13 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
                                 )}
                             </div>
 
+                            {report.hourly.length > 0 && (
+                                <div className={styles.forecastSection}>
+                                    <h3 className={styles.forecastTitle}>Aujourd’hui</h3>
+                                    <HourlyRow report={report} />
+                                </div>
+                            )}
+
                             {report.daily.length > 0 && (
                                 <div className={styles.forecastSection}>
                                     <h3 className={styles.forecastTitle}>Prévisions</h3>
@@ -386,6 +594,20 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
                                     </div>
                                 </div>
                             )}
+
+                            <div className={styles.providerBar}>
+                                <span className={styles.providerNote}>via {PROVIDER_LABELS[report.provider]}</span>
+                                <button
+                                    type='button'
+                                    className={styles.providerEdit}
+                                    onClick={() => {
+                                        const loc = locations.find((l) => l.id === report.locationId);
+                                        if (loc) setSettingsFor(loc);
+                                    }}
+                                >
+                                    Modifier
+                                </button>
+                            </div>
                         </motion.div>
                     ) : (
                         <div className={styles.empty}>
@@ -393,6 +615,14 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
                         </div>
                     )}
                 </div>
+            )}
+
+            {settingsFor && (
+                <WeatherSettingsModal
+                    loc={settingsFor}
+                    onClose={() => setSettingsFor(null)}
+                    onSave={handleSaveSettings}
+                />
             )}
         </div>
     );

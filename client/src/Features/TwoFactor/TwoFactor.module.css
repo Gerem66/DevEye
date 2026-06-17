@@ -85,7 +85,6 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-lg);
-    padding-bottom: var(--space-lg);
 }
 
 /* Password-based encryption dialog (moved from Profile). */

@@ -12,6 +12,8 @@ export interface CreateWeatherLocationInput {
     format: WeatherFormat;
     days: number;
     provider: WeatherProvider;
+    /** Encrypted per-city API key, or null. */
+    apiKeyEnc?: string | null;
 }
 
 export interface WeatherRepo {
@@ -21,7 +23,14 @@ export interface WeatherRepo {
     updateLocation(
         id: string,
         userId: number,
-        patch: { format?: WeatherFormat; days?: number; position?: number }
+        patch: {
+            format?: WeatherFormat;
+            days?: number;
+            position?: number;
+            provider?: WeatherProvider;
+            /** Encrypted key to store, or null to clear. Omit to leave unchanged. */
+            apiKeyEnc?: string | null;
+        }
     ): Promise<WeatherLocationRow | null>;
     deleteLocation(id: string, userId: number): Promise<boolean>;
     /** Reorder by assigning `position` to each id by its index in `ids`. */
@@ -49,7 +58,7 @@ export function weatherRepo(pool: Q): WeatherRepo {
             );
             return r.rows[0] ?? null;
         },
-        async createLocation({ userId, label, latitude, longitude, format, days, provider }) {
+        async createLocation({ userId, label, latitude, longitude, format, days, provider, apiKeyEnc }) {
             const id = randomUUID();
             const posRow = await pool.query<{ next: number }>(
                 'SELECT COALESCE(MAX(position) + 1, 0) AS next FROM weather_locations WHERE user_id = ?',
@@ -59,9 +68,9 @@ export function weatherRepo(pool: Q): WeatherRepo {
             // The first city a user adds is automatically their primary one.
             const isPrimary = position === 0 ? 1 : 0;
             await pool.query(
-                `INSERT INTO weather_locations (id, user_id, label, latitude, longitude, format, days, provider, position, is_primary)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [id, userId, label, latitude, longitude, format, days, provider, position, isPrimary]
+                `INSERT INTO weather_locations (id, user_id, label, latitude, longitude, format, days, provider, position, is_primary, api_key_enc)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [id, userId, label, latitude, longitude, format, days, provider, position, isPrimary, apiKeyEnc ?? null]
             );
             const r = await pool.query<WeatherLocationRow>('SELECT * FROM weather_locations WHERE id = ?', [id]);
             return r.rows[0];
@@ -80,6 +89,14 @@ export function weatherRepo(pool: Q): WeatherRepo {
             if (patch.position !== undefined) {
                 sets.push('position = ?');
                 params.push(patch.position);
+            }
+            if (patch.provider !== undefined) {
+                sets.push('provider = ?');
+                params.push(patch.provider);
+            }
+            if (patch.apiKeyEnc !== undefined) {
+                sets.push('api_key_enc = ?');
+                params.push(patch.apiKeyEnc);
             }
             if (sets.length === 0) return this.findLocation(id, userId);
             params.push(id, userId);
