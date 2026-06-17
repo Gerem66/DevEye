@@ -73,8 +73,16 @@ export const passwordListFeature: FeatureDefinition<
         const filtered = rows.filter((r) => rowInWorkspace(r.workspace_id, input.workspaceId));
         if (filtered.length > 0) {
             const sample = filtered[0].content;
+            const legacyResult = ctx.crypt.Decrypt(sample);
+            const gcmResult = await ctx.secure.tryDecrypt(sample);
             ctx.logger.warn(
-                { sampleLength: sample.length, samplePrefix: sample.slice(0, 40) },
+                {
+                    sampleLength: sample.length,
+                    samplePrefix: sample.slice(0, 40),
+                    legacyDecryptOk: legacyResult !== null,
+                    legacyPrefix: legacyResult?.slice(0, 30) ?? null,
+                    gcmDecryptOk: gcmResult !== null
+                },
                 'DEBUG password.list sample row'
             );
         }
