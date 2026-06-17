@@ -71,22 +71,6 @@ export const passwordListFeature: FeatureDefinition<
         await assertSecureUnlocked(ctx);
         const rows = await ctx.db.passwords.listByUser(ctx.userId);
         const filtered = rows.filter((r) => rowInWorkspace(r.workspace_id, input.workspaceId));
-        if (filtered.length > 0) {
-            const sample = filtered[0].content;
-            const legacyResult = ctx.crypt.Decrypt(sample);
-            const gcmResult = await ctx.secure.tryDecrypt(sample);
-            const payloadResult = await tryDecryptPayload(ctx.secure, sample);
-            ctx.logger.warn(
-                {
-                    sampleLength: sample.length,
-                    legacyDecryptOk: legacyResult !== null,
-                    legacyPrefix: legacyResult?.slice(0, 40) ?? null,
-                    gcmResult: gcmResult?.slice(0, 40) ?? null,
-                    payloadOk: payloadResult !== null
-                },
-                'DEBUG password.list sample row'
-            );
-        }
         // A single undecryptable row (e.g. legacy/foreign-key data) must not break
         // the whole list — skip it with a warning instead of failing the feature.
         let skipped = 0;

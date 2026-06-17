@@ -30,8 +30,10 @@ export async function decryptPayload(secure: SecureStore, content: string): Prom
 
 /** Non-throwing variant: returns null instead of failing (e.g. legacy rows). */
 export async function tryDecryptPayload(secure: SecureStore, content: string): Promise<StoredPayload | null> {
+    const plain = await secure.tryDecrypt(content);
+    if (plain === null) return null;
     try {
-        return await decryptPayload(secure, content);
+        return JSON.parse(plain) as StoredPayload;
     } catch {
         return null;
     }
