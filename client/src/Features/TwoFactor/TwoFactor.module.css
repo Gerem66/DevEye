@@ -88,6 +88,46 @@
     padding-bottom: var(--space-lg);
 }
 
+/* Password-based encryption dialog (moved from Profile). */
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.fieldLabel {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.formError {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--danger);
+}
+
+.recoveryCodeBox {
+    display: block;
+    margin: var(--space-sm) 0;
+    padding: var(--space-md);
+    font-family: var(--font-mono, monospace);
+    font-size: 1.1rem;
+    letter-spacing: 0.05em;
+    text-align: center;
+    color: var(--text-primary);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-md);
+    word-break: break-all;
+}
+
 .statusCard {
     display: flex;
     align-items: center;
@@ -166,21 +206,7 @@
     margin: 0 0 var(--space-md) 0;
 }
 
-/* Setup card */
-.setupCard {
-    background: var(--glass-bg-light);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-lg);
-    padding: var(--space-lg);
-}
-
-.setupCard h3 {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0 0 var(--space-lg) 0;
-}
-
+/* 2FA setup steps (rendered inside the setup Dialog). */
 .steps {
     display: flex;
     flex-direction: column;
@@ -253,8 +279,9 @@
 
 .manualEntry {
     display: flex;
-    align-items: center;
-    gap: var(--space-sm);
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-xs);
     font-size: 0.8rem;
     color: var(--text-muted);
 }
@@ -267,12 +294,6 @@
     font-size: 0.85rem;
     color: var(--accent);
     word-break: break-all;
-}
-
-.verifyForm {
-    display: flex;
-    gap: var(--space-sm);
-    flex-wrap: wrap;
 }
 
 .codeInput {

@@ -9,6 +9,7 @@ import {
     passwordListFeature,
     passwordUnlockFeature
 } from './password';
+import { secrecyFeatures } from './secrecy';
 import { twoFactorFeatures } from './twofa';
 import { userSetAvatarFeature } from './user/setAvatar';
 import { weatherFeatures } from './weather';
@@ -29,6 +30,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...deviceFeatures,
     ...metricsFeatures,
     ...twoFactorFeatures,
+    ...secrecyFeatures,
     ...weatherFeatures
 ];
 

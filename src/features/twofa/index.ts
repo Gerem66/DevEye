@@ -11,6 +11,13 @@ import { sha256hex } from '@/Utils/hash';
 import { generateBackupCodes, generateTotpSecret, normalizeBackupCode, verifyTotp } from '@/Services/Totp';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
+/*
+ * The TOTP secret is an authentication-bound secret: it must be decryptable at
+ * login (before any WS session / password unlock exists) to verify the 2FA
+ * code. It therefore stays wrapped by the server key via `ctx.crypt` and does
+ * NOT go through `ctx.secure` (the per-user DEK), unlike feature data at rest.
+ */
+
 async function buildStatus(ctx: FeatureContext): Promise<TwoFactorStatus> {
     const row = await ctx.db.twoFactor.get(ctx.userId);
     if (!row || !row.enabled) return { enabled: false, backupCodesRemaining: 0 };

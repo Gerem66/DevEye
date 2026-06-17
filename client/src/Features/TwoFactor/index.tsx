@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { ws } from '@/api/ws';
 import { Dialog } from '@/Components/Dialog';
 import Button from '@/Components/Button';
-import type { TwoFactorStatus } from 'deveye-types';
+import { refreshSecrecyStatus } from '@/stores/secrecy';
+import type { SecrecyStatus, TwoFactorStatus } from 'deveye-types';
 import type { FeatureProps } from '../types';
+import { SecurityDialog } from './SecurityDialog';
 import styles from './TwoFactor.module.css';
 
 interface SetupData {
@@ -17,6 +18,7 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
     const [status, setStatus] = useState<TwoFactorStatus | null>(null);
     const [loading, setLoading] = useState(true);
     const [setupData, setSetupData] = useState<SetupData | null>(null);
+    const [setupOpen, setSetupOpen] = useState(false);
     const [verifyCode, setVerifyCode] = useState('');
     const [verifying, setVerifying] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -24,6 +26,8 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
     const [backupCodes, setBackupCodes] = useState<string[]>([]);
     const [showDisableConfirm, setShowDisableConfirm] = useState(false);
     const [disableCode, setDisableCode] = useState('');
+    const [secrecy, setSecrecy] = useState<SecrecyStatus | null>(null);
+    const [securityOpen, setSecurityOpen] = useState(false);
 
     const fetchStatus = useCallback(async () => {
         try {
@@ -36,18 +40,40 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
         }
     }, []);
 
+    const fetchSecrecy = useCallback(async () => {
+        try {
+            const res = await ws.send('secrecy.status', {});
+            setSecrecy(res.status);
+        } catch {
+            // ignore
+        }
+    }, []);
+
     useEffect(() => {
         void fetchStatus();
-    }, [fetchStatus]);
+        void fetchSecrecy();
+    }, [fetchStatus, fetchSecrecy]);
 
     const startSetup = async () => {
+        // Open the dialog right away (with a loader) so it doesn't feel laggy
+        // while the secret/QR are minted server-side.
         setError(null);
+        setSetupData(null);
+        setVerifyCode('');
+        setSetupOpen(true);
         try {
             const res = await ws.send('twofa.setup', {});
             setSetupData(res.setup);
         } catch {
+            setSetupOpen(false);
             setError('Erreur lors de la génération du QR code');
         }
+    };
+
+    const closeSetup = () => {
+        setSetupOpen(false);
+        setSetupData(null);
+        setVerifyCode('');
     };
 
     const verifyAndEnable = async () => {
@@ -56,8 +82,7 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
         setError(null);
         try {
             await ws.send('twofa.enable', { code: verifyCode.trim() });
-            setSetupData(null);
-            setVerifyCode('');
+            closeSetup();
             await fetchStatus();
         } catch {
             setError('Code invalide. Vérifiez et réessayez.');
@@ -93,8 +118,10 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
 
     return (
         <div className={styles.container}>
-            <h2 className={styles.title}>Authentification à deux facteurs</h2>
-            <p className={styles.subtitle}>Protégez votre compte avec une couche de sécurité supplémentaire</p>
+            <h2 className={styles.title}>Sécurité</h2>
+            <p className={styles.subtitle}>
+                Protégez votre compte et vos données avec des couches de sécurité supplémentaires
+            </p>
 
             {loading ? (
                 <div className={styles.loader}>Chargement...</div>
@@ -121,6 +148,27 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
                         )}
                     </div>
 
+                    <div className={styles.statusCard}>
+                        <div className={`${styles.statusIcon} ${secrecy?.enabled ? styles.enabled : ''}`}>
+                            <span className='icon icon-shield' />
+                        </div>
+                        <div className={styles.statusInfo}>
+                            <h3>
+                                {secrecy?.enabled
+                                    ? 'Chiffrement par mot de passe activé'
+                                    : 'Chiffrement par mot de passe désactivé'}
+                            </h3>
+                            <p>
+                                {secrecy?.enabled
+                                    ? 'Vos données chiffrées sont verrouillées par votre mot de passe.'
+                                    : 'Verrouillez vos données chiffrées avec votre mot de passe.'}
+                            </p>
+                        </div>
+                        <Button variant={secrecy?.enabled ? 'danger' : 'primary'} onClick={() => setSecurityOpen(true)}>
+                            {secrecy?.enabled ? 'Désactiver' : 'Activer'}
+                        </Button>
+                    </div>
+
                     {status?.enabled && (
                         <div className={styles.backupSection}>
                             <h3>Codes de secours</h3>
@@ -136,70 +184,72 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
 
                     {error && <div className={styles.error}>{error}</div>}
 
-                    <AnimatePresence>
-                        {setupData && (
-                            <motion.div
-                                className={styles.setupCard}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -20 }}
-                            >
-                                <h3>Configuration</h3>
-                                <div className={styles.steps}>
-                                    <div className={styles.step}>
-                                        <span className={styles.stepNumber}>1</span>
-                                        <div className={styles.stepContent}>
-                                            <h4>Scannez le QR code</h4>
-                                            <p>
-                                                Utilisez une application comme Google Authenticator, Authy ou 1Password.
-                                            </p>
-                                            <div className={styles.qrContainer}>
-                                                <img
-                                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(setupData.otpauthUrl)}`}
-                                                    alt='QR Code 2FA'
-                                                    className={styles.qrCode}
-                                                />
-                                            </div>
-                                            <div className={styles.manualEntry}>
-                                                <span>Clé manuelle :</span>
-                                                <code>{setupData.secret}</code>
-                                            </div>
+                    <Dialog
+                        open={setupOpen}
+                        onClose={closeSetup}
+                        title='Configurer la 2FA'
+                        width={520}
+                        footer={
+                            <>
+                                <Button variant='secondary' onClick={closeSetup} disabled={verifying}>
+                                    Annuler
+                                </Button>
+                                <Button
+                                    onClick={verifyAndEnable}
+                                    disabled={!setupData || verifyCode.length !== 6 || verifying}
+                                >
+                                    {verifying ? 'Vérification...' : 'Vérifier et activer'}
+                                </Button>
+                            </>
+                        }
+                    >
+                        {!setupData ? (
+                            <div className={styles.loader}>Génération du QR code…</div>
+                        ) : (
+                            <div className={styles.steps}>
+                                <div className={styles.step}>
+                                    <span className={styles.stepNumber}>1</span>
+                                    <div className={styles.stepContent}>
+                                        <h4>Scannez le QR code</h4>
+                                        <p>Utilisez une application comme Google Authenticator, Authy ou 1Password.</p>
+                                        <div className={styles.qrContainer}>
+                                            <img
+                                                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(setupData.otpauthUrl)}`}
+                                                alt='QR Code 2FA'
+                                                className={styles.qrCode}
+                                            />
                                         </div>
-                                    </div>
-
-                                    <div className={styles.step}>
-                                        <span className={styles.stepNumber}>2</span>
-                                        <div className={styles.stepContent}>
-                                            <h4>Entrez le code de vérification</h4>
-                                            <p>Saisissez le code à 6 chiffres affiché dans votre application.</p>
-                                            <div className={styles.verifyForm}>
-                                                <input
-                                                    type='text'
-                                                    inputMode='numeric'
-                                                    pattern='[0-9]*'
-                                                    maxLength={6}
-                                                    className={styles.codeInput}
-                                                    value={verifyCode}
-                                                    onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, ''))}
-                                                    placeholder='000000'
-                                                />
-                                                <Button
-                                                    onClick={verifyAndEnable}
-                                                    disabled={verifyCode.length !== 6 || verifying}
-                                                >
-                                                    {verifying ? 'Vérification...' : 'Vérifier et activer'}
-                                                </Button>
-                                            </div>
+                                        <div className={styles.manualEntry}>
+                                            <span>Clé manuelle :</span>
+                                            <code>{setupData.secret}</code>
                                         </div>
                                     </div>
                                 </div>
 
-                                <Button variant='ghost' onClick={() => setSetupData(null)}>
-                                    Annuler
-                                </Button>
-                            </motion.div>
+                                <div className={styles.step}>
+                                    <span className={styles.stepNumber}>2</span>
+                                    <div className={styles.stepContent}>
+                                        <h4>Entrez le code de vérification</h4>
+                                        <p>Saisissez le code à 6 chiffres affiché dans votre application.</p>
+                                        <input
+                                            type='text'
+                                            inputMode='numeric'
+                                            pattern='[0-9]*'
+                                            maxLength={6}
+                                            className={styles.codeInput}
+                                            value={verifyCode}
+                                            onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, ''))}
+                                            placeholder='000000'
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && verifyCode.length === 6)
+                                                    void verifyAndEnable();
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
                         )}
-                    </AnimatePresence>
+                    </Dialog>
 
                     <Dialog
                         open={showBackupCodes && backupCodes.length > 0}
@@ -256,6 +306,16 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
                             placeholder='000000'
                         />
                     </Dialog>
+
+                    <SecurityDialog
+                        open={securityOpen}
+                        enabled={secrecy?.enabled ?? false}
+                        onClose={() => setSecurityOpen(false)}
+                        onChanged={() => {
+                            void fetchSecrecy();
+                            void refreshSecrecyStatus();
+                        }}
+                    />
                 </div>
             )}
         </div>

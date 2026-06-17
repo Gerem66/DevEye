@@ -93,7 +93,7 @@ const PAGES: ViewConfig[] = [
     },
     {
         id: 'twofa',
-        title: 'Sécurité 2FA',
+        title: 'Sécurité',
         icon: 'shield',
         FullComponent: TwoFactor,
         cacheDurationMinutes: 1

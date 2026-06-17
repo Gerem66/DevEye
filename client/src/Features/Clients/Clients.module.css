@@ -172,6 +172,7 @@
     color: var(--text-muted);
     gap: var(--space-sm);
     text-align: center;
+    pointer-events: none;
 }
 
 .emptyIcon {

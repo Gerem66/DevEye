@@ -199,7 +199,7 @@ export default function TopNavbar({
                                     setMenuOpen(false);
                                 }}
                             >
-                                <span className='icon icon-shield' /> Sécurité 2FA
+                                <span className='icon icon-shield' /> Sécurité
                             </button>
                             <button
                                 className={styles.menuItem}

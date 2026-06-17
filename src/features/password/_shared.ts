@@ -1,4 +1,4 @@
-import type Encryption from '@/Services/Encryption';
+import type { SecureStore } from '@/Services/SecureStore';
 import type { PasswordEntry, PasswordEntryMasked, PasswordStatus } from 'deveye-types';
 import { passwordEntrySchema } from 'deveye-types';
 import { FeatureError } from '../_define';
@@ -15,15 +15,12 @@ interface StoredPayload {
     status: PasswordStatus;
 }
 
-export function encryptPayload(crypt: Encryption, payload: StoredPayload): string {
-    return crypt.Encrypt(JSON.stringify(payload));
+export async function encryptPayload(secure: SecureStore, payload: StoredPayload): Promise<string> {
+    return secure.encrypt(JSON.stringify(payload));
 }
 
-export function decryptPayload(crypt: Encryption, content: string): StoredPayload {
-    const plain = crypt.Decrypt(content);
-    if (plain === null) {
-        throw new FeatureError('internal', 'Failed to decrypt password content');
-    }
+export async function decryptPayload(secure: SecureStore, content: string): Promise<StoredPayload> {
+    const plain = await secure.decrypt(content);
     try {
         return JSON.parse(plain) as StoredPayload;
     } catch {
@@ -32,9 +29,9 @@ export function decryptPayload(crypt: Encryption, content: string): StoredPayloa
 }
 
 /** Non-throwing variant: returns null instead of failing (e.g. legacy rows). */
-export function tryDecryptPayload(crypt: Encryption, content: string): StoredPayload | null {
+export async function tryDecryptPayload(secure: SecureStore, content: string): Promise<StoredPayload | null> {
     try {
-        return decryptPayload(crypt, content);
+        return await decryptPayload(secure, content);
     } catch {
         return null;
     }

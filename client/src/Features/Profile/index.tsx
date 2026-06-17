@@ -10,6 +10,8 @@ import { ACCEPTED_TYPES, avatarSrc, fileToAvatarDataUrl } from './avatar';
 import { PasswordDialog } from './PasswordDialog';
 import styles from './style.module.css';
 
+const SECURITY_MAX = 2;
+
 function formatDate(time: number): string {
     const str = new Date(time * 1000).toLocaleDateString('fr-FR', {
         hour: '2-digit',
@@ -25,6 +27,9 @@ function formatDate(time: number): string {
 export default function FeatureProfile({ user, workspace }: FeatureProps) {
     const { workspaces, logout, updateUser } = useAuth();
     const [passwordOpen, setPasswordOpen] = useState(false);
+
+    const securityScore = (user.security.twoFactor ? 1 : 0) + (user.security.passwordEncryption ? 1 : 0);
+    const securityFull = securityScore >= SECURITY_MAX;
     const [uploading, setUploading] = useState(false);
     const [avatarError, setAvatarError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -87,6 +92,14 @@ export default function FeatureProfile({ user, workspace }: FeatureProps) {
                     <div className={styles.row}>
                         <dt>Espaces de travail</dt>
                         <dd>{Math.max(workspaces.length - 1, 0)}</dd>
+                    </div>
+                    <div className={styles.row}>
+                        <dt>Sécurité</dt>
+                        <dd>
+                            <span className={`${styles.securityScore} ${securityFull ? styles.full : styles.partial}`}>
+                                {securityScore} / {SECURITY_MAX}
+                            </span>
+                        </dd>
                     </div>
                     <div className={`${styles.row} ${styles.rowAction}`}>
                         <dt>Mot de passe</dt>

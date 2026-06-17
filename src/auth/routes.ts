@@ -13,6 +13,7 @@ import { env } from '@/Utils/Env';
 import { sha256hex } from '@/Utils/hash';
 import { normalizeBackupCode, verifyTotp } from '@/Services/Totp';
 import type Encryption from '@/Services/Encryption';
+import { SecretKeyService, WrongSecretError } from '@/Services/SecretKeyService';
 import { hashPassword, needsRehash, verifyPassword } from './argon';
 import {
     ACCESS_COOKIE,
@@ -268,6 +269,23 @@ export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps):
 
         if (currentPassword === newPassword) {
             return reply.code(400).send(err('validation', 'New password must differ from the current one'));
+        }
+
+        // If password-based encryption is on, the DEK is wrapped by the current
+        // password. Re-wrap it with the new password before rotating the hash so
+        // the user keeps access to their encrypted data (content is untouched).
+        const secretKeys = new SecretKeyService(db, crypt);
+        const keyRow = await db.userSecretKeys.get(row.id);
+        if (keyRow && secretKeys.isPasswordWrapped(keyRow)) {
+            try {
+                const dek = await secretKeys.unwrapWithPassword(keyRow, currentPassword);
+                await secretKeys.wrapWithPassword(row.id, dek, newPassword, 'keep', keyRow);
+            } catch (e) {
+                if (e instanceof WrongSecretError) {
+                    return reply.code(401).send(err('auth_invalid', 'Current password is incorrect'));
+                }
+                throw e;
+            }
         }
 
         await db.users.updatePasswordHash(row.id, await hashPassword(newPassword));

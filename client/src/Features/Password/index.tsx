@@ -10,13 +10,31 @@ import { OpenPopup } from '@/Components/Popup';
 import { ws, WsError } from '@/api/ws';
 import TextInput from '@/Components/TextInput';
 import Button from '@/Components/Button';
+import { ensureUnlocked as ensureSecrecyUnlocked } from '@/stores/secrecy';
 
 import type { FeatureProps } from '@/Features/types';
 import type { PasswordEntry, PasswordEntryMasked } from 'deveye-types';
 
+/**
+ * Run a request, and if the server reports the password-encryption layer is
+ * `locked`, open the global unlock prompt and retry once. Keeps every
+ * encrypted-data call resilient without each call handling the prompt itself.
+ */
+async function withSecrecy<T>(run: () => Promise<T>): Promise<T> {
+    try {
+        return await run();
+    } catch (e) {
+        if (e instanceof WsError && e.code === 'locked') {
+            await ensureSecrecyUnlocked();
+            return run();
+        }
+        throw e;
+    }
+}
+
 function humanizeError(e: unknown, fallback: string): string {
     if (e instanceof WsError) {
-        if (e.code === 'auth_required') return 'Déverrouillage requis.';
+        if (e.code === 'auth_required' || e.code === 'locked') return 'Déverrouillage requis.';
         if (e.code === 'auth_invalid') return 'Mot de passe principal incorrect.';
         if (e.code === 'forbidden') return 'Accès refusé.';
     }
@@ -35,7 +53,7 @@ function FeaturePassword({ workspace }: FeatureProps) {
         if (reloadRef.current) return reloadRef.current;
         const task = (async () => {
             try {
-                const res = await ws.send('password.list', { workspaceId: workspace.id });
+                const res = await withSecrecy(() => ws.send('password.list', { workspaceId: workspace.id }));
                 setAllPasswords(res.entries as PasswordEntryMasked[]);
             } catch {
                 setAllPasswords([]);
@@ -87,7 +105,9 @@ function FeaturePassword({ workspace }: FeatureProps) {
             setActionError(null);
             if (!(await ensureUnlocked())) return;
             try {
-                const res = await ws.send('password.get', { workspaceId: workspace.id, passwordId: id });
+                const res = await withSecrecy(() =>
+                    ws.send('password.get', { workspaceId: workspace.id, passwordId: id })
+                );
                 replaceEntry(res.entry);
             } catch (e) {
                 setActionError(humanizeError(e, 'Impossible de récupérer le mot de passe.'));
@@ -105,7 +125,9 @@ function FeaturePassword({ workspace }: FeatureProps) {
                 // Need the real entry (clear password) before editing.
                 if (!(await ensureUnlocked())) return;
                 try {
-                    const res = await ws.send('password.get', { workspaceId: workspace.id, passwordId: id });
+                    const res = await withSecrecy(() =>
+                        ws.send('password.get', { workspaceId: workspace.id, passwordId: id })
+                    );
                     initial = res.entry;
                     replaceEntry(initial);
                 } catch (e) {
@@ -133,13 +155,14 @@ function FeaturePassword({ workspace }: FeatureProps) {
                     if (id === null || result.id === 0) {
                         const { id: _omit, ...entry } = result;
                         void _omit;
-                        const res = await ws.send('password.add', { workspaceId: workspace.id, entry });
+                        const res = await withSecrecy(() =>
+                            ws.send('password.add', { workspaceId: workspace.id, entry })
+                        );
                         setAllPasswords((prev) => [...prev, res.entry]);
                     } else {
-                        const res = await ws.send('password.edit', {
-                            workspaceId: workspace.id,
-                            entry: result
-                        });
+                        const res = await withSecrecy(() =>
+                            ws.send('password.edit', { workspaceId: workspace.id, entry: result })
+                        );
                         replaceEntry(res.entry);
                     }
                 } catch (e) {

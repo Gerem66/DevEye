@@ -17,6 +17,13 @@ export interface DialogProps {
     footer?: ReactNode;
     /** Max dialog width in px. */
     width?: number;
+    /**
+     * When false, the overlay click and Escape no longer close the dialog (only
+     * the close button / explicit actions do). Use for dialogs where an
+     * accidental dismissal is costly — e.g. 2FA setup, which mints a fresh
+     * secret each time it opens. Defaults to true.
+     */
+    dismissible?: boolean;
 }
 
 /**
@@ -24,15 +31,24 @@ export interface DialogProps {
  * confirmations…). Animated glass surface, closes on overlay click or Escape.
  * Feature-specific dialogs render their content as children + footer.
  */
-export default function Dialog({ open, onClose, title, description, children, footer, width = 460 }: DialogProps) {
+export default function Dialog({
+    open,
+    onClose,
+    title,
+    description,
+    children,
+    footer,
+    width = 460,
+    dismissible = true
+}: DialogProps) {
     useEffect(() => {
-        if (!open) return;
+        if (!open || !dismissible) return;
         const onKey = (e: KeyboardEvent) => {
             if (e.key === 'Escape') onClose();
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [open, onClose]);
+    }, [open, onClose, dismissible]);
 
     return (
         <AnimatePresence>
@@ -44,16 +60,16 @@ export default function Dialog({ open, onClose, title, description, children, fo
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.2, ease: 'easeOut' }}
-                        onClick={onClose}
+                        onClick={dismissible ? onClose : undefined}
                     />
                     <motion.div
                         className={styles.dialog}
                         style={{ maxWidth: width }}
                         role='dialog'
                         aria-modal='true'
-                        initial={{ opacity: 0, scale: 0.94, y: 16 }}
+                        initial={{ opacity: 0, scale: 0.94, y: 0 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.94, y: 16 }}
+                        exit={{ opacity: 0, scale: 0.94, y: 0 }}
                         transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.9 }}
                     >
                         <button className={styles.close} onClick={onClose} aria-label='Fermer'>

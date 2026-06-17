@@ -125,6 +125,19 @@
     padding-bottom: var(--space-sm);
 }
 
+/* "Sécurité → x / 2" score: orange below max, green at max. */
+.securityScore {
+    font-weight: 700;
+}
+
+.securityScore.partial {
+    color: var(--warning, #fbbf24);
+}
+
+.securityScore.full {
+    color: var(--success, #34d399);
+}
+
 .form {
     display: flex;
     flex-direction: column;

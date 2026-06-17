@@ -5,6 +5,7 @@ import { metricsRepo, type MetricsRepo } from './repos/metrics';
 import { passwordsRepo, type PasswordsRepo } from './repos/passwords';
 import { refreshTokensRepo, type RefreshTokensRepo } from './repos/refreshTokens';
 import { twoFactorRepo, type TwoFactorRepo } from './repos/twoFactor';
+import { userSecretKeysRepo, type UserSecretKeysRepo } from './repos/userSecretKeys';
 import { usersRepo, type UsersRepo } from './repos/users';
 import { weatherRepo, type WeatherRepo } from './repos/weather';
 import {
@@ -25,6 +26,7 @@ export interface Database {
     linkCodes: LinkCodesRepo;
     metrics: MetricsRepo;
     twoFactor: TwoFactorRepo;
+    userSecretKeys: UserSecretKeysRepo;
     weather: WeatherRepo;
 }
 
@@ -40,6 +42,7 @@ export function createDatabase(q: Queryable): Database {
         linkCodes: linkCodesRepo(q),
         metrics: metricsRepo(q),
         twoFactor: twoFactorRepo(q),
+        userSecretKeys: userSecretKeysRepo(q),
         weather: weatherRepo(q)
     };
 }

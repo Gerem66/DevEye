@@ -2,6 +2,7 @@ import type { User, Workspace } from 'deveye-types';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ApiError, login as apiLogin, logout as apiLogout, me as apiMe, refresh as apiRefresh } from '../api/http';
 import { ws } from '../api/ws';
+import { refreshSecrecyStatus, setUnlocked } from '../stores/secrecy';
 
 interface AuthState {
     status: 'unknown' | 'authenticated' | 'anonymous';
@@ -38,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const refreshing = useRef<Promise<void> | null>(null);
 
     const setAnonymous = useCallback(() => {
+        setUnlocked(false);
         setState({ status: 'anonymous', user: null, workspaces: [] });
     }, []);
 
@@ -48,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const bundle = await apiMe();
                 setState(applyBundle(bundle));
                 await ws.connect().catch(() => {});
+                await refreshSecrecyStatus();
             } catch (e) {
                 if (e instanceof ApiError && (e.code === 'auth_required' || e.code === 'auth_expired')) {
                     try {
@@ -55,6 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         const bundle = await apiMe();
                         setState(applyBundle(bundle));
                         await ws.connect().catch(() => {});
+                        await refreshSecrecyStatus();
                         return;
                     } catch {
                         setAnonymous();
@@ -79,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         setState(applyBundle(bundle));
         await ws.connect().catch(() => {});
+        await refreshSecrecyStatus();
         return { twoFactorRequired: false };
     }, []);
 

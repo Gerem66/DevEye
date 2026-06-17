@@ -9,6 +9,7 @@ import { createMonitorTransport, type MonitorHub } from '@/agent/hub';
 import { FeatureError } from '@/features/_define';
 import { forgetSession } from '@/features/password/_shared';
 import { featureHandlerMap } from '@/features/registry';
+import { createSecureStore, forgetSessionDek } from '@/Services/SecureStore';
 import { logger } from '@/logger';
 
 import type { Database } from '@/db';
@@ -52,6 +53,8 @@ export async function registerWS(app: FastifyInstance, { db, crypt, hub }: WSDep
 
         const reqLogger = logger.child({ userId: session.userId, sid: session.sessionId });
         reqLogger.info('WS connected');
+
+        const { store: secure, keys: secretKeys } = createSecureStore(db, crypt, session.userId, session.sessionId);
 
         const monitor = createMonitorTransport(hub, socket);
 
@@ -108,6 +111,8 @@ export async function registerWS(app: FastifyInstance, { db, crypt, hub }: WSDep
                     {
                         db,
                         crypt,
+                        secure,
+                        secretKeys,
                         userId: session!.userId,
                         sessionId: session!.sessionId,
                         logger: reqLogger.child({ command, requestId: replyId }),
@@ -149,6 +154,7 @@ export async function registerWS(app: FastifyInstance, { db, crypt, hub }: WSDep
         socket.on('close', () => {
             hub.dropSubscriber(socket);
             forgetSession(session!.sessionId);
+            forgetSessionDek(session!.sessionId);
             reqLogger.info('WS closed');
         });
     });

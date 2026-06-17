@@ -8,6 +8,13 @@ export async function loadUserBundle(
     const row = await db.users.findById(userId);
     if (!row) return null;
 
+    // Security posture surfaced as "Sécurité → x / 2" in the profile.
+    const [twoFaRow, secretKeyRow] = await Promise.all([db.twoFactor.get(userId), db.userSecretKeys.get(userId)]);
+    const security = {
+        twoFactor: Boolean(twoFaRow?.enabled),
+        passwordEncryption: secretKeyRow?.wrap_mode === 'password'
+    };
+
     const wsRows = await db.workspaces.findAccessibleByUser(userId);
     const memberRows = wsRows.length ? await db.workspaceMembers.listByWorkspaceIds(wsRows.map((w) => w.id)) : [];
 
@@ -64,6 +71,7 @@ export async function loadUserBundle(
         avatar: row.avatar,
         role: (row.role === 'admin' ? 'admin' : 'user') as UserRole,
         settings: parseStringArray(row.settings),
+        security,
         defaultWorkspace: row.default_workspace,
         lastLogin: Number(row.last_login),
         created: Number(row.created)
