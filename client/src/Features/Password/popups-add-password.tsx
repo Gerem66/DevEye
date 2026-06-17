@@ -2,8 +2,10 @@ import { useState } from 'react';
 
 import styles from './style.module.css';
 
-import { Button, Popup, SelectInput, TextInput } from '@/Components';
-import { ClosePopup } from '@/Components/Popup';
+import Popup, { ClosePopup } from '@/Components/Popup';
+import Button from '@/Components/Button';
+import TextInput from '@/Components/TextInput';
+import SelectInput from '@/Components/SelectInput';
 
 import type { PasswordEntry, PasswordStatus } from 'deveye-types';
 
@@ -84,75 +86,67 @@ function PasswordPopupAdd({ passwordCategories }: PasswordPopupAddProps) {
         <Popup
             id='popup-add-password'
             title={mode === 'add' ? 'Ajouter un mot de passe' : 'Modifier le mot de passe'}
+            width={520}
             onInputChange={handleOpenPopup}
             onClosePopup={() => handleBack()}
         >
-            <p>
-                Stocker un mot de passe est une bonne pratique pour protéger vos comptes.
-                <br />
-                Les informations concernant les mots de passe sont chiffrées.
+            <p className={styles.popupHint}>
+                Stocker un mot de passe est une bonne pratique pour protéger vos comptes. Les informations sont
+                chiffrées.
             </p>
 
-            <TextInput
-                className={styles['password-add-input']}
-                list='category'
-                placeholder='Catégorie'
-                value={category}
-                error={errorCategory}
-                onChange={(e) => setCategory(e.target.value)}
-            />
-            <datalist id='category'>
-                {passwordCategories.map((c) => (
-                    <option key={c} value={c} />
-                ))}
-            </datalist>
+            <div className={styles.form}>
+                <TextInput
+                    list='category'
+                    placeholder='Catégorie'
+                    value={category}
+                    error={errorCategory}
+                    onChange={(e) => setCategory(e.target.value)}
+                />
+                <datalist id='category'>
+                    {passwordCategories.map((c) => (
+                        <option key={c} value={c} />
+                    ))}
+                </datalist>
 
-            <div className='form-group'>
                 <TextInput
                     name='service'
-                    className={styles['password-add-input']}
                     placeholder='Service'
                     value={service}
                     error={errorService}
                     onChange={(e) => setService(e.target.value)}
                 />
-            </div>
 
-            <div className='form-group'>
                 <TextInput
                     name='email'
-                    className={styles['password-add-input']}
                     placeholder="Nom d'utilisateur / Email"
                     value={email}
                     error={errorEmail}
                     onChange={(e) => setEmail(e.target.value)}
                 />
-            </div>
 
-            <div className='form-group'>
                 <TextInput
-                    className={styles['password-add-input']}
                     type='password'
                     placeholder='Mot de passe'
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     enableShowHideButton
                 />
+
+                <SelectInput value={status} onChange={handleStatusPassword}>
+                    <option value='active'>Actif</option>
+                    <option value='inactive'>Inactif</option>
+                    <option value='none'>Indéterminé</option>
+                </SelectInput>
             </div>
 
-            <SelectInput value={status} onChange={handleStatusPassword}>
-                <option value='active'>Actif</option>
-                <option value='inactive'>Inactif</option>
-                <option value='none'>Indéterminé</option>
-            </SelectInput>
-
-            <div className={`form-group ${styles['popup-check-password-buttons']}`}>
-                <div>
-                    <Button onClick={() => handleBack()} color='#576d8c'>
+            <div className={styles.popupActions}>
+                <div className={styles.popupActionsLeft}>
+                    <Button variant='secondary' onClick={() => handleBack()}>
                         Fermer
                     </Button>
                     {mode === 'edit' && (
-                        <Button className={styles['password-edit-btn-delete']} onClick={handleDelete} color='#c42e2e'>
+                        <Button variant='danger' onClick={handleDelete}>
                             Supprimer
                         </Button>
                     )}

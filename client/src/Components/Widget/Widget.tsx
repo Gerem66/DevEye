@@ -1,0 +1,55 @@
+import { forwardRef, type ReactNode, type MouseEvent } from 'react';
+import { motion, type HTMLMotionProps } from 'framer-motion';
+import styles from './Widget.module.css';
+
+export interface WidgetProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
+    /** Unique ID used as framer-motion layoutId for shared-element transitions. */
+    widgetId: string;
+    /** Widget heading/title shown in the header. */
+    title?: string;
+    /** Optional icon (name) displayed before the title. */
+    icon?: string;
+    /** Content rendered inside the widget body. */
+    children?: ReactNode;
+    /** Called when the widget is clicked (e.g., to expand into popup). */
+    onExpand?: (e: React.MouseEvent<HTMLDivElement>) => void;
+    /** Additional className for the outer wrapper. */
+    className?: string;
+}
+
+/**
+ * Glassmorphism widget card. Uses framer-motion `layoutId` for smooth expansion
+ * into a popup. Clicking anywhere triggers `onExpand`.
+ */
+const Widget = forwardRef<HTMLDivElement, WidgetProps>(function Widget(
+    { widgetId, title, icon, children, onExpand, className, ...motionProps },
+    ref
+) {
+    return (
+        <motion.div
+            ref={ref}
+            layoutId={widgetId}
+            className={`${styles.widget} ${className ?? ''}`}
+            onClick={(e: MouseEvent<HTMLDivElement>) => onExpand?.(e)}
+            whileHover={{ y: -4 }}
+            whileTap={{ scale: 0.985 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 26, mass: 0.8 }}
+            {...motionProps}
+        >
+            {title && (
+                <div className={styles.header}>
+                    {icon && (
+                        <span className={styles.iconWrap}>
+                            <span className={`icon icon-${icon} ${styles.icon}`} />
+                        </span>
+                    )}
+                    <span className={styles.title}>{title}</span>
+                    <span className={`icon icon-arrow ${styles.expandHint}`} aria-hidden='true' />
+                </div>
+            )}
+            <div className={styles.body}>{children}</div>
+        </motion.div>
+    );
+});
+
+export default Widget;

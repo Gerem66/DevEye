@@ -20,10 +20,13 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'Open Sans';
-    background: linear-gradient(#446182, #13181c);
+    font-family: var(--font-sans);
+    background:
+        radial-gradient(900px circle at 15% -10%, rgba(34, 211, 238, 0.18), transparent 55%),
+        radial-gradient(1000px circle at 110% 115%, rgba(11, 188, 214, 0.14), transparent 55%),
+        linear-gradient(160deg, #06080f 0%, #0a1622 55%, #070f18 100%);
 
-    transition: opacity 0.5s cubic-bezier(.77,0,.18,1);
+    transition: opacity 0.5s cubic-bezier(0.77, 0, 0.18, 1);
     pointer-events: all;
 }
 .login.hide {
@@ -47,13 +50,14 @@ body {
 }
 .login .title {
     width: 100%;
-    color: #ccc;
+    color: var(--text-secondary);
     font-size: 2rem;
     user-select: none;
     cursor: initial;
 }
 .login .title > b {
     font-weight: 600;
+    color: var(--text-primary);
 }
 .login .title > p {
     display: inline;
@@ -62,17 +66,22 @@ body {
 
 .login .login-card {
     position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
     height: 144px;
     margin-top: 24px;
     margin-bottom: 48px;
-    padding: 20px;
-    border-radius: 4px;
-    background-color: #212529;
-    transition: height 0.5s cubic-bezier(.77,0,.18,1),
-                margin-top 0.5s cubic-bezier(.77,0,.18,1),
-                padding-top 0.5s cubic-bezier(.77,0,.18,1),
-                padding-bottom 0.5s cubic-bezier(.77,0,.18,1),
-                background-color 0.5s cubic-bezier(.77,0,.18,1);
+    padding: 28px 20px;
+    border-radius: var(--radius-md);
+    background-color: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    transition:
+        height 0.5s cubic-bezier(0.77, 0, 0.18, 1),
+        margin-top 0.5s cubic-bezier(0.77, 0, 0.18, 1),
+        padding-top 0.5s cubic-bezier(0.77, 0, 0.18, 1),
+        padding-bottom 0.5s cubic-bezier(0.77, 0, 0.18, 1),
+        background-color 0.5s cubic-bezier(0.77, 0, 0.18, 1);
     overflow: hidden;
 }
 .login .login-card.card-to-progressbar {
@@ -80,13 +89,12 @@ body {
     margin-top: 6px;
     padding-top: 0px;
     padding-bottom: 0px;
-    /*background-color: #21252983;*/
 }
 .login .login-card * {
-    transition: opacity 0.5s cubic-bezier(.77,0,.18,1);
+    transition: opacity 0.5s cubic-bezier(0.77, 0, 0.18, 1);
 }
 .login .login-card.card-to-progressbar * {
-    transition: opacity 0.5s cubic-bezier(.77,0,.18,1);
+    transition: opacity 0.5s cubic-bezier(0.77, 0, 0.18, 1);
     opacity: 0;
 }
 .login .progress-bar {
@@ -96,13 +104,13 @@ body {
     bottom: 0;
     width: 0;
     opacity: 0;
-    background-color: #3585df;
-    transition: width 0s .5s cubic-bezier(.77,0,.18,1);
+    background-color: var(--accent);
+    transition: width 0s 0.5s cubic-bezier(0.77, 0, 0.18, 1);
 }
 .login .login-card.card-to-progressbar > .progress-bar {
     width: 100%;
     opacity: 1;
-    transition: width 1s .5s cubic-bezier(.77,0,.18,1);
+    transition: width 1s 0.5s cubic-bezier(0.77, 0, 0.18, 1);
 }
 .login .login-card.auto-login {
     transition: none;
@@ -123,6 +131,7 @@ body {
     bottom: 10px;
     z-index: 10;
     pointer-events: none;
+    color: var(--text-muted);
 }
 
 @keyframes loadAnim {
@@ -148,4 +157,52 @@ body {
         opacity: 1;
         margin-left: 0px;
     }
+}
+
+/* 2FA styles */
+.login .twofa-prompt {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    text-align: center;
+    margin: 0 0 1rem;
+    line-height: 1.4;
+}
+
+.login .submit,
+.login .cancel {
+    display: block;
+    width: 100%;
+    padding: 0.7rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    font-weight: 400;
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-top: 0.5rem;
+}
+
+.login .submit {
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
+.login .submit:hover:not(:disabled) {
+    background: var(--accent-hover);
+}
+
+.login .submit:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.login .cancel {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--glass-border);
+}
+
+.login .cancel:hover {
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
 }

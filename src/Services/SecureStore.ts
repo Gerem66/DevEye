@@ -1,0 +1,118 @@
+import { FeatureError } from '@/features/_define';
+import type { Database } from '@/db';
+import type { UserSecretKeyRow } from 'deveye-types';
+import Encryption from './Encryption';
+import { SecretKeyService } from './SecretKeyService';
+
+/**
+ * In-memory registry of unlocked DEKs, keyed by WS sessionId. Populated only
+ * when a user with password-based encryption supplies their password during a
+ * session; never persisted and cleared on disconnect/logout. Server-wrapped
+ * DEKs (feature OFF) are resolved on demand and never need an entry here.
+ */
+const sessionDeks = new Map<string, Buffer>();
+
+export function rememberSessionDek(sessionId: string, dek: Buffer): void {
+    sessionDeks.set(sessionId, dek);
+}
+
+export function forgetSessionDek(sessionId: string): void {
+    const dek = sessionDeks.get(sessionId);
+    if (dek) dek.fill(0); // best-effort wipe of key material
+    sessionDeks.delete(sessionId);
+}
+
+/**
+ * The unified storage-encryption gateway handed to feature handlers as
+ * `ctx.secure`. Features call `encrypt`/`decrypt` and never see the DEK, the
+ * server key, the password or the storage of the wrapped key — this is the
+ * single place that turns plaintext into a stored blob and back.
+ *
+ * Scoped to one (user, session): it resolves the right DEK based on whether the
+ * feature is on (password-wrapped) or off (server-wrapped).
+ */
+export class SecureStore {
+    private cachedRow: UserSecretKeyRow | null = null;
+
+    constructor(
+        private readonly keys: SecretKeyService,
+        private readonly userId: number,
+        private readonly sessionId: string,
+        private readonly crypt: Encryption
+    ) {}
+
+    private async row(): Promise<UserSecretKeyRow> {
+        if (!this.cachedRow) this.cachedRow = await this.keys.ensureRow(this.userId);
+        return this.cachedRow;
+    }
+
+    /** Invalidate the cached row after a wrap-mode change within the session. */
+    invalidate(): void {
+        this.cachedRow = null;
+    }
+
+    /**
+     * Resolve the DEK for this session, or throw a typed error the dispatcher
+     * turns into a client-actionable response:
+     *  - feature OFF → unwrap with the server key transparently.
+     *  - feature ON, session unlocked → use the cached DEK.
+     *  - feature ON, locked → `FeatureError('locked')` so the client prompts.
+     */
+    private async resolveDek(): Promise<Buffer> {
+        const row = await this.row();
+        if (!this.keys.isPasswordWrapped(row)) {
+            return this.keys.resolveServerDek(row);
+        }
+        const dek = sessionDeks.get(this.sessionId);
+        if (!dek) {
+            throw new FeatureError('locked', 'Password encryption is locked; unlock with your password');
+        }
+        return dek;
+    }
+
+    /** True when encrypted data can be read/written right now without a prompt. */
+    async isUnlocked(): Promise<boolean> {
+        const row = await this.row();
+        if (!this.keys.isPasswordWrapped(row)) return true;
+        return sessionDeks.has(this.sessionId);
+    }
+
+    /** Encrypt a plaintext payload for storage. */
+    async encrypt(plaintext: string): Promise<string> {
+        const dek = await this.resolveDek();
+        return SecretKeyService.encrypt(dek, plaintext);
+    }
+
+    /** Decrypt a stored blob. Throws `internal` if the blob is corrupt. */
+    async decrypt(blob: string): Promise<string> {
+        const dek = await this.resolveDek();
+        const plain = SecretKeyService.decrypt(dek, blob);
+        if (plain === null) throw new FeatureError('internal', 'Failed to decrypt content');
+        return plain;
+    }
+
+    /**
+     * Non-throwing decrypt for tolerant list paths. Tries the new GCM format
+     * first; falls back to the legacy CTR+HMAC format for rows written before
+     * the envelope-encryption layer was introduced.
+     */
+    async tryDecrypt(blob: string): Promise<string | null> {
+        try {
+            return await this.decrypt(blob);
+        } catch {
+            // Legacy fallback: data written with the old Encryption.Encrypt scheme.
+            return this.crypt.Decrypt(blob);
+        }
+    }
+}
+
+/** Factory wiring used by the WS dispatcher to build `ctx.secure` per session. */
+export function createSecureStore(
+    db: Database,
+    crypt: Encryption,
+    userId: number,
+    sessionId: string
+): { store: SecureStore; keys: SecretKeyService } {
+    const keys = new SecretKeyService(db, crypt);
+    return { store: new SecureStore(keys, userId, sessionId, crypt), keys };
+}

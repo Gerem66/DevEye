@@ -3,6 +3,7 @@ import type { FastifyReply } from 'fastify';
 
 export const ACCESS_COOKIE = 'dv_at';
 export const REFRESH_COOKIE = 'dv_rt';
+export const TWOFA_COOKIE = 'dv_2fa';
 
 interface BaseCookieOpts {
     httpOnly: true;
@@ -37,4 +38,15 @@ export function setAuthCookies(reply: FastifyReply, accessToken: string, refresh
 export function clearAuthCookies(reply: FastifyReply): void {
     reply.clearCookie(ACCESS_COOKIE, { ...baseOpts('/') });
     reply.clearCookie(REFRESH_COOKIE, { ...baseOpts('/api/auth') });
+}
+
+export function setTwoFactorChallengeCookie(reply: FastifyReply, token: string): void {
+    reply.setCookie(TWOFA_COOKIE, token, {
+        ...baseOpts('/api/auth'),
+        maxAge: env.TWOFA_CHALLENGE_TTL_SECONDS
+    });
+}
+
+export function clearTwoFactorChallengeCookie(reply: FastifyReply): void {
+    reply.clearCookie(TWOFA_COOKIE, { ...baseOpts('/api/auth') });
 }

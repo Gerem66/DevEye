@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 
-import { Button, TextInput } from '@/Components';
 import Popup, { ClosePopup } from '@/Components/Popup';
+import Button from '@/Components/Button';
+import TextInput from '@/Components/TextInput';
 import { ws, WsError } from '@/api/ws';
 
 import styles from './style.module.css';
@@ -63,26 +64,28 @@ function PopupUnlock({ workspace }: PopupUnlockProps) {
             onInputChange={() => inputRef.current?.focus()}
             onClosePopup={close}
         >
-            <p>Pour accéder à vos mots de passe, veuillez entrer votre mot de passe principal.</p>
+            <p className={styles.popupHint}>
+                Pour accéder à vos mots de passe, veuillez entrer votre mot de passe principal.
+            </p>
 
-            <div className='form-group'>
-                <TextInput
-                    ref={inputRef}
-                    type='password'
-                    placeholder='Mot de passe principal'
-                    value={password}
-                    error={error}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onKeyDown={onKeyDown}
-                    enableShowHideButton
-                />
-            </div>
+            <TextInput
+                ref={inputRef}
+                type='password'
+                placeholder='Mot de passe principal'
+                value={password}
+                error={error}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={onKeyDown}
+                enableShowHideButton
+            />
 
-            <div className={`form-group ${styles['popup-check-password-buttons']}`}>
-                <Button onClick={close} color='#576d8c'>
+            <div className={styles.popupActions}>
+                <Button variant='secondary' onClick={close}>
                     Fermer
                 </Button>
-                <Button onClick={submit}>{submitting ? '…' : 'Déverrouiller'}</Button>
+                <Button onClick={submit} disabled={submitting}>
+                    {submitting ? '…' : 'Déverrouiller'}
+                </Button>
             </div>
         </Popup>
     );

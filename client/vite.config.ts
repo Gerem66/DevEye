@@ -20,7 +20,19 @@ export default defineConfig({
     },
     build: {
         outDir: 'build',
-        sourcemap: true
+        sourcemap: true,
+        rollupOptions: {
+            output: {
+                // Split heavy third-party libs into their own long-lived chunks so the
+                // app bundle stays small and vendor code is cached across deploys.
+                manualChunks(id) {
+                    if (!id.includes('node_modules')) return undefined;
+                    if (id.includes('framer-motion')) return 'framer-motion';
+                    if (id.includes('/react') || id.includes('/scheduler')) return 'react-vendor';
+                    return 'vendor';
+                }
+            }
+        }
     },
     resolve: {
         alias: {

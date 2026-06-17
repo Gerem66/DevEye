@@ -1,7 +1,15 @@
 import { verifyPassword } from '@/auth/argon';
 import { passwordAdd, passwordDelete, passwordEdit, passwordGet, passwordList, passwordUnlock } from 'deveye-types';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
-import { decryptPayload, encryptPayload, isUnlocked, markUnlocked, toEntry, toMaskedEntry } from './_shared';
+import {
+    decryptPayload,
+    encryptPayload,
+    isUnlocked,
+    markUnlocked,
+    toEntry,
+    toMaskedEntry,
+    tryDecryptPayload
+} from './_shared';
 
 /**
  * Workspace id 0 is the caller's private/personal workspace: it has no row in
@@ -32,6 +40,24 @@ function assertUnlocked(ctx: FeatureContext, workspaceId: number): void {
     }
 }
 
+/**
+ * Ensure the password-based encryption DEK is available this session. No-op
+ * when the feature is off; throws `locked` (client prompts for the password)
+ * when it's on but the session hasn't been unlocked yet.
+ */
+async function assertSecureUnlocked(ctx: FeatureContext): Promise<void> {
+    try {
+        if (!(await ctx.secure.isUnlocked())) {
+            throw new FeatureError('locked', 'Password encryption is locked; unlock with your password');
+        }
+    } catch (e) {
+        if (e instanceof FeatureError) throw e;
+        // DB/infra error (e.g. migration not yet applied) — let through rather
+        // than masking all passwords as locked.
+        ctx.logger.warn({ err: e }, 'assertSecureUnlocked: failed to check lock state, assuming unlocked');
+    }
+}
+
 export const passwordListFeature: FeatureDefinition<
     typeof passwordList.command,
     typeof passwordList.input,
@@ -40,9 +66,29 @@ export const passwordListFeature: FeatureDefinition<
     ...passwordList,
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
+        // When password-based encryption is on, listing needs the DEK. Surface a
+        // `locked` error (don't silently skip every row) so the client prompts.
+        await assertSecureUnlocked(ctx);
         const rows = await ctx.db.passwords.listByUser(ctx.userId);
         const filtered = rows.filter((r) => rowInWorkspace(r.workspace_id, input.workspaceId));
-        const entries = filtered.map((r) => toMaskedEntry(r.id, decryptPayload(ctx.crypt, r.content)));
+        // A single undecryptable row (e.g. legacy/foreign-key data) must not break
+        // the whole list — skip it with a warning instead of failing the feature.
+        let skipped = 0;
+        const entries = (
+            await Promise.all(
+                filtered.map(async (r) => {
+                    const payload = await tryDecryptPayload(ctx.secure, r.content);
+                    if (!payload) {
+                        skipped += 1;
+                        return null;
+                    }
+                    return toMaskedEntry(r.id, payload);
+                })
+            )
+        ).filter((e): e is NonNullable<typeof e> => e !== null);
+        if (skipped > 0) {
+            ctx.logger.warn({ skipped, total: filtered.length }, 'password.list: skipped undecryptable rows');
+        }
         return { entries };
     }
 });
@@ -56,11 +102,12 @@ export const passwordGetFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
         assertUnlocked(ctx, input.workspaceId);
+        await assertSecureUnlocked(ctx);
         const row = await ctx.db.passwords.findById(input.passwordId, ctx.userId);
         if (!row || !rowInWorkspace(row.workspace_id, input.workspaceId)) {
             throw new FeatureError('not_found', 'Password not found');
         }
-        return { entry: toEntry(row.id, decryptPayload(ctx.crypt, row.content)) };
+        return { entry: toEntry(row.id, await decryptPayload(ctx.secure, row.content)) };
     }
 });
 
@@ -73,7 +120,8 @@ export const passwordAddFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
         assertUnlocked(ctx, input.workspaceId);
-        const content = encryptPayload(ctx.crypt, input.entry);
+        await assertSecureUnlocked(ctx);
+        const content = await encryptPayload(ctx.secure, input.entry);
         const row = await ctx.db.passwords.create({
             userId: ctx.userId,
             workspaceId: toDbWorkspaceId(input.workspaceId),
@@ -92,11 +140,12 @@ export const passwordEditFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
         assertUnlocked(ctx, input.workspaceId);
+        await assertSecureUnlocked(ctx);
         const existing = await ctx.db.passwords.findById(input.entry.id, ctx.userId);
         if (!existing || !rowInWorkspace(existing.workspace_id, input.workspaceId)) {
             throw new FeatureError('not_found', 'Password not found');
         }
-        const content = encryptPayload(ctx.crypt, input.entry);
+        const content = await encryptPayload(ctx.secure, input.entry);
         const updated = await ctx.db.passwords.update(input.entry.id, ctx.userId, content);
         if (!updated) throw new FeatureError('not_found', 'Password not found');
         return { entry: toEntry(updated.id, input.entry) };

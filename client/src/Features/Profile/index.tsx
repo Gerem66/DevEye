@@ -1,122 +1,139 @@
-import styles from './style.module.css';
+import { useRef, useState } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
-import { Button, Card, Header, Popup, Row } from '../../Components';
-import { ChangeImage, EditPassword } from './actions';
+import { ws } from '@/api/ws';
+import { Dialog } from '@/Components/Dialog';
+import Button from '@/Components/Button';
 
 import type { FeatureProps } from '@/Features/types';
+import { ACCEPTED_TYPES, avatarSrc, fileToAvatarDataUrl } from './avatar';
+import { PasswordDialog } from './PasswordDialog';
+import styles from './style.module.css';
 
-function FeatureProfile({ user, workspace, feature }: FeatureProps) {
-    const { workspaces, logout } = useAuth();
+const SECURITY_MAX = 2;
 
-    const convertDate = (time: number): string =>
-        new Date(time * 1000)
-            .toLocaleDateString(undefined, {
-                hour: '2-digit',
-                minute: '2-digit',
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-            })
-            .split(' ')
-            .map((word) => (word.length <= 1 ? word : word.charAt(0).toUpperCase() + word.slice(1)))
-            .join(' ');
+function formatDate(time: number): string {
+    const str = new Date(time * 1000).toLocaleDateString('fr-FR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
 
-    const dateCreated = convertDate(user.created);
-    const dateLastLogin = user.lastLogin ? convertDate(user.lastLogin) : 'Première connexion';
+export default function FeatureProfile({ user, workspace }: FeatureProps) {
+    const { workspaces, logout, updateUser } = useAuth();
+    const [passwordOpen, setPasswordOpen] = useState(false);
+
+    const securityScore = (user.security.twoFactor ? 1 : 0) + (user.security.passwordEncryption ? 1 : 0);
+    const securityFull = securityScore >= SECURITY_MAX;
+    const [uploading, setUploading] = useState(false);
+    const [avatarError, setAvatarError] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const onPickAvatar = () => {
+        if (uploading) return;
+        fileInputRef.current?.click();
+    };
+
+    const onAvatarSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = ''; // allow re-selecting the same file later
+        if (!file) return;
+
+        setUploading(true);
+        try {
+            const avatar = await fileToAvatarDataUrl(file);
+            await ws.send('user.setAvatar', { avatar });
+            updateUser({ avatar });
+        } catch (err) {
+            setAvatarError(err instanceof Error ? err.message : "La mise à jour de l'image a échoué.");
+        } finally {
+            setUploading(false);
+        }
+    };
 
     return (
-        <div className='profile'>
-            <Header user={user} workspace={workspace} feature={feature} />
+        <div className={styles.container}>
+            <header className={styles.header}>
+                <h2 className={styles.title}>Profil</h2>
+                <p className={styles.subtitle}>Vos informations personnelles</p>
+            </header>
 
-            <Row center>
-                <Card.Element width={450} color='bg-blue-dark'>
-                    <div className={styles['profile-header']}>
-                        <div className={styles['profile-avatar']} onClick={ChangeImage}>
-                            <img
-                                className={styles['profile-avatar-logo']}
-                                src={'./images/' + workspace.logo}
-                                alt={workspace.name}
-                            />
-                        </div>
-                        <h2 className={`${styles.title} ${styles['profile-avatar-name']}`}>{workspace.name}</h2>
-                    </div>
-
-                    <div className={styles.separator} />
-                    <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>Adresse e-mail</h3>
-                        <p className={styles['profile-info-text']}>{user.email}</p>
-                    </div>
-
-                    <div className={styles.separator} />
-                    <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>{"Nombre d'entreprises"}</h3>
-                        <p className={styles['profile-info-text']}>{Math.max(workspaces.length - 1, 0)}</p>
-                    </div>
-
-                    <div className={styles.separator} />
-                    <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>Double authentification</h3>
-                        <div className={styles['profile-info-content']}>
-                            <p className={styles['profile-info-text']}>[Désactivée]</p>
-                            <i className={styles['icon-error']} />
-                        </div>
-                    </div>
-
-                    <div className={styles.separator} />
-                    <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>Chiffrage par mot de passe</h3>
-                        <div className={styles['profile-info-content']}>
-                            <p className={styles['profile-info-text']}>[Désactivée]</p>
-                            <i className={styles['icon-error']} />
-                        </div>
-                    </div>
-
-                    <div className={styles.separator} />
-                    <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>Mot de passe</h3>
-                        <div className={styles['profile-info-content']}>
-                            <Button className={styles['btn-edit']} onClick={EditPassword}>
-                                Modifier le mot de passe
-                            </Button>
-                        </div>
-                    </div>
-
-                    <div className={styles.separator} />
-                    <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>Dernière connexion</h3>
-                        <p className={styles['profile-info-text']}>{dateLastLogin}</p>
-                    </div>
-
-                    <div className={styles.separator} />
-                    <div className={styles['profile-info']}>
-                        <h3 className={styles['profile-info-title']}>Créé le</h3>
-                        <p className={styles['profile-info-text']}>{dateCreated}</p>
-                    </div>
-
-                    <div className={styles.separator} />
-                    <Button
-                        className={styles['btn-disconnect']}
-                        onClick={() => {
-                            void logout();
-                        }}
-                        color='#aa3333'
+            <div className={styles.card}>
+                <div className={styles.identity}>
+                    <button
+                        className={styles.avatar}
+                        onClick={onPickAvatar}
+                        disabled={uploading}
+                        aria-label="Modifier l'image de profil"
                     >
-                        Se déconnecter
-                    </Button>
-                </Card.Element>
-            </Row>
+                        <img src={avatarSrc(user.avatar)} alt={user.username} />
+                        <span className={styles.avatarHint}>{uploading ? 'Envoi…' : 'Modifier'}</span>
+                    </button>
+                    <input
+                        ref={fileInputRef}
+                        type='file'
+                        accept={ACCEPTED_TYPES.join(',')}
+                        hidden
+                        onChange={(e) => void onAvatarSelected(e)}
+                    />
+                    <span className={styles.name}>{workspace.name}</span>
+                </div>
 
-            <Popup id='in-dev' title='En développement'>
-                <p>
-                    Cette fonctionnalité est en cours de développement.
-                    <br />
-                    Elle sera bientôt disponible.
-                </p>
-            </Popup>
+                <dl className={styles.info}>
+                    <div className={styles.row}>
+                        <dt>Adresse e-mail</dt>
+                        <dd>{user.email}</dd>
+                    </div>
+                    <div className={styles.row}>
+                        <dt>Espaces de travail</dt>
+                        <dd>{Math.max(workspaces.length - 1, 0)}</dd>
+                    </div>
+                    <div className={styles.row}>
+                        <dt>Sécurité</dt>
+                        <dd>
+                            <span className={`${styles.securityScore} ${securityFull ? styles.full : styles.partial}`}>
+                                {securityScore} / {SECURITY_MAX}
+                            </span>
+                        </dd>
+                    </div>
+                    <div className={`${styles.row} ${styles.rowAction}`}>
+                        <dt>Mot de passe</dt>
+                        <dd>
+                            <Button variant='secondary' onClick={() => setPasswordOpen(true)}>
+                                Modifier
+                            </Button>
+                        </dd>
+                    </div>
+                    <div className={styles.row}>
+                        <dt>Dernière connexion</dt>
+                        <dd>{user.lastLogin ? formatDate(user.lastLogin) : 'Première connexion'}</dd>
+                    </div>
+                    <div className={styles.row}>
+                        <dt>Créé le</dt>
+                        <dd>{formatDate(user.created)}</dd>
+                    </div>
+                </dl>
+
+                <Button variant='danger' icon='logout' className={styles.logout} onClick={() => void logout()}>
+                    Se déconnecter
+                </Button>
+            </div>
+
+            <PasswordDialog open={passwordOpen} onClose={() => setPasswordOpen(false)} />
+
+            <Dialog
+                open={avatarError !== null}
+                onClose={() => setAvatarError(null)}
+                title="Modification de l'image"
+                footer={<Button onClick={() => setAvatarError(null)}>Compris</Button>}
+            >
+                {avatarError}
+            </Dialog>
         </div>
     );
 }
-
-export default FeatureProfile;

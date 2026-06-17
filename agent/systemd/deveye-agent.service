@@ -1,0 +1,31 @@
+[Unit]
+Description=DevEye Agent — monitoring daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/deveye-agent run
+Restart=always
+RestartSec=5
+
+Environment=DEVEYE_CONFIG=/etc/deveye/agent.toml
+Environment=RUST_LOG=info
+
+# Run unprivileged and sandboxed.
+DynamicUser=true
+StateDirectory=deveye
+ConfigurationDirectory=deveye
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadOnlyPaths=/etc/deveye
+
+# Resource limits — the agent is intentionally tiny.
+LimitNOFILE=4096
+MemoryMax=128M
+CPUQuota=20%
+
+[Install]
+WantedBy=multi-user.target

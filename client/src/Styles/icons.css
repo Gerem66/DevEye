@@ -2,11 +2,15 @@
     display: inline-block;
     width: 18px;
     aspect-ratio: 1;
+    flex-shrink: 0;
     -webkit-mask-size: contain;
             mask-size: contain;
     -webkit-mask-repeat: no-repeat;
             mask-repeat: no-repeat;
-    background-color: #fff;
+    -webkit-mask-position: center;
+            mask-position: center;
+    /* Inherit the element's text color so icons can be tinted via `color`. */
+    background-color: currentColor;
 }
 .icon.icon-gamelife {
     -webkit-mask-image: url(/icons/gamelife.svg);
@@ -120,6 +124,10 @@
     -webkit-mask-image: url(/icons/user.svg);
     mask-image: url(/icons/user.svg);
 }
+.icon.icon-user-outline {
+    -webkit-mask-image: url(/icons/user-outline.svg);
+    mask-image: url(/icons/user-outline.svg);
+}
 .icon.icon-users {
     -webkit-mask-image: url(/icons/users.svg);
     mask-image: url(/icons/users.svg);
@@ -131,4 +139,54 @@
 .icon.icon-x {
     -webkit-mask-image: url(/icons/x.svg);
     mask-image: url(/icons/x.svg);
+}
+
+/* Dashboard icons (homepage refonte) */
+.icon.icon-plus {
+    -webkit-mask-image: url(/icons/add.svg);
+    mask-image: url(/icons/add.svg);
+}
+.icon.icon-arrow-left {
+    -webkit-mask-image: url(/icons/arrow-left.svg);
+    mask-image: url(/icons/arrow-left.svg);
+}
+.icon.icon-chevron-down {
+    -webkit-mask-image: url(/icons/chevron-down.svg);
+    mask-image: url(/icons/chevron-down.svg);
+}
+.icon.icon-activity {
+    -webkit-mask-image: url(/icons/activity.svg);
+    mask-image: url(/icons/activity.svg);
+}
+.icon.icon-cloud {
+    -webkit-mask-image: url(/icons/cloud.svg);
+    mask-image: url(/icons/cloud.svg);
+}
+.icon.icon-server {
+    -webkit-mask-image: url(/icons/server.svg);
+    mask-image: url(/icons/server.svg);
+}
+.icon.icon-shield {
+    -webkit-mask-image: url(/icons/shield.svg);
+    mask-image: url(/icons/shield.svg);
+}
+.icon.icon-cpu {
+    -webkit-mask-image: url(/icons/cpu.svg);
+    mask-image: url(/icons/cpu.svg);
+}
+.icon.icon-clock {
+    -webkit-mask-image: url(/icons/clock.svg);
+    mask-image: url(/icons/clock.svg);
+}
+.icon.icon-copy {
+    -webkit-mask-image: url(/icons/copy.svg);
+    mask-image: url(/icons/copy.svg);
+}
+.icon.icon-settings {
+    -webkit-mask-image: url(/icons/settings.svg);
+    mask-image: url(/icons/settings.svg);
+}
+.icon.icon-logout {
+    -webkit-mask-image: url(/icons/logout.svg);
+    mask-image: url(/icons/logout.svg);
 }

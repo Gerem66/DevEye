@@ -5,9 +5,11 @@ import type { FastifyInstance } from 'fastify';
 
 import { ACCESS_COOKIE } from '@/auth/cookies';
 import { verifyAccessToken } from '@/auth/jwt';
+import { createMonitorTransport, type MonitorHub } from '@/agent/hub';
 import { FeatureError } from '@/features/_define';
 import { forgetSession } from '@/features/password/_shared';
 import { featureHandlerMap } from '@/features/registry';
+import { createSecureStore, forgetSessionDek } from '@/Services/SecureStore';
 import { logger } from '@/logger';
 
 import type { Database } from '@/db';
@@ -16,6 +18,7 @@ import type Encryption from '@/Services/Encryption';
 interface WSDeps {
     db: Database;
     crypt: Encryption;
+    hub: MonitorHub;
 }
 
 interface Session {
@@ -27,7 +30,7 @@ function send(socket: WebSocket, msg: ServerMessage): void {
     socket.send(JSON.stringify(msg));
 }
 
-export async function registerWS(app: FastifyInstance, { db, crypt }: WSDeps): Promise<void> {
+export async function registerWS(app: FastifyInstance, { db, crypt, hub }: WSDeps): Promise<void> {
     app.get('/ws', { websocket: true }, async (socket, req) => {
         const accessToken = req.cookies[ACCESS_COOKIE];
         let session: Session | null = null;
@@ -50,6 +53,10 @@ export async function registerWS(app: FastifyInstance, { db, crypt }: WSDeps): P
 
         const reqLogger = logger.child({ userId: session.userId, sid: session.sessionId });
         reqLogger.info('WS connected');
+
+        const { store: secure, keys: secretKeys } = createSecureStore(db, crypt, session.userId, session.sessionId);
+
+        const monitor = createMonitorTransport(hub, socket);
 
         send(socket, { command: 'session', payload: ok({ userId: session.userId }) });
 
@@ -104,10 +111,13 @@ export async function registerWS(app: FastifyInstance, { db, crypt }: WSDeps): P
                     {
                         db,
                         crypt,
+                        secure,
+                        secretKeys,
                         userId: session!.userId,
                         sessionId: session!.sessionId,
                         logger: reqLogger.child({ command, requestId: replyId }),
-                        requestId: replyId
+                        requestId: replyId,
+                        monitor
                     },
                     inputParse.data
                 );
@@ -142,7 +152,9 @@ export async function registerWS(app: FastifyInstance, { db, crypt }: WSDeps): P
         });
 
         socket.on('close', () => {
+            hub.dropSubscriber(socket);
             forgetSession(session!.sessionId);
+            forgetSessionDek(session!.sessionId);
             reqLogger.info('WS closed');
         });
     });

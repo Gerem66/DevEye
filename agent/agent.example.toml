@@ -1,0 +1,22 @@
+# Example DevEye agent configuration.
+#
+# The agent normally writes this file itself during `deveye-agent link`.
+# Location: $DEVEYE_CONFIG, or <config-dir>/deveye/agent.toml
+# (~/.config/deveye/agent.toml for a user, /etc/deveye/agent.toml for the service).
+
+# HTTP base URL of the DevEye server.
+server = "https://deveye.example.com"
+
+# Human-friendly device name (shown in the Clients page).
+name = "my-laptop"
+
+# Stable machine fingerprint (auto-derived from /etc/machine-id).
+fingerprint = "0123456789abcdef0123456789abcdef"
+
+# Base64 Ed25519 keypair (auto-generated; keep the secret private).
+secret_key = "<base64-ed25519-secret>"
+public_key = "<base64-ed25519-public>"
+
+# Set automatically after `deveye-agent link <code>`:
+# device_id = "..."
+# device_token = "..."

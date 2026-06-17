@@ -1,0 +1,119 @@
+/* Glassmorphism design tokens */
+:root {
+  /* Base palette */
+  --glass-bg: rgba(18, 26, 38, 0.62);
+  --glass-bg-light: rgba(38, 52, 68, 0.5);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --glass-border-strong: rgba(255, 255, 255, 0.16);
+  --glass-blur: 16px;
+
+  /* Surfaces */
+  --surface-widget: var(--glass-bg);
+  --surface-popup: rgba(14, 21, 32, 0.92);
+  --surface-navbar: rgba(9, 14, 22, 0.78);
+  --surface-subtle: rgba(255, 255, 255, 0.04);
+
+  /* Text */
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.66);
+  --text-muted: rgba(255, 255, 255, 0.42);
+
+  /* Accent — cyan/teal (DevEye brand) */
+  --accent: #22d3ee;
+  --accent-hover: #4fe3f5;
+  --accent-strong: #0bbcd6;
+  --accent-glow: rgba(34, 211, 238, 0.35);
+  --accent-bg: rgba(34, 211, 238, 0.14);
+  --on-accent: #05222a;
+
+  /* Status */
+  --success: #2ed8b6;
+  --success-bg: rgba(46, 216, 182, 0.14);
+  --warning: #ffb64d;
+  --warning-bg: rgba(255, 182, 77, 0.14);
+  --danger: #ff5370;
+  --danger-bg: rgba(255, 83, 112, 0.13);
+
+  /* Inputs */
+  --input-bg: rgba(255, 255, 255, 0.04);
+  --input-border: var(--glass-border);
+  --input-focus: var(--accent);
+  --input-placeholder: var(--text-muted);
+
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.28);
+  --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.42);
+  --shadow-glow: 0 0 0 1px var(--accent-bg), 0 8px 32px var(--accent-glow);
+
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 26px;
+  --radius-pill: 999px;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* Typography */
+  --font-sans: 'Open Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  /* Layout */
+  --navbar-height: 56px;
+
+  /* Z-index scale */
+  --z-wallpaper: -1;
+  --z-base: 1;
+  --z-popup-overlay: 900;
+  --z-popup: 1000;
+  --z-navbar: 1200;
+  --z-modal: 1400;
+  --z-toast: 1600;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-slow: 400ms ease;
+}
+
+html,
+body {
+  font-family: var(--font-sans);
+}
+
+body {
+  background: #06080f;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Global glass card utility */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--glass-border-strong);
+  border-radius: var(--radius-pill);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}

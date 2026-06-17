@@ -9,6 +9,9 @@ import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 
+import { agentRoutes } from '@/agent/routes';
+import { registerAgentWS } from '@/agent/ws';
+import { MonitorHub } from '@/agent/hub';
 import { authRoutes } from '@/auth/routes';
 import { logger } from '@/logger';
 import { env, isDev } from '@/Utils/Env';
@@ -60,8 +63,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
     app.get('/api/health', { logLevel: 'silent' }, async () => ({ ok: true }));
 
-    await authRoutes(app, { db: deps.db });
-    await registerWS(app, { db: deps.db, crypt: deps.crypt });
+    const hub = new MonitorHub();
+
+    await authRoutes(app, { db: deps.db, crypt: deps.crypt });
+    await agentRoutes(app, { db: deps.db, hub });
+    await registerWS(app, { db: deps.db, crypt: deps.crypt, hub });
+    await registerAgentWS(app, { db: deps.db, hub });
 
     // Serve the built web client from the same origin as the API whenever a
     // build is present (production, or the dockerised dev stack). On the host

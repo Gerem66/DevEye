@@ -1,0 +1,73 @@
+.dashboard {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.main {
+    flex: 1;
+    overflow-y: auto;
+    padding-top: var(--navbar-height);
+}
+
+.content {
+    width: 100%;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: var(--space-lg) var(--space-lg) var(--space-xl);
+}
+
+.greeting {
+    padding: var(--space-lg) var(--space-xs) var(--space-xl);
+}
+
+.greetingText {
+    font-size: clamp(1.6rem, 1.1rem + 1.6vw, 2.2rem);
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-xs) 0;
+    letter-spacing: -0.01em;
+}
+
+.dateText {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    margin: 0;
+    text-transform: capitalize;
+}
+
+/* Compact widget bodies for trivial features */
+.profileWidget {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    justify-content: center;
+    height: 100%;
+}
+
+.profileName {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.profileEmail {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.simpleHint {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+@media (max-width: 640px) {
+    .content {
+        padding: var(--space-md) var(--space-md) var(--space-xl);
+    }
+}

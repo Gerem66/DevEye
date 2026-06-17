@@ -1,0 +1,337 @@
+/* Widget compact */
+.widgetLoading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    height: 100%;
+}
+
+.widgetContent {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.statusBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    font-weight: 500;
+    width: fit-content;
+}
+
+.statusBadge .icon {
+    width: 15px;
+}
+
+.statusBadge.enabled {
+    background: rgba(46, 216, 182, 0.15);
+    color: var(--success);
+}
+
+.statusBadge.disabled {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted);
+}
+
+.backupInfo {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-xs);
+}
+
+.backupCount {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.backupLabel {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+/* Full view */
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-xs) 0;
+}
+
+.subtitle {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin: 0 0 var(--space-lg) 0;
+}
+
+.loader {
+    color: var(--text-muted);
+    text-align: center;
+    padding: var(--space-xl);
+}
+
+.content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+    padding-bottom: var(--space-lg);
+}
+
+/* Password-based encryption dialog (moved from Profile). */
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.fieldLabel {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.formError {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--danger);
+}
+
+.recoveryCodeBox {
+    display: block;
+    margin: var(--space-sm) 0;
+    padding: var(--space-md);
+    font-family: var(--font-mono, monospace);
+    font-size: 1.1rem;
+    letter-spacing: 0.05em;
+    text-align: center;
+    color: var(--text-primary);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-md);
+    word-break: break-all;
+}
+
+.statusCard {
+    display: flex;
+    align-items: center;
+    gap: var(--space-lg);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-lg);
+    flex-wrap: wrap;
+}
+
+.statusIcon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted);
+}
+
+.statusIcon .icon {
+    width: 26px;
+}
+
+.statusIcon.enabled {
+    background: rgba(46, 216, 182, 0.15);
+    color: var(--success);
+}
+
+.statusInfo {
+    flex: 1;
+    min-width: 200px;
+}
+
+.statusInfo h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-xs) 0;
+}
+
+.statusInfo p {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.error {
+    padding: var(--space-sm) var(--space-md);
+    background: rgba(255, 83, 112, 0.1);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-sm);
+    color: var(--danger);
+    font-size: 0.85rem;
+}
+
+.backupSection {
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-lg);
+}
+
+.backupSection h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-xs) 0;
+}
+
+.backupSection p {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: 0 0 var(--space-md) 0;
+}
+
+/* 2FA setup steps (rendered inside the setup Dialog). */
+.steps {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+    margin-bottom: var(--space-lg);
+}
+
+.step {
+    display: flex;
+    gap: var(--space-md);
+}
+
+@media (min-width: 641px) {
+    .steps {
+        flex-direction: row;
+        align-items: flex-start;
+    }
+
+    .step {
+        flex: 1;
+        min-width: 0;
+    }
+}
+
+.stepNumber {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: var(--accent);
+    color: white;
+    border-radius: 50%;
+    font-weight: 600;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+}
+
+.stepContent {
+    flex: 1;
+}
+
+.stepContent h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-xs) 0;
+}
+
+.stepContent p {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: 0 0 var(--space-md) 0;
+}
+
+.qrContainer {
+    display: flex;
+    justify-content: center;
+    padding: var(--space-md);
+    background: white;
+    border-radius: var(--radius-sm);
+    width: fit-content;
+    margin-bottom: var(--space-md);
+}
+
+.qrCode {
+    width: 180px;
+    height: 180px;
+}
+
+.manualEntry {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-xs);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.manualEntry code {
+    background: var(--glass-bg);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--accent);
+    word-break: break-all;
+}
+
+.codeInput {
+    width: 140px;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 1.25rem;
+    letter-spacing: 0.2em;
+    text-align: center;
+    outline: none;
+    transition: border-color var(--transition-fast);
+}
+
+.codeInput:focus {
+    border-color: var(--accent);
+}
+
+.codeInput::placeholder {
+    color: var(--text-muted);
+    letter-spacing: 0.2em;
+}
+
+.codesGrid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-sm);
+}
+
+.backupCode {
+    padding: var(--space-sm);
+    background: var(--glass-bg);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    text-align: center;
+}

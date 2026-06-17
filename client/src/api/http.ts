@@ -1,9 +1,13 @@
 import {
+    changePasswordRequestSchema,
+    changePasswordResponseSchema,
     loginRequestSchema,
     loginResponseSchema,
     meResponseSchema,
     refreshResponseSchema,
     resultSchema,
+    type ChangePasswordRequest,
+    type ChangePasswordResponse,
     type ErrorCode,
     type LoginRequest,
     type LoginResponse,
@@ -31,8 +35,8 @@ async function request<TOut>(path: string, init: RequestInit, outputSchema: z.Zo
     try {
         res = await fetch(`${BASE_URL}${path}`, {
             credentials: 'include',
-            headers: { 'Content-Type': 'application/json', ...init.headers },
-            ...init
+            ...init,
+            headers: { 'Content-Type': 'application/json', ...init.headers }
         });
     } catch (e) {
         throw new ApiError('network', (e as Error).message);
@@ -65,4 +69,21 @@ export function logout(): Promise<{ loggedOut: true }> {
 
 export function me(): Promise<MeResponse> {
     return request('/api/auth/me', { method: 'GET' }, meResponseSchema);
+}
+
+export function changePassword(payload: ChangePasswordRequest): Promise<ChangePasswordResponse> {
+    const body = changePasswordRequestSchema.parse(payload);
+    return request(
+        '/api/auth/change-password',
+        { method: 'POST', body: JSON.stringify(body) },
+        changePasswordResponseSchema
+    );
+}
+
+export function post<T>(
+    path: string,
+    body: unknown,
+    outputSchema: z.ZodType<T> = z.unknown() as z.ZodType<T>
+): Promise<T> {
+    return request(path, { method: 'POST', body: JSON.stringify(body) }, outputSchema);
 }

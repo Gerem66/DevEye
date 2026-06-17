@@ -1,13 +1,12 @@
 import HomePage from './Pages/Home/index.js';
 import LoginPage from './Pages/Login/index.js';
+import { SecrecyGate } from './Components/SecrecyGate';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 
-import './Styles/colors.css';
+import './Styles/theme.css';
 import './Styles/fonts.css';
 import './Styles/icons.css';
 import './Styles/input.css';
-import './Styles/sizes.css';
-import './Styles/table.css';
 
 function AppRoot() {
     const { status } = useAuth();
@@ -15,6 +14,7 @@ function AppRoot() {
     return (
         <>
             {status === 'authenticated' && <HomePage />}
+            {status === 'authenticated' && <SecrecyGate />}
             <LoginPage />
         </>
     );

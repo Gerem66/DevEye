@@ -2,8 +2,9 @@ import { useState } from 'react';
 
 import { ws, WsError } from '@/api/ws';
 import { useAuth } from '@/auth/AuthProvider';
-import { Button, Popup, TextInput } from '@/Components/index.js';
-import { ClosePopup } from '@/Components/Popup';
+import Popup, { ClosePopup } from '@/Components/Popup';
+import Button from '@/Components/Button';
+import TextInput from '@/Components/TextInput';
 import styles from './style.module.css';
 
 import type { Workspace } from 'deveye-types';
@@ -52,26 +53,26 @@ function AddWorkspacePopup({ onCreated }: AddWorkspacePopupProps) {
 
     return (
         <Popup id='popup-add-workspace' title='Ajouter une entreprise' onClosePopup={close}>
-            <p>Quel est le nom de la nouvelle entreprise ?</p>
+            <p className={styles.popupHint}>Quel est le nom de la nouvelle entreprise ?</p>
 
-            <div className='form-group'>
-                <TextInput
-                    placeholder='Entreprise X'
-                    value={name}
-                    error={error}
-                    onChange={(e) => {
-                        setName(e.target.value);
-                        setError('');
-                    }}
-                    onKeyDown={onKeyDown}
-                />
-            </div>
+            <TextInput
+                placeholder='Entreprise X'
+                value={name}
+                error={error}
+                onChange={(e) => {
+                    setName(e.target.value);
+                    setError('');
+                }}
+                onKeyDown={onKeyDown}
+            />
 
-            <div className={`form-group ${styles['popup-check-password-buttons']}`}>
-                <Button onClick={close} color='#576d8c'>
+            <div className={styles.popupActions}>
+                <Button variant='secondary' onClick={close}>
                     Fermer
                 </Button>
-                <Button onClick={submit}>{submitting ? '…' : 'Créer'}</Button>
+                <Button onClick={submit} disabled={submitting}>
+                    {submitting ? '…' : 'Créer'}
+                </Button>
             </div>
         </Popup>
     );

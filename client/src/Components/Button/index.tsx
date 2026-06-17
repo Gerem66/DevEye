@@ -1,23 +1,22 @@
-import React from 'react';
-
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import styles from './style.module.css';
 
-import type { ButtonHTMLAttributes, DetailedHTMLProps } from 'react';
+export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 
-type ButtonAttributes = ButtonHTMLAttributes<HTMLButtonElement>;
-type DetailedButtonProps = DetailedHTMLProps<ButtonAttributes, HTMLButtonElement>;
-type ButtonProps = DetailedButtonProps & { color?: string };
+export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+    /** Visual style. Defaults to the accent-filled primary button. */
+    variant?: ButtonVariant;
+    /** Optional leading icon name (see icons.css). */
+    icon?: string;
+    children?: ReactNode;
+}
 
-function Button(props: ButtonProps): React.JSX.Element {
-    const { children, color, className, ...rest } = props;
-    const classes = `${styles.button} ${className || ''}`;
-
+/** App-wide button. Use `variant` for intent; never hardcode colors. */
+export default function Button({ variant = 'primary', icon, className, children, ...rest }: ButtonProps) {
     return (
-        <button className={classes} {...rest}>
-            <div className={styles['button-background']} style={{ backgroundColor: color || '#4481dd' }} />
+        <button className={`${styles.button} ${styles[variant]} ${className ?? ''}`} {...rest}>
+            {icon && <span className={`icon ${styles.icon} icon-${icon}`} />}
             {children}
         </button>
     );
 }
-
-export default Button;
