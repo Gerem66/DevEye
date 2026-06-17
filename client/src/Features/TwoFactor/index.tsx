@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ws } from '@/api/ws';
 import { Dialog } from '@/Components/Dialog';
 import Button from '@/Components/Button';
+import { useAuth } from '@/auth/AuthProvider';
 import { refreshSecrecyStatus } from '@/stores/secrecy';
 import type { SecrecyStatus, TwoFactorStatus } from 'deveye-types';
 import type { FeatureProps } from '../types';
@@ -15,6 +16,7 @@ interface SetupData {
 }
 
 export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps) {
+    const { updateUser } = useAuth();
     const [status, setStatus] = useState<TwoFactorStatus | null>(null);
     const [loading, setLoading] = useState(true);
     const [setupData, setSetupData] = useState<SetupData | null>(null);
@@ -28,6 +30,7 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
     const [disableCode, setDisableCode] = useState('');
     const [secrecy, setSecrecy] = useState<SecrecyStatus | null>(null);
     const [securityOpen, setSecurityOpen] = useState(false);
+    const [infoOpen, setInfoOpen] = useState<'2fa' | 'encryption' | null>(null);
 
     const fetchStatus = useCallback(async () => {
         try {
@@ -53,6 +56,14 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
         void fetchStatus();
         void fetchSecrecy();
     }, [fetchStatus, fetchSecrecy]);
+
+    // Keep the global user.security in sync so the profile's "Sécurité x / 2"
+    // counter updates live, without a full page reload. Only patches once both
+    // statuses are known to avoid flicker from partial state.
+    useEffect(() => {
+        if (status === null || secrecy === null) return;
+        updateUser({ security: { twoFactor: status.enabled, passwordEncryption: secrecy.enabled } });
+    }, [status, secrecy, updateUser]);
 
     const startSetup = async () => {
         // Open the dialog right away (with a loader) so it doesn't feel laggy
@@ -139,6 +150,13 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
                                     : 'Activez la 2FA pour sécuriser votre compte'}
                             </p>
                         </div>
+                        <button
+                            className={styles.infoBtn}
+                            onClick={() => setInfoOpen('2fa')}
+                            title='Comment ça fonctionne ?'
+                        >
+                            <span className='icon icon-info' />
+                        </button>
                         {!status?.enabled ? (
                             <Button onClick={startSetup}>Activer</Button>
                         ) : (
@@ -164,6 +182,13 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
                                     : 'Verrouillez vos données chiffrées avec votre mot de passe.'}
                             </p>
                         </div>
+                        <button
+                            className={styles.infoBtn}
+                            onClick={() => setInfoOpen('encryption')}
+                            title='Comment ça fonctionne ?'
+                        >
+                            <span className='icon icon-info' />
+                        </button>
                         <Button variant={secrecy?.enabled ? 'danger' : 'primary'} onClick={() => setSecurityOpen(true)}>
                             {secrecy?.enabled ? 'Désactiver' : 'Activer'}
                         </Button>
@@ -305,6 +330,62 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
                             onChange={(e) => setDisableCode(e.target.value.replace(/\D/g, ''))}
                             placeholder='000000'
                         />
+                    </Dialog>
+
+                    <Dialog
+                        open={infoOpen === '2fa'}
+                        onClose={() => setInfoOpen(null)}
+                        title='Authentification à deux facteurs (TOTP)'
+                        width={500}
+                    >
+                        <div className={styles.infoContent}>
+                            <p>
+                                La 2FA utilise le protocole <strong>TOTP</strong> (RFC 6238). Un secret de 20 octets est
+                                généré côté serveur et partagé une seule fois via QR code.
+                            </p>
+                            <p>
+                                À chaque connexion, votre application calcule un code à 6 chiffres via{' '}
+                                <code>HMAC-SHA1(secret, floor(time/30))</code>. Le serveur recalcule le même code et les
+                                compare — le secret ne transite jamais après l&apos;enrôlement.
+                            </p>
+                            <p>
+                                Les <strong>codes de secours</strong> sont des tokens aléatoires à usage unique, stockés
+                                en base sous forme de hash SHA-256. Chaque utilisation marque le code comme consommé de
+                                façon définitive.
+                            </p>
+                        </div>
+                    </Dialog>
+
+                    <Dialog
+                        open={infoOpen === 'encryption'}
+                        onClose={() => setInfoOpen(null)}
+                        title='Chiffrement par mot de passe (envelope encryption)'
+                        width={500}
+                    >
+                        <div className={styles.infoContent}>
+                            <p>
+                                Chaque utilisateur possède une <strong>DEK</strong> (Data Encryption Key) de 256 bits
+                                générée aléatoirement. Les données sont chiffrées avec cette DEK via{' '}
+                                <strong>AES-256-GCM</strong> (authentifié, avec IV aléatoire par bloc).
+                            </p>
+                            <p>
+                                Sans ce mode activé, la DEK est elle-même chiffrée par une clé serveur (
+                                <strong>KEK</strong>) stockée dans les variables d&apos;environnement — le serveur peut
+                                déchiffrer sans action de votre part.
+                            </p>
+                            <p>
+                                Avec ce mode activé, la DEK est chiffrée par une clé dérivée de{' '}
+                                <strong>votre mot de passe</strong> via Argon2id (résistant aux GPUs). Le serveur ne
+                                stocke jamais votre mot de passe ni la DEK en clair — même un accès à la base de données
+                                ne suffit pas à lire vos données.
+                            </p>
+                            <p>
+                                Le <strong>code de récupération</strong> chiffre une seconde copie de la DEK via une clé
+                                Argon2id distincte. Si vous oubliez votre mot de passe, ce code déverrouille la DEK et
+                                permet de redéfinir un mot de passe — sans lui, les données chiffrées sont
+                                définitivement perdues.
+                            </p>
+                        </div>
                     </Dialog>
 
                     <SecurityDialog

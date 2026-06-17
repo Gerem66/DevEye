@@ -16,8 +16,37 @@ export interface SecrecyState {
     prompting: boolean;
 }
 
+/**
+ * Client mirror of the server's "sudo-like" grace window (see SecureStore on the
+ * backend). Must stay <= the server value so the client re-prompts proactively
+ * instead of firing a request that fails with `locked`.
+ */
+const GRACE_MS = 60_000;
+
 let state: SecrecyState = { unlocked: false, prompting: false };
 const listeners = new Set<() => void>();
+
+/** Timer that flips `unlocked` back to false once the grace window elapses. */
+let graceTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearGraceTimer(): void {
+    if (graceTimer) {
+        clearTimeout(graceTimer);
+        graceTimer = null;
+    }
+}
+
+/**
+ * Restart the grace countdown. Called on unlock and on every subsequent
+ * encrypted action (see {@link touchSecrecy}) to mirror the server's sliding TTL.
+ */
+function armGraceTimer(): void {
+    clearGraceTimer();
+    graceTimer = setTimeout(() => {
+        graceTimer = null;
+        set({ unlocked: false });
+    }, GRACE_MS);
+}
 
 /** Promises waiting on the in-flight unlock prompt. */
 type Waiter = { resolve: () => void; reject: (e: Error) => void };
@@ -47,7 +76,17 @@ export function useSecrecy(): SecrecyState {
 
 /** Mark the session unlocked/locked from anywhere (status sync, logout, …). */
 export function setUnlocked(unlocked: boolean): void {
+    if (unlocked) armGraceTimer();
+    else clearGraceTimer();
     set({ unlocked });
+}
+
+/**
+ * Signal an encrypted action just happened: slides the grace window forward to
+ * match the server. No-op when already locked (the next action will prompt).
+ */
+export function touchSecrecy(): void {
+    if (state.unlocked) armGraceTimer();
 }
 
 /**
@@ -65,6 +104,7 @@ export function ensureUnlocked(): Promise<void> {
 
 /** Called by the dialog after a successful `secrecy.unlock`. */
 export function resolveUnlock(): void {
+    armGraceTimer();
     set({ unlocked: true, prompting: false });
     const pending = waiters;
     waiters = [];
@@ -87,7 +127,7 @@ export async function refreshSecrecyStatus(): Promise<void> {
     try {
         const { status } = await ws.send('secrecy.status', {});
         // When the feature is off, treat the session as always unlocked.
-        set({ unlocked: !status.enabled || status.unlocked });
+        setUnlocked(!status.enabled || status.unlocked);
     } catch {
         // Leave state as-is on transient errors.
     }

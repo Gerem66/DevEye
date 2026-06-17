@@ -18,7 +18,7 @@ async function buildStatus(ctx: FeatureContext): Promise<SecrecyStatus> {
     const enabled = ctx.secretKeys.isPasswordWrapped(row);
     return {
         enabled,
-        unlocked: await ctx.secure.isUnlocked(),
+        unlocked: await ctx.secure.isUnlockedPassive(),
         recoveryEnabled: row.recovery_wrapped !== null
     };
 }

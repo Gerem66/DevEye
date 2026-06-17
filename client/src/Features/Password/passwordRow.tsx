@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import styles from './style.module.css';
 
 import type { PasswordEntry, PasswordEntryMasked } from 'deveye-types';
@@ -7,10 +8,86 @@ type RowPassword = PasswordEntry | PasswordEntryMasked;
 interface PasswordRowProps {
     password: RowPassword | null;
     onEdit?: (id: number) => void;
-    callback?: (id: number) => void;
+    onReveal?: (id: number) => void;
+    onMask?: (id: number) => void;
+    /** Fetch + copy the clear password without revealing it. Returns success. */
+    onCopyPassword?: (id: number) => Promise<boolean>;
 }
 
-function PasswordRow({ password, onEdit = () => {}, callback = () => {} }: PasswordRowProps) {
+const REVEAL_DURATION_MS = 15_000;
+
+/**
+ * Copy-to-clipboard icon with "copied" feedback. Either copies `value` locally,
+ * or delegates to `onCopy` (which performs the copy itself and returns whether
+ * it succeeded — used to copy a still-masked password fetched on demand).
+ */
+function CopyButton({
+    value,
+    onCopy,
+    className,
+    title = 'Copier'
+}: {
+    value?: string;
+    onCopy?: () => Promise<boolean>;
+    className?: string;
+    title?: string;
+}) {
+    const [copied, setCopied] = useState(false);
+    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const flashCopied = () => {
+        setCopied(true);
+        if (timerRef.current) clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => setCopied(false), 2000);
+    };
+
+    const copy = () => {
+        if (onCopy) {
+            void onCopy().then((ok) => {
+                if (ok) flashCopied();
+            });
+            return;
+        }
+        navigator.clipboard.writeText(value ?? '').then(flashCopied, () => {
+            // Clipboard refused (insecure context / denied permission) — no-op.
+        });
+    };
+
+    useEffect(
+        () => () => {
+            if (timerRef.current) clearTimeout(timerRef.current);
+        },
+        []
+    );
+
+    return (
+        <i
+            className={`icon ${copied ? 'icon-square-check' : 'icon-copy'} ${className ?? ''}`}
+            onClick={copy}
+            title={copied ? 'Copié !' : title}
+        />
+    );
+}
+
+function PasswordRow({
+    password,
+    onEdit = () => {},
+    onReveal = () => {},
+    onMask = () => {},
+    onCopyPassword
+}: PasswordRowProps) {
+    const id = password?.id ?? null;
+    const isRevealed = password !== null && password.password !== '';
+
+    // Auto-hide a revealed password after the timeout. The timer is keyed on the
+    // revealed state so it starts when the clear value actually appears (not when
+    // the reveal request is fired) and resets cleanly on unmount or re-mask.
+    useEffect(() => {
+        if (!isRevealed || id === null) return;
+        const timer = setTimeout(() => onMask(id), REVEAL_DURATION_MS);
+        return () => clearTimeout(timer);
+    }, [isRevealed, id, onMask]);
+
     if (password === null) {
         return (
             <tr data-id={`${Math.random()}`} style={{ height: 48 }}>
@@ -23,17 +100,45 @@ function PasswordRow({ password, onEdit = () => {}, callback = () => {} }: Passw
         );
     }
 
-    const isMasked = password.password === '';
+    const handleReveal = () => onReveal(password.id);
 
     return (
         <tr data-id={`${password.id}`}>
             <td>{password.service}</td>
 
-            <td>{password.email}</td>
+            <td>
+                <div className={styles['cell-flex']}>
+                    <span className={styles['cell-text']}>{password.email}</span>
+                    {password.email && <CopyButton value={password.email} className={styles['cell-icon']} />}
+                </div>
+            </td>
 
-            <td className={styles['password-cell']}>
-                <p>{isMasked ? '••••••••' : password.password}</p>
-                {isMasked ? <i className='icon icon-eye-open' onClick={() => callback(password.id)} /> : null}
+            <td>
+                <div className={styles['cell-flex']}>
+                    <span className={styles['cell-text']}>{isRevealed ? password.password : '••••••••'}</span>
+                    {isRevealed ? (
+                        <CopyButton
+                            value={password.password}
+                            className={styles['cell-icon']}
+                            title='Copier le mot de passe'
+                        />
+                    ) : (
+                        <>
+                            <i
+                                className={`icon icon-eye-open ${styles['cell-icon']}`}
+                                onClick={handleReveal}
+                                title='Afficher'
+                            />
+                            {onCopyPassword && (
+                                <CopyButton
+                                    onCopy={() => onCopyPassword(password.id)}
+                                    className={styles['cell-icon']}
+                                    title='Copier sans afficher'
+                                />
+                            )}
+                        </>
+                    )}
+                </div>
             </td>
 
             {password.status === 'active' ? (

@@ -190,3 +190,7 @@
     -webkit-mask-image: url(/icons/logout.svg);
     mask-image: url(/icons/logout.svg);
 }
+.icon.icon-info {
+    -webkit-mask-image: url(/icons/info.svg);
+    mask-image: url(/icons/info.svg);
+}

@@ -1,7 +1,6 @@
 import type { SecureStore } from '@/Services/SecureStore';
 import type { PasswordEntry, PasswordEntryMasked, PasswordStatus } from 'deveye-types';
 import { passwordEntrySchema } from 'deveye-types';
-import { FeatureError } from '../_define';
 
 /**
  * Stored payload (encrypted as `passwords.content`). Mirrors PasswordEntry
@@ -19,16 +18,6 @@ export async function encryptPayload(secure: SecureStore, payload: StoredPayload
     return secure.encrypt(JSON.stringify(payload));
 }
 
-export async function decryptPayload(secure: SecureStore, content: string): Promise<StoredPayload> {
-    const plain = await secure.decrypt(content);
-    try {
-        return JSON.parse(plain) as StoredPayload;
-    } catch {
-        throw new FeatureError('internal', 'Corrupted password content');
-    }
-}
-
-/** Non-throwing variant: returns null instead of failing (e.g. legacy rows). */
 export async function tryDecryptPayload(secure: SecureStore, content: string): Promise<StoredPayload | null> {
     const plain = await secure.tryDecrypt(content);
     if (plain === null) return null;

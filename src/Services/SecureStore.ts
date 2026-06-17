@@ -5,21 +5,68 @@ import Encryption from './Encryption';
 import { SecretKeyService } from './SecretKeyService';
 
 /**
+ * "Sudo-like" grace window: once unlocked, the DEK stays available for this many
+ * ms and the timer resets on every use. After it elapses without activity the
+ * DEK is wiped and the next encrypted action re-prompts for the password.
+ */
+const DEK_GRACE_MS = 60_000;
+
+interface DekEntry {
+    dek: Buffer;
+    /** Epoch ms after which the DEK is considered expired. */
+    expiresAt: number;
+}
+
+/**
  * In-memory registry of unlocked DEKs, keyed by WS sessionId. Populated only
  * when a user with password-based encryption supplies their password during a
  * session; never persisted and cleared on disconnect/logout. Server-wrapped
  * DEKs (feature OFF) are resolved on demand and never need an entry here.
  */
-const sessionDeks = new Map<string, Buffer>();
+const sessionDeks = new Map<string, DekEntry>();
+
+/** Wipe + drop an entry. */
+function dropDek(sessionId: string, entry: DekEntry | undefined): void {
+    if (!entry) return;
+    entry.dek.fill(0); // best-effort wipe of key material
+    sessionDeks.delete(sessionId);
+}
+
+/**
+ * Read the live DEK for a session, enforcing the grace window. Returns null when
+ * absent or expired (expired entries are wiped). Each successful read slides the
+ * expiry forward by {@link DEK_GRACE_MS}.
+ */
+function liveDek(sessionId: string): Buffer | null {
+    const entry = sessionDeks.get(sessionId);
+    if (!entry) return null;
+    if (Date.now() >= entry.expiresAt) {
+        dropDek(sessionId, entry);
+        return null;
+    }
+    entry.expiresAt = Date.now() + DEK_GRACE_MS;
+    return entry.dek;
+}
+
+/** True if the DEK is currently live, without sliding the grace window. */
+function hasLiveDek(sessionId: string): boolean {
+    const entry = sessionDeks.get(sessionId);
+    if (!entry) return false;
+    if (Date.now() >= entry.expiresAt) {
+        dropDek(sessionId, entry);
+        return false;
+    }
+    return true;
+}
 
 export function rememberSessionDek(sessionId: string, dek: Buffer): void {
-    sessionDeks.set(sessionId, dek);
+    const prev = sessionDeks.get(sessionId);
+    if (prev && prev.dek !== dek) prev.dek.fill(0);
+    sessionDeks.set(sessionId, { dek, expiresAt: Date.now() + DEK_GRACE_MS });
 }
 
 export function forgetSessionDek(sessionId: string): void {
-    const dek = sessionDeks.get(sessionId);
-    if (dek) dek.fill(0); // best-effort wipe of key material
-    sessionDeks.delete(sessionId);
+    dropDek(sessionId, sessionDeks.get(sessionId));
 }
 
 /**
@@ -63,18 +110,32 @@ export class SecureStore {
         if (!this.keys.isPasswordWrapped(row)) {
             return this.keys.resolveServerDek(row);
         }
-        const dek = sessionDeks.get(this.sessionId);
+        const dek = liveDek(this.sessionId);
         if (!dek) {
             throw new FeatureError('locked', 'Password encryption is locked; unlock with your password');
         }
         return dek;
     }
 
-    /** True when encrypted data can be read/written right now without a prompt. */
+    /**
+     * True when encrypted data can be read/written right now without a prompt.
+     * Note: this also slides the grace window forward (treated as activity), so
+     * call it only as part of a real access check, not for passive polling.
+     */
     async isUnlocked(): Promise<boolean> {
         const row = await this.row();
         if (!this.keys.isPasswordWrapped(row)) return true;
-        return sessionDeks.has(this.sessionId);
+        return liveDek(this.sessionId) !== null;
+    }
+
+    /**
+     * Like {@link isUnlocked} but does NOT slide the grace window — for status
+     * polling that must not count as user activity.
+     */
+    async isUnlockedPassive(): Promise<boolean> {
+        const row = await this.row();
+        if (!this.keys.isPasswordWrapped(row)) return true;
+        return hasLiveDek(this.sessionId);
     }
 
     /** Encrypt a plaintext payload for storage. */

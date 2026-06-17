@@ -177,6 +177,60 @@
     margin: 0;
 }
 
+.infoBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0.5;
+    flex-shrink: 0;
+    transition:
+        opacity var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.infoBtn:hover {
+    opacity: 1;
+    color: var(--accent);
+}
+
+.infoBtn .icon {
+    width: 16px;
+}
+
+.infoContent {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.infoContent p {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.6;
+}
+
+.infoContent strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.infoContent code {
+    background: var(--glass-bg);
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--accent);
+}
+
 .error {
     padding: var(--space-sm) var(--space-md);
     background: rgba(255, 83, 112, 0.1);

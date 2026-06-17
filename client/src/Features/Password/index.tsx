@@ -10,7 +10,7 @@ import { OpenPopup } from '@/Components/Popup';
 import { ws, WsError } from '@/api/ws';
 import TextInput from '@/Components/TextInput';
 import Button from '@/Components/Button';
-import { ensureUnlocked as ensureSecrecyUnlocked } from '@/stores/secrecy';
+import { ensureUnlocked as ensureSecrecyUnlocked, touchSecrecy } from '@/stores/secrecy';
 
 import type { FeatureProps } from '@/Features/types';
 import type { PasswordEntry, PasswordEntryMasked } from 'deveye-types';
@@ -22,11 +22,15 @@ import type { PasswordEntry, PasswordEntryMasked } from 'deveye-types';
  */
 async function withSecrecy<T>(run: () => Promise<T>): Promise<T> {
     try {
-        return await run();
+        const out = await run();
+        touchSecrecy(); // slide the grace window on each successful action
+        return out;
     } catch (e) {
         if (e instanceof WsError && e.code === 'locked') {
             await ensureSecrecyUnlocked();
-            return run();
+            const out = await run();
+            touchSecrecy();
+            return out;
         }
         throw e;
     }
@@ -95,9 +99,26 @@ function FeaturePassword({ workspace }: FeatureProps) {
         }
     }, [workspace.id]);
 
-    /** Replace a single entry inside the cache, used after on-demand unlock. */
+    /** Replace a single revealed entry inside the cache (used by reveal). */
     const replaceEntry = useCallback((entry: PasswordEntry) => {
         setAllPasswords((prev) => prev.map((p) => (p.id === entry.id ? entry : p)));
+    }, []);
+
+    /**
+     * Upsert an entry into the cache in its MASKED form. Use after add/edit so a
+     * freshly saved password is never left in clear in the table.
+     */
+    const upsertMasked = useCallback((entry: PasswordEntry) => {
+        const masked: PasswordEntryMasked = { ...entry, password: '' };
+        setAllPasswords((prev) => {
+            const exists = prev.some((p) => p.id === masked.id);
+            return exists ? prev.map((p) => (p.id === masked.id ? masked : p)) : [...prev, masked];
+        });
+    }, []);
+
+    /** Mask a revealed entry back to its masked form. */
+    const maskEntry = useCallback((id: number) => {
+        setAllPasswords((prev) => prev.map((p) => (p.id === id ? { ...p, password: '' } : p)));
     }, []);
 
     const getPassword = useCallback(
@@ -116,6 +137,29 @@ function FeaturePassword({ workspace }: FeatureProps) {
         [ensureUnlocked, workspace.id, replaceEntry]
     );
 
+    /**
+     * Fetch the clear password and copy it to the clipboard WITHOUT revealing it
+     * in the table. Same unlock/grace logic as a reveal. Returns true on success
+     * so the row can show its "copied" feedback.
+     */
+    const copyPassword = useCallback(
+        async (id: number): Promise<boolean> => {
+            setActionError(null);
+            if (!(await ensureUnlocked())) return false;
+            try {
+                const res = await withSecrecy(() =>
+                    ws.send('password.get', { workspaceId: workspace.id, passwordId: id })
+                );
+                await navigator.clipboard.writeText(res.entry.password);
+                return true;
+            } catch (e) {
+                setActionError(humanizeError(e, 'Impossible de copier le mot de passe.'));
+                return false;
+            }
+        },
+        [ensureUnlocked, workspace.id]
+    );
+
     const openEditPopup = useCallback(
         async (id: number | null) => {
             setActionError(null);
@@ -128,8 +172,9 @@ function FeaturePassword({ workspace }: FeatureProps) {
                     const res = await withSecrecy(() =>
                         ws.send('password.get', { workspaceId: workspace.id, passwordId: id })
                     );
+                    // Hand the clear entry to the edit popup ONLY — never write it
+                    // into `allPasswords`, or the table would reveal the password.
                     initial = res.entry;
-                    replaceEntry(initial);
                 } catch (e) {
                     setActionError(humanizeError(e, 'Impossible de récupérer le mot de passe.'));
                     return;
@@ -158,19 +203,19 @@ function FeaturePassword({ workspace }: FeatureProps) {
                         const res = await withSecrecy(() =>
                             ws.send('password.add', { workspaceId: workspace.id, entry })
                         );
-                        setAllPasswords((prev) => [...prev, res.entry]);
+                        upsertMasked(res.entry);
                     } else {
                         const res = await withSecrecy(() =>
                             ws.send('password.edit', { workspaceId: workspace.id, entry: result })
                         );
-                        replaceEntry(res.entry);
+                        upsertMasked(res.entry);
                     }
                 } catch (e) {
                     setActionError(humanizeError(e, 'Enregistrement impossible.'));
                 }
             }
         },
-        [ensureUnlocked, workspace.id, replaceEntry]
+        [ensureUnlocked, workspace.id, upsertMasked]
     );
 
     /** Categories grouped + filtered by search. */
@@ -245,7 +290,9 @@ function FeaturePassword({ workspace }: FeatureProps) {
                                             key={password.id}
                                             password={password}
                                             onEdit={(id) => void openEditPopup(id)}
-                                            callback={(id) => void getPassword(id)}
+                                            onReveal={(id) => void getPassword(id)}
+                                            onMask={maskEntry}
+                                            onCopyPassword={copyPassword}
                                         />
                                     ))}
                                 </tbody>

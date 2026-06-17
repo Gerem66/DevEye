@@ -91,10 +91,6 @@
     font-size: 0.875rem;
 }
 
-.table p {
-    margin: 0;
-}
-
 .table thead th {
     position: sticky;
     top: 0;
@@ -127,26 +123,45 @@
 }
 
 /* Row cells (see passwordRow.tsx) */
-.password-cell > p {
-    display: inline;
+.cell-flex {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-width: 0;
 }
 
-.password-cell > i,
+.cell-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cell-icon {
+    opacity: 0.5;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+        opacity var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.cell-icon:hover {
+    opacity: 1;
+    color: var(--accent);
+}
+
+.edit-cell {
+    text-align: right;
+}
+
 .edit-cell > i {
-    margin-left: 12px;
     opacity: 0.7;
-    vertical-align: middle;
     cursor: pointer;
     transition:
         opacity var(--transition-fast),
         color var(--transition-fast);
 }
 
-.edit-cell > i {
-    margin-left: 0;
-}
-
-.password-cell > i:hover,
 .edit-cell > i:hover {
     opacity: 1;
     color: var(--accent);
