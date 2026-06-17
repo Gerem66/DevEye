@@ -71,6 +71,13 @@ export const passwordListFeature: FeatureDefinition<
         await assertSecureUnlocked(ctx);
         const rows = await ctx.db.passwords.listByUser(ctx.userId);
         const filtered = rows.filter((r) => rowInWorkspace(r.workspace_id, input.workspaceId));
+        if (filtered.length > 0) {
+            const sample = filtered[0].content;
+            ctx.logger.warn(
+                { sampleLength: sample.length, samplePrefix: sample.slice(0, 40) },
+                'DEBUG password.list sample row'
+            );
+        }
         // A single undecryptable row (e.g. legacy/foreign-key data) must not break
         // the whole list — skip it with a warning instead of failing the feature.
         let skipped = 0;
