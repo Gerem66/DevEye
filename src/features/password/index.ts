@@ -75,13 +75,14 @@ export const passwordListFeature: FeatureDefinition<
             const sample = filtered[0].content;
             const legacyResult = ctx.crypt.Decrypt(sample);
             const gcmResult = await ctx.secure.tryDecrypt(sample);
+            const payloadResult = await tryDecryptPayload(ctx.secure, sample);
             ctx.logger.warn(
                 {
                     sampleLength: sample.length,
-                    samplePrefix: sample.slice(0, 40),
                     legacyDecryptOk: legacyResult !== null,
-                    legacyPrefix: legacyResult?.slice(0, 30) ?? null,
-                    gcmDecryptOk: gcmResult !== null
+                    legacyPrefix: legacyResult?.slice(0, 40) ?? null,
+                    gcmResult: gcmResult?.slice(0, 40) ?? null,
+                    payloadOk: payloadResult !== null
                 },
                 'DEBUG password.list sample row'
             );
