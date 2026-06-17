@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme, setTheme, ACCENT_PRESETS, BG_PRESETS } from '@/stores/theme';
 import styles from './SettingsPanel.module.css';
@@ -14,9 +14,14 @@ const DEFAULT_ACCENT = '#22d3ee';
 export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
     const theme = useTheme();
     const [draftUrl, setDraftUrl] = useState(theme.bgImage ?? '');
+    const [fileError, setFileError] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        if (open) setDraftUrl(theme.bgImage ?? '');
+        if (open) {
+            setDraftUrl(theme.bgImage?.startsWith('data:') ? '' : (theme.bgImage ?? ''));
+            setFileError(null);
+        }
     }, [open, theme.bgImage]);
 
     useEffect(() => {
@@ -29,12 +34,43 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
     }, [open, onClose]);
 
     const activeAccent = (theme.accent ?? DEFAULT_ACCENT).toLowerCase();
-    const applyImage = () => setTheme({ bgImage: draftUrl.trim() || null });
+    const applyImage = () => {
+        setFileError(null);
+        setTheme({ bgImage: draftUrl.trim() || null });
+    };
     const customized = Boolean(theme.accent || theme.bgPreset || theme.bgImage);
     const resetAll = () => {
         setDraftUrl('');
+        setFileError(null);
         setTheme({ accent: null, bgPreset: null, bgImage: null });
     };
+
+    // localStorage caps around ~5 MB; a data-URL inflates ~33%, so keep the
+    // source file well under that to leave room for the rest of the theme state.
+    const MAX_FILE_BYTES = 3 * 1024 * 1024;
+    const pickFile = () => fileInputRef.current?.click();
+    const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = ''; // allow re-picking the same file later
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            setFileError('Ce fichier n’est pas une image.');
+            return;
+        }
+        if (file.size > MAX_FILE_BYTES) {
+            setFileError('Image trop lourde (max 3 Mo).');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+            setFileError(null);
+            setDraftUrl('');
+            setTheme({ bgImage: typeof reader.result === 'string' ? reader.result : null });
+        };
+        reader.onerror = () => setFileError('Lecture du fichier impossible.');
+        reader.readAsDataURL(file);
+    };
+    const usingLocalImage = theme.bgImage?.startsWith('data:') ?? false;
 
     return (
         <AnimatePresence>
@@ -124,7 +160,25 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                                     Appliquer
                                 </button>
                             </div>
-                            {theme.bgImage && <span className={styles.imageActive}>Image active comme fond.</span>}
+
+                            <p className={styles.sectionHint}>Ou choisissez un fichier local :</p>
+                            <input
+                                ref={fileInputRef}
+                                type='file'
+                                accept='image/*'
+                                className={styles.fileInput}
+                                onChange={onFileChange}
+                            />
+                            <button type='button' className={styles.fileBtn} onClick={pickFile}>
+                                Parcourir…
+                            </button>
+
+                            {fileError && <span className={styles.fileError}>{fileError}</span>}
+                            {theme.bgImage && (
+                                <span className={styles.imageActive}>
+                                    {usingLocalImage ? 'Image locale active comme fond.' : 'Image active comme fond.'}
+                                </span>
+                            )}
                         </div>
 
                         {customized && (

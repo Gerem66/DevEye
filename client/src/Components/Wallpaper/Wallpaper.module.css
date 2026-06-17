@@ -5,9 +5,10 @@
     overflow: hidden;
     background: var(
         --wallpaper-bg,
-        radial-gradient(900px circle at 12% -8%, var(--accent-glow), transparent 55%),
-        radial-gradient(1100px circle at 108% 112%, var(--accent-glow), transparent 55%),
-        linear-gradient(160deg, #06080f 0%, #0a1622 48%, #070f18 100%)
+        radial-gradient(ellipse 60% 35% at 8% 0%, rgba(34, 211, 238, 0.07) 0%, transparent 100%),
+        radial-gradient(ellipse 40% 28% at 95% 100%, rgba(34, 211, 238, 0.05) 0%, transparent 100%),
+        radial-gradient(ellipse 30% 40% at 55% 60%, rgba(34, 211, 238, 0.03) 0%, transparent 100%),
+        linear-gradient(160deg, #06080f 0%, #090f1c 50%, #06080f 100%)
     );
 }
 

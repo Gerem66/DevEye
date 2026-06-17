@@ -159,6 +159,33 @@
     color: var(--accent);
 }
 
+.fileInput {
+    display: none;
+}
+
+.fileBtn {
+    align-self: flex-start;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--surface-subtle);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.fileBtn:hover {
+    background: var(--glass-bg-light);
+    border-color: var(--glass-border-strong);
+}
+
+.fileError {
+    font-size: 0.78rem;
+    color: var(--danger);
+}
+
 .inputRow {
     display: flex;
     gap: var(--space-sm);
