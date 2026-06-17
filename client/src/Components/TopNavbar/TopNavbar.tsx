@@ -208,7 +208,7 @@ export default function TopNavbar({
                                     setMenuOpen(false);
                                 }}
                             >
-                                <span className='icon icon-settings' /> Paramètres
+                                <span className='icon icon-appearance' /> Apparence
                             </button>
                             <hr className={styles.divider} />
                             <button

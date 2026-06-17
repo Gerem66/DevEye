@@ -17,15 +17,24 @@
     inset: 0;
     background-size: cover;
     background-position: center;
+    /* Blur radius driven by the theme slider; the small scale-up hides the
+       soft transparent edges a blur would otherwise reveal. */
+    filter: blur(var(--wallpaper-blur, 0px));
+    transform: scale(calc(1 + var(--wallpaper-blur, 0px) / 100));
     animation: fade-in var(--transition-slow) ease both;
+    transition: filter var(--transition-normal) ease, transform var(--transition-normal) ease;
 }
 
-/* Scrim over the photo for card/text legibility */
+/* Scrim over the photo for card/text legibility. Base gradient keeps a touch
+   of top→bottom darkening; the slider adds a flat layer on top. */
 .image::after {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(rgba(6, 9, 15, 0.5), rgba(6, 9, 15, 0.64));
+    background:
+        linear-gradient(rgba(6, 9, 15, 0.18), rgba(6, 9, 15, 0.32)),
+        rgba(6, 9, 15, var(--wallpaper-scrim, 0.4));
+    transition: background var(--transition-normal) ease;
 }
 
 @keyframes fade-in {

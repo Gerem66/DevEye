@@ -24,6 +24,10 @@
     -webkit-mask-image: url(/icons/add.svg);
     mask-image: url(/icons/add.svg);
 }
+.icon.icon-appearance {
+    -webkit-mask-image: url(/icons/appearance.svg);
+    mask-image: url(/icons/appearance.svg);
+}
 .icon.icon-arrow {
     -webkit-mask-image: url(/icons/arrow.svg);
     mask-image: url(/icons/arrow.svg);
