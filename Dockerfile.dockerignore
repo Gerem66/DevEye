@@ -1,4 +1,4 @@
-# Build context is the PARENT dir (Projects/DevEye). Ignore heavy/local files.
+# Build context is this dir (DevEye). Ignore heavy/local files.
 **/node_modules
 **/.git
 **/dist
@@ -13,8 +13,3 @@
 **/coverage
 **/.vscode
 **/target
-DevEye_backup_*
-DevEye-Interface
-Backups
-Docs
-Rust
