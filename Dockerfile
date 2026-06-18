@@ -18,11 +18,12 @@ ARG GITHUB_PACKAGES_TOKEN
 ENV GITHUB_PACKAGES_TOKEN=${GITHUB_PACKAGES_TOKEN}
 ENV NPM_CONFIG_USERCONFIG=/app/DevEye/.npmrc
 COPY .npmrc ./DevEye/.npmrc
-COPY package.json ./DevEye/
+COPY package.json package-lock.json ./DevEye/
 COPY client/package.json ./DevEye/client/
-# This project does not commit lockfiles, so use `npm install` (not `npm ci`).
+# Reproducible install from the committed lockfile. The repo is an npm workspace
+# (root + client), so a single `npm ci` installs both.
 RUN --mount=type=cache,target=/root/.npm \
-    cd DevEye && npm install --no-audit --no-fund && cd client && npm install --no-audit --no-fund
+    cd DevEye && npm ci --no-audit --no-fund
 
 FROM deps AS build
 WORKDIR /app

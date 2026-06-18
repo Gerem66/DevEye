@@ -6,10 +6,8 @@ import { useWeather } from '@/stores/weather';
 import { wmoIcon } from '@/Features/Weather/wmoIcon';
 import styles from './TopNavbar.module.css';
 
-import packageJson from '../../../package.json';
-
 const ENV = import.meta.env.VITE_ENV;
-const version = packageJson.version + (ENV === 'dev' ? '-dev' : '');
+const version = __APP_VERSION__ + (ENV === 'dev' ? '-dev' : '');
 
 /** Ease-out used for entering elements (fast arrival). */
 const COLLAPSE = { duration: 0.28, ease: [0.22, 1, 0.36, 1] } as const;

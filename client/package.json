@@ -1,6 +1,5 @@
 {
   "name": "deveye-client",
-  "version": "0.1.6",
   "description": "Tool management tools",
   "type": "module",
   "private": true,
