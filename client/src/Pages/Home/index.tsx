@@ -18,7 +18,7 @@ import { ClientsWidget } from '@/Features/Clients';
 import Monitoring from '@/Features/Monitoring';
 import Weather from '@/Features/Weather';
 import Clients from '@/Features/Clients';
-import TwoFactor from '@/Features/TwoFactor';
+import Security from '@/Features/Security';
 import FeatureProfile from '@/Features/Profile';
 import FeaturePassword from '@/Features/Password';
 
@@ -104,10 +104,10 @@ const PAGES: ViewConfig[] = [
         cacheDurationMinutes: 0
     },
     {
-        id: 'twofa',
+        id: 'security',
         title: 'Sécurité',
         icon: 'shield',
-        FullComponent: TwoFactor,
+        FullComponent: Security,
         cacheDurationMinutes: 1
     }
 ];
@@ -331,7 +331,7 @@ export default function HomePage() {
                 viewTitle={expandedConfig?.title}
                 onBack={expandedWidget ? handleClose : undefined}
                 onOpenProfile={() => handleExpand('profile')}
-                onOpenTwoFactor={() => handleExpand('twofa')}
+                onOpenSecurity={() => handleExpand('security')}
                 onOpenSettings={() => setSettingsOpen(true)}
             />
 

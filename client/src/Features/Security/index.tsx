@@ -7,7 +7,7 @@ import { refreshSecrecyStatus } from '@/stores/secrecy';
 import type { SecrecyStatus, TwoFactorStatus } from 'deveye-types';
 import type { FeatureProps } from '../types';
 import { SecurityDialog } from './SecurityDialog';
-import styles from './TwoFactor.module.css';
+import styles from './Security.module.css';
 
 interface SetupData {
     secret: string;
@@ -15,7 +15,7 @@ interface SetupData {
     backupCodes: string[];
 }
 
-export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps) {
+export default function Security({ user: _user, workspace: _ws }: FeatureProps) {
     const { updateUser } = useAuth();
     const [status, setStatus] = useState<TwoFactorStatus | null>(null);
     const [loading, setLoading] = useState(true);

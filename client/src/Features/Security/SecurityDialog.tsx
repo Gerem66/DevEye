@@ -6,7 +6,7 @@ import { TextInput } from '@/Components';
 import Button from '@/Components/Button';
 import { setUnlocked } from '@/stores/secrecy';
 
-import styles from './TwoFactor.module.css';
+import styles from './Security.module.css';
 
 interface SecurityDialogProps {
     open: boolean;

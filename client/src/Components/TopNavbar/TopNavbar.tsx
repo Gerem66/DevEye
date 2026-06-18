@@ -26,8 +26,8 @@ export interface TopNavbarProps {
     onBack?: () => void;
     /** Open the profile feature. */
     onOpenProfile?: () => void;
-    /** Open the 2FA security feature. */
-    onOpenTwoFactor?: () => void;
+    /** Open the security feature (2FA, password encryption, re-auth window). */
+    onOpenSecurity?: () => void;
     /** Open the settings panel. */
     onOpenSettings?: () => void;
 }
@@ -68,7 +68,7 @@ export default function TopNavbar({
     viewTitle,
     onBack,
     onOpenProfile,
-    onOpenTwoFactor,
+    onOpenSecurity,
     onOpenSettings
 }: TopNavbarProps) {
     const { user, logout } = useAuth();
@@ -195,7 +195,7 @@ export default function TopNavbar({
                             <button
                                 className={styles.menuItem}
                                 onClick={() => {
-                                    onOpenTwoFactor?.();
+                                    onOpenSecurity?.();
                                     setMenuOpen(false);
                                 }}
                             >
