@@ -120,6 +120,18 @@
     -webkit-mask-image: url(/icons/success.svg);
     mask-image: url(/icons/success.svg);
 }
+.icon.icon-check-circle {
+    -webkit-mask-image: url(/icons/check-circle.svg);
+    mask-image: url(/icons/check-circle.svg);
+}
+.icon.icon-x-circle {
+    -webkit-mask-image: url(/icons/x-circle.svg);
+    mask-image: url(/icons/x-circle.svg);
+}
+.icon.icon-spinner {
+    -webkit-mask-image: url(/icons/spinner.svg);
+    mask-image: url(/icons/spinner.svg);
+}
 .icon.icon-trash {
     -webkit-mask-image: url(/icons/trash.svg);
     mask-image: url(/icons/trash.svg);

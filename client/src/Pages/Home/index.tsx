@@ -118,7 +118,7 @@ const PAGES: ViewConfig[] = [
         title: 'Sécurité',
         icon: 'shield',
         FullComponent: Security,
-        cacheDurationMinutes: 1
+        cacheDurationMinutes: 0
     }
 ];
 

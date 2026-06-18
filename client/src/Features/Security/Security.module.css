@@ -270,6 +270,70 @@
     color: var(--text-secondary);
 }
 
+/* Transient autosave indicator next to the re-auth input. Fixed width so the
+   editor row doesn't shift when the icon appears/disappears. */
+.reAuthStatus {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+}
+
+.reAuthStatus .icon {
+    width: 16px;
+    opacity: 0.9;
+}
+
+/* Saved / error icons fade-and-settle in: a subtle pop that feels like a gentle
+   confirmation rather than a flash. */
+.reAuthOk,
+.reAuthErr {
+    animation: reAuthPop 250ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}
+
+.reAuthOk {
+    color: var(--success);
+}
+
+.reAuthErr {
+    color: var(--danger);
+}
+
+/* Spinner: thin, low-contrast, smooth continuous rotation. */
+.reAuthSpin {
+    color: var(--text-muted);
+    opacity: 0.7;
+    animation: reAuthSpin 0.7s linear infinite;
+}
+
+@keyframes reAuthPop {
+    from {
+        opacity: 0;
+        transform: scale(0.6);
+    }
+    to {
+        opacity: 0.9;
+        transform: scale(1);
+    }
+}
+
+@keyframes reAuthSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .reAuthOk,
+    .reAuthErr {
+        animation: none;
+    }
+    .reAuthSpin {
+        animation-duration: 1.4s;
+    }
+}
+
 .infoContent {
     display: flex;
     flex-direction: column;

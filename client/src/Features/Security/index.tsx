@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ws } from '@/api/ws';
 import { Dialog } from '@/Components/Dialog';
 import Button from '@/Components/Button';
@@ -35,8 +35,11 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     // Re-auth window editor, expressed in minutes (0 = always re-prompt). Kept as
     // a string so the field can be cleared mid-edit without snapping to 0.
     const [reAuthInput, setReAuthInput] = useState('');
-    const [reAuthSaving, setReAuthSaving] = useState(false);
-    const [reAuthSaved, setReAuthSaved] = useState(false);
+    // Autosave status for the re-auth window, surfaced as a small transient icon
+    // next to the input rather than a button.
+    const [reAuthSaveState, setReAuthSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+    const reAuthDebounce = useRef<number | undefined>(undefined);
+    const reAuthSavedTimer = useRef<number | undefined>(undefined);
 
     const fetchStatus = useCallback(async () => {
         try {
@@ -174,21 +177,38 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
         reAuthInput.trim() !== '' && Number.isInteger(parsedReAuth) && parsedReAuth >= 0 && parsedReAuth <= 1440;
     const reAuthDirty = reAuthValid && parsedReAuth !== currentReAuthMinutes;
 
-    const saveReAuth = async () => {
-        if (!reAuthValid || reAuthSaving) return;
-        setReAuthSaving(true);
-        setReAuthSaved(false);
+    const saveReAuth = useCallback(async () => {
+        if (!reAuthValid) return;
+        setReAuthSaveState('saving');
         try {
             const res = await ws.send('secrecy.setReauth', { seconds: parsedReAuth * 60 });
             setSecrecy(res.status);
-            setReAuthSaved(true);
-            window.setTimeout(() => setReAuthSaved(false), 2000);
+            setReAuthSaveState('saved');
+            window.clearTimeout(reAuthSavedTimer.current);
+            reAuthSavedTimer.current = window.setTimeout(() => setReAuthSaveState('idle'), 2000);
         } catch {
-            setError("Échec de l'enregistrement du délai de validation.");
-        } finally {
-            setReAuthSaving(false);
+            setReAuthSaveState('error');
         }
-    };
+    }, [reAuthValid, parsedReAuth]);
+
+    // Debounced autosave: wait 500 ms after the last edit before persisting. Any
+    // change resets the timer, so we only save once the user pauses. Only fires
+    // when the value is valid and actually differs from what's stored.
+    useEffect(() => {
+        if (!reAuthDirty) return;
+        window.clearTimeout(reAuthDebounce.current);
+        reAuthDebounce.current = window.setTimeout(() => void saveReAuth(), 500);
+        return () => window.clearTimeout(reAuthDebounce.current);
+    }, [reAuthDirty, reAuthInput, saveReAuth]);
+
+    // Clean up any pending timers on unmount.
+    useEffect(
+        () => () => {
+            window.clearTimeout(reAuthDebounce.current);
+            window.clearTimeout(reAuthSavedTimer.current);
+        },
+        []
+    );
 
     return (
         <div className={styles.container}>
@@ -297,13 +317,29 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                 aria-label='Délai de validation en minutes'
                             />
                             <span className={styles.reAuthUnit}>min</span>
-                            <Button onClick={() => void saveReAuth()} disabled={!reAuthDirty || reAuthSaving}>
-                                {reAuthSaving
-                                    ? 'Enregistrement…'
-                                    : reAuthSaved && !reAuthDirty
-                                      ? 'Enregistré ✓'
-                                      : 'Enregistrer'}
-                            </Button>
+                            <span className={styles.reAuthStatus} aria-live='polite'>
+                                {reAuthSaveState === 'saving' && (
+                                    <span
+                                        key='saving'
+                                        className={`icon icon-spinner ${styles.reAuthSpin}`}
+                                        title='Enregistrement…'
+                                    />
+                                )}
+                                {reAuthSaveState === 'saved' && (
+                                    <span
+                                        key='saved'
+                                        className={`icon icon-check-circle ${styles.reAuthOk}`}
+                                        title='Enregistré'
+                                    />
+                                )}
+                                {reAuthSaveState === 'error' && (
+                                    <span
+                                        key='error'
+                                        className={`icon icon-x-circle ${styles.reAuthErr}`}
+                                        title="Échec de l'enregistrement"
+                                    />
+                                )}
+                            </span>
                         </div>
                     </div>
 
