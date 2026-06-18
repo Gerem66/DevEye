@@ -441,6 +441,7 @@
 }
 
 .block {
+    position: relative;
     display: flex;
     align-items: flex-start;
     gap: var(--space-sm);
@@ -481,9 +482,28 @@
     height: 16px;
 }
 
-/* The dragged row, shown in its live preview position as a ghost. */
+/* The row being dragged, ghosted in place while the insertion line shows
+   where it will land. */
 .blockDragging {
     opacity: 0.4;
+}
+
+/* A flat insertion line drawn in the gap before a row (or after the last one).
+   Absolutely positioned so the list never reflows during a drag. */
+.dropLine {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -1px;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+    pointer-events: none;
+}
+
+.dropLineEnd {
+    top: auto;
+    bottom: -1px;
 }
 
 .checkButton {

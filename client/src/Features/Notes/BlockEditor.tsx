@@ -9,17 +9,6 @@ interface BlockEditorProps {
     onChange: (blocks: NoteBlock[]) => void;
 }
 
-// A 1×1 transparent image used to suppress the browser's native drag ghost,
-// so only our live in-list preview is visible. Created lazily on first drag.
-let _emptyDragImage: HTMLImageElement | null = null;
-function emptyDragImage(): HTMLImageElement {
-    if (!_emptyDragImage) {
-        _emptyDragImage = new Image();
-        _emptyDragImage.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-    }
-    return _emptyDragImage;
-}
-
 /** Auto-grow a textarea to fit its content (no inner scrollbar). */
 function autosize(el: HTMLTextAreaElement | null): void {
     if (!el) return;
@@ -32,14 +21,20 @@ function autosize(el: HTMLTextAreaElement | null): void {
  * checklist item). One clean surface — Enter splits into a new block of the
  * same kind, Backspace at the start of an empty block removes it and focuses the
  * previous one, so it reads like a native notes editor rather than a form.
+ *
+ * Rows can be reordered by dragging the grip on the left. The list itself never
+ * reflows during a drag (that would move the element under the cursor and cause
+ * a feedback loop / flicker); instead the dragged row is ghosted and a thin
+ * insertion line shows where it will land, computed from each row's midpoint.
  */
 export default function BlockEditor({ blocks, onChange }: BlockEditorProps) {
     const refs = useRef<(HTMLTextAreaElement | null)[]>([]);
+    const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
     const focusIndex = useRef<number | null>(null);
-    // Index of the block being dragged, and the index it would drop before
-    // (== blocks.length to drop at the end). Both null when not dragging.
+    // Index of the row being dragged, and the insertion index it would drop at
+    // (0..blocks.length). Both null when not dragging.
     const [dragFrom, setDragFrom] = useState<number | null>(null);
-    const [dragOver, setDragOver] = useState<number | null>(null);
+    const [dropAt, setDropAt] = useState<number | null>(null);
 
     // After a structural change we may want to move focus to a specific block.
     useEffect(() => {
@@ -88,19 +83,6 @@ export default function BlockEditor({ blocks, onChange }: BlockEditorProps) {
         [blocks, onChange]
     );
 
-    /** Move the block at `from` so it sits before position `to`. */
-    const reorder = useCallback(
-        (from: number, to: number) => {
-            if (from === to || from === to - 1) return;
-            const next = [...blocks];
-            const [moved] = next.splice(from, 1);
-            // Removing the source shifts everything after it left by one.
-            next.splice(to > from ? to - 1 : to, 0, moved);
-            onChange(next);
-        },
-        [blocks, onChange]
-    );
-
     const onKeyDown = useCallback(
         (e: React.KeyboardEvent<HTMLTextAreaElement>, index: number) => {
             const b = blocks[index];
@@ -121,107 +103,128 @@ export default function BlockEditor({ blocks, onChange }: BlockEditorProps) {
         [blocks, insertAfter, removeAt]
     );
 
-    // Live preview order: while dragging, render the blocks as they *would* be
-    // after the drop, so the dragged row glides into place (rendered semi-
-    // transparent) instead of a static drop marker. Each entry is the block's
-    // original index, used as a stable React key so the DOM node — and its
-    // textarea focus/scroll — moves with the block rather than the position.
-    const order = blocks.map((_, i) => i);
-    if (dragFrom !== null && dragOver !== null && dragOver !== dragFrom && dragOver !== dragFrom + 1) {
-        order.splice(dragFrom, 1);
-        order.splice(dragOver > dragFrom ? dragOver - 1 : dragOver, 0, dragFrom);
-    }
+    // Which gap (0..length) the cursor is closest to, from the rows' real
+    // geometry. The list doesn't reflow mid-drag, so these rects are stable.
+    const insertionIndexAt = useCallback((clientY: number): number => {
+        let i = 0;
+        for (; i < rowRefs.current.length; i++) {
+            const el = rowRefs.current[i];
+            if (!el) continue;
+            const rect = el.getBoundingClientRect();
+            if (clientY < rect.top + rect.height / 2) return i;
+        }
+        return i;
+    }, []);
 
-    const commitDrop = (e: React.DragEvent) => {
-        if (dragFrom === null || dragOver === null) return;
-        e.preventDefault();
-        reorder(dragFrom, dragOver);
-        setDragFrom(null);
-        setDragOver(null);
-    };
+    const onContainerDragOver = useCallback(
+        (e: React.DragEvent) => {
+            if (dragFrom === null) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            setDropAt(insertionIndexAt(e.clientY));
+        },
+        [dragFrom, insertionIndexAt]
+    );
 
-    const trackDragOver = (e: React.DragEvent, index: number) => {
-        if (dragFrom === null) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        // Drop before this block, or after it if past its midpoint.
-        const rect = e.currentTarget.getBoundingClientRect();
-        const after = e.clientY > rect.top + rect.height / 2;
-        setDragOver(after ? index + 1 : index);
-    };
+    const onContainerDrop = useCallback(
+        (e: React.DragEvent) => {
+            if (dragFrom === null || dropAt === null) {
+                setDragFrom(null);
+                setDropAt(null);
+                return;
+            }
+            e.preventDefault();
+            // Translate the insertion gap into a target array position.
+            const next = [...blocks];
+            const [moved] = next.splice(dragFrom, 1);
+            const target = dropAt > dragFrom ? dropAt - 1 : dropAt;
+            next.splice(target, 0, moved);
+            setDragFrom(null);
+            setDropAt(null);
+            if (target !== dragFrom) onChange(next);
+        },
+        [blocks, dragFrom, dropAt, onChange]
+    );
+
+    // The drop would change nothing if the row lands back in its own slot
+    // (gap just above or just below itself) — hide the line in that case.
+    const lineAt = (gap: number): boolean =>
+        dragFrom !== null && dropAt === gap && dropAt !== dragFrom && dropAt !== dragFrom + 1;
 
     return (
-        <div className={styles.blocks} onDrop={commitDrop}>
-            {order.map((index) => {
-                const block = blocks[index];
-                return (
-                    <div
-                        key={index}
-                        className={`${styles.block} ${dragFrom === index ? styles.blockDragging : ''}`}
-                        onDragOver={(e) => trackDragOver(e, index)}
-                        onDrop={commitDrop}
+        <div className={styles.blocks} onDragOver={onContainerDragOver} onDrop={onContainerDrop}>
+            {blocks.map((block, index) => (
+                <div
+                    key={index}
+                    ref={(el) => {
+                        rowRefs.current[index] = el;
+                    }}
+                    className={`${styles.block} ${dragFrom === index ? styles.blockDragging : ''}`}
+                >
+                    {/* Insertion line in the gap above this row. The last row
+                        also carries the "drop at end" line on its bottom edge. */}
+                    {lineAt(index) && <span className={styles.dropLine} aria-hidden='true' />}
+                    {index === blocks.length - 1 && lineAt(blocks.length) && (
+                        <span className={`${styles.dropLine} ${styles.dropLineEnd}`} aria-hidden='true' />
+                    )}
+                    <button
+                        type='button'
+                        className={styles.blockGrip}
+                        aria-label='Réordonner la ligne'
+                        draggable
+                        onDragStart={(e) => {
+                            e.dataTransfer.effectAllowed = 'move';
+                            e.dataTransfer.setData('text/plain', String(index));
+                            setDragFrom(index);
+                            setDropAt(index);
+                        }}
+                        onDragEnd={() => {
+                            setDragFrom(null);
+                            setDropAt(null);
+                        }}
                     >
+                        <span className={`icon ${styles.badge} icon-drag`} />
+                    </button>
+                    {block.type === 'check' && (
                         <button
                             type='button'
-                            className={styles.blockGrip}
-                            aria-label='Réordonner la ligne'
-                            draggable
-                            onDragStart={(e) => {
-                                e.dataTransfer.effectAllowed = 'move';
-                                e.dataTransfer.setData('text/plain', String(index));
-                                // Hide the native drag image — the live preview (the
-                                // row gliding into place) is our ghost instead.
-                                e.dataTransfer.setDragImage(emptyDragImage(), 0, 0);
-                                setDragFrom(index);
-                            }}
-                            onDragEnd={() => {
-                                setDragFrom(null);
-                                setDragOver(null);
-                            }}
+                            className={`${styles.checkButton} ${block.done ? styles.checkButtonDone : ''}`}
+                            aria-label={block.done ? 'Décocher' : 'Cocher'}
+                            onClick={() => toggleDone(index)}
                         >
-                            <span className={`icon ${styles.badge} icon-drag`} />
+                            <span
+                                className={`icon ${styles.badge} icon-${block.done ? 'square-check' : 'square-empty'}`}
+                            />
                         </button>
-                        {block.type === 'check' && (
-                            <button
-                                type='button'
-                                className={`${styles.checkButton} ${block.done ? styles.checkButtonDone : ''}`}
-                                aria-label={block.done ? 'Décocher' : 'Cocher'}
-                                onClick={() => toggleDone(index)}
-                            >
-                                <span
-                                    className={`icon ${styles.badge} icon-${block.done ? 'square-check' : 'square-empty'}`}
-                                />
-                            </button>
-                        )}
-                        <textarea
-                            ref={(el) => {
-                                refs.current[index] = el;
-                                autosize(el);
-                            }}
-                            className={`${styles.blockText} ${
-                                block.type === 'check' && block.done ? styles.blockTextDone : ''
-                            }`}
-                            rows={1}
-                            value={block.text}
-                            placeholder={block.type === 'check' ? 'Élément…' : 'Écrivez quelque chose…'}
-                            onChange={(e) => {
-                                update(index, { text: e.target.value });
-                                autosize(e.target);
-                            }}
-                            onKeyDown={(e) => onKeyDown(e, index)}
-                        />
-                        <button
-                            type='button'
-                            className={styles.blockRemove}
-                            aria-label='Supprimer la ligne'
-                            onClick={() => removeAt(index)}
-                            disabled={blocks.length <= 1}
-                        >
-                            <span className={`icon ${styles.badge} icon-x`} />
-                        </button>
-                    </div>
-                );
-            })}
+                    )}
+                    <textarea
+                        ref={(el) => {
+                            refs.current[index] = el;
+                            autosize(el);
+                        }}
+                        className={`${styles.blockText} ${
+                            block.type === 'check' && block.done ? styles.blockTextDone : ''
+                        }`}
+                        rows={1}
+                        value={block.text}
+                        placeholder={block.type === 'check' ? 'Élément…' : 'Écrivez quelque chose…'}
+                        onChange={(e) => {
+                            update(index, { text: e.target.value });
+                            autosize(e.target);
+                        }}
+                        onKeyDown={(e) => onKeyDown(e, index)}
+                    />
+                    <button
+                        type='button'
+                        className={styles.blockRemove}
+                        aria-label='Supprimer la ligne'
+                        onClick={() => removeAt(index)}
+                        disabled={blocks.length <= 1}
+                    >
+                        <span className={`icon ${styles.badge} icon-x`} />
+                    </button>
+                </div>
+            ))}
 
             <div className={styles.addBlockRow}>
                 <button
