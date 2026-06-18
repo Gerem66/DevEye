@@ -97,23 +97,31 @@ export async function verifyDeviceToken(token: string): Promise<DeviceClaims | n
     }
 }
 
-/** Short-lived token proving a password check passed, pending a TOTP code. */
-export async function signTwoFactorChallenge(userId: number): Promise<string> {
-    return new SignJWT({ purpose: '2fa' })
+/**
+ * Short-lived token proving a password check passed, pending a TOTP code.
+ * `pendingDekToken` (optional) references a DEK unwrapped at login time and held
+ * server-side, so the TOTP step can pre-cache it without re-prompting for the
+ * password. It's only an opaque lookup key — no secret material lives in the JWT.
+ */
+export async function signTwoFactorChallenge(userId: number, pendingDekToken?: string): Promise<string> {
+    const builder = new SignJWT(pendingDekToken ? { purpose: '2fa', pdk: pendingDekToken } : { purpose: '2fa' })
         .setProtectedHeader({ alg: 'HS256' })
         .setSubject(String(userId))
         .setIssuer(issuer)
         .setAudience('deveye-2fa')
         .setIssuedAt()
-        .setExpirationTime(`${env.TWOFA_CHALLENGE_TTL_SECONDS}s`)
-        .sign(accessSecret);
+        .setExpirationTime(`${env.TWOFA_CHALLENGE_TTL_SECONDS}s`);
+    return builder.sign(accessSecret);
 }
 
-export async function verifyTwoFactorChallenge(token: string): Promise<{ sub: string } | null> {
+export async function verifyTwoFactorChallenge(
+    token: string
+): Promise<{ sub: string; pendingDekToken?: string } | null> {
     try {
         const { payload } = await jwtVerify(token, accessSecret, { issuer, audience: 'deveye-2fa' });
         if (typeof payload.sub !== 'string' || payload.purpose !== '2fa') return null;
-        return { sub: payload.sub };
+        const pdk = typeof payload.pdk === 'string' ? payload.pdk : undefined;
+        return { sub: payload.sub, pendingDekToken: pdk };
     } catch {
         return null;
     }

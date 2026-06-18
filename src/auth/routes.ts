@@ -14,6 +14,13 @@ import { sha256hex } from '@/Utils/hash';
 import { normalizeBackupCode, verifyTotp } from '@/Services/Totp';
 import type Encryption from '@/Services/Encryption';
 import { SecretKeyService, WrongSecretError } from '@/Services/SecretKeyService';
+import {
+    claimPendingDek,
+    DEFAULT_DEK_GRACE_MS,
+    discardPendingDek,
+    rememberSessionDek,
+    stashPendingDek
+} from '@/Services/SecureStore';
 import { hashPassword, needsRehash, verifyPassword } from './argon';
 import {
     ACCESS_COOKIE,
@@ -62,6 +69,50 @@ async function issueSession(reply: FastifyReply, db: Database, userId: number): 
     });
     setAuthCookies(reply, access, refresh.token);
     return sessionId;
+}
+
+/**
+ * Resolve the grace window (ms) for a freshly logged-in user from their
+ * configured re-auth interval. Mirrors the secrecy feature: `null` → server
+ * default, otherwise seconds → ms. `0` means "never cache".
+ */
+function loginGraceMs(reAuthIntervalSeconds: number | null): number {
+    return reAuthIntervalSeconds === null ? DEFAULT_DEK_GRACE_MS : reAuthIntervalSeconds * 1000;
+}
+
+/**
+ * Unwrap the user's DEK at login so the imminent WS session starts already
+ * unlocked — no second password prompt right after signing in. Returns the DEK
+ * and the grace window, or `null` when there's nothing to pre-cache:
+ *  - the feature is off (DEK is server-wrapped; no prompt happens anyway), or
+ *  - the user set a `0` re-auth interval (they explicitly want every action to
+ *    re-prompt), or
+ *  - the password no longer unwraps the DEK (defensive; never blocks login).
+ *
+ * Critically this only runs on a real login (the POST that carries the
+ * password). A page reload / auto-login reuses the access cookie and never hits
+ * these routes, so it never pre-caches — exactly the intended behavior.
+ */
+async function unwrapDekForLogin(
+    db: Database,
+    crypt: Encryption,
+    userId: number,
+    password: string
+): Promise<{ dek: Buffer; graceMs: number } | null> {
+    const keys = new SecretKeyService(db, crypt);
+    try {
+        const row = await keys.ensureRow(userId);
+        if (!keys.isPasswordWrapped(row)) return null;
+        const user = await db.users.findById(userId);
+        const graceMs = loginGraceMs(user?.re_auth_interval ?? null);
+        if (graceMs <= 0) return null;
+        const dek = await keys.unwrapWithPassword(row, password);
+        return { dek, graceMs };
+    } catch {
+        // A wrong-secret or any failure here must never break login; the user
+        // will simply be prompted to unlock on first encrypted access.
+        return null;
+    }
 }
 
 export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps): Promise<void> {
@@ -117,10 +168,18 @@ export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps):
             }
         }
 
+        // Unwrap the DEK now, while we hold the password, so the session starts
+        // unlocked (no double prompt). Skipped when the feature is off or the
+        // user opted into per-action re-prompts.
+        const pending = await unwrapDekForLogin(db, crypt, row.id, password);
+
         // If 2FA is enabled, defer session issuance behind a TOTP challenge.
         const twoFa = await db.twoFactor.get(row.id);
         if (twoFa?.enabled) {
-            const challenge = await signTwoFactorChallenge(row.id);
+            // The session doesn't exist yet; hold the DEK server-side and carry an
+            // opaque reference through the challenge for the TOTP step to claim.
+            const pdkToken = pending ? stashPendingDek(pending.dek, pending.graceMs) : undefined;
+            const challenge = await signTwoFactorChallenge(row.id, pdkToken);
             setTwoFactorChallengeCookie(reply, challenge);
             return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: true })));
         }
@@ -131,7 +190,8 @@ export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps):
             return reply.code(500).send(err('internal', 'Unable to load user'));
         }
 
-        await issueSession(reply, db, row.id);
+        const sessionId = await issueSession(reply, db, row.id);
+        if (pending) rememberSessionDek(sessionId, pending.dek, pending.graceMs);
         return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: false, ...bundle })));
     });
 
@@ -155,6 +215,9 @@ export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps):
         const twoFa = await db.twoFactor.get(userId);
         if (!twoFa?.enabled) {
             clearTwoFactorChallengeCookie(reply);
+            // Terminal: no session will be issued, so release any DEK we stashed
+            // at the password step instead of letting it linger until its TTL.
+            if (challenge.pendingDekToken) discardPendingDek(challenge.pendingDekToken);
             return reply.code(400).send(err('conflict', '2FA is not enabled'));
         }
 
@@ -183,7 +246,12 @@ export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps):
         if (!bundle) {
             return reply.code(500).send(err('internal', 'Unable to load user'));
         }
-        await issueSession(reply, db, userId);
+        const sessionId = await issueSession(reply, db, userId);
+        // Bind the DEK unwrapped at the password step (if any) to this session.
+        if (challenge.pendingDekToken) {
+            const pending = claimPendingDek(challenge.pendingDekToken);
+            if (pending) rememberSessionDek(sessionId, pending.dek, pending.graceMs);
+        }
         return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: false, ...bundle })));
     });
 

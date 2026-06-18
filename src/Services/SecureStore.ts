@@ -1,3 +1,5 @@
+import { randomBytes } from 'crypto';
+
 import { FeatureError } from '@/features/_define';
 import type { Database } from '@/db';
 import type { UserSecretKeyRow } from 'deveye-types';
@@ -87,6 +89,77 @@ export function rememberSessionDek(sessionId: string, dek: Buffer, graceMs: numb
 
 export function forgetSessionDek(sessionId: string): void {
     dropDek(sessionId, sessionDeks.get(sessionId));
+}
+
+/**
+ * Short-lived holding area for a DEK unwrapped at login time but not yet bound to
+ * a WS session — the 2FA bridge. The login POST has the password (so it can
+ * unwrap the DEK) but, for a 2FA account, the session is only issued after the
+ * TOTP step. Rather than carrying the password through the 2FA challenge, we
+ * unwrap once and stash the DEK here under an opaque, single-use token that
+ * travels inside the challenge JWT. The TOTP step claims it and binds it to the
+ * freshly issued session. Entries self-expire so an abandoned challenge leaks
+ * nothing for long.
+ */
+interface PendingDek {
+    dek: Buffer;
+    graceMs: number;
+    expiresAt: number;
+}
+
+const pendingDeks = new Map<string, PendingDek>();
+
+/** TTL for a stashed DEK; sized to the 2FA challenge window with margin. */
+const PENDING_DEK_TTL_MS = 5 * 60_000;
+
+function sweepPendingDeks(now: number): void {
+    for (const [token, entry] of pendingDeks) {
+        if (now >= entry.expiresAt) {
+            entry.dek.fill(0);
+            pendingDeks.delete(token);
+        }
+    }
+}
+
+/**
+ * Stash a login-unwrapped DEK for an imminent 2FA completion. Returns an opaque
+ * token to embed in the challenge; pass it to {@link claimPendingDek} once the
+ * TOTP step issues the session. `graceMs` is carried so the eventual
+ * {@link rememberSessionDek} uses the user's configured window.
+ */
+export function stashPendingDek(dek: Buffer, graceMs: number): string {
+    const now = Date.now();
+    sweepPendingDeks(now);
+    const token = randomBytes(18).toString('base64url');
+    pendingDeks.set(token, { dek, graceMs, expiresAt: now + PENDING_DEK_TTL_MS });
+    return token;
+}
+
+/** Consume a stashed DEK (single use). Returns null when absent or expired. */
+export function claimPendingDek(token: string): { dek: Buffer; graceMs: number } | null {
+    const now = Date.now();
+    sweepPendingDeks(now);
+    const entry = pendingDeks.get(token);
+    if (!entry) return null;
+    pendingDeks.delete(token);
+    if (now >= entry.expiresAt) {
+        entry.dek.fill(0);
+        return null;
+    }
+    return { dek: entry.dek, graceMs: entry.graceMs };
+}
+
+/**
+ * Drop a stashed DEK without binding it, wiping its key material. For terminal
+ * 2FA failures where the session won't be issued (e.g. 2FA was disabled between
+ * the password step and the TOTP step) so the DEK isn't left dangling until its
+ * TTL. A no-op for unknown tokens.
+ */
+export function discardPendingDek(token: string): void {
+    const entry = pendingDeks.get(token);
+    if (!entry) return;
+    entry.dek.fill(0);
+    pendingDeks.delete(token);
 }
 
 /**
