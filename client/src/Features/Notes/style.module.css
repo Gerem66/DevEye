@@ -441,7 +441,6 @@
 }
 
 .block {
-    position: relative;
     display: flex;
     align-items: flex-start;
     gap: var(--space-sm);
@@ -452,6 +451,17 @@
 
 .block:hover {
     background: var(--surface-subtle);
+}
+
+/* During a drag, suppress per-row hover affordances (background, grip and
+   delete button): the hovered row is incidental to the cursor and looks noisy. */
+.dragging .block:hover {
+    background: transparent;
+}
+
+.dragging .block:hover .blockGrip,
+.dragging .block:hover .blockRemove {
+    opacity: 0;
 }
 
 /* Drag-to-reorder grip: hidden until the row is hovered, à la native editors. */
@@ -482,28 +492,55 @@
     height: 16px;
 }
 
-/* The row being dragged, ghosted in place while the insertion line shows
-   where it will land. */
-.blockDragging {
-    opacity: 0.4;
-}
-
-/* A flat insertion line drawn in the gap before a row (or after the last one).
-   Absolutely positioned so the list never reflows during a drag. */
-.dropLine {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: -1px;
-    height: 2px;
-    border-radius: 1px;
-    background: var(--accent);
+/* The grabbed row stays mounted (so `dragend` still fires) but collapses out of
+   the flow for the whole drag; its translucent copy trails the cursor instead. */
+.blockHidden {
+    height: 0;
+    min-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin: 0;
+    opacity: 0;
+    overflow: hidden;
     pointer-events: none;
 }
 
-.dropLineEnd {
-    top: auto;
-    bottom: -1px;
+/* Landing preview: a translucent copy of the grabbed row, mirroring its layout
+   so the content shows exactly where (and how) it will drop in. */
+.blockGhost {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    background: var(--accent-bg, var(--surface-subtle));
+    opacity: 0.55;
+    pointer-events: none;
+}
+
+.ghostGrip {
+    flex-shrink: 0;
+    margin-top: 3px;
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+}
+
+.ghostCheck {
+    flex-shrink: 0;
+    margin-top: 3px;
+    width: 18px;
+    height: 18px;
+    color: var(--text-secondary);
+}
+
+.ghostText {
+    flex: 1 1 auto;
+    font-size: 0.92rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    overflow: hidden;
 }
 
 .checkButton {
