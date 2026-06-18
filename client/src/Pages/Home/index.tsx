@@ -98,8 +98,7 @@ const FEATURES: FeatureConfig[] = [
         icon: 'notes',
         WidgetContent: () => <NotesWidgetContent />,
         FullComponent: FeatureNotes,
-        cacheDurationMinutes: 5,
-        preload: true
+        cacheDurationMinutes: 5
     }
 ];
 

@@ -76,9 +76,8 @@ export default function BlockEditor({ blocks, onChange }: BlockEditorProps) {
     const onKeyDown = useCallback(
         (e: React.KeyboardEvent<HTMLTextAreaElement>, index: number) => {
             const b = blocks[index];
-            if (e.key === 'Enter' && !e.shiftKey) {
-                // Enter ends the current line and starts a sibling block (same kind,
-                // checkboxes start unchecked). Shift+Enter keeps the soft newline.
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                // Ctrl+Enter (or ⌘+Enter on Mac) creates a sibling block.
                 e.preventDefault();
                 insertAfter(
                     index,

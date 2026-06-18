@@ -167,7 +167,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    flex: 1;
+    flex: 0.85;
     padding: var(--space-xl);
     color: var(--text-muted);
     gap: var(--space-sm);
