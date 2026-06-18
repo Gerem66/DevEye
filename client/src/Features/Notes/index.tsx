@@ -181,6 +181,12 @@ function FeatureNotes({ workspace }: FeatureProps) {
             if (result === null) return;
 
             if (result === 'delete' && existing) {
+                const confirmed = await OpenPopup<boolean>(NOTE_CONFIRM_POPUP, {
+                    title: 'Supprimer la note',
+                    message: `Supprimer « ${existing.title || 'Sans titre'} » ? Cette action est irréversible.`,
+                    confirmLabel: 'Supprimer'
+                } as ConfirmInput);
+                if (confirmed !== true) return;
                 try {
                     await ws.send('note.delete', { workspaceId: workspace.id, noteId: existing.id });
                     setNotes((prev) => prev.filter((n) => n.id !== existing!.id));
@@ -502,7 +508,8 @@ function toSummary(note: Note): NoteSummary {
         checkTotal: checks.length,
         checkDone: checks.filter((b) => b.type === 'check' && b.done).length,
         locked: false,
-        updated: note.updated
+        updated: note.updated,
+        created: note.created
     };
 }
 

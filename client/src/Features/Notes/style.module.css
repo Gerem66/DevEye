@@ -312,6 +312,7 @@
     margin-top: auto;
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: var(--space-sm);
     font-size: 0.75rem;
     color: var(--text-muted);
@@ -321,6 +322,12 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
+}
+
+/* Last-modified stamp, pushed to the trailing corner of the card. */
+.cardDate {
+    margin-left: auto;
+    white-space: nowrap;
 }
 
 .lockedHint {
@@ -429,6 +436,16 @@
     background: var(--glass-border);
     border: none;
     margin: 0;
+}
+
+/* Created / last-modified stamps shown when editing an existing note. */
+.editorDates {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
 }
 
 /* Blocks editor */

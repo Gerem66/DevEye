@@ -78,6 +78,11 @@ function PasswordRow({
 }: PasswordRowProps) {
     const id = password?.id ?? null;
     const isRevealed = password !== null && password.password !== '';
+    // A masked entry whose stored password is empty: show an empty cell rather
+    // than fake dots + reveal/copy controls that would yield nothing. Only the
+    // masked variant carries `hasPassword`; a revealed entry is never "empty".
+    const isEmptyPassword =
+        password !== null && password.password === '' && 'hasPassword' in password && !password.hasPassword;
 
     // Auto-hide a revealed password after the timeout. The timer is keyed on the
     // revealed state so it starts when the clear value actually appears (not when
@@ -114,31 +119,35 @@ function PasswordRow({
             </td>
 
             <td>
-                <div className={styles['cell-flex']}>
-                    <span className={styles['cell-text']}>{isRevealed ? password.password : '••••••••'}</span>
-                    {isRevealed ? (
-                        <CopyButton
-                            value={password.password}
-                            className={styles['cell-icon']}
-                            title='Copier le mot de passe'
-                        />
-                    ) : (
-                        <>
-                            <i
-                                className={`icon icon-eye-open ${styles['cell-icon']}`}
-                                onClick={handleReveal}
-                                title='Afficher'
+                {isEmptyPassword ? (
+                    <div className={styles['cell-flex']} />
+                ) : (
+                    <div className={styles['cell-flex']}>
+                        <span className={styles['cell-text']}>{isRevealed ? password.password : '••••••••'}</span>
+                        {isRevealed ? (
+                            <CopyButton
+                                value={password.password}
+                                className={styles['cell-icon']}
+                                title='Copier le mot de passe'
                             />
-                            {onCopyPassword && (
-                                <CopyButton
-                                    onCopy={() => onCopyPassword(password.id)}
-                                    className={styles['cell-icon']}
-                                    title='Copier sans afficher'
+                        ) : (
+                            <>
+                                <i
+                                    className={`icon icon-eye-open ${styles['cell-icon']}`}
+                                    onClick={handleReveal}
+                                    title='Afficher'
                                 />
-                            )}
-                        </>
-                    )}
-                </div>
+                                {onCopyPassword && (
+                                    <CopyButton
+                                        onCopy={() => onCopyPassword(password.id)}
+                                        className={styles['cell-icon']}
+                                        title='Copier sans afficher'
+                                    />
+                                )}
+                            </>
+                        )}
+                    </div>
+                )}
             </td>
 
             {password.status === 'active' ? (

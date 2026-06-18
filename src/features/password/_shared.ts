@@ -39,6 +39,7 @@ export function toMaskedEntry(id: number, payload: StoredPayload): PasswordEntry
         service: payload.service,
         email: payload.email,
         password: '',
+        hasPassword: payload.password !== '',
         status: payload.status
     };
 }

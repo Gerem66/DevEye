@@ -89,7 +89,7 @@ function FeaturePassword({ workspace }: FeatureProps) {
      * freshly saved password is never left in clear in the table.
      */
     const upsertMasked = useCallback((entry: PasswordEntry) => {
-        const masked: PasswordEntryMasked = { ...entry, password: '' };
+        const masked: PasswordEntryMasked = { ...entry, password: '', hasPassword: entry.password !== '' };
         setAllPasswords((prev) => {
             const exists = prev.some((p) => p.id === masked.id);
             return exists ? prev.map((p) => (p.id === masked.id ? masked : p)) : [...prev, masked];
@@ -98,7 +98,9 @@ function FeaturePassword({ workspace }: FeatureProps) {
 
     /** Mask a revealed entry back to its masked form. */
     const maskEntry = useCallback((id: number) => {
-        setAllPasswords((prev) => prev.map((p) => (p.id === id ? { ...p, password: '' } : p)));
+        setAllPasswords((prev) =>
+            prev.map((p) => (p.id === id ? { ...p, password: '', hasPassword: p.password !== '' } : p))
+        );
     }, []);
 
     const getPassword = useCallback(

@@ -36,6 +36,17 @@ function emptyBlocks(): NoteBlock[] {
     return [{ type: 'text', text: '' }];
 }
 
+/** Human date+time (epoch seconds) for the editor's metadata line. */
+function formatStamp(time: number): string {
+    return new Date(time * 1000).toLocaleDateString('fr-FR', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
 /** Drop trailing empty blocks but always keep at least one. */
 function normalizeBlocks(blocks: NoteBlock[]): NoteBlock[] {
     const trimmed = blocks.filter((b) => b.text.trim() !== '');
@@ -57,6 +68,8 @@ export default function NoteEditor() {
     const [blocks, setBlocks] = useState<NoteBlock[]>(emptyBlocks);
     const [pinned, setPinned] = useState(false);
     const [hidden, setHidden] = useState(false);
+    const [created, setCreated] = useState<number | null>(null);
+    const [updated, setUpdated] = useState<number | null>(null);
 
     function handleOpen(input: NoteEditorInput) {
         const note = input?.note ?? null;
@@ -67,6 +80,8 @@ export default function NoteEditor() {
             setBlocks(emptyBlocks());
             setPinned(false);
             setHidden(false);
+            setCreated(null);
+            setUpdated(null);
             setTimeout(() => titleRef.current?.focus(), 0);
             return;
         }
@@ -76,6 +91,8 @@ export default function NoteEditor() {
         setBlocks(note.blocks.length > 0 ? note.blocks : emptyBlocks());
         setPinned(note.pinned);
         setHidden(note.hidden);
+        setCreated(note.created);
+        setUpdated(note.updated);
     }
 
     function close(result: NoteEditorResult = null) {
@@ -102,7 +119,7 @@ export default function NoteEditor() {
     return (
         <Popup<NoteEditorInput>
             id={NOTE_EDITOR_POPUP}
-            title={mode === 'add' ? 'Nouvelle note' : ''}
+            title=''
             width={560}
             onInputChange={handleOpen}
             onClosePopup={() => close(null)}
@@ -111,7 +128,7 @@ export default function NoteEditor() {
                 <input
                     ref={titleRef}
                     className={styles.editorTitleInput}
-                    placeholder='Titre de la note'
+                    placeholder={mode === 'add' ? 'Titre de la nouvelle note' : 'Titre de la note'}
                     value={title}
                     maxLength={NOTE_TITLE_MAX_LENGTH}
                     onChange={(e) => setTitle(e.target.value)}
@@ -120,6 +137,13 @@ export default function NoteEditor() {
                 <hr className={styles.divider} />
 
                 <BlockEditor blocks={blocks} onChange={setBlocks} />
+
+                {mode === 'edit' && created !== null && updated !== null && (
+                    <p className={styles.editorDates}>
+                        <span>Créée le {formatStamp(created)}</span>
+                        <span>Modifiée le {formatStamp(updated)}</span>
+                    </p>
+                )}
 
                 <hr className={styles.divider} />
 

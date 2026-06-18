@@ -4,6 +4,19 @@ import styles from './style.module.css';
 
 import type { NoteFolder, NoteSummary } from 'deveye-types';
 
+/**
+ * Compact "last modified" label for a card corner: a short numeric date, or the
+ * full date+time when `full` is set (used for the hover title).
+ */
+function formatCardDate(time: number, full = false): string {
+    return new Date(time * 1000).toLocaleDateString(
+        'fr-FR',
+        full
+            ? { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }
+            : { day: '2-digit', month: '2-digit', year: '2-digit' }
+    );
+}
+
 interface NoteCardProps {
     note: NoteSummary;
     folders: NoteFolder[];
@@ -49,6 +62,7 @@ export default function NoteCard({ note, folders, onOpen, onMove, onDragStart, o
     }
 
     const hasChecks = note.checkTotal > 0;
+    const updatedLabel = formatCardDate(note.updated);
 
     function move(folderId: number | null) {
         setMenuOpen(false);
@@ -123,8 +137,8 @@ export default function NoteCard({ note, folders, onOpen, onMove, onDragStart, o
 
             {note.preview && <p className={styles.cardPreview}>{note.preview}</p>}
 
-            {hasChecks && (
-                <div className={styles.cardMeta}>
+            <div className={styles.cardMeta}>
+                {hasChecks && (
                     <span className={styles.checkProgress}>
                         <span
                             className={`icon ${styles.badge} icon-${
@@ -133,8 +147,14 @@ export default function NoteCard({ note, folders, onOpen, onMove, onDragStart, o
                         />
                         {note.checkDone}/{note.checkTotal}
                     </span>
-                </div>
-            )}
+                )}
+                <span
+                    className={styles.cardDate}
+                    title={`Dernière modification : ${formatCardDate(note.updated, true)}`}
+                >
+                    {updatedLabel}
+                </span>
+            </div>
         </div>
     );
 }

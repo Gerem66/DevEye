@@ -39,7 +39,8 @@ export function toNote(row: NoteRow, payload: StoredPayload): Note {
         blocks: payload.blocks,
         pinned: row.pinned === 1,
         hidden: row.hidden === 1,
-        updated: row.updated
+        updated: row.updated,
+        created: row.created
     });
 }
 
@@ -67,7 +68,8 @@ export function toSummary(row: NoteRow, payload: StoredPayload): NoteSummary {
         checkTotal: checks.length,
         checkDone: checks.filter((b) => b.type === 'check' && b.done).length,
         locked: false,
-        updated: row.updated
+        updated: row.updated,
+        created: row.created
     };
 }
 
@@ -87,7 +89,8 @@ export function toLockedSummary(row: NoteRow): NoteSummary {
         checkTotal: 0,
         checkDone: 0,
         locked: true,
-        updated: row.updated
+        updated: row.updated,
+        created: row.created
     };
 }
 
