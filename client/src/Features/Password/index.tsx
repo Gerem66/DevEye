@@ -51,7 +51,6 @@ function FeaturePassword({ workspace }: FeatureProps) {
     const [allPasswords, setAllPasswords] = useState<RowPassword[]>([]);
     const [actionError, setActionError] = useState<string | null>(null);
     const reloadRef = useRef<Promise<void> | null>(null);
-    const unlockedRef = useRef(false);
 
     const reload = useCallback(async () => {
         if (reloadRef.current) return reloadRef.current;
@@ -74,30 +73,11 @@ function FeaturePassword({ workspace }: FeatureProps) {
     }, [workspace.id]);
 
     useEffect(() => {
-        unlockedRef.current = false;
         setLoaded(false);
         setAllPasswords([]);
         setActionError(null);
         void reload();
     }, [reload]);
-
-    /**
-     * Ensure the workspace is unlocked before a reveal/add/edit. Personal and
-     * password-less workspaces unlock transparently (no prompt); protected ones
-     * ask for the master password via the unlock popup.
-     */
-    const ensureUnlocked = useCallback(async (): Promise<boolean> => {
-        if (unlockedRef.current) return true;
-        try {
-            await ws.send('password.unlock', { workspaceId: workspace.id, password: '' });
-            unlockedRef.current = true;
-            return true;
-        } catch {
-            const ok = await OpenPopup<boolean>('popup-unlock');
-            if (ok) unlockedRef.current = true;
-            return ok === true;
-        }
-    }, [workspace.id]);
 
     /** Replace a single revealed entry inside the cache (used by reveal). */
     const replaceEntry = useCallback((entry: PasswordEntry) => {
@@ -124,7 +104,6 @@ function FeaturePassword({ workspace }: FeatureProps) {
     const getPassword = useCallback(
         async (id: number) => {
             setActionError(null);
-            if (!(await ensureUnlocked())) return;
             try {
                 const res = await withSecrecy(() =>
                     ws.send('password.get', { workspaceId: workspace.id, passwordId: id })
@@ -134,7 +113,7 @@ function FeaturePassword({ workspace }: FeatureProps) {
                 setActionError(humanizeError(e, 'Impossible de récupérer le mot de passe.'));
             }
         },
-        [ensureUnlocked, workspace.id, replaceEntry]
+        [workspace.id, replaceEntry]
     );
 
     /**
@@ -145,7 +124,6 @@ function FeaturePassword({ workspace }: FeatureProps) {
     const copyPassword = useCallback(
         async (id: number): Promise<boolean> => {
             setActionError(null);
-            if (!(await ensureUnlocked())) return false;
             try {
                 const res = await withSecrecy(() =>
                     ws.send('password.get', { workspaceId: workspace.id, passwordId: id })
@@ -157,7 +135,7 @@ function FeaturePassword({ workspace }: FeatureProps) {
                 return false;
             }
         },
-        [ensureUnlocked, workspace.id]
+        [workspace.id]
     );
 
     const openEditPopup = useCallback(
@@ -167,7 +145,6 @@ function FeaturePassword({ workspace }: FeatureProps) {
 
             if (id !== null) {
                 // Need the real entry (clear password) before editing.
-                if (!(await ensureUnlocked())) return;
                 try {
                     const res = await withSecrecy(() =>
                         ws.send('password.get', { workspaceId: workspace.id, passwordId: id })
@@ -195,7 +172,6 @@ function FeaturePassword({ workspace }: FeatureProps) {
             }
 
             if (typeof result === 'object') {
-                if (!(await ensureUnlocked())) return;
                 try {
                     if (id === null || result.id === 0) {
                         const { id: _omit, ...entry } = result;
@@ -215,7 +191,7 @@ function FeaturePassword({ workspace }: FeatureProps) {
                 }
             }
         },
-        [ensureUnlocked, workspace.id, upsertMasked]
+        [workspace.id, upsertMasked]
     );
 
     /** Categories grouped + filtered by search. */

@@ -1,7 +1,7 @@
 import { verifyPassword } from '@/auth/argon';
 import { passwordAdd, passwordDelete, passwordEdit, passwordGet, passwordList, passwordUnlock } from 'deveye-types';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
-import { encryptPayload, isUnlocked, markUnlocked, toEntry, toMaskedEntry, tryDecryptPayload } from './_shared';
+import { encryptPayload, markUnlocked, toEntry, toMaskedEntry, tryDecryptPayload } from './_shared';
 
 /**
  * Workspace id 0 is the caller's private/personal workspace: it has no row in
@@ -24,12 +24,6 @@ function toDbWorkspaceId(workspaceId: number): number | null {
 /** True when a stored row belongs to the given client workspace id. */
 function rowInWorkspace(rowWorkspaceId: number | null, workspaceId: number): boolean {
     return (rowWorkspaceId ?? PERSONAL_WORKSPACE_ID) === workspaceId;
-}
-
-function assertUnlocked(ctx: FeatureContext, workspaceId: number): void {
-    if (!isUnlocked(ctx.sessionId, workspaceId)) {
-        throw new FeatureError('auth_required', 'Workspace locked; call password.unlock first');
-    }
 }
 
 /**
@@ -93,7 +87,6 @@ export const passwordGetFeature: FeatureDefinition<
     ...passwordGet,
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
-        assertUnlocked(ctx, input.workspaceId);
         await assertSecureUnlocked(ctx);
         const row = await ctx.db.passwords.findById(input.passwordId, ctx.userId);
         if (!row || !rowInWorkspace(row.workspace_id, input.workspaceId)) {
@@ -113,7 +106,6 @@ export const passwordAddFeature: FeatureDefinition<
     ...passwordAdd,
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
-        assertUnlocked(ctx, input.workspaceId);
         await assertSecureUnlocked(ctx);
         const content = await encryptPayload(ctx.secure, input.entry);
         const row = await ctx.db.passwords.create({
@@ -133,7 +125,6 @@ export const passwordEditFeature: FeatureDefinition<
     ...passwordEdit,
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
-        assertUnlocked(ctx, input.workspaceId);
         await assertSecureUnlocked(ctx);
         const existing = await ctx.db.passwords.findById(input.entry.id, ctx.userId);
         if (!existing || !rowInWorkspace(existing.workspace_id, input.workspaceId)) {

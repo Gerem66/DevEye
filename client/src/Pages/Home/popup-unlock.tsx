@@ -65,13 +65,13 @@ function PopupUnlock({ workspace }: PopupUnlockProps) {
             onClosePopup={close}
         >
             <p className={styles.popupHint}>
-                Pour accéder à vos mots de passe, veuillez entrer votre mot de passe principal.
+                Cet espace de travail est protégé. Saisissez son mot de passe pour y accéder.
             </p>
 
             <TextInput
                 ref={inputRef}
                 type='password'
-                placeholder='Mot de passe principal'
+                placeholder='Mot de passe de l’espace de travail'
                 value={password}
                 error={error}
                 onChange={(e) => setPassword(e.target.value)}
