@@ -10,7 +10,7 @@ import { ACCEPTED_TYPES, avatarSrc, fileToAvatarDataUrl } from './avatar';
 import { PasswordDialog } from './PasswordDialog';
 import styles from './style.module.css';
 
-const SECURITY_MAX = 2;
+const SECURITY_MAX = 3;
 
 function formatDate(time: number): string {
     const str = new Date(time * 1000).toLocaleDateString('fr-FR', {
@@ -28,7 +28,10 @@ export default function FeatureProfile({ user, workspace }: FeatureProps) {
     const { workspaces, logout, updateUser } = useAuth();
     const [passwordOpen, setPasswordOpen] = useState(false);
 
-    const securityScore = (user.security.twoFactor ? 1 : 0) + (user.security.passwordEncryption ? 1 : 0);
+    const securityScore =
+        (user.security.twoFactor ? 1 : 0) +
+        (user.security.passwordEncryption ? 1 : 0) +
+        (user.security.reAuthValidation ? 1 : 0);
     const securityFull = securityScore >= SECURITY_MAX;
     const [uploading, setUploading] = useState(false);
     const [avatarError, setAvatarError] = useState<string | null>(null);

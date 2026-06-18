@@ -31,7 +31,12 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
     const [showRegenConfirm, setShowRegenConfirm] = useState(false);
     const [secrecy, setSecrecy] = useState<SecrecyStatus | null>(null);
     const [securityOpen, setSecurityOpen] = useState(false);
-    const [infoOpen, setInfoOpen] = useState<'2fa' | 'encryption' | null>(null);
+    const [infoOpen, setInfoOpen] = useState<'2fa' | 'encryption' | 'reauth' | null>(null);
+    // Re-auth window editor, expressed in minutes (0 = always re-prompt). Kept as
+    // a string so the field can be cleared mid-edit without snapping to 0.
+    const [reAuthInput, setReAuthInput] = useState('');
+    const [reAuthSaving, setReAuthSaving] = useState(false);
+    const [reAuthSaved, setReAuthSaved] = useState(false);
 
     const fetchStatus = useCallback(async () => {
         try {
@@ -48,6 +53,9 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
         try {
             const res = await ws.send('secrecy.status', {});
             setSecrecy(res.status);
+            // Seed the editor in minutes. `null` means the server default (60s = 1 min).
+            const seconds = res.status.reAuthInterval ?? 60;
+            setReAuthInput(String(Math.round(seconds / 60)));
         } catch {
             // ignore
         }
@@ -58,12 +66,21 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
         void fetchSecrecy();
     }, [fetchStatus, fetchSecrecy]);
 
-    // Keep the global user.security in sync so the profile's "Sécurité x / 2"
+    // Keep the global user.security in sync so the profile's "Sécurité x / 3"
     // counter updates live, without a full page reload. Only patches once both
-    // statuses are known to avoid flicker from partial state.
+    // statuses are known to avoid flicker from partial state. The re-auth window
+    // counts when strict: short enough (≤ 5 min), 0 being the strongest setting.
     useEffect(() => {
         if (status === null || secrecy === null) return;
-        updateUser({ security: { twoFactor: status.enabled, passwordEncryption: secrecy.enabled } });
+        const reAuth = secrecy.reAuthInterval ?? 60;
+        const reAuthValidation = reAuth <= 300;
+        updateUser({
+            security: {
+                twoFactor: status.enabled,
+                passwordEncryption: secrecy.enabled,
+                reAuthValidation
+            }
+        });
     }, [status, secrecy, updateUser]);
 
     const startSetup = async () => {
@@ -133,6 +150,43 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
         } catch {
             setShowRegenConfirm(false);
             setError('Erreur lors de la régénération des codes');
+        }
+    };
+
+    // Current persisted window in minutes (null = server default of 1 min).
+    const currentReAuthMinutes = Math.round((secrecy?.reAuthInterval ?? 60) / 60);
+    // Whether the window is strict enough to count as a protection (≤ 5 min,
+    // including 0 = "always re-prompt", the strongest setting). Same threshold as
+    // the profile security counter.
+    const reAuthStrict = currentReAuthMinutes <= 5;
+    const reAuthTitle =
+        currentReAuthMinutes === 0
+            ? 'Validation du mot de passe : à chaque action'
+            : `Validation du mot de passe : toutes les ${currentReAuthMinutes} min`;
+    const reAuthDescription =
+        currentReAuthMinutes === 0
+            ? 'Sécurité maximale : votre mot de passe est redemandé à chaque action chiffrée.'
+            : reAuthStrict
+              ? `Bon niveau : votre mot de passe reste valide ${currentReAuthMinutes} min avant d’être redemandé.`
+              : `Confort privilégié : votre mot de passe reste valide ${currentReAuthMinutes} min avant d’être redemandé. Réduisez à 5 min ou moins pour renforcer la sécurité.`;
+    const parsedReAuth = Number(reAuthInput);
+    const reAuthValid =
+        reAuthInput.trim() !== '' && Number.isInteger(parsedReAuth) && parsedReAuth >= 0 && parsedReAuth <= 1440;
+    const reAuthDirty = reAuthValid && parsedReAuth !== currentReAuthMinutes;
+
+    const saveReAuth = async () => {
+        if (!reAuthValid || reAuthSaving) return;
+        setReAuthSaving(true);
+        setReAuthSaved(false);
+        try {
+            const res = await ws.send('secrecy.setReauth', { seconds: parsedReAuth * 60 });
+            setSecrecy(res.status);
+            setReAuthSaved(true);
+            window.setTimeout(() => setReAuthSaved(false), 2000);
+        } catch {
+            setError("Échec de l'enregistrement du délai de validation.");
+        } finally {
+            setReAuthSaving(false);
         }
     };
 
@@ -210,6 +264,47 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
                         <Button variant={secrecy?.enabled ? 'danger' : 'primary'} onClick={() => setSecurityOpen(true)}>
                             {secrecy?.enabled ? 'Désactiver' : 'Activer'}
                         </Button>
+                    </div>
+
+                    <div className={styles.statusCard}>
+                        <div className={`${styles.statusIcon} ${reAuthStrict ? styles.enabled : ''}`}>
+                            <span className='icon icon-shield' />
+                        </div>
+                        <div className={styles.statusInfo}>
+                            <h3>{reAuthTitle}</h3>
+                            <p>{reAuthDescription}</p>
+                        </div>
+                        <button
+                            className={styles.infoBtn}
+                            onClick={() => setInfoOpen('reauth')}
+                            title='Comment ça fonctionne ?'
+                        >
+                            <span className='icon icon-info' />
+                        </button>
+                        <div className={styles.reAuthEditor}>
+                            <input
+                                type='number'
+                                inputMode='numeric'
+                                min={0}
+                                max={1440}
+                                step={1}
+                                className={styles.reAuthInput}
+                                value={reAuthInput}
+                                onChange={(e) => setReAuthInput(e.target.value.replace(/\D/g, ''))}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && reAuthDirty) void saveReAuth();
+                                }}
+                                aria-label='Délai de validation en minutes'
+                            />
+                            <span className={styles.reAuthUnit}>min</span>
+                            <Button onClick={() => void saveReAuth()} disabled={!reAuthDirty || reAuthSaving}>
+                                {reAuthSaving
+                                    ? 'Enregistrement…'
+                                    : reAuthSaved && !reAuthDirty
+                                      ? 'Enregistré ✓'
+                                      : 'Enregistrer'}
+                            </Button>
+                        </div>
                     </div>
 
                     {error && <div className={styles.error}>{error}</div>}
@@ -406,6 +501,34 @@ export default function TwoFactor({ user: _user, workspace: _ws }: FeatureProps)
                                 Argon2id distincte. Si vous oubliez votre mot de passe, ce code déverrouille la DEK et
                                 permet de redéfinir un mot de passe — sans lui, les données chiffrées sont
                                 définitivement perdues.
+                            </p>
+                        </div>
+                    </Dialog>
+
+                    <Dialog
+                        open={infoOpen === 'reauth'}
+                        onClose={() => setInfoOpen(null)}
+                        title='Délai de validation du mot de passe'
+                        width={500}
+                    >
+                        <div className={styles.infoContent}>
+                            <p>
+                                Quand le <strong>chiffrement par mot de passe</strong> est actif, votre mot de passe
+                                déverrouille la clé en mémoire pour la session. Plutôt que de le redemander à chaque
+                                action, il reste valide pendant une <strong>fenêtre glissante</strong> qui se
+                                réinitialise à chaque utilisation.
+                            </p>
+                            <p>
+                                Ce délai définit la durée de cette fenêtre. La valeur par défaut est de{' '}
+                                <strong>1 minute</strong>. Une valeur plus courte est plus sûre mais plus contraignante.
+                            </p>
+                            <p>
+                                La valeur <code>0</code> offre la <strong>sécurité maximale</strong> : votre mot de
+                                passe est redemandé à chaque action chiffrée, sans jamais être mis en cache.
+                            </p>
+                            <p>
+                                Un délai de <strong>5 minutes ou moins</strong> est considéré comme strict et compte
+                                dans votre score de sécurité.
                             </p>
                         </div>
                     </Dialog>

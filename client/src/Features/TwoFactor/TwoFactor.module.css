@@ -231,6 +231,45 @@
     width: 18px;
 }
 
+/* Inline re-auth window editor (3rd security card). */
+.reAuthEditor {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-shrink: 0;
+}
+
+.reAuthInput {
+    width: 64px;
+    padding: var(--space-sm);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 1rem;
+    text-align: center;
+    outline: none;
+    transition: border-color var(--transition-fast);
+    /* Hide native number spinners for a cleaner, consistent look. */
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.reAuthInput::-webkit-outer-spin-button,
+.reAuthInput::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.reAuthInput:focus {
+    border-color: var(--accent);
+}
+
+.reAuthUnit {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
 .infoContent {
     display: flex;
     flex-direction: column;

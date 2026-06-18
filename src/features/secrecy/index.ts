@@ -2,6 +2,7 @@ import {
     secrecyDisable,
     secrecyEnable,
     secrecyRecover,
+    secrecySetReauth,
     secrecyStatus,
     secrecyUnlock,
     type SecrecyStatus
@@ -9,8 +10,23 @@ import {
 
 import { hashPassword, verifyPassword } from '@/auth/argon';
 import { WrongSecretError } from '@/Services/SecretKeyService';
-import { rememberSessionDek } from '@/Services/SecureStore';
+import { DEFAULT_DEK_GRACE_MS, rememberSessionDek } from '@/Services/SecureStore';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
+
+/**
+ * The user's configured re-validation interval in seconds, or `null` when unset.
+ * `null` falls back to the server default at unlock time; `0` disables caching.
+ */
+async function reAuthInterval(ctx: FeatureContext): Promise<number | null> {
+    const user = await ctx.db.users.findById(ctx.userId);
+    return user?.re_auth_interval ?? null;
+}
+
+/** Grace window in ms to hand to {@link rememberSessionDek} for this user. */
+async function graceMs(ctx: FeatureContext): Promise<number> {
+    const seconds = await reAuthInterval(ctx);
+    return seconds === null ? DEFAULT_DEK_GRACE_MS : seconds * 1000;
+}
 
 /** Build the status payload from the user's secret-key row + session state. */
 async function buildStatus(ctx: FeatureContext): Promise<SecrecyStatus> {
@@ -19,7 +35,8 @@ async function buildStatus(ctx: FeatureContext): Promise<SecrecyStatus> {
     return {
         enabled,
         unlocked: await ctx.secure.isUnlockedPassive(),
-        recoveryEnabled: row.recovery_wrapped !== null
+        recoveryEnabled: row.recovery_wrapped !== null,
+        reAuthInterval: await reAuthInterval(ctx)
     };
 }
 
@@ -59,7 +76,7 @@ export const secrecyUnlockFeature: FeatureDefinition<
             if (e instanceof WrongSecretError) throw new FeatureError('auth_invalid', 'Mot de passe incorrect');
             throw e;
         }
-        rememberSessionDek(ctx.sessionId, dek);
+        rememberSessionDek(ctx.sessionId, dek, await graceMs(ctx));
         return { status: await buildStatus(ctx) };
     }
 });
@@ -87,8 +104,9 @@ export const secrecyEnableFeature: FeatureDefinition<
             row
         );
 
-        // Keep the session unlocked so the user isn't immediately prompted.
-        rememberSessionDek(ctx.sessionId, dek);
+        // Keep the session unlocked so the user isn't immediately prompted
+        // (unless their window is 0, in which case rememberSessionDek wipes it).
+        rememberSessionDek(ctx.sessionId, dek, await graceMs(ctx));
         ctx.secure.invalidate();
         return { status: await buildStatus(ctx), recoveryCode };
     }
@@ -115,8 +133,23 @@ export const secrecyDisableFeature: FeatureDefinition<
             throw e;
         }
         await ctx.secretKeys.wrapWithServer(ctx.userId, dek);
-        rememberSessionDek(ctx.sessionId, dek);
+        rememberSessionDek(ctx.sessionId, dek, await graceMs(ctx));
         ctx.secure.invalidate();
+        return { status: await buildStatus(ctx) };
+    }
+});
+
+export const secrecySetReauthFeature: FeatureDefinition<
+    typeof secrecySetReauth.command,
+    typeof secrecySetReauth.input,
+    typeof secrecySetReauth.output
+> = defineFeature({
+    ...secrecySetReauth,
+    handler: async (ctx, input) => {
+        // Persist the new window. We don't reset the current session's live DEK:
+        // the new value takes effect on the next unlock/access, which keeps the
+        // change non-disruptive while the user is mid-session.
+        await ctx.db.users.setReAuthInterval(ctx.userId, input.seconds);
         return { status: await buildStatus(ctx) };
     }
 });
@@ -143,7 +176,7 @@ export const secrecyRecoverFeature: FeatureDefinition<
         // password and align the account password hash so login keeps working.
         await ctx.secretKeys.wrapWithPassword(ctx.userId, dek, input.newPassword, 'keep', row);
         await ctx.db.users.updatePasswordHash(ctx.userId, await hashPassword(input.newPassword));
-        rememberSessionDek(ctx.sessionId, dek);
+        rememberSessionDek(ctx.sessionId, dek, await graceMs(ctx));
         ctx.secure.invalidate();
         return { status: await buildStatus(ctx) };
     }
@@ -155,5 +188,6 @@ export const secrecyFeatures: FeatureDefinition<string, any, any>[] = [
     secrecyUnlockFeature,
     secrecyEnableFeature,
     secrecyDisableFeature,
+    secrecySetReauthFeature,
     secrecyRecoverFeature
 ];

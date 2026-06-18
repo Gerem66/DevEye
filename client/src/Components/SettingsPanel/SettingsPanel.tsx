@@ -117,9 +117,9 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                         role='dialog'
                         aria-modal='true'
                         aria-label='Apparence'
-                        initial={{ opacity: 0, scale: 0.94, x: '-50%', y: '-46%' }}
+                        initial={{ opacity: 0, scale: 0.94, x: '-50%', y: '-50%' }}
                         animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
-                        exit={{ opacity: 0, scale: 0.94, x: '-50%', y: '-46%' }}
+                        exit={{ opacity: 0, scale: 0.94, x: '-50%', y: '-50%' }}
                         transition={{ type: 'spring', stiffness: 320, damping: 30 }}
                     >
                         <div className={styles.header}>

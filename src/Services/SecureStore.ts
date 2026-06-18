@@ -5,16 +5,22 @@ import Encryption from './Encryption';
 import { SecretKeyService } from './SecretKeyService';
 
 /**
- * "Sudo-like" grace window: once unlocked, the DEK stays available for this many
- * ms and the timer resets on every use. After it elapses without activity the
- * DEK is wiped and the next encrypted action re-prompts for the password.
+ * Default "sudo-like" grace window when the user hasn't configured one: once
+ * unlocked, the DEK stays available for this many ms and the timer resets on
+ * every use. After it elapses without activity the DEK is wiped and the next
+ * encrypted action re-prompts for the password.
  */
-const DEK_GRACE_MS = 60_000;
+export const DEFAULT_DEK_GRACE_MS = 60_000;
 
 interface DekEntry {
     dek: Buffer;
     /** Epoch ms after which the DEK is considered expired. */
     expiresAt: number;
+    /**
+     * The user's configured grace window in ms, used to slide the expiry on each
+     * access. Mirrors `users.re_auth_interval` (seconds) at unlock time.
+     */
+    graceMs: number;
 }
 
 /**
@@ -35,7 +41,7 @@ function dropDek(sessionId: string, entry: DekEntry | undefined): void {
 /**
  * Read the live DEK for a session, enforcing the grace window. Returns null when
  * absent or expired (expired entries are wiped). Each successful read slides the
- * expiry forward by {@link DEK_GRACE_MS}.
+ * expiry forward by the entry's configured grace window.
  */
 function liveDek(sessionId: string): Buffer | null {
     const entry = sessionDeks.get(sessionId);
@@ -44,7 +50,7 @@ function liveDek(sessionId: string): Buffer | null {
         dropDek(sessionId, entry);
         return null;
     }
-    entry.expiresAt = Date.now() + DEK_GRACE_MS;
+    entry.expiresAt = Date.now() + entry.graceMs;
     return entry.dek;
 }
 
@@ -59,10 +65,24 @@ function hasLiveDek(sessionId: string): boolean {
     return true;
 }
 
-export function rememberSessionDek(sessionId: string, dek: Buffer): void {
+/**
+ * Cache the unlocked DEK for the session under a grace window.
+ *
+ * @param graceMs sliding window in ms. `0` means "always re-prompt": the DEK is
+ *   wiped immediately instead of being remembered. Defaults to
+ *   {@link DEFAULT_DEK_GRACE_MS}.
+ */
+export function rememberSessionDek(sessionId: string, dek: Buffer, graceMs: number = DEFAULT_DEK_GRACE_MS): void {
     const prev = sessionDeks.get(sessionId);
     if (prev && prev.dek !== dek) prev.dek.fill(0);
-    sessionDeks.set(sessionId, { dek, expiresAt: Date.now() + DEK_GRACE_MS });
+    if (graceMs <= 0) {
+        // Validation disabled: keep nothing in memory so the next encrypted
+        // action prompts for the password again.
+        dropDek(sessionId, sessionDeks.get(sessionId));
+        dek.fill(0);
+        return;
+    }
+    sessionDeks.set(sessionId, { dek, expiresAt: Date.now() + graceMs, graceMs });
 }
 
 export function forgetSessionDek(sessionId: string): void {

@@ -9,11 +9,16 @@ export async function loadUserBundle(
     const row = await db.users.findById(userId);
     if (!row) return null;
 
-    // Security posture surfaced as "Sécurité → x / 2" in the profile.
+    // Security posture surfaced as "Sécurité → x / 3" in the profile. The
+    // re-auth window counts when strict — short enough (≤ 5 min) to be a
+    // meaningful protection, 0 being the strongest setting (always re-prompt).
+    // A null interval falls back to the 60s server default, which is strict.
     const [twoFaRow, secretKeyRow] = await Promise.all([db.twoFactor.get(userId), db.userSecretKeys.get(userId)]);
+    const reAuth = row.re_auth_interval ?? 60;
     const security = {
         twoFactor: Boolean(twoFaRow?.enabled),
-        passwordEncryption: secretKeyRow?.wrap_mode === 'password'
+        passwordEncryption: secretKeyRow?.wrap_mode === 'password',
+        reAuthValidation: reAuth <= 300
     };
 
     const wsRows = await db.workspaces.findAccessibleByUser(userId);
