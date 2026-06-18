@@ -61,40 +61,65 @@ function isCurrentHour(time: string, tz: string): boolean {
     return time.slice(0, 13).replace('T', ' ') === nowLocal.slice(0, 13);
 }
 
+/** Left padding kept before the aligned "now" card so it doesn't sit flush against the edge. */
+const NOW_ALIGN_OFFSET = 8;
+
 /**
- * Hour-by-hour row. The current hour is highlighted and scrolled to the left edge
- * on mount, so the most relevant (now + upcoming) hours are seen first.
+ * Hour-by-hour row. On the first reveal for a location the current hour is
+ * aligned near the left edge (so "now" + upcoming hours read first); afterwards
+ * the user's own scroll position is remembered and restored across popup
+ * open/close — the feature stays mounted but the DOM's `scrollLeft` is lost when
+ * the host is hidden, so we persist it ourselves.
  */
 function HourlyRow({ report }: { report: WeatherReport }) {
     const rowRef = useRef<HTMLDivElement>(null);
     const nowRef = useRef<HTMLDivElement>(null);
-    // True until the current hour has been scrolled into view at least once for
-    // this location, so we keep the user's manual scroll afterwards.
-    const alignedRef = useRef(false);
+    // The user's last scroll position, persisted across hide/show. `null` means
+    // we haven't aligned this location yet and should snap to "now" on reveal.
+    const savedScroll = useRef<number | null>(null);
 
+    // New location → forget the remembered position so the next reveal re-centres on "now".
     useLayoutEffect(() => {
-        alignedRef.current = false;
+        savedScroll.current = null;
     }, [report.locationId]);
 
     useLayoutEffect(() => {
         const row = rowRef.current;
         if (!row) return;
-        const align = () => {
-            const now = nowRef.current;
-            // The feature is first rendered in a hidden (display:none) holder, where
-            // every offset is 0; only act once the row has a real width — i.e. when
-            // it becomes visible inside the popup.
-            if (alignedRef.current || !now || row.clientWidth === 0) return;
-            row.scrollLeft = now.offsetLeft - row.offsetLeft;
-            alignedRef.current = true;
+
+        // Apply the right scroll position whenever the row becomes visible: restore
+        // the user's saved offset, or snap to "now" the first time. Geometry is only
+        // real once visible, so IntersectionObserver is the reliable trigger.
+        const applyScroll = () => {
+            if (row.clientWidth === 0) return;
+            if (savedScroll.current !== null) {
+                row.scrollLeft = savedScroll.current;
+            } else if (nowRef.current) {
+                row.scrollLeft = Math.max(0, nowRef.current.offsetLeft - row.offsetLeft - NOW_ALIGN_OFFSET);
+                savedScroll.current = row.scrollLeft;
+            }
         };
-        align();
-        // Re-run when the row gains/changes size (hidden→visible, popup resize),
-        // which is exactly when the geometry first becomes measurable.
-        const ro = new ResizeObserver(align);
-        ro.observe(row);
-        return () => ro.disconnect();
-    }, [report.locationId, report.hourly.length]);
+
+        const io = new IntersectionObserver(
+            (entries) => {
+                if (entries.some((e) => e.isIntersecting)) applyScroll();
+            },
+            { threshold: 0.1 }
+        );
+        io.observe(row);
+        applyScroll();
+
+        // Remember manual scrolling so it survives the next hide/show cycle.
+        const onScroll = () => {
+            if (row.clientWidth > 0) savedScroll.current = row.scrollLeft;
+        };
+        row.addEventListener('scroll', onScroll, { passive: true });
+
+        return () => {
+            io.disconnect();
+            row.removeEventListener('scroll', onScroll);
+        };
+    }, [report.locationId]);
 
     return (
         <div className={styles.hourlyRow} ref={rowRef}>

@@ -84,6 +84,13 @@ body {
         background-color 0.5s cubic-bezier(0.77, 0, 0.18, 1);
     overflow: hidden;
 }
+/* Fixed (not auto) height so every transition stays animatable: collapsing to
+   the progress bar can't tween from/to `height: auto`. The 2FA content is
+   deterministic (prompt + input + two buttons), so a fixed height fits without
+   clipping while keeping the slide animation smooth. */
+.login .login-card.twofa-mode {
+    height: 268px;
+}
 .login .login-card.card-to-progressbar {
     height: 3px;
     margin-top: 6px;

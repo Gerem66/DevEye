@@ -43,11 +43,19 @@ function LoginPage() {
     useEffect(() => {
         if (status === 'unknown') {
             cardRef.current?.classList.add('card-to-progressbar', 'auto-login');
-        } else if (status !== 'authenticated') {
+        } else if (status === 'anonymous') {
             // Reset the card only when the form is (re)shown. When authenticated the
             // login page is fading out, so keep the card collapsed — reverting it here
             // would flash the card back open during the fade.
             cardRef.current?.classList.remove('card-to-progressbar', 'auto-login');
+            // LoginPage is never unmounted (only hidden), so wipe any residual form
+            // state when the user lands back here — otherwise a previous 2FA prompt,
+            // typed code or error would resurface after logout / session expiry.
+            setTwoFaRequired(false);
+            setTwoFaCode('');
+            setPassword('');
+            setError('');
+            setLoading(false);
         }
     }, [status]);
 
@@ -92,6 +100,11 @@ function LoginPage() {
         try {
             const result = await login(username, password);
             if (result.twoFactorRequired) {
+                // The collapse-to-progress-bar animation only starts filling after a
+                // 0.5s delay; reverting before then makes the card flash collapsed.
+                // Let that initial phase play out so the swap to the 2FA prompt reads
+                // as a smooth expansion rather than a jump.
+                await waitUntil(startedAt, 500);
                 stopAnim();
                 setTwoFaRequired(true);
                 setTimeout(() => inputTwoFa.current?.focus(), 50);
@@ -153,7 +166,7 @@ function LoginPage() {
                     <b>Dev</b> <p>Eye</p>
                 </span>
 
-                <div ref={cardRef} className='login-card' onKeyDown={onKeyDown}>
+                <div ref={cardRef} className={`login-card${twoFaRequired ? ' twofa-mode' : ''}`} onKeyDown={onKeyDown}>
                     <div className='progress-bar' />
 
                     {!twoFaRequired ? (
