@@ -173,6 +173,19 @@ function LoginPage() {
         }
     };
 
+    /**
+     * Leave the 2FA prompt ("Back"): reset the form and tell the server to drop
+     * the pending challenge (and any DEK stashed at the password step). The
+     * server call is best-effort — a network error here must not trap the user
+     * on the 2FA card, so we reset the UI regardless.
+     */
+    const onCancel2FA = () => {
+        setTwoFaRequired(false);
+        setTwoFaCode('');
+        setError('');
+        void post('/api/auth/2fa/cancel', {}).catch(() => {});
+    };
+
     const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (e.key === 'Enter') {
             if (twoFaRequired) void onSubmit2FA();
@@ -243,14 +256,7 @@ function LoginPage() {
                                 >
                                     Vérifier
                                 </button>
-                                <button
-                                    className='cancel'
-                                    onClick={() => {
-                                        setTwoFaRequired(false);
-                                        setTwoFaCode('');
-                                        setError('');
-                                    }}
-                                >
+                                <button className='cancel' onClick={onCancel2FA}>
                                     Retour
                                 </button>
                             </>

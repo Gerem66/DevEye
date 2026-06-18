@@ -178,7 +178,7 @@ export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps):
         if (twoFa?.enabled) {
             // The session doesn't exist yet; hold the DEK server-side and carry an
             // opaque reference through the challenge for the TOTP step to claim.
-            const pdkToken = pending ? stashPendingDek(pending.dek, pending.graceMs) : undefined;
+            const pdkToken = pending ? stashPendingDek(row.id, pending.dek, pending.graceMs) : undefined;
             const challenge = await signTwoFactorChallenge(row.id, pdkToken);
             setTwoFactorChallengeCookie(reply, challenge);
             return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: true })));
@@ -253,6 +253,22 @@ export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps):
             if (pending) rememberSessionDek(sessionId, pending.dek, pending.graceMs);
         }
         return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: false, ...bundle })));
+    });
+
+    /**
+     * Abandon an in-progress 2FA challenge ("Back" on the prompt): clear the
+     * challenge cookie and release any DEK stashed at the password step so it
+     * doesn't linger until its TTL. Always succeeds — a missing/expired challenge
+     * is a no-op so the client can call it unconditionally on Back.
+     */
+    app.post('/api/auth/2fa/cancel', async (req, reply) => {
+        const challengeToken = req.cookies[TWOFA_COOKIE];
+        if (challengeToken) {
+            const challenge = await verifyTwoFactorChallenge(challengeToken);
+            if (challenge?.pendingDekToken) discardPendingDek(challenge.pendingDekToken);
+        }
+        clearTwoFactorChallengeCookie(reply);
+        return reply.send(ok({ cancelled: true as const }));
     });
 
     app.post('/api/auth/refresh', async (req, reply) => {

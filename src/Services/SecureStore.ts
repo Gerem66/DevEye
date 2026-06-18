@@ -102,6 +102,7 @@ export function forgetSessionDek(sessionId: string): void {
  * nothing for long.
  */
 interface PendingDek {
+    userId: number;
     dek: Buffer;
     graceMs: number;
     expiresAt: number;
@@ -126,12 +127,17 @@ function sweepPendingDeks(now: number): void {
  * token to embed in the challenge; pass it to {@link claimPendingDek} once the
  * TOTP step issues the session. `graceMs` is carried so the eventual
  * {@link rememberSessionDek} uses the user's configured window.
+ *
+ * Any prior pending DEK for the same user is dropped first: a fresh login
+ * supersedes an abandoned challenge (e.g. the user hit "Back" on the 2FA prompt
+ * and signed in again), so stale key material never piles up across retries.
  */
-export function stashPendingDek(dek: Buffer, graceMs: number): string {
+export function stashPendingDek(userId: number, dek: Buffer, graceMs: number): string {
     const now = Date.now();
     sweepPendingDeks(now);
+    discardPendingDeksForUser(userId);
     const token = randomBytes(18).toString('base64url');
-    pendingDeks.set(token, { dek, graceMs, expiresAt: now + PENDING_DEK_TTL_MS });
+    pendingDeks.set(token, { userId, dek, graceMs, expiresAt: now + PENDING_DEK_TTL_MS });
     return token;
 }
 
@@ -160,6 +166,16 @@ export function discardPendingDek(token: string): void {
     if (!entry) return;
     entry.dek.fill(0);
     pendingDeks.delete(token);
+}
+
+/** Drop every stashed DEK belonging to a user, wiping key material. */
+export function discardPendingDeksForUser(userId: number): void {
+    for (const [token, entry] of pendingDeks) {
+        if (entry.userId === userId) {
+            entry.dek.fill(0);
+            pendingDeks.delete(token);
+        }
+    }
 }
 
 /**

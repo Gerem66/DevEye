@@ -61,7 +61,13 @@ mot de passe est disponible en clair) et cachée sous la `sessionId` émise, via
   est gardée côté serveur dans un _pending store_ (`stashPendingDek`) sous un
   token opaque transporté dans le challenge JWT (champ `pdk`, jamais le mot de
   passe lui-même). L'étape TOTP la réclame (`claimPendingDek`) et la lie à la
-  session émise. Les entrées expirent (≤ fenêtre du challenge 2FA).
+  session émise. Nettoyage du matériel crypto en attente :
+    - les entrées expirent (≤ fenêtre du challenge 2FA, sweep paresseux) ;
+    - un nouveau login purge les pending DEK du même user (`stashPendingDek`
+      appelle `discardPendingDeksForUser`) — couvre "Retour puis re-login" ;
+    - le bouton "Retour" du prompt 2FA appelle `POST /api/auth/2fa/cancel` qui
+      efface le cookie de challenge et `discardPendingDek` (libération immédiate) ;
+    - une 2FA désactivée entre les deux étapes libère aussi la DEK.
 
 ## Notes masquées ("hidden") — root auth
 
