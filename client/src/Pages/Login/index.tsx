@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { ApiError, post } from '../../api/http';
 import { useAuth } from '../../auth/AuthProvider';
@@ -33,6 +33,7 @@ function LoginPage() {
     const [twoFaCode, setTwoFaCode] = useState('');
 
     const cardRef = useRef<HTMLDivElement | null>(null);
+    const contentRef = useRef<HTMLDivElement | null>(null);
     const inputUsername = useRef<HTMLInputElement | null>(null);
     const inputPassword = useRef<HTMLInputElement | null>(null);
     const inputTwoFa = useRef<HTMLInputElement | null>(null);
@@ -58,6 +59,21 @@ function LoginPage() {
             setLoading(false);
         }
     }, [status]);
+
+    // Pin the card's height to its measured content so it can animate between the
+    // login and (taller) 2FA layouts — and collapse to the progress bar — without
+    // magic numbers or clipping. ResizeObserver keeps it correct if the content
+    // reflows (font load, viewport change…).
+    useLayoutEffect(() => {
+        const card = cardRef.current;
+        const content = contentRef.current;
+        if (!card || !content) return;
+        const sync = () => card.style.setProperty('--card-height', `${content.offsetHeight}px`);
+        sync();
+        const ro = new ResizeObserver(sync);
+        ro.observe(content);
+        return () => ro.disconnect();
+    }, [twoFaRequired]);
 
     // Fade to the homepage only once authenticated AND the progress-bar animation
     // has fully played — the transition must wait for the animation to finish.
@@ -106,6 +122,11 @@ function LoginPage() {
                 // as a smooth expansion rather than a jump.
                 await waitUntil(startedAt, 500);
                 stopAnim();
+                // The username/password already authenticated against the server, so
+                // clear them now: going Back must return to a fresh form, and they
+                // must never linger past this first step whatever the 2FA outcome.
+                setUsername('');
+                setPassword('');
                 setTwoFaRequired(true);
                 setTimeout(() => inputTwoFa.current?.focus(), 50);
             } else {
@@ -166,73 +187,75 @@ function LoginPage() {
                     <b>Dev</b> <p>Eye</p>
                 </span>
 
-                <div ref={cardRef} className={`login-card${twoFaRequired ? ' twofa-mode' : ''}`} onKeyDown={onKeyDown}>
+                <div ref={cardRef} className='login-card' onKeyDown={onKeyDown}>
                     <div className='progress-bar' />
 
-                    {!twoFaRequired ? (
-                        <>
-                            <div className='input-group'>
-                                <TextInput
-                                    ref={inputUsername}
-                                    placeholder="Nom d'utilisateur"
-                                    value={username}
-                                    onChange={(e) => setUsername(e.target.value)}
-                                    autoFocus
-                                />
-                                <span className='icon icon-user'></span>
-                            </div>
+                    <div ref={contentRef} className='login-card-content'>
+                        {!twoFaRequired ? (
+                            <>
+                                <div className='input-group'>
+                                    <TextInput
+                                        ref={inputUsername}
+                                        placeholder="Nom d'utilisateur"
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
+                                        autoFocus
+                                    />
+                                    <span className='icon icon-user'></span>
+                                </div>
 
-                            <div className='input-group'>
-                                <TextInput
-                                    ref={inputPassword}
-                                    type='password'
-                                    placeholder='Mot de passe'
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    error={error}
-                                />
-                                <span className='icon icon-lock' />
-                            </div>
+                                <div className='input-group'>
+                                    <TextInput
+                                        ref={inputPassword}
+                                        type='password'
+                                        placeholder='Mot de passe'
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        error={error}
+                                    />
+                                    <span className='icon icon-lock' />
+                                </div>
 
-                            <button className='submit' onClick={onSubmit} disabled={loading}>
-                                Se connecter
-                            </button>
-                        </>
-                    ) : (
-                        <>
-                            <p className='twofa-prompt'>
-                                Entrez le code à 6 chiffres de votre application d&apos;authentification
-                            </p>
-                            <div className='input-group'>
-                                <TextInput
-                                    ref={inputTwoFa}
-                                    placeholder='000000'
-                                    value={twoFaCode}
-                                    onChange={(e) => setTwoFaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                                    error={error}
-                                />
-                                <span className='icon icon-shield' />
-                            </div>
+                                <button className='submit' onClick={onSubmit} disabled={loading}>
+                                    Se connecter
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <p className='twofa-prompt'>
+                                    Entrez le code à 6 chiffres de votre application d&apos;authentification
+                                </p>
+                                <div className='input-group'>
+                                    <TextInput
+                                        ref={inputTwoFa}
+                                        placeholder='000000'
+                                        value={twoFaCode}
+                                        onChange={(e) => setTwoFaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                        error={error}
+                                    />
+                                    <span className='icon icon-shield' />
+                                </div>
 
-                            <button
-                                className='submit'
-                                onClick={onSubmit2FA}
-                                disabled={loading || twoFaCode.length !== 6}
-                            >
-                                Vérifier
-                            </button>
-                            <button
-                                className='cancel'
-                                onClick={() => {
-                                    setTwoFaRequired(false);
-                                    setTwoFaCode('');
-                                    setError('');
-                                }}
-                            >
-                                Retour
-                            </button>
-                        </>
-                    )}
+                                <button
+                                    className='submit'
+                                    onClick={onSubmit2FA}
+                                    disabled={loading || twoFaCode.length !== 6}
+                                >
+                                    Vérifier
+                                </button>
+                                <button
+                                    className='cancel'
+                                    onClick={() => {
+                                        setTwoFaRequired(false);
+                                        setTwoFaCode('');
+                                        setError('');
+                                    }}
+                                >
+                                    Retour
+                                </button>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

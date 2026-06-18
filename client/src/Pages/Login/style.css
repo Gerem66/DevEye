@@ -64,67 +64,71 @@ body {
     animation: fadeIn 1s;
 }
 
+/*
+ * The login card. On submit it collapses straight down into a thin progress bar:
+ * the surface shrinks (height → 3px), its content fades out, and the accent bar
+ * fills left-to-right.
+ *
+ * `height` is driven by `--card-height`, an inline var the component sets to the
+ * content's measured height (see LoginPage). Measuring instead of hard-coding
+ * means the card always hugs its content — login or the taller 2FA step — with
+ * no magic numbers, no clipping and no phantom padding, while keeping `height`
+ * animatable (unlike `auto`).
+ */
 .login .login-card {
     position: relative;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    height: 144px;
+    height: var(--card-height, auto);
     margin-top: 24px;
     margin-bottom: 48px;
-    padding: 28px 20px;
     border-radius: var(--radius-md);
     background-color: var(--glass-bg-light);
     border: 1px solid var(--glass-border);
+    overflow: hidden;
     transition:
         height 0.5s cubic-bezier(0.77, 0, 0.18, 1),
-        margin-top 0.5s cubic-bezier(0.77, 0, 0.18, 1),
-        padding-top 0.5s cubic-bezier(0.77, 0, 0.18, 1),
-        padding-bottom 0.5s cubic-bezier(0.77, 0, 0.18, 1),
-        background-color 0.5s cubic-bezier(0.77, 0, 0.18, 1);
-    overflow: hidden;
+        margin-top 0.5s cubic-bezier(0.77, 0, 0.18, 1);
 }
-/* Fixed (not auto) height so every transition stays animatable: collapsing to
-   the progress bar can't tween from/to `height: auto`. The 2FA content is
-   deterministic (prompt + input + two buttons), so a fixed height fits without
-   clipping while keeping the slide animation smooth. */
-.login .login-card.twofa-mode {
-    height: 268px;
+
+/* The inner content holder is what we measure; its own padding is the card's
+   visual padding. Keeping height on the card and padding here lets us collapse
+   the card to 3px without animating padding separately. */
+.login .login-card-content {
+    padding: 24px;
+    transition: opacity 0.4s cubic-bezier(0.77, 0, 0.18, 1);
 }
+
+/* Collapsed: the card shrinks to the bar's height while the content fades out.
+   The surface stays opaque so the user sees it slide down into the bar. */
 .login .login-card.card-to-progressbar {
     height: 3px;
     margin-top: 6px;
-    padding-top: 0px;
-    padding-bottom: 0px;
 }
-.login .login-card * {
-    transition: opacity 0.5s cubic-bezier(0.77, 0, 0.18, 1);
-}
-.login .login-card.card-to-progressbar * {
-    transition: opacity 0.5s cubic-bezier(0.77, 0, 0.18, 1);
+.login .login-card.card-to-progressbar > .login-card-content {
     opacity: 0;
 }
+
+/* Auto-login: land directly on the collapsed bar, no transition. */
+.login .login-card.auto-login {
+    height: 3px;
+    transition: none;
+}
+.login .login-card.auto-login > .login-card-content {
+    display: none;
+}
+
 .login .progress-bar {
     position: absolute;
-    top: 0;
-    left: 0;
-    bottom: 0;
+    inset: 0 auto 0 0;
     width: 0;
-    opacity: 0;
     background-color: var(--accent);
+    opacity: 0;
     transition: width 0s 0.5s cubic-bezier(0.77, 0, 0.18, 1);
 }
-.login .login-card.card-to-progressbar > .progress-bar {
+.login .login-card.card-to-progressbar > .progress-bar,
+.login .login-card.auto-login > .progress-bar {
     width: 100%;
     opacity: 1;
     transition: width 1s 0.5s cubic-bezier(0.77, 0, 0.18, 1);
-}
-.login .login-card.auto-login {
-    transition: none;
-    height: 3px;
-}
-.login .login-card.auto-login *:not(.progress-bar) {
-    display: none;
 }
 
 .login .input-group {
