@@ -12,9 +12,7 @@
     z-index: var(--z-navbar);
     /* Subtle scrim so brand/profile stay legible over the wallpaper on home. */
     background: linear-gradient(to bottom, rgba(6, 9, 15, 0.55), rgba(6, 9, 15, 0));
-    transition:
-        background var(--transition-normal),
-        backdrop-filter var(--transition-normal);
+    transition: background var(--transition-normal);
 }
 
 .navbar::after {

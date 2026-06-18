@@ -31,7 +31,7 @@ const Widget = forwardRef<HTMLDivElement, WidgetProps>(function Widget(
             layoutId={widgetId}
             className={`${styles.widget} ${className ?? ''}`}
             onClick={(e: MouseEvent<HTMLDivElement>) => onExpand?.(e)}
-            whileHover={{ y: -4 }}
+            whileHover={{ y: -4, willChange: 'transform' }}
             whileTap={{ scale: 0.985 }}
             transition={{ type: 'spring', stiffness: 300, damping: 26, mass: 0.8 }}
             {...motionProps}

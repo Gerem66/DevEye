@@ -23,6 +23,7 @@
     transform: scale(calc(1 + var(--wallpaper-blur, 0px) / 100));
     animation: fade-in var(--transition-slow) ease both;
     transition: filter var(--transition-normal) ease, transform var(--transition-normal) ease;
+    will-change: transform;
 }
 
 /* Scrim over the photo for card/text legibility. Base gradient keeps a touch
