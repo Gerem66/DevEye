@@ -18,12 +18,13 @@ export interface ThemeState {
     bgImage: string | null;
     /** Darkening scrim strength over the image, 0–100 (0 = none). */
     bgDim: number;
-    /** Whether to blur the image (intensity follows `bgDim`). */
-    bgBlur: boolean;
+    /** Blur intensity over the image, 0–100 (0 = none). */
+    bgBlur: number;
 }
 
 export const DEFAULT_DIM = 45;
-const DEFAULT: ThemeState = { accent: null, bgPreset: null, bgImage: null, bgDim: DEFAULT_DIM, bgBlur: false };
+export const DEFAULT_BLUR = 0;
+const DEFAULT: ThemeState = { accent: null, bgPreset: null, bgImage: null, bgDim: DEFAULT_DIM, bgBlur: DEFAULT_BLUR };
 
 export const ACCENT_PRESETS: { key: string; label: string; hex: string }[] = [
     { key: 'cyan', label: 'Cyan', hex: '#22d3ee' },
@@ -61,7 +62,7 @@ function read(): ThemeState {
             bgPreset: typeof p.bgPreset === 'string' ? p.bgPreset : null,
             bgImage: typeof p.bgImage === 'string' ? p.bgImage : null,
             bgDim: typeof p.bgDim === 'number' ? Math.min(100, Math.max(0, p.bgDim)) : DEFAULT_DIM,
-            bgBlur: typeof p.bgBlur === 'boolean' ? p.bgBlur : false
+            bgBlur: typeof p.bgBlur === 'number' ? Math.min(100, Math.max(0, p.bgBlur)) : DEFAULT_BLUR
         };
     } catch {
         return DEFAULT;
@@ -126,8 +127,9 @@ function applyTheme(s: ThemeState): void {
     // Scrim alpha climbs with the slider (0 → fully visible, 100 → ~0.88 dark).
     const dim = Math.min(100, Math.max(0, s.bgDim));
     root.setProperty('--wallpaper-scrim', String(((dim / 100) * 0.88).toFixed(3)));
-    // Blur radius (px) also scales with the slider, but only when enabled.
-    root.setProperty('--wallpaper-blur', s.bgBlur ? `${((dim / 100) * 16).toFixed(1)}px` : '0px');
+    // Blur radius (px) scales independently with its own slider (0–100 → 0–20px).
+    const blur = Math.min(100, Math.max(0, s.bgBlur));
+    root.setProperty('--wallpaper-blur', blur > 0 ? `${((blur / 100) * 20).toFixed(1)}px` : '0px');
 }
 
 // Apply persisted theme as soon as the module loads.

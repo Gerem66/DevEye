@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useTheme, setTheme, ACCENT_PRESETS, BG_PRESETS, DEFAULT_DIM } from '@/stores/theme';
+import { useTheme, setTheme, ACCENT_PRESETS, BG_PRESETS, DEFAULT_DIM, DEFAULT_BLUR } from '@/stores/theme';
 import styles from './SettingsPanel.module.css';
 
 export interface SettingsPanelProps {
@@ -62,7 +62,7 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
 
     const activeAccent = (theme.accent ?? DEFAULT_ACCENT).toLowerCase();
     const customized = Boolean(
-        theme.accent || theme.bgPreset || theme.bgImage || theme.bgDim !== DEFAULT_DIM || theme.bgBlur
+        theme.accent || theme.bgPreset || theme.bgImage || theme.bgDim !== DEFAULT_DIM || theme.bgBlur !== DEFAULT_BLUR
     );
     const resetAll = () => {
         // Mark a sync only if the field actually changes (else the guard would
@@ -70,7 +70,7 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
         if (draftUrl !== '') syncingRef.current = true;
         setDraftUrl('');
         setFileError(null);
-        setTheme({ accent: null, bgPreset: null, bgImage: null, bgDim: DEFAULT_DIM, bgBlur: false });
+        setTheme({ accent: null, bgPreset: null, bgImage: null, bgDim: DEFAULT_DIM, bgBlur: DEFAULT_BLUR });
     };
 
     // localStorage caps around ~5 MB; a data-URL inflates ~33%, so keep the
@@ -216,16 +216,18 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                                             onChange={(e) => setTheme({ bgDim: Number(e.target.value) })}
                                         />
                                     </div>
-                                    <label className={styles.toggleRow}>
-                                        <span>Flouter le fond</span>
+                                    <div className={styles.sliderRow}>
+                                        <span className={styles.sliderLabel}>Flouter le fond</span>
                                         <input
-                                            type='checkbox'
-                                            className={styles.switchInput}
-                                            checked={theme.bgBlur}
-                                            onChange={(e) => setTheme({ bgBlur: e.target.checked })}
+                                            type='range'
+                                            min={0}
+                                            max={100}
+                                            step={1}
+                                            value={theme.bgBlur}
+                                            className={styles.slider}
+                                            onChange={(e) => setTheme({ bgBlur: Number(e.target.value) })}
                                         />
-                                        <span className={styles.switch} aria-hidden='true' />
-                                    </label>
+                                    </div>
                                 </div>
                             )}
                         </div>
