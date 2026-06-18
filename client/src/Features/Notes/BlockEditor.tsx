@@ -237,7 +237,7 @@ export default function BlockEditor({ blocks, onChange }: BlockEditorProps) {
                 onClick={() => removeAt(index)}
                 disabled={blocks.length <= 1}
             >
-                <span className={`icon ${styles.badge} icon-x`} />
+                <span className={`icon ${styles.badge} icon-trash`} />
             </button>
         </div>
     );
