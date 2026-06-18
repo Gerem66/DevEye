@@ -6,7 +6,10 @@ import { getQueryable, type DbPool } from './pool';
 const DEV_USERNAME = process.env.SEED_DEV_USERNAME ?? 'dev';
 const DEV_EMAIL = process.env.SEED_DEV_EMAIL ?? 'dev@deveye.local';
 const DEV_PASSWORD = process.env.SEED_DEV_PASSWORD ?? 'devdevdev';
-const DEV_FEATURES = ['profile', 'monitoring', 'clients', 'weather', 'security', 'password'];
+// Only modular, per-workspace features belong here. Structural pages (profile,
+// security) are part of DevEye itself, reached from the navbar, and are never
+// stored in the features list.
+const DEV_FEATURES = ['monitoring', 'clients', 'weather', 'password'];
 
 /**
  * Idempotently create a development account on an otherwise empty database.
