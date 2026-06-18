@@ -2,6 +2,8 @@ import type { Queryable } from './pool';
 import { devicesRepo, linkCodesRepo, type DevicesRepo, type LinkCodesRepo } from './repos/devices';
 import { logsRepo, type LogsRepo } from './repos/logs';
 import { metricsRepo, type MetricsRepo } from './repos/metrics';
+import { noteFoldersRepo, type NoteFoldersRepo } from './repos/noteFolders';
+import { notesRepo, type NotesRepo } from './repos/notes';
 import { passwordsRepo, type PasswordsRepo } from './repos/passwords';
 import { refreshTokensRepo, type RefreshTokensRepo } from './repos/refreshTokens';
 import { twoFactorRepo, type TwoFactorRepo } from './repos/twoFactor';
@@ -22,6 +24,8 @@ export interface Database {
     refreshTokens: RefreshTokensRepo;
     logs: LogsRepo;
     passwords: PasswordsRepo;
+    notes: NotesRepo;
+    noteFolders: NoteFoldersRepo;
     devices: DevicesRepo;
     linkCodes: LinkCodesRepo;
     metrics: MetricsRepo;
@@ -38,6 +42,8 @@ export function createDatabase(q: Queryable): Database {
         refreshTokens: refreshTokensRepo(q),
         logs: logsRepo(q),
         passwords: passwordsRepo(q),
+        notes: notesRepo(q),
+        noteFolders: noteFoldersRepo(q),
         devices: devicesRepo(q),
         linkCodes: linkCodesRepo(q),
         metrics: metricsRepo(q),

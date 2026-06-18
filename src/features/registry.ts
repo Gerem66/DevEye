@@ -1,6 +1,7 @@
 import type { FeatureDefinition } from './_define';
 import { deviceFeatures } from './devices';
 import { metricsFeatures } from './metrics';
+import { noteFeatures } from './note';
 import {
     passwordAddFeature,
     passwordDeleteFeature,
@@ -29,6 +30,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     passwordEditFeature,
     passwordDeleteFeature,
     passwordUnlockFeature,
+    ...noteFeatures,
     ...deviceFeatures,
     ...metricsFeatures,
     ...twoFactorFeatures,

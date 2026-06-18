@@ -1,0 +1,598 @@
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-lg);
+}
+
+.headerText {
+    min-width: 0;
+}
+
+.title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-xs) 0;
+}
+
+.subtitle {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.searchBar {
+    flex: 1 1 280px;
+    max-width: 460px;
+}
+
+.errorBanner {
+    background: var(--danger-bg);
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    font-size: 0.85rem;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-md);
+}
+
+/* Folder section */
+.folderSection {
+    margin-bottom: var(--space-lg);
+}
+
+.folderTitle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0 0 var(--space-sm) 0;
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    border: 1px dashed transparent;
+    transition:
+        border-color 0.12s ease,
+        background 0.12s ease;
+}
+
+.folderName {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* Highlighted while a note is dragged over this folder header. */
+.folderTitleDrop {
+    border-color: var(--accent, var(--text-secondary));
+    background: var(--surface-subtle);
+}
+
+/* Per-folder actions: hidden until the section is hovered, to stay sober. */
+.folderActions {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.folderSection:hover .folderActions,
+.folderTitle:focus-within .folderActions,
+.folderTitleDrop .folderActions {
+    opacity: 1;
+}
+
+.iconAction {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition:
+        background 0.12s ease,
+        color 0.12s ease;
+}
+
+.iconAction:hover {
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+}
+
+.folderEmpty {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin: 0;
+    padding: var(--space-sm) 6px;
+}
+
+.count {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--surface-subtle);
+    padding: 1px 8px;
+    border-radius: var(--radius-pill);
+}
+
+/* Notes grid */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: var(--space-md);
+}
+
+/* Note card */
+.card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    text-align: left;
+    min-height: 120px;
+    padding: var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition:
+        transform 0.12s ease,
+        border-color 0.12s ease,
+        background 0.12s ease;
+    overflow: hidden;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent, var(--text-secondary));
+    background: var(--glass-bg);
+}
+
+.cardLocked {
+    cursor: pointer;
+    align-items: flex-start;
+    justify-content: center;
+}
+
+.cardHead {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-xs);
+}
+
+.cardTitle {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.cardBadges {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+/* Discreet per-card move menu. */
+.cardMenu {
+    position: relative;
+    display: inline-flex;
+}
+
+.cardMenuBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    opacity: 0;
+    transition:
+        opacity 0.12s ease,
+        background 0.12s ease,
+        color 0.12s ease;
+}
+
+.card:hover .cardMenuBtn,
+.cardMenuBtn:focus-visible {
+    opacity: 1;
+}
+
+.cardMenuBtn:hover {
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+}
+
+.menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 5;
+    min-width: 180px;
+    max-height: 260px;
+    overflow: auto;
+    padding: 4px;
+    background: var(--glass-bg, var(--surface-subtle));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.25));
+    backdrop-filter: blur(12px);
+    text-align: left;
+}
+
+.menuLabel {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    padding: 4px 8px;
+}
+
+.menuItem {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 6px 8px;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.menuItem:hover {
+    background: var(--surface-subtle);
+}
+
+.menuItemActive {
+    color: var(--accent, var(--text-secondary));
+    font-weight: 600;
+}
+
+.badge {
+    width: 14px;
+    height: 14px;
+    display: inline-block;
+}
+
+.cardPreview {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+}
+
+.cardMeta {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.checkProgress {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.lockedHint {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.lockedHint .badge {
+    width: 18px;
+    height: 18px;
+}
+
+/* Empty state */
+.empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    flex: 0.85;
+    padding: var(--space-xl) var(--space-md);
+    color: var(--text-muted);
+    text-align: center;
+    user-select: none;
+}
+
+/* The icon + message are decorative; only the action button stays interactive. */
+.empty > .emptyIcon,
+.empty > p {
+    pointer-events: none;
+}
+
+.emptyIcon {
+    font-size: 2rem;
+    opacity: 0.6;
+}
+
+/* --- Editor popup --- */
+.editor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.editorTitleInput {
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 1.25rem;
+    font-weight: 700;
+    padding: 0;
+    outline: none;
+}
+
+.editorTitleInput::placeholder {
+    color: var(--text-muted);
+}
+
+/* Footer-left cluster: understated pin / hide / delete icon buttons. */
+.footerLeft {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.iconToggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition:
+        background 0.12s ease,
+        color 0.12s ease,
+        border-color 0.12s ease;
+}
+
+.iconToggle:hover {
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+}
+
+.iconToggleActive {
+    color: var(--accent, var(--text-primary));
+    border-color: var(--accent, var(--glass-border));
+    background: var(--accent-bg, var(--surface-subtle));
+}
+
+.toggleIcon {
+    width: 16px;
+    height: 16px;
+}
+
+.divider {
+    height: 1px;
+    background: var(--glass-border);
+    border: none;
+    margin: 0;
+}
+
+/* Blocks editor */
+.blocks {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 42vh;
+    overflow: auto;
+}
+
+.block {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    border-radius: var(--radius-sm);
+    padding: 4px 6px;
+    transition: background 0.1s ease;
+}
+
+.block:hover {
+    background: var(--surface-subtle);
+}
+
+.checkButton {
+    flex-shrink: 0;
+    margin-top: 3px;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.checkButton .badge {
+    width: 18px;
+    height: 18px;
+}
+
+.checkButtonDone {
+    color: var(--success, var(--accent));
+}
+
+.blockText {
+    flex: 1 1 auto;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 0.92rem;
+    line-height: 1.5;
+    padding: 0;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    font-family: inherit;
+}
+
+.blockTextDone {
+    text-decoration: line-through;
+    color: var(--text-muted);
+}
+
+.blockText::placeholder {
+    color: var(--text-muted);
+}
+
+.blockRemove {
+    flex-shrink: 0;
+    opacity: 0;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition:
+        opacity 0.1s ease,
+        color 0.1s ease;
+}
+
+.block:hover .blockRemove {
+    opacity: 1;
+}
+
+.blockRemove:hover {
+    color: var(--danger);
+}
+
+.blockRemove .badge {
+    width: 14px;
+    height: 14px;
+}
+
+.addBlockRow {
+    display: flex;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+}
+
+.addBlockBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px dashed var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: 6px 12px;
+    cursor: pointer;
+    transition:
+        border-color 0.12s ease,
+        color 0.12s ease;
+}
+
+.addBlockBtn:hover {
+    border-color: var(--accent, var(--text-secondary));
+    color: var(--text-primary);
+}
+
+.addBlockBtn .toggleIcon {
+    width: 13px;
+    height: 13px;
+}
+
+.editorFooter {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.footerRight {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.popupHint {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    margin: 0 0 var(--space-md) 0;
+    line-height: 1.5;
+}
+
+/* Loading skeleton */
+.skeletonCard {
+    min-height: 120px;
+    border-radius: var(--radius-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    opacity: 0.5;
+    animation: notesPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes notesPulse {
+    0%,
+    100% {
+        opacity: 0.35;
+    }
+    50% {
+        opacity: 0.6;
+    }
+}

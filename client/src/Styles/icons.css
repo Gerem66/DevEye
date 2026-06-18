@@ -144,6 +144,22 @@
     -webkit-mask-image: url(/icons/x.svg);
     mask-image: url(/icons/x.svg);
 }
+.icon.icon-star {
+    -webkit-mask-image: url(/icons/star.svg);
+    mask-image: url(/icons/star.svg);
+}
+.icon.icon-star-outline {
+    -webkit-mask-image: url(/icons/star-outline.svg);
+    mask-image: url(/icons/star-outline.svg);
+}
+.icon.icon-folder {
+    -webkit-mask-image: url(/icons/folder.svg);
+    mask-image: url(/icons/folder.svg);
+}
+.icon.icon-folder-plus {
+    -webkit-mask-image: url(/icons/folder-plus.svg);
+    mask-image: url(/icons/folder-plus.svg);
+}
 
 /* Dashboard icons (homepage refonte) */
 .icon.icon-plus {
