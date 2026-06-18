@@ -309,8 +309,40 @@ function FeatureNotes({ workspace }: FeatureProps) {
         return { byFolder, unfiled, locked, total: filtered.length };
     }, [notes, folders, search]);
 
-    // Folders sorted by name for a stable, alphabetical layout.
-    const sortedFolders = useMemo(() => [...folders].sort((a, b) => a.name.localeCompare(b.name, 'fr')), [folders]);
+    // Folders in their manual order (sortOrder); the user moves them up/down.
+    const sortedFolders = useMemo(
+        () => [...folders].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id),
+        [folders]
+    );
+
+    /** Move a folder one slot up (dir -1) or down (dir +1); persists the new order. */
+    const reorderFolder = useCallback(
+        async (folder: NoteFolder, dir: -1 | 1) => {
+            setActionError(null);
+            const ordered = [...folders].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
+            const i = ordered.findIndex((f) => f.id === folder.id);
+            const j = i + dir;
+            if (i === -1 || j < 0 || j >= ordered.length) return;
+            [ordered[i], ordered[j]] = [ordered[j], ordered[i]];
+            // Optimistic: renumber locally, roll back to the previous list on failure.
+            const previous = folders;
+            const renumbered = ordered.map((f, idx) => ({ ...f, sortOrder: idx }));
+            setFolders(renumbered);
+            try {
+                const res = await withSecrecy(() =>
+                    ws.send('folder.reorder', {
+                        workspaceId: workspace.id,
+                        folderIds: ordered.map((f) => f.id)
+                    })
+                );
+                setFolders(res.folders);
+            } catch (e) {
+                setFolders(previous);
+                setActionError(humanizeError(e, 'Réorganisation impossible.'));
+            }
+        },
+        [folders, workspace.id]
+    );
 
     const onDropTo = useCallback(
         (folderId: number | null) => {
@@ -393,10 +425,12 @@ function FeatureNotes({ workspace }: FeatureProps) {
             )}
 
             {loaded &&
-                sortedFolders.map((folder) => {
+                sortedFolders.map((folder, idx) => {
                     const items = byFolder.get(folder.id) ?? [];
                     // While searching, hide folders with no matching notes to cut noise.
                     if (searching && items.length === 0) return null;
+                    // Reordering is meaningless while searching (the list is filtered).
+                    const canReorder = !searching;
                     return (
                         <section key={folder.id} className={styles.folderSection}>
                             <div {...dropProps(String(folder.id), folder.id)}>
@@ -404,6 +438,32 @@ function FeatureNotes({ workspace }: FeatureProps) {
                                 <span className={styles.folderName}>{folder.name}</span>
                                 <span className={styles.count}>{items.length}</span>
                                 <span className={styles.folderActions}>
+                                    {canReorder && (
+                                        <>
+                                            <button
+                                                type='button'
+                                                className={styles.iconAction}
+                                                aria-label='Monter le dossier'
+                                                title='Monter'
+                                                disabled={idx === 0}
+                                                onClick={() => void reorderFolder(folder, -1)}
+                                            >
+                                                <span
+                                                    className={`icon ${styles.toggleIcon} ${styles.chevronUp} icon-chevron-down`}
+                                                />
+                                            </button>
+                                            <button
+                                                type='button'
+                                                className={styles.iconAction}
+                                                aria-label='Descendre le dossier'
+                                                title='Descendre'
+                                                disabled={idx === sortedFolders.length - 1}
+                                                onClick={() => void reorderFolder(folder, 1)}
+                                            >
+                                                <span className={`icon ${styles.toggleIcon} icon-chevron-down`} />
+                                            </button>
+                                        </>
+                                    )}
                                     <button
                                         type='button'
                                         className={styles.iconAction}

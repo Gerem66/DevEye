@@ -4,6 +4,7 @@ import {
     folderDelete,
     folderList,
     folderRename,
+    folderReorder,
     noteAdd,
     noteDelete,
     noteEdit,
@@ -358,6 +359,37 @@ export const folderRenameFeature: FeatureDefinition<
     }
 });
 
+export const folderReorderFeature: FeatureDefinition<
+    typeof folderReorder.command,
+    typeof folderReorder.input,
+    typeof folderReorder.output
+> = defineFeature({
+    ...folderReorder,
+    handler: async (ctx, input) => {
+        await assertWorkspaceMember(ctx, input.workspaceId);
+        await assertSecureUnlocked(ctx);
+        // Reorder only the rows that are the caller's and in this workspace; any
+        // foreign or out-of-workspace id in `folderIds` is dropped silently.
+        const owned = (await ctx.db.noteFolders.listByUser(ctx.userId)).filter((r) =>
+            rowInWorkspace(r.workspace_id, input.workspaceId)
+        );
+        const ownedIds = new Set(owned.map((r) => r.id));
+        const orderedIds = input.folderIds.filter((id) => ownedIds.has(id));
+        const rows = (await ctx.db.noteFolders.reorder(ctx.userId, orderedIds)).filter((r) =>
+            rowInWorkspace(r.workspace_id, input.workspaceId)
+        );
+        const folders = (
+            await Promise.all(
+                rows.map(async (r) => {
+                    const payload = await tryDecryptFolder(ctx.secure, r.content);
+                    return payload ? toFolder(r, payload) : null;
+                })
+            )
+        ).filter((f): f is NonNullable<typeof f> => f !== null);
+        return { folders };
+    }
+});
+
 export const folderDeleteFeature: FeatureDefinition<
     typeof folderDelete.command,
     typeof folderDelete.input,
@@ -387,5 +419,6 @@ export const noteFeatures: FeatureDefinition<string, any, any>[] = [
     folderListFeature,
     folderAddFeature,
     folderRenameFeature,
+    folderReorderFeature,
     folderDeleteFeature
 ];

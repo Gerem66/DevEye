@@ -115,7 +115,7 @@ export async function tryDecryptFolder(secure: SecureStore, content: string): Pr
 }
 
 export function toFolder(row: NoteFolderRow, payload: FolderPayload): NoteFolder {
-    return noteFolderSchema.parse({ id: row.id, name: payload.name });
+    return noteFolderSchema.parse({ id: row.id, name: payload.name, sortOrder: row.sort_order });
 }
 
 /**

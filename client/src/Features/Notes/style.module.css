@@ -118,9 +118,19 @@
         color 0.12s ease;
 }
 
-.iconAction:hover {
+.iconAction:hover:not(:disabled) {
     background: var(--surface-subtle);
     color: var(--text-primary);
+}
+
+.iconAction:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+/* "Monter" reuses the chevron-down glyph flipped upward. */
+.chevronUp {
+    transform: rotate(180deg);
 }
 
 .folderEmpty {
