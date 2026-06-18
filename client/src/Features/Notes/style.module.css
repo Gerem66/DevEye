@@ -453,6 +453,39 @@
     background: var(--surface-subtle);
 }
 
+/* Drag-to-reorder grip: hidden until the row is hovered, à la native editors. */
+.blockGrip {
+    flex-shrink: 0;
+    margin-top: 3px;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: grab;
+    opacity: 0;
+    transition: opacity 0.1s ease;
+}
+
+.block:hover .blockGrip {
+    opacity: 1;
+}
+
+.blockGrip:active {
+    cursor: grabbing;
+}
+
+.blockGrip .badge {
+    width: 16px;
+    height: 16px;
+}
+
+/* The dragged row, shown in its live preview position as a ghost. */
+.blockDragging {
+    opacity: 0.4;
+}
+
 .checkButton {
     flex-shrink: 0;
     margin-top: 3px;

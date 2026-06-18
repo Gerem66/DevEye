@@ -22,6 +22,7 @@ import Security from '@/Features/Security';
 import FeatureProfile from '@/Features/Profile';
 import FeaturePassword from '@/Features/Password';
 import FeatureNotes from '@/Features/Notes';
+import { NotesWidget } from '@/Features/Notes/NotesWidget';
 
 import type { FeatureProps } from '@/Features/types';
 import styles from './Dashboard.module.css';
@@ -96,7 +97,7 @@ const FEATURES: FeatureConfig[] = [
         id: 'notes',
         title: 'Notes',
         icon: 'notes',
-        WidgetContent: () => <NotesWidgetContent />,
+        WidgetContent: NotesWidget,
         FullComponent: FeatureNotes,
         cacheDurationMinutes: 5
     }
@@ -127,14 +128,6 @@ function PasswordWidgetContent() {
     return (
         <div className={styles.profileWidget}>
             <span className={styles.simpleHint}>Modifier votre mot de passe</span>
-        </div>
-    );
-}
-
-function NotesWidgetContent() {
-    return (
-        <div className={styles.profileWidget}>
-            <span className={styles.simpleHint}>Vos notes et pense-bêtes</span>
         </div>
     );
 }

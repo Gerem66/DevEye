@@ -1,0 +1,41 @@
+.widgetContent {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    height: 100%;
+}
+
+.stat {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+}
+
+.statValue {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+}
+
+.statLabel {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.footnote {
+    margin-top: auto;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.hint {
+    margin-top: auto;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.empty {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}

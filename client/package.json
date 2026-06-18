@@ -1,6 +1,6 @@
 {
   "name": "deveye-client",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Tool management tools",
   "type": "module",
   "private": true,
@@ -18,7 +18,7 @@
   "author": "Gerem",
   "license": "ISC",
   "dependencies": {
-    "deveye-types": "npm:@gerem66/deveye-types@^0.1.5",
+    "deveye-types": "npm:@gerem66/deveye-types@^0.1.6",
     "framer-motion": "^12.40.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
