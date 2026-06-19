@@ -30,10 +30,19 @@
     padding: var(--space-lg);
 }
 
-.close {
+/* Top-right corner cluster: optional header action(s) + the close button, laid
+   out together so a headerAction (e.g. an "i") never overlaps the ×. */
+.corner {
     position: absolute;
     top: var(--space-md);
     right: var(--space-md);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    z-index: 1;
+}
+
+.close {
     display: flex;
     align-items: center;
     justify-content: center;

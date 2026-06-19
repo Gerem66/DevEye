@@ -401,34 +401,23 @@
     gap: var(--space-md);
 }
 
-/* Title row: the title input plus an info button right-aligned. Padding-right
-   leaves the Dialog's own × button (top-right of the dialog) its full hitbox —
-   the info button sits just left of it, never overlapping it. */
-.editorHeader {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    /* Clear the Dialog's × button (30px at var(--space-md) from the dialog edge,
-       while the body starts at var(--space-lg) ≈ 22px in) plus a comfortable gap,
-       so the info button sits cleanly to its left with no overlapping hitbox. */
-    padding-right: 32px;
-}
-
-/* Info button, styled like the info buttons on the Security page. */
+/* Info button rendered in the Dialog's top-right corner cluster (headerAction),
+   styled like the info buttons on the Security page. The Dialog owns its
+   placement next to the ×, so there's no manual positioning here. */
 .editorInfoBtn {
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
     padding: 0;
     background: transparent;
     border: none;
     border-radius: 50%;
     color: var(--text-muted);
     cursor: pointer;
-    opacity: 0.5;
+    opacity: 0.6;
     transition:
         opacity var(--transition-fast),
         color var(--transition-fast);
@@ -441,18 +430,18 @@
 
 .editorInfoBtn .icon {
     width: 16px;
-    height: 16px;
 }
 
 .editorTitleInput {
-    flex: 1;
-    min-width: 0;
+    flex: 1 1 auto;
     border: none;
     background: transparent;
     color: var(--text-primary);
     font-size: 1.25rem;
     font-weight: 700;
-    padding: 0;
+    /* Clear the Dialog's top-right corner cluster (info + ×) so a long title
+       never slides under it. */
+    padding: 0 64px 0 0;
     outline: none;
 }
 

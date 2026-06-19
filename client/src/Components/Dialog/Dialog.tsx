@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import styles from './Dialog.module.css';
 
@@ -15,6 +16,12 @@ export interface DialogProps {
     children?: ReactNode;
     /** Optional footer, typically action buttons. */
     footer?: ReactNode;
+    /**
+     * Optional action rendered in the top-right corner, just left of the close
+     * button (e.g. an "i" info button). The Dialog owns the corner geometry, so
+     * it never collides with the × — features must not position it themselves.
+     */
+    headerAction?: ReactNode;
     /** Max dialog width in px. */
     width?: number;
     /**
@@ -38,6 +45,7 @@ export default function Dialog({
     description,
     children,
     footer,
+    headerAction,
     width = 460,
     dismissible = true
 }: DialogProps) {
@@ -50,7 +58,12 @@ export default function Dialog({
         return () => window.removeEventListener('keydown', onKey);
     }, [open, onClose, dismissible]);
 
-    return (
+    // Render through a portal to <body> so every dialog escapes its declaring
+    // subtree: its full-screen backdrop always sits at the document root, above
+    // any feature popup it was opened from. Clicking the backdrop then dismisses
+    // *this* dialog, never a popup underneath — and ancestor transforms (the
+    // morphing widget popup) can't shift or clip it.
+    return createPortal(
         <AnimatePresence>
             {open && (
                 <div className={styles.root}>
@@ -72,9 +85,12 @@ export default function Dialog({
                         exit={{ opacity: 0, scale: 0.94, y: 0 }}
                         transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.9 }}
                     >
-                        <button className={styles.close} onClick={onClose} aria-label='Fermer'>
-                            <span className='icon icon-x' />
-                        </button>
+                        <div className={styles.corner}>
+                            {headerAction}
+                            <button className={styles.close} onClick={onClose} aria-label='Fermer'>
+                                <span className='icon icon-x' />
+                            </button>
+                        </div>
                         {title && <h3 className={styles.title}>{title}</h3>}
                         {description && <p className={styles.description}>{description}</p>}
                         <div className={styles.body}>{children}</div>
@@ -82,6 +98,7 @@ export default function Dialog({
                     </motion.div>
                 </div>
             )}
-        </AnimatePresence>
+        </AnimatePresence>,
+        document.body
     );
 }

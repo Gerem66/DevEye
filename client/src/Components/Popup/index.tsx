@@ -49,6 +49,8 @@ interface PopupProps<TInput> {
     id: string;
     title?: string;
     width?: number;
+    /** Optional top-right action (e.g. an "i" button); placed left of the ×. */
+    headerAction?: ReactNode;
     /** Receives the `inputData` passed to OpenPopup whenever the popup opens. */
     onInputChange?: ((input: TInput) => void) | null;
     /** Overrides the default close (which resolves OpenPopup with null). */
@@ -60,6 +62,7 @@ function Popup<TInput = unknown>({
     id,
     title = '',
     width,
+    headerAction,
     onInputChange = null,
     onClosePopup = null
 }: PopupProps<TInput>): React.JSX.Element {
@@ -85,7 +88,7 @@ function Popup<TInput = unknown>({
     };
 
     return (
-        <Dialog open={opened} onClose={handleClose} title={title} width={width}>
+        <Dialog open={opened} onClose={handleClose} title={title} width={width} headerAction={headerAction}>
             {children}
         </Dialog>
     );

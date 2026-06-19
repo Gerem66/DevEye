@@ -199,27 +199,27 @@ export default function NoteEditor() {
             width={560}
             onInputChange={handleOpen}
             onClosePopup={() => close(null)}
+            headerAction={
+                <button
+                    type='button'
+                    className={styles.editorInfoBtn}
+                    aria-label='À propos des notes verrouillées'
+                    title='Comment fonctionnent les notes verrouillées ?'
+                    onClick={showLockInfo}
+                >
+                    <span className='icon icon-info' />
+                </button>
+            }
         >
             <div className={styles.editor}>
-                <div className={styles.editorHeader}>
-                    <input
-                        ref={titleRef}
-                        className={styles.editorTitleInput}
-                        placeholder={mode === 'add' ? 'Titre de la nouvelle note' : 'Titre de la note'}
-                        value={title}
-                        maxLength={NOTE_TITLE_MAX_LENGTH}
-                        onChange={(e) => setTitle(e.target.value)}
-                    />
-                    <button
-                        type='button'
-                        className={styles.editorInfoBtn}
-                        aria-label='À propos des notes verrouillées'
-                        title='Comment fonctionnent les notes verrouillées ?'
-                        onClick={showLockInfo}
-                    >
-                        <span className='icon icon-info' />
-                    </button>
-                </div>
+                <input
+                    ref={titleRef}
+                    className={styles.editorTitleInput}
+                    placeholder={mode === 'add' ? 'Titre de la nouvelle note' : 'Titre de la note'}
+                    value={title}
+                    maxLength={NOTE_TITLE_MAX_LENGTH}
+                    onChange={(e) => setTitle(e.target.value)}
+                />
 
                 <hr className={styles.divider} />
 
