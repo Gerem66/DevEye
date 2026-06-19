@@ -282,7 +282,7 @@ function FeaturePassword({ workspace }: FeatureProps) {
             {loaded && visibleCategories.length === 0 && (
                 <div className={styles.empty}>
                     <span className={styles.emptyIcon}>🔒</span>
-                    <p>{search ? 'Aucun résultat' : 'Aucun mot de passe enregistré'}</p>
+                    <p>{search ? 'Aucun résultat' : 'Aucun mot de passe trouvé'}</p>
                 </div>
             )}
 

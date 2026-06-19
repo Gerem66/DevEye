@@ -7,7 +7,6 @@ import { ACCESS_COOKIE } from '@/auth/cookies';
 import { verifyAccessToken } from '@/auth/jwt';
 import { createMonitorTransport, type MonitorHub } from '@/agent/hub';
 import { FeatureError } from '@/features/_define';
-import { forgetReveal } from '@/features/note/_shared';
 import { forgetSession } from '@/features/password/_shared';
 import { featureHandlerMap } from '@/features/registry';
 import { createSecureStore, forgetSessionDek } from '@/Services/SecureStore';
@@ -156,7 +155,6 @@ export async function registerWS(app: FastifyInstance, { db, crypt, hub }: WSDep
             hub.dropSubscriber(socket);
             forgetSession(session!.sessionId);
             forgetSessionDek(session!.sessionId);
-            forgetReveal(session!.sessionId);
             reqLogger.info('WS closed');
         });
     });

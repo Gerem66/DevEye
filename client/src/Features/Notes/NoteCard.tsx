@@ -27,10 +27,12 @@ interface NoteCardProps {
 }
 
 /**
- * A single note preview. A `locked` hidden note shows only a placeholder (no
- * body ever reached the client); clicking it triggers the reveal flow. Readable
- * cards are draggable (to a folder header) and expose a discreet "⋯" menu to
- * move the note between folders without opening the editor.
+ * A single note preview. A `locked` note shows only a padlock placeholder (no
+ * title or body ever reached the client); clicking it prompts for the note's
+ * dedicated password. Readable cards are draggable (to a folder header) and
+ * expose a discreet folder menu to move the note between folders without opening
+ * the editor — at rest the menu button is collapsed so any badges sit flush
+ * against the right edge, and it expands on hover.
  */
 export default function NoteCard({ note, folders, onOpen, onMove, onDragStart, onDragEnd }: NoteCardProps) {
     const [menuOpen, setMenuOpen] = useState(false);
@@ -51,11 +53,11 @@ export default function NoteCard({ note, folders, onOpen, onMove, onDragStart, o
                 type='button'
                 className={`${styles.card} ${styles.cardLocked}`}
                 onClick={() => onOpen(note)}
-                aria-label='Note masquée — déverrouiller'
+                aria-label='Note verrouillée — déverrouiller'
             >
                 <span className={styles.lockedHint}>
                     <span className={`icon ${styles.badge} icon-lock`} />
-                    Note masquée
+                    Note verrouillée
                 </span>
             </button>
         );
@@ -92,9 +94,8 @@ export default function NoteCard({ note, folders, onOpen, onMove, onDragStart, o
             <div className={styles.cardHead}>
                 <h4 className={styles.cardTitle}>{note.title || 'Sans titre'}</h4>
                 <span className={styles.cardBadges}>
-                    {note.hidden && <span className={`icon ${styles.badge} icon-lock`} aria-label='Masquée' />}
                     {note.pinned && <span className={`icon ${styles.badge} icon-star`} aria-label='Épinglée' />}
-                    <div className={styles.cardMenu} ref={menuRef}>
+                    <div className={`${styles.cardMenu} ${menuOpen ? styles.menuOpen : ''}`} ref={menuRef}>
                         <button
                             type='button'
                             className={styles.cardMenuBtn}

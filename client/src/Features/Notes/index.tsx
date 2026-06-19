@@ -9,7 +9,9 @@ import NoteEditor, {
     type NoteEditorInput,
     type NoteEditorResult
 } from './NoteEditor';
-import RevealPopup, { NOTE_REVEAL_POPUP } from './RevealPopup';
+import LockPopup, { NOTE_LOCK_POPUP, type NoteLockInput } from './LockPopup';
+import LockSetPopup from './LockSetPopup';
+import LockManagePopup from './LockManagePopup';
 import FolderNamePopup, { FOLDER_NAME_POPUP, type FolderNameInput, type FolderNameResult } from './FolderNamePopup';
 import ConfirmPopup, { NOTE_CONFIRM_POPUP, type ConfirmInput } from './ConfirmPopup';
 
@@ -28,8 +30,8 @@ const UNFILED = '__unfiled__';
 /**
  * Run a request and, if the password-encryption layer reports `locked`, open the
  * global unlock prompt and retry once. Mirrors the Password feature so every
- * encrypted call is resilient. This is the DEK gate — distinct from the hidden
- * notes "reveal" gate handled separately below.
+ * encrypted call is resilient. This is the DEK gate (password-encryption layer)
+ * — distinct from a note's per-note lock, handled separately on open.
  */
 async function withSecrecy<T>(run: () => Promise<T>): Promise<T> {
     try {
@@ -65,8 +67,6 @@ function FeatureNotes({ workspace }: FeatureProps) {
     const [dragOverKey, setDragOverKey] = useState<string | null>(null);
     const reloadRef = useRef<Promise<void> | null>(null);
     const draggingRef = useRef<NoteSummary | null>(null);
-    /** Whether the session has passed "root auth" to read hidden notes. */
-    const revealedRef = useRef(false);
 
     const reload = useCallback(async () => {
         if (reloadRef.current) return reloadRef.current;
@@ -94,7 +94,6 @@ function FeatureNotes({ workspace }: FeatureProps) {
     }, [workspace.id]);
 
     useEffect(() => {
-        revealedRef.current = false;
         setLoaded(false);
         setNotes([]);
         setFolders([]);
@@ -102,20 +101,43 @@ function FeatureNotes({ workspace }: FeatureProps) {
         void reload();
     }, [reload]);
 
-    /** Ensure hidden notes are unlocked this session; prompts if needed. */
-    const ensureRevealed = useCallback(async (): Promise<boolean> => {
-        if (revealedRef.current) return true;
-        const ok = await OpenPopup<boolean>(NOTE_REVEAL_POPUP);
-        if (ok === true) {
-            revealedRef.current = true;
-            await reload(); // refetch so masked notes come back in full
-            return true;
-        }
-        return false;
-    }, [reload]);
+    /**
+     * Prompt for a locked note's dedicated password and `note.get` it, retrying
+     * on a wrong password. Returns the full note plus the password that opened it
+     * (so a later edit/delete in this same flow can reuse it), or null if the
+     * user cancels. The password is verified server-side on every open.
+     */
+    const openLockedNote = useCallback(
+        async (noteId: number): Promise<{ note: Note; password: string } | null> => {
+            let lockError = '';
+            for (;;) {
+                const password = await OpenPopup<string>(NOTE_LOCK_POPUP, {
+                    intent: 'open',
+                    error: lockError
+                } as NoteLockInput);
+                if (password === null) return null;
+                try {
+                    const res = await withSecrecy(() =>
+                        ws.send('note.get', { workspaceId: workspace.id, noteId, password })
+                    );
+                    return { note: res.note, password };
+                } catch (e) {
+                    if (e instanceof WsError && (e.code === 'auth_invalid' || e.code === 'auth_required')) {
+                        lockError = 'Mot de passe incorrect';
+                        continue;
+                    }
+                    setActionError(humanizeError(e, 'Impossible d’ouvrir la note.'));
+                    return null;
+                }
+            }
+        },
+        [workspace.id]
+    );
 
     const upsert = useCallback((note: Note) => {
-        const summary = toSummary(note);
+        // A note that is now locked renders as a masked card (padlock, no title
+        // or preview) exactly as the list would return it on reload.
+        const summary = note.locked ? toLockedSummary(note) : toSummary(note);
         setNotes((prev) => {
             const exists = prev.some((n) => n.id === summary.id);
             return exists ? prev.map((n) => (n.id === summary.id ? summary : n)) : [summary, ...prev];
@@ -123,11 +145,11 @@ function FeatureNotes({ workspace }: FeatureProps) {
     }, []);
 
     const saveDraft = useCallback(
-        async (existing: Note | null, draft: NoteDraft) => {
+        async (existing: Note | null, draft: NoteDraft, password?: string) => {
             try {
                 if (existing) {
                     const res = await withSecrecy(() =>
-                        ws.send('note.edit', { workspaceId: workspace.id, noteId: existing.id, note: draft })
+                        ws.send('note.edit', { workspaceId: workspace.id, noteId: existing.id, note: draft, password })
                     );
                     upsert(res.note);
                 } else {
@@ -148,28 +170,23 @@ function FeatureNotes({ workspace }: FeatureProps) {
         async (summary: NoteSummary | null, targetFolderId: number | null = null) => {
             setActionError(null);
 
-            // Opening a hidden note (locked card or already-hidden note) requires
-            // root auth first; creating a new note never does.
-            if (summary && (summary.locked || summary.hidden) && !(await ensureRevealed())) return;
-
             let existing: Note | null = null;
+            // Password that opened a locked note — reused for its edit/delete so
+            // the user isn't prompted twice within the same editor session.
+            let unlockPassword: string | undefined;
             if (summary) {
-                try {
-                    const res = await withSecrecy(() =>
-                        ws.send('note.get', { workspaceId: workspace.id, noteId: summary.id })
-                    );
-                    existing = res.note;
-                } catch (e) {
-                    if (e instanceof WsError && e.code === 'auth_required') {
-                        if (!(await ensureRevealed())) return;
-                        try {
-                            const res = await ws.send('note.get', { workspaceId: workspace.id, noteId: summary.id });
-                            existing = res.note;
-                        } catch (e2) {
-                            setActionError(humanizeError(e2, 'Impossible d’ouvrir la note.'));
-                            return;
-                        }
-                    } else {
+                if (summary.locked) {
+                    const opened = await openLockedNote(summary.id);
+                    if (!opened) return;
+                    existing = opened.note;
+                    unlockPassword = opened.password;
+                } else {
+                    try {
+                        const res = await withSecrecy(() =>
+                            ws.send('note.get', { workspaceId: workspace.id, noteId: summary.id })
+                        );
+                        existing = res.note;
+                    } catch (e) {
                         setActionError(humanizeError(e, 'Impossible d’ouvrir la note.'));
                         return;
                     }
@@ -180,15 +197,15 @@ function FeatureNotes({ workspace }: FeatureProps) {
             const result = await OpenPopup<NoteEditorResult>(NOTE_EDITOR_POPUP, input);
             if (result === null) return;
 
+            // Deletion is already confirmed inside the editor (popup over it), so
+            // 'delete' here means "go ahead".
             if (result === 'delete' && existing) {
-                const confirmed = await OpenPopup<boolean>(NOTE_CONFIRM_POPUP, {
-                    title: 'Supprimer la note',
-                    message: `Supprimer « ${existing.title || 'Sans titre'} » ? Cette action est irréversible.`,
-                    confirmLabel: 'Supprimer'
-                } as ConfirmInput);
-                if (confirmed !== true) return;
                 try {
-                    await ws.send('note.delete', { workspaceId: workspace.id, noteId: existing.id });
+                    await ws.send('note.delete', {
+                        workspaceId: workspace.id,
+                        noteId: existing.id,
+                        password: unlockPassword
+                    });
                     setNotes((prev) => prev.filter((n) => n.id !== existing!.id));
                 } catch (e) {
                     setActionError(humanizeError(e, 'Suppression impossible.'));
@@ -196,13 +213,9 @@ function FeatureNotes({ workspace }: FeatureProps) {
                 return;
             }
 
-            // Creating a hidden note also requires authorization.
-            if (typeof result === 'object' && result.hidden && !revealedRef.current && !(await ensureRevealed())) {
-                return;
-            }
-            if (typeof result === 'object') await saveDraft(existing, result);
+            if (typeof result === 'object') await saveDraft(existing, result, unlockPassword);
         },
-        [ensureRevealed, workspace.id, saveDraft]
+        [openLockedNote, workspace.id, saveDraft]
     );
 
     /** Relocate a note to another folder (menu or drag & drop). */
@@ -210,7 +223,8 @@ function FeatureNotes({ workspace }: FeatureProps) {
         async (summary: NoteSummary, folderId: number | null) => {
             setActionError(null);
             if (folderId === summary.folderId) return;
-            if (summary.hidden && !revealedRef.current && !(await ensureRevealed())) return;
+            // Moving is benign and never exposes the body, so even a locked note
+            // can be re-filed without its password (matches the server gate).
             // Optimistic: re-bucket immediately, roll back on failure.
             setNotes((prev) => prev.map((n) => (n.id === summary.id ? { ...n, folderId } : n)));
             try {
@@ -222,7 +236,7 @@ function FeatureNotes({ workspace }: FeatureProps) {
                 setActionError(humanizeError(e, 'Déplacement impossible.'));
             }
         },
-        [ensureRevealed, workspace.id]
+        [workspace.id]
     );
 
     const createFolder = useCallback(async () => {
@@ -277,8 +291,13 @@ function FeatureNotes({ workspace }: FeatureProps) {
         [workspace.id]
     );
 
-    /** Notes filtered by search and bucketed by folder id (locked bucket apart). */
-    const { byFolder, unfiled, locked, total } = useMemo(() => {
+    /**
+     * Notes filtered by search and bucketed by folder id. Locked notes are just
+     * regular notes whose body is masked — they stay in their own folder (the
+     * clear `folderId` column), never pulled into a special section. Search skips
+     * locked notes since their title/preview aren't available client-side.
+     */
+    const { byFolder, unfiled, total } = useMemo(() => {
         const lower = search.trim().toLowerCase();
         const folderName = (id: number | null) => folders.find((f) => f.id === id)?.name ?? '';
         const filtered = lower
@@ -293,10 +312,8 @@ function FeatureNotes({ workspace }: FeatureProps) {
 
         const byFolder = new Map<number, NoteSummary[]>();
         const unfiled: NoteSummary[] = [];
-        const locked: NoteSummary[] = [];
         for (const n of filtered) {
-            if (n.locked) locked.push(n);
-            else if (n.folderId === null) unfiled.push(n);
+            if (n.folderId === null) unfiled.push(n);
             else {
                 const bucket = byFolder.get(n.folderId);
                 if (bucket) bucket.push(n);
@@ -306,7 +323,7 @@ function FeatureNotes({ workspace }: FeatureProps) {
         const sortPinned = (a: NoteSummary, b: NoteSummary) => Number(b.pinned) - Number(a.pinned);
         byFolder.forEach((arr) => arr.sort(sortPinned));
         unfiled.sort(sortPinned);
-        return { byFolder, unfiled, locked, total: filtered.length };
+        return { byFolder, unfiled, total: filtered.length };
     }, [notes, folders, search]);
 
     // Folders in their manual order (sortOrder); the user moves them up/down.
@@ -523,17 +540,6 @@ function FeatureNotes({ workspace }: FeatureProps) {
                 </section>
             )}
 
-            {loaded && locked.length > 0 && (
-                <section className={styles.folderSection}>
-                    <div className={styles.folderTitle}>
-                        <span className={`icon ${styles.badge} icon-lock`} />
-                        <span className={styles.folderName}>Masquées</span>
-                        <span className={styles.count}>{locked.length}</span>
-                    </div>
-                    {renderGrid(locked)}
-                </section>
-            )}
-
             {loaded && total === 0 && (
                 <div className={styles.empty}>
                     <span className={styles.emptyIcon}>📝</span>
@@ -547,14 +553,31 @@ function FeatureNotes({ workspace }: FeatureProps) {
             )}
 
             <NoteEditor />
-            <RevealPopup />
+            <LockPopup />
+            <LockSetPopup />
+            <LockManagePopup />
             <FolderNamePopup />
             <ConfirmPopup />
         </div>
     );
 }
 
-/** Build an optimistic summary from a full note (after add/edit). */
+/** Build a masked summary for a (now) locked note — padlock card, no body. */
+function toLockedSummary(note: Note): NoteSummary {
+    return {
+        id: note.id,
+        title: '',
+        folderId: note.folderId,
+        pinned: note.pinned,
+        checkTotal: 0,
+        checkDone: 0,
+        locked: true,
+        updated: note.updated,
+        created: note.created
+    };
+}
+
+/** Build an optimistic summary from a full (open) note after add/edit. */
 function toSummary(note: Note): NoteSummary {
     const checks = note.blocks.filter((b) => b.type === 'check');
     const previewBlock = note.blocks.find((b) => b.text.trim() !== '');
@@ -563,7 +586,6 @@ function toSummary(note: Note): NoteSummary {
         title: note.title,
         folderId: note.folderId,
         pinned: note.pinned,
-        hidden: note.hidden,
         preview: previewBlock ? previewBlock.text.trim().slice(0, 140) : '',
         checkTotal: checks.length,
         checkDone: checks.filter((b) => b.type === 'check' && b.done).length,

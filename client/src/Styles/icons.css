@@ -72,6 +72,14 @@
     -webkit-mask-image: url(/icons/lock.svg);
     mask-image: url(/icons/lock.svg);
 }
+.icon.icon-unlock {
+    -webkit-mask-image: url(/icons/unlock.svg);
+    mask-image: url(/icons/unlock.svg);
+}
+.icon.icon-key {
+    -webkit-mask-image: url(/icons/key.svg);
+    mask-image: url(/icons/key.svg);
+}
 .icon.icon-logs {
     -webkit-mask-image: url(/icons/logs.svg);
     mask-image: url(/icons/logs.svg);

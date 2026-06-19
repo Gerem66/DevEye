@@ -38,7 +38,7 @@ export function toNote(row: NoteRow, payload: StoredPayload): Note {
         folderId: row.folder_id,
         blocks: payload.blocks,
         pinned: row.pinned === 1,
-        hidden: row.hidden === 1,
+        locked: row.lock_hash !== null,
         updated: row.updated,
         created: row.created
     });
@@ -55,7 +55,7 @@ function buildPreview(blocks: NoteBlock[]): string {
     return '';
 }
 
-/** Summary for a readable note (its body was successfully decrypted). */
+/** Summary for a readable (open) note — its body was successfully decrypted. */
 export function toSummary(row: NoteRow, payload: StoredPayload): NoteSummary {
     const checks = payload.blocks.filter((b) => b.type === 'check');
     return {
@@ -63,7 +63,6 @@ export function toSummary(row: NoteRow, payload: StoredPayload): NoteSummary {
         title: payload.title,
         folderId: row.folder_id,
         pinned: row.pinned === 1,
-        hidden: row.hidden === 1,
         preview: buildPreview(payload.blocks),
         checkTotal: checks.length,
         checkDone: checks.filter((b) => b.type === 'check' && b.done).length,
@@ -74,9 +73,9 @@ export function toSummary(row: NoteRow, payload: StoredPayload): NoteSummary {
 }
 
 /**
- * Summary for a hidden note the session may not read yet: metadata only, no
- * body-derived fields, so nothing sensitive leaks before unlock. `folderId` is
- * a clear column (not sensitive on its own), so it's kept — the note still
+ * Summary for a locked note: metadata only, no `title`/body-derived fields, so
+ * nothing sensitive leaks before its dedicated password is entered. `folderId`
+ * is a clear column (not sensitive on its own), so it's kept — the note still
  * groups under its folder while locked.
  */
 export function toLockedSummary(row: NoteRow): NoteSummary {
@@ -85,7 +84,6 @@ export function toLockedSummary(row: NoteRow): NoteSummary {
         title: '',
         folderId: row.folder_id,
         pinned: row.pinned === 1,
-        hidden: true,
         checkTotal: 0,
         checkDone: 0,
         locked: true,
@@ -116,25 +114,4 @@ export async function tryDecryptFolder(secure: SecureStore, content: string): Pr
 
 export function toFolder(row: NoteFolderRow, payload: FolderPayload): NoteFolder {
     return noteFolderSchema.parse({ id: row.id, name: payload.name, sortOrder: row.sort_order });
-}
-
-/**
- * Sessions that have passed "root auth" and may read hidden notes this
- * connection. Populated by `note.reveal`; never persisted and cleared on
- * disconnect. Kept separate from the SecureStore DEK cache: revealing hidden
- * notes is an authorization gate (account password), independent of whether
- * password-based encryption is enabled.
- */
-const revealed = new Set<string>();
-
-export function markRevealed(sessionId: string): void {
-    revealed.add(sessionId);
-}
-
-export function isRevealed(sessionId: string): boolean {
-    return revealed.has(sessionId);
-}
-
-export function forgetReveal(sessionId: string): void {
-    revealed.delete(sessionId);
 }

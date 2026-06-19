@@ -1,4 +1,4 @@
-import { verifyPassword } from '@/auth/argon';
+import { hashPassword, verifyPassword } from '@/auth/argon';
 import {
     folderAdd,
     folderDelete,
@@ -10,15 +10,13 @@ import {
     noteEdit,
     noteGet,
     noteList,
-    noteMove,
-    noteReveal
+    noteMove
 } from 'deveye-types';
+import type { NoteRow } from 'deveye-types';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import {
     encryptFolder,
     encryptPayload,
-    isRevealed,
-    markRevealed,
     toFolder,
     toLockedSummary,
     toNote,
@@ -68,25 +66,32 @@ async function resolveFolderId(
 }
 
 /**
- * Whether this session may read hidden notes ("root auth"). True when either:
- *  - the session passed `note.reveal` (account-password check), or
- *  - password-based encryption is on AND the DEK is live (the cached master
- *    password is itself the proof the user asked for).
- *
- * The passive check never slides the grace window — gating must not count as
- * encrypted-data activity.
+ * Verify a locked note's dedicated password against its stored hash. Open notes
+ * (`lock_hash` null) never require one. Throws `auth_required` when a password is
+ * needed but absent, `auth_invalid` when it doesn't match. The lock is purely an
+ * access gate — checked on every operation that exposes or destroys the note.
  */
-async function canRevealHidden(ctx: FeatureContext): Promise<boolean> {
-    if (isRevealed(ctx.sessionId)) return true;
-    try {
-        const row = await ctx.secretKeys.ensureRow(ctx.userId);
-        if (ctx.secretKeys.isPasswordWrapped(row)) {
-            return await ctx.secure.isUnlockedPassive();
-        }
-    } catch (e) {
-        ctx.logger.warn({ err: e }, 'note.canRevealHidden: secret-key check failed; treating as not revealed');
+async function assertNoteUnlocked(row: NoteRow, password: string | undefined): Promise<void> {
+    if (row.lock_hash === null) return;
+    if (!password) throw new FeatureError('auth_required', 'Note verrouillée; saisissez son mot de passe');
+    if (!(await verifyPassword(row.lock_hash, password))) {
+        throw new FeatureError('auth_invalid', 'Mot de passe incorrect');
     }
-    return false;
+}
+
+/**
+ * Resolve the new `lock_hash` for a save from the draft's optional `lock` change:
+ *  - omitted        → keep the existing hash (content-only edit).
+ *  - `{ set }`      → hash the new dedicated password (lock / re-lock).
+ *  - `{ remove }`   → null (unlock the note).
+ */
+async function resolveLockHash(
+    lock: { set: string } | { remove: true } | undefined,
+    existing: string | null
+): Promise<string | null> {
+    if (!lock) return existing;
+    if ('remove' in lock) return null;
+    return hashPassword(lock.set);
 }
 
 /** Normalize a draft into the encrypted payload (folder lives in a clear column). */
@@ -120,7 +125,6 @@ export const noteListFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
         await assertSecureUnlocked(ctx);
-        const allowHidden = await canRevealHidden(ctx);
         const rows = (await ctx.db.notes.listByUser(ctx.userId)).filter((r) =>
             rowInWorkspace(r.workspace_id, input.workspaceId)
         );
@@ -129,14 +133,13 @@ export const noteListFeature: FeatureDefinition<
         const notes = (
             await Promise.all(
                 rows.map(async (r) => {
-                    // Hidden + not authorized → masked summary, body never decrypted.
-                    if (r.hidden === 1 && !allowHidden) return toLockedSummary(r);
+                    // Locked notes are always masked in the list: title + body stay
+                    // hidden until the per-note password is entered on open.
+                    if (r.lock_hash !== null) return toLockedSummary(r);
                     const payload = await tryDecryptPayload(ctx.secure, r.content);
                     if (!payload) {
                         // A locked SecureStore (password encryption on, session not
-                        // unlocked) surfaces here as an undecryptable body. Mask it
-                        // rather than dropping the row so the note stays listed.
-                        if (r.hidden === 1) return toLockedSummary(r);
+                        // unlocked) surfaces here as an undecryptable body — drop it.
                         skipped += 1;
                         return null;
                     }
@@ -162,9 +165,7 @@ export const noteGetFeature: FeatureDefinition<typeof noteGet.command, typeof no
             if (!row || !rowInWorkspace(row.workspace_id, input.workspaceId)) {
                 throw new FeatureError('not_found', 'Note not found');
             }
-            if (row.hidden === 1 && !(await canRevealHidden(ctx))) {
-                throw new FeatureError('auth_required', 'Hidden note locked; reveal with your password');
-            }
+            await assertNoteUnlocked(row, input.password);
             const payload = await tryDecryptPayload(ctx.secure, row.content);
             if (!payload) throw new FeatureError('internal', 'Failed to decrypt note content');
             return { note: toNote(row, payload) };
@@ -177,20 +178,16 @@ export const noteAddFeature: FeatureDefinition<typeof noteAdd.command, typeof no
         handler: async (ctx, input) => {
             await assertWorkspaceMember(ctx, input.workspaceId);
             await assertSecureUnlocked(ctx);
-            // Creating a hidden note requires the same authorization as reading one,
-            // so a locked session can't quietly stash content it then can't reopen.
-            if (input.note.hidden && !(await canRevealHidden(ctx))) {
-                throw new FeatureError('auth_required', 'Reveal hidden notes before creating one');
-            }
             const folderId = await resolveFolderId(ctx, input.workspaceId, input.note.folderId);
             const content = await encryptPayload(ctx.secure, toPayload(input.note));
+            const lockHash = await resolveLockHash(input.note.lock, null);
             const row = await ctx.db.notes.create({
                 userId: ctx.userId,
                 workspaceId: toDbWorkspaceId(input.workspaceId),
                 folderId,
                 content,
                 pinned: input.note.pinned,
-                hidden: input.note.hidden
+                lockHash
             });
             return { note: toNote(row, toPayload(input.note)) };
         }
@@ -209,17 +206,17 @@ export const noteEditFeature: FeatureDefinition<
         if (!existing || !rowInWorkspace(existing.workspace_id, input.workspaceId)) {
             throw new FeatureError('not_found', 'Note not found');
         }
-        // Touching a note that is (or becomes) hidden requires authorization.
-        if ((existing.hidden === 1 || input.note.hidden) && !(await canRevealHidden(ctx))) {
-            throw new FeatureError('auth_required', 'Reveal hidden notes before editing');
-        }
+        // Editing a locked note's content requires its existing password (proof
+        // the note was legitimately opened before saving over it).
+        await assertNoteUnlocked(existing, input.password);
         const folderId = await resolveFolderId(ctx, input.workspaceId, input.note.folderId);
         const content = await encryptPayload(ctx.secure, toPayload(input.note));
+        const lockHash = await resolveLockHash(input.note.lock, existing.lock_hash);
         const updated = await ctx.db.notes.update(input.noteId, ctx.userId, {
             folderId,
             content,
             pinned: input.note.pinned,
-            hidden: input.note.hidden
+            lockHash
         });
         if (!updated) throw new FeatureError('not_found', 'Note not found');
         return { note: toNote(updated, toPayload(input.note)) };
@@ -238,11 +235,8 @@ export const noteMoveFeature: FeatureDefinition<
         if (!existing || !rowInWorkspace(existing.workspace_id, input.workspaceId)) {
             throw new FeatureError('not_found', 'Note not found');
         }
-        // Moving a hidden note requires the same authorization as reading it,
-        // otherwise a locked session could reorganize notes it can't see.
-        if (existing.hidden === 1 && !(await canRevealHidden(ctx))) {
-            throw new FeatureError('auth_required', 'Reveal hidden notes before moving');
-        }
+        // Moving is a benign reorganization that never exposes the body, so it is
+        // not gated by the lock — even a locked note can be re-filed freely.
         const folderId = await resolveFolderId(ctx, input.workspaceId, input.folderId);
         const updated = await ctx.db.notes.move(input.noteId, ctx.userId, folderId);
         if (!updated) throw new FeatureError('not_found', 'Note not found');
@@ -262,35 +256,11 @@ export const noteDeleteFeature: FeatureDefinition<
         if (!existing || !rowInWorkspace(existing.workspace_id, input.workspaceId)) {
             throw new FeatureError('not_found', 'Note not found');
         }
-        // Deleting a hidden note also requires authorization — otherwise a locked
-        // session could destroy notes it isn't allowed to even read.
-        if (existing.hidden === 1 && !(await canRevealHidden(ctx))) {
-            throw new FeatureError('auth_required', 'Reveal hidden notes before deleting');
-        }
+        // Deleting is destructive, so a locked note requires its password — one
+        // can't destroy a note it couldn't open. Moving (above) stays free.
+        await assertNoteUnlocked(existing, input.password);
         await ctx.db.notes.delete(input.noteId, ctx.userId);
         return { noteId: input.noteId };
-    }
-});
-
-export const noteRevealFeature: FeatureDefinition<
-    typeof noteReveal.command,
-    typeof noteReveal.input,
-    typeof noteReveal.output
-> = defineFeature({
-    ...noteReveal,
-    handler: async (ctx, input) => {
-        // Already authorized (e.g. password-encryption session is unlocked)?
-        // Accept without re-checking so the client need not re-prompt.
-        if (await canRevealHidden(ctx)) {
-            markRevealed(ctx.sessionId);
-            return { revealed: true as const };
-        }
-        const user = await ctx.db.users.findById(ctx.userId);
-        if (!user?.password_hash || !(await verifyPassword(user.password_hash, input.password))) {
-            throw new FeatureError('auth_invalid', 'Mot de passe incorrect');
-        }
-        markRevealed(ctx.sessionId);
-        return { revealed: true as const };
     }
 });
 
@@ -415,7 +385,6 @@ export const noteFeatures: FeatureDefinition<string, any, any>[] = [
     noteEditFeature,
     noteMoveFeature,
     noteDeleteFeature,
-    noteRevealFeature,
     folderListFeature,
     folderAddFeature,
     folderRenameFeature,

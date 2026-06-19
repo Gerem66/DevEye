@@ -11,9 +11,9 @@ type WidgetState = { kind: 'loading' } | { kind: 'locked' } | { kind: 'ready'; n
  * Compact dashboard card for Notes: a count of notes plus an at-a-glance
  * checklist progress (done / total checkboxes across all notes).
  *
- * Deliberately calls `note.list` *without* the unlock dance — locked hidden
- * notes come back masked (no `checkTotal`/`checkDone` leak), so the widget
- * never triggers a master-password prompt just to render the dashboard.
+ * Deliberately calls `note.list` *without* any unlock dance — locked notes come
+ * back masked (no `checkTotal`/`checkDone` leak), so the widget never triggers a
+ * password prompt just to render the dashboard.
  */
 export function NotesWidget() {
     const { user, workspaces } = useAuth();

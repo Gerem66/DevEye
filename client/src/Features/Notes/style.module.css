@@ -219,15 +219,21 @@
 .cardMenu {
     position: relative;
     display: inline-flex;
+    margin-left: 2px;
 }
 
 .cardMenuBtn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
+    /* Collapsed at rest so the lock/star badges sit flush against the right
+       edge; expands on hover, smoothly pushing the badges left to make room for
+       the folder (move) button. */
+    width: 0;
     height: 22px;
     padding: 0;
+    margin: 0;
+    overflow: hidden;
     border: none;
     background: transparent;
     color: var(--text-muted);
@@ -235,13 +241,16 @@
     cursor: pointer;
     opacity: 0;
     transition:
-        opacity 0.12s ease,
+        width 0.16s ease,
+        opacity 0.16s ease,
         background 0.12s ease,
         color 0.12s ease;
 }
 
 .card:hover .cardMenuBtn,
-.cardMenuBtn:focus-visible {
+.cardMenuBtn:focus-visible,
+.cardMenu.menuOpen .cardMenuBtn {
+    width: 22px;
     opacity: 1;
 }
 
@@ -380,13 +389,57 @@
 
 /* --- Editor popup --- */
 .editor {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--space-md);
 }
 
+/* Title row: the title input plus an info button right-aligned. Padding-right
+   leaves the Dialog's own × button (top-right of the dialog) its full hitbox —
+   the info button sits just left of it, never overlapping it. */
+.editorHeader {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    /* Clear the Dialog's × button (30px at var(--space-md) from the dialog edge,
+       while the body starts at var(--space-lg)): md + 30 − lg ≈ 22px. */
+    padding-right: 24px;
+}
+
+/* Info button, styled like the info buttons on the Security page. */
+.editorInfoBtn {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0.5;
+    transition:
+        opacity var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.editorInfoBtn:hover {
+    opacity: 1;
+    color: var(--accent);
+}
+
+.editorInfoBtn .icon {
+    width: 16px;
+    height: 16px;
+}
+
 .editorTitleInput {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     border: none;
     background: transparent;
     color: var(--text-primary);
@@ -695,6 +748,53 @@
     color: var(--text-secondary);
     margin: 0 0 var(--space-md) 0;
     line-height: 1.5;
+}
+
+/* Pending-lock notice shown in the note editor before saving (temporary, so
+   kept noticeable rather than blending into the metadata line). */
+.lockNotice {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: var(--space-sm) 0 0 0;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.lockNotice .toggleIcon {
+    width: 13px;
+    height: 13px;
+}
+
+/* Info dialog content — mirrors the Security page's info modals. */
+.infoContent {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.infoContent p {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.6;
+}
+
+.infoContent strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* Lock-management popup: stacked full-width choices. */
+.lockManageActions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+}
+
+.lockManageActions > * {
+    width: 100%;
 }
 
 /* Loading skeleton */
