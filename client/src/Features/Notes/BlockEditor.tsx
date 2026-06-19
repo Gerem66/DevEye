@@ -230,15 +230,16 @@ export default function BlockEditor({ blocks, onChange }: BlockEditorProps) {
                 }}
                 onKeyDown={(e) => onKeyDown(e, index)}
             />
-            <button
-                type='button'
-                className={styles.blockRemove}
-                aria-label='Supprimer la ligne'
-                onClick={() => removeAt(index)}
-                disabled={blocks.length <= 1}
-            >
-                <span className={`icon ${styles.badge} icon-trash`} />
-            </button>
+            {blocks.length > 1 && (
+                <button
+                    type='button'
+                    className={styles.blockRemove}
+                    aria-label='Supprimer la ligne'
+                    onClick={() => removeAt(index)}
+                >
+                    <span className={`icon ${styles.badge} icon-trash`} />
+                </button>
+            )}
         </div>
     );
 

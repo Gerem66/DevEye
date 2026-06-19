@@ -56,8 +56,8 @@ export default function NoteCard({ note, folders, onOpen, onMove, onDragStart, o
                 aria-label='Note verrouillée — déverrouiller'
             >
                 <span className={styles.lockedHint}>
-                    <span className={`icon ${styles.badge} icon-lock`} />
-                    Note verrouillée
+                    <span className={`icon ${styles.lockedIcon} icon-lock`} />
+                    <span className={styles.lockedLabel}>Note verrouillée</span>
                 </span>
             </button>
         );

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ws } from '@/api/ws';
 import { Dialog } from '@/Components/Dialog';
+import { openInfo } from '@/Components/InfoPopup';
 import Button from '@/Components/Button';
 import { useAuth } from '@/auth/AuthProvider';
 import { refreshSecrecyStatus } from '@/stores/secrecy';
@@ -8,6 +9,87 @@ import type { SecrecyStatus, TwoFactorStatus } from 'deveye-types';
 import type { FeatureProps } from '../types';
 import { SecurityDialog } from './SecurityDialog';
 import styles from './Security.module.css';
+
+/** Explainers shown by the "i" buttons, via the shared root-level info popup. */
+function showTwoFactorInfo() {
+    void openInfo({
+        title: 'Authentification à deux facteurs (TOTP)',
+        body: (
+            <>
+                <p>
+                    La 2FA utilise le protocole <strong>TOTP</strong> (RFC 6238). Un secret de 20 octets est généré côté
+                    serveur et partagé une seule fois via QR code.
+                </p>
+                <p>
+                    À chaque connexion, votre application calcule un code à 6 chiffres via{' '}
+                    <code>HMAC-SHA1(secret, floor(time/30))</code>. Le serveur recalcule le même code et les compare —
+                    le secret ne transite jamais après l&apos;enrôlement.
+                </p>
+                <p>
+                    Les <strong>codes de secours</strong> sont des tokens aléatoires à usage unique, stockés en base
+                    sous forme de hash SHA-256. Chaque utilisation marque le code comme consommé de façon définitive.
+                </p>
+            </>
+        )
+    });
+}
+
+function showEncryptionInfo() {
+    void openInfo({
+        title: 'Chiffrement par mot de passe (envelope encryption)',
+        body: (
+            <>
+                <p>
+                    Chaque utilisateur possède une <strong>DEK</strong> (Data Encryption Key) de 256 bits générée
+                    aléatoirement. Les données sont chiffrées avec cette DEK via <strong>AES-256-GCM</strong>{' '}
+                    (authentifié, avec IV aléatoire par bloc).
+                </p>
+                <p>
+                    Sans ce mode activé, la DEK est elle-même chiffrée par une clé serveur (<strong>KEK</strong>)
+                    stockée dans les variables d&apos;environnement — le serveur peut déchiffrer sans action de votre
+                    part.
+                </p>
+                <p>
+                    Avec ce mode activé, la DEK est chiffrée par une clé dérivée de <strong>votre mot de passe</strong>{' '}
+                    via Argon2id (résistant aux GPUs). Le serveur ne stocke jamais votre mot de passe ni la DEK en clair
+                    — même un accès à la base de données ne suffit pas à lire vos données.
+                </p>
+                <p>
+                    Le <strong>code de récupération</strong> chiffre une seconde copie de la DEK via une clé Argon2id
+                    distincte. Si vous oubliez votre mot de passe, ce code déverrouille la DEK et permet de redéfinir un
+                    mot de passe — sans lui, les données chiffrées sont définitivement perdues.
+                </p>
+            </>
+        )
+    });
+}
+
+function showReauthInfo() {
+    void openInfo({
+        title: 'Délai de validation du mot de passe',
+        body: (
+            <>
+                <p>
+                    Quand le <strong>chiffrement par mot de passe</strong> est actif, votre mot de passe déverrouille la
+                    clé en mémoire pour la session. Plutôt que de le redemander à chaque action, il reste valide pendant
+                    une <strong>fenêtre glissante</strong> qui se réinitialise à chaque utilisation.
+                </p>
+                <p>
+                    Ce délai définit la durée de cette fenêtre. La valeur par défaut est de <strong>1 minute</strong>.
+                    Une valeur plus courte est plus sûre mais plus contraignante.
+                </p>
+                <p>
+                    La valeur <code>0</code> offre la <strong>sécurité maximale</strong> : votre mot de passe est
+                    redemandé à chaque action chiffrée, sans jamais être mis en cache.
+                </p>
+                <p>
+                    Un délai de <strong>5 minutes ou moins</strong> est considéré comme strict et compte dans votre
+                    score de sécurité.
+                </p>
+            </>
+        )
+    });
+}
 
 interface SetupData {
     secret: string;
@@ -31,7 +113,6 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     const [showRegenConfirm, setShowRegenConfirm] = useState(false);
     const [secrecy, setSecrecy] = useState<SecrecyStatus | null>(null);
     const [securityOpen, setSecurityOpen] = useState(false);
-    const [infoOpen, setInfoOpen] = useState<'2fa' | 'encryption' | 'reauth' | null>(null);
     // Re-auth window editor, expressed in minutes (0 = always re-prompt). Kept as
     // a string so the field can be cleared mid-edit without snapping to 0.
     const [reAuthInput, setReAuthInput] = useState('');
@@ -233,11 +314,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                     : 'Activez la 2FA pour sécuriser votre compte'}
                             </p>
                         </div>
-                        <button
-                            className={styles.infoBtn}
-                            onClick={() => setInfoOpen('2fa')}
-                            title='Comment ça fonctionne ?'
-                        >
+                        <button className={styles.infoBtn} onClick={showTwoFactorInfo} title='Comment ça fonctionne ?'>
                             <span className='icon icon-info' />
                         </button>
                         {!status?.enabled ? (
@@ -274,11 +351,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                     : 'Verrouillez vos données chiffrées avec votre mot de passe.'}
                             </p>
                         </div>
-                        <button
-                            className={styles.infoBtn}
-                            onClick={() => setInfoOpen('encryption')}
-                            title='Comment ça fonctionne ?'
-                        >
+                        <button className={styles.infoBtn} onClick={showEncryptionInfo} title='Comment ça fonctionne ?'>
                             <span className='icon icon-info' />
                         </button>
                         <Button variant={secrecy?.enabled ? 'danger' : 'primary'} onClick={() => setSecurityOpen(true)}>
@@ -294,11 +367,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                             <h3>{reAuthTitle}</h3>
                             <p>{reAuthDescription}</p>
                         </div>
-                        <button
-                            className={styles.infoBtn}
-                            onClick={() => setInfoOpen('reauth')}
-                            title='Comment ça fonctionne ?'
-                        >
+                        <button className={styles.infoBtn} onClick={showReauthInfo} title='Comment ça fonctionne ?'>
                             <span className='icon icon-info' />
                         </button>
                         <div className={styles.reAuthEditor}>
@@ -484,90 +553,6 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                             </>
                         }
                     />
-
-                    <Dialog
-                        open={infoOpen === '2fa'}
-                        onClose={() => setInfoOpen(null)}
-                        title='Authentification à deux facteurs (TOTP)'
-                        width={500}
-                    >
-                        <div className={styles.infoContent}>
-                            <p>
-                                La 2FA utilise le protocole <strong>TOTP</strong> (RFC 6238). Un secret de 20 octets est
-                                généré côté serveur et partagé une seule fois via QR code.
-                            </p>
-                            <p>
-                                À chaque connexion, votre application calcule un code à 6 chiffres via{' '}
-                                <code>HMAC-SHA1(secret, floor(time/30))</code>. Le serveur recalcule le même code et les
-                                compare — le secret ne transite jamais après l&apos;enrôlement.
-                            </p>
-                            <p>
-                                Les <strong>codes de secours</strong> sont des tokens aléatoires à usage unique, stockés
-                                en base sous forme de hash SHA-256. Chaque utilisation marque le code comme consommé de
-                                façon définitive.
-                            </p>
-                        </div>
-                    </Dialog>
-
-                    <Dialog
-                        open={infoOpen === 'encryption'}
-                        onClose={() => setInfoOpen(null)}
-                        title='Chiffrement par mot de passe (envelope encryption)'
-                        width={500}
-                    >
-                        <div className={styles.infoContent}>
-                            <p>
-                                Chaque utilisateur possède une <strong>DEK</strong> (Data Encryption Key) de 256 bits
-                                générée aléatoirement. Les données sont chiffrées avec cette DEK via{' '}
-                                <strong>AES-256-GCM</strong> (authentifié, avec IV aléatoire par bloc).
-                            </p>
-                            <p>
-                                Sans ce mode activé, la DEK est elle-même chiffrée par une clé serveur (
-                                <strong>KEK</strong>) stockée dans les variables d&apos;environnement — le serveur peut
-                                déchiffrer sans action de votre part.
-                            </p>
-                            <p>
-                                Avec ce mode activé, la DEK est chiffrée par une clé dérivée de{' '}
-                                <strong>votre mot de passe</strong> via Argon2id (résistant aux GPUs). Le serveur ne
-                                stocke jamais votre mot de passe ni la DEK en clair — même un accès à la base de données
-                                ne suffit pas à lire vos données.
-                            </p>
-                            <p>
-                                Le <strong>code de récupération</strong> chiffre une seconde copie de la DEK via une clé
-                                Argon2id distincte. Si vous oubliez votre mot de passe, ce code déverrouille la DEK et
-                                permet de redéfinir un mot de passe — sans lui, les données chiffrées sont
-                                définitivement perdues.
-                            </p>
-                        </div>
-                    </Dialog>
-
-                    <Dialog
-                        open={infoOpen === 'reauth'}
-                        onClose={() => setInfoOpen(null)}
-                        title='Délai de validation du mot de passe'
-                        width={500}
-                    >
-                        <div className={styles.infoContent}>
-                            <p>
-                                Quand le <strong>chiffrement par mot de passe</strong> est actif, votre mot de passe
-                                déverrouille la clé en mémoire pour la session. Plutôt que de le redemander à chaque
-                                action, il reste valide pendant une <strong>fenêtre glissante</strong> qui se
-                                réinitialise à chaque utilisation.
-                            </p>
-                            <p>
-                                Ce délai définit la durée de cette fenêtre. La valeur par défaut est de{' '}
-                                <strong>1 minute</strong>. Une valeur plus courte est plus sûre mais plus contraignante.
-                            </p>
-                            <p>
-                                La valeur <code>0</code> offre la <strong>sécurité maximale</strong> : votre mot de
-                                passe est redemandé à chaque action chiffrée, sans jamais être mis en cache.
-                            </p>
-                            <p>
-                                Un délai de <strong>5 minutes ou moins</strong> est considéré comme strict et compte
-                                dans votre score de sécurité.
-                            </p>
-                        </div>
-                    </Dialog>
 
                     <SecurityDialog
                         open={securityOpen}

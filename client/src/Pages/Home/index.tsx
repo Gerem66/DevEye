@@ -8,6 +8,7 @@ import { WidgetGrid } from '@/Components/WidgetGrid';
 import { WidgetPopup, FeatureKeepAlive } from '@/Components/WidgetPopup';
 import { Wallpaper } from '@/Components/Wallpaper';
 import { SettingsPanel } from '@/Components/SettingsPanel';
+import { InfoPopup } from '@/Components/InfoPopup';
 import PopupUnlock from './popup-unlock';
 
 // Widget content (compact)
@@ -427,6 +428,11 @@ export default function HomePage() {
             {/* Password unlock dialog — registered globally so the Password feature
                 can request it on demand. */}
             <PopupUnlock workspace={currentWorkspace} />
+
+            {/* Shared info dialog, registered once here so any feature's "i" button
+                opens it via openInfo(). Mounted at this level (not inside a feature
+                popup) so its own backdrop closes it, never a popup underneath. */}
+            <InfoPopup />
         </div>
     );
 }

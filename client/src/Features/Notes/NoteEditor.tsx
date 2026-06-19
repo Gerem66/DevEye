@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import styles from './style.module.css';
 
 import Popup, { ClosePopup, OpenPopup } from '@/Components/Popup';
-import { Dialog } from '@/Components/Dialog';
+import { openInfo } from '@/Components/InfoPopup';
 import Button from '@/Components/Button';
 import BlockEditor from './BlockEditor';
 import { NOTE_LOCK_SET_POPUP, type NoteLockSetInput } from './LockSetPopup';
@@ -65,6 +65,27 @@ function normalizeBlocks(blocks: NoteBlock[]): NoteBlock[] {
     return trimmed.length > 0 ? trimmed : [];
 }
 
+/** Open the shared, root-level explainer about locked notes. */
+function showLockInfo() {
+    void openInfo({
+        title: 'Notes verrouillées',
+        body: (
+            <>
+                <p>
+                    Une note <strong>verrouillée</strong> possède son propre mot de passe, distinct de celui de votre
+                    compte. Elle apparaît avec un cadenas et son titre comme son contenu restent masqués tant que ce mot
+                    de passe n’est pas saisi.
+                </p>
+                <p>
+                    Le verrou est un contrôle d’<strong>accès</strong> : il faut le mot de passe pour ouvrir, modifier
+                    ou supprimer la note. Le déplacer d’un dossier à l’autre reste libre. Le chiffrement des données en
+                    base n’est pas affecté.
+                </p>
+            </>
+        )
+    });
+}
+
 /**
  * The single note editor surface, driven imperatively via OpenPopup. Handles
  * both create and edit: a prominent title, the modular block body, and an
@@ -87,13 +108,11 @@ export default function NoteEditor() {
     const [wasLocked, setWasLocked] = useState(false);
     /** Pending lock change applied on save; null = leave the lock unchanged. */
     const [lockChange, setLockChange] = useState<LockChange>(undefined);
-    const [infoOpen, setInfoOpen] = useState(false);
     const [created, setCreated] = useState<number | null>(null);
     const [updated, setUpdated] = useState<number | null>(null);
 
     function handleOpen(input: NoteEditorInput) {
         const note = input?.note ?? null;
-        setInfoOpen(false);
         setLockChange(undefined);
         if (!note) {
             setMode('add');
@@ -196,7 +215,7 @@ export default function NoteEditor() {
                         className={styles.editorInfoBtn}
                         aria-label='À propos des notes verrouillées'
                         title='Comment fonctionnent les notes verrouillées ?'
-                        onClick={() => setInfoOpen(true)}
+                        onClick={showLockInfo}
                     >
                         <span className='icon icon-info' />
                     </button>
@@ -270,21 +289,6 @@ export default function NoteEditor() {
                     </div>
                 </div>
             </div>
-
-            <Dialog open={infoOpen} onClose={() => setInfoOpen(false)} title='Notes verrouillées' width={500}>
-                <div className={styles.infoContent}>
-                    <p>
-                        Une note <strong>verrouillée</strong> possède son propre mot de passe, distinct de celui de
-                        votre compte. Elle apparaît avec un cadenas et son titre comme son contenu restent masqués tant
-                        que ce mot de passe n’est pas saisi.
-                    </p>
-                    <p>
-                        Le verrou est un contrôle d’<strong>accès</strong> : il faut le mot de passe pour ouvrir,
-                        modifier ou supprimer la note. Le déplacer d’un dossier à l’autre reste libre. Le chiffrement
-                        des données en base n’est pas affecté.
-                    </p>
-                </div>
-            </Dialog>
         </Popup>
     );
 }

@@ -1,0 +1,28 @@
+/* Shared info-dialog content styling — matches the explainer modals used across
+   the app (Security, Notes…). */
+.infoContent {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.infoContent p {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.6;
+}
+
+.infoContent strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.infoContent code {
+    background: var(--glass-bg);
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--accent);
+}

@@ -9,7 +9,7 @@ import NoteEditor, {
     type NoteEditorInput,
     type NoteEditorResult
 } from './NoteEditor';
-import LockPopup, { NOTE_LOCK_POPUP, type NoteLockInput } from './LockPopup';
+import LockPopup, { NOTE_LOCK_POPUP, type NoteLockInput, type LockVerifyResult } from './LockPopup';
 import LockSetPopup from './LockSetPopup';
 import LockManagePopup from './LockManagePopup';
 import FolderNamePopup, { FOLDER_NAME_POPUP, type FolderNameInput, type FolderNameResult } from './FolderNamePopup';
@@ -109,27 +109,28 @@ function FeatureNotes({ workspace }: FeatureProps) {
      */
     const openLockedNote = useCallback(
         async (noteId: number): Promise<{ note: Note; password: string } | null> => {
-            let lockError = '';
-            for (;;) {
-                const password = await OpenPopup<string>(NOTE_LOCK_POPUP, {
-                    intent: 'open',
-                    error: lockError
-                } as NoteLockInput);
-                if (password === null) return null;
+            // The popup owns the retry loop: it calls `verify` and stays open with
+            // an inline error on a wrong password (no close/reopen flicker). On the
+            // first valid password we capture the note here and resolve.
+            let opened: Note | null = null;
+            const verify = async (password: string): Promise<LockVerifyResult> => {
                 try {
                     const res = await withSecrecy(() =>
                         ws.send('note.get', { workspaceId: workspace.id, noteId, password })
                     );
-                    return { note: res.note, password };
+                    opened = res.note;
+                    return { ok: true };
                 } catch (e) {
                     if (e instanceof WsError && (e.code === 'auth_invalid' || e.code === 'auth_required')) {
-                        lockError = 'Mot de passe incorrect';
-                        continue;
+                        return { ok: false };
                     }
                     setActionError(humanizeError(e, 'Impossible d’ouvrir la note.'));
-                    return null;
+                    return { ok: false, abort: true };
                 }
-            }
+            };
+            const password = await OpenPopup<string>(NOTE_LOCK_POPUP, { intent: 'open', verify } as NoteLockInput);
+            if (password === null || opened === null) return null;
+            return { note: opened, password };
         },
         [workspace.id]
     );

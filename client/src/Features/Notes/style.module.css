@@ -182,10 +182,12 @@
     background: var(--glass-bg);
 }
 
+/* Locked note: centered column — a large padlock with a small label beneath. */
 .cardLocked {
     cursor: pointer;
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
+    text-align: center;
 }
 
 .cardHead {
@@ -351,15 +353,19 @@
 
 .lockedHint {
     display: flex;
+    flex-direction: column;
     align-items: center;
     gap: var(--space-sm);
     color: var(--text-muted);
-    font-size: 0.9rem;
 }
 
-.lockedHint .badge {
-    width: 18px;
-    height: 18px;
+.lockedIcon {
+    width: 34px;
+    height: 34px;
+}
+
+.lockedLabel {
+    font-size: 0.85rem;
 }
 
 /* Empty state */
@@ -403,8 +409,9 @@
     align-items: center;
     gap: var(--space-sm);
     /* Clear the Dialog's × button (30px at var(--space-md) from the dialog edge,
-       while the body starts at var(--space-lg)): md + 30 − lg ≈ 22px. */
-    padding-right: 24px;
+       while the body starts at var(--space-lg) ≈ 22px in) plus a comfortable gap,
+       so the info button sits cleanly to its left with no overlapping hitbox. */
+    padding-right: 32px;
 }
 
 /* Info button, styled like the info buttons on the Security page. */
@@ -764,25 +771,6 @@
 .lockNotice .toggleIcon {
     width: 13px;
     height: 13px;
-}
-
-/* Info dialog content — mirrors the Security page's info modals. */
-.infoContent {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-md);
-}
-
-.infoContent p {
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-    margin: 0;
-    line-height: 1.6;
-}
-
-.infoContent strong {
-    color: var(--text-primary);
-    font-weight: 600;
 }
 
 /* Lock-management popup: stacked full-width choices. */

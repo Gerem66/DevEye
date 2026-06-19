@@ -8,49 +8,78 @@ import TextInput from '@/Components/TextInput';
 
 export const NOTE_LOCK_POPUP = 'popup-note-lock';
 
+/** Outcome of a password attempt, returned by {@link NoteLockInput.verify}. */
+export type LockVerifyResult =
+    /** Password accepted — the popup resolves with it and closes. */
+    | { ok: true }
+    /** Wrong password — the popup stays open and shows an inline error. */
+    | { ok: false }
+    /** Other failure — the popup closes (resolving null); caller surfaces it. */
+    | { ok: false; abort: true };
+
 /**
  * Per-note unlock prompt. A locked note carries its own dedicated password,
- * verified server-side on every open (no session reveal). Resolves OpenPopup
- * with the typed password on confirm, or `null` on cancel. The caller passes
- * the password to `note.get`/`note.delete`/`note.edit`; if the server rejects
- * it (`auth_invalid`), the caller reopens this popup.
+ * verified server-side on every open (no session reveal). The popup owns the
+ * verify→retry loop: it calls `verify(password)` and, on a wrong password, stays
+ * open with an inline error instead of closing and reopening (which looked like a
+ * flicker/bug). Resolves OpenPopup with the accepted password, or `null` on
+ * cancel / abort.
  */
 export interface NoteLockInput {
-    /** Optional message override (e.g. "Saisissez le mot de passe pour supprimer…"). */
+    /** Wording: opening vs. deleting the note. */
     intent?: 'open' | 'delete';
-    /** Shown when a previous attempt was wrong, to prompt a retry. */
-    error?: string;
+    /** Validate a candidate password (typically a `note.get`/`note.delete` call). */
+    verify: (password: string) => Promise<LockVerifyResult>;
 }
+
+const NOOP_VERIFY = async (): Promise<LockVerifyResult> => ({ ok: false, abort: true });
 
 export default function LockPopup() {
     const inputRef = useRef<HTMLInputElement | null>(null);
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [submitting, setSubmitting] = useState(false);
     const [intent, setIntent] = useState<'open' | 'delete'>('open');
-
-    function reset() {
-        setPassword('');
-        setError('');
-    }
+    const verifyRef = useRef<(password: string) => Promise<LockVerifyResult>>(NOOP_VERIFY);
 
     function handleOpen(input: NoteLockInput) {
         setIntent(input?.intent ?? 'open');
+        verifyRef.current = input?.verify ?? NOOP_VERIFY;
         setPassword('');
-        setError(input?.error ?? '');
+        setError('');
+        setSubmitting(false);
         setTimeout(() => inputRef.current?.focus(), 0);
     }
 
     function close(result: string | null) {
-        reset();
+        setPassword('');
+        setError('');
+        setSubmitting(false);
         ClosePopup(NOTE_LOCK_POPUP, result);
     }
 
-    function submit() {
+    async function submit() {
+        if (submitting) return;
         if (!password) {
             setError('Mot de passe requis');
             return;
         }
-        close(password);
+        setSubmitting(true);
+        setError('');
+        const result = await verifyRef.current(password);
+        if (result.ok) {
+            close(password);
+            return;
+        }
+        if ('abort' in result && result.abort) {
+            close(null);
+            return;
+        }
+        // Wrong password: keep the popup open, show the error, let the user retry.
+        setError('Mot de passe incorrect');
+        setPassword('');
+        setSubmitting(false);
+        setTimeout(() => inputRef.current?.focus(), 0);
     }
 
     return (
@@ -73,18 +102,23 @@ export default function LockPopup() {
                 placeholder='Mot de passe de la note'
                 value={password}
                 error={error}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError('');
+                }}
                 onKeyDown={(e) => {
-                    if (e.key === 'Enter') submit();
+                    if (e.key === 'Enter') void submit();
                 }}
             />
             <div className={styles.editorFooter} style={{ marginTop: 'var(--space-md)' }}>
                 <span />
                 <div className={styles.footerRight}>
-                    <Button variant='secondary' onClick={() => close(null)}>
+                    <Button variant='secondary' onClick={() => close(null)} disabled={submitting}>
                         Annuler
                     </Button>
-                    <Button onClick={submit}>{intent === 'delete' ? 'Supprimer' : 'Ouvrir'}</Button>
+                    <Button onClick={() => void submit()} disabled={submitting}>
+                        {submitting ? '…' : intent === 'delete' ? 'Supprimer' : 'Ouvrir'}
+                    </Button>
                 </div>
             </div>
         </Popup>
