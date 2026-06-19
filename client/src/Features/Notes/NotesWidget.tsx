@@ -26,22 +26,38 @@ export function NotesWidget() {
     useEffect(() => {
         if (!workspace) return;
         let cancelled = false;
-        ws.send('note.list', { workspaceId: workspace.id })
-            .then((res) => {
-                if (!cancelled) setState({ kind: 'ready', notes: res.notes });
-            })
-            .catch((e) => {
-                if (cancelled) return;
-                // Password encryption on + session locked: don't pop an unlock
-                // prompt from a dashboard card — just say so.
-                if (e instanceof WsError && (e.code === 'locked' || e.code === 'auth_required')) {
-                    setState({ kind: 'locked' });
-                } else {
-                    setState({ kind: 'ready', notes: [] });
-                }
-            });
+
+        const load = () => {
+            ws.send('note.list', { workspaceId: workspace.id })
+                .then((res) => {
+                    if (!cancelled) setState({ kind: 'ready', notes: res.notes });
+                })
+                .catch((e) => {
+                    if (cancelled) return;
+                    // Password encryption on + session locked: don't pop an unlock
+                    // prompt from a dashboard card — just say so.
+                    if (e instanceof WsError && (e.code === 'locked' || e.code === 'auth_required')) {
+                        setState({ kind: 'locked' });
+                    } else {
+                        // A transient connection error (WS not open yet at mount, or
+                        // a drop) must NOT collapse into a permanent "0 notes": stay
+                        // in loading and let the reconnect below re-fetch.
+                        setState((prev) => (prev.kind === 'ready' ? prev : { kind: 'loading' }));
+                    }
+                });
+        };
+
+        // Fetch now if the socket is already open; otherwise wait for it. Also
+        // re-fetch whenever the connection (re)opens, so the count is never left
+        // stale from a send that raced the WS handshake at startup.
+        if (ws.state === 'open') load();
+        const off = ws.onStateChange((s) => {
+            if (s === 'open') load();
+        });
+
         return () => {
             cancelled = true;
+            off();
         };
     }, [workspace]);
 
