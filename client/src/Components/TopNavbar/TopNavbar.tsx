@@ -219,7 +219,7 @@ export default function TopNavbar({
                                         setMenuOpen(false);
                                     }}
                                 >
-                                    <span className='icon icon-logs' /> Logs
+                                    <span className='icon icon-activity' /> Logs
                                 </button>
                             )}
                             <hr className={styles.divider} />

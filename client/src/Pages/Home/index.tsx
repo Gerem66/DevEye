@@ -76,7 +76,7 @@ const FEATURES: FeatureConfig[] = [
         icon: 'cloud',
         WidgetContent: WeatherWidget,
         FullComponent: Weather,
-        cacheDurationMinutes: 10,
+        cacheDurationMinutes: 60,
         preload: true
     },
     {
@@ -127,7 +127,7 @@ const PAGES: ViewConfig[] = [
         // and the server gates every logs.* command on the admin role too.
         id: 'logs',
         title: 'Logs',
-        icon: 'logs',
+        icon: 'activity',
         FullComponent: FeatureLogs,
         cacheDurationMinutes: 5
     }

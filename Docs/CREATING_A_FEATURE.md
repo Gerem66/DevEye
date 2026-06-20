@@ -1,0 +1,172 @@
+# Créer une nouvelle fonctionnalité — checklist complète
+
+Ce document liste **tout** ce qu'implique l'ajout d'une fonctionnalité dans DevEye,
+dans l'ordre, à travers les trois bases de code. Suis-le de haut en bas pour ne
+rien oublier.
+
+> **Deux types de « feature » à ne pas confondre :**
+>
+> - **Feature-commande** (la plupart) : une ou plusieurs commandes WebSocket
+>   (`note.add`, `password.list`, `logs.list`…) dispatchées par le serveur, avec
+>   éventuellement une UI (widget de la grille d'accueil ou page de la topbar).
+> - **Page structurelle** : un écran qui fait partie de DevEye lui-même (Profil,
+>   Sécurité, Logs), atteint depuis le menu de la topbar, **sans** carte sur la
+>   grille. Peut quand même s'appuyer sur des commandes WS.
+>
+> Une feature peut n'avoir **que** du back (commande sans UI) ou **que** du front
+> (page qui réutilise des commandes existantes). Ne fais que les étapes utiles.
+
+---
+
+## A. Contrats partagés — `DevEye-Types/` (à faire en premier)
+
+Tout passe par des schémas zod partagés. Le serveur **et** le client importent
+`deveye-types`. ⚠️ **Lis [DEVELOPMENT.md](#g-workflow-deveye-types--node_modules)
+(section G) : un changement de types doit être mirroré dans `node_modules`.**
+
+1. **Domaine** — `src/domain/<feature>.ts` : schémas zod + types des entités
+   (`xSchema`, `type X`, et l'interface `XRow` de la ligne SQL si table dédiée).
+2. **Commandes** — `src/features/<feature>.ts` : un objet par commande
+   `{ command: 'x.action' as const, input: zod, output: zod }`, puis
+   `export const <feature>Commands = [...] as const;`.
+3. **Registre** — `src/features/registry.ts` : importer et **spread** dans
+   `featureCommands` (`...<feature>Commands`).
+4. **Barrel** — `src/index.ts` : exporter le domaine et les commandes.
+5. **Version** — bump `package.json` (`x.y.z` → `x.y.(z+1)`).
+6. **CI** — `cd DevEye-Types && npm run ci`.
+
+---
+
+## B. Base de données — `DevEye/src/db/` (si la feature stocke des données)
+
+1. **Migration** — `src/db/migrations/0NN_<nom>.sql` (numéro suivant, jamais
+   réutilisé). DDL pure. **Politique projet : migration de schéma franche, pas de
+   shim de rétro-compat** — on peut renommer/supprimer des colonnes. Les
+   migrations tournent automatiquement au démarrage (`db/migrate.ts`), une seule
+   fois (table `_migrations`). MySQL : un fichier = exécuté en une requête
+   (multi-statements activés).
+2. **Repo** — `src/db/repos/<feature>.ts` : `export interface XRepo { … }` +
+   `export function xRepo(pool: Queryable): XRepo`. Requêtes paramétrées
+   uniquement (`?`). Le `content` sensible est **chiffré** (voir section E).
+3. **Branchement** — `src/db/index.ts` : ajouter au type `Database` **et** à
+   `createDatabase()`.
+
+---
+
+## C. Handlers serveur — `DevEye/src/features/`
+
+1. **Handlers** — `src/features/<feature>/index.ts` : un `defineFeature({ ...cmd,
+   handler })` par commande. Le handler reçoit un `FeatureContext` (`ctx.db`,
+   `ctx.userId`, `ctx.secure`, `ctx.audit`, `ctx.ip`, `ctx.logger`…) et renvoie
+   l'`output`. Lever `FeatureError(code, message)` pour une erreur typée.
+   - **Autorisation** : vérifie l'appartenance au workspace
+     (`assertWorkspaceMember`) et/ou le rôle (`user.role === 'admin'`) selon le cas.
+   - **Déverrouillage** : si données chiffrées par mot de passe, garder le
+     `assertSecureUnlocked` (lève `locked` → le client demande le mot de passe).
+   - Exporter `export const <feature>Features: FeatureDefinition<string, any, any>[] = [...]`.
+2. **Registre** — `src/features/registry.ts` : importer et **spread** dans
+   `featureHandlers` (`...<feature>Features`).
+3. **Audit** (recommandé) — sur les actions notables, appeler
+   `ctx.audit({ action: 'x.create', description: '…', level?, metadata? })`.
+   Fire-and-forget ; l'acteur, l'IP, la source `web` et la catégorie (préfixe de
+   commande) sont pré-remplis par le dispatcher. Voir
+   [logs-feature](./CREATING_A_FEATURE.md) / `Services/AuditLog.ts`.
+
+> Le dispatcher WS (`src/ws/handler.ts`) valide input **et** output contre les
+> schémas zod automatiquement — pas de validation manuelle à écrire.
+
+---
+
+## D. UI client — `DevEye/client/src/`
+
+1. **Composant** — `src/Features/<Name>/index.tsx` (+ `style.module.css`).
+   Props `FeatureProps` (`user`, `workspace`, …). Appels via
+   `ws.send('x.action', input)` (typé, validé). Réutiliser les primitives :
+   `Button`, `TextInput`, `SelectInput`, `OpenPopup`, et les **CSS vars du thème**
+   (`var(--accent)`, `var(--space-md)`, `var(--text-primary)`… — jamais de
+   couleurs en dur). UI en **français**.
+   - Pattern déverrouillage : envelopper les appels chiffrés dans un helper qui
+     intercepte l'erreur `locked` et relance après `ensureSecrecyUnlocked()`
+     (voir `Features/Notes/index.tsx → withSecrecy`).
+2. **Enregistrement** — `src/Pages/Home/index.tsx` :
+   - widget de grille → ajouter à `FEATURES` (`{ id, title, icon, WidgetContent,
+     FullComponent, cacheDurationMinutes, preload? }`) ;
+   - page structurelle → ajouter à `PAGES` et passer un `onOpenX` au `TopNavbar`
+     (gater par rôle si besoin : `user.role === 'admin' ? () => handleExpand('x') : undefined`).
+3. **Navbar** (page structurelle) — `src/Components/TopNavbar/TopNavbar.tsx` :
+   ajouter la prop `onOpenX?` et l'entrée de menu (rendue seulement si la prop est
+   fournie → gating naturel).
+4. **Icône** — réutiliser une classe de `src/Styles/icons.css` (`icon-…`).
+
+---
+
+## E. Sécurité / chiffrement (modèle zero-knowledge)
+
+Voir [SECURITY_MODEL.md](./SECURITY_MODEL.md). Règles clés :
+
+- Les données de feature au repos passent **toujours** par `ctx.secure`
+  (`encrypt`/`tryDecrypt`), **jamais** par `ctx.crypt` directement (réservé aux
+  secrets liés à l'auth, ex. 2FA).
+- Stocker en clair seulement les métadonnées non sensibles nécessaires au
+  serveur pour lister/trier/gater sans déchiffrer (`pinned`, `folder_id`, `level`,
+  `workspace_id`…).
+- Le serveur ne doit jamais voir le contenu en clair.
+
+---
+
+## F. Validation finale
+
+```bash
+./ci.sh                       # lint + typecheck des 3 repos (racine)
+# ou ciblé :
+cd DevEye-Types && npm run ci
+cd DevEye        && npm run ci          # lint + typecheck serveur
+cd DevEye/client && npm run ci          # lint + typecheck + build
+```
+
+Test manuel : `cd DevEye && npm run dev` (serveur + Vite). Se connecter,
+ouvrir la feature.
+
+---
+
+## G. Workflow `deveye-types` ↔ `node_modules`
+
+`deveye-types` est consommé comme **paquet npm installé** (`@gerem66/deveye-types`,
+GitHub Packages), **pas** un symlink. Le serveur (tsx) et le client (vite) lisent
+le `src` du paquet installé, hoisté dans `DevEye/node_modules/deveye-types/`.
+
+Après avoir édité `DevEye-Types/src/` en dev local, pour que serveur/client le
+voient **sans publier**, mirrorer les fichiers modifiés dans
+`DevEye/node_modules/deveye-types/src/` et bumper la version de ce `package.json`
+aussi. Vérifier :
+
+```bash
+diff -rq DevEye-Types/src DevEye/node_modules/deveye-types/src   # doit être vide
+```
+
+⚠️ **Vite met en cache le pré-bundling** : après un changement de types, si le
+client plante sur un export manquant, vider le cache :
+`rm -rf DevEye/client/node_modules/.vite` puis relancer le dev server.
+
+Release réelle : publier `@gerem66/deveye-types@x.y.z` sur GitHub Packages, puis
+réinstaller côté serveur/client.
+
+---
+
+## Récapitulatif des points d'enregistrement (à ne pas oublier)
+
+| # | Fichier | Action |
+|---|---------|--------|
+| 1 | `DevEye-Types/src/domain/<f>.ts` | schémas + types entité |
+| 2 | `DevEye-Types/src/features/<f>.ts` | commandes + `<f>Commands` |
+| 3 | `DevEye-Types/src/features/registry.ts` | spread `...<f>Commands` |
+| 4 | `DevEye-Types/src/index.ts` | exports |
+| 5 | `DevEye-Types/package.json` | bump version + mirror node_modules |
+| 6 | `DevEye/src/db/migrations/0NN_*.sql` | migration (si table) |
+| 7 | `DevEye/src/db/repos/<f>.ts` | repo (si table) |
+| 8 | `DevEye/src/db/index.ts` | `Database` + `createDatabase` |
+| 9 | `DevEye/src/features/<f>/index.ts` | handlers + `<f>Features` |
+| 10 | `DevEye/src/features/registry.ts` | spread `...<f>Features` |
+| 11 | `DevEye/client/src/Features/<F>/` | composant + styles |
+| 12 | `DevEye/client/src/Pages/Home/index.tsx` | `FEATURES` ou `PAGES` |
+| 13 | `DevEye/client/src/Components/TopNavbar/TopNavbar.tsx` | entrée menu (page structurelle) |
