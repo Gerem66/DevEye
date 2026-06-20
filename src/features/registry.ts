@@ -1,5 +1,6 @@
 import type { FeatureDefinition } from './_define';
 import { deviceFeatures } from './devices';
+import { logsFeatures } from './logs';
 import { metricsFeatures } from './metrics';
 import { noteFeatures } from './note';
 import {
@@ -35,7 +36,8 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...metricsFeatures,
     ...twoFactorFeatures,
     ...secrecyFeatures,
-    ...weatherFeatures
+    ...weatherFeatures,
+    ...logsFeatures
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

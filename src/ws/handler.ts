@@ -14,11 +14,14 @@ import { logger } from '@/logger';
 
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
+import type { AuditLog } from '@/Services/AuditLog';
+import type { FeatureAuditEntry } from '@/features/_define';
 
 interface WSDeps {
     db: Database;
     crypt: Encryption;
     hub: MonitorHub;
+    audit: AuditLog;
 }
 
 interface Session {
@@ -30,9 +33,10 @@ function send(socket: WebSocket, msg: ServerMessage): void {
     socket.send(JSON.stringify(msg));
 }
 
-export async function registerWS(app: FastifyInstance, { db, crypt, hub }: WSDeps): Promise<void> {
+export async function registerWS(app: FastifyInstance, { db, crypt, hub, audit }: WSDeps): Promise<void> {
     app.get('/ws', { websocket: true }, async (socket, req) => {
         const accessToken = req.cookies[ACCESS_COOKIE];
+        const ip = req.ip;
         let session: Session | null = null;
 
         if (accessToken) {
@@ -106,6 +110,23 @@ export async function registerWS(app: FastifyInstance, { db, crypt, hub }: WSDep
                 return;
             }
 
+            // Per-request audit binding: actor, IP and channel are fixed here;
+            // category defaults to the command's prefix (e.g. `note` for
+            // `note.add`) so handlers usually only describe the event.
+            const defaultCategory = command.includes('.') ? command.slice(0, command.indexOf('.')) : command;
+            const recordAudit = (entry: FeatureAuditEntry): void => {
+                audit.record({
+                    level: entry.level,
+                    source: 'web',
+                    category: entry.category ?? defaultCategory,
+                    action: entry.action,
+                    uid: session!.userId,
+                    ip,
+                    description: entry.description,
+                    metadata: entry.metadata ?? null
+                });
+            };
+
             try {
                 const result = await def.handler(
                     {
@@ -115,8 +136,10 @@ export async function registerWS(app: FastifyInstance, { db, crypt, hub }: WSDep
                         secretKeys,
                         userId: session!.userId,
                         sessionId: session!.sessionId,
+                        ip,
                         logger: reqLogger.child({ command, requestId: replyId }),
                         requestId: replyId,
+                        audit: recordAudit,
                         monitor
                     },
                     inputParse.data

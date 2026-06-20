@@ -113,6 +113,11 @@ export const passwordAddFeature: FeatureDefinition<
             workspaceId: toDbWorkspaceId(input.workspaceId),
             content
         });
+        ctx.audit({
+            action: 'password.create',
+            description: 'Mot de passe enregistré',
+            metadata: { passwordId: row.id, workspaceId: input.workspaceId }
+        });
         return { entry: toEntry(row.id, input.entry) };
     }
 });
@@ -150,6 +155,12 @@ export const passwordDeleteFeature: FeatureDefinition<
             throw new FeatureError('not_found', 'Password not found');
         }
         await ctx.db.passwords.delete(input.passwordId, ctx.userId);
+        ctx.audit({
+            action: 'password.delete',
+            level: 'warning',
+            description: 'Mot de passe supprimé',
+            metadata: { passwordId: input.passwordId, workspaceId: input.workspaceId }
+        });
         return { passwordId: input.passwordId };
     }
 });

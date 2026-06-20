@@ -15,10 +15,12 @@ import { logger } from '@/logger';
 import type { MonitorHub } from './hub';
 
 import type { Database } from '@/db';
+import type { AuditLog } from '@/Services/AuditLog';
 
 interface AgentWSDeps {
     db: Database;
     hub: MonitorHub;
+    audit: AuditLog;
 }
 
 function send(socket: WebSocket, msg: AgentServerMessage): void {
@@ -37,7 +39,7 @@ function extractToken(req: { headers: Record<string, unknown>; query: unknown })
  * Agent <-> server WebSocket. Authenticated with a device token; streams metric
  * batches which are persisted and fanned out to subscribed user sockets.
  */
-export async function registerAgentWS(app: FastifyInstance, { db, hub }: AgentWSDeps): Promise<void> {
+export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: AgentWSDeps): Promise<void> {
     app.get('/agent', { websocket: true }, async (socket, req) => {
         const token = extractToken(req);
         if (!token) {
@@ -61,6 +63,16 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub }: AgentWS
         reqLogger.info('Agent connected');
         hub.agentOnline(deviceId, socket);
         await db.devices.touchSeen(deviceId, Math.floor(Date.now() / 1000));
+        audit.record({
+            source: 'agent',
+            category: 'device',
+            action: 'agent.connect',
+            level: 'info',
+            uid: claims.oid,
+            ip: req.ip,
+            description: `Agent connecté : appareil « ${device.name} »`,
+            metadata: { deviceId, status: device.status }
+        });
 
         socket.on('message', async (raw: Buffer) => {
             let parsed;

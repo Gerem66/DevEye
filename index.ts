@@ -3,6 +3,7 @@ import { buildApp } from '@/app';
 import { logger } from '@/logger';
 
 import Encryption from '@/Services/Encryption';
+import { createAuditLog } from '@/Services/AuditLog';
 import { createDatabase } from '@/db';
 import { runMigrations } from '@/db/migrate';
 import { createDbPool, getQueryable, testConnection } from '@/db/pool';
@@ -43,6 +44,17 @@ async function main() {
 
     await app.listen({ port: env.LISTEN_PORT, host: '0.0.0.0' });
     logger.info({ port: env.LISTEN_PORT }, 'DevEye server ready');
+
+    createAuditLog(db).record({
+        source: 'system',
+        category: 'system',
+        action: 'server.start',
+        level: 'info',
+        uid: 0,
+        ip: '',
+        description: 'Serveur DevEye démarré',
+        metadata: { port: env.LISTEN_PORT }
+    });
 }
 
 main().catch((e) => {

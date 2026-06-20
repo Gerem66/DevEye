@@ -41,11 +41,13 @@ import {
 } from './jwt';
 import { loadUserBundle } from './loadUserBundle';
 
+import type { AuditLog } from '@/Services/AuditLog';
 import type { Database } from '@/db';
 
 interface AuthDeps {
     db: Database;
     crypt: Encryption;
+    audit: AuditLog;
 }
 
 /**
@@ -115,7 +117,7 @@ async function unwrapDekForLogin(
     }
 }
 
-export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps): Promise<void> {
+export async function authRoutes(app: FastifyInstance, { db, crypt, audit }: AuthDeps): Promise<void> {
     app.post('/api/auth/register', async (req, reply) => {
         const parsed = registerRequestSchema.safeParse(req.body);
         if (!parsed.success) {
@@ -139,6 +141,16 @@ export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps):
         if (!bundle) {
             return reply.code(500).send(err('internal', 'Unable to load user'));
         }
+        audit.record({
+            source: 'web',
+            category: 'auth',
+            action: 'register',
+            level: 'info',
+            uid: row.id,
+            ip: req.ip,
+            description: `Nouveau compte créé : ${username}`,
+            metadata: { email }
+        });
         return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: false, ...bundle })));
     });
 
@@ -151,11 +163,31 @@ export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps):
 
         const row = await db.users.findByUsername(username);
         if (!row) {
+            audit.record({
+                source: 'web',
+                category: 'auth',
+                action: 'login.failed',
+                level: 'warning',
+                uid: 0,
+                ip: req.ip,
+                description: `Échec de connexion : identifiant inconnu « ${username} »`,
+                metadata: { username, reason: 'unknown_user' }
+            });
             return reply.code(401).send(err('auth_invalid', 'Invalid credentials'));
         }
 
         const valid = row.password_hash ? await verifyPassword(row.password_hash, password) : false;
         if (!valid) {
+            audit.record({
+                source: 'web',
+                category: 'auth',
+                action: 'login.failed',
+                level: 'warning',
+                uid: row.id,
+                ip: req.ip,
+                description: `Échec de connexion : mot de passe incorrect pour « ${username} »`,
+                metadata: { username, reason: 'bad_password' }
+            });
             return reply.code(401).send(err('auth_invalid', 'Invalid credentials'));
         }
 
@@ -181,6 +213,15 @@ export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps):
             const pdkToken = pending ? stashPendingDek(row.id, pending.dek, pending.graceMs) : undefined;
             const challenge = await signTwoFactorChallenge(row.id, pdkToken);
             setTwoFactorChallengeCookie(reply, challenge);
+            audit.record({
+                source: 'web',
+                category: 'auth',
+                action: 'login.2fa_required',
+                level: 'info',
+                uid: row.id,
+                ip: req.ip,
+                description: `Mot de passe validé pour « ${username} » ; en attente du code 2FA`
+            });
             return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: true })));
         }
 
@@ -192,6 +233,15 @@ export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps):
 
         const sessionId = await issueSession(reply, db, row.id);
         if (pending) rememberSessionDek(sessionId, pending.dek, pending.graceMs);
+        audit.record({
+            source: 'web',
+            category: 'auth',
+            action: 'login.success',
+            level: 'info',
+            uid: row.id,
+            ip: req.ip,
+            description: `Connexion réussie : ${username}`
+        });
         return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: false, ...bundle })));
     });
 
@@ -237,6 +287,15 @@ export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps):
         }
 
         if (!accepted) {
+            audit.record({
+                source: 'web',
+                category: 'auth',
+                action: 'login.2fa_failed',
+                level: 'warning',
+                uid: userId,
+                ip: req.ip,
+                description: 'Échec de connexion : code 2FA invalide'
+            });
             return reply.code(401).send(err('auth_invalid', 'Invalid 2FA code'));
         }
 
@@ -247,6 +306,16 @@ export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps):
             return reply.code(500).send(err('internal', 'Unable to load user'));
         }
         const sessionId = await issueSession(reply, db, userId);
+        audit.record({
+            source: 'web',
+            category: 'auth',
+            action: 'login.success',
+            level: 'info',
+            uid: userId,
+            ip: req.ip,
+            description: 'Connexion réussie (2FA validée)',
+            metadata: { twoFactor: true }
+        });
         // Bind the DEK unwrapped at the password step (if any) to this session.
         if (challenge.pendingDekToken) {
             const pending = claimPendingDek(challenge.pendingDekToken);
@@ -292,6 +361,16 @@ export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps):
             if (!benign) {
                 await db.refreshTokens.revokeSession(claims.sid);
                 clearAuthCookies(reply);
+                audit.record({
+                    source: 'web',
+                    category: 'auth',
+                    action: 'token.reuse_detected',
+                    level: 'critical',
+                    uid: Number(claims.sub),
+                    ip: req.ip,
+                    description: 'Réutilisation de jeton de rafraîchissement détectée ; session révoquée',
+                    metadata: { sessionId: claims.sid }
+                });
                 return reply.code(401).send(err('auth_expired', 'Refresh token reuse detected'));
             }
         }
@@ -311,7 +390,18 @@ export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps):
         const token = req.cookies[REFRESH_COOKIE];
         if (token) {
             const claims = await verifyRefreshToken(token);
-            if (claims) await db.refreshTokens.revokeSession(claims.sid);
+            if (claims) {
+                await db.refreshTokens.revokeSession(claims.sid);
+                audit.record({
+                    source: 'web',
+                    category: 'auth',
+                    action: 'logout',
+                    level: 'info',
+                    uid: Number(claims.sub),
+                    ip: req.ip,
+                    description: 'Déconnexion'
+                });
+            }
         }
         clearAuthCookies(reply);
         return reply.send(ok({ loggedOut: true }));
@@ -373,6 +463,16 @@ export async function authRoutes(app: FastifyInstance, { db, crypt }: AuthDeps):
         }
 
         await db.users.updatePasswordHash(row.id, await hashPassword(newPassword));
+
+        audit.record({
+            source: 'web',
+            category: 'auth',
+            action: 'password.change',
+            level: 'warning',
+            uid: row.id,
+            ip: req.ip,
+            description: `Mot de passe modifié pour « ${row.username} »`
+        });
 
         return reply.send(ok({ changed: true as const }));
     });

@@ -16,6 +16,7 @@ import { authRoutes } from '@/auth/routes';
 import { logger } from '@/logger';
 import { env, isDev } from '@/Utils/Env';
 import { registerWS } from '@/ws/handler';
+import { createAuditLog } from '@/Services/AuditLog';
 
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
@@ -64,11 +65,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     app.get('/api/health', { logLevel: 'silent' }, async () => ({ ok: true }));
 
     const hub = new MonitorHub();
+    const audit = createAuditLog(deps.db);
 
-    await authRoutes(app, { db: deps.db, crypt: deps.crypt });
+    await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await agentRoutes(app, { db: deps.db, hub });
-    await registerWS(app, { db: deps.db, crypt: deps.crypt, hub });
-    await registerAgentWS(app, { db: deps.db, hub });
+    await registerWS(app, { db: deps.db, crypt: deps.crypt, hub, audit });
+    await registerAgentWS(app, { db: deps.db, hub, audit });
 
     // Serve the built web client from the same origin as the API whenever a
     // build is present (production, or the dockerised dev stack). On the host

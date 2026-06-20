@@ -23,6 +23,7 @@ import Security from '@/Features/Security';
 import FeatureProfile from '@/Features/Profile';
 import FeaturePassword from '@/Features/Password';
 import FeatureNotes from '@/Features/Notes';
+import FeatureLogs from '@/Features/Logs';
 import { NotesWidget } from '@/Features/Notes/NotesWidget';
 
 import type { FeatureProps } from '@/Features/types';
@@ -120,6 +121,15 @@ const PAGES: ViewConfig[] = [
         icon: 'shield',
         FullComponent: Security,
         cacheDurationMinutes: 0
+    },
+    {
+        // Admin-only system audit trail; the navbar only exposes it to admins,
+        // and the server gates every logs.* command on the admin role too.
+        id: 'logs',
+        title: 'Logs',
+        icon: 'logs',
+        FullComponent: FeatureLogs,
+        cacheDurationMinutes: 5
     }
 ];
 
@@ -343,6 +353,7 @@ export default function HomePage() {
                 onBack={expandedWidget ? handleClose : undefined}
                 onOpenProfile={() => handleExpand('profile')}
                 onOpenSecurity={() => handleExpand('security')}
+                onOpenLogs={user.role === 'admin' ? () => handleExpand('logs') : undefined}
                 onOpenSettings={() => setSettingsOpen(true)}
             />
 

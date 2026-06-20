@@ -189,6 +189,11 @@ export const noteAddFeature: FeatureDefinition<typeof noteAdd.command, typeof no
                 pinned: input.note.pinned,
                 lockHash
             });
+            ctx.audit({
+                action: 'note.create',
+                description: 'Note créée',
+                metadata: { noteId: row.id, workspaceId: input.workspaceId, locked: lockHash !== null }
+            });
             return { note: toNote(row, toPayload(input.note)) };
         }
     });
@@ -260,6 +265,12 @@ export const noteDeleteFeature: FeatureDefinition<
         // can't destroy a note it couldn't open. Moving (above) stays free.
         await assertNoteUnlocked(existing, input.password);
         await ctx.db.notes.delete(input.noteId, ctx.userId);
+        ctx.audit({
+            action: 'note.delete',
+            level: 'warning',
+            description: 'Note supprimée',
+            metadata: { noteId: input.noteId, workspaceId: input.workspaceId }
+        });
         return { noteId: input.noteId };
     }
 });

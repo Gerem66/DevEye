@@ -26,6 +26,8 @@ export interface TopNavbarProps {
     onOpenProfile?: () => void;
     /** Open the security feature (2FA, password encryption, re-auth window). */
     onOpenSecurity?: () => void;
+    /** Open the logs feature. Only provided for admins (omit to hide the entry). */
+    onOpenLogs?: () => void;
     /** Open the settings panel. */
     onOpenSettings?: () => void;
 }
@@ -67,6 +69,7 @@ export default function TopNavbar({
     onBack,
     onOpenProfile,
     onOpenSecurity,
+    onOpenLogs,
     onOpenSettings
 }: TopNavbarProps) {
     const { user, logout } = useAuth();
@@ -208,6 +211,17 @@ export default function TopNavbar({
                             >
                                 <span className='icon icon-appearance' /> Apparence
                             </button>
+                            {onOpenLogs && (
+                                <button
+                                    className={styles.menuItem}
+                                    onClick={() => {
+                                        onOpenLogs();
+                                        setMenuOpen(false);
+                                    }}
+                                >
+                                    <span className='icon icon-logs' /> Logs
+                                </button>
+                            )}
                             <hr className={styles.divider} />
                             <button
                                 className={`${styles.menuItem} ${styles.danger}`}
