@@ -138,6 +138,11 @@ export const passwordEditFeature: FeatureDefinition<
         const content = await encryptPayload(ctx.secure, input.entry);
         const updated = await ctx.db.passwords.update(input.entry.id, ctx.userId, content);
         if (!updated) throw new FeatureError('not_found', 'Password not found');
+        ctx.audit({
+            action: 'password.edit',
+            description: 'Mot de passe modifié',
+            metadata: { passwordId: input.entry.id, workspaceId: input.workspaceId }
+        });
         return { entry: toEntry(updated.id, input.entry) };
     }
 });
@@ -186,8 +191,21 @@ export const passwordUnlockFeature: FeatureDefinition<
             return { unlocked: true as const };
         }
         const ok = await verifyPassword(workspace.password_hash, input.password);
-        if (!ok) throw new FeatureError('auth_invalid', 'Invalid workspace password');
+        if (!ok) {
+            ctx.audit({
+                action: 'password.unlock_failed',
+                level: 'warning',
+                description: 'Échec de déverrouillage : mot de passe d’espace incorrect',
+                metadata: { workspaceId: input.workspaceId }
+            });
+            throw new FeatureError('auth_invalid', 'Invalid workspace password');
+        }
         markUnlocked(ctx.sessionId, input.workspaceId);
+        ctx.audit({
+            action: 'password.unlock',
+            description: 'Espace de mots de passe déverrouillé',
+            metadata: { workspaceId: input.workspaceId }
+        });
         return { unlocked: true as const };
     }
 });

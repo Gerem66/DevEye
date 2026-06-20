@@ -9,6 +9,12 @@ export default [
     { files: ['**/*.{js,mjs,cjs,ts}'] },
     {
         languageOptions: {
+            // Pin the TS root to this config's directory so typescript-eslint
+            // doesn't bail when the editor lints from the workspace root, where
+            // both this repo and client/ are candidate roots.
+            parserOptions: {
+                tsconfigRootDir: import.meta.dirname
+            },
             globals: {
                 ...globals.node
             }

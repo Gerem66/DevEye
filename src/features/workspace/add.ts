@@ -15,6 +15,12 @@ export const workspaceAddFeature: FeatureDefinition<
             roles: ['owner']
         });
 
+        ctx.audit({
+            action: 'workspace.create',
+            description: `Espace de travail créé : « ${workspace.name} »`,
+            metadata: { workspaceId: workspace.id }
+        });
+
         return {
             workspace: {
                 id: workspace.id,

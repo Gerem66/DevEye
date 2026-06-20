@@ -77,6 +77,7 @@ export const secrecyUnlockFeature: FeatureDefinition<
             throw e;
         }
         rememberSessionDek(ctx.sessionId, dek, await graceMs(ctx));
+        ctx.audit({ action: 'secrecy.unlock', description: 'Coffre chiffré déverrouillé pour la session' });
         return { status: await buildStatus(ctx) };
     }
 });
@@ -108,6 +109,12 @@ export const secrecyEnableFeature: FeatureDefinition<
         // (unless their window is 0, in which case rememberSessionDek wipes it).
         rememberSessionDek(ctx.sessionId, dek, await graceMs(ctx));
         ctx.secure.invalidate();
+        ctx.audit({
+            action: 'secrecy.enable',
+            level: 'warning',
+            description: 'Chiffrement par mot de passe activé',
+            metadata: { recovery: Boolean(input.recovery) }
+        });
         return { status: await buildStatus(ctx), recoveryCode };
     }
 });
@@ -135,6 +142,11 @@ export const secrecyDisableFeature: FeatureDefinition<
         await ctx.secretKeys.wrapWithServer(ctx.userId, dek);
         rememberSessionDek(ctx.sessionId, dek, await graceMs(ctx));
         ctx.secure.invalidate();
+        ctx.audit({
+            action: 'secrecy.disable',
+            level: 'warning',
+            description: 'Chiffrement par mot de passe désactivé'
+        });
         return { status: await buildStatus(ctx) };
     }
 });
@@ -150,6 +162,11 @@ export const secrecySetReauthFeature: FeatureDefinition<
         // the new value takes effect on the next unlock/access, which keeps the
         // change non-disruptive while the user is mid-session.
         await ctx.db.users.setReAuthInterval(ctx.userId, input.seconds);
+        ctx.audit({
+            action: 'secrecy.setReauth',
+            description: 'Fenêtre de re-validation du mot de passe modifiée',
+            metadata: { seconds: input.seconds }
+        });
         return { status: await buildStatus(ctx) };
     }
 });
@@ -178,6 +195,11 @@ export const secrecyRecoverFeature: FeatureDefinition<
         await ctx.db.users.updatePasswordHash(ctx.userId, await hashPassword(input.newPassword));
         rememberSessionDek(ctx.sessionId, dek, await graceMs(ctx));
         ctx.secure.invalidate();
+        ctx.audit({
+            action: 'secrecy.recover',
+            level: 'warning',
+            description: 'Récupération par code : mot de passe réinitialisé'
+        });
         return { status: await buildStatus(ctx) };
     }
 });

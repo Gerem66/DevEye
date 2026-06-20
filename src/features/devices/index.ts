@@ -63,6 +63,12 @@ export const deviceConfirmFeature: FeatureDefinition<
         if (row.status === 'revoked') throw new FeatureError('conflict', 'Device is revoked');
         await ctx.db.devices.setStatus(row.id, 'active');
         const updated = await ctx.db.devices.findById(row.id);
+        ctx.audit({
+            action: 'device.confirm',
+            level: 'warning',
+            description: `Appareil approuvé : « ${row.name} »`,
+            metadata: { deviceId: row.id, ownerId: row.owner_id }
+        });
         return { device: toDevice(ctx, updated ?? { ...row, status: 'active' }) };
     }
 });
@@ -77,6 +83,12 @@ export const deviceRevokeFeature: FeatureDefinition<
         const row = await authorizeDevice(ctx, input.deviceId);
         await ctx.db.devices.setStatus(row.id, 'revoked');
         const updated = await ctx.db.devices.findById(row.id);
+        ctx.audit({
+            action: 'device.revoke',
+            level: 'warning',
+            description: `Appareil révoqué : « ${row.name} »`,
+            metadata: { deviceId: row.id, ownerId: row.owner_id }
+        });
         return { device: toDevice(ctx, updated ?? { ...row, status: 'revoked' }) };
     }
 });
@@ -91,6 +103,11 @@ export const deviceRenameFeature: FeatureDefinition<
         const row = await authorizeDevice(ctx, input.deviceId);
         await ctx.db.devices.rename(row.id, input.name);
         const updated = await ctx.db.devices.findById(row.id);
+        ctx.audit({
+            action: 'device.rename',
+            description: `Appareil renommé : « ${row.name} » → « ${input.name} »`,
+            metadata: { deviceId: row.id, ownerId: row.owner_id }
+        });
         return { device: toDevice(ctx, updated ?? { ...row, name: input.name }) };
     }
 });
@@ -104,6 +121,12 @@ export const deviceDeleteFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         const row = await authorizeDevice(ctx, input.deviceId);
         await ctx.db.devices.delete(row.id);
+        ctx.audit({
+            action: 'device.delete',
+            level: 'warning',
+            description: `Appareil supprimé : « ${row.name} »`,
+            metadata: { deviceId: row.id, ownerId: row.owner_id }
+        });
         return { deviceId: row.id };
     }
 });

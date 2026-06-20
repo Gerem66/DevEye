@@ -15,6 +15,10 @@ export default [
                 ...globals.node
             },
             parserOptions: {
+                // Pin the TS root to this config's directory so typescript-eslint
+                // doesn't bail when the editor lints from the workspace root,
+                // where both this client and the parent server are candidate roots.
+                tsconfigRootDir: import.meta.dirname,
                 ecmaFeatures: {
                     jsx: true
                 }

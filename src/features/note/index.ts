@@ -224,6 +224,11 @@ export const noteEditFeature: FeatureDefinition<
             lockHash
         });
         if (!updated) throw new FeatureError('not_found', 'Note not found');
+        ctx.audit({
+            action: 'note.edit',
+            description: 'Note modifiée',
+            metadata: { noteId: input.noteId, workspaceId: input.workspaceId }
+        });
         return { note: toNote(updated, toPayload(input.note)) };
     }
 });
@@ -315,6 +320,12 @@ export const folderAddFeature: FeatureDefinition<
             workspaceId: toDbWorkspaceId(input.workspaceId),
             content
         });
+        ctx.audit({
+            category: 'note',
+            action: 'folder.create',
+            description: 'Dossier de notes créé',
+            metadata: { folderId: row.id, workspaceId: input.workspaceId }
+        });
         return { folder: toFolder(row, { name }) };
     }
 });
@@ -336,6 +347,12 @@ export const folderRenameFeature: FeatureDefinition<
         const content = await encryptFolder(ctx.secure, { name });
         const updated = await ctx.db.noteFolders.update(input.folderId, ctx.userId, content);
         if (!updated) throw new FeatureError('not_found', 'Folder not found');
+        ctx.audit({
+            category: 'note',
+            action: 'folder.rename',
+            description: 'Dossier de notes renommé',
+            metadata: { folderId: input.folderId, workspaceId: input.workspaceId }
+        });
         return { folder: toFolder(updated, { name }) };
     }
 });
@@ -384,6 +401,13 @@ export const folderDeleteFeature: FeatureDefinition<
             throw new FeatureError('not_found', 'Folder not found');
         }
         await ctx.db.noteFolders.delete(input.folderId, ctx.userId);
+        ctx.audit({
+            category: 'note',
+            action: 'folder.delete',
+            level: 'warning',
+            description: 'Dossier de notes supprimé',
+            metadata: { folderId: input.folderId, workspaceId: input.workspaceId }
+        });
         return { folderId: input.folderId };
     }
 });

@@ -69,6 +69,7 @@ export const twoFactorSetupFeature: FeatureDefinition<
             backupCodes.map((c) => sha256hex(normalizeBackupCode(c)))
         );
 
+        ctx.audit({ action: 'twofa.setup', description: 'Configuration 2FA initiée (secret + codes générés)' });
         return { setup: { secret, otpauthUrl, backupCodes } };
     }
 });
@@ -88,6 +89,7 @@ export const twoFactorEnableFeature: FeatureDefinition<
             throw new FeatureError('auth_invalid', 'Invalid TOTP code');
         }
         await ctx.db.twoFactor.enable(ctx.userId);
+        ctx.audit({ action: 'twofa.enable', level: 'warning', description: 'Double authentification activée' });
         return { status: await buildStatus(ctx) };
     }
 });
@@ -101,6 +103,7 @@ export const twoFactorDisableFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         await assertValidCode(ctx, input.code);
         await ctx.db.twoFactor.disable(ctx.userId);
+        ctx.audit({ action: 'twofa.disable', level: 'warning', description: 'Double authentification désactivée' });
         return { status: await buildStatus(ctx) };
     }
 });
@@ -119,6 +122,11 @@ export const twoFactorRegenBackupFeature: FeatureDefinition<
             ctx.userId,
             backupCodes.map((c) => sha256hex(normalizeBackupCode(c)))
         );
+        ctx.audit({
+            action: 'twofa.regenBackup',
+            level: 'warning',
+            description: 'Codes de secours 2FA régénérés'
+        });
         return { backupCodes };
     }
 });

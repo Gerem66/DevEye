@@ -9,6 +9,7 @@ export const userSetThemeFeature: FeatureDefinition<
     ...userSetTheme,
     handler: async (ctx, input) => {
         await ctx.db.users.setTheme(ctx.userId, JSON.stringify(input));
+        ctx.audit({ action: 'user.setTheme', level: 'debug', description: 'Apparence modifiée' });
         return { ok: true };
     }
 });

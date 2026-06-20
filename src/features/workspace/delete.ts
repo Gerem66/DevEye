@@ -17,6 +17,12 @@ export const workspaceDeleteFeature: FeatureDefinition<
         }
         // FK ON DELETE CASCADE removes members + passwords.
         await ctx.db.workspaces.delete(input.workspaceId);
+        ctx.audit({
+            action: 'workspace.delete',
+            level: 'warning',
+            description: 'Espace de travail supprimé',
+            metadata: { workspaceId: input.workspaceId }
+        });
         return { workspaceId: input.workspaceId };
     }
 });

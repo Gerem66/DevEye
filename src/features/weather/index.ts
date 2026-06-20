@@ -83,6 +83,11 @@ export const weatherAddFeature: FeatureDefinition<
             provider: input.provider,
             apiKeyEnc: apiKey ? ctx.crypt.Encrypt(apiKey) : null
         });
+        ctx.audit({
+            action: 'weather.add',
+            description: `Ville météo ajoutée : « ${row.label} »`,
+            metadata: { locationId: row.id, provider: row.provider }
+        });
         return { location: toLocation(row) };
     }
 });
@@ -108,6 +113,11 @@ export const weatherUpdateFeature: FeatureDefinition<
             apiKeyEnc
         });
         if (!row) throw new FeatureError('not_found', 'Weather location not found');
+        ctx.audit({
+            action: 'weather.update',
+            description: `Ville météo modifiée : « ${row.label} »`,
+            metadata: { locationId: row.id, apiKeyChanged: input.apiKey !== undefined }
+        });
         return { location: toLocation(row) };
     }
 });
@@ -121,6 +131,12 @@ export const weatherRemoveFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         const deleted = await ctx.db.weather.deleteLocation(input.id, ctx.userId);
         if (!deleted) throw new FeatureError('not_found', 'Weather location not found');
+        ctx.audit({
+            action: 'weather.remove',
+            level: 'warning',
+            description: 'Ville météo supprimée',
+            metadata: { locationId: input.id }
+        });
         return { id: input.id };
     }
 });
@@ -189,9 +205,19 @@ export const weatherSetKeyFeature: FeatureDefinition<
         const key = input.key.trim();
         if (key.length === 0) {
             await ctx.db.weather.deleteKey(ctx.userId, input.provider);
+            ctx.audit({
+                action: 'weather.setKey',
+                description: `Clé API météo supprimée (${input.provider})`,
+                metadata: { provider: input.provider, hasKey: false }
+            });
             return { provider: input.provider, hasKey: false };
         }
         await ctx.db.weather.setKey(ctx.userId, input.provider, ctx.crypt.Encrypt(key));
+        ctx.audit({
+            action: 'weather.setKey',
+            description: `Clé API météo enregistrée (${input.provider})`,
+            metadata: { provider: input.provider, hasKey: true }
+        });
         return { provider: input.provider, hasKey: true };
     }
 });
