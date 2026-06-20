@@ -12,5 +12,5 @@ build
 node_modules
 
 # Logs
-logs
+/logs/
 *.log
