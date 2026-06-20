@@ -23,6 +23,7 @@ export interface DevicesRepo {
     setTokenHash(id: string, tokenHash: string): Promise<void>;
     rename(id: string, name: string): Promise<void>;
     touchSeen(id: string, lastSeen: number): Promise<void>;
+    setReport(id: string, reportJson: string): Promise<void>;
     delete(id: string): Promise<boolean>;
 }
 
@@ -71,6 +72,9 @@ export function devicesRepo(pool: Q): DevicesRepo {
         async touchSeen(id, lastSeen) {
             await pool.query('UPDATE devices SET last_seen = ? WHERE id = ?', [lastSeen, id]);
         },
+        async setReport(id, reportJson) {
+            await pool.query('UPDATE devices SET report_json = ? WHERE id = ?', [reportJson, id]);
+        },
         async delete(id) {
             const r = await pool.query('DELETE FROM devices WHERE id = ?', [id]);
             return r.rowCount > 0;
@@ -79,8 +83,12 @@ export function devicesRepo(pool: Q): DevicesRepo {
 }
 
 export interface LinkCodesRepo {
-    create(input: { userId: number; ttlSeconds: number }): Promise<{ code: string; expiresAt: number }>;
+    /** `ttlSeconds === null` mints a code that never expires. */
+    create(input: { userId: number; ttlSeconds: number | null }): Promise<{ code: string; expiresAt: number | null }>;
     consume(code: string): Promise<{ userId: number } | null>;
+    listActive(userId: number): Promise<{ code: string; expiresAt: number | null }[]>;
+    /** Delete one of the caller's still-active codes. Returns true if removed. */
+    revoke(userId: number, code: string): Promise<boolean>;
 }
 
 function randomCode(): string {
@@ -95,7 +103,7 @@ export function linkCodesRepo(pool: Q): LinkCodesRepo {
     return {
         async create({ userId, ttlSeconds }) {
             const now = Math.floor(Date.now() / 1000);
-            const expiresAt = now + ttlSeconds;
+            const expiresAt = ttlSeconds === null ? null : now + ttlSeconds;
             const code = randomCode();
             await pool.query('INSERT INTO device_link_codes (code, user_id, expires_at) VALUES (?, ?, ?)', [
                 code,
@@ -106,14 +114,35 @@ export function linkCodesRepo(pool: Q): LinkCodesRepo {
         },
         async consume(code) {
             const now = Math.floor(Date.now() / 1000);
-            const r = await pool.query<{ user_id: number; expires_at: number; used_at: number | null }>(
+            const r = await pool.query<{ user_id: number; expires_at: number | null; used_at: number | null }>(
                 'SELECT user_id, expires_at, used_at FROM device_link_codes WHERE code = ?',
                 [code]
             );
             const row = r.rows[0];
-            if (!row || row.used_at !== null || Number(row.expires_at) < now) return null;
+            if (!row || row.used_at !== null) return null;
+            if (row.expires_at !== null && Number(row.expires_at) < now) return null;
             await pool.query('UPDATE device_link_codes SET used_at = ? WHERE code = ?', [now, code]);
             return { userId: row.user_id };
+        },
+        async listActive(userId) {
+            const now = Math.floor(Date.now() / 1000);
+            const r = await pool.query<{ code: string; expires_at: number | null }>(
+                `SELECT code, expires_at FROM device_link_codes
+                 WHERE user_id = ? AND used_at IS NULL AND (expires_at IS NULL OR expires_at > ?)
+                 ORDER BY expires_at IS NULL DESC, expires_at ASC`,
+                [userId, now]
+            );
+            return r.rows.map((row) => ({
+                code: row.code,
+                expiresAt: row.expires_at === null ? null : Number(row.expires_at)
+            }));
+        },
+        async revoke(userId, code) {
+            const r = await pool.query(
+                'DELETE FROM device_link_codes WHERE code = ? AND user_id = ? AND used_at IS NULL',
+                [code, userId]
+            );
+            return r.rowCount > 0;
         }
     };
 }

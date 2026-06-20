@@ -1,14 +1,46 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ws } from '@/api/ws';
-import { post } from '@/api/http';
-import { StatusBadge } from '@/Components/StatusBadge';
+import { del, get, post } from '@/api/http';
+import { StatusBadge, type BadgeTone } from '@/Components/StatusBadge';
 import { Dialog } from '@/Components/Dialog';
 import Button from '@/Components/Button';
+import SelectInput from '@/Components/SelectInput';
+import TextInput from '@/Components/TextInput';
 import { useDevices, removeDeviceLocal } from '@/stores/devices';
-import { linkCodeResponseSchema, type LinkCodeResponse } from 'deveye-types';
+import {
+    LINK_CODE_TTL_MAX_SECONDS,
+    linkCodeResponseSchema,
+    linkCodesListResponseSchema,
+    type DeviceStatus,
+    type LinkCodeResponse
+} from 'deveye-types';
 import type { FeatureProps } from '../types';
 import styles from './Clients.module.css';
+
+/** Localized lifecycle label + badge tone for a device status. */
+function statusMeta(status: DeviceStatus): { label: string; tone: BadgeTone } {
+    switch (status) {
+        case 'pending':
+            return { label: 'En attente', tone: 'warning' };
+        case 'active':
+            return { label: 'Approuvé', tone: 'success' };
+        case 'revoked':
+            return { label: 'Révoqué', tone: 'danger' };
+    }
+}
+
+/** Human-readable validity for a link code (`null` = never expires). */
+function formatExpiry(expiresAt: number | null): string {
+    if (expiresAt === null) return 'N’expire pas';
+    const secs = expiresAt - Math.floor(Date.now() / 1000);
+    if (secs <= 0) return 'Expiré';
+    const mins = Math.ceil(secs / 60);
+    if (mins < 60) return `Expire dans ${mins} min`;
+    const hours = Math.round(mins / 60);
+    if (hours < 24) return `Expire dans ${hours} h`;
+    return `Expire le ${new Date(expiresAt * 1000).toLocaleDateString('fr-FR')}`;
+}
 
 function formatLastSeen(ts: number | null): string {
     if (ts === null) return 'Jamais';
@@ -22,57 +54,75 @@ function formatLastSeen(ts: number | null): string {
     return `Il y a ${days}j`;
 }
 
-export function ClientsWidget() {
-    const { devices } = useDevices();
-    const onlineCount = devices.filter((d) => d.online).length;
-
-    return (
-        <div className={styles.widgetContent}>
-            <div className={styles.stat}>
-                <span className={styles.statValue}>{devices.length}</span>
-                <span className={styles.statLabel}>appareil{devices.length !== 1 ? 's' : ''}</span>
-            </div>
-            {devices.length > 0 ? (
-                <>
-                    <div className={styles.miniList}>
-                        {devices.slice(0, 3).map((d) => (
-                            <div key={d.id} className={styles.miniItem}>
-                                <span className={`${styles.dot} ${d.online ? styles.online : ''}`} />
-                                <span className={styles.miniName}>{d.name}</span>
-                            </div>
-                        ))}
-                        {devices.length > 3 && <span className={styles.more}>+{devices.length - 3} autres</span>}
-                    </div>
-                    <span className={styles.widgetFootnote}>{onlineCount} en ligne</span>
-                </>
-            ) : (
-                <span className={styles.widgetEmpty}>Aucun appareil lié</span>
-            )}
-        </div>
-    );
-}
-
 export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
     const { devices, loading, error, refresh } = useDevices();
-    const [linkCode, setLinkCode] = useState<LinkCodeResponse | null>(null);
+    const [codes, setCodes] = useState<LinkCodeResponse[]>([]);
     const [showLinkModal, setShowLinkModal] = useState(false);
     const [generatingCode, setGeneratingCode] = useState(false);
     const [actionError, setActionError] = useState<string | null>(null);
-    const [copied, setCopied] = useState(false);
+    const [genError, setGenError] = useState<string | null>(null);
+    const [copiedCode, setCopiedCode] = useState<string | null>(null);
+    // Validity preset for newly generated codes ('custom' / 'none' are special).
+    const [ttlPreset, setTtlPreset] = useState<string>('300');
+    const [customMinutes, setCustomMinutes] = useState<string>('30');
+
+    const fetchCodes = async (): Promise<LinkCodeResponse[]> => {
+        try {
+            const res = await get('/api/devices/link-codes', linkCodesListResponseSchema);
+            setCodes(res.codes);
+            return res.codes;
+        } catch {
+            return [];
+        }
+    };
+
+    // Resolve the chosen preset to a request payload. Returns `undefined` on an
+    // invalid custom value (caller shows an error).
+    const resolveTtlSeconds = (): { ttlSeconds: number | null } | undefined => {
+        if (ttlPreset === 'none') return { ttlSeconds: null };
+        if (ttlPreset === 'custom') {
+            const mins = Number(customMinutes);
+            if (!Number.isFinite(mins) || mins <= 0) return undefined;
+            return { ttlSeconds: Math.min(Math.round(mins * 60), LINK_CODE_TTL_MAX_SECONDS) };
+        }
+        return { ttlSeconds: Number(ttlPreset) };
+    };
 
     const generateLinkCode = async () => {
+        const body = resolveTtlSeconds();
+        if (!body) {
+            setGenError('Durée personnalisée invalide.');
+            return;
+        }
         setGeneratingCode(true);
-        setActionError(null);
+        setGenError(null);
         try {
-            const res = await post('/api/devices/link', {}, linkCodeResponseSchema);
-            setLinkCode(res);
-            setCopied(false);
-            setShowLinkModal(true);
+            await post('/api/devices/link', body, linkCodeResponseSchema);
+            await fetchCodes();
         } catch {
-            setActionError('Impossible de générer un code de liaison. Réessayez.');
+            setGenError('Impossible de générer un code de liaison. Réessayez.');
         } finally {
             setGeneratingCode(false);
         }
+    };
+
+    const deleteCode = async (code: string) => {
+        // Optimistic: drop it locally, reconcile via fetch on failure.
+        setCodes((prev) => prev.filter((c) => c.code !== code));
+        try {
+            await del(`/api/devices/link-codes/${encodeURIComponent(code)}`);
+        } catch {
+            await fetchCodes();
+        }
+    };
+
+    // Manual generation only: open the dialog and show the current codes table.
+    const openLinkModal = async () => {
+        setActionError(null);
+        setGenError(null);
+        setCopiedCode(null);
+        setShowLinkModal(true);
+        await fetchCodes();
     };
 
     const removeDevice = async (id: string) => {
@@ -86,18 +136,49 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
         }
     };
 
+    const confirmDevice = async (id: string) => {
+        setActionError(null);
+        try {
+            await ws.send('device.confirm', { deviceId: id });
+            await refresh();
+        } catch {
+            setActionError('Approbation impossible.');
+        }
+    };
+
+    const revokeDevice = async (id: string) => {
+        setActionError(null);
+        try {
+            await ws.send('device.revoke', { deviceId: id });
+            await refresh();
+        } catch {
+            setActionError('Révocation impossible.');
+        }
+    };
+
+    const renameDevice = async (id: string, current: string) => {
+        const name = window.prompt('Nouveau nom de l’appareil :', current)?.trim();
+        if (!name || name === current) return;
+        setActionError(null);
+        try {
+            await ws.send('device.rename', { deviceId: id, name });
+            await refresh();
+        } catch {
+            setActionError('Renommage impossible.');
+        }
+    };
+
     const closeModal = () => {
         setShowLinkModal(false);
         // A device may have paired while the dialog was open — reflect it now.
         void refresh();
     };
 
-    const copyCode = async () => {
-        if (!linkCode) return;
+    const copyCode = async (code: string) => {
         try {
-            await navigator.clipboard.writeText(linkCode.code);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1800);
+            await navigator.clipboard.writeText(code);
+            setCopiedCode(code);
+            setTimeout(() => setCopiedCode((c) => (c === code ? null : c)), 1800);
         } catch {
             // clipboard may be unavailable
         }
@@ -110,7 +191,7 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                     <h2 className={styles.title}>Appareils</h2>
                     <p className={styles.subtitle}>Gérez vos agents DevEye</p>
                 </div>
-                <button className={styles.addBtn} onClick={generateLinkCode} disabled={generatingCode}>
+                <button className={styles.addBtn} onClick={openLinkModal} disabled={generatingCode}>
                     {generatingCode ? (
                         <span className={styles.spinner} />
                     ) : (
@@ -166,7 +247,9 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                                     </div>
                                     <div className={styles.infoRow}>
                                         <span className='icon icon-shield' />
-                                        <span>{device.status}</span>
+                                        <StatusBadge tone={statusMeta(device.status).tone} dot={false}>
+                                            {statusMeta(device.status).label}
+                                        </StatusBadge>
                                     </div>
                                     <div className={styles.infoRow}>
                                         <span className='icon icon-clock' />
@@ -174,9 +257,40 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                                     </div>
                                 </div>
 
+                                {device.status === 'pending' && (
+                                    <p className={styles.pendingHint}>
+                                        Approuvez cet appareil pour autoriser la collecte de métriques.
+                                    </p>
+                                )}
+
                                 <div className={styles.deviceActions}>
+                                    {device.status === 'pending' && (
+                                        <button
+                                            className={`${styles.actionBtn} ${styles.actionPrimary}`}
+                                            onClick={() => confirmDevice(device.id)}
+                                            title='Approuver'
+                                        >
+                                            <span className='icon icon-check-circle' /> Approuver
+                                        </button>
+                                    )}
                                     <button
                                         className={styles.actionBtn}
+                                        onClick={() => renameDevice(device.id, device.name)}
+                                        title='Renommer'
+                                    >
+                                        <span className='icon icon-edit' />
+                                    </button>
+                                    {device.status === 'active' && (
+                                        <button
+                                            className={`${styles.actionBtn} ${styles.actionDanger}`}
+                                            onClick={() => revokeDevice(device.id)}
+                                            title='Révoquer'
+                                        >
+                                            <span className='icon icon-x-circle' />
+                                        </button>
+                                    )}
+                                    <button
+                                        className={`${styles.actionBtn} ${styles.actionDanger}`}
                                         onClick={() => removeDevice(device.id)}
                                         title='Supprimer'
                                     >
@@ -190,43 +304,100 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
             )}
 
             <Dialog
-                open={showLinkModal && !!linkCode}
+                open={showLinkModal}
                 onClose={closeModal}
-                title='Code de liaison'
-                description="Utilisez ce code dans l'agent DevEye pour lier un nouvel appareil."
+                title='Codes de liaison'
+                description="Générez un code, puis utilisez-le dans l'agent DevEye pour lier un appareil."
                 footer={
                     <Button variant='secondary' onClick={closeModal}>
                         Fermer
                     </Button>
                 }
             >
-                {linkCode && (
-                    <>
-                        <div className={styles.codeDisplay}>
-                            <code>{linkCode.code}</code>
-                            <button
-                                className={`${styles.copyBtn} ${copied ? styles.copied : ''}`}
-                                onClick={copyCode}
-                                title='Copier'
-                            >
-                                <span className={`icon ${copied ? 'icon-success' : 'icon-copy'}`} />
-                            </button>
-                        </div>
-                        <p className={styles.expiry}>
-                            Expire le {new Date(linkCode.expiresAt * 1000).toLocaleString('fr-FR')}
-                        </p>
-                        <div className={styles.instructions}>
-                            <h4>Instructions :</h4>
-                            <ol>
-                                <li>Installez l&apos;agent DevEye sur votre appareil</li>
-                                <li>
-                                    Exécutez <code>deveye link {linkCode.code}</code>
-                                </li>
-                                <li>L&apos;appareil apparaîtra automatiquement ici</li>
-                            </ol>
-                        </div>
-                    </>
+                {/* Generation controls: pick a validity, then generate. */}
+                <div className={styles.genRow}>
+                    <SelectInput
+                        value={ttlPreset}
+                        onChange={(e) => setTtlPreset(e.target.value)}
+                        aria-label='Durée de validité'
+                    >
+                        <option value='300'>Valide 5 minutes</option>
+                        <option value='900'>Valide 15 minutes</option>
+                        <option value='3600'>Valide 1 heure</option>
+                        <option value='86400'>Valide 24 heures</option>
+                        <option value='custom'>Durée personnalisée…</option>
+                        <option value='none'>Sans expiration</option>
+                    </SelectInput>
+                    {ttlPreset === 'custom' && (
+                        <TextInput
+                            type='number'
+                            min='1'
+                            value={customMinutes}
+                            onChange={(e) => setCustomMinutes(e.target.value)}
+                            className={styles.minutesInput}
+                            aria-label='Durée en minutes'
+                            placeholder='minutes'
+                        />
+                    )}
+                    <Button onClick={generateLinkCode} disabled={generatingCode}>
+                        {generatingCode ? 'Génération…' : 'Générer'}
+                    </Button>
+                </div>
+                {genError && <p className={styles.genError}>{genError}</p>}
+
+                {/* Table of active (pending) codes. */}
+                {codes.length === 0 ? (
+                    <p className={styles.noCodes}>Aucun code actif. Générez-en un ci-dessus.</p>
+                ) : (
+                    <table className={styles.codeTable}>
+                        <thead>
+                            <tr>
+                                <th>Code</th>
+                                <th>Validité</th>
+                                <th aria-label='Actions' />
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {codes.map((c) => (
+                                <tr key={c.code}>
+                                    <td>
+                                        <code className={styles.codeCell}>{c.code}</code>
+                                    </td>
+                                    <td className={styles.validityCell}>{formatExpiry(c.expiresAt)}</td>
+                                    <td className={styles.codeRowActions}>
+                                        <button
+                                            className={`${styles.iconBtn} ${copiedCode === c.code ? styles.copied : ''}`}
+                                            onClick={() => copyCode(c.code)}
+                                            title={copiedCode === c.code ? 'Copié' : 'Copier'}
+                                        >
+                                            <span
+                                                className={`icon ${copiedCode === c.code ? 'icon-check-circle' : 'icon-copy'}`}
+                                            />
+                                        </button>
+                                        <button
+                                            className={`${styles.iconBtn} ${styles.iconDanger}`}
+                                            onClick={() => deleteCode(c.code)}
+                                            title='Invalider ce code'
+                                        >
+                                            <span className='icon icon-trash' />
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 )}
+
+                <div className={styles.instructions}>
+                    <h4>Instructions :</h4>
+                    <ol>
+                        <li>Installez l&apos;agent DevEye (Linux ou macOS) sur votre appareil</li>
+                        <li>
+                            Exécutez <code>deveye-agent link &lt;code&gt; --server &lt;url&gt;</code>
+                        </li>
+                        <li>L&apos;appareil apparaît ici en « En attente » — approuvez-le pour démarrer la collecte</li>
+                    </ol>
+                </div>
             </Dialog>
         </div>
     );

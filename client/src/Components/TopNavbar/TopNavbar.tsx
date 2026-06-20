@@ -26,6 +26,8 @@ export interface TopNavbarProps {
     onOpenProfile?: () => void;
     /** Open the security feature (2FA, password encryption, re-auth window). */
     onOpenSecurity?: () => void;
+    /** Open the devices (agents) management page. */
+    onOpenDevices?: () => void;
     /** Open the logs feature. Only provided for admins (omit to hide the entry). */
     onOpenLogs?: () => void;
     /** Open the settings panel. */
@@ -69,6 +71,7 @@ export default function TopNavbar({
     onBack,
     onOpenProfile,
     onOpenSecurity,
+    onOpenDevices,
     onOpenLogs,
     onOpenSettings
 }: TopNavbarProps) {
@@ -211,6 +214,20 @@ export default function TopNavbar({
                             >
                                 <span className='icon icon-appearance' /> Apparence
                             </button>
+                            {/* Second separator: groups "fleet" entries (Appareils,
+                                Logs) apart from the personal settings above. */}
+                            {(onOpenDevices || onOpenLogs) && <hr className={styles.divider} />}
+                            {onOpenDevices && (
+                                <button
+                                    className={styles.menuItem}
+                                    onClick={() => {
+                                        onOpenDevices();
+                                        setMenuOpen(false);
+                                    }}
+                                >
+                                    <span className='icon icon-server' /> Appareils
+                                </button>
+                            )}
                             {onOpenLogs && (
                                 <button
                                     className={styles.menuItem}

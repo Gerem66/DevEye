@@ -52,6 +52,23 @@ impl Config {
         Self::path().exists()
     }
 
+    /// PID file for a backgrounded `run --detach`, alongside the config.
+    pub fn pid_path() -> PathBuf {
+        Self::sibling("agent.pid")
+    }
+
+    /// Log file used when running detached.
+    pub fn log_path() -> PathBuf {
+        Self::sibling("agent.log")
+    }
+
+    fn sibling(name: &str) -> PathBuf {
+        Self::path()
+            .parent()
+            .map(|p| p.join(name))
+            .unwrap_or_else(|| PathBuf::from(name))
+    }
+
     pub fn save(&self) -> Result<()> {
         let path = Self::path();
         if let Some(parent) = path.parent() {

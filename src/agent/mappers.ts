@@ -1,4 +1,22 @@
-import type { Device, DeviceRow, DevicePlatform, DeviceStatus } from 'deveye-types';
+import {
+    deviceReportSchema,
+    type Device,
+    type DeviceReport,
+    type DeviceRow,
+    type DevicePlatform,
+    type DeviceStatus
+} from 'deveye-types';
+
+/** Safely decode the stored JSON report; returns null on absence or corruption. */
+export function parseDeviceReport(reportJson: string | null): DeviceReport | null {
+    if (!reportJson) return null;
+    try {
+        const parsed = deviceReportSchema.safeParse(JSON.parse(reportJson));
+        return parsed.success ? parsed.data : null;
+    } catch {
+        return null;
+    }
+}
 
 /** Map a persisted device row to the client-facing domain shape. */
 export function deviceRowToDevice(row: DeviceRow, online: boolean): Device {
@@ -11,6 +29,7 @@ export function deviceRowToDevice(row: DeviceRow, online: boolean): Device {
         status: row.status as DeviceStatus,
         online,
         lastSeen: row.last_seen === null ? null : Number(row.last_seen),
-        created: Number(row.created)
+        created: Number(row.created),
+        report: parseDeviceReport(row.report_json)
     };
 }

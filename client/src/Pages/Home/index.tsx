@@ -14,7 +14,6 @@ import PopupUnlock from './popup-unlock';
 // Widget content (compact)
 import { MonitoringWidget } from '@/Features/Monitoring';
 import { WeatherWidget } from '@/Features/Weather';
-import { ClientsWidget } from '@/Features/Clients';
 // Full feature components
 import Monitoring from '@/Features/Monitoring';
 import Weather from '@/Features/Weather';
@@ -80,14 +79,6 @@ const FEATURES: FeatureConfig[] = [
         preload: true
     },
     {
-        id: 'clients',
-        title: 'Appareils',
-        icon: 'server',
-        WidgetContent: ClientsWidget,
-        FullComponent: Clients,
-        cacheDurationMinutes: 5
-    },
-    {
         id: 'password',
         title: 'Mot de passe',
         icon: 'lock',
@@ -114,6 +105,15 @@ const PAGES: ViewConfig[] = [
         icon: 'user',
         FullComponent: FeatureProfile,
         cacheDurationMinutes: 0
+    },
+    {
+        // Device management & pairing — reached from the navbar menu, grouped
+        // with Logs (both are "fleet" concerns) rather than shown as a card.
+        id: 'clients',
+        title: 'Appareils',
+        icon: 'server',
+        FullComponent: Clients,
+        cacheDurationMinutes: 5
     },
     {
         id: 'security',
@@ -353,6 +353,7 @@ export default function HomePage() {
                 onBack={expandedWidget ? handleClose : undefined}
                 onOpenProfile={() => handleExpand('profile')}
                 onOpenSecurity={() => handleExpand('security')}
+                onOpenDevices={() => handleExpand('clients')}
                 onOpenLogs={user.role === 'admin' ? () => handleExpand('logs') : undefined}
                 onOpenSettings={() => setSettingsOpen(true)}
             />

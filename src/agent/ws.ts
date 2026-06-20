@@ -4,6 +4,7 @@ import {
     AGENT_ERROR,
     AGENT_HELLO,
     AGENT_METRICS_BATCH,
+    AGENT_REPORT,
     agentClientMessageSchema,
     type AgentServerMessage
 } from 'deveye-types';
@@ -93,6 +94,24 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: 
             const msg = parsed.data;
             if (msg.command === AGENT_HELLO) {
                 send(socket, { command: AGENT_ACK, payload: { received: 0 } });
+                return;
+            }
+
+            if (msg.command === AGENT_REPORT) {
+                // Reports persist only for confirmed devices (same gate as metrics).
+                if (device.status !== 'active') {
+                    send(socket, { command: AGENT_ACK, payload: { received: 0 } });
+                    return;
+                }
+                try {
+                    await db.devices.setReport(deviceId, JSON.stringify(msg.payload.report));
+                    hub.publishReport(deviceId, msg.payload.report);
+                    await db.devices.touchSeen(deviceId, Math.floor(Date.now() / 1000));
+                    send(socket, { command: AGENT_ACK, payload: { received: 1 } });
+                } catch (e) {
+                    reqLogger.error({ err: (e as Error).message }, 'Failed to persist device report');
+                    send(socket, { command: AGENT_ERROR, payload: { code: 'internal', message: 'Persist failed' } });
+                }
                 return;
             }
 

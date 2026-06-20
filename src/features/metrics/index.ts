@@ -1,5 +1,6 @@
-import { metricsQuery, metricsSubscribe, metricsUnsubscribe, type DeviceRow } from 'deveye-types';
+import { metricsQuery, metricsRefresh, metricsSubscribe, metricsUnsubscribe, type DeviceRow } from 'deveye-types';
 
+import { parseDeviceReport } from '@/agent/mappers';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
 async function isAdmin(ctx: FeatureContext): Promise<boolean> {
@@ -42,13 +43,21 @@ export const metricsSubscribeFeature: FeatureDefinition<
 > = defineFeature({
     ...metricsSubscribe,
     handler: async (ctx, input) => {
-        const allowed: string[] = [];
+        const allowed: { id: string; row: DeviceRow }[] = [];
         for (const deviceId of input.deviceIds) {
-            await authorizeRead(ctx, deviceId);
-            allowed.push(deviceId);
+            const row = await authorizeRead(ctx, deviceId);
+            allowed.push({ id: deviceId, row });
         }
-        ctx.monitor?.subscribe(allowed);
-        return { deviceIds: allowed };
+        const ids = allowed.map((a) => a.id);
+        ctx.monitor?.subscribe(ids);
+
+        // Push the latest stored snapshot + report straight away so the UI shows
+        // data immediately rather than waiting for the next live sample.
+        for (const { id, row } of allowed) {
+            const snapshot = await ctx.db.metrics.latest(id);
+            ctx.monitor?.sendInitial(id, snapshot, parseDeviceReport(row.report_json));
+        }
+        return { deviceIds: ids };
     }
 });
 
@@ -64,9 +73,23 @@ export const metricsUnsubscribeFeature: FeatureDefinition<
     }
 });
 
+export const metricsRefreshFeature: FeatureDefinition<
+    typeof metricsRefresh.command,
+    typeof metricsRefresh.input,
+    typeof metricsRefresh.output
+> = defineFeature({
+    ...metricsRefresh,
+    handler: async (ctx, input) => {
+        await authorizeRead(ctx, input.deviceId);
+        const requested = ctx.monitor?.requestCollect(input.deviceId) ?? false;
+        return { deviceId: input.deviceId, requested };
+    }
+});
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const metricsFeatures: FeatureDefinition<string, any, any>[] = [
     metricsQueryFeature,
     metricsSubscribeFeature,
-    metricsUnsubscribeFeature
+    metricsUnsubscribeFeature,
+    metricsRefreshFeature
 ];

@@ -1,5 +1,13 @@
 import type { WebSocket } from '@fastify/websocket';
-import { DEVICE_PRESENCE_EVENT, METRICS_PUSH_EVENT, type DevicePresence, type MetricSnapshot } from 'deveye-types';
+import {
+    AGENT_COLLECT,
+    DEVICE_PRESENCE_EVENT,
+    DEVICE_REPORT_EVENT,
+    METRICS_PUSH_EVENT,
+    type DevicePresence,
+    type DeviceReport,
+    type MetricSnapshot
+} from 'deveye-types';
 
 /**
  * In-memory hub coordinating live monitoring between agent sockets (producers)
@@ -30,6 +38,14 @@ export class MonitorHub {
 
     isOnline(deviceId: string): boolean {
         return this.agents.has(deviceId);
+    }
+
+    /** Ask a connected agent to push a fresh sample + report now. */
+    requestCollect(deviceId: string): boolean {
+        const socket = this.agents.get(deviceId);
+        if (!socket) return false;
+        socket.send(JSON.stringify({ command: AGENT_COLLECT, payload: {} }));
+        return true;
     }
 
     onlineDevices(deviceIds: string[]): Record<string, boolean> {
@@ -79,11 +95,30 @@ export class MonitorHub {
     publishMetric(deviceId: string, snapshot: MetricSnapshot): void {
         const set = this.subscribers.get(deviceId);
         if (!set || set.size === 0) return;
-        const frame = JSON.stringify({
-            command: METRICS_PUSH_EVENT,
-            payload: { ok: true, data: { deviceId, snapshot } }
-        });
+        const frame = metricFrame(deviceId, snapshot);
         for (const socket of set) socket.send(frame);
+    }
+
+    publishReport(deviceId: string, report: DeviceReport): void {
+        const set = this.subscribers.get(deviceId);
+        if (!set || set.size === 0) return;
+        const frame = reportFrame(deviceId, report);
+        for (const socket of set) socket.send(frame);
+    }
+
+    /**
+     * Push the most recent metric snapshot / report straight to one socket.
+     * Used right after `metrics.subscribe` so the UI shows data immediately
+     * instead of waiting for the next live sample.
+     */
+    sendInitial(
+        socket: WebSocket,
+        deviceId: string,
+        snapshot: MetricSnapshot | null,
+        report: DeviceReport | null
+    ): void {
+        if (snapshot) socket.send(metricFrame(deviceId, snapshot));
+        if (report) socket.send(reportFrame(deviceId, report));
     }
 
     private publishPresence(deviceId: string, online: boolean): void {
@@ -102,17 +137,37 @@ export class MonitorHub {
     }
 }
 
+function metricFrame(deviceId: string, snapshot: MetricSnapshot): string {
+    return JSON.stringify({
+        command: METRICS_PUSH_EVENT,
+        payload: { ok: true, data: { deviceId, snapshot } }
+    });
+}
+
+function reportFrame(deviceId: string, report: DeviceReport): string {
+    return JSON.stringify({
+        command: DEVICE_REPORT_EVENT,
+        payload: { ok: true, data: { deviceId, report } }
+    });
+}
+
 /** Per-connection binding handed to feature handlers via FeatureContext. */
 export interface MonitorTransport {
     subscribe(deviceIds: string[]): void;
     unsubscribe(deviceIds: string[]): void;
     isOnline(deviceIds: string[]): Record<string, boolean>;
+    /** Push the latest snapshot/report for one device straight to this socket. */
+    sendInitial(deviceId: string, snapshot: MetricSnapshot | null, report: DeviceReport | null): void;
+    /** Ask the device's agent to push fresh data now; false if it's offline. */
+    requestCollect(deviceId: string): boolean;
 }
 
 export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): MonitorTransport {
     return {
         subscribe: (deviceIds) => hub.subscribe(socket, deviceIds),
         unsubscribe: (deviceIds) => hub.unsubscribe(socket, deviceIds),
-        isOnline: (deviceIds) => hub.onlineDevices(deviceIds)
+        isOnline: (deviceIds) => hub.onlineDevices(deviceIds),
+        sendInitial: (deviceId, snapshot, report) => hub.sendInitial(socket, deviceId, snapshot, report),
+        requestCollect: (deviceId) => hub.requestCollect(deviceId)
     };
 }

@@ -22,6 +22,11 @@ const BUCKET_SECONDS: Record<MetricsResolution, number> = {
     day: 86400
 };
 
+/** Coerce a possibly-null numeric column to a number or null. */
+function num(v: number | null): number | null {
+    return v === null || v === undefined ? null : Number(v);
+}
+
 function rowToSnapshot(r: MetricRow): MetricSnapshot {
     return {
         timestamp: Number(r.ts),
@@ -32,7 +37,12 @@ function rowToSnapshot(r: MetricRow): MetricSnapshot {
         diskTotalBytes: Number(r.disk_total_bytes),
         netRxBytes: Number(r.net_rx_bytes),
         netTxBytes: Number(r.net_tx_bytes),
-        usersCount: Number(r.users_count)
+        usersCount: Number(r.users_count),
+        loadAvg1: num(r.load_avg_1),
+        cpuTempC: num(r.cpu_temp_c),
+        uptimeSeconds: num(r.uptime_seconds),
+        processCount: num(r.process_count),
+        activeConnections: num(r.active_connections)
     };
 }
 
@@ -40,7 +50,7 @@ export function metricsRepo(pool: Q): MetricsRepo {
     return {
         async insertBatch(deviceId, snapshots) {
             if (snapshots.length === 0) return;
-            const values = snapshots.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+            const values = snapshots.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
             const params: unknown[] = [];
             for (const s of snapshots) {
                 params.push(
@@ -53,13 +63,19 @@ export function metricsRepo(pool: Q): MetricsRepo {
                     s.diskTotalBytes,
                     s.netRxBytes,
                     s.netTxBytes,
-                    s.usersCount
+                    s.usersCount,
+                    s.loadAvg1 ?? null,
+                    s.cpuTempC ?? null,
+                    s.uptimeSeconds ?? null,
+                    s.processCount ?? null,
+                    s.activeConnections ?? null
                 );
             }
             await pool.query(
                 `INSERT INTO device_metrics
                     (device_id, ts, cpu_percent, mem_used_bytes, mem_total_bytes,
-                     disk_used_bytes, disk_total_bytes, net_rx_bytes, net_tx_bytes, users_count)
+                     disk_used_bytes, disk_total_bytes, net_rx_bytes, net_tx_bytes, users_count,
+                     load_avg_1, cpu_temp_c, uptime_seconds, process_count, active_connections)
                  VALUES ${values}`,
                 params
             );
@@ -88,7 +104,12 @@ export function metricsRepo(pool: Q): MetricsRepo {
                      MAX(disk_total_bytes)      AS disk_total_bytes,
                      MAX(net_rx_bytes)          AS net_rx_bytes,
                      MAX(net_tx_bytes)          AS net_tx_bytes,
-                     MAX(users_count)           AS users_count
+                     MAX(users_count)           AS users_count,
+                     AVG(load_avg_1)            AS load_avg_1,
+                     AVG(cpu_temp_c)            AS cpu_temp_c,
+                     MAX(uptime_seconds)        AS uptime_seconds,
+                     AVG(process_count)         AS process_count,
+                     AVG(active_connections)    AS active_connections
                  FROM device_metrics
                  WHERE device_id = ? AND ts BETWEEN ? AND ?
                  GROUP BY FLOOR(ts / ?)

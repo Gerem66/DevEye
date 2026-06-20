@@ -5,20 +5,70 @@ use base64::Engine;
 use ed25519_dalek::SigningKey;
 use rand::rngs::OsRng;
 
+/// The platform string sent to the server at enrollment. Must match one of the
+/// values in `deveye-types` `devicePlatformSchema`.
+pub fn current_platform() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        "macos"
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "linux"
+    }
+}
+
 /// Derive a stable fingerprint for this machine.
 ///
-/// Prefers the systemd/D-Bus machine-id (stable across reboots, unique per
-/// install). Falls back to the hostname when no machine-id is available.
+/// - Linux: the systemd/D-Bus machine-id (stable across reboots, unique).
+/// - macOS: the IOPlatformUUID from `ioreg`.
+///
+/// Falls back to the hostname when no stable id is available.
 pub fn machine_fingerprint() -> String {
-    for path in ["/etc/machine-id", "/var/lib/dbus/machine-id"] {
-        if let Ok(id) = std::fs::read_to_string(path) {
-            let id = id.trim();
-            if !id.is_empty() {
-                return id.to_string();
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(id) = macos_platform_uuid() {
+            return id;
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        for path in ["/etc/machine-id", "/var/lib/dbus/machine-id"] {
+            if let Ok(id) = std::fs::read_to_string(path) {
+                let id = id.trim();
+                if !id.is_empty() {
+                    return id.to_string();
+                }
             }
         }
     }
     hostname()
+}
+
+/// Read the hardware IOPlatformUUID on macOS via `ioreg`.
+#[cfg(target_os = "macos")]
+fn macos_platform_uuid() -> Option<String> {
+    let out = std::process::Command::new("ioreg")
+        .args(["-rd1", "-c", "IOPlatformExpertDevice"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    // Line looks like: `"IOPlatformUUID" = "XXXXXXXX-...."`
+    for line in text.lines() {
+        if let Some(idx) = line.find("IOPlatformUUID") {
+            let rest = &line[idx..];
+            if let Some(eq) = rest.find('=') {
+                let val = rest[eq + 1..].trim().trim_matches('"').trim();
+                if !val.is_empty() {
+                    return Some(val.to_string());
+                }
+            }
+        }
+    }
+    None
 }
 
 pub fn hostname() -> String {
@@ -46,6 +96,9 @@ pub fn load_signing_key(secret_b64: &str) -> Result<SigningKey> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(secret_b64)
         .context("decoding secret key")?;
-    let seed: [u8; 32] = bytes.as_slice().try_into().context("secret key must be 32 bytes")?;
+    let seed: [u8; 32] = bytes
+        .as_slice()
+        .try_into()
+        .context("secret key must be 32 bytes")?;
     Ok(SigningKey::from_bytes(&seed))
 }

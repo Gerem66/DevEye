@@ -358,24 +358,164 @@
     border-top: 1px solid var(--glass-border);
 }
 
-.metricRow {
+/* ─── Extended info grid (temp, load, uptime, processes, connections…) ─────── */
+
+.infoGrid {
     display: grid;
-    grid-template-columns: 60px 1fr auto;
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    gap: var(--space-sm);
+}
+
+/* ─── Sections (security, processes) ──────────────────────────────────────── */
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.sectionTitle {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0;
+}
+
+.secGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: var(--space-sm);
+}
+
+.secChip {
+    display: flex;
     align-items: center;
-    gap: var(--space-md);
-    font-size: 0.875rem;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg-light);
+}
+
+.secLabel {
+    font-size: 0.78rem;
     color: var(--text-secondary);
 }
 
-.bar {
-    height: 8px;
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: 4px;
-    overflow: hidden;
+.secVal {
+    font-size: 0.8rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
 }
 
-.barFill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--accent), var(--accent-hover));
-    border-radius: 4px;
+.secGood {
+    border-color: var(--success);
+    color: var(--success);
+}
+
+.secBad {
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.secWarn {
+    border-color: var(--warning);
+    color: var(--warning);
+}
+
+.secUnknown {
+    color: var(--text-muted);
+}
+
+/* ─── Top processes table ─────────────────────────────────────────────────── */
+
+.procTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+    table-layout: fixed;
+}
+
+.procTable th {
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    padding: 0 var(--space-sm) 4px;
+}
+
+.procTable td {
+    padding: var(--space-xs) var(--space-sm);
+    border-top: 1px solid var(--glass-border);
+}
+
+/* Numeric columns: right-aligned, fixed width, tabular figures. */
+.procNum {
+    text-align: right;
+    width: 84px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* CPU column (2nd cell) in accent. */
+.procTable tbody td:nth-child(2) {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.procName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+}
+
+/* ─── Header actions (refresh) ────────────────────────────────────────────── */
+
+.headerRight {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.refreshBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    background: transparent;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.refreshBtn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.refreshBtn:disabled {
+    cursor: default;
+    opacity: 0.8;
+}
+
+.spinning {
+    display: inline-block;
+    animation: monitoring-spin 0.7s linear infinite;
+}
+
+@keyframes monitoring-spin {
+    to {
+        transform: rotate(360deg);
+    }
 }

@@ -15,7 +15,7 @@ pub async fn enroll(config: &mut Config, code: &str) -> Result<()> {
         code: code.trim().to_uppercase(),
         name: config.name.clone(),
         fingerprint: config.fingerprint.clone(),
-        platform: "linux".to_string(),
+        platform: crate::identity::current_platform().to_string(),
         public_key: config.public_key.clone(),
     };
 
@@ -31,7 +31,8 @@ pub async fn enroll(config: &mut Config, code: &str) -> Result<()> {
         .await
         .with_context(|| format!("POST {url}"))?;
 
-    let result: ApiResult<EnrollData> = resp.json().await.context("decoding enrollment response")?;
+    let result: ApiResult<EnrollData> =
+        resp.json().await.context("decoding enrollment response")?;
 
     if !result.ok {
         let msg = result

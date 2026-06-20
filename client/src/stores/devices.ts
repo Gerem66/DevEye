@@ -20,6 +20,7 @@ interface DevicesState {
 let state: DevicesState = { devices: [], loading: true, error: null };
 const listeners = new Set<() => void>();
 let timer: ReturnType<typeof setInterval> | null = null;
+let offState: (() => void) | null = null;
 let refCount = 0;
 
 function emit(next: Partial<DevicesState>): void {
@@ -28,6 +29,11 @@ function emit(next: Partial<DevicesState>): void {
 }
 
 export async function refreshDevices(): Promise<void> {
+    // The socket may still be connecting (page load) or briefly reconnecting.
+    // `ws.send` rejects instantly when it isn't open, so polling then would flash
+    // a spurious "Connexion indisponible". Stay in the loading state instead and
+    // let the onStateChange handler refresh once the socket opens.
+    if (ws.state !== 'open') return;
     try {
         const res = await ws.send('device.list', {});
         emit({ devices: res.devices, loading: false, error: null });
@@ -46,6 +52,11 @@ function start(): void {
     if (refCount === 1) {
         void refreshDevices();
         timer = setInterval(() => void refreshDevices(), POLL_MS);
+        // Refresh as soon as the socket (re)opens, so the list appears without
+        // waiting for the next poll and without an error flash during connect.
+        offState = ws.onStateChange((s) => {
+            if (s === 'open') void refreshDevices();
+        });
     }
 }
 
@@ -56,6 +67,10 @@ function stop(): void {
         if (timer) {
             clearInterval(timer);
             timer = null;
+        }
+        if (offState) {
+            offState();
+            offState = null;
         }
     }
 }

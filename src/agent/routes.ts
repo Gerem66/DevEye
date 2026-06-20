@@ -1,10 +1,19 @@
-import { enrollDeviceRequestSchema, enrollDeviceResponseSchema, err, linkCodeResponseSchema, ok } from 'deveye-types';
+import {
+    enrollDeviceRequestSchema,
+    enrollDeviceResponseSchema,
+    err,
+    linkCodeRequestSchema,
+    linkCodeResponseSchema,
+    linkCodesListResponseSchema,
+    ok
+} from 'deveye-types';
 import type { FastifyInstance } from 'fastify';
 
 import { ACCESS_COOKIE } from '@/auth/cookies';
 import { signDeviceToken, verifyAccessToken } from '@/auth/jwt';
 import { sha256hex } from '@/Utils/hash';
 import { env } from '@/Utils/Env';
+import type { AuditLog } from '@/Services/AuditLog';
 import { deviceRowToDevice } from './mappers';
 import type { MonitorHub } from './hub';
 
@@ -13,6 +22,7 @@ import type { Database } from '@/db';
 interface AgentRouteDeps {
     db: Database;
     hub: MonitorHub;
+    audit: AuditLog;
 }
 
 /**
@@ -20,18 +30,46 @@ interface AgentRouteDeps {
  *  - POST /api/devices/link   (auth user)  → mint a short-lived link code
  *  - POST /api/agent/enroll   (public)     → exchange code for a device token
  */
-export async function agentRoutes(app: FastifyInstance, { db, hub }: AgentRouteDeps): Promise<void> {
+export async function agentRoutes(app: FastifyInstance, { db, hub, audit }: AgentRouteDeps): Promise<void> {
     app.post('/api/devices/link', async (req, reply) => {
         const accessToken = req.cookies[ACCESS_COOKIE];
         if (!accessToken) return reply.code(401).send(err('auth_required', 'No session'));
         const claims = await verifyAccessToken(accessToken);
         if (!claims) return reply.code(401).send(err('auth_expired', 'Access token expired'));
 
-        const { code, expiresAt } = await db.linkCodes.create({
-            userId: Number(claims.sub),
-            ttlSeconds: env.LINK_CODE_TTL_SECONDS
-        });
+        const parsed = linkCodeRequestSchema.safeParse(req.body ?? {});
+        if (!parsed.success) {
+            return reply.code(400).send(err('validation', 'Invalid link options', parsed.error.flatten()));
+        }
+        // undefined → server default; null → never expires; number → custom.
+        const ttlSeconds = parsed.data.ttlSeconds === undefined ? env.LINK_CODE_TTL_SECONDS : parsed.data.ttlSeconds;
+
+        const { code, expiresAt } = await db.linkCodes.create({ userId: Number(claims.sub), ttlSeconds });
         return reply.send(ok(linkCodeResponseSchema.parse({ code, expiresAt })));
+    });
+
+    // Active (unconsumed, unexpired) link codes — lets the UI show the table of
+    // pending codes and re-grab one after the dialog was closed.
+    app.get('/api/devices/link-codes', async (req, reply) => {
+        const accessToken = req.cookies[ACCESS_COOKIE];
+        if (!accessToken) return reply.code(401).send(err('auth_required', 'No session'));
+        const claims = await verifyAccessToken(accessToken);
+        if (!claims) return reply.code(401).send(err('auth_expired', 'Access token expired'));
+
+        const codes = await db.linkCodes.listActive(Number(claims.sub));
+        return reply.send(ok(linkCodesListResponseSchema.parse({ codes })));
+    });
+
+    // Manually invalidate a pending code (e.g. cancel one you no longer need).
+    app.delete<{ Params: { code: string } }>('/api/devices/link-codes/:code', async (req, reply) => {
+        const accessToken = req.cookies[ACCESS_COOKIE];
+        if (!accessToken) return reply.code(401).send(err('auth_required', 'No session'));
+        const claims = await verifyAccessToken(accessToken);
+        if (!claims) return reply.code(401).send(err('auth_expired', 'Access token expired'));
+
+        const removed = await db.linkCodes.revoke(Number(claims.sub), req.params.code.trim().toUpperCase());
+        if (!removed) return reply.code(404).send(err('not_found', 'Code not found'));
+        return reply.send(ok({ code: req.params.code }));
     });
 
     app.post('/api/agent/enroll', async (req, reply) => {
@@ -66,6 +104,19 @@ export async function agentRoutes(app: FastifyInstance, { db, hub }: AgentRouteD
 
         const deviceToken = await signDeviceToken(deviceId, ownerId);
         await db.devices.setTokenHash(deviceId, sha256hex(deviceToken));
+
+        // The device stays `pending` until the owner approves it in the UI; only
+        // then does the server accept its metrics (defence in depth).
+        audit.record({
+            source: 'agent',
+            category: 'device',
+            action: 'device.enroll',
+            level: 'warning',
+            uid: ownerId,
+            ip: req.ip,
+            description: `Appareil appairé (en attente d'approbation) : « ${name} »`,
+            metadata: { deviceId, platform, reenrolled: Boolean(existing) }
+        });
 
         const row = await db.devices.findById(deviceId);
         if (!row) return reply.code(500).send(err('internal', 'Device not found after enrollment'));

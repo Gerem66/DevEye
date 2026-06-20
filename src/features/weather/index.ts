@@ -133,7 +133,7 @@ export const weatherRemoveFeature: FeatureDefinition<
         if (!deleted) throw new FeatureError('not_found', 'Weather location not found');
         ctx.audit({
             action: 'weather.remove',
-            level: 'warning',
+            level: 'info',
             description: 'Ville météo supprimée',
             metadata: { locationId: input.id }
         });

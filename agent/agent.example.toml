@@ -2,15 +2,17 @@
 #
 # The agent normally writes this file itself during `deveye-agent link`.
 # Location: $DEVEYE_CONFIG, or <config-dir>/deveye/agent.toml
-# (~/.config/deveye/agent.toml for a user, /etc/deveye/agent.toml for the service).
+#   - Linux: ~/.config/deveye/agent.toml
+#   - macOS: ~/Library/Application Support/deveye/agent.toml
 
 # HTTP base URL of the DevEye server.
 server = "https://deveye.example.com"
 
-# Human-friendly device name (shown in the Clients page).
+# Human-friendly device name (shown in the Appareils page).
 name = "my-laptop"
 
-# Stable machine fingerprint (auto-derived from /etc/machine-id).
+# Stable machine fingerprint (auto-derived: machine-id on Linux,
+# IOPlatformUUID on macOS).
 fingerprint = "0123456789abcdef0123456789abcdef"
 
 # Base64 Ed25519 keypair (auto-generated; keep the secret private).

@@ -68,7 +68,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const audit = createAuditLog(deps.db);
 
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
-    await agentRoutes(app, { db: deps.db, hub });
+    await agentRoutes(app, { db: deps.db, hub, audit });
     await registerWS(app, { db: deps.db, crypt: deps.crypt, hub, audit });
     await registerAgentWS(app, { db: deps.db, hub, audit });
 

@@ -247,9 +247,17 @@
     flex-shrink: 0;
 }
 
+.pendingHint {
+    font-size: 0.78rem;
+    color: var(--warning);
+    margin: 0;
+}
+
 .deviceActions {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-sm);
     margin-top: auto;
     padding-top: var(--space-sm);
     border-top: 1px solid var(--glass-border);
@@ -259,12 +267,14 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: var(--space-xs);
     width: 32px;
     height: 32px;
     background: transparent;
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
     color: var(--text-muted);
+    font-size: 0.8rem;
     cursor: pointer;
     transition:
         background var(--transition-fast),
@@ -273,64 +283,144 @@
 }
 
 .actionBtn:hover {
+    border-color: var(--glass-border-strong);
+    color: var(--text-primary);
+}
+
+/* Primary confirm action: accent-filled, sized to its label. */
+.actionPrimary {
+    width: auto;
+    padding: 0 var(--space-md);
+    margin-right: auto;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+    font-weight: 600;
+}
+
+.actionPrimary:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+    color: var(--on-accent);
+}
+
+/* Destructive actions (revoke, delete) flush danger on hover. */
+.actionDanger:hover {
     background: var(--danger-bg);
     border-color: var(--danger);
     color: var(--danger);
 }
 
-/* Link-code dialog content (rendered inside the shared <Dialog/>) */
-.codeDisplay {
+/* ─── Link-code dialog (rendered inside the shared <Dialog/>) ──────────────── */
+
+/* Generation controls: validity selector (+ optional minutes) and Generate. */
+.genRow {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
-    background: var(--surface-subtle);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-sm);
-    padding: var(--space-sm) var(--space-md);
-    margin-bottom: var(--space-sm);
+    margin-bottom: var(--space-md);
+    flex-wrap: wrap;
 }
 
-.codeDisplay code {
+.genRow > select {
     flex: 1;
+    min-width: 150px;
+}
+
+.minutesInput {
+    width: 110px;
+    flex-shrink: 0;
+}
+
+.genError {
+    color: var(--danger);
+    font-size: 0.82rem;
+    margin: 0 0 var(--space-md) 0;
+}
+
+.noCodes {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-md) 0;
+}
+
+/* Active-codes table. */
+.codeTable {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: var(--space-md);
+}
+
+.codeTable th {
+    text-align: left;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    padding: 0 var(--space-sm) var(--space-xs);
+}
+
+.codeTable td {
+    padding: var(--space-sm);
+    border-top: 1px solid var(--glass-border);
+    vertical-align: middle;
+}
+
+.codeCell {
     font-family: var(--font-mono);
-    font-size: 1.5rem;
+    font-size: 1.1rem;
     font-weight: 600;
     color: var(--accent);
-    letter-spacing: 0.15em;
+    letter-spacing: 0.12em;
 }
 
-.copyBtn {
+.validityCell {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.codeRowActions {
     display: flex;
+    justify-content: flex-end;
+    gap: var(--space-xs);
+}
+
+/* Compact icon button used in the codes table (copy / delete). */
+.iconBtn {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 34px;
-    height: 34px;
-    background: var(--glass-bg-light);
+    width: 30px;
+    height: 30px;
+    background: transparent;
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
     color: var(--text-secondary);
     cursor: pointer;
-    flex-shrink: 0;
     transition:
         background var(--transition-fast),
+        border-color var(--transition-fast),
         color var(--transition-fast);
 }
 
-.copyBtn:hover {
-    background: var(--accent);
-    color: var(--on-accent);
+.iconBtn:hover {
+    border-color: var(--glass-border-strong);
+    color: var(--text-primary);
 }
 
-.copyBtn.copied {
+/* Copied confirmation: a clear accent-green check, not a bare dot. */
+.iconBtn.copied {
     color: var(--success);
     border-color: var(--success);
     background: var(--success-bg);
 }
 
-.expiry {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin: 0 0 var(--space-md) 0;
+.iconDanger:hover {
+    background: var(--danger-bg);
+    border-color: var(--danger);
+    color: var(--danger);
 }
 
 .instructions {
