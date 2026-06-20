@@ -220,6 +220,11 @@ export default function TopNavbar({
                                     }}
                                 >
                                     <span className='icon icon-activity' /> Logs
+                                    <span
+                                        className={`icon icon-shield ${styles.adminBadge}`}
+                                        title='Réservé aux administrateurs'
+                                        aria-label='Réservé aux administrateurs'
+                                    />
                                 </button>
                             )}
                             <hr className={styles.divider} />

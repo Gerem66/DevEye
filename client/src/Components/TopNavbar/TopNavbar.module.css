@@ -281,6 +281,16 @@
     background: var(--glass-bg-light);
 }
 
+/* Subtle admin-only marker — a small shield pushed to the right of the label so
+   reserved features are quietly distinguishable from the ones everyone sees. */
+.menuItem .adminBadge {
+    margin-left: auto;
+    width: 12px;
+    height: 12px;
+    color: var(--text-muted);
+    opacity: 0.75;
+}
+
 .menuItem.danger {
     color: var(--danger);
 }
