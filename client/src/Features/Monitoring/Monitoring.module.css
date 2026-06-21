@@ -529,6 +529,59 @@
     color: var(--text-muted);
 }
 
+/* ─── Loading skeletons (device switch / first load) ──────────────────────── */
+
+/* A shimmering placeholder block; sized by the modifier classes below. */
+.skelLine {
+    position: relative;
+    overflow: hidden;
+    background: var(--glass-bg-light);
+    border-radius: var(--radius-sm);
+}
+.skelLine::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+        90deg,
+        transparent,
+        color-mix(in srgb, var(--text-muted) 14%, transparent),
+        transparent
+    );
+    animation: monitoring-shimmer 1.2s ease-in-out infinite;
+}
+@keyframes monitoring-shimmer {
+    100% {
+        transform: translateX(100%);
+    }
+}
+.skelTitle {
+    width: 38%;
+    height: 0.7rem;
+}
+.skelStat {
+    width: 22%;
+    height: 0.7rem;
+}
+.skelGraphBody {
+    height: 60px;
+}
+.activityHeroLoading {
+    --activity-color: var(--text-muted);
+}
+.skelHeroLabel {
+    width: 130px;
+    height: 0.85rem;
+    border-radius: 999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .skelLine::after {
+        animation: none;
+    }
+}
+
 /* ─── Info cards (current values) ─────────────────────────────────────────── */
 
 .infoCard {

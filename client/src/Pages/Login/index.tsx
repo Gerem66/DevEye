@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { ApiError, post } from '../../api/http';
 import { useAuth } from '../../auth/AuthProvider';
+import { isHomeReady, onHomeReady } from '../../stores/homeReady';
 import { TextInput } from '../../Components';
 import { z } from 'zod';
 import './style.css';
@@ -15,6 +16,9 @@ const twoFaResponseSchema = z.object({
 const PROGRESS_MS = 1500;
 /** Minimum visible time for a failed attempt before the error shows. */
 const ERROR_MS = PROGRESS_MS;
+/** Hard cap on how long the splash waits for the home to load past the
+ *  progress-bar animation, so a stalled first load can't trap the user here. */
+const HOME_READY_MAX_MS = 4000;
 
 /** Block until at least `minMs` has elapsed since `startedAt` (keeps the
  *  progress/error animations from flashing on fast responses). */
@@ -75,16 +79,51 @@ function LoginPage() {
         return () => ro.disconnect();
     }, [twoFaRequired]);
 
-    // Fade to the homepage only once authenticated AND the progress-bar animation
-    // has fully played — the transition must wait for the animation to finish.
+    // Fade to the homepage only once authenticated, the progress-bar animation has
+    // fully played, AND the home has its first data — so the transition always
+    // lands on a clean, populated dashboard instead of a half-empty grid. The
+    // animation is never cut short (we always wait out its remaining time), and a
+    // cap keeps a stalled first load from trapping the user on the splash.
     useEffect(() => {
         if (status !== 'authenticated') {
             setHide(false);
             return;
         }
-        const remaining = Math.max(0, PROGRESS_MS - (Date.now() - animStartRef.current));
-        const timer = setTimeout(() => setHide(true), remaining);
-        return () => clearTimeout(timer);
+        let cancelled = false;
+        let animTimer: ReturnType<typeof setTimeout> | undefined;
+        let capTimer: ReturnType<typeof setTimeout> | undefined;
+        let offReady: (() => void) | undefined;
+
+        const hideAfterAnim = () => {
+            const remaining = Math.max(0, PROGRESS_MS - (Date.now() - animStartRef.current));
+            animTimer = setTimeout(() => {
+                if (!cancelled) setHide(true);
+            }, remaining);
+        };
+        // Stop waiting on home readiness (the listener + the safety cap).
+        const stopWaiting = () => {
+            clearTimeout(capTimer);
+            offReady?.();
+        };
+
+        if (isHomeReady()) {
+            hideAfterAnim();
+        } else {
+            offReady = onHomeReady(() => {
+                stopWaiting();
+                hideAfterAnim();
+            });
+            capTimer = setTimeout(() => {
+                stopWaiting();
+                hideAfterAnim();
+            }, HOME_READY_MAX_MS);
+        }
+
+        return () => {
+            cancelled = true;
+            clearTimeout(animTimer);
+            stopWaiting();
+        };
     }, [status]);
 
     const startAnim = () => {

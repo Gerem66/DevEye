@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { ApiError, login as apiLogin, logout as apiLogout, me as apiMe, refresh as apiRefresh } from '../api/http';
 import { ws } from '../api/ws';
 import { refreshSecrecyStatus, setUnlocked } from '../stores/secrecy';
+import { resetHomeReady } from '../stores/homeReady';
 import { syncThemeFromServer } from '../stores/theme';
 
 interface AuthState {
@@ -42,6 +43,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const setAnonymous = useCallback(() => {
         setUnlocked(false);
+        // Next sign-in must wait for the home's first data again before its splash
+        // fades, instead of inheriting this session's "ready" flag.
+        resetHomeReady();
         setState({ status: 'anonymous', user: null, workspaces: [] });
     }, []);
 

@@ -272,6 +272,12 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
     const [refreshing, setRefreshing] = useState(false);
     const [dataDays, setDataDays] = useState<string[]>([]);
     const [graphsExpanded, setGraphsExpanded] = useState(false);
+    // False from the moment a device is (re)selected until its first metrics
+    // query resolves. The graphs and activity hero come *only* from that
+    // historical query, so we show loaders for them until it lands — everything
+    // else (KPIs, security, online state) is seeded instantly by the subscribe
+    // push and appears right away.
+    const [metricsReady, setMetricsReady] = useState(false);
 
     const devices = useMemo(
         () => baseDevices.map((d) => (overrides[d.id] ? { ...d, ...overrides[d.id] } : d)),
@@ -296,6 +302,20 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
     useEffect(() => {
         if (selectedId === null && baseDevices.length > 0) setSelectedId(baseDevices[0].id);
     }, [baseDevices, selectedId]);
+
+    // Switching device: drop the previous machine's transient data so its graphs,
+    // activity and KPIs never bleed into the new selection (which would flash
+    // stale values, then jump). The per-device effects below refill everything;
+    // until the first metrics query resolves we show loaders instead of stale or
+    // empty cards.
+    useEffect(() => {
+        setMetricsReady(false);
+        setPoints([]);
+        setLiveSnapshot(null);
+        setProcSample(null);
+        setSnapshotTimes([]);
+        setPresence({ onlineAtStart: false, events: [] });
+    }, [selectedId]);
 
     // Which days have data (for the calendar + day arrows).
     useEffect(() => {
@@ -358,7 +378,12 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
             .then((res) => {
                 if (selectedRef.current === id) setPoints(res.points);
             })
-            .catch(() => {});
+            .catch(() => {})
+            // Reveal the graphs once the first attempt lands (success or failure),
+            // so a transient error shows "no data" rather than an endless loader.
+            .finally(() => {
+                if (selectedRef.current === id) setMetricsReady(true);
+            });
         ws.send('metrics.processesAt', { deviceId: id, at: processAt })
             .then((res) => {
                 if (selectedRef.current === id) setProcSample(res.sample);
@@ -783,7 +808,7 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                                 </div>
                             </div>
 
-                            {display && (
+                            {display ? (
                                 <div
                                     className={`${styles.activityHero} ${styles[activityMeta.cls]} ${valuesMuted ? styles.muted : ''}`}
                                 >
@@ -791,7 +816,12 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                                     <span className={styles.activityLabel}>{activityMeta.label}</span>
                                     <span className={`icon icon-activity ${styles.activityIcon}`} />
                                 </div>
-                            )}
+                            ) : !metricsReady ? (
+                                <div className={`${styles.activityHero} ${styles.activityHeroLoading}`} aria-hidden>
+                                    <span className={styles.activityDot} />
+                                    <div className={`${styles.skelLine} ${styles.skelHeroLabel}`} />
+                                </div>
+                            ) : null}
 
                             {!online && (
                                 <div className={styles.offlineBanner}>
@@ -828,8 +858,20 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                             />
 
                             {/* Graphs */}
-                            <div className={styles.graphsGrid}>{shownGraphs.map((g) => g.node)}</div>
-                            {allGraphs.length > COLLAPSED_GRAPHS && (
+                            <div className={styles.graphsGrid}>
+                                {metricsReady
+                                    ? shownGraphs.map((g) => g.node)
+                                    : Array.from({ length: COLLAPSED_GRAPHS }).map((_, i) => (
+                                          <div key={`graph-skeleton-${i}`} className={styles.graphCard} aria-hidden>
+                                              <div className={styles.graphHead}>
+                                                  <div className={`${styles.skelLine} ${styles.skelTitle}`} />
+                                                  <div className={`${styles.skelLine} ${styles.skelStat}`} />
+                                              </div>
+                                              <div className={`${styles.skelLine} ${styles.skelGraphBody}`} />
+                                          </div>
+                                      ))}
+                            </div>
+                            {metricsReady && allGraphs.length > COLLAPSED_GRAPHS && (
                                 <button className={styles.expandGraphsBtn} onClick={() => setGraphsExpanded((v) => !v)}>
                                     {graphsExpanded
                                         ? 'Réduire les graphiques'

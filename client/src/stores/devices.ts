@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { ws } from '@/api/ws';
+import { markHomeReady } from '@/stores/homeReady';
 import type { Device } from 'deveye-types';
 
 /**
@@ -40,6 +41,10 @@ export async function refreshDevices(): Promise<void> {
     } catch {
         emit({ loading: false, error: 'Connexion indisponible' });
     }
+    // The device list is the dashboard's main above-the-fold content; once it has
+    // first settled (loaded or errored) the home is "ready" enough for the login
+    // splash to fade onto a populated view. No-op after the first settle.
+    markHomeReady();
 }
 
 /** Optimistic local removal after `device.delete`; the next poll reconciles. */
