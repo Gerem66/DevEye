@@ -1,4 +1,5 @@
-//! DevEye Agent — lightweight cross-platform monitoring daemon (Linux & macOS).
+//! DevEye Agent — lightweight cross-platform monitoring daemon (Linux, macOS &
+//! Windows).
 //!
 //! Subcommands:
 //!   - `link <code>`  Enroll this machine with a one-time code from the web UI.
@@ -195,17 +196,39 @@ fn stop() -> Result<()> {
         let _ = fs::remove_file(&pid_path);
         return Ok(());
     }
+    kill_process(&pid)?;
+    let _ = fs::remove_file(&pid_path);
+    println!("✓ Agent stopped (pid {pid}).");
+    Ok(())
+}
+
+/// Terminate a backgrounded agent by PID. Unix sends SIGTERM (`kill`); Windows
+/// force-kills via `taskkill /F` (the agent installs no graceful-shutdown
+/// handler, so it relies on the OS terminating it either way).
+#[cfg(unix)]
+fn kill_process(pid: &str) -> Result<()> {
     let status = PCommand::new("kill")
-        .arg(&pid)
+        .arg(pid)
         .status()
         .context("sending SIGTERM")?;
     if status.success() {
-        let _ = fs::remove_file(&pid_path);
-        println!("✓ Agent stopped (pid {pid}).");
+        Ok(())
     } else {
         anyhow::bail!("failed to stop agent (pid {pid})");
     }
-    Ok(())
+}
+
+#[cfg(windows)]
+fn kill_process(pid: &str) -> Result<()> {
+    let status = PCommand::new("taskkill")
+        .args(["/PID", pid, "/F"])
+        .status()
+        .context("running taskkill")?;
+    if status.success() {
+        Ok(())
+    } else {
+        anyhow::bail!("failed to stop agent (pid {pid})");
+    }
 }
 
 fn status() {
@@ -251,13 +274,30 @@ fn running_state() -> String {
     }
 }
 
-/// `kill -0 <pid>` succeeds iff the process exists and is signalable.
+/// Whether a PID is currently a live process. Unix uses `kill -0` (succeeds iff
+/// the process exists and is signalable); Windows asks `tasklist` for that PID.
+#[cfg(unix)]
 fn process_alive(pid: &str) -> bool {
     PCommand::new("kill")
         .args(["-0", pid])
         .status()
         .map(|s| s.success())
         .unwrap_or(false)
+}
+
+#[cfg(windows)]
+fn process_alive(pid: &str) -> bool {
+    let out = match PCommand::new("tasklist")
+        .args(["/FI", &format!("PID eq {pid}"), "/NH", "/FO", "CSV"])
+        .output()
+    {
+        Ok(o) if o.status.success() => o.stdout,
+        _ => return false,
+    };
+    // CSV rows quote each field, e.g. `"deveye-agent.exe","1234",...`; absence
+    // prints an "INFO: No tasks…" notice that won't contain the quoted PID.
+    let text = String::from_utf8_lossy(&out);
+    text.contains(&format!("\"{pid}\""))
 }
 
 fn unlink() -> Result<()> {

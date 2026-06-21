@@ -4,8 +4,8 @@ Lightweight, cross-platform monitoring daemon for DevEye. It enrolls a machine
 with the DevEye server, then streams health metrics and a periodic
 health/security report over a single WebSocket.
 
-Supported platforms: **Linux** and **macOS** (same codebase; OS-specific probes
-are `#[cfg(target_os)]`-gated).
+Supported platforms: **Linux**, **macOS** and **Windows** (same codebase;
+OS-specific probes are `#[cfg(target_os)]`-gated).
 
 > Scope, on purpose: the agent only handles **pairing, run, stop** and a few
 > base commands. It does **not** install itself or configure start-on-boot.
@@ -13,13 +13,13 @@ are `#[cfg(target_os)]`-gated).
 
 ## Build
 
-A native binary is produced per platform — build it on the machine that will run
-it (or cross-compile with the matching Rust target):
+A native binary is produced per platform. The simplest path is to build on the
+machine that will run it:
 
 ```sh
 cd DevEye/agent
 cargo build --release
-# binary: target/release/deveye-agent
+# binary: target/release/deveye-agent  (deveye-agent.exe on Windows)
 ```
 
 Requires a stable Rust toolchain (`rust-toolchain.toml` pins `stable`).
@@ -67,6 +67,7 @@ The agent writes its own config during `link`. Location: `$DEVEYE_CONFIG`, or
 
 - Linux: `~/.config/deveye/agent.toml`
 - macOS: `~/Library/Application Support/deveye/agent.toml`
+- Windows: `%APPDATA%\deveye\agent.toml`
 
 Alongside it, when running: `agent.pid` (for `stop`/`status`) and, when detached,
 `agent.log`. See `agent.example.toml` for the file format.
@@ -96,18 +97,25 @@ arrives (it arrives within ~1 s of connecting); the real cadence is UI-controlle
 
 **Health/security report** (OS name/version/arch + posture):
 
-| Signal | Linux | macOS |
-| --- | --- | --- |
-| Firewall | `ufw` / `firewalld` | Application Firewall (`socketfilterfw`) |
-| Disk encryption | LUKS (via `lsblk`) | FileVault (`fdesetup`) |
-| SIP | — | `csrutil status` |
-| Pending updates | `apt-get -s upgrade` / `dnf check-update` | not collected (slow) |
-| GPU % | `nvidia-smi` | IOAccelerator (`ioreg`) |
+| Signal | Linux | macOS | Windows |
+| --- | --- | --- | --- |
+| Firewall | `ufw` / `firewalld` | Application Firewall (`socketfilterfw`) | `netsh advfirewall` |
+| Disk encryption | LUKS (via `lsblk`) | FileVault (`fdesetup`) | BitLocker (`manage-bde`) |
+| SIP | — | `csrutil status` | — |
+| Pending updates | `apt-get -s upgrade` / `dnf check-update` | not collected (slow) | not collected (slow) |
+| GPU % | `nvidia-smi` | IOAccelerator (`ioreg`) | `nvidia-smi` |
+| Logged-in users | `who` | `who` | `query user` |
+| Active TCP conns | `ss` | `netstat` | `netstat -an` |
+| Machine id | `/etc/machine-id` | IOPlatformUUID (`ioreg`) | registry `MachineGuid` |
+| Processes | `ps` | `ps` | `sysinfo` |
 
 Every probe is **best-effort and nullable**: when the underlying tool is absent
 or not permitted, the value is reported as “unknown”/empty. Notable limitations:
 **CPU temperature is unavailable on Apple Silicon** (SMC access is privileged), and
-**disk I/O is reported on Linux** but may be unavailable (hidden) on macOS.
+**disk I/O is reported on Linux** but may be unavailable (hidden) on macOS/Windows.
+On Windows, `stop` force-terminates (`taskkill /F`) and a running agent can't
+delete its own binary, so a self-destruct leaves the `.exe` behind (the config
+and token are still wiped).
 
 **Persistence & retention**: the server stores metrics, the connectivity timeline
 and process samples so the dashboard can "go back in time" and survive the agent

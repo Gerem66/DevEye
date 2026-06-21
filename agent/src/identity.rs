@@ -12,7 +12,11 @@ pub fn current_platform() -> &'static str {
     {
         "macos"
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        "windows"
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         "linux"
     }
@@ -22,6 +26,7 @@ pub fn current_platform() -> &'static str {
 ///
 /// - Linux: the systemd/D-Bus machine-id (stable across reboots, unique).
 /// - macOS: the IOPlatformUUID from `ioreg`.
+/// - Windows: the `MachineGuid` from the registry.
 ///
 /// Falls back to the hostname when no stable id is available.
 pub fn machine_fingerprint() -> String {
@@ -31,7 +36,13 @@ pub fn machine_fingerprint() -> String {
             return id;
         }
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(id) = windows_machine_guid() {
+            return id;
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         for path in ["/etc/machine-id", "/var/lib/dbus/machine-id"] {
             if let Ok(id) = std::fs::read_to_string(path) {
@@ -65,6 +76,34 @@ fn macos_platform_uuid() -> Option<String> {
                 if !val.is_empty() {
                     return Some(val.to_string());
                 }
+            }
+        }
+    }
+    None
+}
+
+/// Read the stable `MachineGuid` on Windows via `reg query` (no extra crate).
+#[cfg(target_os = "windows")]
+fn windows_machine_guid() -> Option<String> {
+    let out = std::process::Command::new("reg")
+        .args([
+            "query",
+            r"HKLM\SOFTWARE\Microsoft\Cryptography",
+            "/v",
+            "MachineGuid",
+        ])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    // Line looks like: `    MachineGuid    REG_SZ    XXXXXXXX-....`
+    for line in text.lines() {
+        if let Some(idx) = line.find("REG_SZ") {
+            let val = line[idx + "REG_SZ".len()..].trim();
+            if !val.is_empty() {
+                return Some(val.to_string());
             }
         }
     }

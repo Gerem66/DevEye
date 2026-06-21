@@ -92,7 +92,8 @@ impl Config {
     /// Only the config removal is mandatory: if it fails (e.g. permissions), we
     /// return an error so the server aborts the deletion and surfaces it. The
     /// rest is best-effort (their failure must not block a deletion). On Unix a
-    /// running process can unlink its own binary; the inode lives until exit.
+    /// running process can unlink its own binary (the inode lives until exit);
+    /// Windows locks a running executable, so the binary there is left in place.
     pub fn self_destruct() -> Result<()> {
         let config = Self::path();
         if config.exists() {

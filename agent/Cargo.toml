@@ -2,7 +2,7 @@
 name = "deveye-agent"
 version = "0.1.0"
 edition = "2021"
-description = "DevEye Agent — lightweight Linux monitoring daemon"
+description = "DevEye Agent — lightweight cross-platform monitoring daemon (Linux, macOS, Windows)"
 license = "ISC"
 
 [[bin]]

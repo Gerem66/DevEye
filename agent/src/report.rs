@@ -57,38 +57,21 @@ const TOP_PROCESS_LIMIT: usize = 20;
 /// processes, so a single PID looks idle while the app is busy. Grouping by name
 /// gives the realistic "this app is using X%".
 ///
-/// We shell out to `ps` rather than use `sysinfo`: its per-process CPU reads 0 on
-/// macOS (a known limitation), whereas `ps` reports a real value on both
-/// platforms. `%cpu` is the kernel's recent (decaying-average) utilisation and
+/// On Unix we shell out to `ps` rather than use `sysinfo`: its per-process CPU
+/// reads 0 on macOS (a known limitation), whereas `ps` reports a real value on
+/// both Unixes. `%cpu` is the kernel's recent (decaying-average) utilisation and
 /// can exceed 100% across cores; `%mem` is RSS as a fraction of physical memory.
+/// Windows has no `ps`, so there we use `sysinfo` (whose per-process CPU *is*
+/// accurate on Windows) — see `aggregate_processes`.
 pub fn collect_processes(capture: &str) -> Vec<ProcessInfo> {
     if capture == "off" {
         return Vec::new();
     }
 
-    // macOS uses `ucomm` (short accounting name); Linux uses `comm`.
-    #[cfg(target_os = "macos")]
-    let args: [&str; 2] = ["-Ao", "pcpu=,pmem=,rss=,ucomm="];
-    #[cfg(not(target_os = "macos"))]
-    let args: [&str; 2] = ["-eo", "pcpu=,pmem=,rss=,comm="];
+    // Per-program aggregate: (summed cpu%, summed mem%, summed rss bytes).
+    let agg = aggregate_processes();
 
-    let out = match run("ps", &args) {
-        Some(o) => o,
-        None => return Vec::new(),
-    };
-
-    // Aggregate by name: (summed cpu%, summed mem%, summed rss bytes).
-    let mut agg: HashMap<String, (f64, f64, u64)> = HashMap::new();
-    for line in out.lines() {
-        if let Some((name, cpu, mem_pct, rss)) = parse_ps_line(line) {
-            let e = agg.entry(name).or_insert((0.0, 0.0, 0));
-            e.0 += cpu;
-            e.1 += mem_pct;
-            e.2 = e.2.saturating_add(rss);
-        }
-    }
-
-    // Score on cpu% + mem% (the two signals `ps` exposes everywhere).
+    // Score on cpu% + mem% (the two signals available everywhere).
     let mut scored: Vec<(f64, ProcessInfo)> = agg
         .into_iter()
         .map(|(name, (cpu, mem_pct, rss))| {
@@ -112,8 +95,63 @@ pub fn collect_processes(capture: &str) -> Vec<ProcessInfo> {
     scored.into_iter().map(|(_, p)| p).collect()
 }
 
+/// Aggregate processes by program name into `(summed cpu%, summed mem%, summed
+/// rss bytes)`. Unix parses `ps`; Windows reads `sysinfo`.
+#[cfg(not(target_os = "windows"))]
+fn aggregate_processes() -> HashMap<String, (f64, f64, u64)> {
+    // macOS uses `ucomm` (short accounting name); Linux uses `comm`.
+    #[cfg(target_os = "macos")]
+    let args: [&str; 2] = ["-Ao", "pcpu=,pmem=,rss=,ucomm="];
+    #[cfg(not(target_os = "macos"))]
+    let args: [&str; 2] = ["-eo", "pcpu=,pmem=,rss=,comm="];
+
+    let mut agg: HashMap<String, (f64, f64, u64)> = HashMap::new();
+    let out = match run("ps", &args) {
+        Some(o) => o,
+        None => return agg,
+    };
+    for line in out.lines() {
+        if let Some((name, cpu, mem_pct, rss)) = parse_ps_line(line) {
+            let e = agg.entry(name).or_insert((0.0, 0.0, 0));
+            e.0 += cpu;
+            e.1 += mem_pct;
+            e.2 = e.2.saturating_add(rss);
+        }
+    }
+    agg
+}
+
+/// Windows aggregate via `sysinfo`. Two refreshes spaced apart yield a real
+/// per-process CPU delta; memory is the working set, expressed as a % of total.
+#[cfg(target_os = "windows")]
+fn aggregate_processes() -> HashMap<String, (f64, f64, u64)> {
+    use sysinfo::ProcessesToUpdate;
+    let mut sys = System::new();
+    sys.refresh_memory(); // `new()` leaves totals at 0 until refreshed
+    sys.refresh_processes(ProcessesToUpdate::All, true);
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    sys.refresh_processes(ProcessesToUpdate::All, true);
+    let total_mem = sys.total_memory().max(1) as f64;
+    let mut agg: HashMap<String, (f64, f64, u64)> = HashMap::new();
+    for proc in sys.processes().values() {
+        let name = proc.name().to_string_lossy().to_string();
+        if name.is_empty() {
+            continue;
+        }
+        let cpu = proc.cpu_usage() as f64;
+        let rss = proc.memory();
+        let mem_pct = (rss as f64 / total_mem) * 100.0;
+        let e = agg.entry(name).or_insert((0.0, 0.0, 0));
+        e.0 += cpu;
+        e.1 += mem_pct;
+        e.2 = e.2.saturating_add(rss);
+    }
+    agg
+}
+
 /// Parse a `ps` line `<%cpu> <%mem> <rss_kb> <command…>` into
 /// `(name, cpu%, mem%, rss_bytes)`.
+#[cfg(not(target_os = "windows"))]
 fn parse_ps_line(line: &str) -> Option<(String, f64, f64, u64)> {
     let mut parts = line.split_whitespace();
     let cpu: f64 = parts.next()?.parse().ok()?;
@@ -197,7 +235,7 @@ fn pending_updates() -> Option<u32> {
 
 // ── Linux collectors ────────────────────────────────────────────────────────
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn firewall_enabled() -> Option<bool> {
     if let Some(out) = run("ufw", &["status"]) {
         let lower = out.to_lowercase();
@@ -214,7 +252,7 @@ fn firewall_enabled() -> Option<bool> {
     None
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn disk_encrypted() -> Option<bool> {
     // Any LUKS-typed block device counts as encrypted storage.
     let out = run("lsblk", &["-o", "TYPE,FSTYPE", "-n"])?;
@@ -224,12 +262,12 @@ fn disk_encrypted() -> Option<bool> {
     Some(encrypted)
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn sip_enabled() -> Option<bool> {
     None
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn pending_updates() -> Option<u32> {
     // Debian/Ubuntu: simulate an upgrade and count "Inst" lines.
     if let Some(out) = run("apt-get", &["-s", "upgrade"]) {
@@ -242,5 +280,56 @@ fn pending_updates() -> Option<u32> {
         let n = text.lines().filter(|l| !l.trim().is_empty()).count();
         return Some(n as u32);
     }
+    None
+}
+
+// ── Windows collectors ──────────────────────────────────────────────────────
+
+#[cfg(target_os = "windows")]
+fn firewall_enabled() -> Option<bool> {
+    // `netsh advfirewall show allprofiles state` prints a `State   ON/OFF` line
+    // per profile (Domain/Private/Public). Treat any profile OFF as not fully
+    // protected.
+    let out = run("netsh", &["advfirewall", "show", "allprofiles", "state"])?;
+    let mut saw_state = false;
+    let mut any_off = false;
+    for line in out.to_lowercase().lines() {
+        if line.contains("state") {
+            saw_state = true;
+            if line.contains("off") {
+                any_off = true;
+            }
+        }
+    }
+    if saw_state {
+        Some(!any_off)
+    } else {
+        None
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn disk_encrypted() -> Option<bool> {
+    // BitLocker: `manage-bde -status` reports "Protection Status: Protection
+    // On/Off" per volume. Any volume On counts as encrypted storage.
+    let out = run("manage-bde", &["-status"])?;
+    let lower = out.to_lowercase();
+    if lower.contains("protection on") {
+        Some(true)
+    } else if lower.contains("protection off") {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn sip_enabled() -> Option<bool> {
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn pending_updates() -> Option<u32> {
+    // Querying Windows Update needs WUA/PowerShell and is slow; skipped by design.
     None
 }

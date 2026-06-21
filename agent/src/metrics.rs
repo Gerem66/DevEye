@@ -305,23 +305,45 @@ fn read_cpu_temp(components: &Components) -> Option<f64> {
     max.map(|t| (t * 10.0).round() / 10.0)
 }
 
-/// Count distinct logged-in OS users via `who`. Returns 0 if unavailable.
+/// Count distinct logged-in OS users: `who` on Unix, `query user` on Windows.
+/// Returns 0 if the tool is unavailable.
 fn logged_in_users() -> u32 {
     use std::collections::HashSet;
-    let output = match std::process::Command::new("who").output() {
-        Ok(o) if o.status.success() => o.stdout,
-        _ => return 0,
-    };
-    let text = String::from_utf8_lossy(&output);
-    let users: HashSet<&str> = text
-        .lines()
-        .filter_map(|line| line.split_whitespace().next())
-        .collect();
-    users.len() as u32
+    #[cfg(target_os = "windows")]
+    {
+        // `query user` lists interactive sessions; the first column is the user
+        // (prefixed with `>` for the current one). The first line is the header.
+        let output = match std::process::Command::new("query").args(["user"]).output() {
+            Ok(o) if o.status.success() => o.stdout,
+            _ => return 0,
+        };
+        let text = String::from_utf8_lossy(&output);
+        let users: HashSet<String> = text
+            .lines()
+            .skip(1)
+            .filter_map(|line| line.split_whitespace().next())
+            .map(|u| u.trim_start_matches('>').to_lowercase())
+            .filter(|u| !u.is_empty())
+            .collect();
+        users.len() as u32
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = match std::process::Command::new("who").output() {
+            Ok(o) if o.status.success() => o.stdout,
+            _ => return 0,
+        };
+        let text = String::from_utf8_lossy(&output);
+        let users: HashSet<&str> = text
+            .lines()
+            .filter_map(|line| line.split_whitespace().next())
+            .collect();
+        users.len() as u32
+    }
 }
 
 /// Count established TCP connections, best-effort via `ss` (Linux) or `netstat`
-/// (macOS). Returns `None` when neither tool is usable.
+/// (macOS & Windows). Returns `None` when the tool is unusable.
 fn active_connections() -> Option<u32> {
     #[cfg(target_os = "macos")]
     {
@@ -336,7 +358,20 @@ fn active_connections() -> Option<u32> {
         let n = text.lines().filter(|l| l.contains("ESTABLISHED")).count();
         Some(n as u32)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        let out = std::process::Command::new("netstat")
+            .args(["-an"])
+            .output()
+            .ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        let text = String::from_utf8_lossy(&out.stdout);
+        let n = text.lines().filter(|l| l.contains("ESTABLISHED")).count();
+        Some(n as u32)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         if let Ok(out) = std::process::Command::new("ss")
             .args(["-tn", "state", "established"])
