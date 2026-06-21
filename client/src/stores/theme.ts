@@ -1,6 +1,9 @@
 import { useSyncExternalStore } from 'react';
 import type { ThemeStateDTO } from 'deveye-types';
+import { THEME_SLOT_COUNT, THEME_SLOT_IMAGE_MAX_LENGTH } from 'deveye-types';
 import { ws } from '@/api/ws';
+
+export { THEME_SLOT_COUNT };
 
 /**
  * Frontend theme personalization (accent color + dashboard background).
@@ -14,8 +17,13 @@ export interface ThemeState {
     accent: string | null;
     /** Background gradient preset key, or null for the accent-tinted default. */
     bgPreset: string | null;
-    /** Optional wallpaper image URL (takes over the gradient when set). */
+    /** Active wallpaper image (data URL or raw URL) — takes over the gradient when set. */
     bgImage: string | null;
+    /**
+     * Saved background gallery: exactly THEME_SLOT_COUNT slots, each a data URL /
+     * raw URL or null for empty. The active `bgImage` is normally one of these.
+     */
+    bgImages: (string | null)[];
     /** Darkening scrim strength over the image, 0–100 (0 = none). */
     bgDim: number;
     /** Blur intensity over the image, 0–100 (0 = none). */
@@ -24,7 +32,45 @@ export interface ThemeState {
 
 export const DEFAULT_DIM = 45;
 export const DEFAULT_BLUR = 0;
-const DEFAULT: ThemeState = { accent: null, bgPreset: null, bgImage: null, bgDim: DEFAULT_DIM, bgBlur: DEFAULT_BLUR };
+const emptySlots = (): (string | null)[] => Array<string | null>(THEME_SLOT_COUNT).fill(null);
+const DEFAULT: ThemeState = {
+    accent: null,
+    bgPreset: null,
+    bgImage: null,
+    bgImages: emptySlots(),
+    bgDim: DEFAULT_DIM,
+    bgBlur: DEFAULT_BLUR
+};
+
+/** Coerce any persisted/server value into a fixed-length array of THEME_SLOT_COUNT slots. */
+function normalizeSlots(input: unknown): (string | null)[] {
+    const arr = Array.isArray(input) ? input : [];
+    const out = emptySlots();
+    for (let i = 0; i < THEME_SLOT_COUNT; i++) {
+        const v = arr[i];
+        out[i] = typeof v === 'string' && v ? v : null;
+    }
+    return out;
+}
+
+/**
+ * Make sure the active background occupies a gallery slot when there's room.
+ * This seeds the gallery for themes saved before slots existed (single bgImage),
+ * so the active image shows up as the first thumbnail. When every slot is taken,
+ * the active image stays "overflow" (unsaved) — lost on the next change.
+ */
+function ensureActiveSlotted(s: ThemeState): ThemeState {
+    if (!s.bgImage || s.bgImages.includes(s.bgImage)) return s;
+    // Skip oversized legacy images (uncompressed data URLs from before the
+    // gallery): they'd exceed the slot cap and fail server validation on sync.
+    // They stay as the active "overflow" background instead.
+    if (s.bgImage.length > THEME_SLOT_IMAGE_MAX_LENGTH) return s;
+    const free = s.bgImages.indexOf(null);
+    if (free === -1) return s;
+    const bgImages = s.bgImages.slice();
+    bgImages[free] = s.bgImage;
+    return { ...s, bgImages };
+}
 
 export const ACCENT_PRESETS: { key: string; label: string; hex: string }[] = [
     { key: 'cyan', label: 'Cyan', hex: '#22d3ee' },
@@ -57,13 +103,14 @@ function read(): ThemeState {
         const raw = localStorage.getItem(KEY);
         if (!raw) return DEFAULT;
         const p = JSON.parse(raw) as Partial<ThemeState>;
-        return {
+        return ensureActiveSlotted({
             accent: typeof p.accent === 'string' ? p.accent : null,
             bgPreset: typeof p.bgPreset === 'string' ? p.bgPreset : null,
             bgImage: typeof p.bgImage === 'string' ? p.bgImage : null,
+            bgImages: normalizeSlots(p.bgImages),
             bgDim: typeof p.bgDim === 'number' ? Math.min(100, Math.max(0, p.bgDim)) : DEFAULT_DIM,
             bgBlur: typeof p.bgBlur === 'number' ? Math.min(100, Math.max(0, p.bgBlur)) : DEFAULT_BLUR
-        };
+        });
     } catch {
         return DEFAULT;
     }
@@ -167,19 +214,47 @@ export function setTheme(patch: Partial<ThemeState>): void {
 }
 
 /**
+ * Apply `value` as the active background and remember it in the gallery, stored
+ * in the first free slot. If it already occupies a slot, it's simply
+ * re-activated (no duplicate). If every slot is taken it still becomes the active
+ * background but isn't saved — it's lost on the next change. Returns whether it
+ * landed in a slot so the UI can warn about the overflow case.
+ */
+export function saveBackground(value: string): { saved: boolean } {
+    const bgImages = state.bgImages.slice();
+    let saved = true;
+    if (!bgImages.includes(value)) {
+        const free = bgImages.indexOf(null);
+        if (free !== -1) bgImages[free] = value;
+        else saved = false;
+    }
+    setTheme({ bgImage: value, bgImages });
+    return { saved };
+}
+
+/** Empty a specific gallery slot, freeing it for the next saved background. */
+export function clearBackgroundSlot(index: number): void {
+    if (index < 0 || index >= state.bgImages.length || state.bgImages[index] === null) return;
+    const bgImages = state.bgImages.slice();
+    bgImages[index] = null;
+    setTheme({ bgImages });
+}
+
+/**
  * Called by AuthProvider when a user bundle is received (login, refresh, /me).
  * The server state wins over localStorage so cross-device settings propagate.
  * Skips overwrite if the server has no saved theme (first login, or legacy user).
  */
 export function syncThemeFromServer(serverTheme: ThemeStateDTO | null): void {
     if (!serverTheme) return;
-    state = {
+    state = ensureActiveSlotted({
         accent: serverTheme.accent,
         bgPreset: serverTheme.bgPreset,
         bgImage: serverTheme.bgImage,
+        bgImages: normalizeSlots(serverTheme.bgImages),
         bgDim: serverTheme.bgDim,
         bgBlur: serverTheme.bgBlur
-    };
+    });
     persist();
     applyTheme(state);
     for (const fn of listeners) fn();

@@ -1,6 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useTheme, setTheme, ACCENT_PRESETS, BG_PRESETS, DEFAULT_DIM, DEFAULT_BLUR } from '@/stores/theme';
+import {
+    useTheme,
+    setTheme,
+    saveBackground,
+    clearBackgroundSlot,
+    ACCENT_PRESETS,
+    BG_PRESETS,
+    DEFAULT_DIM,
+    DEFAULT_BLUR,
+    THEME_SLOT_COUNT
+} from '@/stores/theme';
+import { fileToBackgroundDataUrl, resolveBackgroundFromUrl } from './appearance';
 import styles from './SettingsPanel.module.css';
 
 export interface SettingsPanelProps {
@@ -10,46 +21,22 @@ export interface SettingsPanelProps {
 
 const DEFAULT_ACCENT = '#22d3ee';
 
-/** App settings dialog: accent color + dashboard background. */
+/** App settings dialog: accent color + dashboard background gallery. */
 export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
     const theme = useTheme();
-    const [draftUrl, setDraftUrl] = useState(theme.bgImage ?? '');
-    const [fileError, setFileError] = useState<string | null>(null);
+    const [draftUrl, setDraftUrl] = useState('');
+    const [error, setError] = useState<string | null>(null);
+    const [notice, setNotice] = useState<string | null>(null);
+    const [busy, setBusy] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    // Set while we sync the field *from* theme, so the debounce effect below
-    // doesn't treat that programmatic change as a user edit and re-apply it.
-    const syncingRef = useRef(false);
 
-    useEffect(() => {
-        if (open) {
-            const next = theme.bgImage?.startsWith('data:') ? '' : (theme.bgImage ?? '');
-            setDraftUrl((prev) => {
-                if (prev !== next) syncingRef.current = true;
-                return next;
-            });
-            setFileError(null);
-        }
-    }, [open, theme.bgImage]);
-
-    // Debounced auto-apply of the URL field: wait 500 ms of inactivity, then
-    // commit. No "Appliquer" button needed. The field is empty by nature when a
-    // local (data:) image is active, so an empty field must NOT clear it — only
-    // a user-typed URL or an explicit reset changes the image from here.
+    // Reset transient UI whenever the dialog (re)opens.
     useEffect(() => {
         if (!open) return;
-        if (syncingRef.current) {
-            syncingRef.current = false;
-            return;
-        }
-        const url = draftUrl.trim();
-        const localImageActive = theme.bgImage?.startsWith('data:') ?? false;
-        if (!url && localImageActive) return;
-        const t = setTimeout(() => {
-            setFileError(null);
-            setTheme({ bgImage: url || null });
-        }, 500);
-        return () => clearTimeout(t);
-    }, [draftUrl, open, theme.bgImage]);
+        setDraftUrl('');
+        setError(null);
+        setNotice(null);
+    }, [open]);
 
     useEffect(() => {
         if (!open) return;
@@ -62,43 +49,80 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
 
     const activeAccent = (theme.accent ?? DEFAULT_ACCENT).toLowerCase();
     const customized = Boolean(
-        theme.accent || theme.bgPreset || theme.bgImage || theme.bgDim !== DEFAULT_DIM || theme.bgBlur !== DEFAULT_BLUR
+        theme.accent ||
+        theme.bgPreset ||
+        theme.bgImage ||
+        theme.bgImages.some(Boolean) ||
+        theme.bgDim !== DEFAULT_DIM ||
+        theme.bgBlur !== DEFAULT_BLUR
     );
+    const showGallery = theme.bgImage !== null || theme.bgImages.some(Boolean);
+
     const resetAll = () => {
-        // Mark a sync only if the field actually changes (else the guard would
-        // never be consumed and would swallow the user's next real edit).
-        if (draftUrl !== '') syncingRef.current = true;
         setDraftUrl('');
-        setFileError(null);
-        setTheme({ accent: null, bgPreset: null, bgImage: null, bgDim: DEFAULT_DIM, bgBlur: DEFAULT_BLUR });
+        setError(null);
+        setNotice(null);
+        setTheme({
+            accent: null,
+            bgPreset: null,
+            bgImage: null,
+            bgImages: Array<string | null>(THEME_SLOT_COUNT).fill(null),
+            bgDim: DEFAULT_DIM,
+            bgBlur: DEFAULT_BLUR
+        });
     };
 
-    // localStorage caps around ~5 MB; a data-URL inflates ~33%, so keep the
-    // source file well under that to leave room for the rest of the theme state.
-    const MAX_FILE_BYTES = 3 * 1024 * 1024;
+    // Report what happened after a background was added: an "overflow" warning
+    // when no slot was free, or a heads-up when only a raw URL could be kept.
+    const announce = (saved: boolean, copied: boolean) => {
+        if (!saved) {
+            setNotice(
+                'Tous les emplacements sont pleins : ce fond est appliqué mais ne sera pas conservé. ' +
+                    'Videz un emplacement pour le garder.'
+            );
+        } else if (!copied) {
+            setNotice('Fond ajouté via un lien direct : il dépend de la source (copie impossible).');
+        } else {
+            setNotice(null);
+        }
+    };
+
+    const addFromUrl = async () => {
+        const url = draftUrl.trim();
+        if (!url || busy) return;
+        setBusy(true);
+        setError(null);
+        setNotice(null);
+        try {
+            const { value, copied } = await resolveBackgroundFromUrl(url);
+            const { saved } = saveBackground(value);
+            setDraftUrl('');
+            announce(saved, copied);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Impossible d'ajouter cette image.");
+        } finally {
+            setBusy(false);
+        }
+    };
+
     const pickFile = () => fileInputRef.current?.click();
-    const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         e.target.value = ''; // allow re-picking the same file later
-        if (!file) return;
-        if (!file.type.startsWith('image/')) {
-            setFileError('Ce fichier n’est pas une image.');
-            return;
+        if (!file || busy) return;
+        setBusy(true);
+        setError(null);
+        setNotice(null);
+        try {
+            const value = await fileToBackgroundDataUrl(file);
+            const { saved } = saveBackground(value);
+            announce(saved, true);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Impossible d'ajouter cette image.");
+        } finally {
+            setBusy(false);
         }
-        if (file.size > MAX_FILE_BYTES) {
-            setFileError('Image trop lourde (max 3 Mo).');
-            return;
-        }
-        const reader = new FileReader();
-        reader.onload = () => {
-            setFileError(null);
-            setDraftUrl('');
-            setTheme({ bgImage: typeof reader.result === 'string' ? reader.result : null });
-        };
-        reader.onerror = () => setFileError('Lecture du fichier impossible.');
-        reader.readAsDataURL(file);
     };
-    const usingLocalImage = theme.bgImage?.startsWith('data:') ?? false;
 
     return (
         <AnimatePresence>
@@ -173,7 +197,8 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                             </div>
 
                             <p className={styles.sectionHint}>
-                                Ou collez l&apos;URL d&apos;une image, ou choisissez un fichier local :
+                                Ajoutez un fond depuis une URL ou un fichier local (jusqu&apos;à {THEME_SLOT_COUNT}{' '}
+                                conservés) :
                             </p>
                             <div className={styles.inputRow}>
                                 <input
@@ -181,25 +206,77 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                                     className={styles.input}
                                     placeholder='https://exemple.com/image.jpg'
                                     value={draftUrl}
+                                    disabled={busy}
                                     onChange={(e) => setDraftUrl(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            void addFromUrl();
+                                        }
+                                    }}
                                 />
-                                <input
-                                    ref={fileInputRef}
-                                    type='file'
-                                    accept='image/*'
-                                    className={styles.fileInput}
-                                    onChange={onFileChange}
-                                />
-                                <button type='button' className={styles.fileBtn} onClick={pickFile}>
-                                    Parcourir…
+                                <button
+                                    type='button'
+                                    className={styles.fileBtn}
+                                    onClick={() => void addFromUrl()}
+                                    disabled={busy || !draftUrl.trim()}
+                                >
+                                    Ajouter
                                 </button>
                             </div>
+                            <input
+                                ref={fileInputRef}
+                                type='file'
+                                accept='image/*'
+                                className={styles.fileInput}
+                                onChange={onFileChange}
+                            />
+                            <button type='button' className={styles.fileBtnWide} onClick={pickFile} disabled={busy}>
+                                Parcourir un fichier…
+                            </button>
 
-                            {fileError && <span className={styles.fileError}>{fileError}</span>}
-                            {theme.bgImage && (
-                                <span className={styles.imageActive}>
-                                    {usingLocalImage ? 'Image locale active comme fond.' : 'Image active comme fond.'}
-                                </span>
+                            {busy && <span className={styles.imageActive}>Traitement de l&apos;image…</span>}
+                            {error && <span className={styles.fileError}>{error}</span>}
+                            {!busy && notice && <span className={styles.imageActive}>{notice}</span>}
+
+                            {showGallery && (
+                                <div className={styles.gallery}>
+                                    {theme.bgImages.map((slot, i) =>
+                                        slot ? (
+                                            <div
+                                                key={i}
+                                                className={`${styles.slot} ${slot === theme.bgImage ? styles.slotActive : ''}`}
+                                            >
+                                                <button
+                                                    type='button'
+                                                    className={styles.slotPick}
+                                                    style={{
+                                                        backgroundImage: `url("${slot.replace(/"/g, '%22')}")`
+                                                    }}
+                                                    onClick={() => setTheme({ bgImage: slot })}
+                                                    title='Utiliser ce fond'
+                                                    aria-label={`Utiliser le fond ${i + 1}`}
+                                                    aria-pressed={slot === theme.bgImage}
+                                                />
+                                                <button
+                                                    type='button'
+                                                    className={styles.slotDelete}
+                                                    onClick={() => clearBackgroundSlot(i)}
+                                                    title='Vider cet emplacement'
+                                                    aria-label={`Vider l'emplacement ${i + 1}`}
+                                                >
+                                                    <span className='icon icon-x' />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div
+                                                key={i}
+                                                className={`${styles.slot} ${styles.slotEmpty}`}
+                                                aria-hidden='true'
+                                            />
+                                        )
+                                    )}
+                                </div>
                             )}
 
                             {theme.bgImage && (
