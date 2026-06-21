@@ -10,9 +10,12 @@ use std::collections::HashMap;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use sysinfo::System;
+use sysinfo::{Networks, System};
 
-use crate::protocol::{AgentInfo, DeviceReport, OpenPort, OsInfo, ProcessInfo, Security};
+use crate::protocol::{
+    AgentInfo, CpuInfo, DeviceHardware, DeviceReport, NetInterface, OpenPort, OsInfo, ProcessInfo,
+    Security,
+};
 
 /// OS + security posture (latest known). Processes are collected separately
 /// (see `top_processes`) so they can be historised.
@@ -24,7 +27,290 @@ pub fn collect() -> DeviceReport {
         disks: crate::metrics::read_disks(),
         agent: agent_info(),
         open_ports: read_open_ports(),
+        hardware: hardware(),
     }
+}
+
+/// Static hardware inventory: CPU identity, total RAM, GPU model(s), network
+/// interfaces and a best-effort bluetooth descriptor. All slow-moving, so it's
+/// gathered once per report cycle alongside the security posture.
+fn hardware() -> DeviceHardware {
+    let mut sys = System::new();
+    sys.refresh_cpu_all();
+    sys.refresh_memory();
+
+    let cpus = sys.cpus();
+    let first = cpus.first();
+    let model = first
+        .map(|c| c.brand().trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "Inconnu".to_string());
+    let vendor = first
+        .map(|c| c.vendor_id().trim().to_string())
+        .filter(|s| !s.is_empty());
+    let frequency_mhz = first.map(|c| c.frequency()).filter(|&f| f > 0);
+
+    let cpu = CpuInfo {
+        model,
+        vendor,
+        physical_cores: sys.physical_core_count().map(|n| n as u32),
+        logical_cores: cpus.len() as u32,
+        frequency_mhz,
+    };
+
+    DeviceHardware {
+        cpu,
+        memory_total_bytes: sys.total_memory(),
+        gpus: read_gpus(),
+        network: read_network_interfaces(),
+        bluetooth: read_bluetooth(),
+    }
+}
+
+/// Network interfaces with their MAC and an inferred class. On macOS the class is
+/// resolved from `networksetup -listallhardwareports` (reliable: `en0` may be
+/// Wi-Fi or Ethernet); elsewhere it's inferred from the interface name.
+fn read_network_interfaces() -> Vec<NetInterface> {
+    #[cfg(target_os = "macos")]
+    let ports = macos_hardware_ports();
+
+    let networks = Networks::new_with_refreshed_list();
+    let mut out: Vec<NetInterface> = networks
+        .iter()
+        .map(|(name, data)| {
+            #[cfg(target_os = "macos")]
+            let kind = ports
+                .get(name.as_str())
+                .copied()
+                .unwrap_or_else(|| classify_iface(name));
+            #[cfg(not(target_os = "macos"))]
+            let kind = classify_iface(name);
+
+            let mac = data.mac_address();
+            NetInterface {
+                name: name.clone(),
+                kind,
+                mac: if mac.is_unspecified() {
+                    None
+                } else {
+                    Some(mac.to_string())
+                },
+            }
+        })
+        .collect();
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    out
+}
+
+/// Best-effort interface classification from its name. Linux uses predictable
+/// names (`wl*` Wi-Fi, `en*`/`eth*` Ethernet); Windows exposes friendly names
+/// ("Wi-Fi", "Ethernet", "Bluetooth") matched by the `contains` checks.
+fn classify_iface(name: &str) -> &'static str {
+    let n = name.to_lowercase();
+    if n == "lo" || n.starts_with("lo") || n.contains("loopback") {
+        return "loopback";
+    }
+    if n.contains("wi-fi")
+        || n.contains("wifi")
+        || n.contains("wlan")
+        || n.contains("wireless")
+        || n.contains("airport")
+        || n.starts_with("wl")
+    {
+        return "wifi";
+    }
+    if n.contains("bluetooth") || n.starts_with("bt") {
+        return "bluetooth";
+    }
+    if n.contains("ethernet") || n.starts_with("eth") || n.starts_with("en") {
+        return "ethernet";
+    }
+    if n.starts_with("docker")
+        || n.starts_with("veth")
+        || n.starts_with("br-")
+        || n.starts_with("virbr")
+        || n.starts_with("vbox")
+        || n.starts_with("vmnet")
+        || n.starts_with("tun")
+        || n.starts_with("tap")
+        || n.starts_with("utun")
+        || n.starts_with("awdl")
+        || n.starts_with("llw")
+        || n.starts_with("vnic")
+        || n.contains("virtual")
+    {
+        return "virtual";
+    }
+    "other"
+}
+
+/// GPU model name(s), best-effort per OS. Empty when none could be read.
+fn read_gpus() -> Vec<String> {
+    #[cfg(target_os = "macos")]
+    {
+        let out = match run("system_profiler", &["SPDisplaysDataType"]) {
+            Some(o) => o,
+            None => return Vec::new(),
+        };
+        out.lines()
+            .filter_map(|l| l.trim().strip_prefix("Chipset Model:"))
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let out = match run("lspci", &[]) {
+            Some(o) => o,
+            None => return Vec::new(),
+        };
+        let mut gpus: Vec<String> = Vec::new();
+        for line in out.lines() {
+            let is_gpu = line.contains("VGA compatible controller")
+                || line.contains("3D controller")
+                || line.contains("Display controller");
+            if !is_gpu {
+                continue;
+            }
+            // "01:00.0 VGA compatible controller: NVIDIA Corporation GA104 [...]".
+            if let Some((_, desc)) = line.split_once(": ") {
+                let name = desc.trim().to_string();
+                if !name.is_empty() && !gpus.contains(&name) {
+                    gpus.push(name);
+                }
+            }
+        }
+        gpus
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let out = match run(
+            "powershell",
+            &[
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name",
+            ],
+        ) {
+            Some(o) => o,
+            None => return Vec::new(),
+        };
+        out.lines()
+            .map(|l| l.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        Vec::new()
+    }
+}
+
+/// Best-effort bluetooth adapter descriptor. `None` when no adapter is detected
+/// or the probe tool is unavailable.
+fn read_bluetooth() -> Option<String> {
+    #[cfg(target_os = "macos")]
+    {
+        let out = run("system_profiler", &["SPBluetoothDataType"])?;
+        if !out.to_lowercase().contains("bluetooth") {
+            return None;
+        }
+        // Prefer the controller chipset when present; else just flag presence.
+        for line in out.lines() {
+            if let Some(v) = line.trim().strip_prefix("Chipset:") {
+                let v = v.trim();
+                if !v.is_empty() {
+                    return Some(v.to_string());
+                }
+            }
+        }
+        Some("Intégré".to_string())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // `bluetoothctl list` → "Controller AA:BB:CC:DD:EE:FF name [default]".
+        if let Some(out) = run("bluetoothctl", &["list"]) {
+            for line in out.lines() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.first() == Some(&"Controller") && parts.len() >= 3 {
+                    let name = parts[2..]
+                        .iter()
+                        .take_while(|p| !p.starts_with('['))
+                        .copied()
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    if !name.is_empty() {
+                        return Some(name);
+                    }
+                }
+            }
+        }
+        // Fallback: a present rfkill bluetooth line means an adapter exists.
+        if let Some(out) = run("rfkill", &["list", "bluetooth"]) {
+            if out.to_lowercase().contains("bluetooth") {
+                return Some("Présent".to_string());
+            }
+        }
+        None
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let out = run(
+            "powershell",
+            &[
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Get-PnpDevice -Class Bluetooth -Status OK | Select-Object -First 1 -ExpandProperty FriendlyName",
+            ],
+        )?;
+        let name = out.trim();
+        if name.is_empty() {
+            None
+        } else {
+            Some(name.to_string())
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        None
+    }
+}
+
+/// Map macOS interface device names → class via `networksetup
+/// -listallhardwareports`, whose blocks read:
+///   Hardware Port: Wi-Fi
+///   Device: en0
+///   Ethernet Address: a4:…
+#[cfg(target_os = "macos")]
+fn macos_hardware_ports() -> HashMap<String, &'static str> {
+    let mut map = HashMap::new();
+    let out = match run("networksetup", &["-listallhardwareports"]) {
+        Some(o) => o,
+        None => return map,
+    };
+    let mut current: Option<&'static str> = None;
+    for line in out.lines() {
+        let t = line.trim();
+        if let Some(port) = t.strip_prefix("Hardware Port:") {
+            let p = port.trim().to_lowercase();
+            current = Some(if p.contains("wi-fi") || p.contains("airport") {
+                "wifi"
+            } else if p.contains("bluetooth") {
+                "bluetooth"
+            } else if p.contains("ethernet") || p.contains("lan") || p.contains("thunderbolt") {
+                "ethernet"
+            } else {
+                "other"
+            });
+        } else if let Some(dev) = t.strip_prefix("Device:") {
+            if let Some(kind) = current.take() {
+                map.insert(dev.trim().to_string(), kind);
+            }
+        }
+    }
+    map
 }
 
 /// The agent's runtime identity: privilege level + the account it runs as. Used

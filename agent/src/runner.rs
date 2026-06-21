@@ -333,7 +333,7 @@ where
         .context("collecting device report")?;
     let msg = serde_json::to_string(&ClientMessage::Report {
         device_id: device_id.to_string(),
-        report,
+        report: Box::new(report),
     })?;
     sink.send(Message::Text(msg))
         .await

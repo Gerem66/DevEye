@@ -67,6 +67,48 @@ pub struct DeviceReport {
     /// report that predates this field deserialises to `null` server-side.
     #[serde(rename = "openPorts")]
     pub open_ports: Vec<OpenPort>,
+    /// Static hardware inventory (CPU, RAM, GPU, network, bluetooth). Slow-moving;
+    /// a legacy report that predates this field deserialises to `null` server-side.
+    pub hardware: DeviceHardware,
+}
+
+/// Static hardware inventory of the host. Every list is best-effort and may be
+/// empty; `bluetooth` is `None` when no adapter was detected.
+#[derive(Debug, Clone, Serialize)]
+pub struct DeviceHardware {
+    pub cpu: CpuInfo,
+    #[serde(rename = "memoryTotalBytes")]
+    pub memory_total_bytes: u64,
+    pub gpus: Vec<String>,
+    pub network: Vec<NetInterface>,
+    pub bluetooth: Option<String>,
+}
+
+/// Processor identity (best-effort, from `sysinfo`).
+#[derive(Debug, Clone, Serialize)]
+pub struct CpuInfo {
+    /// Brand string, e.g. "Apple M1 Pro" / "Intel(R) Core(TM) i7-1185G7".
+    pub model: String,
+    /// Vendor id (`GenuineIntel`, `AuthenticAMD`, …); None when unknown.
+    pub vendor: Option<String>,
+    /// Physical cores; None when the OS can't report them.
+    #[serde(rename = "physicalCores")]
+    pub physical_cores: Option<u32>,
+    /// Logical cores (threads).
+    #[serde(rename = "logicalCores")]
+    pub logical_cores: u32,
+    /// Nominal/base frequency in MHz; None when unknown.
+    #[serde(rename = "frequencyMhz")]
+    pub frequency_mhz: Option<u64>,
+}
+
+/// One network interface: name + hardware address + an inferred class.
+#[derive(Debug, Clone, Serialize)]
+pub struct NetInterface {
+    pub name: String,
+    /// One of: wifi, ethernet, bluetooth, loopback, virtual, other.
+    pub kind: &'static str,
+    pub mac: Option<String>,
 }
 
 /// The agent's own runtime identity, used by the UI to flag privilege-gated gaps.
@@ -151,7 +193,9 @@ pub enum ClientMessage {
     Report {
         #[serde(rename = "deviceId")]
         device_id: String,
-        report: DeviceReport,
+        // Boxed: the report is by far the largest variant; boxing keeps the enum
+        // small (clippy::large_enum_variant) without changing the wire shape.
+        report: Box<DeviceReport>,
     },
     #[serde(rename = "agent.processes")]
     Processes {

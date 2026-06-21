@@ -19,7 +19,8 @@ export function MonitoringInfo() {
                 </li>
                 <li>
                     <b>Toutes les heures</b> : l&apos;état de sécurité (pare-feu, chiffrement, SIP, mises à jour), les{' '}
-                    <b>ports en écoute</b> et le niveau de privilèges de l&apos;agent.
+                    <b>ports en écoute</b>, le niveau de privilèges de l&apos;agent et l&apos;
+                    <b>inventaire matériel</b> (CPU, RAM, GPU, réseau, Bluetooth, disques).
                 </li>
                 <li>
                     <b>Bouton rafraîchir</b> : demande à l&apos;agent un relevé immédiat, intégré à l&apos;historique à
@@ -29,7 +30,9 @@ export function MonitoringInfo() {
             <p>
                 Ces réglages (intervalles, processus capturés : <i>tous / top 20 / désactivé</i>, durées de
                 conservation) se règlent <b>par appareil</b> depuis l&apos;icône <span className='icon icon-settings' />{' '}
-                de ce panneau, et sont appliqués en direct.
+                de ce panneau, et sont appliqués en direct. L&apos;icône <span className='icon icon-cpu' /> ouvre la
+                fiche <b>Matériel &amp; agent</b> : détail complet du matériel de la machine (CPU, RAM, GPU, réseau,
+                Bluetooth, disques) et identité de l&apos;agent.
             </p>
             <h4>Remonter le temps</h4>
             <p>La frise montre les périodes en ligne/hors ligne. Choisissez un jour avec les flèches, puis :</p>

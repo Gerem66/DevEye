@@ -20,6 +20,7 @@ import {
 import type { FeatureProps } from '../types';
 import { useFeatureLifecycle } from '../useFeatureLifecycle';
 import { MonitoringInfo } from './MonitoringInfo';
+import { HardwareInfo } from './HardwareInfo';
 import { PrivilegeInfo } from './PrivilegeInfo';
 import { OpenPorts } from './OpenPorts';
 import { ConfigDialog } from './ConfigDialog';
@@ -726,6 +727,14 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
     const showInfo = () =>
         void openInfo({ title: 'Monitoring — comment ça marche', body: <MonitoringInfo />, width: 560 });
 
+    const showHardwareInfo = () =>
+        selected &&
+        void openInfo({
+            title: `Matériel — ${selected.name}`,
+            body: <HardwareInfo report={report} device={selected} />,
+            width: 560
+        });
+
     const showPrivilegeInfo = () =>
         selected &&
         void openInfo({
@@ -736,8 +745,15 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
 
     return (
         <div className={styles.container}>
-            <h2 className={styles.title}>Monitoring</h2>
-            <p className={styles.subtitle}>Surveillance et historique de vos appareils</p>
+            <div className={styles.titleRow}>
+                <div>
+                    <h2 className={styles.title}>Monitoring</h2>
+                    <p className={styles.subtitle}>Surveillance et historique de vos appareils</p>
+                </div>
+                <button className={styles.iconHeaderBtn} onClick={showInfo} title='Comment ça marche ?'>
+                    <span className='icon icon-info' />
+                </button>
+            </div>
 
             {loading && devices.length === 0 ? (
                 <div className={styles.loader}>Chargement...</div>
@@ -774,10 +790,10 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                                 <div className={styles.headerRight}>
                                     <button
                                         className={styles.iconHeaderBtn}
-                                        onClick={showInfo}
-                                        title='Comment ça marche ?'
+                                        onClick={showHardwareInfo}
+                                        title='Matériel & agent'
                                     >
-                                        <span className='icon icon-info' />
+                                        <span className='icon icon-cpu' />
                                     </button>
                                     {!archived && (
                                         <button

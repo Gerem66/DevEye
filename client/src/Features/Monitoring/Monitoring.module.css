@@ -81,6 +81,14 @@
     margin: 0 0 var(--space-lg) 0;
 }
 
+/* Feature header: title block + general "how it works" info button. */
+.titleRow {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
 .loader {
     color: var(--text-muted);
     text-align: center;
@@ -381,6 +389,60 @@
     margin: 0;
     font-variant-numeric: tabular-nums;
     font-weight: 600;
+}
+
+/* ── Hardware / agent info dialog ── */
+.hwContent {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+.hwGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+.hwGroupTitle {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+.hwRows {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+}
+.hwRow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-md);
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+}
+.hwRow:last-child {
+    border-bottom: none;
+}
+.hwRow dt {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+.hwRow dd {
+    margin: 0;
+    text-align: right;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
+}
+.hwLegacyNote {
+    color: var(--text-muted);
+    font-style: italic;
 }
 
 /* ── Activity hero (idle / normal / intensive) ── */
