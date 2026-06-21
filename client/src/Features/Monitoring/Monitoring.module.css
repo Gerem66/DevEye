@@ -713,6 +713,73 @@
     color: var(--text-muted);
 }
 
+/* Clickable security chip (e.g. agent privileges → explainer popup). */
+.secChipBtn {
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+    transition: border-color 0.15s ease;
+}
+
+.secChipBtn:hover {
+    border-color: var(--accent);
+}
+
+.secChipBtn .secVal {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* ─── Open listening ports ────────────────────────────────────────────────── */
+
+.portGrid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+}
+
+.portChip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 2px var(--space-sm);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg-light);
+    cursor: default;
+}
+
+.portNum {
+    font-size: 0.82rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.portMeta {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+}
+
+/* World-exposed (0.0.0.0 / ::) ports stand out; loopback is muted. */
+.portWorld {
+    border-color: var(--warning);
+}
+
+.portWorld .portNum {
+    color: var(--warning);
+}
+
+.portLocal {
+    opacity: 0.7;
+}
+
+.portBound .portNum {
+    color: var(--text-secondary);
+}
+
 /* ─── Top processes table ─────────────────────────────────────────────────── */
 
 .procTable {

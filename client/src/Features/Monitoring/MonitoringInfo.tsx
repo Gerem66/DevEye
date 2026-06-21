@@ -18,7 +18,8 @@ export function MonitoringInfo() {
                     processus et les E/S disque. Ce sont les repères cliquables de la frise.
                 </li>
                 <li>
-                    <b>Toutes les heures</b> : l&apos;état de sécurité (pare-feu, chiffrement, SIP, mises à jour).
+                    <b>Toutes les heures</b> : l&apos;état de sécurité (pare-feu, chiffrement, SIP, mises à jour), les{' '}
+                    <b>ports en écoute</b> et le niveau de privilèges de l&apos;agent.
                 </li>
                 <li>
                     <b>Bouton rafraîchir</b> : demande à l&apos;agent un relevé immédiat, intégré à l&apos;historique à
@@ -45,11 +46,21 @@ export function MonitoringInfo() {
                     <b>Direct</b> : revient au suivi temps réel.
                 </li>
             </ul>
-            <h4>Sécurité & confidentialité</h4>
+            <h4>Processus & CPU</h4>
+            <p>
+                Le mode de capture (<i>tous / top 20 / désactivé</i>) décide combien de processus sont historisés à
+                chaque snapshot. En mode <i>tous</i>, ils sont agrégés <b>par nom de programme</b> (les apps
+                multi-process comptent comme une). Le CPU affiché est rapporté au nombre de cœurs (0–100 % = machine
+                entière) ; la valeur Unix brute, cumulée sur tous les cœurs, peut dépasser 100 % (survolez pour la
+                voir).
+            </p>
+            <h4>Sécurité & privilèges</h4>
             <p>
                 Les sondes de sécurité sont en « best-effort » : si l&apos;outil système n&apos;est pas disponible, la
-                valeur est « Inconnu ». Certaines mesures sont indisponibles selon la plateforme (ex. température et GPU
-                sur Apple Silicon sans privilèges, E/S disque sur macOS).
+                valeur est « Inconnu ». Certaines mesures dépendent des droits de l&apos;agent : la pastille{' '}
+                <b>Privilèges agent</b> indique s&apos;il tourne en root/élevé et, sinon, ce que cela limite et comment
+                le relancer avec privilèges. D&apos;autres mesures sont indisponibles selon la plateforme (ex.
+                température et GPU sur Apple Silicon, E/S disque sur macOS).
             </p>
         </div>
     );

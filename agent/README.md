@@ -128,10 +128,12 @@ arrives (it arrives within ~1 s of connecting); the real cadence is UI-controlle
 
 | Signal | Linux | macOS | Windows |
 | --- | --- | --- | --- |
-| Firewall | `ufw` / `firewalld` | Application Firewall (`socketfilterfw`) | `netsh advfirewall` |
+| Firewall | `ufw` / `firewalld`, then `systemctl is-active` / `nft` | Application Firewall (`socketfilterfw`) | `netsh advfirewall` |
 | Disk encryption | LUKS (via `lsblk`) | FileVault (`fdesetup`) | BitLocker (`manage-bde`) |
 | SIP | — | `csrutil status` | — |
 | Pending updates | `apt-get -s upgrade` / `dnf check-update` | not collected (slow) | not collected (slow) |
+| Open ports | `ss -tuln` (TCP+UDP) | `netstat -an -p tcp` | `netstat -an` |
+| Privilege | `id -u` / `id -un` | `id -u` / `id -un` | `net session` / `%USERNAME%` |
 | GPU % | `nvidia-smi` | IOAccelerator (`ioreg`) | `nvidia-smi` |
 | Logged-in users | `who` | `who` | `query user` |
 | Active TCP conns | `ss` | `netstat` | `netstat -an` |
@@ -142,6 +144,12 @@ Every probe is **best-effort and nullable**: when the underlying tool is absent
 or not permitted, the value is reported as “unknown”/empty. Notable limitations:
 **CPU temperature is unavailable on Apple Silicon** (SMC access is privileged), and
 **disk I/O is reported on Linux** but may be unavailable (hidden) on macOS/Windows.
+
+The report also carries the agent's **privilege level** (root/elevated or not) and
+the account it runs as. The UI uses this to flag which signals are limited by a
+lack of privileges. On Linux the firewall state now resolves without root when the
+firewall is a managed systemd unit (`ufw`/`firewalld`/`nftables`); listing open
+ports needs no privileges (only mapping a port to its owning process would).
 On Windows, `stop` force-terminates (`taskkill /F`) and a running agent can't
 delete its own binary, so a self-destruct leaves the `.exe` behind (the config
 and token are still wiped).

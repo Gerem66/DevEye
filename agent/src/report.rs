@@ -12,7 +12,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use sysinfo::System;
 
-use crate::protocol::{DeviceReport, OsInfo, ProcessInfo, Security};
+use crate::protocol::{AgentInfo, DeviceReport, OpenPort, OsInfo, ProcessInfo, Security};
 
 /// OS + security posture (latest known). Processes are collected separately
 /// (see `top_processes`) so they can be historised.
@@ -22,6 +22,54 @@ pub fn collect() -> DeviceReport {
         os: os_info(),
         security: security(),
         disks: crate::metrics::read_disks(),
+        agent: agent_info(),
+        open_ports: read_open_ports(),
+    }
+}
+
+/// The agent's runtime identity: privilege level + the account it runs as. Used
+/// by the UI to explain why some best-effort probes are limited without root.
+fn agent_info() -> AgentInfo {
+    AgentInfo {
+        privileged: is_privileged(),
+        user: current_user(),
+    }
+}
+
+#[cfg(unix)]
+fn is_privileged() -> bool {
+    // Effective uid 0 ⇒ root. Shelling out keeps us libc-free (matches the rest).
+    run("id", &["-u"]).map(|s| s.trim() == "0").unwrap_or(false)
+}
+
+#[cfg(windows)]
+fn is_privileged() -> bool {
+    // `net session` only succeeds from an elevated token (else "Access is denied").
+    Command::new("net")
+        .arg("session")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+fn current_user() -> String {
+    #[cfg(unix)]
+    {
+        // `id -un` is the effective user (matches `id -u`); fall back to $USER.
+        run("id", &["-un"])
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .or_else(|| std::env::var("USER").ok().filter(|s| !s.is_empty()))
+            .unwrap_or_else(|| "unknown".to_string())
+    }
+    #[cfg(windows)]
+    {
+        std::env::var("USERNAME")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "unknown".to_string())
     }
 }
 
@@ -164,6 +212,145 @@ fn parse_ps_line(line: &str) -> Option<(String, f64, f64, u64)> {
     Some((name, cpu, mem_pct, rss_kb * 1024))
 }
 
+/// Hard cap on reported listening ports.
+const OPEN_PORTS_LIMIT: usize = 500;
+
+/// Listening sockets, best-effort. Linux parses `ss` (TCP + UDP); macOS & Windows
+/// parse `netstat` (TCP listeners + Windows UDP). Listing *which* ports listen
+/// needs no privileges — only the owning process would. Deduped, sorted, capped.
+fn read_open_ports() -> Vec<OpenPort> {
+    let mut ports = collect_open_ports();
+    ports.sort_by(|a, b| {
+        a.port
+            .cmp(&b.port)
+            .then(a.proto.cmp(b.proto))
+            .then_with(|| a.address.cmp(&b.address))
+    });
+    ports.dedup_by(|a, b| a.port == b.port && a.proto == b.proto && a.address == b.address);
+    ports.truncate(OPEN_PORTS_LIMIT);
+    ports
+}
+
+/// Normalise a bind host: drop IPv6 brackets and any `%zone` suffix.
+#[allow(dead_code)]
+fn clean_addr(host: &str) -> String {
+    let h = host.trim_start_matches('[').trim_end_matches(']');
+    match h.split_once('%') {
+        Some((a, _)) => a.to_string(),
+        None => h.to_string(),
+    }
+}
+
+/// Split `host:port` from the right (handles `0.0.0.0:22`, `[::]:22`).
+#[allow(dead_code)]
+fn split_host_port(s: &str) -> Option<(String, u16)> {
+    let (host, port) = s.rsplit_once(':')?;
+    Some((clean_addr(host), port.parse().ok()?))
+}
+
+/// Split `host.port` from the right — BSD `netstat` uses `.` before the port
+/// (`*.22`, `127.0.0.1.631`, `::1.631`).
+#[allow(dead_code)]
+fn split_host_dot_port(s: &str) -> Option<(String, u16)> {
+    let (host, port) = s.rsplit_once('.')?;
+    Some((clean_addr(host), port.parse().ok()?))
+}
+
+#[cfg(target_os = "linux")]
+fn collect_open_ports() -> Vec<OpenPort> {
+    // -t TCP, -u UDP, -l listening, -n numeric, -H no header.
+    let out = match run("ss", &["-tulnH"]) {
+        Some(o) => o,
+        None => return Vec::new(),
+    };
+    let mut v = Vec::new();
+    for line in out.lines() {
+        // Netid State Recv-Q Send-Q Local:Port Peer:Port …
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        if cols.len() < 5 {
+            continue;
+        }
+        let proto = match cols[0] {
+            "tcp" => "tcp",
+            "udp" => "udp",
+            _ => continue,
+        };
+        if let Some((address, port)) = split_host_port(cols[4]) {
+            v.push(OpenPort {
+                proto,
+                port,
+                address,
+            });
+        }
+    }
+    v
+}
+
+#[cfg(target_os = "macos")]
+fn collect_open_ports() -> Vec<OpenPort> {
+    let out = match run("netstat", &["-an", "-p", "tcp"]) {
+        Some(o) => o,
+        None => return Vec::new(),
+    };
+    let mut v = Vec::new();
+    for line in out.lines() {
+        if !line.contains("LISTEN") {
+            continue;
+        }
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        // Proto Recv-Q Send-Q Local-Address Foreign-Address (state) …
+        if cols.len() < 4 || !cols[0].starts_with("tcp") {
+            continue;
+        }
+        if let Some((address, port)) = split_host_dot_port(cols[3]) {
+            v.push(OpenPort {
+                proto: "tcp",
+                port,
+                address,
+            });
+        }
+    }
+    v
+}
+
+#[cfg(target_os = "windows")]
+fn collect_open_ports() -> Vec<OpenPort> {
+    let out = match run("netstat", &["-an"]) {
+        Some(o) => o,
+        None => return Vec::new(),
+    };
+    let mut v = Vec::new();
+    for line in out.lines() {
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        if cols.len() < 2 {
+            continue;
+        }
+        let proto = match cols[0] {
+            "TCP" => "tcp",
+            "UDP" => "udp",
+            _ => continue,
+        };
+        // TCP listeners end in a LISTENING state column; UDP rows have no state.
+        if proto == "tcp" && cols.last().map(|s| *s != "LISTENING").unwrap_or(true) {
+            continue;
+        }
+        if let Some((address, port)) = split_host_port(cols[1]) {
+            v.push(OpenPort {
+                proto,
+                port,
+                address,
+            });
+        }
+    }
+    v
+}
+
+/// Fallback for any other target: no portable probe.
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+fn collect_open_ports() -> Vec<OpenPort> {
+    Vec::new()
+}
+
 fn security() -> Security {
     Security {
         firewall: firewall_enabled(),
@@ -179,6 +366,15 @@ fn run(cmd: &str, args: &[&str]) -> Option<String> {
     if !out.status.success() {
         return None;
     }
+    Some(String::from_utf8_lossy(&out.stdout).to_string())
+}
+
+/// Like `run`, but returns stdout even on a non-zero exit. Some tools print the
+/// answer we want yet exit non-zero (`systemctl is-active` exits 3 when a unit is
+/// inactive but still prints "inactive"). `None` only when the binary is absent.
+#[cfg(target_os = "linux")]
+fn run_unchecked(cmd: &str, args: &[&str]) -> Option<String> {
+    let out = Command::new(cmd).args(args).output().ok()?;
     Some(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
@@ -237,6 +433,10 @@ fn pending_updates() -> Option<u32> {
 
 #[cfg(target_os = "linux")]
 fn firewall_enabled() -> Option<bool> {
+    // `ufw status` and reading the nft ruleset both need root; when the agent runs
+    // unprivileged they return None and we fall through to the systemd probe below,
+    // which any user can read. So firewall state is now detectable without root as
+    // long as the firewall is a managed systemd unit.
     if let Some(out) = run("ufw", &["status"]) {
         let lower = out.to_lowercase();
         if lower.contains("status: active") {
@@ -248,6 +448,22 @@ fn firewall_enabled() -> Option<bool> {
     }
     if let Some(out) = run("firewall-cmd", &["--state"]) {
         return Some(out.trim() == "running");
+    }
+    // Non-root fallback: a running firewall service. Only a positive "active" is
+    // conclusive here (an absent unit also reports inactive), so we don't infer
+    // "disabled" from this — we keep looking and ultimately return None (unknown).
+    for svc in ["firewalld", "ufw", "nftables"] {
+        if let Some(out) = run_unchecked("systemctl", &["is-active", svc]) {
+            if out.trim() == "active" {
+                return Some(true);
+            }
+        }
+    }
+    // Root path: a non-empty nftables ruleset with an input hook means filtering.
+    if let Some(out) = run("nft", &["list", "ruleset"]) {
+        if out.contains("hook input") {
+            return Some(true);
+        }
     }
     None
 }

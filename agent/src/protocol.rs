@@ -60,6 +60,31 @@ pub struct DeviceReport {
     pub os: OsInfo,
     pub security: Security,
     pub disks: Vec<ReportDisk>,
+    /// How the agent itself runs (privilege level + account). Lets the UI explain
+    /// why some best-effort probes are limited (e.g. not running as root).
+    pub agent: AgentInfo,
+    /// Listening sockets (TCP, plus UDP on Linux). Empty = none found; a legacy
+    /// report that predates this field deserialises to `null` server-side.
+    #[serde(rename = "openPorts")]
+    pub open_ports: Vec<OpenPort>,
+}
+
+/// The agent's own runtime identity, used by the UI to flag privilege-gated gaps.
+#[derive(Debug, Clone, Serialize)]
+pub struct AgentInfo {
+    /// `true` when running as root (Unix euid 0) / elevated (Windows).
+    pub privileged: bool,
+    /// The OS account the agent runs as (e.g. `root`, `deploy`).
+    pub user: String,
+}
+
+/// One listening socket. `address` is the bind address (e.g. `0.0.0.0`, `::`,
+/// `127.0.0.1`) so the UI can tell world-exposed ports from loopback-only ones.
+#[derive(Debug, Clone, Serialize)]
+pub struct OpenPort {
+    pub proto: &'static str,
+    pub port: u16,
+    pub address: String,
 }
 
 /// One mounted disk/volume (per-disk breakdown for multi-disk machines).

@@ -20,6 +20,8 @@ import {
 import type { FeatureProps } from '../types';
 import { useFeatureLifecycle } from '../useFeatureLifecycle';
 import { MonitoringInfo } from './MonitoringInfo';
+import { PrivilegeInfo } from './PrivilegeInfo';
+import { OpenPorts } from './OpenPorts';
 import { ConfigDialog } from './ConfigDialog';
 import { GraphDetail, type DetailRow } from './GraphDetail';
 import { Timeline } from './Timeline';
@@ -267,6 +269,7 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
     const [snapshotTimes, setSnapshotTimes] = useState<number[]>([]);
     const [points, setPoints] = useState<MetricSnapshot[]>([]);
     const [procSample, setProcSample] = useState<ProcessSample | null>(null);
+    const [showAllProcs, setShowAllProcs] = useState(false);
     const [report, setReport] = useState<DeviceReport | null>(null);
     const [liveSnapshot, setLiveSnapshot] = useState<MetricSnapshot | null>(null);
     const [refreshing, setRefreshing] = useState(false);
@@ -723,6 +726,14 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
     const showInfo = () =>
         void openInfo({ title: 'Monitoring — comment ça marche', body: <MonitoringInfo />, width: 560 });
 
+    const showPrivilegeInfo = () =>
+        selected &&
+        void openInfo({
+            title: 'Accès & privilèges de l’agent',
+            body: <PrivilegeInfo agent={report?.agent ?? null} platform={selected.platform} />,
+            width: 560
+        });
+
     return (
         <div className={styles.container}>
             <h2 className={styles.title}>Monitoring</h2>
@@ -956,9 +967,44 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                                                 <span className={styles.secVal}>{report.security.pendingUpdates}</span>
                                             </div>
                                         )}
+                                        {report.agent && (
+                                            <button
+                                                type='button'
+                                                className={`${styles.secChip} ${styles.secChipBtn} ${report.agent.privileged ? styles.secGood : styles.secUnknown}`}
+                                                onClick={showPrivilegeInfo}
+                                                title={`Agent exécuté sous « ${report.agent.user || 'inconnu'} » — pourquoi certaines mesures sont limitées`}
+                                            >
+                                                <span className={styles.secLabel}>Privilèges agent</span>
+                                                <span className={styles.secVal}>
+                                                    {report.agent.privileged
+                                                        ? selected.platform === 'windows'
+                                                            ? 'élevé'
+                                                            : 'root'
+                                                        : 'limité'}
+                                                    <span className='icon icon-info' />
+                                                </span>
+                                            </button>
+                                        )}
                                     </div>
                                 ) : (
                                     <p className={styles.waitingMsg}>Aucun bilan de sécurité.</p>
+                                )}
+                            </div>
+
+                            {/* Open listening ports */}
+                            <div className={styles.section}>
+                                <h4 className={styles.sectionTitle}>
+                                    Ports en écoute
+                                    {report?.openPorts && report.openPorts.length > 0 && (
+                                        <span className={styles.sectionMeta}>
+                                            {report.openPorts.length} port{report.openPorts.length > 1 ? 's' : ''}
+                                        </span>
+                                    )}
+                                </h4>
+                                {report ? (
+                                    <OpenPorts ports={report.openPorts} />
+                                ) : (
+                                    <p className={styles.waitingMsg}>Aucun bilan.</p>
                                 )}
                             </div>
 
@@ -968,30 +1014,71 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                                     Processus les plus actifs
                                     {procSample && (
                                         <span className={styles.sectionMeta}>
-                                            {new Date(procSample.ts).toLocaleString('fr-FR')}
-                                            {procSample.kind === 'all' ? ' · complet' : ''}
+                                            {new Date(procSample.ts).toLocaleString('fr-FR')} ·{' '}
+                                            {procSample.processes.length} processus
+                                            {procSample.kind === 'all' ? ' (complet)' : ' (top 20)'}
                                         </span>
                                     )}
                                 </h4>
                                 {procSample && procSample.processes.length > 0 ? (
-                                    <table className={styles.procTable}>
-                                        <thead>
-                                            <tr>
-                                                <th>Nom</th>
-                                                <th className={styles.procNum}>CPU</th>
-                                                <th className={styles.procNum}>Mémoire</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {procSample.processes.slice(0, 12).map((p, i) => (
-                                                <tr key={`${p.name}-${i}`}>
-                                                    <td className={styles.procName}>{p.name}</td>
-                                                    <td className={styles.procNum}>{p.cpuPercent.toFixed(1)}%</td>
-                                                    <td className={styles.procNum}>{formatBytes(p.memBytes)}</td>
+                                    <>
+                                        <table className={styles.procTable}>
+                                            <thead>
+                                                <tr>
+                                                    <th>Nom</th>
+                                                    <th
+                                                        className={styles.procNum}
+                                                        title={
+                                                            cores > 0
+                                                                ? `% rapporté aux ${cores} cœurs (0–100 % = machine entière). Survolez une valeur pour le cumul brut.`
+                                                                : 'Utilisation CPU'
+                                                        }
+                                                    >
+                                                        CPU{cores > 0 ? ' %' : ''}
+                                                    </th>
+                                                    <th className={styles.procNum}>Mémoire</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody>
+                                                {procSample.processes
+                                                    .slice(0, showAllProcs ? undefined : 12)
+                                                    .map((p, i) => {
+                                                        const cpuNorm =
+                                                            cores > 0
+                                                                ? Math.min(100, p.cpuPercent / cores)
+                                                                : p.cpuPercent;
+                                                        return (
+                                                            <tr key={`${p.name}-${i}`}>
+                                                                <td className={styles.procName}>{p.name}</td>
+                                                                <td
+                                                                    className={styles.procNum}
+                                                                    title={
+                                                                        cores > 0
+                                                                            ? `${p.cpuPercent.toFixed(0)} % cumulé sur ${cores} cœurs`
+                                                                            : undefined
+                                                                    }
+                                                                >
+                                                                    {cpuNorm.toFixed(1)}%
+                                                                </td>
+                                                                <td className={styles.procNum}>
+                                                                    {formatBytes(p.memBytes)}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                            </tbody>
+                                        </table>
+                                        {procSample.processes.length > 12 && (
+                                            <button
+                                                className={styles.expandGraphsBtn}
+                                                onClick={() => setShowAllProcs((v) => !v)}
+                                            >
+                                                {showAllProcs
+                                                    ? 'Réduire'
+                                                    : `Afficher tout (${procSample.processes.length - 12} de plus)`}
+                                            </button>
+                                        )}
+                                    </>
                                 ) : (
                                     <p className={styles.waitingMsg}>Aucun relevé de processus sur cette période.</p>
                                 )}
