@@ -106,6 +106,10 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
     // Device pending a "delete without waiting" (force-archive) confirmation.
     const [forceTarget, setForceTarget] = useState<{ id: string; name: string } | null>(null);
     const [forcing, setForcing] = useState(false);
+    // Device being renamed; `renameValue` holds the edited name, `renaming` the in-flight save.
+    const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
+    const [renameValue, setRenameValue] = useState('');
+    const [renaming, setRenaming] = useState(false);
     // Validity preset for newly generated codes ('custom' / 'none' are special).
     const [ttlPreset, setTtlPreset] = useState<string>('300');
     const [customMinutes, setCustomMinutes] = useState<string>('30');
@@ -267,15 +271,29 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
         }
     };
 
-    const renameDevice = async (id: string, current: string) => {
-        const name = window.prompt('Nouveau nom de l’appareil :', current)?.trim();
-        if (!name || name === current) return;
+    const openRename = (id: string, current: string) => {
+        setActionError(null);
+        setRenameValue(current);
+        setRenameTarget({ id, name: current });
+    };
+
+    const confirmRename = async () => {
+        if (!renameTarget) return;
+        const name = renameValue.trim();
+        if (!name || name === renameTarget.name) {
+            setRenameTarget(null);
+            return;
+        }
+        setRenaming(true);
         setActionError(null);
         try {
-            await ws.send('device.rename', { deviceId: id, name });
+            await ws.send('device.rename', { deviceId: renameTarget.id, name });
+            setRenameTarget(null);
             await refresh();
         } catch {
             setActionError('Renommage impossible.');
+        } finally {
+            setRenaming(false);
         }
     };
 
@@ -431,7 +449,7 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                                             )}
                                             <button
                                                 className={styles.actionBtn}
-                                                onClick={() => renameDevice(device.id, device.name)}
+                                                onClick={() => openRename(device.id, device.name)}
                                                 title='Renommer'
                                             >
                                                 <span className='icon icon-edit' />
@@ -597,6 +615,41 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                     En cas d’échec de l’auto-destruction, la suppression est interrompue et l’erreur s’affiche sur la
                     carte de l’appareil.
                 </p>
+            </Dialog>
+
+            <Dialog
+                open={renameTarget !== null}
+                onClose={() => setRenameTarget(null)}
+                title='Renommer l’appareil'
+                description={renameTarget ? `Choisissez un nouveau nom pour « ${renameTarget.name} ».` : 'Renommer'}
+                width={420}
+                footer={
+                    <>
+                        <Button variant='secondary' onClick={() => setRenameTarget(null)} disabled={renaming}>
+                            Annuler
+                        </Button>
+                        <Button
+                            onClick={confirmRename}
+                            disabled={
+                                renaming || renameValue.trim() === '' || renameValue.trim() === renameTarget?.name
+                            }
+                        >
+                            {renaming ? 'Renommage…' : 'Renommer'}
+                        </Button>
+                    </>
+                }
+            >
+                <TextInput
+                    autoFocus
+                    value={renameValue}
+                    maxLength={128}
+                    placeholder='Nom de l’appareil'
+                    aria-label='Nouveau nom de l’appareil'
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') void confirmRename();
+                    }}
+                />
             </Dialog>
 
             <Dialog
