@@ -2,6 +2,7 @@ import type { WebSocket } from '@fastify/websocket';
 import {
     AGENT_COLLECT,
     AGENT_CONFIG,
+    AGENT_DESTROY,
     DEVICE_PRESENCE_EVENT,
     DEVICE_REPORT_EVENT,
     METRICS_PUSH_EVENT,
@@ -55,6 +56,14 @@ export class MonitorHub {
         const socket = this.agents.get(deviceId);
         if (!socket) return false;
         socket.send(JSON.stringify({ command: AGENT_CONFIG, payload: config }));
+        return true;
+    }
+
+    /** Tell a connected agent to self-destruct now. No-op if offline. */
+    requestDestroy(deviceId: string): boolean {
+        const socket = this.agents.get(deviceId);
+        if (!socket) return false;
+        socket.send(JSON.stringify({ command: AGENT_DESTROY, payload: {} }));
         return true;
     }
 
@@ -172,6 +181,8 @@ export interface MonitorTransport {
     requestCollect(deviceId: string): boolean;
     /** Push updated collection config to the device's agent; false if offline. */
     pushConfig(deviceId: string, config: AgentConfigPayload): boolean;
+    /** Tell the device's agent to self-destruct now; false if offline. */
+    requestDestroy(deviceId: string): boolean;
 }
 
 export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): MonitorTransport {
@@ -181,6 +192,7 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         isOnline: (deviceIds) => hub.onlineDevices(deviceIds),
         sendInitial: (deviceId, snapshot, report) => hub.sendInitial(socket, deviceId, snapshot, report),
         requestCollect: (deviceId) => hub.requestCollect(deviceId),
-        pushConfig: (deviceId, config) => hub.pushConfig(deviceId, config)
+        pushConfig: (deviceId, config) => hub.pushConfig(deviceId, config),
+        requestDestroy: (deviceId) => hub.requestDestroy(deviceId)
     };
 }

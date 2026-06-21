@@ -85,6 +85,43 @@ maintenable**.
     résolution, KPI et processus** de façon unifiée. → Garder le `focus` comme
     pilote unique (pas d'états parallèles).
 
+## Cycle de vie d'un appareil & suppression
+
+Statuts (`devices.status`) : `pending` → `active`, `revoked` (réversible via
+`device.reactivate`), `pending_deletion`, `archived`.
+
+- **Révocation** (`device.revoke`) : l'agent est refusé à la connexion. Réactivable.
+- **Suppression gérée** (`device.requestDelete`, page Appareils) : passe en
+  `pending_deletion` en mémorisant le statut précédent (`status_before_delete`).
+  - Agent **en ligne** → ordre `agent.destroy` immédiat (`hub.requestDestroy`).
+  - Agent **hors ligne** → l'ordre part à sa prochaine connexion (`agent/ws.ts`).
+  - L'agent **s'auto-détruit** (`config.rs::self_destruct` : config + token + pid +
+    log + binaire) puis répond `agent.destroyed{ok}`. Le serveur **archive** alors
+    l'appareil (`devices.archive` : statut `archived`, `token_hash=''`).
+  - En cas d'échec (`ok:false`) : `failDeletion` restaure le statut précédent et
+    stocke `delete_error` (affiché sur la carte). La suppression est **interrompue**.
+  - Annulable (`device.cancelDelete`) tant que l'agent ne s'est pas reconnecté.
+- **Archive** : l'appareil disparaît de la page Appareils mais reste **consultable
+  en lecture seule** dans Monitoring (voyage temporel). Ses données sont **figées**
+  (les balayages de rétention **excluent** `status='archived'`). Pas de config, pas
+  d'approbation. L'agent est refusé définitivement.
+- **Purge dure** (`device.delete`, bouton de la page Monitoring) : supprime la
+  ligne + tout l'historique (cascade FK). Disponible quel que soit l'état (agent
+  connecté ou non) ; ne déclenche **pas** d'auto-destruction.
+
+### Invariants de sécurité à préserver
+
+- **Furtivité** (`agent/ws.ts`) : tout échec d'auth/autorisation (jeton absent /
+  invalide, appareil inconnu, révoqué, archivé, empreinte de jeton fausse) **se
+  ferme exactement de la même façon** (`close(1008)`, sans raison). De l'extérieur,
+  impossible de distinguer ces cas — c'est volontaire (anti-énumération). Seuls
+  `pending`/`active` sont acceptés ; `pending_deletion` l'est juste le temps de
+  recevoir l'ordre d'auto-destruction.
+- **Backoff de rejet** (`agent/runner.rs`) : une fermeture au handshake (avant la
+  config) = `SessionOutcome::Rejected` → nouvelle tentative **toutes les heures**
+  (`REJECTED_RETRY`), pas en boucle serrée. Une session établie qui se ferme
+  reconnecte vite.
+
 ## Pièges connus
 
 - **`deveye-types` est miroité, pas symlinké.** Après édition de

@@ -34,6 +34,20 @@ export interface DevicesRepo {
     touchSeen(id: string, lastSeen: number): Promise<void>;
     setReport(id: string, reportJson: string): Promise<void>;
     setConfig(id: string, patch: DeviceConfigPatch): Promise<void>;
+    /** Mark a device for deletion, remembering its status so it can be restored. */
+    requestDeletion(id: string, currentStatus: string): Promise<void>;
+    /** Cancel a pending deletion: restore the remembered status, clear the error. */
+    cancelDeletion(id: string): Promise<void>;
+    /**
+     * Reset a device to a freshly-enrolled state: set its status (`pending` or
+     * `active`) and clear any deletion bookkeeping. Used on (re)enrollment so a
+     * previously archived/revoked machine re-pairs into a clean, visible state.
+     */
+    markEnrolled(id: string, status: DeviceStatus): Promise<void>;
+    /** Finalise a deletion: archive the device (its history is kept, frozen). */
+    archive(id: string): Promise<void>;
+    /** Abort a deletion after a self-destruct failure: restore status + record why. */
+    failDeletion(id: string, message: string): Promise<void>;
     delete(id: string): Promise<boolean>;
 }
 
@@ -106,6 +120,48 @@ export function devicesRepo(pool: Q): DevicesRepo {
             params.push(id);
             await pool.query(`UPDATE devices SET ${sets.join(', ')} WHERE id = ?`, params);
         },
+        async requestDeletion(id, currentStatus) {
+            await pool.query(
+                `UPDATE devices
+                 SET status = 'pending_deletion', status_before_delete = ?, delete_error = NULL
+                 WHERE id = ?`,
+                [currentStatus, id]
+            );
+        },
+        async cancelDeletion(id) {
+            await pool.query(
+                `UPDATE devices
+                 SET status = COALESCE(status_before_delete, 'active'),
+                     status_before_delete = NULL, delete_error = NULL
+                 WHERE id = ? AND status = 'pending_deletion'`,
+                [id]
+            );
+        },
+        async markEnrolled(id, status) {
+            await pool.query(
+                `UPDATE devices SET status = ?, status_before_delete = NULL, delete_error = NULL WHERE id = ?`,
+                [status, id]
+            );
+        },
+        async archive(id) {
+            // Keep the row (and its monitoring history) but neutralise the device:
+            // wipe the token so it can never reconnect, and clear deletion bookkeeping.
+            await pool.query(
+                `UPDATE devices
+                 SET status = 'archived', token_hash = '', status_before_delete = NULL, delete_error = NULL
+                 WHERE id = ?`,
+                [id]
+            );
+        },
+        async failDeletion(id, message) {
+            await pool.query(
+                `UPDATE devices
+                 SET status = COALESCE(status_before_delete, 'active'),
+                     status_before_delete = NULL, delete_error = ?
+                 WHERE id = ?`,
+                [message.slice(0, 255), id]
+            );
+        },
         async delete(id) {
             const r = await pool.query('DELETE FROM devices WHERE id = ?', [id]);
             return r.rowCount > 0;
@@ -113,11 +169,19 @@ export function devicesRepo(pool: Q): DevicesRepo {
     };
 }
 
+export interface LinkCode {
+    code: string;
+    expiresAt: number | null;
+    autoApprove: boolean;
+}
+
 export interface LinkCodesRepo {
     /** `ttlSeconds === null` mints a code that never expires. */
-    create(input: { userId: number; ttlSeconds: number | null }): Promise<{ code: string; expiresAt: number | null }>;
-    consume(code: string): Promise<{ userId: number } | null>;
-    listActive(userId: number): Promise<{ code: string; expiresAt: number | null }[]>;
+    create(input: { userId: number; ttlSeconds: number | null; autoApprove: boolean }): Promise<LinkCode>;
+    consume(code: string): Promise<{ userId: number; autoApprove: boolean } | null>;
+    listActive(userId: number): Promise<LinkCode[]>;
+    /** Toggle auto-approval on one of the caller's still-active codes (else null). */
+    setAutoApprove(userId: number, code: string, autoApprove: boolean): Promise<LinkCode | null>;
     /** Delete one of the caller's still-active codes. Returns true if removed. */
     revoke(userId: number, code: string): Promise<boolean>;
 }
@@ -132,41 +196,63 @@ function randomCode(): string {
 
 export function linkCodesRepo(pool: Q): LinkCodesRepo {
     return {
-        async create({ userId, ttlSeconds }) {
+        async create({ userId, ttlSeconds, autoApprove }) {
             const now = Math.floor(Date.now() / 1000);
             const expiresAt = ttlSeconds === null ? null : now + ttlSeconds;
             const code = randomCode();
-            await pool.query('INSERT INTO device_link_codes (code, user_id, expires_at) VALUES (?, ?, ?)', [
-                code,
-                userId,
-                expiresAt
-            ]);
-            return { code, expiresAt };
+            await pool.query(
+                'INSERT INTO device_link_codes (code, user_id, expires_at, auto_approve) VALUES (?, ?, ?, ?)',
+                [code, userId, expiresAt, autoApprove ? 1 : 0]
+            );
+            return { code, expiresAt, autoApprove };
         },
         async consume(code) {
             const now = Math.floor(Date.now() / 1000);
-            const r = await pool.query<{ user_id: number; expires_at: number | null; used_at: number | null }>(
-                'SELECT user_id, expires_at, used_at FROM device_link_codes WHERE code = ?',
-                [code]
-            );
+            const r = await pool.query<{
+                user_id: number;
+                expires_at: number | null;
+                used_at: number | null;
+                auto_approve: number;
+            }>('SELECT user_id, expires_at, used_at, auto_approve FROM device_link_codes WHERE code = ?', [code]);
             const row = r.rows[0];
             if (!row || row.used_at !== null) return null;
             if (row.expires_at !== null && Number(row.expires_at) < now) return null;
             await pool.query('UPDATE device_link_codes SET used_at = ? WHERE code = ?', [now, code]);
-            return { userId: row.user_id };
+            return { userId: row.user_id, autoApprove: Number(row.auto_approve) === 1 };
         },
         async listActive(userId) {
             const now = Math.floor(Date.now() / 1000);
-            const r = await pool.query<{ code: string; expires_at: number | null }>(
-                `SELECT code, expires_at FROM device_link_codes
+            const r = await pool.query<{ code: string; expires_at: number | null; auto_approve: number }>(
+                `SELECT code, expires_at, auto_approve FROM device_link_codes
                  WHERE user_id = ? AND used_at IS NULL AND (expires_at IS NULL OR expires_at > ?)
                  ORDER BY expires_at IS NULL DESC, expires_at ASC`,
                 [userId, now]
             );
             return r.rows.map((row) => ({
                 code: row.code,
-                expiresAt: row.expires_at === null ? null : Number(row.expires_at)
+                expiresAt: row.expires_at === null ? null : Number(row.expires_at),
+                autoApprove: Number(row.auto_approve) === 1
             }));
+        },
+        async setAutoApprove(userId, code, autoApprove) {
+            const now = Math.floor(Date.now() / 1000);
+            const upd = await pool.query(
+                `UPDATE device_link_codes SET auto_approve = ?
+                 WHERE code = ? AND user_id = ? AND used_at IS NULL AND (expires_at IS NULL OR expires_at > ?)`,
+                [autoApprove ? 1 : 0, code, userId, now]
+            );
+            if (upd.rowCount === 0) return null;
+            const r = await pool.query<{ code: string; expires_at: number | null; auto_approve: number }>(
+                'SELECT code, expires_at, auto_approve FROM device_link_codes WHERE code = ?',
+                [code]
+            );
+            const row = r.rows[0];
+            if (!row) return null;
+            return {
+                code: row.code,
+                expiresAt: row.expires_at === null ? null : Number(row.expires_at),
+                autoApprove: Number(row.auto_approve) === 1
+            };
         },
         async revoke(userId, code) {
             const r = await pool.query(

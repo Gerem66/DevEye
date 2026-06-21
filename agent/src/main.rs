@@ -114,16 +114,21 @@ async fn link(code: String, server: String, name: Option<String>) -> Result<()> 
         }
     };
 
-    enroll::enroll(&mut config, &code).await?;
-    info!(
-        device_id = config.device_id.as_deref().unwrap_or("?"),
-        "Device enrolled. It is now pending approval in the DevEye UI."
-    );
-    println!(
-        "✓ Enrolled as \"{}\" (id {}).\n  Approve it in DevEye → Appareils, then start the agent:\n    deveye-agent run            # foreground\n    deveye-agent run --detach   # background",
-        config.name,
-        config.device_id.as_deref().unwrap_or("?")
-    );
+    let status = enroll::enroll(&mut config, &code).await?;
+    let approved = status == "active";
+    let id = config.device_id.as_deref().unwrap_or("?");
+    info!(device_id = id, %status, "Device enrolled");
+    if approved {
+        println!(
+            "✓ Enrolled as \"{}\" (id {}) — automatically approved.\n  Start the agent:\n    deveye-agent run            # foreground\n    deveye-agent run --detach   # background",
+            config.name, id
+        );
+    } else {
+        println!(
+            "✓ Enrolled as \"{}\" (id {}).\n  Approve it in DevEye → Appareils, then start the agent:\n    deveye-agent run            # foreground\n    deveye-agent run --detach   # background",
+            config.name, id
+        );
+    }
     Ok(())
 }
 

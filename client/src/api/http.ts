@@ -95,3 +95,11 @@ export function get<T>(path: string, outputSchema: z.ZodType<T> = z.unknown() as
 export function del<T>(path: string, outputSchema: z.ZodType<T> = z.unknown() as z.ZodType<T>): Promise<T> {
     return request(path, { method: 'DELETE' }, outputSchema);
 }
+
+export function patch<T>(
+    path: string,
+    body: unknown,
+    outputSchema: z.ZodType<T> = z.unknown() as z.ZodType<T>
+): Promise<T> {
+    return request(path, { method: 'PATCH', body: JSON.stringify(body) }, outputSchema);
+}

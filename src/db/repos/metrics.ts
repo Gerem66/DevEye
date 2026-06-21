@@ -179,7 +179,8 @@ export function metricsRepo(pool: Q): MetricsRepo {
             const r = await pool.query(
                 `DELETE m FROM device_metrics m
                  JOIN devices d ON d.id = m.device_id
-                 WHERE m.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.retention_days, ?) * 86400000`,
+                 WHERE d.status <> 'archived'
+                   AND m.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.retention_days, ?) * 86400000`,
                 [defaultDays]
             );
             return r.rowCount;

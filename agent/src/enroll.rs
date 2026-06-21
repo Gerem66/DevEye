@@ -8,8 +8,9 @@ use crate::protocol::{ApiResult, EnrollData, EnrollRequest};
 /// Enroll this machine with the server using a short-lived link code.
 ///
 /// On success, updates and persists `config` with the returned device id and
-/// token. The code is consumed server-side and cannot be reused.
-pub async fn enroll(config: &mut Config, code: &str) -> Result<()> {
+/// token, and returns the device's status (`active` when the code auto-approves,
+/// otherwise `pending`). The code is consumed server-side and cannot be reused.
+pub async fn enroll(config: &mut Config, code: &str) -> Result<String> {
     let url = format!("{}/api/agent/enroll", config.server.trim_end_matches('/'));
     let body = EnrollRequest {
         code: code.trim().to_uppercase(),
@@ -43,8 +44,13 @@ pub async fn enroll(config: &mut Config, code: &str) -> Result<()> {
     }
 
     let data = result.data.context("enrollment response missing data")?;
+    let status = data
+        .device
+        .as_ref()
+        .map(|d| d.status.clone())
+        .unwrap_or_default();
     config.device_id = Some(data.device_id);
     config.device_token = Some(data.device_token);
     config.save().context("saving enrolled config")?;
-    Ok(())
+    Ok(status)
 }

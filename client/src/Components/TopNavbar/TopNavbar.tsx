@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { type MouseEvent as ReactMouseEvent, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/auth/AuthProvider';
 import { useDevices } from '@/stores/devices';
@@ -22,24 +22,26 @@ export interface TopNavbarProps {
     viewTitle?: string;
     /** Called when user clicks "back to home" in feature mode. */
     onBack?: () => void;
-    /** Open the profile feature. */
-    onOpenProfile?: () => void;
-    /** Open the security feature (2FA, password encryption, re-auth window). */
-    onOpenSecurity?: () => void;
-    /** Open the devices (agents) management page. */
-    onOpenDevices?: () => void;
-    /** Open the logs feature. Only provided for admins (omit to hide the entry). */
-    onOpenLogs?: () => void;
+    /** Open the profile feature. Receives the click (Ctrl/Cmd = force reload). */
+    onOpenProfile?: (e: ReactMouseEvent) => void;
+    /** Open the security feature. Receives the click (Ctrl/Cmd = force reload). */
+    onOpenSecurity?: (e: ReactMouseEvent) => void;
+    /** Open the devices page. Receives the click (Ctrl/Cmd = force reload). */
+    onOpenDevices?: (e: ReactMouseEvent) => void;
+    /** Open the logs feature (admins only). Click carries the force-reload modifier. */
+    onOpenLogs?: (e: ReactMouseEvent) => void;
     /** Open the settings panel. */
     onOpenSettings?: () => void;
 }
 
 /** Always-visible main info: current weather (primary city) + online devices. */
 function TopbarStatus() {
-    const { devices } = useDevices();
+    const { devices: allDevices } = useDevices();
     const { report } = useWeather();
     const current = report?.current ?? null;
 
+    // Exclude archived devices (history-only) from the live fleet count.
+    const devices = allDevices.filter((d) => d.status !== 'archived');
     const onlineCount = devices.filter((d) => d.online).length;
     if (devices.length === 0 && !current) return null;
 
@@ -189,8 +191,8 @@ export default function TopNavbar({
                         >
                             <button
                                 className={styles.menuItem}
-                                onClick={() => {
-                                    onOpenProfile?.();
+                                onClick={(e) => {
+                                    onOpenProfile?.(e);
                                     setMenuOpen(false);
                                 }}
                             >
@@ -198,8 +200,8 @@ export default function TopNavbar({
                             </button>
                             <button
                                 className={styles.menuItem}
-                                onClick={() => {
-                                    onOpenSecurity?.();
+                                onClick={(e) => {
+                                    onOpenSecurity?.(e);
                                     setMenuOpen(false);
                                 }}
                             >
@@ -220,8 +222,8 @@ export default function TopNavbar({
                             {onOpenDevices && (
                                 <button
                                     className={styles.menuItem}
-                                    onClick={() => {
-                                        onOpenDevices();
+                                    onClick={(e) => {
+                                        onOpenDevices(e);
                                         setMenuOpen(false);
                                     }}
                                 >
@@ -231,8 +233,8 @@ export default function TopNavbar({
                             {onOpenLogs && (
                                 <button
                                     className={styles.menuItem}
-                                    onClick={() => {
-                                        onOpenLogs();
+                                    onClick={(e) => {
+                                        onOpenLogs(e);
                                         setMenuOpen(false);
                                     }}
                                 >

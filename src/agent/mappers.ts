@@ -54,6 +54,7 @@ export function deviceRowToDevice(row: DeviceRow, online: boolean): Device {
         snapshotIntervalSeconds: row.snapshot_interval_seconds === null ? null : Number(row.snapshot_interval_seconds),
         processCapture: (row.process_capture as ProcessCapture | null) ?? null,
         retentionDays: row.retention_days === null ? null : Number(row.retention_days),
-        processRetentionDays: row.process_retention_days === null ? null : Number(row.process_retention_days)
+        processRetentionDays: row.process_retention_days === null ? null : Number(row.process_retention_days),
+        deleteError: row.delete_error ?? null
     };
 }

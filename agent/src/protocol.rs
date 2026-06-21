@@ -134,6 +134,15 @@ pub enum ClientMessage {
         device_id: String,
         sample: ProcessSample,
     },
+    /// Outcome of an `agent.destroy`: whether the agent wiped itself successfully.
+    #[serde(rename = "agent.destroyed")]
+    Destroyed {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
 }
 
 /// Messages the server sends back to the agent.
@@ -147,6 +156,9 @@ pub enum ServerMessage {
     /// Push a fresh sample + report immediately (user clicked "refresh").
     #[serde(rename = "agent.collect")]
     Collect {},
+    /// Self-destruct: wipe local config + binary and exit (device being deleted).
+    #[serde(rename = "agent.destroy")]
+    Destroy {},
     /// Per-device collection config (cadences + capture mode), pushed by the
     /// server on connect and whenever the user changes it in the UI.
     #[serde(rename = "agent.config")]
@@ -194,4 +206,14 @@ pub struct EnrollData {
     pub device_id: String,
     #[serde(rename = "deviceToken")]
     pub device_token: String,
+    /// The enrolled device, so the agent can report the real status (a code with
+    /// auto-approval lands the device directly as `active`, not `pending`).
+    #[serde(default)]
+    pub device: Option<EnrolledDevice>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct EnrolledDevice {
+    #[serde(default)]
+    pub status: String,
 }

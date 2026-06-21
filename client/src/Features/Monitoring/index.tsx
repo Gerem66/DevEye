@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ws } from '@/api/ws';
 import { useDevices } from '@/stores/devices';
 import { openInfo } from '@/Components/InfoPopup';
+import { Dialog } from '@/Components/Dialog';
+import Button from '@/Components/Button';
 import {
     DEVICE_PRESENCE_EVENT,
     DEVICE_REPORT_EVENT,
@@ -214,7 +216,10 @@ const ACTIVITY_META: Record<Activity, { label: string; cls: string }> = {
 // ─── Widget compact ─────────────────────────────────────────────────────────
 
 export function MonitoringWidget() {
-    const { devices } = useDevices();
+    const { devices: allDevices } = useDevices();
+    // Archived devices are former machines kept only for their history; don't
+    // count them among the live fleet.
+    const devices = allDevices.filter((d) => d.status !== 'archived');
     const onlineCount = devices.filter((d) => d.online).length;
     return (
         <div className={styles.widgetContent}>
@@ -242,6 +247,8 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
     const [overrides, setOverrides] = useState<Record<string, { online?: boolean; report?: DeviceReport | null }>>({});
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [configOpen, setConfigOpen] = useState(false);
+    const [purgeOpen, setPurgeOpen] = useState(false);
+    const [purging, setPurging] = useState(false);
 
     // Timeline window: dayStart null = live (rolling last 24h); otherwise a day.
     const [dayStart, setDayStart] = useState<number | null>(null);
@@ -393,6 +400,25 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
         return off;
     }, [selectedId, liveTail]);
 
+    // Hard-purge: remove the device and ALL its monitoring history (works whether
+    // the agent is online or not). Used to clear an archived device's frozen data,
+    // or to reset an active one.
+    const purgeDevice = useCallback(async () => {
+        const id = selectedRef.current;
+        if (!id) return;
+        setPurging(true);
+        try {
+            await ws.send('device.delete', { deviceId: id });
+            setPurgeOpen(false);
+            setSelectedId(null);
+            await refresh();
+        } catch {
+            // Keep the dialog open; the failure is rare (network) and retryable.
+        } finally {
+            setPurging(false);
+        }
+    }, [refresh]);
+
     // Refresh: ask the agent to push fresh data now.
     const refreshNow = useCallback(() => {
         const id = selectedRef.current;
@@ -450,6 +476,7 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
 
     const lastKnown = liveSnapshot ?? (points.length ? points[points.length - 1] : null);
     const online = selected?.online ?? false;
+    const archived = selected?.status === 'archived';
     const cores = report?.os.cores ?? 0;
     const valuesMuted = !online && focus.kind === 'live';
 
@@ -716,14 +743,16 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                                     >
                                         <span className='icon icon-info' />
                                     </button>
-                                    <button
-                                        className={styles.iconHeaderBtn}
-                                        onClick={() => setConfigOpen(true)}
-                                        title='Configurer la collecte'
-                                    >
-                                        <span className='icon icon-settings' />
-                                    </button>
-                                    {online && (
+                                    {!archived && (
+                                        <button
+                                            className={styles.iconHeaderBtn}
+                                            onClick={() => setConfigOpen(true)}
+                                            title='Configurer la collecte'
+                                        >
+                                            <span className='icon icon-settings' />
+                                        </button>
+                                    )}
+                                    {online && !archived && (
                                         <button
                                             className={styles.iconHeaderBtn}
                                             onClick={refreshNow}
@@ -735,11 +764,22 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                                             />
                                         </button>
                                     )}
-                                    <span
-                                        className={`${styles.onlineBadge} ${online ? styles.online : styles.offline}`}
+                                    <button
+                                        className={`${styles.iconHeaderBtn} ${styles.iconHeaderDanger}`}
+                                        onClick={() => setPurgeOpen(true)}
+                                        title='Supprimer l’appareil et ses données'
                                     >
-                                        {online ? 'En ligne' : 'Hors ligne'}
-                                    </span>
+                                        <span className='icon icon-trash' />
+                                    </button>
+                                    {archived ? (
+                                        <span className={`${styles.onlineBadge} ${styles.archived}`}>Archivé</span>
+                                    ) : (
+                                        <span
+                                            className={`${styles.onlineBadge} ${online ? styles.online : styles.offline}`}
+                                        >
+                                            {online ? 'En ligne' : 'Hors ligne'}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 
@@ -756,7 +796,8 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                             {!online && (
                                 <div className={styles.offlineBanner}>
                                     <span className='icon icon-clock' />
-                                    Hors ligne{selected.lastSeen ? ` depuis ${formatAgo(selected.lastSeen)}` : ''}
+                                    Hors ligne
+                                    {selected.lastSeen ? ` depuis ${formatAgo(selected.lastSeen * 1000)}` : ''}
                                     {lastKnown
                                         ? ` · dernières données le ${new Date(lastKnown.timestamp).toLocaleString('fr-FR')}`
                                         : ''}
@@ -929,6 +970,33 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                                 onClose={() => setConfigOpen(false)}
                                 onSaved={() => void refresh()}
                             />
+
+                            <Dialog
+                                open={purgeOpen}
+                                onClose={() => setPurgeOpen(false)}
+                                title={`Supprimer « ${selected.name} » ?`}
+                                description='Cette action efface définitivement l’appareil et tout son historique de monitoring.'
+                                footer={
+                                    <>
+                                        <Button
+                                            variant='secondary'
+                                            onClick={() => setPurgeOpen(false)}
+                                            disabled={purging}
+                                        >
+                                            Annuler
+                                        </Button>
+                                        <Button variant='danger' onClick={() => void purgeDevice()} disabled={purging}>
+                                            {purging ? 'Suppression…' : 'Supprimer les données'}
+                                        </Button>
+                                    </>
+                                }
+                            >
+                                <p className={styles.focusCaption}>
+                                    {archived
+                                        ? 'Les données figées de cet appareil archivé seront définitivement effacées et il disparaîtra de cette page.'
+                                        : 'Toutes les métriques, snapshots et historiques de cet appareil seront supprimés. L’agent, s’il est encore actif, n’est pas détruit : utilisez « Supprimer » depuis la page Appareils pour cela.'}
+                                </p>
+                            </Dialog>
                         </div>
                     )}
                 </div>

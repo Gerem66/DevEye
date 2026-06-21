@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ws } from '@/api/ws';
-import { del, get, post } from '@/api/http';
+import { del, get, patch, post } from '@/api/http';
 import { StatusBadge, type BadgeTone } from '@/Components/StatusBadge';
 import { Dialog } from '@/Components/Dialog';
+import { openInfo } from '@/Components/InfoPopup';
 import Button from '@/Components/Button';
 import SelectInput from '@/Components/SelectInput';
 import TextInput from '@/Components/TextInput';
-import { useDevices, removeDeviceLocal } from '@/stores/devices';
+import { useDevices } from '@/stores/devices';
+import { LinkInfo } from './LinkInfo';
 import {
     LINK_CODE_TTL_MAX_SECONDS,
     linkCodeResponseSchema,
@@ -27,6 +29,10 @@ function statusMeta(status: DeviceStatus): { label: string; tone: BadgeTone } {
             return { label: 'Approuvé', tone: 'success' };
         case 'revoked':
             return { label: 'Révoqué', tone: 'danger' };
+        case 'pending_deletion':
+            return { label: 'Suppression en attente', tone: 'warning' };
+        case 'archived':
+            return { label: 'Archivé', tone: 'neutral' };
     }
 }
 
@@ -44,7 +50,8 @@ function formatExpiry(expiresAt: number | null): string {
 
 function formatLastSeen(ts: number | null): string {
     if (ts === null) return 'Jamais';
-    const diffMs = Date.now() - ts;
+    // `lastSeen` is stored in seconds; bring it to ms before diffing.
+    const diffMs = Date.now() - ts * 1000;
     const minutes = Math.floor(diffMs / 60000);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
@@ -52,6 +59,37 @@ function formatLastSeen(ts: number | null): string {
     if (minutes < 60) return `Il y a ${minutes} min`;
     if (hours < 24) return `Il y a ${hours}h`;
     return `Il y a ${days}j`;
+}
+
+/** DA-styled on/off switch (replaces the native checkbox). */
+function Switch({
+    checked,
+    onChange,
+    label,
+    hint
+}: {
+    checked: boolean;
+    onChange: (v: boolean) => void;
+    label: string;
+    hint?: string;
+}) {
+    return (
+        <button
+            type='button'
+            role='switch'
+            aria-checked={checked}
+            className={`${styles.switch} ${checked ? styles.switchOn : ''}`}
+            onClick={() => onChange(!checked)}
+        >
+            <span className={styles.switchTrack}>
+                <span className={styles.switchThumb} />
+            </span>
+            <span className={styles.switchText}>
+                {label}
+                {hint && <span className={styles.switchHint}>{hint}</span>}
+            </span>
+        </button>
+    );
 }
 
 export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
@@ -62,9 +100,17 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
     const [actionError, setActionError] = useState<string | null>(null);
     const [genError, setGenError] = useState<string | null>(null);
     const [copiedCode, setCopiedCode] = useState<string | null>(null);
+    // Device pending a deletion confirmation (the explanatory dialog).
+    const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+    const [deleting, setDeleting] = useState(false);
+    // Device pending a "delete without waiting" (force-archive) confirmation.
+    const [forceTarget, setForceTarget] = useState<{ id: string; name: string } | null>(null);
+    const [forcing, setForcing] = useState(false);
     // Validity preset for newly generated codes ('custom' / 'none' are special).
     const [ttlPreset, setTtlPreset] = useState<string>('300');
     const [customMinutes, setCustomMinutes] = useState<string>('30');
+    // Whether a newly generated code auto-approves the device on enrollment.
+    const [autoApprove, setAutoApprove] = useState(false);
 
     const fetchCodes = async (): Promise<LinkCodeResponse[]> => {
         try {
@@ -97,7 +143,7 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
         setGeneratingCode(true);
         setGenError(null);
         try {
-            await post('/api/devices/link', body, linkCodeResponseSchema);
+            await post('/api/devices/link', { ...body, autoApprove }, linkCodeResponseSchema);
             await fetchCodes();
         } catch {
             setGenError('Impossible de générer un code de liaison. Réessayez.');
@@ -116,23 +162,88 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
         }
     };
 
+    // Toggle auto-approval on an existing code (edited straight from the table).
+    const toggleAutoApprove = async (code: string, value: boolean) => {
+        // Optimistic: reflect it immediately, reconcile via fetch on failure.
+        setCodes((prev) => prev.map((c) => (c.code === code ? { ...c, autoApprove: value } : c)));
+        try {
+            await patch(`/api/devices/link-codes/${encodeURIComponent(code)}`, { autoApprove: value });
+        } catch {
+            await fetchCodes();
+        }
+    };
+
     // Manual generation only: open the dialog and show the current codes table.
     const openLinkModal = async () => {
         setActionError(null);
         setGenError(null);
         setCopiedCode(null);
+        setAutoApprove(false);
         setShowLinkModal(true);
         await fetchCodes();
     };
 
-    const removeDevice = async (id: string) => {
+    const showLinkInfo = () => void openInfo({ title: 'Lier un appareil', body: <LinkInfo />, width: 460 });
+
+    // While the dialog is open, refresh the codes periodically so one consumed by
+    // a device enrolling in the background drops out of the table on its own.
+    useEffect(() => {
+        if (!showLinkModal) return;
+        const timer = setInterval(() => void fetchCodes(), 4000);
+        return () => clearInterval(timer);
+    }, [showLinkModal]);
+
+    // Managed deletion: ask the agent to self-destruct, then archive (keeping the
+    // monitoring history). Confirmed via the explanatory dialog below.
+    const confirmRemoveDevice = async () => {
+        if (!deleteTarget) return;
         setActionError(null);
+        setDeleting(true);
         try {
-            await ws.send('device.delete', { deviceId: id });
-            removeDeviceLocal(id);
+            await ws.send('device.requestDelete', { deviceId: deleteTarget.id });
+            setDeleteTarget(null);
+            await refresh();
         } catch {
             setActionError('Suppression impossible.');
             void refresh();
+        } finally {
+            setDeleting(false);
+        }
+    };
+
+    const cancelDeleteDevice = async (id: string) => {
+        setActionError(null);
+        try {
+            await ws.send('device.cancelDelete', { deviceId: id });
+            await refresh();
+        } catch {
+            setActionError('Annulation impossible.');
+        }
+    };
+
+    // Force the deletion now (archive) without waiting for the agent to self-destruct.
+    const confirmForceDelete = async () => {
+        if (!forceTarget) return;
+        setActionError(null);
+        setForcing(true);
+        try {
+            await ws.send('device.forceDelete', { deviceId: forceTarget.id });
+            setForceTarget(null);
+            await refresh();
+        } catch {
+            setActionError('Suppression impossible.');
+        } finally {
+            setForcing(false);
+        }
+    };
+
+    const reactivateDevice = async (id: string) => {
+        setActionError(null);
+        try {
+            await ws.send('device.reactivate', { deviceId: id });
+            await refresh();
+        } catch {
+            setActionError('Réactivation impossible.');
         }
     };
 
@@ -184,6 +295,10 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
         }
     };
 
+    // Archived devices are gone from management; they live (read-only) in
+    // Monitoring for browsing their frozen history.
+    const visibleDevices = devices.filter((d) => d.status !== 'archived');
+
     return (
         <div className={styles.container}>
             <div className={styles.header}>
@@ -212,7 +327,7 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                     <span className={styles.emptyIcon}>⚠️</span>
                     <p>{error}</p>
                 </div>
-            ) : devices.length === 0 ? (
+            ) : visibleDevices.length === 0 ? (
                 <div className={styles.empty}>
                     <span className={styles.emptyIcon}>🖥️</span>
                     <p>Aucun appareil lié</p>
@@ -226,79 +341,122 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                         the popup so they morph in and out *with* it (the shared-element
                         transition). Only deletions animate, via exit. */}
                     <AnimatePresence initial={false}>
-                        {devices.map((device) => (
-                            <motion.div
-                                key={device.id}
-                                className={styles.deviceCard}
-                                exit={{ opacity: 0, scale: 0.96 }}
-                                transition={{ duration: 0.2, ease: 'easeOut' }}
-                            >
-                                <div className={styles.deviceHeader}>
-                                    <span className={styles.deviceName}>{device.name}</span>
-                                    <StatusBadge tone={device.online ? 'online' : 'offline'}>
-                                        {device.online ? 'En ligne' : 'Hors ligne'}
-                                    </StatusBadge>
-                                </div>
-
-                                <div className={styles.deviceInfo}>
-                                    <div className={styles.infoRow}>
-                                        <span className='icon icon-cpu' />
-                                        <span>{device.platform}</span>
-                                    </div>
-                                    <div className={styles.infoRow}>
-                                        <span className='icon icon-shield' />
-                                        <StatusBadge tone={statusMeta(device.status).tone} dot={false}>
-                                            {statusMeta(device.status).label}
+                        {visibleDevices.map((device) => {
+                            const pendingDeletion = device.status === 'pending_deletion';
+                            return (
+                                <motion.div
+                                    key={device.id}
+                                    className={styles.deviceCard}
+                                    exit={{ opacity: 0, scale: 0.96 }}
+                                    transition={{ duration: 0.2, ease: 'easeOut' }}
+                                >
+                                    <div className={styles.deviceHeader}>
+                                        <span className={styles.deviceName}>{device.name}</span>
+                                        <StatusBadge tone={device.online ? 'online' : 'offline'}>
+                                            {device.online ? 'En ligne' : 'Hors ligne'}
                                         </StatusBadge>
                                     </div>
-                                    <div className={styles.infoRow}>
-                                        <span className='icon icon-clock' />
-                                        <span>{device.online ? 'En ligne' : formatLastSeen(device.lastSeen)}</span>
+
+                                    <div className={styles.deviceInfo}>
+                                        <div className={styles.infoRow}>
+                                            <span className='icon icon-cpu' />
+                                            <span>{device.platform}</span>
+                                        </div>
+                                        <div className={styles.infoRow}>
+                                            <span className='icon icon-shield' />
+                                            <StatusBadge tone={statusMeta(device.status).tone} dot={false}>
+                                                {statusMeta(device.status).label}
+                                            </StatusBadge>
+                                        </div>
+                                        <div className={styles.infoRow}>
+                                            <span className='icon icon-clock' />
+                                            <span>{device.online ? 'En ligne' : formatLastSeen(device.lastSeen)}</span>
+                                        </div>
                                     </div>
-                                </div>
 
-                                {device.status === 'pending' && (
-                                    <p className={styles.pendingHint}>
-                                        Approuvez cet appareil pour autoriser la collecte de métriques.
-                                    </p>
-                                )}
+                                    {device.deleteError && (
+                                        <p className={styles.deleteErrorHint}>
+                                            <span className='icon icon-x-circle' /> Échec de la suppression :{' '}
+                                            {device.deleteError}
+                                        </p>
+                                    )}
 
-                                <div className={styles.deviceActions}>
-                                    {device.status === 'pending' && (
-                                        <button
-                                            className={`${styles.actionBtn} ${styles.actionPrimary}`}
-                                            onClick={() => confirmDevice(device.id)}
-                                            title='Approuver'
-                                        >
-                                            <span className='icon icon-check-circle' /> Approuver
-                                        </button>
+                                    {pendingDeletion ? (
+                                        <p className={styles.pendingHint}>
+                                            Suppression demandée. L’agent s’auto-détruira à sa prochaine connexion, puis
+                                            l’appareil sera archivé (ses données restent consultables dans Monitoring).
+                                        </p>
+                                    ) : (
+                                        device.status === 'pending' && (
+                                            <p className={styles.pendingHint}>
+                                                Approuvez cet appareil pour autoriser la collecte de métriques.
+                                            </p>
+                                        )
                                     )}
-                                    <button
-                                        className={styles.actionBtn}
-                                        onClick={() => renameDevice(device.id, device.name)}
-                                        title='Renommer'
-                                    >
-                                        <span className='icon icon-edit' />
-                                    </button>
-                                    {device.status === 'active' && (
-                                        <button
-                                            className={`${styles.actionBtn} ${styles.actionDanger}`}
-                                            onClick={() => revokeDevice(device.id)}
-                                            title='Révoquer'
-                                        >
-                                            <span className='icon icon-x-circle' />
-                                        </button>
+
+                                    {pendingDeletion ? (
+                                        <div className={styles.pendingActions}>
+                                            <button
+                                                className={`${styles.pendingBtn} ${styles.pendingCancel}`}
+                                                onClick={() => cancelDeleteDevice(device.id)}
+                                            >
+                                                <span className='icon icon-x-circle' /> Annuler la suppression
+                                            </button>
+                                            <button
+                                                className={`${styles.pendingBtn} ${styles.pendingForce}`}
+                                                onClick={() => setForceTarget({ id: device.id, name: device.name })}
+                                            >
+                                                <span className='icon icon-trash' /> Supprimer sans attendre
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className={styles.deviceActions}>
+                                            {device.status === 'pending' && (
+                                                <button
+                                                    className={`${styles.actionBtn} ${styles.actionPrimary}`}
+                                                    onClick={() => confirmDevice(device.id)}
+                                                    title='Approuver'
+                                                >
+                                                    <span className='icon icon-check-circle' /> Approuver
+                                                </button>
+                                            )}
+                                            {device.status === 'revoked' && (
+                                                <button
+                                                    className={`${styles.actionBtn} ${styles.actionPrimary}`}
+                                                    onClick={() => reactivateDevice(device.id)}
+                                                    title='Réactiver'
+                                                >
+                                                    <span className='icon icon-check-circle' /> Réactiver
+                                                </button>
+                                            )}
+                                            <button
+                                                className={styles.actionBtn}
+                                                onClick={() => renameDevice(device.id, device.name)}
+                                                title='Renommer'
+                                            >
+                                                <span className='icon icon-edit' />
+                                            </button>
+                                            {device.status === 'active' && (
+                                                <button
+                                                    className={`${styles.actionBtn} ${styles.actionDanger}`}
+                                                    onClick={() => revokeDevice(device.id)}
+                                                    title='Révoquer'
+                                                >
+                                                    <span className='icon icon-x-circle' />
+                                                </button>
+                                            )}
+                                            <button
+                                                className={`${styles.actionBtn} ${styles.actionDanger}`}
+                                                onClick={() => setDeleteTarget({ id: device.id, name: device.name })}
+                                                title='Supprimer'
+                                            >
+                                                <span className='icon icon-trash' />
+                                            </button>
+                                        </div>
                                     )}
-                                    <button
-                                        className={`${styles.actionBtn} ${styles.actionDanger}`}
-                                        onClick={() => removeDevice(device.id)}
-                                        title='Supprimer'
-                                    >
-                                        <span className='icon icon-trash' />
-                                    </button>
-                                </div>
-                            </motion.div>
-                        ))}
+                                </motion.div>
+                            );
+                        })}
                     </AnimatePresence>
                 </div>
             )}
@@ -308,6 +466,16 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                 onClose={closeModal}
                 title='Codes de liaison'
                 description="Générez un code, puis utilisez-le dans l'agent DevEye pour lier un appareil."
+                headerAction={
+                    <button
+                        className={styles.iconBtn}
+                        onClick={showLinkInfo}
+                        title='Comment lier un appareil ?'
+                        aria-label='Aide'
+                    >
+                        <span className='icon icon-info' />
+                    </button>
+                }
                 footer={
                     <Button variant='secondary' onClick={closeModal}>
                         Fermer
@@ -343,6 +511,12 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                         {generatingCode ? 'Génération…' : 'Générer'}
                     </Button>
                 </div>
+                <Switch
+                    checked={autoApprove}
+                    onChange={setAutoApprove}
+                    label='Approuver automatiquement à la liaison'
+                    hint='Sinon l’appareil reste « En attente » jusqu’à votre approbation (recommandé).'
+                />
                 {genError && <p className={styles.genError}>{genError}</p>}
 
                 {/* Table of active (pending) codes. */}
@@ -366,6 +540,20 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                                     <td className={styles.validityCell}>{formatExpiry(c.expiresAt)}</td>
                                     <td className={styles.codeRowActions}>
                                         <button
+                                            className={`${styles.iconBtn} ${c.autoApprove ? styles.iconApprove : ''}`}
+                                            onClick={() => toggleAutoApprove(c.code, !c.autoApprove)}
+                                            aria-pressed={c.autoApprove}
+                                            title={
+                                                c.autoApprove
+                                                    ? 'Auto-approbation activée — cliquer pour désactiver'
+                                                    : 'Auto-approbation désactivée — cliquer pour activer'
+                                            }
+                                        >
+                                            <span
+                                                className={`icon ${c.autoApprove ? 'icon-check-circle' : 'icon-x-circle'}`}
+                                            />
+                                        </button>
+                                        <button
                                             className={`${styles.iconBtn} ${copiedCode === c.code ? styles.copied : ''}`}
                                             onClick={() => copyCode(c.code)}
                                             title={copiedCode === c.code ? 'Copié' : 'Copier'}
@@ -387,17 +575,50 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                         </tbody>
                     </table>
                 )}
+            </Dialog>
 
-                <div className={styles.instructions}>
-                    <h4>Instructions :</h4>
-                    <ol>
-                        <li>Installez l&apos;agent DevEye (Linux ou macOS) sur votre appareil</li>
-                        <li>
-                            Exécutez <code>deveye-agent link &lt;code&gt; --server &lt;url&gt;</code>
-                        </li>
-                        <li>L&apos;appareil apparaît ici en « En attente » — approuvez-le pour démarrer la collecte</li>
-                    </ol>
-                </div>
+            <Dialog
+                open={deleteTarget !== null}
+                onClose={() => setDeleteTarget(null)}
+                title={deleteTarget ? `Supprimer « ${deleteTarget.name} » ?` : 'Supprimer'}
+                description='La suppression de l’appareil entraînera la destruction définitive de l’agent.'
+                footer={
+                    <>
+                        <Button variant='secondary' onClick={() => setDeleteTarget(null)} disabled={deleting}>
+                            Annuler
+                        </Button>
+                        <Button variant='danger' onClick={confirmRemoveDevice} disabled={deleting}>
+                            {deleting ? 'Suppression…' : 'Supprimer l’appareil'}
+                        </Button>
+                    </>
+                }
+            >
+                <p className={styles.deleteExplainNote}>
+                    En cas d’échec de l’auto-destruction, la suppression est interrompue et l’erreur s’affiche sur la
+                    carte de l’appareil.
+                </p>
+            </Dialog>
+
+            <Dialog
+                open={forceTarget !== null}
+                onClose={() => setForceTarget(null)}
+                title={forceTarget ? `Supprimer « ${forceTarget.name} » sans attendre ?` : 'Supprimer'}
+                description='L’appareil sera archivé immédiatement, sans attendre la reconnexion de l’agent.'
+                footer={
+                    <>
+                        <Button variant='secondary' onClick={() => setForceTarget(null)} disabled={forcing}>
+                            Annuler
+                        </Button>
+                        <Button variant='danger' onClick={confirmForceDelete} disabled={forcing}>
+                            {forcing ? 'Suppression…' : 'Supprimer sans attendre'}
+                        </Button>
+                    </>
+                }
+            >
+                <p className={styles.deleteExplainNote}>
+                    L’agent ne sera pas auto-détruit. À utiliser s’il n’existe plus, ou si peu importe qu’il se nettoie.
+                    Ses données restent consultables dans Monitoring.
+                </p>
             </Dialog>
         </div>
     );

@@ -31,6 +31,11 @@ const MAX_BATCH: usize = 100;
 const QUEUE_CAPACITY: usize = 2880;
 const MIN_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(60);
+/// Retry delay after the server *rejects* us at the handshake (revoked, unknown
+/// or not-yet-approved device). Much slower than a normal reconnect: a rejection
+/// won't clear on its own, so we back off to roughly hourly to avoid hammering
+/// the server (and to stay quiet from the outside).
+const REJECTED_RETRY: Duration = Duration::from_secs(60 * 60);
 /// How often to send the OS/security report.
 const REPORT_INTERVAL: Duration = Duration::from_secs(60 * 60);
 /// Defaults used until the server pushes `agent.config` (≈immediately on connect).
@@ -80,9 +85,16 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
         )
         .await
         {
-            Ok(()) => {
+            Ok(SessionOutcome::Established) => {
                 info!("connection closed by server, reconnecting");
                 backoff = MIN_BACKOFF;
+            }
+            Ok(SessionOutcome::Rejected) => {
+                warn!(
+                    retry_secs = REJECTED_RETRY.as_secs(),
+                    "server rejected this agent (revoked, removed or not yet approved); retrying later"
+                );
+                tokio::time::sleep(REJECTED_RETRY).await;
             }
             Err(e) => {
                 warn!(error = %e, backoff_secs = backoff.as_secs(), "session error, retrying");
@@ -91,6 +103,15 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
             }
         }
     }
+}
+
+/// How a connected session ended, so the caller can pick a reconnect delay.
+enum SessionOutcome {
+    /// We authenticated and ran (normal close / server restart) → reconnect fast.
+    Established,
+    /// The server closed us at the handshake (auth/authorization refused) before
+    /// we ever received config → back off hard (`REJECTED_RETRY`).
+    Rejected,
 }
 
 /// Connect once, push a report + one full snapshot + processes, then exit.
@@ -135,7 +156,7 @@ async fn stream_session(
     initial_metric_interval: Duration,
     collector: &mut Collector,
     queue: &mut VecDeque<MetricSnapshot>,
-) -> Result<()> {
+) -> Result<SessionOutcome> {
     let (ws_stream, _) = tokio_tungstenite::connect_async(ws_url)
         .await
         .context("connecting to agent WebSocket")?;
@@ -161,25 +182,36 @@ async fn stream_session(
         }
         match tokio::time::timeout(remaining, stream.next()).await {
             Ok(Some(Ok(Message::Text(txt)))) => {
-                if let Ok(ServerMessage::Config {
-                    metric_interval_ms,
-                    snapshot_interval_ms,
-                    process_capture,
-                }) = serde_json::from_str::<ServerMessage>(&txt)
-                {
-                    capture = process_capture;
-                    metric_interval = Duration::from_millis(metric_interval_ms.max(1000));
-                    snapshot_interval = Duration::from_millis(snapshot_interval_ms.max(1000));
-                    break;
+                match serde_json::from_str::<ServerMessage>(&txt) {
+                    Ok(ServerMessage::Config {
+                        metric_interval_ms,
+                        snapshot_interval_ms,
+                        process_capture,
+                    }) => {
+                        capture = process_capture;
+                        metric_interval = Duration::from_millis(metric_interval_ms.max(1000));
+                        snapshot_interval = Duration::from_millis(snapshot_interval_ms.max(1000));
+                        break;
+                    }
+                    // The server may greet a pending-deletion device with destroy
+                    // straight away, before any config.
+                    Ok(ServerMessage::Destroy {}) => {
+                        handle_destroy(&mut sink, device_id).await;
+                        // Only reached if self-destruct failed → end the session.
+                        return Ok(SessionOutcome::Established);
+                    }
+                    // Ack/error/other: keep waiting until config or the deadline.
+                    _ => {}
                 }
-                // Ack/error/other: keep waiting until config or the deadline.
             }
             Ok(Some(Ok(Message::Ping(payload)))) => {
                 sink.send(Message::Pong(payload)).await.ok();
             }
             Ok(Some(Ok(_))) => {}
             Ok(Some(Err(e))) => return Err(e).context("WebSocket stream error"),
-            Ok(None) => return Ok(()),
+            // Closed during the handshake, before any config: the server refused
+            // us (revoked / unknown / not approved) → caller backs off hard.
+            Ok(None) => return Ok(SessionOutcome::Rejected),
             Err(_) => break, // timeout: fall back to defaults
         }
     }
@@ -242,6 +274,12 @@ async fn stream_session(
                                     "applied server config"
                                 );
                             }
+                            // Device deleted while we're online: wipe and exit.
+                            Ok(ServerMessage::Destroy {}) => {
+                                handle_destroy(&mut sink, device_id).await;
+                                // Only reached if self-destruct failed → end session.
+                                return Ok(SessionOutcome::Established);
+                            }
                             Ok(ServerMessage::Ack { received }) => debug!(received, "ack"),
                             Ok(ServerMessage::Error { code, message }) => {
                                 warn!(%code, %message, "server error")
@@ -252,7 +290,7 @@ async fn stream_session(
                     Some(Ok(Message::Ping(payload))) => {
                         sink.send(Message::Pong(payload)).await.ok();
                     }
-                    Some(Ok(Message::Close(_))) | None => return Ok(()),
+                    Some(Ok(Message::Close(_))) | None => return Ok(SessionOutcome::Established),
                     Some(Ok(_)) => {}
                     Some(Err(e)) => return Err(e).context("WebSocket stream error"),
                 }
@@ -332,6 +370,56 @@ where
         .await
         .context("sending processes")?;
     debug!(kind, "processes sent");
+    Ok(())
+}
+
+/// Self-destruct on the server's request. On success the agent wipes its local
+/// state, reports it, and **exits the process** (never returns). On failure it
+/// reports the error and returns, so the session ends and the server can abort
+/// the deletion (it restores the device's previous status).
+async fn handle_destroy<S>(sink: &mut S, device_id: &str)
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    match crate::config::Config::self_destruct() {
+        Ok(()) => {
+            info!("self-destruct requested: local config + binary wiped, exiting");
+            let _ = send_destroyed(sink, device_id, true, None).await;
+            let _ = sink.flush().await;
+            // Let the confirmation reach the server before we drop the socket.
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            std::process::exit(0);
+        }
+        Err(e) => {
+            warn!(error = %e, "self-destruct failed; aborting deletion");
+            let _ = send_destroyed(sink, device_id, false, Some(e.to_string())).await;
+            let _ = sink.flush().await;
+            // Give the server time to record the failure (restore status) before
+            // the caller ends the session and reconnects.
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    }
+}
+
+async fn send_destroyed<S>(
+    sink: &mut S,
+    device_id: &str,
+    ok: bool,
+    error: Option<String>,
+) -> Result<()>
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let msg = serde_json::to_string(&ClientMessage::Destroyed {
+        device_id: device_id.to_string(),
+        ok,
+        error,
+    })?;
+    sink.send(Message::Text(msg))
+        .await
+        .context("sending destroyed")?;
     Ok(())
 }
 

@@ -86,6 +86,27 @@ impl Config {
         Ok(())
     }
 
+    /// Wipe every local trace of this agent: the config (which holds the device
+    /// token), the PID and log files, and — best effort — the executable itself.
+    ///
+    /// Only the config removal is mandatory: if it fails (e.g. permissions), we
+    /// return an error so the server aborts the deletion and surfaces it. The
+    /// rest is best-effort (their failure must not block a deletion). On Unix a
+    /// running process can unlink its own binary; the inode lives until exit.
+    pub fn self_destruct() -> Result<()> {
+        let config = Self::path();
+        if config.exists() {
+            std::fs::remove_file(&config)
+                .with_context(|| format!("removing config {}", config.display()))?;
+        }
+        let _ = std::fs::remove_file(Self::pid_path());
+        let _ = std::fs::remove_file(Self::log_path());
+        if let Ok(exe) = std::env::current_exe() {
+            let _ = std::fs::remove_file(&exe);
+        }
+        Ok(())
+    }
+
     pub fn ws_url(&self) -> Result<String> {
         let token = self
             .device_token

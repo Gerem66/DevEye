@@ -2,6 +2,8 @@ import type { WebSocket } from '@fastify/websocket';
 import {
     AGENT_ACK,
     AGENT_CONFIG,
+    AGENT_DESTROY,
+    AGENT_DESTROYED,
     AGENT_ERROR,
     AGENT_HELLO,
     AGENT_METRICS_BATCH,
@@ -45,41 +47,50 @@ function extractToken(req: { headers: Record<string, unknown>; query: unknown })
  */
 export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: AgentWSDeps): Promise<void> {
     app.get('/agent', { websocket: true }, async (socket, req) => {
+        // Stealth: every authentication/authorization failure ends the connection
+        // the exact same way, with no distinguishing code or reason. An outsider
+        // probing the endpoint can't tell a missing/invalid token from an unknown,
+        // revoked or archived device — it all looks like "nothing here".
+        const deny = () => socket.close(1008);
+
         const token = extractToken(req);
-        if (!token) {
-            socket.close(4401, 'unauthorized');
-            return;
-        }
+        if (!token) return deny();
         const claims = await verifyDeviceToken(token);
-        if (!claims) {
-            socket.close(4401, 'unauthorized');
-            return;
-        }
+        if (!claims) return deny();
 
         const device = await db.devices.findById(claims.sub);
-        if (!device || device.status === 'revoked' || device.token_hash !== sha256hex(token)) {
-            socket.close(4403, 'forbidden');
-            return;
-        }
+        if (!device || device.token_hash !== sha256hex(token)) return deny();
+        // Revoked and archived devices are refused identically to unknown ones.
+        if (device.status === 'revoked' || device.status === 'archived') return deny();
 
         const deviceId = device.id;
         const reqLogger = logger.child({ deviceId, ownerId: claims.oid });
-        reqLogger.info('Agent connected');
-        hub.agentOnline(deviceId, socket);
-        // Tell the agent its collection cadences + capture mode straight away.
-        send(socket, { command: AGENT_CONFIG, payload: deviceAgentConfig(device) });
-        await db.devices.touchSeen(deviceId, Math.floor(Date.now() / 1000));
-        await db.presence.record(deviceId, Date.now(), true);
-        audit.record({
-            source: 'agent',
-            category: 'device',
-            action: 'agent.connect',
-            level: 'info',
-            uid: claims.oid,
-            ip: req.ip,
-            description: `Agent connecté : appareil « ${device.name} »`,
-            metadata: { deviceId, status: device.status }
-        });
+
+        // A device marked for deletion is accepted just long enough to be told to
+        // self-destruct; we send the destroy signal and wait for its reply
+        // (handled below). No config, no persistence, no normal presence.
+        if (device.status === 'pending_deletion') {
+            reqLogger.info('Agent connected while pending deletion — sending destroy');
+            hub.agentOnline(deviceId, socket);
+            send(socket, { command: AGENT_DESTROY, payload: {} });
+        } else {
+            reqLogger.info('Agent connected');
+            hub.agentOnline(deviceId, socket);
+            // Tell the agent its collection cadences + capture mode straight away.
+            send(socket, { command: AGENT_CONFIG, payload: deviceAgentConfig(device) });
+            await db.devices.touchSeen(deviceId, Math.floor(Date.now() / 1000));
+            await db.presence.record(deviceId, Date.now(), true);
+            audit.record({
+                source: 'agent',
+                category: 'device',
+                action: 'agent.connect',
+                level: 'info',
+                uid: claims.oid,
+                ip: req.ip,
+                description: `Agent connecté : appareil « ${device.name} »`,
+                metadata: { deviceId, status: device.status }
+            });
+        }
 
         socket.on('message', async (raw: Buffer) => {
             let parsed;
@@ -100,6 +111,46 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: 
             const msg = parsed.data;
             if (msg.command === AGENT_HELLO) {
                 send(socket, { command: AGENT_ACK, payload: { received: 0 } });
+                return;
+            }
+
+            if (msg.command === AGENT_DESTROYED) {
+                // The agent reports the outcome of its self-destruction.
+                if (msg.payload.ok) {
+                    try {
+                        await db.devices.archive(deviceId);
+                        audit.record({
+                            source: 'agent',
+                            category: 'device',
+                            action: 'device.destroyed',
+                            level: 'warning',
+                            uid: claims.oid,
+                            ip: req.ip,
+                            description: `Agent auto-détruit, appareil archivé : « ${device.name} »`,
+                            metadata: { deviceId }
+                        });
+                    } catch (e) {
+                        reqLogger.error({ err: (e as Error).message }, 'Failed to archive destroyed device');
+                    }
+                } else {
+                    const reason = msg.payload.error ?? "Échec de l'auto-destruction";
+                    try {
+                        await db.devices.failDeletion(deviceId, reason);
+                        audit.record({
+                            source: 'agent',
+                            category: 'device',
+                            action: 'device.destroyFailed',
+                            level: 'error',
+                            uid: claims.oid,
+                            ip: req.ip,
+                            description: `Échec de l'auto-destruction : « ${device.name} » — ${reason}`,
+                            metadata: { deviceId }
+                        });
+                    } catch (e) {
+                        reqLogger.error({ err: (e as Error).message }, 'Failed to record destroy failure');
+                    }
+                }
+                send(socket, { command: AGENT_ACK, payload: { received: 1 } });
                 return;
             }
 

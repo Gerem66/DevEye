@@ -241,6 +241,12 @@
     border: 1px solid var(--danger);
 }
 
+.onlineBadge.archived {
+    background: var(--accent-bg);
+    color: var(--text-muted);
+    border: 1px solid var(--glass-border);
+}
+
 .offlineMsg,
 .waitingMsg {
     color: var(--text-muted);
@@ -731,6 +737,11 @@
 .iconHeaderBtn:disabled {
     cursor: default;
     opacity: 0.8;
+}
+
+.iconHeaderDanger:hover:not(:disabled) {
+    border-color: var(--danger);
+    color: var(--danger);
 }
 
 .spinning {

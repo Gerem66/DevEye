@@ -360,10 +360,10 @@ export default function HomePage() {
             <TopNavbar
                 viewTitle={expandedConfig?.title}
                 onBack={expandedWidget ? handleClose : undefined}
-                onOpenProfile={() => handleExpand('profile')}
-                onOpenSecurity={() => handleExpand('security')}
-                onOpenDevices={() => handleExpand('clients')}
-                onOpenLogs={user.role === 'admin' ? () => handleExpand('logs') : undefined}
+                onOpenProfile={(e) => handleExpand('profile', isForceReload(e))}
+                onOpenSecurity={(e) => handleExpand('security', isForceReload(e))}
+                onOpenDevices={(e) => handleExpand('clients', isForceReload(e))}
+                onOpenLogs={user.role === 'admin' ? (e) => handleExpand('logs', isForceReload(e)) : undefined}
                 onOpenSettings={() => setSettingsOpen(true)}
             />
 

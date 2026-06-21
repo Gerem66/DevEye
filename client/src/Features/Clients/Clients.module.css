@@ -253,8 +253,24 @@
     margin: 0;
 }
 
+.deleteErrorHint {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.78rem;
+    color: var(--danger);
+    margin: 0;
+}
+
+.deleteExplainNote {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    margin: 0;
+}
+
 .deviceActions {
     display: flex;
+    flex-wrap: wrap;
     justify-content: flex-end;
     align-items: center;
     gap: var(--space-sm);
@@ -311,6 +327,56 @@
     color: var(--danger);
 }
 
+/* Pending-deletion actions: two full-width labeled buttons stacked, so long
+   labels always stay aligned and inside the card. */
+.pendingActions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin-top: auto;
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--glass-border);
+}
+
+.pendingBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    width: 100%;
+    height: 34px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--glass-border);
+    background: transparent;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.pendingCancel {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+}
+
+.pendingCancel:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+
+.pendingForce {
+    color: var(--danger);
+}
+
+.pendingForce:hover {
+    background: var(--danger-bg);
+    border-color: var(--danger);
+}
+
 /* ─── Link-code dialog (rendered inside the shared <Dialog/>) ──────────────── */
 
 /* Generation controls: validity selector (+ optional minutes) and Generate. */
@@ -336,6 +402,82 @@
     color: var(--danger);
     font-size: 0.82rem;
     margin: 0 0 var(--space-md) 0;
+}
+
+/* DA on/off switch (generation row) */
+.switch {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0 0 var(--space-md) 0;
+    text-align: left;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font: inherit;
+}
+
+.switchTrack {
+    position: relative;
+    flex-shrink: 0;
+    width: 38px;
+    height: 22px;
+    margin-top: 1px;
+    border-radius: 999px;
+    background: var(--glass-bg, rgba(255, 255, 255, 0.08));
+    border: 1px solid var(--glass-border);
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.switchThumb {
+    position: absolute;
+    top: 50%;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transform: translate(0, -50%);
+    transition:
+        transform var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.switchOn .switchTrack {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+}
+
+.switchOn .switchThumb {
+    background: var(--accent);
+    transform: translate(16px, -50%);
+}
+
+.switchText {
+    font-size: 0.85rem;
+    line-height: 1.3;
+}
+
+.switchHint {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* Auto-approval toggle (icon-only) in the codes table: a filled accent ✓ when
+   on, a muted ✗ when off — distinct shape + colour to read the state at a glance.
+   Compound selector so it overrides `.iconBtn`'s border regardless of order. */
+.iconBtn.iconApprove,
+.iconBtn.iconApprove:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-bg);
 }
 
 .noCodes {
@@ -421,34 +563,4 @@
     background: var(--danger-bg);
     border-color: var(--danger);
     color: var(--danger);
-}
-
-.instructions {
-    background: var(--surface-subtle);
-    border-radius: var(--radius-sm);
-    padding: var(--space-md);
-    margin-bottom: var(--space-md);
-}
-
-.instructions h4 {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0 0 var(--space-sm) 0;
-}
-
-.instructions ol {
-    margin: 0;
-    padding-left: var(--space-lg);
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    line-height: 1.6;
-}
-
-.instructions code {
-    background: var(--glass-bg);
-    padding: 2px 6px;
-    border-radius: var(--radius-sm);
-    font-size: 0.8rem;
-    font-family: var(--font-mono);
 }

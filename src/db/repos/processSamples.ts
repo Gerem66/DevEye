@@ -82,7 +82,8 @@ export function processSamplesRepo(pool: Q): ProcessSamplesRepo {
             const r = await pool.query(
                 `DELETE s FROM device_process_samples s
                  JOIN devices d ON d.id = s.device_id
-                 WHERE s.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.process_retention_days, ?) * 86400000`,
+                 WHERE d.status <> 'archived'
+                   AND s.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.process_retention_days, ?) * 86400000`,
                 [defaultDays]
             );
             return r.rowCount;

@@ -5,6 +5,7 @@ import {
     linkCodeRequestSchema,
     linkCodeResponseSchema,
     linkCodesListResponseSchema,
+    linkCodeUpdateSchema,
     ok
 } from 'deveye-types';
 import type { FastifyInstance } from 'fastify';
@@ -44,8 +45,12 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, audit }: Agen
         // undefined → server default; null → never expires; number → custom.
         const ttlSeconds = parsed.data.ttlSeconds === undefined ? env.LINK_CODE_TTL_SECONDS : parsed.data.ttlSeconds;
 
-        const { code, expiresAt } = await db.linkCodes.create({ userId: Number(claims.sub), ttlSeconds });
-        return reply.send(ok(linkCodeResponseSchema.parse({ code, expiresAt })));
+        const created = await db.linkCodes.create({
+            userId: Number(claims.sub),
+            ttlSeconds,
+            autoApprove: parsed.data.autoApprove
+        });
+        return reply.send(ok(linkCodeResponseSchema.parse(created)));
     });
 
     // Active (unconsumed, unexpired) link codes — lets the UI show the table of
@@ -58,6 +63,26 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, audit }: Agen
 
         const codes = await db.linkCodes.listActive(Number(claims.sub));
         return reply.send(ok(linkCodesListResponseSchema.parse({ codes })));
+    });
+
+    // Toggle a still-active code's auto-approval (edited from the codes table).
+    app.patch<{ Params: { code: string } }>('/api/devices/link-codes/:code', async (req, reply) => {
+        const accessToken = req.cookies[ACCESS_COOKIE];
+        if (!accessToken) return reply.code(401).send(err('auth_required', 'No session'));
+        const claims = await verifyAccessToken(accessToken);
+        if (!claims) return reply.code(401).send(err('auth_expired', 'Access token expired'));
+
+        const parsed = linkCodeUpdateSchema.safeParse(req.body ?? {});
+        if (!parsed.success) {
+            return reply.code(400).send(err('validation', 'Invalid update', parsed.error.flatten()));
+        }
+        const updated = await db.linkCodes.setAutoApprove(
+            Number(claims.sub),
+            req.params.code.trim().toUpperCase(),
+            parsed.data.autoApprove
+        );
+        if (!updated) return reply.code(404).send(err('not_found', 'Code not found'));
+        return reply.send(ok(linkCodeResponseSchema.parse(updated)));
     });
 
     // Manually invalidate a pending code (e.g. cancel one you no longer need).
@@ -105,8 +130,12 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, audit }: Agen
         const deviceToken = await signDeviceToken(deviceId, ownerId);
         await db.devices.setTokenHash(deviceId, sha256hex(deviceToken));
 
-        // The device stays `pending` until the owner approves it in the UI; only
-        // then does the server accept its metrics (defence in depth).
+        // (Re)set the device to a clean enrolled state: pending by default (the
+        // owner approves it before its metrics are accepted — defence in depth),
+        // or active straight away if the code auto-approves. Doing this for the
+        // re-enrollment case too re-pairs a previously archived/revoked machine
+        // instead of leaving it stuck (and hidden) in its old state.
+        await db.devices.markEnrolled(deviceId, consumed.autoApprove ? 'active' : 'pending');
         audit.record({
             source: 'agent',
             category: 'device',
@@ -114,8 +143,10 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, audit }: Agen
             level: 'warning',
             uid: ownerId,
             ip: req.ip,
-            description: `Appareil appairé (en attente d'approbation) : « ${name} »`,
-            metadata: { deviceId, platform, reenrolled: Boolean(existing) }
+            description: consumed.autoApprove
+                ? `Appareil appairé et approuvé automatiquement : « ${name} »`
+                : `Appareil appairé (en attente d'approbation) : « ${name} »`,
+            metadata: { deviceId, platform, reenrolled: Boolean(existing), autoApprove: consumed.autoApprove }
         });
 
         const row = await db.devices.findById(deviceId);

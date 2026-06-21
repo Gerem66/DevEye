@@ -1,8 +1,12 @@
 import {
+    deviceCancelDelete,
     deviceConfirm,
     deviceDelete,
+    deviceForceDelete,
     deviceList,
+    deviceReactivate,
     deviceRename,
+    deviceRequestDelete,
     deviceRevoke,
     deviceSetConfig,
     type Device,
@@ -141,6 +145,100 @@ export const deviceSetConfigFeature: FeatureDefinition<
     }
 });
 
+export const deviceReactivateFeature: FeatureDefinition<
+    typeof deviceReactivate.command,
+    typeof deviceReactivate.input,
+    typeof deviceReactivate.output
+> = defineFeature({
+    ...deviceReactivate,
+    handler: async (ctx, input) => {
+        const row = await authorizeDevice(ctx, input.deviceId);
+        if (row.status !== 'revoked') {
+            throw new FeatureError('conflict', 'Only a revoked device can be reactivated');
+        }
+        await ctx.db.devices.setStatus(row.id, 'active');
+        const updated = (await ctx.db.devices.findById(row.id)) ?? { ...row, status: 'active' as const };
+        ctx.audit({
+            action: 'device.reactivate',
+            description: `Appareil réactivé : « ${row.name} »`,
+            metadata: { deviceId: row.id, ownerId: row.owner_id }
+        });
+        return { device: toDevice(ctx, updated) };
+    }
+});
+
+export const deviceRequestDeleteFeature: FeatureDefinition<
+    typeof deviceRequestDelete.command,
+    typeof deviceRequestDelete.input,
+    typeof deviceRequestDelete.output
+> = defineFeature({
+    ...deviceRequestDelete,
+    handler: async (ctx, input) => {
+        const row = await authorizeDevice(ctx, input.deviceId);
+        if (row.status === 'archived' || row.status === 'pending_deletion') {
+            throw new FeatureError('conflict', 'Device is already being deleted');
+        }
+        // Remember the current status so the deletion can be cancelled, then ask
+        // a connected agent to self-destruct now; an offline agent receives the
+        // destroy signal on its next connection (see agent/ws.ts).
+        await ctx.db.devices.requestDeletion(row.id, row.status);
+        const online = ctx.monitor?.requestDestroy(row.id) ?? false;
+        ctx.audit({
+            action: 'device.requestDelete',
+            level: 'warning',
+            description: `Suppression demandée : « ${row.name} »${online ? '' : ' (en attente de connexion)'}`,
+            metadata: { deviceId: row.id, ownerId: row.owner_id, online }
+        });
+        const updated = (await ctx.db.devices.findById(row.id)) ?? row;
+        return { device: toDevice(ctx, updated) };
+    }
+});
+
+export const deviceCancelDeleteFeature: FeatureDefinition<
+    typeof deviceCancelDelete.command,
+    typeof deviceCancelDelete.input,
+    typeof deviceCancelDelete.output
+> = defineFeature({
+    ...deviceCancelDelete,
+    handler: async (ctx, input) => {
+        const row = await authorizeDevice(ctx, input.deviceId);
+        await ctx.db.devices.cancelDeletion(row.id);
+        const updated = (await ctx.db.devices.findById(row.id)) ?? row;
+        ctx.audit({
+            action: 'device.cancelDelete',
+            description: `Suppression annulée : « ${row.name} »`,
+            metadata: { deviceId: row.id, ownerId: row.owner_id }
+        });
+        return { device: toDevice(ctx, updated) };
+    }
+});
+
+export const deviceForceDeleteFeature: FeatureDefinition<
+    typeof deviceForceDelete.command,
+    typeof deviceForceDelete.input,
+    typeof deviceForceDelete.output
+> = defineFeature({
+    ...deviceForceDelete,
+    handler: async (ctx, input) => {
+        const row = await authorizeDevice(ctx, input.deviceId);
+        if (row.status === 'archived') {
+            throw new FeatureError('conflict', 'Device is already archived');
+        }
+        // Archive immediately without telling the agent to self-destruct: this is
+        // for agents that no longer exist (or that we don't care about cleaning).
+        // A still-running agent is simply refused on its next connection.
+        await ctx.db.devices.archive(row.id);
+        const updated = (await ctx.db.devices.findById(row.id)) ?? row;
+        ctx.audit({
+            action: 'device.forceDelete',
+            level: 'warning',
+            description: `Suppression forcée (archivé sans auto-destruction de l'agent) : « ${row.name} »`,
+            metadata: { deviceId: row.id, ownerId: row.owner_id }
+        });
+        return { device: toDevice(ctx, updated) };
+    }
+});
+
 export const deviceDeleteFeature: FeatureDefinition<
     typeof deviceDelete.command,
     typeof deviceDelete.input,
@@ -149,11 +247,14 @@ export const deviceDeleteFeature: FeatureDefinition<
     ...deviceDelete,
     handler: async (ctx, input) => {
         const row = await authorizeDevice(ctx, input.deviceId);
+        // Hard purge (used by the Monitoring page): removes the device row and,
+        // by FK cascade, all its monitoring history. Does NOT self-destruct the
+        // agent — that's `device.requestDelete` from the Appareils page.
         await ctx.db.devices.delete(row.id);
         ctx.audit({
             action: 'device.delete',
             level: 'warning',
-            description: `Appareil supprimé : « ${row.name} »`,
+            description: `Appareil et données supprimés : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id }
         });
         return { deviceId: row.id };
@@ -165,7 +266,11 @@ export const deviceFeatures: FeatureDefinition<string, any, any>[] = [
     deviceListFeature,
     deviceConfirmFeature,
     deviceRevokeFeature,
+    deviceReactivateFeature,
     deviceRenameFeature,
     deviceSetConfigFeature,
+    deviceRequestDeleteFeature,
+    deviceCancelDeleteFeature,
+    deviceForceDeleteFeature,
     deviceDeleteFeature
 ];
