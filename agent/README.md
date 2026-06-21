@@ -24,15 +24,31 @@ cargo build --release
 
 Requires a stable Rust toolchain (`rust-toolchain.toml` pins `stable`).
 
-**All three OSes at once.** Two ways to get the full set (Linux x86_64, macOS
-arm64, Windows x86_64):
+**The whole matrix at once.** A release ships **8 binaries** (the same set the
+web UI offers under **Appareils → Télécharger l'agent**, and the canonical list
+in `deveye-types` `AGENT_TARGETS`):
+
+| OS | Cibles |
+| --- | --- |
+| Linux (musl statique) | `x86_64`, `aarch64`, `armv7` (Raspberry Pi) |
+| macOS | `x86_64` (Intel), `arm64` (Silicon) |
+| Windows (MSVC) | `x86_64`, `x86`, `arm64` |
+
+Two ways to produce them:
 
 - **CI** — built natively on each OS and published as assets to each `v*` tag
   release. See `.github/workflows/release.yml` in the `DevEye` repo. No local setup.
-- **Locally** — `./build-all.sh` cross-compiles all three into `dist/` (handy to
+- **Locally** — `./build-all.sh` cross-compiles the matrix into `dist/` (handy to
   smoke-test before tagging). It needs `rustup` + `zig` + `cargo-zigbuild`
   (Homebrew Rust can't cross-compile); the script preflights and prints the exact
-  install commands if anything is missing.
+  install commands if anything is missing. It is *best-effort*: Linux is built as
+  static musl and Windows via MinGW so it cross-builds from a Mac, while the
+  shipped Windows binaries are MSVC (native CI).
+
+**Distribution.** The DevEye server bakes these release binaries into its Docker
+image (`agent/dist/`) and serves them from the **Télécharger l'agent** picker, so
+end users never touch this repo. In dev, run `cargo build --release` (or
+`build-all.sh`) to populate `agent/dist/` and exercise the same flow.
 
 ### Scripts
 

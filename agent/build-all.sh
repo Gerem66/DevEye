@@ -1,24 +1,36 @@
 #!/usr/bin/env bash
 #
-# Build the DevEye agent for Linux, macOS and Windows in one go, into agent/dist/.
-# Lets you smoke-test all three locally before tagging a release. The CI does the
-# same on native runners — see ../.github/workflows/ci.yml.
+# Build the DevEye agent for the full 8-target matrix in one go, into agent/dist/.
+# Lets you smoke-test locally before tagging a release. The CI builds the same set
+# natively per OS — see ../.github/workflows/release.yml. The matrix mirrors the
+# web UI ("Télécharger l'agent") and deveye-types `AGENT_TARGETS`; keep all three
+# in sync.
+#
+# This is a *best-effort local cross-build*: Linux is built as static musl and
+# Windows via the MinGW (gnu) toolchain so it cross-compiles from a Mac/Linux box
+# (the shipped Windows binaries are MSVC, built natively in CI). The output file
+# names are identical to the release assets regardless.
 #
 # Cross-compiling needs rustup (Homebrew Rust ships only the host target) plus
 # Zig as the cross-linker. One-time setup:
 #
 #   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-#   rustup target add x86_64-unknown-linux-gnu aarch64-apple-darwin x86_64-pc-windows-gnu
 #   brew install zig && cargo install cargo-zigbuild
+#   # target std is added automatically below.
 #
 set -euo pipefail
 cd "$(dirname "$0")"
 
 # target | output name in dist/ | binary name under target/<t>/release/
 TARGETS=(
-    "x86_64-unknown-linux-gnu  deveye-agent-linux-x86_64       deveye-agent"
-    "aarch64-apple-darwin      deveye-agent-macos-arm64        deveye-agent"
-    "x86_64-pc-windows-gnu     deveye-agent-windows-x86_64.exe deveye-agent.exe"
+    "x86_64-unknown-linux-musl       deveye-agent-linux-x86_64       deveye-agent"
+    "aarch64-unknown-linux-musl      deveye-agent-linux-aarch64      deveye-agent"
+    "armv7-unknown-linux-musleabihf  deveye-agent-linux-armv7        deveye-agent"
+    "x86_64-apple-darwin             deveye-agent-macos-x86_64       deveye-agent"
+    "aarch64-apple-darwin            deveye-agent-macos-arm64        deveye-agent"
+    "x86_64-pc-windows-gnu           deveye-agent-windows-x86_64.exe deveye-agent.exe"
+    "i686-pc-windows-gnu             deveye-agent-windows-x86.exe    deveye-agent.exe"
+    "aarch64-pc-windows-gnullvm      deveye-agent-windows-arm64.exe  deveye-agent.exe"
 )
 
 # ── Preflight: fail early, with the exact fix for whatever is missing ────────

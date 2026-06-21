@@ -12,25 +12,45 @@ concurrency:
 permissions:
   contents: read
 
-# Tags only: build the agent natively on each OS (the "3 versions"), then gather
-# the binaries into a GitHub Release.
+# Tags only: build the agent natively on each OS, producing the full 8-target
+# matrix, then gather the binaries into a GitHub Release. The set of targets is
+# the same one exposed by the web UI ("Télécharger l'agent") and `build-all.sh`
+# — keep them in sync (canonical list: deveye-types `AGENT_TARGETS`).
+#
+#   linux   → x86_64 / aarch64 / armv7 (static musl, via cross)
+#   macos   → x86_64 (Intel) / arm64 (Silicon)
+#   windows → x86_64 / x86 / arm64 (MSVC)
 jobs:
   build:
-    name: agent (${{ matrix.target_label }})
+    name: agent (${{ matrix.os_label }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
-            target_label: linux-x86_64
-            bin: deveye-agent
+            os_label: linux
+            builder: cross
+            # triple:output-name (static musl for portability across distros)
+            targets: >-
+              x86_64-unknown-linux-musl:deveye-agent-linux-x86_64
+              aarch64-unknown-linux-musl:deveye-agent-linux-aarch64
+              armv7-unknown-linux-musleabihf:deveye-agent-linux-armv7
           - os: macos-latest
-            target_label: macos-arm64
-            bin: deveye-agent
+            os_label: macos
+            builder: cargo
+            # Apple→Apple cross builds natively (system clang linker, no extras).
+            targets: >-
+              x86_64-apple-darwin:deveye-agent-macos-x86_64
+              aarch64-apple-darwin:deveye-agent-macos-arm64
           - os: windows-latest
-            target_label: windows-x86_64
-            bin: deveye-agent.exe
+            os_label: windows
+            builder: cargo
+            # x86_64 is the host; i686/aarch64 cross via added MSVC targets.
+            targets: >-
+              x86_64-pc-windows-msvc:deveye-agent-windows-x86_64.exe
+              i686-pc-windows-msvc:deveye-agent-windows-x86.exe
+              aarch64-pc-windows-msvc:deveye-agent-windows-arm64.exe
     defaults:
       run:
         working-directory: agent
@@ -46,22 +66,48 @@ jobs:
         with:
           workspaces: agent
 
-      # Clippy runs per OS here, so the release also validates each platform's
-      # #[cfg(target_os)] branches before shipping a binary.
+      # fmt + clippy on the host target validate the code (and each platform's
+      # #[cfg(target_os)] branches) before we ship a binary.
       - name: Format check
         run: cargo fmt --check
 
       - name: Clippy
         run: cargo clippy --release --all-targets -- -D warnings
 
-      - name: Build release
-        run: cargo build --release
+      # Linux musl cross-builds go through `cross` (Docker-based toolchains).
+      - name: Install cross
+        if: matrix.builder == 'cross'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
 
-      - name: Upload binary
+      - name: Build targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for pair in ${{ matrix.targets }}; do
+            triple="${pair%%:*}"; out="${pair##*:}"
+            echo "→ building $triple → $out"
+            rustup target add "$triple" || true
+            if [ "${{ matrix.builder }}" = "cross" ]; then
+              cross build --release --target "$triple"
+            else
+              cargo build --release --target "$triple"
+            fi
+            case "$out" in
+              *.exe) bin="deveye-agent.exe" ;;
+              *)     bin="deveye-agent" ;;
+            esac
+            cp "target/$triple/release/$bin" "dist/$out"
+          done
+          ls -la dist
+
+      - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: deveye-agent-${{ matrix.target_label }}
-          path: agent/target/release/${{ matrix.bin }}
+          name: agent-${{ matrix.os_label }}
+          path: agent/dist/*
           if-no-files-found: error
 
   publish:
@@ -74,22 +120,15 @@ jobs:
       - name: Download all agent binaries
         uses: actions/download-artifact@v4
         with:
-          pattern: deveye-agent-*
+          pattern: agent-*
           path: dist
 
-      # Artifacts download as dist/<artifact-name>/<bin>; flatten + suffix the
-      # filename with the OS label so the release assets are unambiguous.
+      # Artifacts download as dist/<artifact-name>/<files…>; the filenames are
+      # already the final, OS+arch-suffixed names — just flatten them.
       - name: Stage release assets
         run: |
           mkdir -p release
-          for dir in dist/deveye-agent-*; do
-            label="${dir#dist/deveye-agent-}"
-            if [ -f "$dir/deveye-agent.exe" ]; then
-              cp "$dir/deveye-agent.exe" "release/deveye-agent-${label}.exe"
-            else
-              cp "$dir/deveye-agent" "release/deveye-agent-${label}"
-            fi
-          done
+          find dist -type f -exec cp {} release/ \;
           ls -la release
 
       - name: Publish release
