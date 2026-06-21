@@ -1,9 +1,11 @@
 import type { WebSocket } from '@fastify/websocket';
 import {
     AGENT_ACK,
+    AGENT_CONFIG,
     AGENT_ERROR,
     AGENT_HELLO,
     AGENT_METRICS_BATCH,
+    AGENT_PROCESSES,
     AGENT_REPORT,
     agentClientMessageSchema,
     type AgentServerMessage
@@ -13,6 +15,7 @@ import type { FastifyInstance } from 'fastify';
 import { verifyDeviceToken } from '@/auth/jwt';
 import { sha256hex } from '@/Utils/hash';
 import { logger } from '@/logger';
+import { deviceAgentConfig } from './mappers';
 import type { MonitorHub } from './hub';
 
 import type { Database } from '@/db';
@@ -63,7 +66,10 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: 
         const reqLogger = logger.child({ deviceId, ownerId: claims.oid });
         reqLogger.info('Agent connected');
         hub.agentOnline(deviceId, socket);
+        // Tell the agent its collection cadences + capture mode straight away.
+        send(socket, { command: AGENT_CONFIG, payload: deviceAgentConfig(device) });
         await db.devices.touchSeen(deviceId, Math.floor(Date.now() / 1000));
+        await db.presence.record(deviceId, Date.now(), true);
         audit.record({
             source: 'agent',
             category: 'device',
@@ -115,6 +121,22 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: 
                 return;
             }
 
+            if (msg.command === AGENT_PROCESSES) {
+                // Process history persists only for confirmed devices.
+                if (device.status !== 'active') {
+                    send(socket, { command: AGENT_ACK, payload: { received: 0 } });
+                    return;
+                }
+                try {
+                    await db.processSamples.insertSample(deviceId, msg.payload.sample);
+                    send(socket, { command: AGENT_ACK, payload: { received: msg.payload.sample.processes.length } });
+                } catch (e) {
+                    reqLogger.error({ err: (e as Error).message }, 'Failed to persist process sample');
+                    send(socket, { command: AGENT_ERROR, payload: { code: 'internal', message: 'Persist failed' } });
+                }
+                return;
+            }
+
             if (msg.command === AGENT_METRICS_BATCH) {
                 // Devices only persist metrics once the owner has confirmed them.
                 if (device.status !== 'active') {
@@ -136,6 +158,7 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: 
 
         socket.on('close', () => {
             hub.agentOffline(deviceId);
+            void db.presence.record(deviceId, Date.now(), false).catch(() => {});
             reqLogger.info('Agent disconnected');
         });
     });

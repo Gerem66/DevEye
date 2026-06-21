@@ -230,13 +230,13 @@
 }
 
 .onlineBadge.online {
-    background: rgba(52, 211, 153, 0.15);
+    background: var(--success-bg);
     color: var(--success);
     border: 1px solid var(--success);
 }
 
 .onlineBadge.offline {
-    background: rgba(239, 68, 68, 0.1);
+    background: var(--danger-bg);
     color: var(--danger);
     border: 1px solid var(--danger);
 }
@@ -248,70 +248,282 @@
     padding: var(--space-md) 0;
 }
 
-/* ─── Metric bars ─────────────────────────────────────────────────────────── */
+/* ─── Mini graphs ─────────────────────────────────────────────────────────── */
 
-.metricRow {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+.graphsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--space-sm);
 }
 
-.metricHeader {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
+.expandGraphsBtn {
+    align-self: center;
+    margin-top: var(--space-xs);
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--glass-bg);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
 }
 
-.metricLabel {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+.expandGraphsBtn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
 }
 
-.metricValue {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--text-primary);
+.focusCaption {
+    margin: var(--space-xs) 0 0;
+    font-size: 0.74rem;
+    color: var(--text-muted);
     font-variant-numeric: tabular-nums;
 }
 
-.barTrack {
-    height: 6px;
+/* Per-device collection config dialog (opened from the Monitoring panel). */
+.configGrid {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.configRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+}
+
+.configLabel {
+    font-size: 0.85rem;
+    color: var(--text);
+}
+
+.configField {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-shrink: 0;
+}
+
+.configField > select {
+    min-width: 150px;
+}
+
+.configCustom {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.configCustomInput {
+    width: 80px;
+}
+
+.configUnit {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.configError {
+    margin: var(--space-sm) 0 0;
+    color: var(--danger);
+    font-size: 0.82rem;
+}
+
+/* ── Clickable graph cards + detail popup ── */
+.graphCardClickable {
+    cursor: pointer;
+    transition: border-color 0.15s ease, transform 0.1s ease;
+}
+.graphCardClickable:hover {
+    border-color: var(--accent);
+}
+.graphCardClickable:active {
+    transform: scale(0.99);
+}
+.graphBodyTall {
+    height: 160px;
+}
+
+.graphDetail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+.graphDetailStats {
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--space-xs) var(--space-md);
+}
+.graphDetailRow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+}
+.graphDetailRow dt {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+.graphDetailRow dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+/* ── Activity hero (idle / normal / intensive) ── */
+.activityHero {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 8px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: linear-gradient(120deg, color-mix(in srgb, var(--activity-color) 14%, transparent), transparent 70%);
+    --activity-color: var(--text-muted);
+}
+.activityHero.muted {
+    opacity: 0.6;
+}
+.activityLabel {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--activity-color);
+}
+.activityIcon {
+    margin-left: auto;
+    color: var(--activity-color);
+    opacity: 0.85;
+}
+.activityDot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--activity-color);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--activity-color) 70%, transparent);
+}
+.actIdle {
+    --activity-color: var(--text-muted);
+}
+.actNormal {
+    --activity-color: var(--success, #3ecf8e);
+}
+.actIntense {
+    --activity-color: var(--warning);
+}
+.actIntense .activityDot {
+    animation: activityPulse 1.6s ease-out infinite;
+}
+.actNormal .activityDot {
+    animation: activityPulse 2.6s ease-out infinite;
+}
+@keyframes activityPulse {
+    0% {
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--activity-color) 65%, transparent);
+    }
+    70% {
+        box-shadow: 0 0 0 7px transparent;
+    }
+    100% {
+        box-shadow: 0 0 0 0 transparent;
+    }
+}
+
+/* ── Timeline zoom presets (discreet) ── */
+.zoomRow {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+.zoomLabel {
+    margin-right: auto;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+.zoomChip {
+    padding: 2px 8px;
+    font-size: 0.72rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.12s ease, border-color 0.12s ease;
+}
+.zoomChip:hover {
+    color: var(--text);
+    border-color: var(--accent);
+}
+.zoomChipActive {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.graphCard {
     background: var(--glass-bg-light);
-    border-radius: 3px;
-    overflow: hidden;
-}
-
-.barFill {
-    height: 100%;
-    border-radius: 3px;
-    min-width: 2px;
-}
-
-/* ─── CPU sparkline ───────────────────────────────────────────────────────── */
-
-.cpuSection {
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm);
     display: flex;
     flex-direction: column;
     gap: var(--space-xs);
 }
 
-.sparkline {
-    width: 100%;
-    height: 36px;
-    display: block;
-    opacity: 0.7;
-}
-
-/* ─── Info cards (network, users) ─────────────────────────────────────────── */
-
-.infoRow {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
+.graphHead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
     gap: var(--space-sm);
 }
+
+.graphTitle {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+}
+
+.graphStat {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.graphStatMuted {
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.graphBody {
+    height: 60px;
+}
+
+.graphSvg {
+    width: 100%;
+    height: 60px;
+    display: block;
+}
+
+.graphEmpty {
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+}
+
+/* ─── Info cards (current values) ─────────────────────────────────────────── */
 
 .infoCard {
     background: var(--glass-bg-light);
@@ -338,9 +550,10 @@
     font-variant-numeric: tabular-nums;
 }
 
-.noMetrics {
-    color: var(--text-muted);
-    font-style: italic;
+/* Dimmed when showing last-known values for an offline device. */
+.infoCard.muted .infoVal {
+    color: var(--text-secondary);
+    opacity: 0.7;
 }
 
 .noMetrics.offline {
@@ -375,12 +588,23 @@
 }
 
 .sectionTitle {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
     font-size: 0.8rem;
     font-weight: 600;
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     margin: 0;
+}
+
+.sectionMeta {
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-muted);
 }
 
 .secGrid {
@@ -482,7 +706,7 @@
     gap: var(--space-sm);
 }
 
-.refreshBtn {
+.iconHeaderBtn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -499,12 +723,12 @@
         color var(--transition-fast);
 }
 
-.refreshBtn:hover:not(:disabled) {
+.iconHeaderBtn:hover:not(:disabled) {
     border-color: var(--accent);
     color: var(--accent);
 }
 
-.refreshBtn:disabled {
+.iconHeaderBtn:disabled {
     cursor: default;
     opacity: 0.8;
 }
@@ -518,4 +742,276 @@
     to {
         transform: rotate(360deg);
     }
+}
+
+/* ─── Offline banner ──────────────────────────────────────────────────────── */
+
+.offlineBanner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg-light);
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+
+.offlineBanner .icon {
+    color: var(--text-muted);
+}
+
+/* ─── Timeline (uptime frieze + range selector) ───────────────────────────── */
+
+.timeline {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.timelineNav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.navBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    background: transparent;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.navBtn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.navBtn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.timelineDay {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-transform: capitalize;
+    min-width: 120px;
+}
+
+.directBtn {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--accent);
+    background: var(--accent-bg);
+    color: var(--accent);
+    cursor: pointer;
+}
+
+.uptimeBadge {
+    margin-left: auto;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.timelineTrack {
+    position: relative;
+    height: 22px;
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg);
+    overflow: hidden;
+    cursor: crosshair;
+    touch-action: none;
+}
+
+.segment {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+}
+
+.segOnline {
+    background: var(--success);
+    opacity: 0.55;
+}
+
+.segOffline {
+    background: transparent;
+}
+
+.selectionBox {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: var(--accent);
+    opacity: 0.22;
+    border-left: 2px solid var(--accent);
+    border-right: 2px solid var(--accent);
+    pointer-events: none;
+}
+
+/* Tick marks for process snapshots along the track. */
+.snapshotMark {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--text-muted);
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+/* The currently focused single instant. */
+.pointMark {
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    width: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 4px var(--accent);
+    pointer-events: none;
+}
+
+.timelineFooter {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.dragHint {
+    font-style: italic;
+}
+
+.resetSel {
+    background: transparent;
+    border: none;
+    color: var(--accent);
+    font-size: 0.72rem;
+    cursor: pointer;
+    padding: 0;
+}
+
+/* ─── Day picker (button + calendar popover) ──────────────────────────────── */
+
+.dayPickerWrap {
+    position: relative;
+}
+
+.dayButton {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 4px 10px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg-light);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: capitalize;
+    cursor: pointer;
+}
+
+.dayButton:hover {
+    border-color: var(--accent);
+}
+
+.dayButton .icon {
+    color: var(--text-muted);
+}
+
+.calendar {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 20;
+    width: 244px;
+    padding: var(--space-sm);
+    background: var(--surface, var(--glass-bg));
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(12px);
+}
+
+.calHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-sm);
+}
+
+.calMonth {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.calGrid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+}
+
+.calWeekday {
+    text-align: center;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    padding-bottom: 2px;
+}
+
+.calDay {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg-light);
+    color: var(--text-primary);
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.calDay:hover:not(:disabled) {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.calDay:disabled {
+    background: transparent;
+    color: var(--text-muted);
+    opacity: 0.35;
+    cursor: default;
+}
+
+.calToday {
+    outline: 1px solid var(--glass-border-strong);
+}
+
+.calSelected {
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
+.calSelected:hover:not(:disabled) {
+    background: var(--accent);
+    color: var(--on-accent);
 }

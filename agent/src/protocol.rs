@@ -35,6 +35,19 @@ pub struct MetricSnapshot {
     pub process_count: Option<u32>,
     #[serde(rename = "activeConnections")]
     pub active_connections: Option<u32>,
+    #[serde(rename = "gpuPercent")]
+    pub gpu_percent: Option<f64>,
+    /// Cumulative disk bytes read; only the snapshot (heavy) cycle fills it.
+    #[serde(rename = "diskReadBytes")]
+    pub disk_read_bytes: Option<u64>,
+    #[serde(rename = "diskWriteBytes")]
+    pub disk_write_bytes: Option<u64>,
+    /// Battery charge (%); None when the machine has no battery.
+    #[serde(rename = "batteryPercent")]
+    pub battery_percent: Option<f64>,
+    /// Whether the battery is charging / on AC; None when unknown.
+    #[serde(rename = "batteryCharging")]
+    pub battery_charging: Option<bool>,
 }
 
 /// Latest-known health/security report (sent on connect, then periodically).
@@ -46,8 +59,25 @@ pub struct DeviceReport {
     pub collected_at: i64,
     pub os: OsInfo,
     pub security: Security,
-    #[serde(rename = "topProcesses")]
-    pub top_processes: Vec<ProcessInfo>,
+    pub disks: Vec<ReportDisk>,
+}
+
+/// One mounted disk/volume (per-disk breakdown for multi-disk machines).
+#[derive(Debug, Clone, Serialize)]
+pub struct ReportDisk {
+    pub mount: String,
+    #[serde(rename = "usedBytes")]
+    pub used_bytes: u64,
+    #[serde(rename = "totalBytes")]
+    pub total_bytes: u64,
+}
+
+/// A point-in-time process list. `kind` is "top" (heaviest ~20) or "all".
+#[derive(Debug, Clone, Serialize)]
+pub struct ProcessSample {
+    pub ts: i64,
+    pub kind: &'static str,
+    pub processes: Vec<ProcessInfo>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -55,6 +85,7 @@ pub struct OsInfo {
     pub name: String,
     pub version: String,
     pub arch: String,
+    pub cores: u32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -97,6 +128,12 @@ pub enum ClientMessage {
         device_id: String,
         report: DeviceReport,
     },
+    #[serde(rename = "agent.processes")]
+    Processes {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        sample: ProcessSample,
+    },
 }
 
 /// Messages the server sends back to the agent.
@@ -110,6 +147,17 @@ pub enum ServerMessage {
     /// Push a fresh sample + report immediately (user clicked "refresh").
     #[serde(rename = "agent.collect")]
     Collect {},
+    /// Per-device collection config (cadences + capture mode), pushed by the
+    /// server on connect and whenever the user changes it in the UI.
+    #[serde(rename = "agent.config")]
+    Config {
+        #[serde(rename = "metricIntervalMs")]
+        metric_interval_ms: u64,
+        #[serde(rename = "snapshotIntervalMs")]
+        snapshot_interval_ms: u64,
+        #[serde(rename = "processCapture")]
+        process_capture: String,
+    },
 }
 
 /// Standard server result envelope: `{ ok, data? , error? }`.

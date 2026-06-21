@@ -1,40 +1,55 @@
 //! Long-running monitoring loop: maintain a permanent WebSocket to the server,
-//! stream metric batches every cycle, and reconnect with exponential backoff.
+//! stream metric batches, and reconnect with exponential backoff.
 //!
 //! Samples collected while disconnected are buffered in a bounded in-memory
 //! queue and flushed on reconnect, so transient outages don't lose data.
 //!
-//! The first sample (and a health/security report) are sent immediately on
-//! connect, so the dashboard shows data without waiting a full interval.
+//! Two cadences (both pushed by the server via `agent.config`):
+//! - **metrics** (light, ~10 s): cheap graph signals, no full process scan;
+//! - **snapshots** (heavy, ~5 min): full metric sample (process count + disk I/O)
+//!   plus the process list (`all`/`top`/`off`).
+//!
+//! The OS/security report is sent on connect and hourly. The first snapshot is
+//! sent immediately on connect so the dashboard isn't blank.
 
 use std::collections::VecDeque;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
-use tokio::time::{interval, MissedTickBehavior};
+use tokio::time::{interval_at, Instant, MissedTickBehavior};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, info, warn};
 
 use crate::config::Config;
 use crate::metrics::Collector;
-use crate::protocol::{ClientMessage, DeviceReport, MetricSnapshot, ServerMessage};
+use crate::protocol::{ClientMessage, DeviceReport, MetricSnapshot, ProcessSample, ServerMessage};
 use crate::report;
 
 const MAX_BATCH: usize = 100;
-/// ~24h of 30s samples; oldest are dropped when full.
+/// ~8 hours of 10-s samples; oldest are dropped when full.
 const QUEUE_CAPACITY: usize = 2880;
 const MIN_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(60);
-/// How often to refresh the heavier health/security report.
-const REPORT_INTERVAL: Duration = Duration::from_secs(120);
+/// How often to send the OS/security report.
+const REPORT_INTERVAL: Duration = Duration::from_secs(60 * 60);
+/// Defaults used until the server pushes `agent.config` (≈immediately on connect).
+const DEFAULT_SNAPSHOT_INTERVAL: Duration = Duration::from_secs(300);
+const DEFAULT_CAPTURE: &str = "all";
 
 /// Tunables for a run, set from the CLI.
 pub struct RunOptions {
     /// Collect and send a single cycle, then exit (handy for testing).
     pub once: bool,
-    /// Time between metric samples.
+    /// Initial metric (graph) sampling interval, until the server sends config.
     pub interval: Duration,
+}
+
+fn now_millis() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
@@ -53,7 +68,7 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
     let mut queue: VecDeque<MetricSnapshot> = VecDeque::with_capacity(QUEUE_CAPACITY);
     let mut backoff = MIN_BACKOFF;
 
-    info!(device_id = %device_id, interval_secs = opts.interval.as_secs(), "DevEye agent starting");
+    info!(device_id = %device_id, metric_interval_secs = opts.interval.as_secs(), "DevEye agent starting");
 
     loop {
         match stream_session(
@@ -78,7 +93,7 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
     }
 }
 
-/// Connect once, push one report + one snapshot, wait briefly for ack, exit.
+/// Connect once, push a report + one full snapshot + processes, then exit.
 async fn run_once(ws_url: &str, device_id: &str) -> Result<()> {
     let (ws_stream, _) = tokio_tungstenite::connect_async(ws_url)
         .await
@@ -91,7 +106,7 @@ async fn run_once(ws_url: &str, device_id: &str) -> Result<()> {
     let mut collector = Collector::new();
     // Warm-up so the first CPU delta is meaningful.
     tokio::time::sleep(Duration::from_millis(250)).await;
-    let snapshot = collector.collect();
+    let snapshot = collector.collect_full();
     let msg = serde_json::to_string(&ClientMessage::MetricsBatch {
         device_id: device_id.to_string(),
         snapshots: vec![snapshot],
@@ -99,12 +114,13 @@ async fn run_once(ws_url: &str, device_id: &str) -> Result<()> {
     sink.send(Message::Text(msg))
         .await
         .context("sending metrics batch")?;
-    info!("snapshot + report sent");
+    send_processes(&mut sink, device_id, DEFAULT_CAPTURE).await?;
+    info!("snapshot + processes + report sent");
 
     // Give the server a moment to ack before closing.
     let _ = tokio::time::timeout(Duration::from_secs(3), async {
         if let Some(Ok(Message::Text(txt))) = stream.next().await {
-            handle_server_text(&txt);
+            log_server_text(&txt);
         }
     })
     .await;
@@ -112,12 +128,11 @@ async fn run_once(ws_url: &str, device_id: &str) -> Result<()> {
     Ok(())
 }
 
-/// One connected session: send hello + report, an immediate first sample, then
-/// sample + flush on a ticker (and refresh the report periodically).
+/// One connected session.
 async fn stream_session(
     ws_url: &str,
     device_id: &str,
-    sample_interval: Duration,
+    initial_metric_interval: Duration,
     collector: &mut Collector,
     queue: &mut VecDeque<MetricSnapshot>,
 ) -> Result<()> {
@@ -128,23 +143,67 @@ async fn stream_session(
     let (mut sink, mut stream) = ws_stream.split();
 
     send_hello(&mut sink).await?;
+
+    // Collection config — overwritten by the server's `agent.config` (sent on
+    // connect, almost immediately) and on any later change.
+    let mut metric_interval = initial_metric_interval;
+    let mut snapshot_interval = DEFAULT_SNAPSHOT_INTERVAL;
+    let mut capture = DEFAULT_CAPTURE.to_string();
+
+    // Briefly wait for the server's pushed config so the very first snapshot
+    // already reflects the saved per-device settings (capture mode + cadences),
+    // whether the agent was offline at the time of the change or not.
+    let cfg_deadline = Instant::now() + Duration::from_millis(2000);
+    loop {
+        let remaining = cfg_deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        match tokio::time::timeout(remaining, stream.next()).await {
+            Ok(Some(Ok(Message::Text(txt)))) => {
+                if let Ok(ServerMessage::Config {
+                    metric_interval_ms,
+                    snapshot_interval_ms,
+                    process_capture,
+                }) = serde_json::from_str::<ServerMessage>(&txt)
+                {
+                    capture = process_capture;
+                    metric_interval = Duration::from_millis(metric_interval_ms.max(1000));
+                    snapshot_interval = Duration::from_millis(snapshot_interval_ms.max(1000));
+                    break;
+                }
+                // Ack/error/other: keep waiting until config or the deadline.
+            }
+            Ok(Some(Ok(Message::Ping(payload)))) => {
+                sink.send(Message::Pong(payload)).await.ok();
+            }
+            Ok(Some(Ok(_))) => {}
+            Ok(Some(Err(e))) => return Err(e).context("WebSocket stream error"),
+            Ok(None) => return Ok(()),
+            Err(_) => break, // timeout: fall back to defaults
+        }
+    }
+
+    // On connect: slow-moving report + an immediate full snapshot + processes.
     send_report(&mut sink, device_id).await?;
-
-    // Immediate first sample (don't wait a full interval).
-    push_bounded(queue, collector.collect());
+    push_bounded(queue, collector.collect_full());
     flush_queue(&mut sink, device_id, queue).await?;
+    send_processes(&mut sink, device_id, &capture).await?;
 
-    let mut ticker = interval(sample_interval);
-    ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
-    let mut report_ticker = interval(REPORT_INTERVAL);
-    report_ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
-    report_ticker.tick().await; // consume the immediate first tick (already sent)
+    let mut metric_ticker = new_ticker(metric_interval);
+    let mut snapshot_ticker = new_ticker(snapshot_interval);
+    let mut report_ticker = new_ticker(REPORT_INTERVAL);
 
     loop {
         tokio::select! {
-            _ = ticker.tick() => {
-                push_bounded(queue, collector.collect());
+            _ = metric_ticker.tick() => {
+                push_bounded(queue, collector.collect_fine());
                 flush_queue(&mut sink, device_id, queue).await?;
+            }
+            _ = snapshot_ticker.tick() => {
+                push_bounded(queue, collector.collect_full());
+                flush_queue(&mut sink, device_id, queue).await?;
+                send_processes(&mut sink, device_id, &capture).await?;
             }
             _ = report_ticker.tick() => {
                 send_report(&mut sink, device_id).await?;
@@ -152,14 +211,42 @@ async fn stream_session(
             incoming = stream.next() => {
                 match incoming {
                     Some(Ok(Message::Text(txt))) => {
-                        // On a "collect now" request, push a fresh sample + report
-                        // immediately so the dashboard reflects the live state.
-                        if matches!(serde_json::from_str::<ServerMessage>(&txt), Ok(ServerMessage::Collect {})) {
-                            push_bounded(queue, collector.collect());
-                            flush_queue(&mut sink, device_id, queue).await?;
-                            send_report(&mut sink, device_id).await?;
-                        } else {
-                            handle_server_text(&txt);
+                        match serde_json::from_str::<ServerMessage>(&txt) {
+                            // "Collect now" (user refresh): full snapshot + processes + report.
+                            Ok(ServerMessage::Collect {}) => {
+                                push_bounded(queue, collector.collect_full());
+                                flush_queue(&mut sink, device_id, queue).await?;
+                                send_processes(&mut sink, device_id, &capture).await?;
+                                send_report(&mut sink, device_id).await?;
+                            }
+                            Ok(ServerMessage::Config {
+                                metric_interval_ms,
+                                snapshot_interval_ms,
+                                process_capture,
+                            }) => {
+                                capture = process_capture;
+                                let new_metric = Duration::from_millis(metric_interval_ms.max(1000));
+                                if new_metric != metric_interval {
+                                    metric_interval = new_metric;
+                                    metric_ticker = new_ticker(metric_interval);
+                                }
+                                let new_snapshot = Duration::from_millis(snapshot_interval_ms.max(1000));
+                                if new_snapshot != snapshot_interval {
+                                    snapshot_interval = new_snapshot;
+                                    snapshot_ticker = new_ticker(snapshot_interval);
+                                }
+                                info!(
+                                    metric_secs = metric_interval.as_secs(),
+                                    snapshot_secs = snapshot_interval.as_secs(),
+                                    capture = %capture,
+                                    "applied server config"
+                                );
+                            }
+                            Ok(ServerMessage::Ack { received }) => debug!(received, "ack"),
+                            Ok(ServerMessage::Error { code, message }) => {
+                                warn!(%code, %message, "server error")
+                            }
+                            Err(_) => debug!("ignoring unrecognized server frame"),
                         }
                     }
                     Some(Ok(Message::Ping(payload))) => {
@@ -172,6 +259,15 @@ async fn stream_session(
             }
         }
     }
+}
+
+/// A skip-on-miss interval ticker whose first tick fires one full period from
+/// now (the connect-time sample/report has already been sent), avoiding the
+/// immediate first tick of a plain `interval`.
+fn new_ticker(period: Duration) -> tokio::time::Interval {
+    let mut t = interval_at(Instant::now() + period, period);
+    t.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    t
 }
 
 async fn send_hello<S>(sink: &mut S) -> Result<()>
@@ -193,7 +289,7 @@ where
     S: SinkExt<Message> + Unpin,
     S::Error: std::error::Error + Send + Sync + 'static,
 {
-    // Report collection sleeps briefly and scans processes — run off the runtime.
+    // Security probes shell out — run off the runtime.
     let report: DeviceReport = tokio::task::spawn_blocking(report::collect)
         .await
         .context("collecting device report")?;
@@ -205,6 +301,37 @@ where
         .await
         .context("sending report")?;
     debug!("report sent");
+    Ok(())
+}
+
+/// Collect and send the process list per the capture mode. `off` sends nothing.
+async fn send_processes<S>(sink: &mut S, device_id: &str, capture: &str) -> Result<()>
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let kind = match capture {
+        "top" => "top",
+        "all" => "all",
+        _ => return Ok(()), // "off" (or unknown): no process sample.
+    };
+    let cap = capture.to_string();
+    let processes = tokio::task::spawn_blocking(move || report::collect_processes(&cap))
+        .await
+        .context("collecting processes")?;
+    let sample = ProcessSample {
+        ts: now_millis(),
+        kind,
+        processes,
+    };
+    let msg = serde_json::to_string(&ClientMessage::Processes {
+        device_id: device_id.to_string(),
+        sample,
+    })?;
+    sink.send(Message::Text(msg))
+        .await
+        .context("sending processes")?;
+    debug!(kind, "processes sent");
     Ok(())
 }
 
@@ -243,12 +370,11 @@ where
     Ok(())
 }
 
-fn handle_server_text(txt: &str) {
+fn log_server_text(txt: &str) {
     match serde_json::from_str::<ServerMessage>(txt) {
         Ok(ServerMessage::Ack { received }) => debug!(received, "ack"),
         Ok(ServerMessage::Error { code, message }) => warn!(%code, %message, "server error"),
-        // Collect is handled inline in the session loop before reaching here.
-        Ok(ServerMessage::Collect {}) => {}
+        Ok(_) => {}
         Err(_) => debug!("ignoring unrecognized server frame"),
     }
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
 import { ws } from '@/api/ws';
 import { useDevices } from '@/stores/devices';
+import { openInfo } from '@/Components/InfoPopup';
 import {
     DEVICE_PRESENCE_EVENT,
     DEVICE_REPORT_EVENT,
@@ -10,15 +10,45 @@ import {
     type DeviceReport,
     type DeviceReportPush,
     type MetricSnapshot,
-    type MetricsPush
+    type MetricsPush,
+    type MetricsResolution,
+    type PresenceEvent,
+    type ProcessSample
 } from 'deveye-types';
 import type { FeatureProps } from '../types';
 import { useFeatureLifecycle } from '../useFeatureLifecycle';
+import { MonitoringInfo } from './MonitoringInfo';
+import { ConfigDialog } from './ConfigDialog';
+import { GraphDetail, type DetailRow } from './GraphDetail';
+import { Timeline } from './Timeline';
+import { MiniGraph, type Series } from './MiniGraph';
 import styles from './Monitoring.module.css';
 
-const HISTORY_SIZE = 30;
-/** Recent window (ms) backfilled on selection so graphs aren't empty. */
-const BACKFILL_MS = 5 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_SNAPSHOT_INTERVAL_S = 300;
+/** Graphs shown before "Afficher plus" (≈ 2 rows at 3 columns on a wide panel). */
+const COLLAPSED_GRAPHS = 6;
+
+/** Discreet timeline zoom presets (visible window span ending at "now"/day end). */
+const ZOOM_PRESETS: { label: string; ms: number }[] = [
+    { label: '30 min', ms: 30 * 60 * 1000 },
+    { label: '1 h', ms: 60 * 60 * 1000 },
+    { label: '3 h', ms: 3 * 60 * 60 * 1000 },
+    { label: '6 h', ms: 6 * 60 * 60 * 1000 },
+    { label: '12 h', ms: 12 * 60 * 60 * 1000 },
+    { label: 'Jour', ms: DAY_MS }
+];
+
+/**
+ * What the panel is currently showing:
+ * - `live`: the timeline window (rolling 24h or a chosen day), latest values;
+ * - `range`: a dragged zone — graphs over it, KPIs averaged, processes at its end;
+ * - `snapshot`: a single instant — exact KPIs/processes, graphs over the snapshot
+ *   interval around it (fine resolution).
+ */
+type Focus = { kind: 'live' } | { kind: 'range'; start: number; end: number } | { kind: 'snapshot'; at: number };
+
+// ─── Formatting helpers ─────────────────────────────────────────────────────
 
 function formatBytes(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
@@ -40,98 +70,106 @@ function formatUptime(seconds: number): string {
     return `${m}min`;
 }
 
-function barColor(pct: number): string {
-    if (pct >= 85) return 'var(--danger)';
-    if (pct >= 60) return 'var(--warning)';
-    return 'var(--accent)';
+function formatAgo(ts: number): string {
+    const mins = Math.floor((Date.now() - ts) / 60000);
+    if (mins < 1) return "à l'instant";
+    if (mins < 60) return `${mins} min`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} h`;
+    return `${Math.floor(hours / 24)} j`;
 }
 
-interface MetricBarProps {
-    label: string;
-    pct: number;
-    valueLabel: string;
+function pct(used: number, total: number): number {
+    return total > 0 ? (used / total) * 100 : 0;
 }
 
-function MetricBar({ label, pct, valueLabel }: MetricBarProps) {
+/** Bucketing resolution to keep the query light at wide zoom levels. */
+function spanResolution(spanMs: number): MetricsResolution {
+    if (spanMs <= 60 * 60 * 1000) return 'raw';
+    if (spanMs <= 12 * 60 * 60 * 1000) return 'minute';
+    return 'hour';
+}
+
+/** Keep last-known values for fields the light metric cycle leaves null. */
+const SPARSE_FIELDS: (keyof MetricSnapshot)[] = [
+    'processCount',
+    'diskReadBytes',
+    'diskWriteBytes',
+    'activeConnections',
+    'gpuPercent',
+    'cpuTempC',
+    'loadAvg1'
+];
+function mergeSnapshot(prev: MetricSnapshot | null, next: MetricSnapshot): MetricSnapshot {
+    if (!prev) return next;
+    const out = { ...next };
+    for (const k of SPARSE_FIELDS) {
+        if (out[k] == null && prev[k] != null) (out[k] as number | null) = prev[k] as number | null;
+    }
+    return out;
+}
+
+/** The point closest to `at` within a series. */
+function nearestPoint(points: MetricSnapshot[], at: number): MetricSnapshot | null {
+    let best: MetricSnapshot | null = null;
+    let bestDist = Infinity;
+    for (const p of points) {
+        const d = Math.abs(p.timestamp - at);
+        if (d < bestDist) {
+            bestDist = d;
+            best = p;
+        }
+    }
+    return best;
+}
+
+/** A synthetic snapshot whose gauges/counters are averaged over `points`. */
+function averageSnapshot(points: MetricSnapshot[]): MetricSnapshot | null {
+    if (points.length === 0) return null;
+    const last = points[points.length - 1];
+    const avg = (sel: (p: MetricSnapshot) => number | null): number | null => {
+        let sum = 0;
+        let n = 0;
+        for (const p of points) {
+            const v = sel(p);
+            if (v != null && !Number.isNaN(v)) {
+                sum += v;
+                n++;
+            }
+        }
+        return n > 0 ? sum / n : null;
+    };
+    const avgRound = (sel: (p: MetricSnapshot) => number | null): number | null => {
+        const v = avg(sel);
+        return v == null ? null : Math.round(v);
+    };
+    return {
+        ...last,
+        cpuPercent: avg((p) => p.cpuPercent) ?? last.cpuPercent,
+        memUsedBytes: Math.round(avg((p) => p.memUsedBytes) ?? last.memUsedBytes),
+        usersCount: avgRound((p) => p.usersCount) ?? last.usersCount,
+        loadAvg1: avg((p) => p.loadAvg1),
+        processCount: avgRound((p) => p.processCount),
+        activeConnections: avgRound((p) => p.activeConnections)
+    };
+}
+
+// ─── Small building blocks ──────────────────────────────────────────────────
+
+function InfoCard({ label, value, muted, hint }: { label: string; value: string; muted?: boolean; hint?: string }) {
     return (
-        <div className={styles.metricRow}>
-            <div className={styles.metricHeader}>
-                <span className={styles.metricLabel}>{label}</span>
-                <span className={styles.metricValue}>{valueLabel}</span>
-            </div>
-            <div className={styles.barTrack}>
-                <motion.div
-                    className={styles.barFill}
-                    style={{ backgroundColor: barColor(pct) }}
-                    animate={{ width: `${pct}%` }}
-                    transition={{ duration: 0.4, ease: 'easeOut' }}
-                />
-            </div>
-        </div>
-    );
-}
-
-/** A CPU history point: value `v` (%) at unix-ms time `t`. */
-interface HistoryPoint {
-    t: number;
-    v: number;
-}
-
-interface SparklineProps {
-    points: HistoryPoint[];
-    className?: string;
-}
-
-/**
- * Time-aware sparkline: the x-axis is the real timestamp span, so irregular
- * gaps (a manual refresh between periodic samples, a reconnection) are drawn to
- * scale instead of evenly spaced.
- */
-function Sparkline({ points, className }: SparklineProps) {
-    if (points.length < 2) return null;
-    const W = 200;
-    const H = 36;
-    const tMin = points[0].t;
-    const span = Math.max(1, points[points.length - 1].t - tMin);
-    const pts = points
-        .map((p) => {
-            const x = ((p.t - tMin) / span) * W;
-            const y = H - Math.max(0, Math.min(1, p.v / 100)) * H;
-            return `${x.toFixed(1)},${y.toFixed(1)}`;
-        })
-        .join(' ');
-    return (
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio='none' className={className}>
-            <polyline points={pts} fill='none' stroke='var(--accent)' strokeWidth='1.5' strokeLinejoin='round' />
-        </svg>
-    );
-}
-
-/** A small "label: value" info card with an optional emphasis tone. */
-function InfoCard({ label, value }: { label: string; value: string }) {
-    return (
-        <div className={styles.infoCard}>
+        <div className={`${styles.infoCard} ${muted ? styles.muted : ''}`} title={hint}>
             <span className={styles.infoLabel}>{label}</span>
             <span className={styles.infoVal}>{value}</span>
         </div>
     );
 }
 
-/** Security posture chip. `value === null` renders an "unknown" neutral state. */
-function SecurityChip({
-    label,
-    value,
-    goodWhenTrue = true
-}: {
-    label: string;
-    value: boolean | null;
-    goodWhenTrue?: boolean;
-}) {
+function SecurityChip({ label, value }: { label: string; value: boolean | null }) {
     let tone = styles.secUnknown;
     let text = 'Inconnu';
     if (value !== null) {
-        const good = goodWhenTrue ? value : !value;
-        tone = good ? styles.secGood : styles.secBad;
+        tone = value ? styles.secGood : styles.secBad;
         text = value ? 'Oui' : 'Non';
     }
     return (
@@ -142,15 +180,42 @@ function SecurityChip({
     );
 }
 
-// ─── Widget compact ───────────────────────────────────────────────────────────
+/** {current, avg, min, max} of a value series (skips null/NaN). */
+function stats(points: { t: number; v: number }[]): { cur: number; avg: number; min: number; max: number } | null {
+    if (points.length === 0) return null;
+    let sum = 0;
+    let max = -Infinity;
+    let min = Infinity;
+    for (const p of points) {
+        sum += p.v;
+        if (p.v > max) max = p.v;
+        if (p.v < min) min = p.v;
+    }
+    return { cur: points[points.length - 1].v, avg: sum / points.length, min, max };
+}
+
+/** Coarse activity level derived from the focused snapshot. */
+type Activity = 'idle' | 'normal' | 'intensive';
+function activityLevel(s: MetricSnapshot | null, cores: number): Activity {
+    if (!s) return 'idle';
+    const ram = pct(s.memUsedBytes, s.memTotalBytes);
+    const gpu = s.gpuPercent ?? 0;
+    const loadRatio = s.loadAvg1 != null && cores > 0 ? s.loadAvg1 / cores : 0;
+    if (s.cpuPercent >= 60 || gpu >= 60 || loadRatio >= 0.9 || ram >= 88) return 'intensive';
+    if (s.cpuPercent < 10 && gpu < 12 && loadRatio < 0.35 && ram < 60) return 'idle';
+    return 'normal';
+}
+const ACTIVITY_META: Record<Activity, { label: string; cls: string }> = {
+    idle: { label: 'Au repos', cls: 'actIdle' },
+    normal: { label: 'Usage normal', cls: 'actNormal' },
+    intensive: { label: 'Usage intensif', cls: 'actIntense' }
+};
+
+// ─── Widget compact ─────────────────────────────────────────────────────────
 
 export function MonitoringWidget() {
-    // Shared store: auto-polls device.list, so newly paired devices and their
-    // online state appear here without a manual refresh.
     const { devices } = useDevices();
-
     const onlineCount = devices.filter((d) => d.online).length;
-
     return (
         <div className={styles.widgetContent}>
             <div className={styles.stat}>
@@ -170,62 +235,167 @@ export function MonitoringWidget() {
     );
 }
 
-// ─── Full view ────────────────────────────────────────────────────────────────
+// ─── Full view ──────────────────────────────────────────────────────────────
 
 export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps) {
-    // Device list comes from the shared store (auto-polling), so a freshly
-    // paired/approved device shows up here on its own. Live push events
-    // (presence/report) are layered on top via `overrides` for instant feedback.
-    const { devices: baseDevices, loading } = useDevices();
+    const { devices: baseDevices, loading, refresh } = useDevices();
     const [overrides, setOverrides] = useState<Record<string, { online?: boolean; report?: DeviceReport | null }>>({});
     const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [snapshot, setSnapshot] = useState<MetricSnapshot | null>(null);
+    const [configOpen, setConfigOpen] = useState(false);
+
+    // Timeline window: dayStart null = live (rolling last 24h); otherwise a day.
+    const [dayStart, setDayStart] = useState<number | null>(null);
+    // Visible window span (zoom). Ends at "now" (live) or the day's end.
+    const [spanMs, setSpanMs] = useState<number>(DAY_MS);
+    const [windowRange, setWindowRange] = useState<{ start: number; end: number }>({
+        start: Date.now() - DAY_MS,
+        end: Date.now()
+    });
+    const [focus, setFocus] = useState<Focus>({ kind: 'live' });
+
+    const [presence, setPresence] = useState<{ onlineAtStart: boolean; events: PresenceEvent[] }>({
+        onlineAtStart: false,
+        events: []
+    });
+    const [snapshotTimes, setSnapshotTimes] = useState<number[]>([]);
+    const [points, setPoints] = useState<MetricSnapshot[]>([]);
+    const [procSample, setProcSample] = useState<ProcessSample | null>(null);
     const [report, setReport] = useState<DeviceReport | null>(null);
-    const [cpuHistory, setCpuHistory] = useState<HistoryPoint[]>([]);
-    const [netRate, setNetRate] = useState<{ rx: number; tx: number }>({ rx: 0, tx: 0 });
+    const [liveSnapshot, setLiveSnapshot] = useState<MetricSnapshot | null>(null);
     const [refreshing, setRefreshing] = useState(false);
-    const prevSelectedId = useRef<string | null>(null);
-    // Previous snapshot for the selected device, used to derive network rates.
-    const prevSnapshot = useRef<MetricSnapshot | null>(null);
+    const [dataDays, setDataDays] = useState<string[]>([]);
+    const [graphsExpanded, setGraphsExpanded] = useState(false);
 
     const devices = useMemo(
         () => baseDevices.map((d) => (overrides[d.id] ? { ...d, ...overrides[d.id] } : d)),
         [baseDevices, overrides]
     );
-    // Latest devices, read inside the selection effect without making it a dep
-    // (otherwise every 6s poll would re-subscribe).
-    const devicesRef = useRef(devices);
-    devicesRef.current = devices;
+    const selected = devices.find((d) => d.id === selectedId) ?? null;
+    const selectedRef = useRef<string | null>(null);
+    selectedRef.current = selectedId;
 
-    // Auto-select the first device once the list is available.
+    const snapshotIntervalMs = (selected?.snapshotIntervalSeconds ?? DEFAULT_SNAPSHOT_INTERVAL_S) * 1000;
+
+    // The time window the graphs cover, derived from the focus.
+    const graphWindow = useMemo(() => {
+        if (focus.kind === 'range') return { start: focus.start, end: focus.end };
+        if (focus.kind === 'snapshot') return { start: Math.max(0, focus.at - snapshotIntervalMs), end: focus.at };
+        return windowRange;
+    }, [focus, windowRange, snapshotIntervalMs]);
+    const resolution = spanResolution(graphWindow.end - graphWindow.start);
+    const processAt = focus.kind === 'snapshot' ? focus.at : focus.kind === 'range' ? focus.end : windowRange.end;
+
+    // Auto-select the first device.
     useEffect(() => {
         if (selectedId === null && baseDevices.length > 0) setSelectedId(baseDevices[0].id);
     }, [baseDevices, selectedId]);
 
-    // Apply a freshly received snapshot. Snapshots are keyed by their real
-    // timestamp: out-of-order or duplicate samples (the subscribe backfill and
-    // the initial push can overlap) are ignored, so history stays monotonic and
-    // both periodic and manual-refresh samples land at their true time.
-    const applySnapshot = useCallback((snap: MetricSnapshot) => {
-        const prev = prevSnapshot.current;
-        if (prev && snap.timestamp <= prev.timestamp) return;
-        setSnapshot(snap);
-        setCpuHistory((h) => [...h.slice(-(HISTORY_SIZE - 1)), { t: snap.timestamp, v: snap.cpuPercent }]);
-        if (prev) {
-            const dt = (snap.timestamp - prev.timestamp) / 1000;
-            if (dt > 0) {
-                setNetRate({
-                    rx: Math.max(0, (snap.netRxBytes - prev.netRxBytes) / dt),
-                    tx: Math.max(0, (snap.netTxBytes - prev.netTxBytes) / dt)
-                });
-            }
-        }
-        prevSnapshot.current = snap;
-    }, []);
+    // Which days have data (for the calendar + day arrows).
+    useEffect(() => {
+        if (!selectedId) return;
+        const id = selectedId;
+        ws.send('metrics.availability', { deviceId: id, tzOffsetMinutes: new Date().getTimezoneOffset() })
+            .then((res) => {
+                if (selectedRef.current === id) setDataDays(res.days);
+            })
+            .catch(() => {});
+    }, [selectedId]);
 
-    // Ask the agent to push fresh data right now.
+    // Subscribe live to the selected device.
+    useEffect(() => {
+        if (!selectedId) return;
+        const id = selectedId;
+        ws.send('metrics.subscribe', { deviceIds: [id] }).catch(() => {});
+        return () => {
+            ws.send('metrics.unsubscribe', { deviceIds: [id] }).catch(() => {});
+        };
+    }, [selectedId]);
+    useFeatureLifecycle({
+        onUnmount: () => {
+            if (selectedRef.current)
+                ws.send('metrics.unsubscribe', { deviceIds: [selectedRef.current] }).catch(() => {});
+        }
+    });
+
+    // (Re)compute the window + presence + snapshot marks + reset focus when the
+    // device or the chosen day changes.
+    useEffect(() => {
+        if (!selectedId) return;
+        const id = selectedId;
+        const now = Date.now();
+        // Window ends at "now" (live) or the chosen day's end, and spans `spanMs`
+        // (zoom). For a past day, don't run before that day's 00:00.
+        const end = dayStart === null ? now : Math.min(dayStart + DAY_MS, now);
+        const floor = dayStart === null ? -Infinity : dayStart;
+        const start = Math.max(floor, end - spanMs);
+        setWindowRange({ start, end });
+        setFocus({ kind: 'live' });
+        setReport(devices.find((d) => d.id === id)?.report ?? null);
+        ws.send('metrics.presence', { deviceId: id, from: start, to: end })
+            .then((res) => {
+                if (selectedRef.current === id) setPresence({ onlineAtStart: res.onlineAtStart, events: res.events });
+            })
+            .catch(() => {});
+        ws.send('metrics.snapshots', { deviceId: id, from: start, to: end })
+            .then((res) => {
+                if (selectedRef.current === id) setSnapshotTimes(res.timestamps);
+            })
+            .catch(() => {});
+    }, [selectedId, dayStart, spanMs]);
+
+    // Fetch the series + processes for the current graph window / focus.
+    useEffect(() => {
+        if (!selectedId) return;
+        const id = selectedId;
+        ws.send('metrics.query', { deviceId: id, from: graphWindow.start, to: graphWindow.end, resolution })
+            .then((res) => {
+                if (selectedRef.current === id) setPoints(res.points);
+            })
+            .catch(() => {});
+        ws.send('metrics.processesAt', { deviceId: id, at: processAt })
+            .then((res) => {
+                if (selectedRef.current === id) setProcSample(res.sample);
+            })
+            .catch(() => {});
+    }, [selectedId, graphWindow.start, graphWindow.end, resolution, processAt]);
+
+    const liveTail = focus.kind === 'live' && dayStart === null;
+
+    // Live push handling.
+    useEffect(() => {
+        const off = ws.onMessage((msg) => {
+            if (msg.command === METRICS_PUSH_EVENT && msg.payload.ok) {
+                const push = msg.payload.data as MetricsPush;
+                if (push.deviceId !== selectedId) return;
+                setLiveSnapshot((prev) => mergeSnapshot(prev, push.snapshot));
+                if (liveTail) {
+                    setPoints((prev) =>
+                        prev.length && push.snapshot.timestamp <= prev[prev.length - 1].timestamp
+                            ? prev
+                            : [...prev, push.snapshot]
+                    );
+                }
+            }
+            if (msg.command === DEVICE_REPORT_EVENT && msg.payload.ok) {
+                const push = msg.payload.data as DeviceReportPush;
+                if (push.deviceId === selectedId) setReport(push.report);
+                setOverrides((p) => ({ ...p, [push.deviceId]: { ...p[push.deviceId], report: push.report } }));
+            }
+            if (msg.command === DEVICE_PRESENCE_EVENT && msg.payload.ok) {
+                const pres = msg.payload.data as DevicePresence;
+                setOverrides((p) => ({ ...p, [pres.deviceId]: { ...p[pres.deviceId], online: pres.online } }));
+                const seen = pres.lastSeen;
+                if (pres.deviceId === selectedId && seen) {
+                    setPresence((pr) => ({ ...pr, events: [...pr.events, { ts: seen * 1000, online: pres.online }] }));
+                }
+            }
+        });
+        return off;
+    }, [selectedId, liveTail]);
+
+    // Refresh: ask the agent to push fresh data now.
     const refreshNow = useCallback(() => {
-        const id = prevSelectedId.current;
+        const id = selectedRef.current;
         if (!id || refreshing) return;
         setRefreshing(true);
         ws.send('metrics.refresh', { deviceId: id })
@@ -233,80 +403,280 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
             .finally(() => setTimeout(() => setRefreshing(false), 1200));
     }, [refreshing]);
 
-    // Subscribe on device selection; unsubscribe from the previous one. The
-    // server pushes the latest stored snapshot + report right after subscribe,
-    // and we also backfill recent history via metrics.query so graphs aren't
-    // empty. Teardown on feature unload is handled in useFeatureLifecycle below.
-    useEffect(() => {
-        const prev = prevSelectedId.current;
-        prevSelectedId.current = selectedId;
-
-        if (prev && prev !== selectedId) {
-            ws.send('metrics.unsubscribe', { deviceIds: [prev] }).catch(() => {});
+    // ── Derived series for the graphs ──
+    const cpuS = points.map((p) => ({ t: p.timestamp, v: p.cpuPercent }));
+    const ramS = points.map((p) => ({ t: p.timestamp, v: pct(p.memUsedBytes, p.memTotalBytes) }));
+    const diskS = points.map((p) => ({ t: p.timestamp, v: pct(p.diskUsedBytes, p.diskTotalBytes) }));
+    const netRx: { t: number; v: number }[] = [];
+    const netTx: { t: number; v: number }[] = [];
+    for (let i = 1; i < points.length; i++) {
+        const dt = (points[i].timestamp - points[i - 1].timestamp) / 1000;
+        if (dt <= 0) continue;
+        netRx.push({ t: points[i].timestamp, v: Math.max(0, (points[i].netRxBytes - points[i - 1].netRxBytes) / dt) });
+        netTx.push({ t: points[i].timestamp, v: Math.max(0, (points[i].netTxBytes - points[i - 1].netTxBytes) / dt) });
+    }
+    // Disk I/O rates (counters present only on snapshot rows; skip the null gaps).
+    const diskRead: { t: number; v: number }[] = [];
+    const diskWrite: { t: number; v: number }[] = [];
+    let prevIO: { t: number; r: number | null; w: number | null } | null = null;
+    for (const p of points) {
+        if (p.diskReadBytes == null && p.diskWriteBytes == null) continue;
+        if (prevIO) {
+            const dt = (p.timestamp - prevIO.t) / 1000;
+            if (dt > 0) {
+                if (p.diskReadBytes != null && prevIO.r != null)
+                    diskRead.push({ t: p.timestamp, v: Math.max(0, (p.diskReadBytes - prevIO.r) / dt) });
+                if (p.diskWriteBytes != null && prevIO.w != null)
+                    diskWrite.push({ t: p.timestamp, v: Math.max(0, (p.diskWriteBytes - prevIO.w) / dt) });
+            }
         }
-        if (!selectedId) return;
+        prevIO = { t: p.timestamp, r: p.diskReadBytes, w: p.diskWriteBytes };
+    }
+    const tempS = points.filter((p) => p.cpuTempC !== null).map((p) => ({ t: p.timestamp, v: p.cpuTempC as number }));
+    const gpuS = points
+        .filter((p) => p.gpuPercent !== null)
+        .map((p) => ({ t: p.timestamp, v: p.gpuPercent as number }));
+    const batteryS = points
+        .filter((p) => p.batteryPercent !== null)
+        .map((p) => ({ t: p.timestamp, v: p.batteryPercent as number }));
 
-        setSnapshot(null);
-        setReport(devicesRef.current.find((d) => d.id === selectedId)?.report ?? null);
-        setCpuHistory([]);
-        setNetRate({ rx: 0, tx: 0 });
-        prevSnapshot.current = null;
+    // Value to show in the KPI cards, per focus.
+    const display = useMemo<MetricSnapshot | null>(() => {
+        if (focus.kind === 'range') return averageSnapshot(points);
+        if (focus.kind === 'snapshot') return nearestPoint(points, focus.at);
+        return liveSnapshot ?? (points.length ? points[points.length - 1] : null);
+    }, [focus, points, liveSnapshot]);
+    const averaged = focus.kind === 'range';
 
-        const id = selectedId;
-        // Backfill recent history (best-effort).
-        const now = Date.now();
-        ws.send('metrics.query', { deviceId: id, from: now - BACKFILL_MS, to: now, resolution: 'raw' })
-            .then((res) => {
-                if (prevSelectedId.current !== id || res.points.length === 0) return;
-                setCpuHistory(res.points.slice(-HISTORY_SIZE).map((p) => ({ t: p.timestamp, v: p.cpuPercent })));
-                const last = res.points[res.points.length - 1];
-                prevSnapshot.current = last;
-                setSnapshot(last);
-            })
-            .catch(() => {});
+    const lastKnown = liveSnapshot ?? (points.length ? points[points.length - 1] : null);
+    const online = selected?.online ?? false;
+    const cores = report?.os.cores ?? 0;
+    const valuesMuted = !online && focus.kind === 'live';
 
-        ws.send('metrics.subscribe', { deviceIds: [id] }).catch(() => {});
-    }, [selectedId]);
+    const focusCaption =
+        focus.kind === 'snapshot'
+            ? `Valeurs à ${new Date(focus.at).toLocaleString('fr-FR')}`
+            : focus.kind === 'range'
+              ? `Moyenne sur la sélection · ${new Date(focus.start).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} – ${new Date(focus.end).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`
+              : online
+                ? 'En direct'
+                : 'Dernières valeurs connues';
 
-    useFeatureLifecycle({
-        onUnmount: () => {
-            const active = prevSelectedId.current;
-            if (active) ws.send('metrics.unsubscribe', { deviceIds: [active] }).catch(() => {});
+    // ── Graph definitions: a compact stat by default, full stats on click ──
+    const fmtPct1 = (v: number) => `${v.toFixed(0)}%`;
+    const fmtTemp = (v: number) => `${v.toFixed(0)}°C`;
+    const compact = (text: string) => <span className={styles.graphStat}>{text}</span>;
+    const openGraph = (title: string, series: Series[], yMax: number | undefined, rows: DetailRow[]) =>
+        void openInfo({ title, body: <GraphDetail series={series} yMax={yMax} rows={rows} />, width: 520 });
+
+    type S = ReturnType<typeof stats>;
+    const unitRows = (s: S, fmt: (v: number) => string): DetailRow[] =>
+        s
+            ? [
+                  { label: 'Actuel', value: fmt(s.cur) },
+                  { label: 'Moyenne', value: fmt(s.avg) },
+                  { label: 'Minimum', value: fmt(s.min) },
+                  { label: 'Maximum', value: fmt(s.max) }
+              ]
+            : [{ label: 'Aucune donnée', value: '—' }];
+    const pctRows = (s: S, used?: number, total?: number): DetailRow[] => {
+        const rows = unitRows(s, fmtPct1);
+        if (used != null && total != null && total > 0) {
+            rows.push({ label: 'Utilisé', value: `${formatBytes(used)} / ${formatBytes(total)}` });
         }
-    });
+        return rows;
+    };
+    const rateRows = (label: string, s: S): DetailRow[] =>
+        s
+            ? [
+                  { label: `${label} — actuel`, value: formatRate(s.cur) },
+                  { label: `${label} — moyenne`, value: formatRate(s.avg) },
+                  { label: `${label} — maximum`, value: formatRate(s.max) }
+              ]
+            : [];
 
-    // Listen for push events
-    useEffect(() => {
-        const off = ws.onMessage((msg) => {
-            if (msg.command === METRICS_PUSH_EVENT && msg.payload.ok) {
-                const push = msg.payload.data as MetricsPush;
-                if (push.deviceId === selectedId) applySnapshot(push.snapshot);
-            }
-            if (msg.command === DEVICE_REPORT_EVENT && msg.payload.ok) {
-                const push = msg.payload.data as DeviceReportPush;
-                if (push.deviceId === selectedId) setReport(push.report);
-                setOverrides((prev) => ({ ...prev, [push.deviceId]: { ...prev[push.deviceId], report: push.report } }));
-            }
-            if (msg.command === DEVICE_PRESENCE_EVENT && msg.payload.ok) {
-                const pres = msg.payload.data as DevicePresence;
-                setOverrides((prev) => ({ ...prev, [pres.deviceId]: { ...prev[pres.deviceId], online: pres.online } }));
-            }
+    const ramUsed = display?.memUsedBytes ?? 0;
+    const ramTotal = display?.memTotalBytes ?? 0;
+    const diskUsed = display?.diskUsedBytes ?? 0;
+    const diskTotal = display?.diskTotalBytes ?? 0;
+    // Disk detail: aggregate stats + a per-disk breakdown (from the latest report).
+    const diskDetailRows: DetailRow[] = [
+        ...pctRows(stats(diskS), diskUsed, diskTotal),
+        ...(report?.disks ?? []).map((d) => ({
+            label: d.mount,
+            value: `${formatBytes(d.usedBytes)} / ${formatBytes(d.totalBytes)} · ${pct(d.usedBytes, d.totalBytes).toFixed(0)}%`
+        }))
+    ];
+    const cpuColor = [{ points: cpuS, color: 'var(--accent)' }];
+    const ramSeries = [{ points: ramS, color: 'var(--accent)' }];
+    const netSeries = [
+        { points: netRx, color: 'var(--accent)' },
+        { points: netTx, color: 'var(--warning)' }
+    ];
+    const diskSeries = [{ points: diskS, color: 'var(--accent)' }];
+    const ioSeries = [
+        { points: diskRead, color: 'var(--accent)' },
+        { points: diskWrite, color: 'var(--warning)' }
+    ];
+
+    const allGraphs: { key: string; node: React.ReactNode }[] = [
+        {
+            key: 'cpu',
+            node: (
+                <MiniGraph
+                    key='cpu'
+                    title='CPU'
+                    series={cpuColor}
+                    yMax={100}
+                    stat={compact(fmtPct1(display?.cpuPercent ?? stats(cpuS)?.cur ?? 0))}
+                    onClick={() => openGraph('CPU', cpuColor, 100, unitRows(stats(cpuS), fmtPct1))}
+                />
+            )
+        },
+        {
+            key: 'ram',
+            node: (
+                <MiniGraph
+                    key='ram'
+                    title='RAM'
+                    series={ramSeries}
+                    yMax={100}
+                    stat={compact(
+                        `${fmtPct1(pct(ramUsed, ramTotal))} · ${formatBytes(ramUsed)} / ${formatBytes(ramTotal)}`
+                    )}
+                    onClick={() => openGraph('RAM', ramSeries, 100, pctRows(stats(ramS), ramUsed, ramTotal))}
+                />
+            )
+        },
+        {
+            key: 'net',
+            node: (
+                <MiniGraph
+                    key='net'
+                    title='Réseau ↑↓'
+                    series={netSeries}
+                    stat={compact(`↓ ${formatRate(netRx.at(-1)?.v ?? 0)} · ↑ ${formatRate(netTx.at(-1)?.v ?? 0)}`)}
+                    onClick={() =>
+                        openGraph('Réseau', netSeries, undefined, [
+                            ...rateRows('Réception', stats(netRx)),
+                            ...rateRows('Émission', stats(netTx))
+                        ])
+                    }
+                />
+            )
+        },
+        {
+            key: 'disk',
+            node: (
+                <MiniGraph
+                    key='disk'
+                    title='Disque'
+                    series={diskSeries}
+                    yMax={100}
+                    stat={compact(
+                        `${fmtPct1(pct(diskUsed, diskTotal))} · ${formatBytes(diskUsed)} / ${formatBytes(diskTotal)}`
+                    )}
+                    onClick={() => openGraph('Disque', diskSeries, 100, diskDetailRows)}
+                />
+            )
+        }
+    ];
+    if (diskRead.length > 0 || diskWrite.length > 0) {
+        allGraphs.push({
+            key: 'diskio',
+            node: (
+                <MiniGraph
+                    key='diskio'
+                    title='Disque E/S'
+                    series={ioSeries}
+                    stat={compact(
+                        `L ${formatRate(diskRead.at(-1)?.v ?? 0)} · É ${formatRate(diskWrite.at(-1)?.v ?? 0)}`
+                    )}
+                    onClick={() =>
+                        openGraph('Disque E/S', ioSeries, undefined, [
+                            ...rateRows('Lecture', stats(diskRead)),
+                            ...rateRows('Écriture', stats(diskWrite))
+                        ])
+                    }
+                />
+            )
         });
-        return off;
-    }, [selectedId, applySnapshot]);
+    }
+    if (tempS.length > 0) {
+        allGraphs.push({
+            key: 'temp',
+            node: (
+                <MiniGraph
+                    key='temp'
+                    title='Température'
+                    series={[{ points: tempS, color: 'var(--warning)' }]}
+                    stat={compact(fmtTemp(display?.cpuTempC ?? stats(tempS)?.cur ?? 0))}
+                    onClick={() =>
+                        openGraph(
+                            'Température',
+                            [{ points: tempS, color: 'var(--warning)' }],
+                            undefined,
+                            unitRows(stats(tempS), fmtTemp)
+                        )
+                    }
+                />
+            )
+        });
+    }
+    if (gpuS.length > 0) {
+        allGraphs.push({
+            key: 'gpu',
+            node: (
+                <MiniGraph
+                    key='gpu'
+                    title='GPU'
+                    series={[{ points: gpuS, color: 'var(--accent)' }]}
+                    yMax={100}
+                    stat={compact(fmtPct1(display?.gpuPercent ?? stats(gpuS)?.cur ?? 0))}
+                    onClick={() =>
+                        openGraph(
+                            'GPU',
+                            [{ points: gpuS, color: 'var(--accent)' }],
+                            100,
+                            unitRows(stats(gpuS), fmtPct1)
+                        )
+                    }
+                />
+            )
+        });
+    }
+    if (batteryS.length > 0) {
+        const battSeries = [{ points: batteryS, color: 'var(--success, #3ecf8e)' }];
+        const battCur = display?.batteryPercent ?? stats(batteryS)?.cur ?? 0;
+        allGraphs.push({
+            key: 'battery',
+            node: (
+                <MiniGraph
+                    key='battery'
+                    title='Batterie'
+                    series={battSeries}
+                    yMax={100}
+                    stat={compact(`${fmtPct1(battCur)}${display?.batteryCharging ? ' ⚡' : ''}`)}
+                    onClick={() => openGraph('Batterie', battSeries, 100, unitRows(stats(batteryS), fmtPct1))}
+                />
+            )
+        });
+    }
+    const shownGraphs = graphsExpanded ? allGraphs : allGraphs.slice(0, COLLAPSED_GRAPHS);
 
-    const selected = devices.find((d) => d.id === selectedId) ?? null;
+    // Activity level from the focused snapshot (idle / normal / intensive).
+    const activity = activityLevel(display, cores);
+    const activityMeta = ACTIVITY_META[activity];
 
-    const cpuPct = snapshot?.cpuPercent ?? 0;
-    const ramPct = snapshot ? (snapshot.memUsedBytes / snapshot.memTotalBytes) * 100 : 0;
-    const diskPct = snapshot ? (snapshot.diskUsedBytes / snapshot.diskTotalBytes) * 100 : 0;
+    const showInfo = () =>
+        void openInfo({ title: 'Monitoring — comment ça marche', body: <MonitoringInfo />, width: 560 });
 
     return (
         <div className={styles.container}>
             <h2 className={styles.title}>Monitoring</h2>
-            <p className={styles.subtitle}>Surveillance en temps réel de vos appareils</p>
+            <p className={styles.subtitle}>Surveillance et historique de vos appareils</p>
 
-            {loading ? (
+            {loading && devices.length === 0 ? (
                 <div className={styles.loader}>Chargement...</div>
             ) : devices.length === 0 ? (
                 <div className={styles.empty}>
@@ -316,8 +686,7 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                 </div>
             ) : (
                 <div className={styles.grid}>
-                    {/* Left: device list. No scale-on-hover here — the panel clips
-                        its overflow, which cropped a scaled card's left edge. */}
+                    {/* Left: device list */}
                     <div className={styles.deviceListFull}>
                         {devices.map((d) => (
                             <button
@@ -334,19 +703,32 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                         ))}
                     </div>
 
-                    {/* Right: metrics panel */}
+                    {/* Right: panel */}
                     {selected && (
                         <div className={styles.metricsPanel}>
                             <div className={styles.metricsPanelHeader}>
                                 <h3>{selected.name}</h3>
                                 <div className={styles.headerRight}>
-                                    {selected.online && (
+                                    <button
+                                        className={styles.iconHeaderBtn}
+                                        onClick={showInfo}
+                                        title='Comment ça marche ?'
+                                    >
+                                        <span className='icon icon-info' />
+                                    </button>
+                                    <button
+                                        className={styles.iconHeaderBtn}
+                                        onClick={() => setConfigOpen(true)}
+                                        title='Configurer la collecte'
+                                    >
+                                        <span className='icon icon-settings' />
+                                    </button>
+                                    {online && (
                                         <button
-                                            className={styles.refreshBtn}
+                                            className={styles.iconHeaderBtn}
                                             onClick={refreshNow}
                                             disabled={refreshing}
                                             title='Rafraîchir maintenant'
-                                            aria-label='Rafraîchir maintenant'
                                         >
                                             <span
                                                 className={`icon icon-refresh ${refreshing ? styles.spinning : ''}`}
@@ -354,116 +736,183 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                                         </button>
                                     )}
                                     <span
-                                        className={`${styles.onlineBadge} ${selected.online ? styles.online : styles.offline}`}
+                                        className={`${styles.onlineBadge} ${online ? styles.online : styles.offline}`}
                                     >
-                                        {selected.online ? 'En ligne' : 'Hors ligne'}
+                                        {online ? 'En ligne' : 'Hors ligne'}
                                     </span>
                                 </div>
                             </div>
 
-                            {!selected.online ? (
-                                <p className={styles.offlineMsg}>Appareil hors ligne — métriques indisponibles.</p>
-                            ) : !snapshot ? (
-                                <p className={styles.waitingMsg}>En attente du premier snapshot…</p>
-                            ) : (
+                            {display && (
+                                <div
+                                    className={`${styles.activityHero} ${styles[activityMeta.cls]} ${valuesMuted ? styles.muted : ''}`}
+                                >
+                                    <span className={styles.activityDot} />
+                                    <span className={styles.activityLabel}>{activityMeta.label}</span>
+                                    <span className={`icon icon-activity ${styles.activityIcon}`} />
+                                </div>
+                            )}
+
+                            {!online && (
+                                <div className={styles.offlineBanner}>
+                                    <span className='icon icon-clock' />
+                                    Hors ligne{selected.lastSeen ? ` depuis ${formatAgo(selected.lastSeen)}` : ''}
+                                    {lastKnown
+                                        ? ` · dernières données le ${new Date(lastKnown.timestamp).toLocaleString('fr-FR')}`
+                                        : ''}
+                                </div>
+                            )}
+
+                            {/* Timeline + day navigation */}
+                            <Timeline
+                                windowStart={windowRange.start}
+                                windowEnd={windowRange.end}
+                                onlineAtStart={presence.onlineAtStart}
+                                events={presence.events}
+                                snapshotTimes={snapshotTimes}
+                                selection={focus.kind === 'range' ? { start: focus.start, end: focus.end } : null}
+                                pointAt={focus.kind === 'snapshot' ? focus.at : null}
+                                onSelectRange={(sel) => setFocus({ kind: 'range', ...sel })}
+                                onPickSnapshot={(at) => setFocus({ kind: 'snapshot', at })}
+                                onLive={() => {
+                                    setDayStart(null);
+                                    setFocus({ kind: 'live' });
+                                }}
+                                dayStart={dayStart}
+                                onDayChange={setDayStart}
+                                dataDays={dataDays}
+                                spanMs={spanMs}
+                                zoomPresets={ZOOM_PRESETS}
+                                onSpanChange={setSpanMs}
+                            />
+
+                            {/* Graphs */}
+                            <div className={styles.graphsGrid}>{shownGraphs.map((g) => g.node)}</div>
+                            {allGraphs.length > COLLAPSED_GRAPHS && (
+                                <button className={styles.expandGraphsBtn} onClick={() => setGraphsExpanded((v) => !v)}>
+                                    {graphsExpanded
+                                        ? 'Réduire les graphiques'
+                                        : `Afficher plus de graphiques (+${allGraphs.length - COLLAPSED_GRAPHS})`}
+                                </button>
+                            )}
+
+                            {/* Current / focused values */}
+                            {display && (
                                 <>
-                                    {/* CPU with sparkline */}
-                                    <div className={styles.cpuSection}>
-                                        <MetricBar label='CPU' pct={cpuPct} valueLabel={`${cpuPct.toFixed(1)}%`} />
-                                        <Sparkline points={cpuHistory} className={styles.sparkline} />
-                                    </div>
-
-                                    <MetricBar
-                                        label='RAM'
-                                        pct={ramPct}
-                                        valueLabel={`${formatBytes(snapshot.memUsedBytes)} / ${formatBytes(snapshot.memTotalBytes)}`}
-                                    />
-                                    <MetricBar
-                                        label='Disque'
-                                        pct={diskPct}
-                                        valueLabel={`${formatBytes(snapshot.diskUsedBytes)} / ${formatBytes(snapshot.diskTotalBytes)}`}
-                                    />
-
+                                    <p className={styles.focusCaption}>{focusCaption}</p>
                                     <div className={styles.infoGrid}>
-                                        <InfoCard label='Réseau ↓' value={formatRate(netRate.rx)} />
-                                        <InfoCard label='Réseau ↑' value={formatRate(netRate.tx)} />
-                                        <InfoCard label='Utilisateurs' value={String(snapshot.usersCount)} />
-                                        {snapshot.cpuTempC !== null && (
-                                            <InfoCard label='Température' value={`${snapshot.cpuTempC.toFixed(1)}°C`} />
+                                        <InfoCard
+                                            label='Disque'
+                                            muted={valuesMuted}
+                                            value={`${pct(display.diskUsedBytes, display.diskTotalBytes).toFixed(0)}%`}
+                                        />
+                                        {display.batteryPercent !== null && (
+                                            <InfoCard
+                                                label='Batterie'
+                                                value={`${display.batteryPercent.toFixed(0)}%${display.batteryCharging ? ' ⚡' : ''}`}
+                                                muted={valuesMuted}
+                                                hint={
+                                                    display.batteryCharging === null
+                                                        ? undefined
+                                                        : display.batteryCharging
+                                                          ? 'En charge / sur secteur'
+                                                          : 'Sur batterie'
+                                                }
+                                            />
                                         )}
-                                        {snapshot.loadAvg1 !== null && (
-                                            <InfoCard label='Charge (1m)' value={snapshot.loadAvg1.toFixed(2)} />
+                                        <InfoCard
+                                            label={averaged ? 'Utilisateurs (moy.)' : 'Utilisateurs'}
+                                            value={String(display.usersCount)}
+                                            muted={valuesMuted}
+                                        />
+                                        {display.processCount !== null && (
+                                            <InfoCard
+                                                label={averaged ? 'Processus (moy.)' : 'Processus'}
+                                                value={String(display.processCount)}
+                                                muted={valuesMuted}
+                                            />
                                         )}
-                                        {snapshot.processCount !== null && (
-                                            <InfoCard label='Processus' value={String(snapshot.processCount)} />
+                                        {display.activeConnections !== null && (
+                                            <InfoCard
+                                                label={averaged ? 'Connexions (moy.)' : 'Connexions'}
+                                                value={String(display.activeConnections)}
+                                                muted={valuesMuted}
+                                                hint='Connexions TCP établies'
+                                            />
                                         )}
-                                        {snapshot.activeConnections !== null && (
-                                            <InfoCard label='Connexions' value={String(snapshot.activeConnections)} />
-                                        )}
-                                        {snapshot.uptimeSeconds !== null && (
-                                            <InfoCard label='Uptime' value={formatUptime(snapshot.uptimeSeconds)} />
+                                        {display.uptimeSeconds !== null && (
+                                            <InfoCard
+                                                label='Uptime'
+                                                value={formatUptime(display.uptimeSeconds)}
+                                                muted={valuesMuted}
+                                                hint='Temps écoulé depuis le démarrage de la machine'
+                                            />
                                         )}
                                     </div>
-
-                                    {/* Security posture */}
-                                    <div className={styles.section}>
-                                        <h4 className={styles.sectionTitle}>Sécurité</h4>
-                                        {report ? (
-                                            <div className={styles.secGrid}>
-                                                <SecurityChip label='Pare-feu' value={report.security.firewall} />
-                                                <SecurityChip
-                                                    label='Chiffrement disque'
-                                                    value={report.security.diskEncryption}
-                                                />
-                                                {selected.platform === 'macos' && (
-                                                    <SecurityChip label='SIP' value={report.security.sip} />
-                                                )}
-                                                {report.security.pendingUpdates !== null && (
-                                                    <div
-                                                        className={`${styles.secChip} ${report.security.pendingUpdates > 0 ? styles.secWarn : styles.secGood}`}
-                                                    >
-                                                        <span className={styles.secLabel}>MAJ en attente</span>
-                                                        <span className={styles.secVal}>
-                                                            {report.security.pendingUpdates}
-                                                        </span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ) : (
-                                            <p className={styles.waitingMsg}>En attente du bilan de sécurité…</p>
-                                        )}
-                                    </div>
-
-                                    {/* Top processes */}
-                                    {report && report.topProcesses.length > 0 && (
-                                        <div className={styles.section}>
-                                            <h4 className={styles.sectionTitle}>Processus les plus actifs</h4>
-                                            <table className={styles.procTable}>
-                                                <thead>
-                                                    <tr>
-                                                        <th>Nom</th>
-                                                        <th className={styles.procNum}>CPU</th>
-                                                        <th className={styles.procNum}>Mémoire</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {report.topProcesses.map((p, i) => (
-                                                        <tr key={`${p.name}-${i}`}>
-                                                            <td className={styles.procName}>{p.name}</td>
-                                                            <td className={styles.procNum}>
-                                                                {p.cpuPercent.toFixed(1)}%
-                                                            </td>
-                                                            <td className={styles.procNum}>
-                                                                {formatBytes(p.memBytes)}
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )}
                                 </>
                             )}
+
+                            {/* Security */}
+                            <div className={styles.section}>
+                                <h4 className={styles.sectionTitle}>Sécurité</h4>
+                                {report ? (
+                                    <div className={styles.secGrid}>
+                                        <SecurityChip label='Pare-feu' value={report.security.firewall} />
+                                        <SecurityChip
+                                            label='Chiffrement disque'
+                                            value={report.security.diskEncryption}
+                                        />
+                                        {selected.platform === 'macos' && (
+                                            <SecurityChip label='SIP' value={report.security.sip} />
+                                        )}
+                                        {report.security.pendingUpdates !== null && (
+                                            <div
+                                                className={`${styles.secChip} ${report.security.pendingUpdates > 0 ? styles.secWarn : styles.secGood}`}
+                                            >
+                                                <span className={styles.secLabel}>MAJ en attente</span>
+                                                <span className={styles.secVal}>{report.security.pendingUpdates}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <p className={styles.waitingMsg}>Aucun bilan de sécurité.</p>
+                                )}
+                            </div>
+
+                            {/* Processes at the selected moment */}
+                            <div className={styles.section}>
+                                <h4 className={styles.sectionTitle}>
+                                    Processus les plus actifs
+                                    {procSample && (
+                                        <span className={styles.sectionMeta}>
+                                            {new Date(procSample.ts).toLocaleString('fr-FR')}
+                                            {procSample.kind === 'all' ? ' · complet' : ''}
+                                        </span>
+                                    )}
+                                </h4>
+                                {procSample && procSample.processes.length > 0 ? (
+                                    <table className={styles.procTable}>
+                                        <thead>
+                                            <tr>
+                                                <th>Nom</th>
+                                                <th className={styles.procNum}>CPU</th>
+                                                <th className={styles.procNum}>Mémoire</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {procSample.processes.slice(0, 12).map((p, i) => (
+                                                <tr key={`${p.name}-${i}`}>
+                                                    <td className={styles.procName}>{p.name}</td>
+                                                    <td className={styles.procNum}>{p.cpuPercent.toFixed(1)}%</td>
+                                                    <td className={styles.procNum}>{formatBytes(p.memBytes)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                ) : (
+                                    <p className={styles.waitingMsg}>Aucun relevé de processus sur cette période.</p>
+                                )}
+                            </div>
 
                             <div className={styles.deviceMeta}>
                                 {report && (
@@ -473,6 +922,13 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                                 )}
                                 <span>Plateforme : {selected.platform}</span>
                             </div>
+
+                            <ConfigDialog
+                                open={configOpen}
+                                device={selected}
+                                onClose={() => setConfigOpen(false)}
+                                onSaved={() => void refresh()}
+                            />
                         </div>
                     )}
                 </div>

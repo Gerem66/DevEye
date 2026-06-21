@@ -1,8 +1,17 @@
-import type { DeviceRow, DeviceStatus } from 'deveye-types';
+import type { DeviceRow, DeviceStatus, ProcessCapture } from 'deveye-types';
 import { randomUUID } from 'crypto';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
+
+/** Partial collection config; only provided fields are updated (`null` resets). */
+export interface DeviceConfigPatch {
+    metricIntervalSeconds?: number | null;
+    snapshotIntervalSeconds?: number | null;
+    processCapture?: ProcessCapture | null;
+    retentionDays?: number | null;
+    processRetentionDays?: number | null;
+}
 
 export interface CreateDeviceInput {
     ownerId: number;
@@ -24,6 +33,7 @@ export interface DevicesRepo {
     rename(id: string, name: string): Promise<void>;
     touchSeen(id: string, lastSeen: number): Promise<void>;
     setReport(id: string, reportJson: string): Promise<void>;
+    setConfig(id: string, patch: DeviceConfigPatch): Promise<void>;
     delete(id: string): Promise<boolean>;
 }
 
@@ -74,6 +84,27 @@ export function devicesRepo(pool: Q): DevicesRepo {
         },
         async setReport(id, reportJson) {
             await pool.query('UPDATE devices SET report_json = ? WHERE id = ?', [reportJson, id]);
+        },
+        async setConfig(id, patch) {
+            // Map each provided field to its column; only update what's present.
+            const columns: Record<keyof DeviceConfigPatch, string> = {
+                metricIntervalSeconds: 'metric_interval_seconds',
+                snapshotIntervalSeconds: 'snapshot_interval_seconds',
+                processCapture: 'process_capture',
+                retentionDays: 'retention_days',
+                processRetentionDays: 'process_retention_days'
+            };
+            const sets: string[] = [];
+            const params: unknown[] = [];
+            for (const key of Object.keys(columns) as (keyof DeviceConfigPatch)[]) {
+                if (patch[key] !== undefined) {
+                    sets.push(`${columns[key]} = ?`);
+                    params.push(patch[key]);
+                }
+            }
+            if (sets.length === 0) return;
+            params.push(id);
+            await pool.query(`UPDATE devices SET ${sets.join(', ')} WHERE id = ?`, params);
         },
         async delete(id) {
             const r = await pool.query('DELETE FROM devices WHERE id = ?', [id]);

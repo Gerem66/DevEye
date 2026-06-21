@@ -1,4 +1,14 @@
-import { metricsQuery, metricsRefresh, metricsSubscribe, metricsUnsubscribe, type DeviceRow } from 'deveye-types';
+import {
+    metricsAvailability,
+    metricsPresence,
+    metricsProcessesAt,
+    metricsQuery,
+    metricsRefresh,
+    metricsSnapshots,
+    metricsSubscribe,
+    metricsUnsubscribe,
+    type DeviceRow
+} from 'deveye-types';
 
 import { parseDeviceReport } from '@/agent/mappers';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
@@ -86,10 +96,69 @@ export const metricsRefreshFeature: FeatureDefinition<
     }
 });
 
+export const metricsPresenceFeature: FeatureDefinition<
+    typeof metricsPresence.command,
+    typeof metricsPresence.input,
+    typeof metricsPresence.output
+> = defineFeature({
+    ...metricsPresence,
+    handler: async (ctx, input) => {
+        await authorizeRead(ctx, input.deviceId);
+        const [onlineAtStart, events] = await Promise.all([
+            ctx.db.presence.onlineAt(input.deviceId, input.from),
+            ctx.db.presence.query(input.deviceId, input.from, input.to)
+        ]);
+        return { deviceId: input.deviceId, onlineAtStart, events };
+    }
+});
+
+export const metricsProcessesAtFeature: FeatureDefinition<
+    typeof metricsProcessesAt.command,
+    typeof metricsProcessesAt.input,
+    typeof metricsProcessesAt.output
+> = defineFeature({
+    ...metricsProcessesAt,
+    handler: async (ctx, input) => {
+        await authorizeRead(ctx, input.deviceId);
+        const sample = await ctx.db.processSamples.nearest(input.deviceId, input.at);
+        return { deviceId: input.deviceId, sample };
+    }
+});
+
+export const metricsAvailabilityFeature: FeatureDefinition<
+    typeof metricsAvailability.command,
+    typeof metricsAvailability.input,
+    typeof metricsAvailability.output
+> = defineFeature({
+    ...metricsAvailability,
+    handler: async (ctx, input) => {
+        await authorizeRead(ctx, input.deviceId);
+        const days = await ctx.db.metrics.availableDays(input.deviceId, input.tzOffsetMinutes);
+        return { deviceId: input.deviceId, days };
+    }
+});
+
+export const metricsSnapshotsFeature: FeatureDefinition<
+    typeof metricsSnapshots.command,
+    typeof metricsSnapshots.input,
+    typeof metricsSnapshots.output
+> = defineFeature({
+    ...metricsSnapshots,
+    handler: async (ctx, input) => {
+        await authorizeRead(ctx, input.deviceId);
+        const timestamps = await ctx.db.processSamples.snapshotTimes(input.deviceId, input.from, input.to);
+        return { deviceId: input.deviceId, timestamps };
+    }
+});
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const metricsFeatures: FeatureDefinition<string, any, any>[] = [
     metricsQueryFeature,
     metricsSubscribeFeature,
     metricsUnsubscribeFeature,
-    metricsRefreshFeature
+    metricsRefreshFeature,
+    metricsPresenceFeature,
+    metricsProcessesAtFeature,
+    metricsAvailabilityFeature,
+    metricsSnapshotsFeature
 ];

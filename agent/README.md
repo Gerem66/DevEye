@@ -71,14 +71,30 @@ The agent writes its own config during `link`. Location: `$DEVEYE_CONFIG`, or
 Alongside it, when running: `agent.pid` (for `stop`/`status`) and, when detached,
 `agent.log`. See `agent.example.toml` for the file format.
 
-## What is collected
+## What is collected & cadence
 
-**Time-series metrics** (every cycle): CPU %, RAM, disk, network counters,
-logged-in users, 1-minute load average, CPU temperature, uptime, process count,
-active TCP connections.
+Designed to stay light, with **two cadences pushed by the server** (`agent.config`,
+sent on connect and whenever you change them in the **Appareils** page):
 
-**Health/security report** (on connect, then every ~2 min): OS name/version/arch,
-top processes by CPU, and security posture:
+- **Metrics — every ~10 s** (configurable): a light sample for the graphs (CPU %,
+  RAM, disk usage, network counters, load, CPU temperature, GPU %, uptime,
+  logged-in users, active TCP connections). No full process scan, so it stays
+  cheap at this rate.
+- **Snapshots — every ~5 min** (configurable): the **process list** (mode below)
+  plus the heavier signals that need a process scan — **process count** and
+  **disk I/O** (read/write). These are the clickable marks on the timeline.
+- **Hourly** (and on connect): the **health/security report**.
+- **On connect**: an immediate first snapshot so the dashboard isn't blank.
+- **Manual refresh** (UI button): an immediate snapshot + processes + report.
+
+**Process capture mode** (per device): `all` (every process), `top` (the 20
+heaviest, scored on **CPU % + memory %**), or `off` (no process history). Per-process
+GPU/network usage aren't portably available, so they're not part of the score.
+
+`--interval` only sets the initial metric interval used before the server's config
+arrives (it arrives within ~1 s of connecting); the real cadence is UI-controlled.
+
+**Health/security report** (OS name/version/arch + posture):
 
 | Signal | Linux | macOS |
 | --- | --- | --- |
@@ -86,8 +102,15 @@ top processes by CPU, and security posture:
 | Disk encryption | LUKS (via `lsblk`) | FileVault (`fdesetup`) |
 | SIP | — | `csrutil status` |
 | Pending updates | `apt-get -s upgrade` / `dnf check-update` | not collected (slow) |
+| GPU % | `nvidia-smi` | IOAccelerator (`ioreg`) |
 
-Every security probe is **best-effort and nullable**: when the underlying tool is
-absent or not permitted, the value is reported as “unknown” and the UI shows it
-as such. Notable limitation: **CPU temperature is unavailable on Apple Silicon**
-(SMC access is privileged), so it is reported as `null` there.
+Every probe is **best-effort and nullable**: when the underlying tool is absent
+or not permitted, the value is reported as “unknown”/empty. Notable limitations:
+**CPU temperature is unavailable on Apple Silicon** (SMC access is privileged), and
+**disk I/O is reported on Linux** but may be unavailable (hidden) on macOS.
+
+**Persistence & retention**: the server stores metrics, the connectivity timeline
+and process samples so the dashboard can "go back in time" and survive the agent
+going offline (last-known data is kept, live rates show 0). Both retentions are
+**per device, configurable from the Appareils page**: metric/timeline history
+(default 30 days) and the bulkier **process history** (default 1 day).

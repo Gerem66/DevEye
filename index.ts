@@ -42,6 +42,27 @@ async function main() {
     process.on('SIGINT', () => void shutdown('SIGINT'));
     process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
+    // Hourly retention sweep: drop history past each device's retention
+    // (NULL → METRICS_RETENTION_DAYS). Runs once at boot, then every hour.
+    const prune = async () => {
+        try {
+            const days = env.METRICS_RETENTION_DAYS;
+            const [metrics, presence, processes] = await Promise.all([
+                db.metrics.pruneByRetention(days),
+                db.presence.pruneByRetention(days),
+                db.processSamples.pruneByRetention(env.PROCESS_RETENTION_DAYS)
+            ]);
+            if (metrics + presence + processes > 0) {
+                logger.info({ metrics, presence, processes }, 'Pruned old monitoring history');
+            }
+        } catch (e) {
+            logger.error({ err: (e as Error).message }, 'Retention sweep failed');
+        }
+    };
+    void prune();
+    const pruneTimer = setInterval(() => void prune(), 60 * 60 * 1000);
+    pruneTimer.unref();
+
     await app.listen({ port: env.LISTEN_PORT, host: '0.0.0.0' });
     logger.info({ port: env.LISTEN_PORT }, 'DevEye server ready');
 

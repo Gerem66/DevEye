@@ -28,6 +28,15 @@ import { NotesWidget } from '@/Features/Notes/NotesWidget';
 import type { FeatureProps } from '@/Features/types';
 import styles from './Dashboard.module.css';
 
+/**
+ * Force-reload modifier: Cmd on macOS (Ctrl+click there opens the context menu),
+ * Ctrl elsewhere.
+ */
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent);
+function isForceReload(e: { ctrlKey: boolean; metaKey: boolean }): boolean {
+    return IS_MAC ? e.metaKey : e.ctrlKey;
+}
+
 /** A view that can be opened full-screen in the popup. */
 interface ViewConfig {
     id: string;
@@ -376,7 +385,7 @@ export default function HomePage() {
                                 widgetId={config.id}
                                 title={config.title}
                                 icon={config.icon}
-                                onExpand={(e) => handleExpand(config.id, e.ctrlKey)}
+                                onExpand={(e) => handleExpand(config.id, isForceReload(e))}
                             >
                                 <config.WidgetContent />
                             </Widget>

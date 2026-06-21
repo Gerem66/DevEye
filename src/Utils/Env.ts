@@ -38,8 +38,11 @@ export const env = {
     TWOFA_ISSUER: getEnvVar('TWOFA_ISSUER', 'string', false) || 'DevEye',
     TWOFA_CHALLENGE_TTL_SECONDS: getEnvVar('TWOFA_CHALLENGE_TTL_SECONDS', 'number', false) || 60 * 5,
 
-    // Metrics retention (days). A periodic job prunes samples older than this.
+    // Metrics/presence retention (days). A periodic job prunes older samples.
     METRICS_RETENTION_DAYS: getEnvVar('METRICS_RETENTION_DAYS', 'number', false) || 30,
+    // Process-history retention (days). Separate (and shorter) default: process
+    // samples are the bulkiest data.
+    PROCESS_RETENTION_DAYS: getEnvVar('PROCESS_RETENTION_DAYS', 'number', false) || 1,
 
     COOKIE_DOMAIN: getEnvVar('COOKIE_DOMAIN', 'string', false),
 

@@ -51,8 +51,9 @@ enum Command {
         /// Collect and send a single cycle, then exit (quick test).
         #[arg(long)]
         once: bool,
-        /// Seconds between metric samples.
-        #[arg(long, default_value_t = 30)]
+        /// Initial seconds between metric samples (bootstrap only; the real
+        /// cadence is set per-device from the DevEye UI and pushed on connect).
+        #[arg(long, default_value_t = 300)]
         interval: u64,
         /// Run in the background and write a PID file.
         #[arg(long)]

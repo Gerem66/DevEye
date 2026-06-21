@@ -12,7 +12,13 @@ export interface MetricsRepo {
         resolution: MetricsResolution;
     }): Promise<MetricSnapshot[]>;
     latest(deviceId: string): Promise<MetricSnapshot | null>;
-    pruneOlderThan(cutoffMs: number): Promise<number>;
+    /**
+     * Distinct local days (YYYY-MM-DD) that have samples, ascending, bucketed in
+     * the client's timezone (`tzOffsetMinutes` = `Date.getTimezoneOffset()`).
+     */
+    availableDays(deviceId: string, tzOffsetMinutes: number): Promise<string[]>;
+    /** Delete samples past each device's retention (NULL → `defaultDays`). */
+    pruneByRetention(defaultDays: number): Promise<number>;
 }
 
 const BUCKET_SECONDS: Record<MetricsResolution, number> = {
@@ -22,27 +28,41 @@ const BUCKET_SECONDS: Record<MetricsResolution, number> = {
     day: 86400
 };
 
-/** Coerce a possibly-null numeric column to a number or null. */
+/** Coerce a possibly-null float column to a number or null. */
 function num(v: number | null): number | null {
     return v === null || v === undefined ? null : Number(v);
 }
 
+/**
+ * Coerce a possibly-null integer column. Downsampled rows use `AVG()`, which
+ * yields decimals on integer-typed columns; round so they satisfy the `.int()`
+ * output schema (raw rows are already integral, so rounding is a no-op there).
+ */
+function intNum(v: number | null): number | null {
+    return v === null || v === undefined ? null : Math.round(Number(v));
+}
+
 function rowToSnapshot(r: MetricRow): MetricSnapshot {
     return {
-        timestamp: Number(r.ts),
+        timestamp: Math.round(Number(r.ts)),
         cpuPercent: Number(r.cpu_percent),
-        memUsedBytes: Number(r.mem_used_bytes),
-        memTotalBytes: Number(r.mem_total_bytes),
-        diskUsedBytes: Number(r.disk_used_bytes),
-        diskTotalBytes: Number(r.disk_total_bytes),
-        netRxBytes: Number(r.net_rx_bytes),
-        netTxBytes: Number(r.net_tx_bytes),
-        usersCount: Number(r.users_count),
+        memUsedBytes: intNum(r.mem_used_bytes) as number,
+        memTotalBytes: intNum(r.mem_total_bytes) as number,
+        diskUsedBytes: intNum(r.disk_used_bytes) as number,
+        diskTotalBytes: intNum(r.disk_total_bytes) as number,
+        netRxBytes: intNum(r.net_rx_bytes) as number,
+        netTxBytes: intNum(r.net_tx_bytes) as number,
+        usersCount: intNum(r.users_count) as number,
         loadAvg1: num(r.load_avg_1),
         cpuTempC: num(r.cpu_temp_c),
-        uptimeSeconds: num(r.uptime_seconds),
-        processCount: num(r.process_count),
-        activeConnections: num(r.active_connections)
+        uptimeSeconds: intNum(r.uptime_seconds),
+        processCount: intNum(r.process_count),
+        activeConnections: intNum(r.active_connections),
+        gpuPercent: num(r.gpu_percent),
+        diskReadBytes: intNum(r.disk_read_bytes),
+        diskWriteBytes: intNum(r.disk_write_bytes),
+        batteryPercent: num(r.battery_percent),
+        batteryCharging: r.battery_charging === null ? null : Number(r.battery_charging) === 1
     };
 }
 
@@ -50,7 +70,9 @@ export function metricsRepo(pool: Q): MetricsRepo {
     return {
         async insertBatch(deviceId, snapshots) {
             if (snapshots.length === 0) return;
-            const values = snapshots.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+            const values = snapshots
+                .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+                .join(', ');
             const params: unknown[] = [];
             for (const s of snapshots) {
                 params.push(
@@ -68,14 +90,20 @@ export function metricsRepo(pool: Q): MetricsRepo {
                     s.cpuTempC ?? null,
                     s.uptimeSeconds ?? null,
                     s.processCount ?? null,
-                    s.activeConnections ?? null
+                    s.activeConnections ?? null,
+                    s.gpuPercent ?? null,
+                    s.diskReadBytes ?? null,
+                    s.diskWriteBytes ?? null,
+                    s.batteryPercent ?? null,
+                    s.batteryCharging === null || s.batteryCharging === undefined ? null : s.batteryCharging ? 1 : 0
                 );
             }
             await pool.query(
                 `INSERT INTO device_metrics
                     (device_id, ts, cpu_percent, mem_used_bytes, mem_total_bytes,
                      disk_used_bytes, disk_total_bytes, net_rx_bytes, net_tx_bytes, users_count,
-                     load_avg_1, cpu_temp_c, uptime_seconds, process_count, active_connections)
+                     load_avg_1, cpu_temp_c, uptime_seconds, process_count, active_connections, gpu_percent,
+                     disk_read_bytes, disk_write_bytes, battery_percent, battery_charging)
                  VALUES ${values}`,
                 params
             );
@@ -109,13 +137,18 @@ export function metricsRepo(pool: Q): MetricsRepo {
                      AVG(cpu_temp_c)            AS cpu_temp_c,
                      MAX(uptime_seconds)        AS uptime_seconds,
                      AVG(process_count)         AS process_count,
-                     AVG(active_connections)    AS active_connections
+                     AVG(active_connections)    AS active_connections,
+                     AVG(gpu_percent)           AS gpu_percent,
+                     MAX(disk_read_bytes)       AS disk_read_bytes,
+                     MAX(disk_write_bytes)      AS disk_write_bytes,
+                     AVG(battery_percent)       AS battery_percent,
+                     MAX(battery_charging)      AS battery_charging
                  FROM device_metrics
                  WHERE device_id = ? AND ts BETWEEN ? AND ?
-                 GROUP BY FLOOR(ts / ?)
+                 GROUP BY (FLOOR(ts / ?) * ?)
                  ORDER BY ts ASC
                  LIMIT 5000`,
-                [bucketMs, bucketMs, deviceId, from, to, bucketMs]
+                [bucketMs, bucketMs, deviceId, from, to, bucketMs, bucketMs]
             );
             return r.rows.map(rowToSnapshot);
         },
@@ -126,8 +159,29 @@ export function metricsRepo(pool: Q): MetricsRepo {
             );
             return r.rows[0] ? rowToSnapshot(r.rows[0]) : null;
         },
-        async pruneOlderThan(cutoffMs) {
-            const r = await pool.query('DELETE FROM device_metrics WHERE ts < ?', [cutoffMs]);
+        async availableDays(deviceId, tzOffsetMinutes) {
+            // Bucket by *local* day using pure integer math so the result is
+            // independent of the MySQL/Node session timezone. `getTimezoneOffset`
+            // is (UTC - local) in minutes, so local-ms = ts - offset*60000.
+            const offsetMs = tzOffsetMinutes * 60000;
+            const dayMs = 86400000;
+            const r = await pool.query<{ d: number }>(
+                `SELECT DISTINCT FLOOR((ts - ?) / ?) AS d
+                 FROM device_metrics WHERE device_id = ?
+                 ORDER BY d ASC`,
+                [offsetMs, dayMs, deviceId]
+            );
+            // Day index → 'YYYY-MM-DD': index*dayMs is local midnight expressed as
+            // a UTC instant, so formatting it as UTC yields the local calendar day.
+            return r.rows.map((row) => new Date(Number(row.d) * dayMs).toISOString().slice(0, 10));
+        },
+        async pruneByRetention(defaultDays) {
+            const r = await pool.query(
+                `DELETE m FROM device_metrics m
+                 JOIN devices d ON d.id = m.device_id
+                 WHERE m.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.retention_days, ?) * 86400000`,
+                [defaultDays]
+            );
             return r.rowCount;
         }
     };

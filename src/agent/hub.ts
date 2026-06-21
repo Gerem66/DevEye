@@ -1,9 +1,11 @@
 import type { WebSocket } from '@fastify/websocket';
 import {
     AGENT_COLLECT,
+    AGENT_CONFIG,
     DEVICE_PRESENCE_EVENT,
     DEVICE_REPORT_EVENT,
     METRICS_PUSH_EVENT,
+    type AgentConfigPayload,
     type DevicePresence,
     type DeviceReport,
     type MetricSnapshot
@@ -45,6 +47,14 @@ export class MonitorHub {
         const socket = this.agents.get(deviceId);
         if (!socket) return false;
         socket.send(JSON.stringify({ command: AGENT_COLLECT, payload: {} }));
+        return true;
+    }
+
+    /** Push updated collection config to a connected agent. No-op if offline. */
+    pushConfig(deviceId: string, config: AgentConfigPayload): boolean {
+        const socket = this.agents.get(deviceId);
+        if (!socket) return false;
+        socket.send(JSON.stringify({ command: AGENT_CONFIG, payload: config }));
         return true;
     }
 
@@ -160,6 +170,8 @@ export interface MonitorTransport {
     sendInitial(deviceId: string, snapshot: MetricSnapshot | null, report: DeviceReport | null): void;
     /** Ask the device's agent to push fresh data now; false if it's offline. */
     requestCollect(deviceId: string): boolean;
+    /** Push updated collection config to the device's agent; false if offline. */
+    pushConfig(deviceId: string, config: AgentConfigPayload): boolean;
 }
 
 export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): MonitorTransport {
@@ -168,6 +180,7 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         unsubscribe: (deviceIds) => hub.unsubscribe(socket, deviceIds),
         isOnline: (deviceIds) => hub.onlineDevices(deviceIds),
         sendInitial: (deviceId, snapshot, report) => hub.sendInitial(socket, deviceId, snapshot, report),
-        requestCollect: (deviceId) => hub.requestCollect(deviceId)
+        requestCollect: (deviceId) => hub.requestCollect(deviceId),
+        pushConfig: (deviceId, config) => hub.pushConfig(deviceId, config)
     };
 }

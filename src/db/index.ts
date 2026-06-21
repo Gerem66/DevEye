@@ -2,6 +2,8 @@ import type { Queryable } from './pool';
 import { devicesRepo, linkCodesRepo, type DevicesRepo, type LinkCodesRepo } from './repos/devices';
 import { logsRepo, type LogsRepo } from './repos/logs';
 import { metricsRepo, type MetricsRepo } from './repos/metrics';
+import { presenceRepo, type PresenceRepo } from './repos/presence';
+import { processSamplesRepo, type ProcessSamplesRepo } from './repos/processSamples';
 import { noteFoldersRepo, type NoteFoldersRepo } from './repos/noteFolders';
 import { notesRepo, type NotesRepo } from './repos/notes';
 import { passwordsRepo, type PasswordsRepo } from './repos/passwords';
@@ -29,6 +31,8 @@ export interface Database {
     devices: DevicesRepo;
     linkCodes: LinkCodesRepo;
     metrics: MetricsRepo;
+    presence: PresenceRepo;
+    processSamples: ProcessSamplesRepo;
     twoFactor: TwoFactorRepo;
     userSecretKeys: UserSecretKeysRepo;
     weather: WeatherRepo;
@@ -47,6 +51,8 @@ export function createDatabase(q: Queryable): Database {
         devices: devicesRepo(q),
         linkCodes: linkCodesRepo(q),
         metrics: metricsRepo(q),
+        presence: presenceRepo(q),
+        processSamples: processSamplesRepo(q),
         twoFactor: twoFactorRepo(q),
         userSecretKeys: userSecretKeysRepo(q),
         weather: weatherRepo(q)

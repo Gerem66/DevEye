@@ -4,11 +4,12 @@ import {
     deviceList,
     deviceRename,
     deviceRevoke,
+    deviceSetConfig,
     type Device,
     type DeviceRow
 } from 'deveye-types';
 
-import { deviceRowToDevice } from '@/agent/mappers';
+import { deviceAgentConfig, deviceRowToDevice } from '@/agent/mappers';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
 async function isAdmin(ctx: FeatureContext): Promise<boolean> {
@@ -112,6 +113,34 @@ export const deviceRenameFeature: FeatureDefinition<
     }
 });
 
+export const deviceSetConfigFeature: FeatureDefinition<
+    typeof deviceSetConfig.command,
+    typeof deviceSetConfig.input,
+    typeof deviceSetConfig.output
+> = defineFeature({
+    ...deviceSetConfig,
+    handler: async (ctx, input) => {
+        const row = await authorizeDevice(ctx, input.deviceId);
+        const { deviceId: _id, ...patch } = input;
+        await ctx.db.devices.setConfig(row.id, patch);
+        const updated = (await ctx.db.devices.findById(row.id)) ?? row;
+        ctx.audit({
+            action: 'device.setConfig',
+            description: `Configuration modifiée : « ${row.name} »`,
+            metadata: { deviceId: row.id, ...patch }
+        });
+        // If a cadence or the capture mode changed, push it to a live agent.
+        if (
+            input.metricIntervalSeconds !== undefined ||
+            input.snapshotIntervalSeconds !== undefined ||
+            input.processCapture !== undefined
+        ) {
+            ctx.monitor?.pushConfig(row.id, deviceAgentConfig(updated));
+        }
+        return { device: toDevice(ctx, updated) };
+    }
+});
+
 export const deviceDeleteFeature: FeatureDefinition<
     typeof deviceDelete.command,
     typeof deviceDelete.input,
@@ -137,5 +166,6 @@ export const deviceFeatures: FeatureDefinition<string, any, any>[] = [
     deviceConfirmFeature,
     deviceRevokeFeature,
     deviceRenameFeature,
+    deviceSetConfigFeature,
     deviceDeleteFeature
 ];
