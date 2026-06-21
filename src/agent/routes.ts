@@ -1,4 +1,11 @@
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import { isAbsolute, join, resolve } from 'node:path';
+
 import {
+    AGENT_TARGETS,
+    agentTargetSchema,
+    agentTargetsResponseSchema,
     enrollDeviceRequestSchema,
     enrollDeviceResponseSchema,
     err,
@@ -25,6 +32,17 @@ interface AgentRouteDeps {
     hub: MonitorHub;
     audit: AuditLog;
 }
+
+/**
+ * Directory holding the prebuilt agent binaries served for download. From
+ * `AGENT_DIST_DIR` (absolute, or relative to the server cwd), defaulting to
+ * `agent/dist`. Resolved once at module load. See `AGENT_TARGETS` for the matrix.
+ */
+const AGENT_DIST_DIR = env.AGENT_DIST_DIR
+    ? isAbsolute(env.AGENT_DIST_DIR)
+        ? env.AGENT_DIST_DIR
+        : resolve(process.cwd(), env.AGENT_DIST_DIR)
+    : resolve(process.cwd(), 'agent', 'dist');
 
 /**
  * HTTP endpoints for the device-linking handshake:
@@ -95,6 +113,59 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, audit }: Agen
         const removed = await db.linkCodes.revoke(Number(claims.sub), req.params.code.trim().toUpperCase());
         if (!removed) return reply.code(404).send(err('not_found', 'Code not found'));
         return reply.send(ok({ code: req.params.code }));
+    });
+
+    // Availability of each shippable agent binary, so the UI can grey out the
+    // targets whose file isn't present (e.g. a dev box that only built its own).
+    app.get('/api/agent/targets', async (req, reply) => {
+        const accessToken = req.cookies[ACCESS_COOKIE];
+        if (!accessToken) return reply.code(401).send(err('auth_required', 'No session'));
+        const claims = await verifyAccessToken(accessToken);
+        if (!claims) return reply.code(401).send(err('auth_expired', 'Access token expired'));
+
+        const targets = await Promise.all(
+            AGENT_TARGETS.map(async (t) => {
+                let sizeBytes: number | null = null;
+                try {
+                    const s = await stat(join(AGENT_DIST_DIR, t.filename));
+                    if (s.isFile()) sizeBytes = s.size;
+                } catch {
+                    // Missing/unreadable → unavailable.
+                }
+                return { id: t.id, os: t.os, label: t.label, available: sizeBytes !== null, sizeBytes };
+            })
+        );
+        return reply.send(ok(agentTargetsResponseSchema.parse({ targets })));
+    });
+
+    // Stream a prebuilt agent binary as a download. Gated on a session like the
+    // other device endpoints (binaries aren't secret, but no public enumeration).
+    app.get<{ Params: { target: string } }>('/api/agent/download/:target', async (req, reply) => {
+        const accessToken = req.cookies[ACCESS_COOKIE];
+        if (!accessToken) return reply.code(401).send(err('auth_required', 'No session'));
+        const claims = await verifyAccessToken(accessToken);
+        if (!claims) return reply.code(401).send(err('auth_expired', 'Access token expired'));
+
+        const parsed = agentTargetSchema.safeParse(req.params.target);
+        if (!parsed.success) return reply.code(400).send(err('validation', 'Unknown agent target'));
+
+        const meta = AGENT_TARGETS.find((t) => t.id === parsed.data);
+        if (!meta) return reply.code(400).send(err('validation', 'Unknown agent target'));
+
+        const filePath = join(AGENT_DIST_DIR, meta.filename);
+        let size: number;
+        try {
+            const s = await stat(filePath);
+            if (!s.isFile()) throw new Error('not a file');
+            size = s.size;
+        } catch {
+            return reply.code(404).send(err('not_found', 'Binaire indisponible pour cette plateforme'));
+        }
+
+        reply.header('Content-Type', 'application/octet-stream');
+        reply.header('Content-Length', size);
+        reply.header('Content-Disposition', `attachment; filename="${meta.filename}"`);
+        return reply.send(createReadStream(filePath));
     });
 
     app.post('/api/agent/enroll', async (req, reply) => {

@@ -4,7 +4,10 @@ export function LinkInfo() {
         <div>
             <h4>Lier un appareil</h4>
             <ol>
-                <li>Installez l&apos;agent DevEye (Linux ou macOS) sur l&apos;appareil.</li>
+                <li>
+                    Téléchargez l&apos;agent DevEye avec le bouton <b>« Télécharger l&apos;agent »</b> (Apple, Linux ou
+                    Windows), puis placez le binaire sur l&apos;appareil à monitorer.
+                </li>
                 <li>
                     Générez un code ci-contre, puis exécutez sur l&apos;appareil :{' '}
                     <code>deveye-agent link &lt;code&gt; --server &lt;url&gt;</code>

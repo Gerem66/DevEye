@@ -34,6 +34,12 @@ export const env = {
     DEVICE_TOKEN_SECRET: getEnvVar('DEVICE_TOKEN_SECRET', 'string'),
     LINK_CODE_TTL_SECONDS: getEnvVar('LINK_CODE_TTL_SECONDS', 'number', false) || 60 * 5,
 
+    // Directory holding the prebuilt agent binaries served by the download
+    // endpoints. Populated locally by `agent/build-all.sh` (dev) and baked into
+    // the Docker image from the GitHub release (prod). Defaults to `agent/dist`
+    // relative to the server's working directory.
+    AGENT_DIST_DIR: getEnvVar('AGENT_DIST_DIR', 'string', false),
+
     // Interim 2FA challenge token (between password check and TOTP verify).
     TWOFA_ISSUER: getEnvVar('TWOFA_ISSUER', 'string', false) || 'DevEye',
     TWOFA_CHALLENGE_TTL_SECONDS: getEnvVar('TWOFA_CHALLENGE_TTL_SECONDS', 'number', false) || 60 * 5,

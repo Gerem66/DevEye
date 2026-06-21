@@ -10,6 +10,7 @@ import SelectInput from '@/Components/SelectInput';
 import TextInput from '@/Components/TextInput';
 import { useDevices } from '@/stores/devices';
 import { LinkInfo } from './LinkInfo';
+import { DownloadAgent } from './DownloadAgent';
 import {
     LINK_CODE_TTL_MAX_SECONDS,
     linkCodeResponseSchema,
@@ -96,6 +97,7 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
     const { devices, loading, error, refresh } = useDevices();
     const [codes, setCodes] = useState<LinkCodeResponse[]>([]);
     const [showLinkModal, setShowLinkModal] = useState(false);
+    const [showDownloadModal, setShowDownloadModal] = useState(false);
     const [generatingCode, setGeneratingCode] = useState(false);
     const [actionError, setActionError] = useState<string | null>(null);
     const [genError, setGenError] = useState<string | null>(null);
@@ -495,9 +497,14 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                     </button>
                 }
                 footer={
-                    <Button variant='secondary' onClick={closeModal}>
-                        Fermer
-                    </Button>
+                    <>
+                        <Button variant='secondary' icon='cpu' onClick={() => setShowDownloadModal(true)}>
+                            Télécharger l’agent
+                        </Button>
+                        <Button variant='secondary' onClick={closeModal}>
+                            Fermer
+                        </Button>
+                    </>
                 }
             >
                 {/* Generation controls: pick a validity, then generate. */}
@@ -673,6 +680,8 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                     Ses données restent consultables dans Monitoring.
                 </p>
             </Dialog>
+
+            <DownloadAgent open={showDownloadModal} onClose={() => setShowDownloadModal(false)} />
         </div>
     );
 }
