@@ -677,6 +677,26 @@
     opacity: 0.7;
 }
 
+/* Clickable KPI card (opens a detail popup, e.g. connections). */
+.infoCardBtn {
+    width: 100%;
+    font: inherit;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
+}
+.infoCardBtn:hover {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+}
+.infoCardIcon {
+    margin-left: 4px;
+    font-size: 0.7em;
+    opacity: 0.7;
+    vertical-align: middle;
+}
+
 .noMetrics.offline {
     color: var(--danger);
 }
@@ -884,6 +904,41 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--text-primary);
+}
+
+/* ── Established-connections dialog (from the Connexions KPI) ── */
+.connContent {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+.connTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+.connTable th {
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    padding: 0 var(--space-sm) 4px;
+}
+.connTable td {
+    padding: var(--space-xs) var(--space-sm);
+    border-top: 1px solid var(--glass-border);
+}
+.connAddr {
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+.connService {
+    color: var(--text-muted);
+    font-family: var(--font-sans);
+    font-size: 0.74rem;
 }
 
 /* ─── Header actions (refresh) ────────────────────────────────────────────── */

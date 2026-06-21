@@ -67,9 +67,26 @@ pub struct DeviceReport {
     /// report that predates this field deserialises to `null` server-side.
     #[serde(rename = "openPorts")]
     pub open_ports: Vec<OpenPort>,
+    /// Established TCP connections (the detail behind the `activeConnections`
+    /// metric). Empty = none; a legacy report deserialises to `null` server-side.
+    pub connections: Vec<TcpConnection>,
     /// Static hardware inventory (CPU, RAM, GPU, network, bluetooth). Slow-moving;
     /// a legacy report that predates this field deserialises to `null` server-side.
     pub hardware: DeviceHardware,
+}
+
+/// One established TCP connection: the local and remote socket. `activeConnections`
+/// in the metric stream is just the count of these.
+#[derive(Debug, Clone, Serialize)]
+pub struct TcpConnection {
+    #[serde(rename = "localAddress")]
+    pub local_address: String,
+    #[serde(rename = "localPort")]
+    pub local_port: u16,
+    #[serde(rename = "remoteAddress")]
+    pub remote_address: String,
+    #[serde(rename = "remotePort")]
+    pub remote_port: u16,
 }
 
 /// Static hardware inventory of the host. Every list is best-effort and may be

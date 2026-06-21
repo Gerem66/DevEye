@@ -21,6 +21,7 @@ import type { FeatureProps } from '../types';
 import { useFeatureLifecycle } from '../useFeatureLifecycle';
 import { MonitoringInfo } from './MonitoringInfo';
 import { HardwareInfo } from './HardwareInfo';
+import { Connections } from './Connections';
 import { PrivilegeInfo } from './PrivilegeInfo';
 import { OpenPorts } from './OpenPorts';
 import { ConfigDialog } from './ConfigDialog';
@@ -161,11 +162,37 @@ function averageSnapshot(points: MetricSnapshot[]): MetricSnapshot | null {
 
 // ─── Small building blocks ──────────────────────────────────────────────────
 
-function InfoCard({ label, value, muted, hint }: { label: string; value: string; muted?: boolean; hint?: string }) {
-    return (
-        <div className={`${styles.infoCard} ${muted ? styles.muted : ''}`} title={hint}>
-            <span className={styles.infoLabel}>{label}</span>
+function InfoCard({
+    label,
+    value,
+    muted,
+    hint,
+    onClick
+}: {
+    label: string;
+    value: string;
+    muted?: boolean;
+    hint?: string;
+    /** When set, the card becomes a button (e.g. to open a detail popup). */
+    onClick?: () => void;
+}) {
+    const className = `${styles.infoCard} ${muted ? styles.muted : ''} ${onClick ? styles.infoCardBtn : ''}`;
+    const inner = (
+        <>
+            <span className={styles.infoLabel}>
+                {label}
+                {onClick && <span className={`icon icon-details ${styles.infoCardIcon}`} />}
+            </span>
             <span className={styles.infoVal}>{value}</span>
+        </>
+    );
+    return onClick ? (
+        <button type='button' className={className} title={hint} onClick={onClick}>
+            {inner}
+        </button>
+    ) : (
+        <div className={className} title={hint}>
+            {inner}
         </div>
     );
 }
@@ -735,6 +762,9 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
             width: 560
         });
 
+    const showConnections = () =>
+        void openInfo({ title: 'Connexions TCP établies', body: <Connections report={report} />, width: 560 });
+
     const showPrivilegeInfo = () =>
         selected &&
         void openInfo({
@@ -947,7 +977,8 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                                                 label={averaged ? 'Connexions (moy.)' : 'Connexions'}
                                                 value={String(display.activeConnections)}
                                                 muted={valuesMuted}
-                                                hint='Connexions TCP établies'
+                                                hint='Connexions TCP établies — cliquer pour le détail'
+                                                onClick={report?.connections ? showConnections : undefined}
                                             />
                                         )}
                                         {display.uptimeSeconds !== null && (

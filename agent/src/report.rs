@@ -14,7 +14,7 @@ use sysinfo::{Networks, System};
 
 use crate::protocol::{
     AgentInfo, CpuInfo, DeviceHardware, DeviceReport, NetInterface, OpenPort, OsInfo, ProcessInfo,
-    Security,
+    Security, TcpConnection,
 };
 
 /// OS + security posture (latest known). Processes are collected separately
@@ -27,6 +27,7 @@ pub fn collect() -> DeviceReport {
         disks: crate::metrics::read_disks(),
         agent: agent_info(),
         open_ports: read_open_ports(),
+        connections: read_connections(),
         hardware: hardware(),
     }
 }
@@ -634,6 +635,121 @@ fn collect_open_ports() -> Vec<OpenPort> {
 /// Fallback for any other target: no portable probe.
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 fn collect_open_ports() -> Vec<OpenPort> {
+    Vec::new()
+}
+
+/// Hard cap on reported connections (mirrors the listening-ports cap).
+const CONNECTIONS_LIMIT: usize = 500;
+
+/// Established TCP connections — the per-connection detail behind the
+/// `activeConnections` count. Same best-effort tools as the count (`ss` on Linux,
+/// `netstat` on macOS/Windows); each kept entry is one ESTABLISHED socket with
+/// its local and remote endpoint. Sorted by remote endpoint, then local port,
+/// and capped.
+fn read_connections() -> Vec<TcpConnection> {
+    let mut conns = collect_connections();
+    conns.sort_by(|a, b| {
+        a.remote_address
+            .cmp(&b.remote_address)
+            .then(a.remote_port.cmp(&b.remote_port))
+            .then(a.local_port.cmp(&b.local_port))
+    });
+    conns.truncate(CONNECTIONS_LIMIT);
+    conns
+}
+
+#[cfg(target_os = "linux")]
+fn collect_connections() -> Vec<TcpConnection> {
+    // -t TCP, -n numeric, filtered to established (no -l: those are listeners).
+    let out = match run("ss", &["-tn", "state", "established"]) {
+        Some(o) => o,
+        None => return Vec::new(),
+    };
+    let mut v = Vec::new();
+    for line in out.lines() {
+        // Recv-Q Send-Q Local:Port Peer:Port [Process]. A header line, if any,
+        // fails to parse as host:port and is skipped naturally.
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        if cols.len() < 4 {
+            continue;
+        }
+        if let (Some((la, lp)), Some((ra, rp))) =
+            (split_host_port(cols[2]), split_host_port(cols[3]))
+        {
+            v.push(TcpConnection {
+                local_address: la,
+                local_port: lp,
+                remote_address: ra,
+                remote_port: rp,
+            });
+        }
+    }
+    v
+}
+
+#[cfg(target_os = "macos")]
+fn collect_connections() -> Vec<TcpConnection> {
+    let out = match run("netstat", &["-an", "-p", "tcp"]) {
+        Some(o) => o,
+        None => return Vec::new(),
+    };
+    let mut v = Vec::new();
+    for line in out.lines() {
+        if !line.contains("ESTABLISHED") {
+            continue;
+        }
+        // Proto Recv-Q Send-Q Local-Address Foreign-Address (state).
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        if cols.len() < 5 {
+            continue;
+        }
+        if let (Some((la, lp)), Some((ra, rp))) =
+            (split_host_dot_port(cols[3]), split_host_dot_port(cols[4]))
+        {
+            v.push(TcpConnection {
+                local_address: la,
+                local_port: lp,
+                remote_address: ra,
+                remote_port: rp,
+            });
+        }
+    }
+    v
+}
+
+#[cfg(target_os = "windows")]
+fn collect_connections() -> Vec<TcpConnection> {
+    let out = match run("netstat", &["-an"]) {
+        Some(o) => o,
+        None => return Vec::new(),
+    };
+    let mut v = Vec::new();
+    for line in out.lines() {
+        if !line.contains("ESTABLISHED") {
+            continue;
+        }
+        // Proto Local-Address Foreign-Address State.
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        if cols.len() < 4 || cols[0] != "TCP" {
+            continue;
+        }
+        if let (Some((la, lp)), Some((ra, rp))) =
+            (split_host_port(cols[1]), split_host_port(cols[2]))
+        {
+            v.push(TcpConnection {
+                local_address: la,
+                local_port: lp,
+                remote_address: ra,
+                remote_port: rp,
+            });
+        }
+    }
+    v
+}
+
+/// Fallback for any other target: no portable probe.
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+fn collect_connections() -> Vec<TcpConnection> {
     Vec::new()
 }
 
