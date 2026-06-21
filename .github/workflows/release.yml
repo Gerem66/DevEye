@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+# Tags only: build the agent natively on each OS (the "3 versions"), then gather
+# the binaries into a GitHub Release.
+jobs:
+  build:
+    name: agent (${{ matrix.target_label }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target_label: linux-x86_64
+            bin: deveye-agent
+          - os: macos-latest
+            target_label: macos-arm64
+            bin: deveye-agent
+          - os: windows-latest
+            target_label: windows-x86_64
+            bin: deveye-agent.exe
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: agent
+
+      # Clippy runs per OS here, so the release also validates each platform's
+      # #[cfg(target_os)] branches before shipping a binary.
+      - name: Format check
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --release --all-targets -- -D warnings
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: deveye-agent-${{ matrix.target_label }}
+          path: agent/target/release/${{ matrix.bin }}
+          if-no-files-found: error
+
+  publish:
+    name: github release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all agent binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: deveye-agent-*
+          path: dist
+
+      # Artifacts download as dist/<artifact-name>/<bin>; flatten + suffix the
+      # filename with the OS label so the release assets are unambiguous.
+      - name: Stage release assets
+        run: |
+          mkdir -p release
+          for dir in dist/deveye-agent-*; do
+            label="${dir#dist/deveye-agent-}"
+            if [ -f "$dir/deveye-agent.exe" ]; then
+              cp "$dir/deveye-agent.exe" "release/deveye-agent-${label}.exe"
+            else
+              cp "$dir/deveye-agent" "release/deveye-agent-${label}"
+            fi
+          done
+          ls -la release
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          fail_on_unmatched_files: true

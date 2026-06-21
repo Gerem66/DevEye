@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  # Server + client: lint, typecheck, build (the `npm run ci` of each).
+  web:
+    name: server + client
+    runs-on: ubuntu-latest
+    env:
+      # The repo .npmrc resolves @gerem66/deveye-types from GitHub Packages via
+      # this token. The built-in GITHUB_TOKEN can read packages owned by Gerem66.
+      GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # Installs the server deps (brings deveye-types into ./node_modules, which
+      # the client also resolves by walking up the tree).
+      - name: Install server deps
+        run: npm ci
+
+      - name: Server CI (lint + typecheck)
+        run: npm run ci
+
+      # Client has no lockfile; install then run its CI (lint + typecheck + build).
+      - name: Install client deps
+        working-directory: client
+        run: npm install
+
+      - name: Client CI (lint + typecheck + build)
+        working-directory: client
+        run: npm run ci
+
+  # Agent: format + clippy + build on Linux (the per-OS binaries ship via
+  # release.yml on tags).
+  agent:
+    name: agent
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: agent
+
+      - name: Format check
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --release --all-targets -- -D warnings
+
+      - name: Build
+        run: cargo build --release

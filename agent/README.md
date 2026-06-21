@@ -24,6 +24,35 @@ cargo build --release
 
 Requires a stable Rust toolchain (`rust-toolchain.toml` pins `stable`).
 
+**All three OSes at once.** Two ways to get the full set (Linux x86_64, macOS
+arm64, Windows x86_64):
+
+- **CI** — built natively on each OS and published as assets to each `v*` tag
+  release. See `.github/workflows/release.yml` in the `DevEye` repo. No local setup.
+- **Locally** — `./build-all.sh` cross-compiles all three into `dist/` (handy to
+  smoke-test before tagging). It needs `rustup` + `zig` + `cargo-zigbuild`
+  (Homebrew Rust can't cross-compile); the script preflights and prints the exact
+  install commands if anything is missing.
+
+### Scripts
+
+| Script | What it does |
+| --- | --- |
+| `./build-all.sh` | Cross-compile **all three** OSes into `dist/` (needs rustup + zig + cargo-zigbuild). |
+| `./clean.sh` | Remove `target/` (cargo cache, all targets) + `dist/`. Both regenerate on the next build. |
+
+### CI (GitHub Actions, `DevEye` repo)
+
+Two workflows:
+
+| Workflow | Trigger | Does |
+| --- | --- | --- |
+| `ci.yml` | every push / PR | server + client + agent: lint, typecheck, build |
+| `release.yml` | `v*` tags | build the agent on all 3 OSes → GitHub Release |
+
+So every push is checked (the agent on Linux); the three OS binaries are built
+only when you tag a release.
+
 ## Quick start
 
 1. In the DevEye web UI, open **Appareils** (top-right menu) → **Ajouter un
