@@ -251,21 +251,33 @@ export function MonitoringWidget() {
     // count them among the live fleet.
     const devices = allDevices.filter((d) => d.status !== 'archived');
     const onlineCount = devices.filter((d) => d.online).length;
+    // Show as many devices as comfortably fit, anchored to the bottom; the rest
+    // collapse into a "+N autres" marker sitting just above them.
+    const MAX_VISIBLE = 3;
+    const visible = devices.slice(0, MAX_VISIBLE);
+    const hidden = devices.length - visible.length;
     return (
         <div className={styles.widgetContent}>
             <div className={styles.stat}>
                 <span className={styles.statValue}>{onlineCount}</span>
                 <span className={styles.statLabel}>en ligne</span>
             </div>
-            <div className={styles.deviceList}>
-                {devices.slice(0, 3).map((d) => (
-                    <div key={d.id} className={`${styles.deviceItem} ${d.online ? styles.online : styles.offline}`}>
-                        <div className={`${styles.miniDot} ${d.online ? styles.online : styles.offline}`} />
-                        <span className={styles.deviceName}>{d.name}</span>
-                    </div>
-                ))}
-                {devices.length > 3 && <span className={styles.moreDevices}>+{devices.length - 3} autres</span>}
-            </div>
+            {devices.length === 0 ? (
+                <span className={styles.widgetFoot}>Aucun appareil connecté</span>
+            ) : (
+                <div className={styles.deviceList}>
+                    {hidden > 0 && <span className={styles.moreDevices}>+{hidden} autres</span>}
+                    {visible.map((d) => (
+                        <div
+                            key={d.id}
+                            className={`${styles.deviceItem} ${d.online ? styles.online : styles.offline}`}
+                        >
+                            <div className={`${styles.miniDot} ${d.online ? styles.online : styles.offline}`} />
+                            <span className={styles.deviceName}>{d.name}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }

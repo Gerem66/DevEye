@@ -6,6 +6,7 @@
 }
 
 .stat {
+    margin-top: var(--space-sm);
     display: flex;
     align-items: baseline;
     gap: var(--space-sm);

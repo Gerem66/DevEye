@@ -19,7 +19,8 @@
 .widgetContent {
     display: flex;
     flex-direction: column;
-    gap: var(--space-xs);
+    gap: var(--space-sm);
+    height: 100%;
 }
 
 .mainTemp {
@@ -51,7 +52,7 @@
     gap: var(--space-md);
     font-size: 0.8rem;
     color: var(--text-muted);
-    margin-top: var(--space-xs);
+    margin-top: auto;
 }
 
 /* Full view */

@@ -3,6 +3,14 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-md);
+    height: 100%;
+}
+
+/* Bottom-pinned muted line, matching the count widgets (notes / passwords). */
+.widgetFoot {
+    margin-top: auto;
+    font-size: 0.82rem;
+    color: var(--text-muted);
 }
 
 .stat {
@@ -26,6 +34,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-xs);
+    margin-top: auto;
 }
 
 .deviceItem {
