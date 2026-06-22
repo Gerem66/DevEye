@@ -3,12 +3,14 @@ import { get } from '@/api/http';
 import { serverStatusSchema, type ServerStatus } from 'deveye-types';
 
 /**
- * Server readiness store. Polls `GET /api/status` **only while the server isn't
- * ready** (deployment/boot tasks in flight), then stops for good — no
- * steady-state polling. Powers the discreet topbar deployment zone, which
- * vanishes once `ready` is true.
+ * Server readiness store. Polls `GET /api/status` **only while a boot task is
+ * still in flight**, and stops for good once everything has **settled** (every
+ * task `done` or `error`) — no steady-state polling, and no infinite polling
+ * after a terminal error. Powers the discreet topbar deployment zone, which
+ * stays visible while not `ready` (so an error remains on screen) but no longer
+ * triggers requests.
  */
-const POLL_MS = 2500;
+const POLL_MS = 10_000;
 
 let current: ServerStatus | null = null;
 const listeners = new Set<() => void>();
@@ -29,7 +31,10 @@ async function poll(): Promise<void> {
     try {
         const status = await get('/api/status', serverStatusSchema);
         emit(status);
-        if (status.ready) stop(); // settled: never poll again
+        // Settled = every task reached a terminal state. Stop polling for good
+        // (a done set hides the zone; a terminal error stays shown, frozen).
+        const settled = status.tasks.every((t) => t.state === 'done' || t.state === 'error');
+        if (settled) stop();
     } catch {
         // Transient (e.g. server still coming up): keep the timer, retry.
     }
