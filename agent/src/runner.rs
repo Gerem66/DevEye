@@ -314,7 +314,9 @@ where
     S::Error: std::error::Error + Send + Sync + 'static,
 {
     let hello = serde_json::to_string(&ClientMessage::Hello {
-        agent_version: env!("CARGO_PKG_VERSION").to_string(),
+        // Injected from the root package.json at build time (see build.rs), so the
+        // agent reports the same version as the server/client.
+        agent_version: env!("DEVEYE_VERSION").to_string(),
     })?;
     sink.send(Message::Text(hello))
         .await

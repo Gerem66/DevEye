@@ -28,7 +28,7 @@ use crate::config::Config;
 use crate::runner::RunOptions;
 
 #[derive(Parser)]
-#[command(name = "deveye-agent", version, about = "DevEye monitoring agent")]
+#[command(name = "deveye-agent", version = env!("DEVEYE_VERSION"), about = "DevEye monitoring agent")]
 struct Cli {
     #[command(subcommand)]
     command: Command,

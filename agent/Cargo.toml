@@ -1,6 +1,8 @@
 [package]
 name = "deveye-agent"
-version = "0.1.0"
+# Fallback only — the real reported version is injected at build time from the
+# root DevEye/package.json (single source of truth, see build.rs / DEVEYE_VERSION).
+version = "0.0.0"
 edition = "2021"
 description = "DevEye Agent — lightweight cross-platform monitoring daemon (Linux, macOS, Windows)"
 license = "ISC"
@@ -26,6 +28,10 @@ clap = { version = "4", features = ["derive"] }
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand = "0.8"
 base64 = "0.22"
+
+# Used by build.rs to read the version out of the root package.json.
+[build-dependencies]
+serde_json = "1"
 
 [profile.release]
 opt-level = "z"
