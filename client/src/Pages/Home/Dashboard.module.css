@@ -38,34 +38,6 @@
     text-transform: capitalize;
 }
 
-/* Compact widget bodies for trivial features */
-.profileWidget {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-xs);
-    justify-content: center;
-    height: 100%;
-}
-
-.profileName {
-    font-size: 1.05rem;
-    font-weight: 600;
-    color: var(--text-primary);
-}
-
-.profileEmail {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.simpleHint {
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-}
-
 @media (max-width: 640px) {
     .content {
         padding: var(--space-md) var(--space-md) var(--space-xl);

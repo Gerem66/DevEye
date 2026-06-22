@@ -1,4 +1,4 @@
-.widgetContent {
+.widget {
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
@@ -11,31 +11,20 @@
     gap: var(--space-sm);
 }
 
-.statValue {
+.value {
     font-size: 2rem;
     font-weight: 700;
     color: var(--accent);
     line-height: 1;
 }
 
-.statLabel {
+.label {
     font-size: 0.875rem;
     color: var(--text-secondary);
 }
 
-.footnote {
-    margin-top: auto;
-    font-size: 0.78rem;
-    color: var(--text-muted);
-}
-
-.hint {
+.foot {
     margin-top: auto;
     font-size: 0.82rem;
-    color: var(--text-secondary);
-}
-
-.empty {
-    font-size: 0.85rem;
     color: var(--text-muted);
 }

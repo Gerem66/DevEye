@@ -6,6 +6,7 @@ import {
     folderRename,
     folderReorder,
     noteAdd,
+    noteCount,
     noteDelete,
     noteEdit,
     noteGet,
@@ -152,6 +153,23 @@ export const noteListFeature: FeatureDefinition<
             ctx.logger.warn({ skipped, total: rows.length }, 'note.list: skipped undecryptable rows');
         }
         return { notes };
+    }
+});
+
+export const noteCountFeature: FeatureDefinition<
+    typeof noteCount.command,
+    typeof noteCount.input,
+    typeof noteCount.output
+> = defineFeature({
+    ...noteCount,
+    handler: async (ctx, input) => {
+        await assertWorkspaceMember(ctx, input.workspaceId);
+        // Pure row count from clear metadata: no DEK, no unlock gate, and locked
+        // notes are counted like any other (no special case). This lets the
+        // dashboard widget show a number even when the store is locked.
+        const rows = await ctx.db.notes.listByUser(ctx.userId);
+        const count = rows.filter((r) => rowInWorkspace(r.workspace_id, input.workspaceId)).length;
+        return { count };
     }
 });
 
@@ -415,6 +433,7 @@ export const folderDeleteFeature: FeatureDefinition<
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const noteFeatures: FeatureDefinition<string, any, any>[] = [
     noteListFeature,
+    noteCountFeature,
     noteGetFeature,
     noteAddFeature,
     noteEditFeature,

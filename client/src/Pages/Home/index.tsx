@@ -25,6 +25,7 @@ import FeaturePassword from '@/Features/Password';
 import FeatureNotes from '@/Features/Notes';
 import FeatureLogs from '@/Features/Logs';
 import { NotesWidget } from '@/Features/Notes/NotesWidget';
+import { PasswordWidget } from '@/Features/Password/PasswordWidget';
 
 import type { FeatureProps } from '@/Features/types';
 import styles from './Dashboard.module.css';
@@ -92,7 +93,7 @@ const FEATURES: FeatureConfig[] = [
         id: 'password',
         title: 'Mot de passe',
         icon: 'lock',
-        WidgetContent: () => <PasswordWidgetContent />,
+        WidgetContent: PasswordWidget,
         FullComponent: FeaturePassword,
         cacheDurationMinutes: 0
     },
@@ -144,14 +145,6 @@ const PAGES: ViewConfig[] = [
 ];
 
 const VIEWS: ViewConfig[] = [...FEATURES, ...PAGES];
-
-function PasswordWidgetContent() {
-    return (
-        <div className={styles.profileWidget}>
-            <span className={styles.simpleHint}>Modifier votre mot de passe</span>
-        </div>
-    );
-}
 
 function getGreeting(): string {
     const hour = new Date().getHours();

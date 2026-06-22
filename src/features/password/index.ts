@@ -1,5 +1,13 @@
 import { verifyPassword } from '@/auth/argon';
-import { passwordAdd, passwordDelete, passwordEdit, passwordGet, passwordList, passwordUnlock } from 'deveye-types';
+import {
+    passwordAdd,
+    passwordCount,
+    passwordDelete,
+    passwordEdit,
+    passwordGet,
+    passwordList,
+    passwordUnlock
+} from 'deveye-types';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { encryptPayload, markUnlocked, toEntry, toMaskedEntry, tryDecryptPayload } from './_shared';
 
@@ -76,6 +84,22 @@ export const passwordListFeature: FeatureDefinition<
             ctx.logger.warn({ skipped, total: filtered.length }, 'password.list: skipped undecryptable rows');
         }
         return { entries };
+    }
+});
+
+export const passwordCountFeature: FeatureDefinition<
+    typeof passwordCount.command,
+    typeof passwordCount.input,
+    typeof passwordCount.output
+> = defineFeature({
+    ...passwordCount,
+    handler: async (ctx, input) => {
+        await assertWorkspaceMember(ctx, input.workspaceId);
+        // Pure row count from clear metadata: no DEK, no unlock gate. This lets
+        // the dashboard widget show a number even when the store is locked.
+        const rows = await ctx.db.passwords.listByUser(ctx.userId);
+        const count = rows.filter((r) => rowInWorkspace(r.workspace_id, input.workspaceId)).length;
+        return { count };
     }
 });
 

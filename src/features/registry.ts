@@ -5,6 +5,7 @@ import { metricsFeatures } from './metrics';
 import { noteFeatures } from './note';
 import {
     passwordAddFeature,
+    passwordCountFeature,
     passwordDeleteFeature,
     passwordEditFeature,
     passwordGetFeature,
@@ -26,6 +27,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     userSetAvatarFeature,
     userSetThemeFeature,
     passwordListFeature,
+    passwordCountFeature,
     passwordGetFeature,
     passwordAddFeature,
     passwordEditFeature,

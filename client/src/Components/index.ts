@@ -7,6 +7,7 @@ export { Dialog } from './Dialog';
 export { TopNavbar } from './TopNavbar';
 export { Widget } from './Widget';
 export { WidgetGrid } from './WidgetGrid';
+export { CountWidget, useWorkspaceCount } from './CountWidget';
 export { WidgetPopup } from './WidgetPopup';
 export { Wallpaper } from './Wallpaper';
 export { StatusBadge } from './StatusBadge';
