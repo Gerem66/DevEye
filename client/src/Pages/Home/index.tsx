@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 
 import { useAuth } from '@/auth/AuthProvider';
 import { ws } from '@/api/ws';
+import { isHomeReady, onHomeReady } from '@/stores/homeReady';
 import { TopNavbar } from '@/Components/TopNavbar';
 import { Widget } from '@/Components/Widget';
 import { WidgetGrid } from '@/Components/WidgetGrid';
@@ -285,14 +286,21 @@ export default function HomePage() {
     // `cacheDurationMinutes` is auto-unmounted, just like one left to expire
     // after a close.
     //
-    // Gated on the WS being `open`: features fetch their data on mount via
-    // `ws.send`, which rejects (and isn't retried) while the socket is still
-    // connecting. Mounting them only once connected guarantees their initial
-    // load actually succeeds. Runs once, the first time the WS is open.
+    // Deferred on purpose. A preloaded feature fetches its data on mount (e.g.
+    // Monitoring fires a burst of `metrics.*` queries) — doing that *during*
+    // connect would contend the single socket with the above-the-fold critical
+    // load (the device list that gates the splash, and the weather widget),
+    // making the home feel slow exactly when it must feel fast. So we warm the
+    // heavy features only once the home is ready, and in browser idle time, so
+    // the first open is still instant without stealing the opening moment.
+    //
+    // Still gated on the WS being `open`: features' initial `ws.send` rejects
+    // (and isn't retried) while the socket is connecting, so mounting before
+    // then would leave them blank. Runs once.
     const preloadedRef = useRef(false);
     useEffect(() => {
-        const preload = () => {
-            if (preloadedRef.current) return;
+        const mountPreloads = () => {
+            if (preloadedRef.current || ws.state !== 'open') return;
             preloadedRef.current = true;
             VIEWS.forEach((config) => {
                 const duration = config.cacheDurationMinutes;
@@ -309,13 +317,35 @@ export default function HomePage() {
             });
         };
 
-        if (ws.state === 'open') {
-            preload();
-            return;
+        // Run the warm-up in idle time so it never blocks rendering; fall back to
+        // a short timeout where requestIdleCallback isn't available.
+        const ric = window.requestIdleCallback;
+        const scheduleIdle = ric
+            ? () => ric(() => mountPreloads(), { timeout: 2000 })
+            : () => window.setTimeout(mountPreloads, 200);
+
+        // Trigger once the critical home is settled (devices loaded), with a
+        // safety fallback so a stalled `device.list` can't block warm-up forever.
+        let offReady: (() => void) | undefined;
+        let fallback: ReturnType<typeof setTimeout> | undefined;
+        const arm = () => {
+            offReady?.();
+            offReady = undefined;
+            clearTimeout(fallback);
+            scheduleIdle();
+        };
+
+        if (isHomeReady()) {
+            arm();
+        } else {
+            offReady = onHomeReady(arm);
+            fallback = setTimeout(arm, 3000);
         }
-        return ws.onStateChange((s) => {
-            if (s === 'open') preload();
-        });
+
+        return () => {
+            offReady?.();
+            clearTimeout(fallback);
+        };
     }, [unmountFeature]);
 
     // Clean up all timers on unmount.

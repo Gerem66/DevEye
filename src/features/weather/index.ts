@@ -11,7 +11,7 @@ import {
     type WeatherLocationRow
 } from 'deveye-types';
 
-import { getWeatherAdapter, WeatherError } from '@/Services/WeatherProvider';
+import { fetchWeatherReport, getWeatherAdapter, WeatherError } from '@/Services/WeatherProvider';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
 function toLocation(row: WeatherLocationRow): WeatherLocation {
@@ -178,7 +178,7 @@ export const weatherGetFeature: FeatureDefinition<
         if (!row) throw new FeatureError('not_found', 'Weather location not found');
         const apiKey = await resolveLocationKey(ctx, row);
         try {
-            const report = await getWeatherAdapter(row.provider).fetchReport({
+            const report = await fetchWeatherReport({
                 locationId: row.id,
                 label: row.label,
                 latitude: row.latitude,

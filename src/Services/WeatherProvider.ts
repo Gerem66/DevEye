@@ -328,3 +328,61 @@ const adapters: Record<WeatherProvider, WeatherProviderAdapter> = {
 export function getWeatherAdapter(provider: WeatherProvider): WeatherProviderAdapter {
     return adapters[provider] ?? openMeteoAdapter;
 }
+
+/* ------------------------------ Report cache ------------------------------ */
+
+/**
+ * In-memory TTL cache for forecast reports. A report is the slow part of a home
+ * load: every `weather.get` otherwise hits the provider live (≈300 ms–1 s), and
+ * the client refreshes the primary city on connect *and* on every reconnect — so
+ * without caching, reopening the app or a transient socket drop re-pays that cost
+ * each time. Provider data only moves on a ~10-minute cadence (matching the
+ * client's poll), so serving a cached report within that window is both correct
+ * and dramatically faster, while a cold city still fetches live exactly once.
+ *
+ * The cache lives only in process memory and holds public forecast data keyed by
+ * coordinates the server already stores in clear (sort/gating metadata, never
+ * zero-knowledge payload). The API key is deliberately **excluded** from the key:
+ * it authenticates the upstream call but never changes the weather, and must not
+ * leak into cache-key material.
+ */
+const REPORT_TTL_MS = 10 * 60 * 1000;
+/** Hard cap so a long-lived process can't grow the cache without bound. */
+const REPORT_CACHE_MAX = 500;
+
+interface CachedReport {
+    report: WeatherReport;
+    expires: number;
+}
+
+const reportCache = new Map<string, CachedReport>();
+
+function reportCacheKey(input: FetchReportInput): string {
+    // 4 decimals ≈ 11 m — far finer than any forecast grid, stable per stored row.
+    return [input.provider, input.latitude.toFixed(4), input.longitude.toFixed(4), input.days, input.format].join('|');
+}
+
+/**
+ * Fetch a forecast report, served from the TTL cache when fresh. Use this on the
+ * read path (`weather.get`) instead of calling the adapter directly so repeated
+ * loads of the same city are instant. Mutations (add/update) keep using the
+ * adapter directly — they must always hit the provider.
+ */
+export async function fetchWeatherReport(input: FetchReportInput): Promise<WeatherReport> {
+    const key = reportCacheKey(input);
+    const now = Date.now();
+
+    const hit = reportCache.get(key);
+    if (hit && hit.expires > now) return hit.report;
+    if (hit) reportCache.delete(key); // expired — drop before refetching
+
+    const report = await getWeatherAdapter(input.provider).fetchReport(input);
+
+    // Evict the oldest entry once at capacity (Map preserves insertion order).
+    if (reportCache.size >= REPORT_CACHE_MAX) {
+        const oldest = reportCache.keys().next().value;
+        if (oldest !== undefined) reportCache.delete(oldest);
+    }
+    reportCache.set(key, { report, expires: now + REPORT_TTL_MS });
+    return report;
+}

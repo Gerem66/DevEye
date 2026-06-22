@@ -56,7 +56,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const bundle = await apiMe();
                 setState(applyBundle(bundle));
                 await ws.connect().catch(() => {});
-                await refreshSecrecyStatus();
+                // Fire-and-forget: the secrecy state updates its store reactively
+                // and nothing on the reveal path waits on it, so awaiting here only
+                // serialised an extra round-trip onto the critical load.
+                void refreshSecrecyStatus();
             } catch (e) {
                 if (e instanceof ApiError && (e.code === 'auth_required' || e.code === 'auth_expired')) {
                     try {
@@ -64,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         const bundle = await apiMe();
                         setState(applyBundle(bundle));
                         await ws.connect().catch(() => {});
-                        await refreshSecrecyStatus();
+                        void refreshSecrecyStatus();
                         return;
                     } catch {
                         setAnonymous();
@@ -89,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         setState(applyBundle(bundle));
         await ws.connect().catch(() => {});
-        await refreshSecrecyStatus();
+        void refreshSecrecyStatus();
         return { twoFactorRequired: false };
     }, []);
 
