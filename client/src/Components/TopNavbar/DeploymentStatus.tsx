@@ -19,12 +19,15 @@ export function DeploymentStatus() {
     const visible = status !== null && !status.ready;
     const primary = visible ? pickPrimary(status.tasks) : null;
     const isError = primary?.state === 'error';
+    // The bar shows only with a numeric progress; the icon's right gutter keys
+    // off this so the lone spinner doesn't leave dead space on its right.
+    const hasBar = !!primary && !isError && primary.progress !== null;
 
     return (
         <AnimatePresence>
             {visible && primary && (
                 <motion.div
-                    className={`${styles.zone} ${isError ? styles.error : ''}`}
+                    className={`${styles.zone} ${isError ? styles.error : ''} ${hasBar ? styles.withBar : ''}`}
                     initial={{ opacity: 0, width: 0 }}
                     animate={{ opacity: 1, width: 'auto' }}
                     exit={{ opacity: 0, width: 0 }}
@@ -45,11 +48,11 @@ export function DeploymentStatus() {
                             )}
                         </span>
                     </span>
-                    {!isError && primary.progress !== null && (
+                    {hasBar && (
                         <span className={styles.bar}>
                             <span
                                 className={styles.barFill}
-                                style={{ width: `${Math.round(primary.progress * 100)}%` }}
+                                style={{ width: `${Math.round((primary.progress ?? 0) * 100)}%` }}
                             />
                         </span>
                     )}

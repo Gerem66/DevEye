@@ -24,8 +24,19 @@
     flex-shrink: 0;
     width: 14px;
     height: 14px;
-    margin-right: var(--space-xs);
+    /* No trailing gap by default: when the spinner is alone (no bar, collapsed
+       text) the right side stays symmetric with the left padding. The gutter
+       opens — in sync with the text reveal — only when something actually
+       follows the icon: the bar, a hover, or an error (text forced open). */
+    margin-right: 0;
     background-color: var(--accent);
+    transition: margin-right var(--transition-slow);
+}
+
+.zone.withBar .icon,
+.zone:hover .icon,
+.zone.error .icon {
+    margin-right: var(--space-xs);
 }
 
 .error .icon {

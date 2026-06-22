@@ -268,10 +268,7 @@ export function MonitoringWidget() {
                 <div className={styles.deviceList}>
                     {hidden > 0 && <span className={styles.moreDevices}>+{hidden} autres</span>}
                     {visible.map((d) => (
-                        <div
-                            key={d.id}
-                            className={`${styles.deviceItem} ${d.online ? styles.online : styles.offline}`}
-                        >
+                        <div key={d.id} className={`${styles.deviceItem} ${d.online ? styles.online : styles.offline}`}>
                             <div className={`${styles.miniDot} ${d.online ? styles.online : styles.offline}`} />
                             <span className={styles.deviceName}>{d.name}</span>
                         </div>
