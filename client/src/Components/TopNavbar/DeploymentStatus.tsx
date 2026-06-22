@@ -34,11 +34,16 @@ export function DeploymentStatus() {
                     title={primary.error ?? primary.detail ?? primary.label}
                 >
                     <span className={`icon ${isError ? 'icon-error' : `icon-spinner ${styles.spin}`} ${styles.icon}`} />
+                    {/* Text is hidden during normal progress and revealed on hover
+                        (see CSS) — an error keeps it shown. The inner wrapper is the
+                        clip surface for the grid reveal animation. */}
                     <span className={styles.text}>
-                        <span className={styles.label}>{isError ? 'Problème de déploiement' : primary.label}</span>
-                        {(primary.error ?? primary.detail) && (
-                            <span className={styles.detail}>{primary.error ?? primary.detail}</span>
-                        )}
+                        <span className={styles.textInner}>
+                            <span className={styles.label}>{isError ? 'Problème de déploiement' : primary.label}</span>
+                            {(primary.error ?? primary.detail) && (
+                                <span className={styles.detail}>{primary.error ?? primary.detail}</span>
+                            )}
+                        </span>
                     </span>
                     {!isError && primary.progress !== null && (
                         <span className={styles.bar}>

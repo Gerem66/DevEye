@@ -1,7 +1,9 @@
 .zone {
     display: flex;
     align-items: center;
-    gap: var(--space-xs);
+    /* No flex `gap`: the inter-item spacing is carried by the icon and the text
+       wrapper so the text can collapse to *zero* width on reveal, with no gap
+       left dangling between the icon and the bar. */
     max-width: 280px;
     overflow: hidden;
     padding: 4px 10px;
@@ -22,6 +24,7 @@
     flex-shrink: 0;
     width: 14px;
     height: 14px;
+    margin-right: var(--space-xs);
     background-color: var(--accent);
 }
 
@@ -39,11 +42,42 @@
     }
 }
 
+/* Reveal-on-hover wrapper. During normal progress the spinner + bar already say
+   "working", so the text stays hidden and slides open only when the user hovers
+   the zone — discreet by default, legible on intent. The grid 0fr→1fr trick
+   animates the width to the exact content size (no magic numbers). An error is
+   never hidden: `.zone.error` forces the text open, hover or not. */
 .text {
+    display: grid;
+    grid-template-columns: 0fr;
+    opacity: 0;
+    transition:
+        grid-template-columns var(--transition-slow),
+        opacity var(--transition-normal);
+}
+
+.zone:hover .text,
+.zone.error .text {
+    grid-template-columns: 1fr;
+    opacity: 1;
+}
+
+.textInner {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    /* Clip surface for the width reveal; the right padding gives the text its
+       breathing room from the bar and is clipped away while collapsed. */
+    overflow: hidden;
+    padding-right: var(--space-xs);
     line-height: 1.15;
+    transform: translateX(-6px);
+    transition: transform var(--transition-slow);
+}
+
+.zone:hover .textInner,
+.zone.error .textInner {
+    transform: translateX(0);
 }
 
 .label {
