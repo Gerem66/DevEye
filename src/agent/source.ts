@@ -48,11 +48,18 @@ export function createGithubAgentSource({
     };
 
     async function resolveAssets(): Promise<ReleaseAsset[] | null> {
-        const url = tag === 'latest' ? `${releasesUrl}/latest` : `${releasesUrl}/tags/${encodeURIComponent(tag)}`;
-        const res = await fetch(url, { headers: jsonHeaders });
-        if (!res.ok) return null;
-        const body = (await res.json()) as { assets?: ReleaseAsset[] };
-        return body.assets ?? [];
+        // Network/HTTP failures resolve to `null` (not a throw) so the boot
+        // reconciler degrades gracefully — it retries, then settles to a clean
+        // error state — instead of crashing on the first blip / offline host.
+        try {
+            const url = tag === 'latest' ? `${releasesUrl}/latest` : `${releasesUrl}/tags/${encodeURIComponent(tag)}`;
+            const res = await fetch(url, { headers: jsonHeaders });
+            if (!res.ok) return null;
+            const body = (await res.json()) as { assets?: ReleaseAsset[] };
+            return body.assets ?? [];
+        } catch {
+            return null;
+        }
     }
 
     async function fetchAssetBytes(asset: ReleaseAsset): Promise<Buffer> {
