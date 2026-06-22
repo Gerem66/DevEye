@@ -15,7 +15,7 @@ import {
     linkCodeUpdateSchema,
     ok
 } from 'deveye-types';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { ACCESS_COOKIE } from '@/auth/cookies';
 import { signDeviceToken, verifyAccessToken } from '@/auth/jwt';
@@ -43,11 +43,35 @@ const AGENT_DIST_DIR = agentDistDir();
  *  - POST /api/agent/enroll   (public)     → exchange code for a device token
  */
 export async function agentRoutes(app: FastifyInstance, { db, hub, audit }: AgentRouteDeps): Promise<void> {
-    app.post('/api/devices/link', async (req, reply) => {
+    /**
+     * Resolve the caller as an admin for the fleet (Appareils) HTTP endpoints.
+     * Device pairing, link-code management and agent-binary distribution are
+     * reached only from the admin-only Appareils page, so they enforce the admin
+     * role server-side too — hiding the menu entry is not a boundary on its own.
+     * Returns the admin's user id, or `null` after already sending the 401/403.
+     */
+    const requireAdmin = async (req: FastifyRequest, reply: FastifyReply): Promise<number | null> => {
         const accessToken = req.cookies[ACCESS_COOKIE];
-        if (!accessToken) return reply.code(401).send(err('auth_required', 'No session'));
+        if (!accessToken) {
+            void reply.code(401).send(err('auth_required', 'No session'));
+            return null;
+        }
         const claims = await verifyAccessToken(accessToken);
-        if (!claims) return reply.code(401).send(err('auth_expired', 'Access token expired'));
+        if (!claims) {
+            void reply.code(401).send(err('auth_expired', 'Access token expired'));
+            return null;
+        }
+        const user = await db.users.findById(Number(claims.sub));
+        if (!user || user.role !== 'admin') {
+            void reply.code(403).send(err('forbidden', 'Réservé aux administrateurs'));
+            return null;
+        }
+        return Number(claims.sub);
+    };
+
+    app.post('/api/devices/link', async (req, reply) => {
+        const userId = await requireAdmin(req, reply);
+        if (userId === null) return;
 
         const parsed = linkCodeRequestSchema.safeParse(req.body ?? {});
         if (!parsed.success) {
@@ -57,7 +81,7 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, audit }: Agen
         const ttlSeconds = parsed.data.ttlSeconds === undefined ? env.LINK_CODE_TTL_SECONDS : parsed.data.ttlSeconds;
 
         const created = await db.linkCodes.create({
-            userId: Number(claims.sub),
+            userId,
             ttlSeconds,
             autoApprove: parsed.data.autoApprove
         });
@@ -67,28 +91,24 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, audit }: Agen
     // Active (unconsumed, unexpired) link codes — lets the UI show the table of
     // pending codes and re-grab one after the dialog was closed.
     app.get('/api/devices/link-codes', async (req, reply) => {
-        const accessToken = req.cookies[ACCESS_COOKIE];
-        if (!accessToken) return reply.code(401).send(err('auth_required', 'No session'));
-        const claims = await verifyAccessToken(accessToken);
-        if (!claims) return reply.code(401).send(err('auth_expired', 'Access token expired'));
+        const userId = await requireAdmin(req, reply);
+        if (userId === null) return;
 
-        const codes = await db.linkCodes.listActive(Number(claims.sub));
+        const codes = await db.linkCodes.listActive(userId);
         return reply.send(ok(linkCodesListResponseSchema.parse({ codes })));
     });
 
     // Toggle a still-active code's auto-approval (edited from the codes table).
     app.patch<{ Params: { code: string } }>('/api/devices/link-codes/:code', async (req, reply) => {
-        const accessToken = req.cookies[ACCESS_COOKIE];
-        if (!accessToken) return reply.code(401).send(err('auth_required', 'No session'));
-        const claims = await verifyAccessToken(accessToken);
-        if (!claims) return reply.code(401).send(err('auth_expired', 'Access token expired'));
+        const userId = await requireAdmin(req, reply);
+        if (userId === null) return;
 
         const parsed = linkCodeUpdateSchema.safeParse(req.body ?? {});
         if (!parsed.success) {
             return reply.code(400).send(err('validation', 'Invalid update', parsed.error.flatten()));
         }
         const updated = await db.linkCodes.setAutoApprove(
-            Number(claims.sub),
+            userId,
             req.params.code.trim().toUpperCase(),
             parsed.data.autoApprove
         );
@@ -98,12 +118,10 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, audit }: Agen
 
     // Manually invalidate a pending code (e.g. cancel one you no longer need).
     app.delete<{ Params: { code: string } }>('/api/devices/link-codes/:code', async (req, reply) => {
-        const accessToken = req.cookies[ACCESS_COOKIE];
-        if (!accessToken) return reply.code(401).send(err('auth_required', 'No session'));
-        const claims = await verifyAccessToken(accessToken);
-        if (!claims) return reply.code(401).send(err('auth_expired', 'Access token expired'));
+        const userId = await requireAdmin(req, reply);
+        if (userId === null) return;
 
-        const removed = await db.linkCodes.revoke(Number(claims.sub), req.params.code.trim().toUpperCase());
+        const removed = await db.linkCodes.revoke(userId, req.params.code.trim().toUpperCase());
         if (!removed) return reply.code(404).send(err('not_found', 'Code not found'));
         return reply.send(ok({ code: req.params.code }));
     });
@@ -111,10 +129,7 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, audit }: Agen
     // Availability of each shippable agent binary, so the UI can grey out the
     // targets whose file isn't present (e.g. a dev box that only built its own).
     app.get('/api/agent/targets', async (req, reply) => {
-        const accessToken = req.cookies[ACCESS_COOKIE];
-        if (!accessToken) return reply.code(401).send(err('auth_required', 'No session'));
-        const claims = await verifyAccessToken(accessToken);
-        if (!claims) return reply.code(401).send(err('auth_expired', 'Access token expired'));
+        if ((await requireAdmin(req, reply)) === null) return;
 
         const targets = await Promise.all(
             AGENT_TARGETS.map(async (t) => {
@@ -133,13 +148,10 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, audit }: Agen
         return reply.send(ok(agentTargetsResponseSchema.parse({ agentVersion: manifest?.version ?? null, targets })));
     });
 
-    // Stream a prebuilt agent binary as a download. Gated on a session like the
-    // other device endpoints (binaries aren't secret, but no public enumeration).
+    // Stream a prebuilt agent binary as a download. Admin-only like the rest of
+    // the Appareils page (binaries aren't secret, but no non-admin enumeration).
     app.get<{ Params: { target: string } }>('/api/agent/download/:target', async (req, reply) => {
-        const accessToken = req.cookies[ACCESS_COOKIE];
-        if (!accessToken) return reply.code(401).send(err('auth_required', 'No session'));
-        const claims = await verifyAccessToken(accessToken);
-        if (!claims) return reply.code(401).send(err('auth_expired', 'Access token expired'));
+        if ((await requireAdmin(req, reply)) === null) return;
 
         const parsed = agentTargetSchema.safeParse(req.params.target);
         if (!parsed.success) return reply.code(400).send(err('validation', 'Unknown agent target'));

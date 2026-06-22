@@ -27,7 +27,7 @@ export interface TopNavbarProps {
     onOpenProfile?: (e: ReactMouseEvent) => void;
     /** Open the security feature. Receives the click (Ctrl/Cmd = force reload). */
     onOpenSecurity?: (e: ReactMouseEvent) => void;
-    /** Open the devices page. Receives the click (Ctrl/Cmd = force reload). */
+    /** Open the devices page (admins only). Receives the click (Ctrl/Cmd = force reload). */
     onOpenDevices?: (e: ReactMouseEvent) => void;
     /** Open the logs feature (admins only). Click carries the force-reload modifier. */
     onOpenLogs?: (e: ReactMouseEvent) => void;
@@ -230,6 +230,11 @@ export default function TopNavbar({
                                     }}
                                 >
                                     <span className='icon icon-server' /> Appareils
+                                    <span
+                                        className={`icon icon-shield ${styles.adminBadge}`}
+                                        title='Réservé aux administrateurs'
+                                        aria-label='Réservé aux administrateurs'
+                                    />
                                 </button>
                             )}
                             {onOpenLogs && (

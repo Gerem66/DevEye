@@ -392,7 +392,7 @@ export default function HomePage() {
                 onBack={expandedWidget ? handleClose : undefined}
                 onOpenProfile={(e) => handleExpand('profile', isForceReload(e))}
                 onOpenSecurity={(e) => handleExpand('security', isForceReload(e))}
-                onOpenDevices={(e) => handleExpand('clients', isForceReload(e))}
+                onOpenDevices={user.role === 'admin' ? (e) => handleExpand('clients', isForceReload(e)) : undefined}
                 onOpenLogs={user.role === 'admin' ? (e) => handleExpand('logs', isForceReload(e)) : undefined}
                 onOpenSettings={() => setSettingsOpen(true)}
             />

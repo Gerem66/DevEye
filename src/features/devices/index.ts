@@ -21,6 +21,20 @@ async function isAdmin(ctx: FeatureContext): Promise<boolean> {
     return user?.role === 'admin';
 }
 
+/**
+ * Guard for the fleet-management commands. The Appareils page (pairing, approve,
+ * revoke, rename, delete…) is admin-only, so its commands enforce the admin role
+ * server-side as well as in the UI — never trust the hidden menu entry alone.
+ * `device.list` stays open (it feeds the topbar count, Monitoring and the splash
+ * gate, owner-scoped for non-admins); `device.setConfig`/`device.delete` keep
+ * their owner-or-admin model since they belong to Monitoring, not this page.
+ */
+async function assertAdmin(ctx: FeatureContext): Promise<void> {
+    if (!(await isAdmin(ctx))) {
+        throw new FeatureError('forbidden', 'Réservé aux administrateurs');
+    }
+}
+
 /** Load a device the caller is allowed to manage (owner or admin), else throw. */
 async function authorizeDevice(ctx: FeatureContext, deviceId: string): Promise<DeviceRow> {
     const row = await ctx.db.devices.findById(deviceId);
@@ -64,6 +78,7 @@ export const deviceConfirmFeature: FeatureDefinition<
 > = defineFeature({
     ...deviceConfirm,
     handler: async (ctx, input) => {
+        await assertAdmin(ctx);
         const row = await authorizeDevice(ctx, input.deviceId);
         if (row.status === 'revoked') throw new FeatureError('conflict', 'Device is revoked');
         await ctx.db.devices.setStatus(row.id, 'active');
@@ -85,6 +100,7 @@ export const deviceRevokeFeature: FeatureDefinition<
 > = defineFeature({
     ...deviceRevoke,
     handler: async (ctx, input) => {
+        await assertAdmin(ctx);
         const row = await authorizeDevice(ctx, input.deviceId);
         await ctx.db.devices.setStatus(row.id, 'revoked');
         const updated = await ctx.db.devices.findById(row.id);
@@ -105,6 +121,7 @@ export const deviceRenameFeature: FeatureDefinition<
 > = defineFeature({
     ...deviceRename,
     handler: async (ctx, input) => {
+        await assertAdmin(ctx);
         const row = await authorizeDevice(ctx, input.deviceId);
         await ctx.db.devices.rename(row.id, input.name);
         const updated = await ctx.db.devices.findById(row.id);
@@ -152,6 +169,7 @@ export const deviceReactivateFeature: FeatureDefinition<
 > = defineFeature({
     ...deviceReactivate,
     handler: async (ctx, input) => {
+        await assertAdmin(ctx);
         const row = await authorizeDevice(ctx, input.deviceId);
         if (row.status !== 'revoked') {
             throw new FeatureError('conflict', 'Only a revoked device can be reactivated');
@@ -174,6 +192,7 @@ export const deviceRequestDeleteFeature: FeatureDefinition<
 > = defineFeature({
     ...deviceRequestDelete,
     handler: async (ctx, input) => {
+        await assertAdmin(ctx);
         const row = await authorizeDevice(ctx, input.deviceId);
         if (row.status === 'archived' || row.status === 'pending_deletion') {
             throw new FeatureError('conflict', 'Device is already being deleted');
@@ -201,6 +220,7 @@ export const deviceCancelDeleteFeature: FeatureDefinition<
 > = defineFeature({
     ...deviceCancelDelete,
     handler: async (ctx, input) => {
+        await assertAdmin(ctx);
         const row = await authorizeDevice(ctx, input.deviceId);
         await ctx.db.devices.cancelDeletion(row.id);
         const updated = (await ctx.db.devices.findById(row.id)) ?? row;
@@ -220,6 +240,7 @@ export const deviceForceDeleteFeature: FeatureDefinition<
 > = defineFeature({
     ...deviceForceDelete,
     handler: async (ctx, input) => {
+        await assertAdmin(ctx);
         const row = await authorizeDevice(ctx, input.deviceId);
         if (row.status === 'archived') {
             throw new FeatureError('conflict', 'Device is already archived');
