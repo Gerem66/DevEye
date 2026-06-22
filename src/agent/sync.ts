@@ -156,8 +156,12 @@ export async function reconcileAgents({ source, distDir, want, maxWaitMs, pollMs
             }
         }
         if (Date.now() >= deadline) return finalize(distDir, await readSyncedManifest(distDir), lastErrors, want);
+        // Back to waiting (build not published yet, or no manifest): drop the bar
+        // so it's loader-only. `status.update` patches, so progress would
+        // otherwise stay stuck at the last value set during downloadDiffs.
         status.update(TASK_ID, {
             state: 'running',
+            progress: null,
             detail: manifest ? `En attente de la version ${want}…` : 'Manifeste indisponible, nouvel essai…'
         });
         await sleep(pollMs);
