@@ -20,6 +20,9 @@ function formatSize(bytes: number | null): string {
     return `${Math.max(1, Math.round(bytes / 1024))} Ko`;
 }
 
+/** DevEye version this UI was built from (single source of truth: package.json). */
+const APP_VERSION = __APP_VERSION__;
+
 /**
  * Two-step "Télécharger l'agent" picker: pick an OS (Apple / Linux / Windows),
  * then the exact architecture. Availability comes from `/api/agent/targets` so
@@ -29,6 +32,7 @@ function formatSize(bytes: number | null): string {
 export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () => void }) {
     const [os, setOs] = useState<AgentOs | null>(null);
     const [statuses, setStatuses] = useState<AgentTargetStatus[]>([]);
+    const [agentVersion, setAgentVersion] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -39,13 +43,19 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
         setError(null);
         setLoading(true);
         get('/api/agent/targets', agentTargetsResponseSchema)
-            .then((res) => setStatuses(res.targets))
+            .then((res) => {
+                setStatuses(res.targets);
+                setAgentVersion(res.agentVersion);
+            })
             .catch(() => setError('Impossible de récupérer les versions disponibles.'))
             .finally(() => setLoading(false));
     }, [open]);
 
     // id -> availability, to merge onto the static AGENT_TARGETS metadata.
     const statusById = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses]);
+
+    // Make sure, at download time, the agent matches the running DevEye version.
+    const versionMismatch = agentVersion !== null && agentVersion !== APP_VERSION;
 
     const title = os ? `Agent — ${OS_GROUPS.find((g) => g.os === os)?.label}` : "Télécharger l'agent";
 
@@ -74,6 +84,17 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
             }
         >
             {error && <p className={styles.genError}>{error}</p>}
+
+            {agentVersion !== null &&
+                (versionMismatch ? (
+                    <p className={`${styles.agentVersion} ${styles.agentVersionWarn}`}>
+                        <span className='icon icon-error' />
+                        Agent v{agentVersion} — différent de l’interface (v{APP_VERSION}). Une nouvelle version est
+                        peut-être en cours de déploiement.
+                    </p>
+                ) : (
+                    <p className={styles.agentVersion}>Version de l’agent : v{agentVersion}</p>
+                ))}
 
             {os === null ? (
                 <div className={styles.osGrid}>

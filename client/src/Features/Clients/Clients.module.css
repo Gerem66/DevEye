@@ -564,6 +564,34 @@
     background: var(--glass-bg-light);
 }
 
+/* Agent version line (under the dialog description) + mismatch warning. */
+.agentVersion {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin: 0 0 var(--space-md) 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.agentVersionWarn {
+    align-items: flex-start;
+    padding: var(--space-sm);
+    border-radius: var(--radius-sm);
+    background: var(--warning-bg, var(--glass-bg-light));
+    border: 1px solid var(--warning);
+    color: var(--warning);
+}
+
+.agentVersionWarn .icon,
+.agentVersion .icon {
+    flex-shrink: 0;
+    width: 15px;
+    height: 15px;
+    margin-top: 1px;
+    background-color: var(--warning);
+}
+
 /* Auto-approval toggle (icon-only) in the codes table: a filled accent ✓ when
    on, a muted ✗ when off — distinct shape + colour to read the state at a glance.
    Compound selector so it overrides `.iconBtn`'s border regardless of order. */

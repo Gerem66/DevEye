@@ -4,6 +4,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { useDevices } from '@/stores/devices';
 import { useWeather } from '@/stores/weather';
 import { wmoIcon } from '@/Features/Weather/wmoIcon';
+import { DeploymentStatus } from './DeploymentStatus';
 import styles from './TopNavbar.module.css';
 
 const ENV = import.meta.env.VITE_ENV;
@@ -164,8 +165,9 @@ export default function TopNavbar({
                 </div>
             </div>
 
-            {/* Right section: live status + user profile */}
+            {/* Right section: deployment readiness (only while not ready) + live status + user profile */}
             <div className={styles.right} ref={menuRef}>
+                <DeploymentStatus />
                 <TopbarStatus />
 
                 {user && (
