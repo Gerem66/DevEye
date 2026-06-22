@@ -19,15 +19,15 @@ export function DeploymentStatus() {
     const visible = status !== null && !status.ready;
     const primary = visible ? pickPrimary(status.tasks) : null;
     const isError = primary?.state === 'error';
-    // The bar shows only with a numeric progress; the icon's right gutter keys
-    // off this so the lone spinner doesn't leave dead space on its right.
+    // The bar shows only once there's a numeric progress (download started);
+    // while waiting/building it stays null → loader only.
     const hasBar = !!primary && !isError && primary.progress !== null;
 
     return (
         <AnimatePresence>
             {visible && primary && (
                 <motion.div
-                    className={`${styles.zone} ${isError ? styles.error : ''} ${hasBar ? styles.withBar : ''}`}
+                    className={`${styles.zone} ${isError ? styles.error : ''}`}
                     initial={{ opacity: 0, width: 0 }}
                     animate={{ opacity: 1, width: 'auto' }}
                     exit={{ opacity: 0, width: 0 }}

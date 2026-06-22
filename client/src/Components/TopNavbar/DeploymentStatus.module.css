@@ -24,16 +24,15 @@
     flex-shrink: 0;
     width: 14px;
     height: 14px;
-    /* No trailing gap by default: when the spinner is alone (no bar, collapsed
-       text) the right side stays symmetric with the left padding. The gutter
-       opens — in sync with the text reveal — only when something actually
-       follows the icon: the bar, a hover, or an error (text forced open). */
+    /* No trailing gap by default: this gutter is *only* the icon↔text spacing, so
+       it opens — in sync with the text reveal — when the text is shown (hover, or
+       an error that forces it open). The gap before the bar lives on `.bar`, so
+       the lone spinner (no text, no bar) stays perfectly centered. */
     margin-right: 0;
     background-color: var(--accent);
     transition: margin-right var(--transition-slow);
 }
 
-.zone.withBar .icon,
 .zone:hover .icon,
 .zone.error .icon {
     margin-right: var(--space-xs);
@@ -77,10 +76,11 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    /* Clip surface for the width reveal; the right padding gives the text its
-       breathing room from the bar and is clipped away while collapsed. */
+    /* Clip surface for the width reveal. With min-width:0 + overflow:hidden and
+       NO padding, the 0fr track collapses to a *true* zero width — padding here
+       would floor the track at a few px and push the lone spinner off-centre
+       (that was the bug). Breathing room before the bar lives on `.bar`. */
     overflow: hidden;
-    padding-right: var(--space-xs);
     line-height: 1.15;
     transform: translateX(-6px);
     transition: transform var(--transition-slow);
@@ -112,6 +112,9 @@
 
 .bar {
     flex-shrink: 0;
+    /* Single source of the gap before the bar: works whether it follows the
+       icon (text collapsed) or the revealed text — no double gutter. */
+    margin-left: var(--space-xs);
     width: 42px;
     height: 4px;
     border-radius: 999px;
