@@ -36,19 +36,22 @@ in `deveye-types` `AGENT_TARGETS`):
 
 Two ways to produce them:
 
-- **CI** — built natively on each OS and published as assets to each `v*` tag
-  release. See `.github/workflows/release.yml` in the `DevEye` repo. No local setup.
+- **CI** — built natively on each OS on every push to `main` that touches the
+  agent, and published (with a `manifest.json`) to the rolling **`agent-latest`**
+  prerelease. See `.github/workflows/release.yml` in the `DevEye` repo. No local setup.
 - **Locally** — `./build-all.sh` cross-compiles the matrix into `dist/` (handy to
-  smoke-test before tagging). It needs `rustup` + `zig` + `cargo-zigbuild`
-  (Homebrew Rust can't cross-compile); the script preflights and prints the exact
-  install commands if anything is missing. It is *best-effort*: Linux is built as
-  static musl and Windows via MinGW so it cross-builds from a Mac, while the
-  shipped Windows binaries are MSVC (native CI).
+  smoke-test). It needs `rustup` + `zig` + `cargo-zigbuild` (Homebrew Rust can't
+  cross-compile); the script preflights and prints the exact install commands if
+  anything is missing. It is *best-effort*: Linux is built as static musl and
+  Windows via MinGW so it cross-builds from a Mac, while the shipped Windows
+  binaries are MSVC (native CI).
 
-**Distribution.** The DevEye server bakes these release binaries into its Docker
-image (`agent/dist/`) and serves them from the **Télécharger l'agent** picker, so
-end users never touch this repo. In dev, run `cargo build --release` (or
-`build-all.sh`) to populate `agent/dist/` and exercise the same flow.
+**Distribution.** The DevEye server syncs these binaries onto a persistent volume
+(`AGENT_DIST_DIR`) **once at boot** from the `agent-latest` release — the only
+runtime GitHub touch, isolated in `src/agent/sync.ts` — then serves them from
+disk via the **Télécharger l'agent** picker. End users never touch this repo. In
+dev, run `cargo build --release` (or `build-all.sh`) to populate `agent/dist/`
+and exercise the same flow (no token needed; the sync is skipped).
 
 ### Scripts
 
@@ -64,10 +67,10 @@ Two workflows:
 | Workflow | Trigger | Does |
 | --- | --- | --- |
 | `ci.yml` | every push / PR | server + client + agent: lint, typecheck, build |
-| `release.yml` | `v*` tags | build the agent on all 3 OSes → GitHub Release |
+| `release.yml` | push to `main` touching `agent/**` (or a version bump) | build the 8-target matrix natively → rolling `agent-latest` release + `manifest.json` |
 
-So every push is checked (the agent on Linux); the three OS binaries are built
-only when you tag a release.
+So every push is checked (the agent on Linux); the full matrix is rebuilt and
+published whenever the agent (or the DevEye version) changes.
 
 ## Quick start
 

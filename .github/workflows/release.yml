@@ -1,25 +1,27 @@
-name: Release
+name: Agent build
 
+# Build the agent on every push to main that touches it (or bumps the DevEye
+# version), and publish the 8-target matrix + a manifest.json to the rolling
+# `agent-latest` prerelease. The DevEye server reconciles against this release
+# once at boot (see src/agent/sync.ts) — there is no tag/deploy ordering to
+# manage: a push to main builds the agents while Dokploy deploys in parallel,
+# and the server picks up the new build on its next boot.
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+    paths:
+      - 'agent/**'
+      - 'package.json'
+      - '.github/workflows/release.yml'
   workflow_dispatch:
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: agent-build
   cancel-in-progress: false
 
 permissions:
   contents: read
 
-# Tags only: build the agent natively on each OS, producing the full 8-target
-# matrix, then gather the binaries into a GitHub Release. The set of targets is
-# the same one exposed by the web UI ("Télécharger l'agent") and `build-all.sh`
-# — keep them in sync (canonical list: deveye-types `AGENT_TARGETS`).
-#
-#   linux   → x86_64 / aarch64 / armv7 (static musl, via cross)
-#   macos   → x86_64 (Intel) / arm64 (Silicon)
-#   windows → x86_64 / x86 / arm64 (MSVC)
 jobs:
   build:
     name: agent (${{ matrix.os_label }})
@@ -31,7 +33,6 @@ jobs:
           - os: ubuntu-latest
             os_label: linux
             builder: cross
-            # triple:output-name (static musl for portability across distros)
             targets: >-
               x86_64-unknown-linux-musl:deveye-agent-linux-x86_64
               aarch64-unknown-linux-musl:deveye-agent-linux-aarch64
@@ -39,14 +40,12 @@ jobs:
           - os: macos-latest
             os_label: macos
             builder: cargo
-            # Apple→Apple cross builds natively (system clang linker, no extras).
             targets: >-
               x86_64-apple-darwin:deveye-agent-macos-x86_64
               aarch64-apple-darwin:deveye-agent-macos-arm64
           - os: windows-latest
             os_label: windows
             builder: cargo
-            # x86_64 is the host; i686/aarch64 cross via added MSVC targets.
             targets: >-
               x86_64-pc-windows-msvc:deveye-agent-windows-x86_64.exe
               i686-pc-windows-msvc:deveye-agent-windows-x86.exe
@@ -66,15 +65,12 @@ jobs:
         with:
           workspaces: agent
 
-      # fmt + clippy on the host target validate the code (and each platform's
-      # #[cfg(target_os)] branches) before we ship a binary.
       - name: Format check
         run: cargo fmt --check
 
       - name: Clippy
         run: cargo clippy --release --all-targets -- -D warnings
 
-      # Linux musl cross-builds go through `cross` (Docker-based toolchains).
       - name: Install cross
         if: matrix.builder == 'cross'
         uses: taiki-e/install-action@v2
@@ -111,28 +107,63 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: github release
+    name: rolling release
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download all agent binaries
         uses: actions/download-artifact@v4
         with:
           pattern: agent-*
           path: dist
 
-      # Artifacts download as dist/<artifact-name>/<files…>; the filenames are
-      # already the final, OS+arch-suffixed names — just flatten them.
-      - name: Stage release assets
+      # Flatten artifacts and generate manifest.json — the contract the server's
+      # reconciler diffs against (version + per-target sha256 + size).
+      - name: Stage assets + manifest
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p release
           find dist -type f -exec cp {} release/ \;
+
+          declare -A IDS=(
+            [deveye-agent-linux-x86_64]=linux-x86_64
+            [deveye-agent-linux-aarch64]=linux-aarch64
+            [deveye-agent-linux-armv7]=linux-armv7
+            [deveye-agent-macos-x86_64]=macos-x86_64
+            [deveye-agent-macos-arm64]=macos-arm64
+            [deveye-agent-windows-x86_64.exe]=windows-x86_64
+            [deveye-agent-windows-x86.exe]=windows-x86
+            [deveye-agent-windows-arm64.exe]=windows-arm64
+          )
+          version="$(jq -r .version package.json)"
+          targets='[]'
+          for f in release/deveye-agent-*; do
+            name="$(basename "$f")"
+            id="${IDS[$name]:-}"
+            [ -z "$id" ] && continue
+            sha="$(sha256sum "$f" | awk '{print $1}')"
+            size="$(stat -c%s "$f")"
+            targets="$(jq --arg id "$id" --arg fn "$name" --arg sha "$sha" --argjson size "$size" \
+              '. + [{id:$id, filename:$fn, sha256:$sha, size:$size}]' <<<"$targets")"
+          done
+          jq -n --arg v "$version" --argjson t "$targets" '{version:$v, targets:$t}' > release/manifest.json
+          echo "manifest:"; cat release/manifest.json
           ls -la release
 
-      - name: Publish release
+      # Rolling prerelease: stable tag, assets overwritten each build. Kept out of
+      # "Latest" (prerelease) so it doesn't shadow the human release flow; the
+      # server fetches it by tag name, not via /releases/latest.
+      - name: Publish rolling release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: agent-latest
+          name: Agent (rolling)
+          prerelease: true
+          make_latest: 'false'
           files: release/*
           fail_on_unmatched_files: true

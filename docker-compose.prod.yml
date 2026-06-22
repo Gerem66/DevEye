@@ -20,6 +20,11 @@ services:
     env_file:
       - path: .env
         required: false
+    # Agent binaries live here, synced once at boot from the rolling release
+    # (AGENT_DOWNLOAD_TOKEN / AGENT_RELEASE_TAG in .env). A named volume so the
+    # sync survives redeploys — only a genuinely new build is re-downloaded.
+    volumes:
+      - agent-bin:/app/DevEye/agent/dist
     ports:
       - '127.0.0.1:${LISTEN_PORT:-3000}:${LISTEN_PORT:-3000}'
     healthcheck:
@@ -39,6 +44,9 @@ services:
       dokploy-network:
         aliases:
           - deveye-server
+
+volumes:
+  agent-bin:
 
 networks:
   dokploy-network:
