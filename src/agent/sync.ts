@@ -173,13 +173,15 @@ export function startAgentReconcile(distDir: string): void {
     status.register(TASK_ID, TASK_LABEL);
 
     const token = env.AGENT_DOWNLOAD_TOKEN || process.env.GITHUB_PACKAGES_TOKEN || '';
-    if (!token) {
+    const repo = env.AGENT_REPO || '';
+    if (!token || !repo) {
+        // No upstream configured (no token, or AGENT_REPO unset): serve disk only.
         status.update(TASK_ID, { state: 'done', progress: 1, detail: 'Synchronisation désactivée (hors ligne)' });
         return;
     }
 
     const source = createGithubAgentSource({
-        repo: env.AGENT_REPO || 'Gerem66/DevEye',
+        repo,
         tag: env.AGENT_RELEASE_TAG || 'agent-latest',
         token
     });
