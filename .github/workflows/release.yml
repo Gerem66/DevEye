@@ -32,7 +32,7 @@ jobs:
         include:
           - os: ubuntu-latest
             os_label: linux
-            builder: cross
+            builder: zigbuild
             targets: >-
               x86_64-unknown-linux-musl:deveye-agent-linux-x86_64
               aarch64-unknown-linux-musl:deveye-agent-linux-aarch64
@@ -71,11 +71,17 @@ jobs:
       - name: Clippy
         run: cargo clippy --release --all-targets -- -D warnings
 
-      - name: Install cross
-        if: matrix.builder == 'cross'
+      # Linux musl cross-builds via cargo-zigbuild (Zig as the cross-linker) —
+      # robust across host glibc versions, unlike cross-rs's pinned old images.
+      # Zig comes from PyPI; cargo-zigbuild picks it up via `python -m ziglang`.
+      - name: Install Zig
+        if: matrix.builder == 'zigbuild'
+        run: python3 -m pip install --break-system-packages ziglang || python3 -m pip install ziglang
+      - name: Install cargo-zigbuild
+        if: matrix.builder == 'zigbuild'
         uses: taiki-e/install-action@v2
         with:
-          tool: cross
+          tool: cargo-zigbuild
 
       - name: Build targets
         shell: bash
@@ -86,8 +92,8 @@ jobs:
             triple="${pair%%:*}"; out="${pair##*:}"
             echo "→ building $triple → $out"
             rustup target add "$triple" || true
-            if [ "${{ matrix.builder }}" = "cross" ]; then
-              cross build --release --target "$triple"
+            if [ "${{ matrix.builder }}" = "zigbuild" ]; then
+              cargo zigbuild --release --target "$triple"
             else
               cargo build --release --target "$triple"
             fi
