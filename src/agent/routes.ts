@@ -1,6 +1,6 @@
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { isAbsolute, join, resolve } from 'node:path';
+import { join } from 'node:path';
 
 import {
     AGENT_TARGETS,
@@ -22,6 +22,7 @@ import { signDeviceToken, verifyAccessToken } from '@/auth/jwt';
 import { sha256hex } from '@/Utils/hash';
 import { env } from '@/Utils/Env';
 import type { AuditLog } from '@/Services/AuditLog';
+import { agentDistDir, readSyncedManifest } from './sync';
 import { deviceRowToDevice } from './mappers';
 import type { MonitorHub } from './hub';
 
@@ -33,16 +34,8 @@ interface AgentRouteDeps {
     audit: AuditLog;
 }
 
-/**
- * Directory holding the prebuilt agent binaries served for download. From
- * `AGENT_DIST_DIR` (absolute, or relative to the server cwd), defaulting to
- * `agent/dist`. Resolved once at module load. See `AGENT_TARGETS` for the matrix.
- */
-const AGENT_DIST_DIR = env.AGENT_DIST_DIR
-    ? isAbsolute(env.AGENT_DIST_DIR)
-        ? env.AGENT_DIST_DIR
-        : resolve(process.cwd(), env.AGENT_DIST_DIR)
-    : resolve(process.cwd(), 'agent', 'dist');
+/** Directory the agent binaries are served from (shared with the reconciler). */
+const AGENT_DIST_DIR = agentDistDir();
 
 /**
  * HTTP endpoints for the device-linking handshake:
@@ -135,7 +128,9 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, audit }: Agen
                 return { id: t.id, os: t.os, label: t.label, available: sizeBytes !== null, sizeBytes };
             })
         );
-        return reply.send(ok(agentTargetsResponseSchema.parse({ targets })));
+        // Version of the synced set (local manifest read — no GitHub at runtime).
+        const manifest = await readSyncedManifest(AGENT_DIST_DIR);
+        return reply.send(ok(agentTargetsResponseSchema.parse({ agentVersion: manifest?.version ?? null, targets })));
     });
 
     // Stream a prebuilt agent binary as a download. Gated on a session like the

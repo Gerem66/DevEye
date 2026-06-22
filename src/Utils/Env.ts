@@ -34,11 +34,16 @@ export const env = {
     DEVICE_TOKEN_SECRET: getEnvVar('DEVICE_TOKEN_SECRET', 'string'),
     LINK_CODE_TTL_SECONDS: getEnvVar('LINK_CODE_TTL_SECONDS', 'number', false) || 60 * 5,
 
-    // Directory holding the prebuilt agent binaries served by the download
-    // endpoints. Populated locally by `agent/build-all.sh` (dev) and baked into
-    // the Docker image from the GitHub release (prod). Defaults to `agent/dist`
-    // relative to the server's working directory.
+    // Directory holding the agent binaries served by the download endpoints.
+    // On a persistent volume in prod; defaults to `agent/dist` relative to the
+    // server's working directory. The boot reconciler syncs binaries here.
     AGENT_DIST_DIR: getEnvVar('AGENT_DIST_DIR', 'string', false),
+    // Boot-time agent sync (the ONLY runtime GitHub dependency). Token needs
+    // `contents:read`; falls back to GITHUB_PACKAGES_TOKEN. Empty token disables
+    // the sync (serves whatever is already on disk — typical dev).
+    AGENT_DOWNLOAD_TOKEN: getEnvVar('AGENT_DOWNLOAD_TOKEN', 'string', false),
+    AGENT_RELEASE_TAG: getEnvVar('AGENT_RELEASE_TAG', 'string', false),
+    AGENT_REPO: getEnvVar('AGENT_REPO', 'string', false),
 
     // Interim 2FA challenge token (between password check and TOTP verify).
     TWOFA_ISSUER: getEnvVar('TWOFA_ISSUER', 'string', false) || 'DevEye',

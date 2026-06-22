@@ -1,6 +1,7 @@
 import { env } from '@/Utils/Env';
 import { buildApp } from '@/app';
 import { logger } from '@/logger';
+import { agentDistDir, startAgentReconcile } from '@/agent/sync';
 
 import Encryption from '@/Services/Encryption';
 import { createAuditLog } from '@/Services/AuditLog';
@@ -62,6 +63,11 @@ async function main() {
     void prune();
     const pruneTimer = setInterval(() => void prune(), 60 * 60 * 1000);
     pruneTimer.unref();
+
+    // Reconcile the agent binaries with the rolling release (the only runtime
+    // GitHub touch, and only at boot). Non-blocking: the readiness task is
+    // registered synchronously so /api/status reports "not ready" right away.
+    startAgentReconcile(agentDistDir());
 
     await app.listen({ port: env.LISTEN_PORT, host: '0.0.0.0' });
     logger.info({ port: env.LISTEN_PORT }, 'DevEye server ready');

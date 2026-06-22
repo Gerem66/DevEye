@@ -8,6 +8,7 @@ import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
+import { ok, serverStatusSchema } from 'deveye-types';
 
 import { agentRoutes } from '@/agent/routes';
 import { registerAgentWS } from '@/agent/ws';
@@ -17,6 +18,7 @@ import { logger } from '@/logger';
 import { env, isDev } from '@/Utils/Env';
 import { registerWS } from '@/ws/handler';
 import { createAuditLog } from '@/Services/AuditLog';
+import { status } from '@/status';
 
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
@@ -63,6 +65,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     });
 
     app.get('/api/health', { logLevel: 'silent' }, async () => ({ ok: true }));
+
+    // Boot/deployment readiness (agent sync + future steps). Public + cheap so
+    // the client can show a discreet topbar zone until the server is fully ready.
+    app.get('/api/status', { logLevel: 'silent' }, async () => ok(serverStatusSchema.parse(status.snapshot())));
 
     const hub = new MonitorHub();
     const audit = createAuditLog(deps.db);
