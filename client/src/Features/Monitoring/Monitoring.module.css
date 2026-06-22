@@ -757,6 +757,43 @@
     color: var(--text-muted);
 }
 
+/* Snapshot footprint + delete controls (under the Processes title). */
+.snapshotBar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.snapshotUsage {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.snapshotDeleteBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--glass-bg);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.snapshotDeleteBtn:hover {
+    color: var(--danger);
+    border-color: var(--danger);
+}
+
 .secGrid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));

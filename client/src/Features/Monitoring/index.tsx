@@ -67,6 +67,14 @@ function formatRate(bytesPerSec: number): string {
     return `${formatBytes(Math.max(0, Math.round(bytesPerSec)))}/s`;
 }
 
+/** Byte size with French units (o / Ko / Mo / Go) — used for DB footprint. */
+function formatBytesFr(bytes: number): string {
+    if (bytes < 1024) return `${bytes} o`;
+    if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} Ko`;
+    if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} Mo`;
+    return `${(bytes / 1024 ** 3).toFixed(2)} Go`;
+}
+
 function formatUptime(seconds: number): string {
     const d = Math.floor(seconds / 86400);
     const h = Math.floor((seconds % 86400) / 3600);
@@ -288,6 +296,11 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
     const [configOpen, setConfigOpen] = useState(false);
     const [purgeOpen, setPurgeOpen] = useState(false);
     const [purging, setPurging] = useState(false);
+    // Storage footprint of the selected device's stored snapshots.
+    const [storage, setStorage] = useState<{ snapshots: number; rows: number; bytes: number } | null>(null);
+    // Snapshot-deletion confirmation (targets the current snapshot/zone focus).
+    const [deleteOpen, setDeleteOpen] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     // Timeline window: dayStart null = live (rolling last 24h); otherwise a day.
     const [dayStart, setDayStart] = useState<number | null>(null);
@@ -354,6 +367,7 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
         setLiveSnapshot(null);
         setProcSample(null);
         setSnapshotTimes([]);
+        setStorage(null);
         setPresence({ onlineAtStart: false, events: [] });
     }, [selectedId]);
 
@@ -364,6 +378,18 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
         ws.send('metrics.availability', { deviceId: id, tzOffsetMinutes: new Date().getTimezoneOffset() })
             .then((res) => {
                 if (selectedRef.current === id) setDataDays(res.days);
+            })
+            .catch(() => {});
+    }, [selectedId]);
+
+    // Storage footprint of the device's stored snapshots (count + DB bytes).
+    useEffect(() => {
+        if (!selectedId) return;
+        const id = selectedId;
+        ws.send('metrics.storage', { deviceId: id })
+            .then((res) => {
+                if (selectedRef.current === id)
+                    setStorage({ snapshots: res.snapshots, rows: res.rows, bytes: res.bytes });
             })
             .catch(() => {});
     }, [selectedId]);
@@ -483,6 +509,47 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
             setPurging(false);
         }
     }, [refresh]);
+
+    // What a delete action would remove, per the current focus: the selected
+    // snapshot (snapshot focus) or every snapshot inside the dragged zone (range
+    // focus). `count` is computed from the marks already loaded for the window.
+    const deleteTarget = useMemo(() => {
+        if (focus.kind === 'snapshot') return { kind: 'snapshot' as const, from: focus.at, to: focus.at, count: 1 };
+        if (focus.kind === 'range') {
+            const count = snapshotTimes.filter((t) => t >= focus.start && t <= focus.end).length;
+            return { kind: 'range' as const, from: focus.start, to: focus.end, count };
+        }
+        return null;
+    }, [focus, snapshotTimes]);
+
+    // Delete the targeted snapshot(s), then drop back to live (the removed focus
+    // no longer exists) and refresh the marks + footprint. focus→live re-queries
+    // the graphs and processes through the window effect.
+    const deleteSnapshots = useCallback(async () => {
+        const id = selectedRef.current;
+        if (!id || !deleteTarget) return;
+        setDeleting(true);
+        try {
+            await ws.send('metrics.deleteSnapshots', { deviceId: id, from: deleteTarget.from, to: deleteTarget.to });
+            setDeleteOpen(false);
+            setFocus({ kind: 'live' });
+            ws.send('metrics.snapshots', { deviceId: id, from: windowRange.start, to: windowRange.end })
+                .then((res) => {
+                    if (selectedRef.current === id) setSnapshotTimes(res.timestamps);
+                })
+                .catch(() => {});
+            ws.send('metrics.storage', { deviceId: id })
+                .then((res) => {
+                    if (selectedRef.current === id)
+                        setStorage({ snapshots: res.snapshots, rows: res.rows, bytes: res.bytes });
+                })
+                .catch(() => {});
+        } catch {
+            // Keep the dialog open; the failure is rare (network) and retryable.
+        } finally {
+            setDeleting(false);
+        }
+    }, [deleteTarget, windowRange]);
 
     // Refresh: ask the agent to push fresh data now.
     const refreshNow = useCallback(() => {
@@ -1076,6 +1143,37 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                                         </span>
                                     )}
                                 </h4>
+
+                                {/* Snapshot footprint + per-snapshot / per-zone deletion */}
+                                <div className={styles.snapshotBar}>
+                                    <span
+                                        className={styles.snapshotUsage}
+                                        title='Espace occupé en base par les snapshots de cet appareil'
+                                    >
+                                        <span className='icon icon-server' />
+                                        {storage
+                                            ? `${storage.snapshots} snapshot${storage.snapshots > 1 ? 's' : ''} · ≈ ${formatBytesFr(storage.bytes)} en base`
+                                            : 'Calcul de l’espace…'}
+                                    </span>
+                                    {deleteTarget && (deleteTarget.kind === 'snapshot' || deleteTarget.count > 0) && (
+                                        <button
+                                            type='button'
+                                            className={styles.snapshotDeleteBtn}
+                                            onClick={() => setDeleteOpen(true)}
+                                            title={
+                                                deleteTarget.kind === 'snapshot'
+                                                    ? 'Supprimer le snapshot sélectionné'
+                                                    : 'Supprimer les snapshots de la zone sélectionnée'
+                                            }
+                                        >
+                                            <span className='icon icon-trash' />
+                                            {deleteTarget.kind === 'snapshot'
+                                                ? 'Supprimer ce snapshot'
+                                                : `Supprimer la zone (${deleteTarget.count})`}
+                                        </button>
+                                    )}
+                                </div>
+
                                 {procSample && procSample.processes.length > 0 ? (
                                     <>
                                         <table className={styles.procTable}>
@@ -1180,6 +1278,41 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                                     {archived
                                         ? 'Les données figées de cet appareil archivé seront définitivement effacées et il disparaîtra de cette page.'
                                         : 'Toutes les métriques, snapshots et historiques de cet appareil seront supprimés. L’agent, s’il est encore actif, n’est pas détruit : utilisez « Supprimer » depuis la page Appareils pour cela.'}
+                                </p>
+                            </Dialog>
+
+                            <Dialog
+                                open={deleteOpen}
+                                onClose={() => setDeleteOpen(false)}
+                                title={
+                                    deleteTarget?.kind === 'range'
+                                        ? 'Supprimer les snapshots de la zone ?'
+                                        : 'Supprimer ce snapshot ?'
+                                }
+                                description='Cette action efface définitivement les relevés de processus sélectionnés.'
+                                footer={
+                                    <>
+                                        <Button
+                                            variant='secondary'
+                                            onClick={() => setDeleteOpen(false)}
+                                            disabled={deleting}
+                                        >
+                                            Annuler
+                                        </Button>
+                                        <Button
+                                            variant='danger'
+                                            onClick={() => void deleteSnapshots()}
+                                            disabled={deleting}
+                                        >
+                                            {deleting ? 'Suppression…' : 'Supprimer'}
+                                        </Button>
+                                    </>
+                                }
+                            >
+                                <p className={styles.focusCaption}>
+                                    {deleteTarget?.kind === 'range'
+                                        ? `${deleteTarget.count} snapshot${deleteTarget.count > 1 ? 's' : ''} entre ${new Date(deleteTarget.from).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} et ${new Date(deleteTarget.to).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} seront supprimés. Les graphiques de métriques ne sont pas affectés.`
+                                        : `Le snapshot du ${deleteTarget ? new Date(deleteTarget.from).toLocaleString('fr-FR') : ''} et sa liste de processus seront supprimés. Les graphiques de métriques ne sont pas affectés.`}
                                 </p>
                             </Dialog>
                         </div>

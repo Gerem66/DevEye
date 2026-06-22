@@ -6,12 +6,55 @@ type Q = Queryable;
 /** Don't return a process sample further than this from the requested instant. */
 const NEAREST_TOLERANCE_MS = 2 * 60 * 60 * 1000;
 
+/**
+ * Byte cost of each fixed-width column of `device_process_samples`, used to
+ * estimate a device's snapshot footprint without per-row inspection. Keep this
+ * map in sync with the table schema: adding/removing/resizing a column here makes
+ * the estimate adapt on its own — no magic total to recompute by hand. The
+ * variable-length `name` column is NOT listed; it's added from its real
+ * `LENGTH(name)` at query time.
+ */
+const PROCESS_ROW_COLUMN_BYTES = {
+    id: 8, // BIGINT
+    device_id: 36, // CHAR(36)
+    ts: 8, // BIGINT
+    kind: 1, // ENUM('top','full')
+    cpu_percent: 4, // FLOAT
+    mem_bytes: 8 // BIGINT
+} as const;
+
+/**
+ * Non-column per-row cost: InnoDB record header + the `(device_id, ts)` secondary
+ * index entry + page fill slack. Roughly stable regardless of the columns.
+ */
+const PROCESS_ROW_OVERHEAD_BYTES = 70;
+
+/** Estimated fixed bytes per stored row (columns + overhead); `name` added on top. */
+const EST_FIXED_BYTES_PER_PROCESS_ROW =
+    Object.values(PROCESS_ROW_COLUMN_BYTES).reduce((sum, b) => sum + b, 0) + PROCESS_ROW_OVERHEAD_BYTES;
+
+export interface SnapshotStorage {
+    /** Distinct snapshot instants. */
+    snapshots: number;
+    /** Total process rows across those snapshots. */
+    rows: number;
+    /** Estimated bytes occupied in the database (data + index). */
+    bytes: number;
+}
+
 export interface ProcessSamplesRepo {
     insertSample(deviceId: string, sample: ProcessSample): Promise<void>;
     /** The process list captured nearest `at` (within tolerance), else null. */
     nearest(deviceId: string, at: number): Promise<ProcessSample | null>;
     /** Distinct snapshot timestamps within [from, to], ascending (timeline marks). */
     snapshotTimes(deviceId: string, from: number, to: number): Promise<number[]>;
+    /** Estimated storage taken by a device's stored snapshots. */
+    storage(deviceId: string): Promise<SnapshotStorage>;
+    /**
+     * Delete snapshots whose `ts` falls in [from, to] (inclusive). Returns the
+     * number of distinct instants and process rows removed.
+     */
+    deleteRange(deviceId: string, from: number, to: number): Promise<{ snapshots: number; rows: number }>;
     /** Delete samples past each device's process retention (NULL → default). */
     pruneByRetention(defaultDays: number): Promise<number>;
 }
@@ -76,6 +119,35 @@ export function processSamplesRepo(pool: Q): ProcessSamplesRepo {
                 [deviceId, from, to]
             );
             return r.rows.map((row) => Number(row.ts));
+        },
+        async storage(deviceId) {
+            const r = await pool.query<{ total: number; snapshots: number; name_bytes: number }>(
+                `SELECT COUNT(*)                       AS total,
+                        COUNT(DISTINCT ts)             AS snapshots,
+                        COALESCE(SUM(LENGTH(name)), 0) AS name_bytes
+                 FROM device_process_samples WHERE device_id = ?`,
+                [deviceId]
+            );
+            const row = r.rows[0];
+            const rows = Number(row?.total ?? 0);
+            const nameBytes = Number(row?.name_bytes ?? 0);
+            return {
+                snapshots: Number(row?.snapshots ?? 0),
+                rows,
+                bytes: rows * EST_FIXED_BYTES_PER_PROCESS_ROW + nameBytes
+            };
+        },
+        async deleteRange(deviceId, from, to) {
+            const counted = await pool.query<{ snapshots: number }>(
+                `SELECT COUNT(DISTINCT ts) AS snapshots FROM device_process_samples
+                 WHERE device_id = ? AND ts BETWEEN ? AND ?`,
+                [deviceId, from, to]
+            );
+            const del = await pool.query(
+                `DELETE FROM device_process_samples WHERE device_id = ? AND ts BETWEEN ? AND ?`,
+                [deviceId, from, to]
+            );
+            return { snapshots: Number(counted.rows[0]?.snapshots ?? 0), rows: del.rowCount };
         },
         async pruneByRetention(defaultDays) {
             // Process history has its own (shorter) retention; it's the bulkiest data.

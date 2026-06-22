@@ -1,10 +1,12 @@
 import {
     metricsAvailability,
+    metricsDeleteSnapshots,
     metricsPresence,
     metricsProcessesAt,
     metricsQuery,
     metricsRefresh,
     metricsSnapshots,
+    metricsStorage,
     metricsSubscribe,
     metricsUnsubscribe,
     type DeviceRow
@@ -151,6 +153,43 @@ export const metricsSnapshotsFeature: FeatureDefinition<
     }
 });
 
+export const metricsStorageFeature: FeatureDefinition<
+    typeof metricsStorage.command,
+    typeof metricsStorage.input,
+    typeof metricsStorage.output
+> = defineFeature({
+    ...metricsStorage,
+    handler: async (ctx, input) => {
+        await authorizeRead(ctx, input.deviceId);
+        const usage = await ctx.db.processSamples.storage(input.deviceId);
+        return { deviceId: input.deviceId, ...usage };
+    }
+});
+
+export const metricsDeleteSnapshotsFeature: FeatureDefinition<
+    typeof metricsDeleteSnapshots.command,
+    typeof metricsDeleteSnapshots.input,
+    typeof metricsDeleteSnapshots.output
+> = defineFeature({
+    ...metricsDeleteSnapshots,
+    handler: async (ctx, input) => {
+        const row = await authorizeRead(ctx, input.deviceId);
+        const { snapshots, rows } = await ctx.db.processSamples.deleteRange(input.deviceId, input.from, input.to);
+        if (snapshots > 0) {
+            const single = input.from === input.to;
+            ctx.audit({
+                action: 'metrics.deleteSnapshots',
+                level: 'warning',
+                description: single
+                    ? `Snapshot supprimé : « ${row.name} »`
+                    : `${snapshots} snapshots supprimés : « ${row.name} »`,
+                metadata: { deviceId: row.id, from: input.from, to: input.to, snapshots, rows }
+            });
+        }
+        return { deviceId: input.deviceId, deletedSnapshots: snapshots, deletedRows: rows };
+    }
+});
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const metricsFeatures: FeatureDefinition<string, any, any>[] = [
     metricsQueryFeature,
@@ -160,5 +199,7 @@ export const metricsFeatures: FeatureDefinition<string, any, any>[] = [
     metricsPresenceFeature,
     metricsProcessesAtFeature,
     metricsAvailabilityFeature,
-    metricsSnapshotsFeature
+    metricsSnapshotsFeature,
+    metricsStorageFeature,
+    metricsDeleteSnapshotsFeature
 ];

@@ -132,7 +132,10 @@ export function Timeline({
         if (!el) return windowStart;
         const rect = el.getBoundingClientRect();
         const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-        return windowStart + frac * span;
+        // Round to an integer ms: the focus drives `metrics.query`/`processesAt`,
+        // whose schemas require integer `from`/`to`/`at`. A fractional value would
+        // fail client-side validation and the graphs would never reflect the zone.
+        return Math.round(windowStart + frac * span);
     };
 
     const onPointerDown = (e: React.PointerEvent) => {
