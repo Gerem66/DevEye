@@ -19,6 +19,7 @@ import {
 } from 'deveye-types';
 import type { FeatureProps } from '../types';
 import { useFeatureLifecycle } from '../useFeatureLifecycle';
+import { agentVersionInfo } from '../agentVersion';
 import { MonitoringInfo } from './MonitoringInfo';
 import { HardwareInfo } from './HardwareInfo';
 import { Connections } from './Connections';
@@ -873,19 +874,33 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                 <div className={styles.grid}>
                     {/* Left: device list */}
                     <div className={styles.deviceListFull}>
-                        {devices.map((d) => (
-                            <button
-                                key={d.id}
-                                className={`${styles.deviceCard} ${d.id === selectedId ? styles.selected : ''}`}
-                                onClick={() => setSelectedId(d.id)}
-                            >
-                                <div className={`${styles.statusDot} ${d.online ? styles.online : styles.offline}`} />
-                                <div className={styles.deviceCardInfo}>
-                                    <span className={styles.deviceCardName}>{d.name}</span>
-                                    <span className={styles.deviceCardPlatform}>{d.platform}</span>
-                                </div>
-                            </button>
-                        ))}
+                        {devices.map((d) => {
+                            const version = agentVersionInfo(d.agentVersion);
+                            return (
+                                <button
+                                    key={d.id}
+                                    className={`${styles.deviceCard} ${d.id === selectedId ? styles.selected : ''}`}
+                                    onClick={() => setSelectedId(d.id)}
+                                >
+                                    <div
+                                        className={`${styles.statusDot} ${d.online ? styles.online : styles.offline}`}
+                                    />
+                                    <div className={styles.deviceCardInfo}>
+                                        <span className={styles.deviceCardName}>{d.name}</span>
+                                        <span className={styles.deviceCardPlatform}>
+                                            {d.platform}
+                                            {version && ` · v${version.version}`}
+                                            {version?.mismatch && (
+                                                <span
+                                                    className={`icon icon-error ${styles.deviceCardWarn}`}
+                                                    title='Mise à jour de l’agent disponible'
+                                                />
+                                            )}
+                                        </span>
+                                    </div>
+                                </button>
+                            );
+                        })}
                     </div>
 
                     {/* Right: panel */}

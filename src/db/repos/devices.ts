@@ -32,6 +32,8 @@ export interface DevicesRepo {
     setTokenHash(id: string, tokenHash: string): Promise<void>;
     rename(id: string, name: string): Promise<void>;
     touchSeen(id: string, lastSeen: number): Promise<void>;
+    /** Store the agent version reported on connect (`agent.hello`). */
+    setAgentVersion(id: string, version: string): Promise<void>;
     setReport(id: string, reportJson: string): Promise<void>;
     setConfig(id: string, patch: DeviceConfigPatch): Promise<void>;
     /** Mark a device for deletion, remembering its status so it can be restored. */
@@ -95,6 +97,9 @@ export function devicesRepo(pool: Q): DevicesRepo {
         },
         async touchSeen(id, lastSeen) {
             await pool.query('UPDATE devices SET last_seen = ? WHERE id = ?', [lastSeen, id]);
+        },
+        async setAgentVersion(id, version) {
+            await pool.query('UPDATE devices SET agent_version = ? WHERE id = ?', [version.slice(0, 64), id]);
         },
         async setReport(id, reportJson) {
             await pool.query('UPDATE devices SET report_json = ? WHERE id = ?', [reportJson, id]);

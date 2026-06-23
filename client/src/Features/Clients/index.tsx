@@ -11,6 +11,7 @@ import TextInput from '@/Components/TextInput';
 import { useDevices } from '@/stores/devices';
 import { LinkInfo } from './LinkInfo';
 import { DownloadAgent } from './DownloadAgent';
+import { agentVersionInfo, APP_VERSION } from '../agentVersion';
 import {
     LINK_CODE_TTL_MAX_SECONDS,
     linkCodeResponseSchema,
@@ -363,6 +364,7 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                     <AnimatePresence initial={false}>
                         {visibleDevices.map((device) => {
                             const pendingDeletion = device.status === 'pending_deletion';
+                            const version = agentVersionInfo(device.agentVersion);
                             return (
                                 <motion.div
                                     key={device.id}
@@ -392,6 +394,28 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                                             <span className='icon icon-clock' />
                                             <span>{device.online ? 'En ligne' : formatLastSeen(device.lastSeen)}</span>
                                         </div>
+                                        {version && (
+                                            <div
+                                                className={`${styles.infoRow} ${version.mismatch ? styles.versionWarn : ''}`}
+                                                title={
+                                                    version.mismatch
+                                                        ? `Interface en v${APP_VERSION} — une mise à jour de l’agent est disponible.`
+                                                        : undefined
+                                                }
+                                            >
+                                                <span
+                                                    className={`icon ${version.mismatch ? 'icon-error' : 'icon-info'}`}
+                                                />
+                                                <span>
+                                                    Agent v{version.version}
+                                                    {version.mismatch && (
+                                                        <span className={styles.versionTag}>
+                                                            Mise à jour disponible
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {device.deleteError && (

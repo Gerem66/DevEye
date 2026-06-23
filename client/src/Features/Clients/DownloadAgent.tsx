@@ -3,6 +3,7 @@ import { get } from '@/api/http';
 import { Dialog } from '@/Components/Dialog';
 import Button from '@/Components/Button';
 import { AGENT_TARGETS, agentTargetsResponseSchema, type AgentOs, type AgentTargetStatus } from 'deveye-types';
+import { APP_VERSION } from '../agentVersion';
 import styles from './Clients.module.css';
 
 /** OS families in picker order, with their display label + tagline. */
@@ -19,9 +20,6 @@ function formatSize(bytes: number | null): string {
     if (mb >= 1) return `${mb.toFixed(1)} Mo`;
     return `${Math.max(1, Math.round(bytes / 1024))} Ko`;
 }
-
-/** DevEye version this UI was built from (single source of truth: package.json). */
-const APP_VERSION = __APP_VERSION__;
 
 /**
  * Two-step "Télécharger l'agent" picker: pick an OS (Apple / Linux / Windows),

@@ -215,6 +215,15 @@
     white-space: nowrap;
 }
 
+/* Tiny amber glyph next to the version when the agent lags the interface build. */
+.deviceCardWarn {
+    width: 12px;
+    height: 12px;
+    margin-left: 4px;
+    vertical-align: -1px;
+    color: var(--warning);
+}
+
 .metricsPanel {
     background: var(--glass-bg-light);
     border: 1px solid var(--glass-border);
@@ -452,6 +461,19 @@
 .hwLegacyNote {
     color: var(--text-muted);
     font-style: italic;
+}
+
+/* Outdated-agent value inside the "Agent" group: amber text + leading glyph. */
+.agentVersionWarn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--warning);
+}
+.agentVersionWarn .icon {
+    width: 14px;
+    height: 14px;
+    color: var(--warning);
 }
 
 /* ── Activity hero (idle / normal / intensive) ── */

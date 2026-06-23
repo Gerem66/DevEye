@@ -49,6 +49,7 @@ export function deviceRowToDevice(row: DeviceRow, online: boolean): Device {
         online,
         lastSeen: row.last_seen === null ? null : Number(row.last_seen),
         created: Number(row.created),
+        agentVersion: row.agent_version ?? null,
         report: parseDeviceReport(row.report_json),
         metricIntervalSeconds: row.metric_interval_seconds === null ? null : Number(row.metric_interval_seconds),
         snapshotIntervalSeconds: row.snapshot_interval_seconds === null ? null : Number(row.snapshot_interval_seconds),

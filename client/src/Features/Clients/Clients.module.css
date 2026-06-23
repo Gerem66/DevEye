@@ -247,6 +247,27 @@
     flex-shrink: 0;
 }
 
+/* Agent-version row turns amber when the agent lags the interface build. */
+.infoRow.versionWarn {
+    color: var(--warning);
+}
+
+.infoRow.versionWarn .icon {
+    color: var(--warning);
+}
+
+/* Small inline pill nudging an agent update, kept subtle (no hard background). */
+.versionTag {
+    margin-left: var(--space-xs);
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    background: var(--warning-bg);
+    color: var(--warning);
+    font-size: 0.68rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
 .pendingHint {
     font-size: 0.78rem;
     color: var(--warning);

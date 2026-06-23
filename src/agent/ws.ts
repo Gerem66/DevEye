@@ -53,6 +53,18 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: 
         // revoked or archived device — it all looks like "nothing here".
         const deny = () => socket.close(1008);
 
+        // The agent fires `agent.hello` the instant the socket opens — i.e. while
+        // we're still in the async auth + connect-time DB writes below, before any
+        // real `message` handler exists. Attach a listener synchronously from t=0
+        // that buffers frames until the handler is wired, then replay them; without
+        // this the first frame (the hello carrying the agent version) is dropped.
+        const earlyFrames: Buffer[] = [];
+        let onMessage: ((raw: Buffer) => void) | null = null;
+        socket.on('message', (raw: Buffer) => {
+            if (onMessage) onMessage(raw);
+            else earlyFrames.push(raw);
+        });
+
         const token = extractToken(req);
         if (!token) return deny();
         const claims = await verifyDeviceToken(token);
@@ -92,7 +104,7 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: 
             });
         }
 
-        socket.on('message', async (raw: Buffer) => {
+        const handleMessage = async (raw: Buffer): Promise<void> => {
             let parsed;
             try {
                 parsed = agentClientMessageSchema.safeParse(JSON.parse(raw.toString()));
@@ -110,6 +122,12 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: 
 
             const msg = parsed.data;
             if (msg.command === AGENT_HELLO) {
+                // Remember which agent build is running so the UI can flag stale agents.
+                try {
+                    await db.devices.setAgentVersion(deviceId, msg.payload.agentVersion);
+                } catch (e) {
+                    reqLogger.warn({ err: (e as Error).message }, 'Failed to persist agent version');
+                }
                 send(socket, { command: AGENT_ACK, payload: { received: 0 } });
                 return;
             }
@@ -205,7 +223,13 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: 
                     send(socket, { command: AGENT_ERROR, payload: { code: 'internal', message: 'Persist failed' } });
                 }
             }
-        });
+        };
+
+        // Wire the real handler, then flush whatever arrived during auth/connect
+        // (in order). New frames now go straight through; no await sits between the
+        // assignment and the drain, so nothing can slip past unbuffered.
+        onMessage = (raw) => void handleMessage(raw);
+        for (const raw of earlyFrames.splice(0)) onMessage(raw);
 
         socket.on('close', () => {
             hub.agentOffline(deviceId);

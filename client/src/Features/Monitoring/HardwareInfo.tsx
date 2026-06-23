@@ -1,4 +1,5 @@
 import type { Device, DeviceReport, NetInterfaceKind } from 'deveye-types';
+import { agentVersionInfo, APP_VERSION } from '../agentVersion';
 import styles from './Monitoring.module.css';
 
 /** Human-readable bytes (binary units), used for RAM and disks. */
@@ -67,6 +68,7 @@ export function HardwareInfo({ report, device }: { report: DeviceReport | null; 
     }
 
     const hw = report.hardware;
+    const version = agentVersionInfo(device.agentVersion);
     const interfaces = (hw?.network ?? [])
         .slice()
         .sort((a, b) => NET_KIND[a.kind].order - NET_KIND[b.kind].order || a.name.localeCompare(b.name));
@@ -152,6 +154,20 @@ export function HardwareInfo({ report, device }: { report: DeviceReport | null; 
             )}
 
             <Group title='Agent'>
+                {version && (
+                    <Row
+                        label='Version'
+                        value={
+                            version.mismatch ? (
+                                <span className={styles.agentVersionWarn} title={`Interface en v${APP_VERSION}`}>
+                                    <span className='icon icon-error' />v{version.version} · mise à jour disponible
+                                </span>
+                            ) : (
+                                `v${version.version}`
+                            )
+                        }
+                    />
+                )}
                 {report.agent && <Row label='Compte' value={report.agent.user || 'inconnu'} />}
                 {report.agent && (
                     <Row
