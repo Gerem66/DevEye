@@ -135,7 +135,12 @@ function HourlyRow({ report }: { report: WeatherReport }) {
                         <span className={styles.hourlyIcon}>{wmoIcon(hour.code)}</span>
                         <span className={styles.hourlyTemp}>{Math.round(hour.temperature)}°</span>
                         {hour.precipitationProbability !== null && hour.precipitationProbability > 0 && (
-                            <span className={styles.hourlyPrecip}>💧{hour.precipitationProbability}%</span>
+                            <span
+                                className={styles.hourlyPrecip}
+                                title={`Probabilité de pluie : ${hour.precipitationProbability} %`}
+                            >
+                                ☔ {hour.precipitationProbability}%
+                            </span>
                         )}
                     </div>
                 );
