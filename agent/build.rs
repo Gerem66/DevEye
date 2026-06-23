@@ -9,7 +9,7 @@ use std::path::Path;
 /// Falls back to the crate's own `version` if the file can't be read (e.g. the
 /// crate is built standalone, outside the monorepo checkout).
 fn main() {
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is set by cargo");
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR unset");
     let pkg_path = Path::new(&manifest_dir).join("../package.json");
     println!("cargo:rerun-if-changed={}", pkg_path.display());
 
