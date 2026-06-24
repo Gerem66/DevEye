@@ -127,10 +127,24 @@ jobs:
           pattern: agent-*
           path: dist
 
+      # Build the offline signer (gated `signer` feature). Only when the signing
+      # key is configured — a fork without the secret still publishes, unsigned
+      # (those targets simply can't drive a self-update; manual download is fine).
+      - name: Build update signer
+        if: ${{ env.AGENT_UPDATE_SIGNING_KEY != '' }}
+        env:
+          AGENT_UPDATE_SIGNING_KEY: ${{ secrets.AGENT_UPDATE_SIGNING_KEY }}
+        working-directory: agent
+        run: cargo build --release --features signer --bin deveye-sign
+
       # Flatten artifacts and generate manifest.json — the contract the server's
-      # reconciler diffs against (version + per-target sha256 + size).
+      # reconciler diffs against (version + per-target sha256 + size + signature).
+      # The signature is an ed25519 signature over the binary's 32 sha256 bytes,
+      # which the agent verifies against its embedded public key before updating.
       - name: Stage assets + manifest
         shell: bash
+        env:
+          AGENT_UPDATE_SIGNING_KEY: ${{ secrets.AGENT_UPDATE_SIGNING_KEY }}
         run: |
           set -euo pipefail
           mkdir -p release
@@ -146,6 +160,7 @@ jobs:
             [deveye-agent-windows-x86.exe]=windows-x86
             [deveye-agent-windows-arm64.exe]=windows-arm64
           )
+          SIGNER=agent/target/release/deveye-sign
           version="$(jq -r .version package.json)"
           targets='[]'
           for f in release/deveye-agent-*; do
@@ -154,11 +169,19 @@ jobs:
             [ -z "$id" ] && continue
             sha="$(sha256sum "$f" | awk '{print $1}')"
             size="$(stat -c%s "$f")"
-            targets="$(jq --arg id "$id" --arg fn "$name" --arg sha "$sha" --argjson size "$size" \
-              '. + [{id:$id, filename:$fn, sha256:$sha, size:$size}]' <<<"$targets")"
+            if [ -n "${AGENT_UPDATE_SIGNING_KEY:-}" ] && [ -x "$SIGNER" ]; then
+              sig="$("$SIGNER" sign "$AGENT_UPDATE_SIGNING_KEY" "$sha")"
+              targets="$(jq --arg id "$id" --arg fn "$name" --arg sha "$sha" --argjson size "$size" --arg sig "$sig" \
+                '. + [{id:$id, filename:$fn, sha256:$sha, size:$size, signature:$sig}]' <<<"$targets")"
+            else
+              targets="$(jq --arg id "$id" --arg fn "$name" --arg sha "$sha" --argjson size "$size" \
+                '. + [{id:$id, filename:$fn, sha256:$sha, size:$size}]' <<<"$targets")"
+            fi
           done
           jq -n --arg v "$version" --argjson t "$targets" '{version:$v, targets:$t}' > release/manifest.json
-          echo "manifest:"; cat release/manifest.json
+          # Don't print the manifest with signatures into public logs unnecessarily;
+          # just confirm it parses and report which targets got signed.
+          jq '.targets | map({id, signed: (has("signature"))})' release/manifest.json
           ls -la release
 
       # Rolling prerelease: stable tag, assets overwritten each build. Kept out of

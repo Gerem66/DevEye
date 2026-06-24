@@ -15,6 +15,7 @@ mod metrics;
 mod protocol;
 mod report;
 mod runner;
+mod update;
 
 use std::fs;
 use std::process::{Command as PCommand, Stdio};
@@ -134,6 +135,9 @@ async fn link(code: String, server: String, name: Option<String>) -> Result<()> 
 }
 
 async fn run(once: bool, interval: u64, detach: bool) -> Result<()> {
+    // Sweep any binary a previous self-update left behind (Windows `.old`).
+    update::cleanup_after_update();
+
     let config = Config::load().context("loading config (run `link` first)")?;
 
     if detach {

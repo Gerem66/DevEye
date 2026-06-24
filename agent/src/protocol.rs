@@ -199,6 +199,10 @@ pub enum ClientMessage {
     Hello {
         #[serde(rename = "agentVersion")]
         agent_version: String,
+        /// Build target id (e.g. `linux-x86_64`); omitted when unknown. Lets the
+        /// server resolve which binary to push for a self-update.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        target: Option<String>,
     },
     #[serde(rename = "metrics.batch")]
     MetricsBatch {
@@ -229,6 +233,17 @@ pub enum ClientMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
+    /// Outcome of an `agent.update`: whether the new binary verified and swapped in.
+    #[serde(rename = "agent.updated")]
+    Updated {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        version: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
 }
 
 /// Messages the server sends back to the agent.
@@ -245,6 +260,16 @@ pub enum ServerMessage {
     /// Self-destruct: wipe local config + binary and exit (device being deleted).
     #[serde(rename = "agent.destroy")]
     Destroy {},
+    /// Self-update: download, verify (sha256 + ed25519 signature) and swap in a
+    /// newer binary for `target_id`, then restart.
+    #[serde(rename = "agent.update")]
+    Update {
+        #[serde(rename = "targetId")]
+        target_id: String,
+        version: String,
+        sha256: String,
+        signature: String,
+    },
     /// Per-device collection config (cadences + capture mode), pushed by the
     /// server on connect and whenever the user changes it in the UI.
     #[serde(rename = "agent.config")]

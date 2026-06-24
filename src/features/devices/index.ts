@@ -9,11 +9,13 @@ import {
     deviceRequestDelete,
     deviceRevoke,
     deviceSetConfig,
+    deviceUpdateAgent,
     type Device,
     type DeviceRow
 } from 'deveye-types';
 
-import { deviceAgentConfig, deviceRowToDevice } from '@/agent/mappers';
+import { computeAgentUpdate, deviceAgentConfig, deviceRowToDevice } from '@/agent/mappers';
+import { agentDistDir, readServedManifestCached } from '@/agent/sync';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
 async function isAdmin(ctx: FeatureContext): Promise<boolean> {
@@ -49,8 +51,9 @@ function online(ctx: FeatureContext, ids: string[]): Record<string, boolean> {
     return ctx.monitor?.isOnline(ids) ?? Object.fromEntries(ids.map((id) => [id, false]));
 }
 
-function toDevice(ctx: FeatureContext, row: DeviceRow): Device {
-    return deviceRowToDevice(row, online(ctx, [row.id])[row.id] ?? false);
+async function toDevice(ctx: FeatureContext, row: DeviceRow): Promise<Device> {
+    const manifest = await readServedManifestCached(agentDistDir());
+    return deviceRowToDevice(row, online(ctx, [row.id])[row.id] ?? false, computeAgentUpdate(row, manifest));
 }
 
 export const deviceListFeature: FeatureDefinition<
@@ -67,7 +70,10 @@ export const deviceListFeature: FeatureDefinition<
             ctx,
             rows.map((r) => r.id)
         );
-        return { devices: rows.map((r) => deviceRowToDevice(r, presence[r.id] ?? false)) };
+        const manifest = await readServedManifestCached(agentDistDir());
+        return {
+            devices: rows.map((r) => deviceRowToDevice(r, presence[r.id] ?? false, computeAgentUpdate(r, manifest)))
+        };
     }
 });
 
@@ -89,7 +95,7 @@ export const deviceConfirmFeature: FeatureDefinition<
             description: `Appareil approuvé : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id }
         });
-        return { device: toDevice(ctx, updated ?? { ...row, status: 'active' }) };
+        return { device: await toDevice(ctx, updated ?? { ...row, status: 'active' }) };
     }
 });
 
@@ -110,7 +116,7 @@ export const deviceRevokeFeature: FeatureDefinition<
             description: `Appareil révoqué : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id }
         });
-        return { device: toDevice(ctx, updated ?? { ...row, status: 'revoked' }) };
+        return { device: await toDevice(ctx, updated ?? { ...row, status: 'revoked' }) };
     }
 });
 
@@ -130,7 +136,7 @@ export const deviceRenameFeature: FeatureDefinition<
             description: `Appareil renommé : « ${row.name} » → « ${input.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id }
         });
-        return { device: toDevice(ctx, updated ?? { ...row, name: input.name }) };
+        return { device: await toDevice(ctx, updated ?? { ...row, name: input.name }) };
     }
 });
 
@@ -158,7 +164,7 @@ export const deviceSetConfigFeature: FeatureDefinition<
         ) {
             ctx.monitor?.pushConfig(row.id, deviceAgentConfig(updated));
         }
-        return { device: toDevice(ctx, updated) };
+        return { device: await toDevice(ctx, updated) };
     }
 });
 
@@ -181,7 +187,63 @@ export const deviceReactivateFeature: FeatureDefinition<
             description: `Appareil réactivé : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id }
         });
-        return { device: toDevice(ctx, updated) };
+        return { device: await toDevice(ctx, updated) };
+    }
+});
+
+export const deviceUpdateAgentFeature: FeatureDefinition<
+    typeof deviceUpdateAgent.command,
+    typeof deviceUpdateAgent.input,
+    typeof deviceUpdateAgent.output
+> = defineFeature({
+    ...deviceUpdateAgent,
+    handler: async (ctx, input) => {
+        await assertAdmin(ctx);
+        const row = await authorizeDevice(ctx, input.deviceId);
+        // Pre-flight: the agent must be reachable, must have told us its build
+        // target, and we must hold a NEWER, SIGNED binary for it. Each gate maps
+        // to a clear French error so the UI can explain why the button did nothing.
+        if (!(online(ctx, [row.id])[row.id] ?? false)) {
+            throw new FeatureError('conflict', 'Agent hors ligne');
+        }
+        if (!row.agent_target) {
+            throw new FeatureError('conflict', "L'agent ne supporte pas encore la mise à jour automatique");
+        }
+        const manifest = await readServedManifestCached(agentDistDir());
+        const target = manifest?.targets.find((t) => t.id === row.agent_target);
+        if (!manifest || !target) {
+            throw new FeatureError('conflict', 'Aucun binaire disponible pour cette plateforme');
+        }
+        if (!target.signature) {
+            throw new FeatureError('conflict', 'Binaire non signé : mise à jour refusée');
+        }
+        if (manifest.version === row.agent_version) {
+            throw new FeatureError('conflict', "L'agent est déjà à jour");
+        }
+
+        const pushed =
+            ctx.monitor?.requestUpdate(row.id, {
+                targetId: target.id,
+                version: manifest.version,
+                sha256: target.sha256,
+                signature: target.signature
+            }) ?? false;
+        if (!pushed) throw new FeatureError('conflict', 'Agent hors ligne');
+
+        ctx.audit({
+            action: 'device.updateAgent',
+            level: 'warning',
+            description: `Mise à jour de l'agent demandée : « ${row.name} » ${row.agent_version ?? '?'} → ${manifest.version}`,
+            metadata: {
+                deviceId: row.id,
+                ownerId: row.owner_id,
+                from: row.agent_version,
+                to: manifest.version,
+                target: target.id
+            }
+        });
+        const updated = (await ctx.db.devices.findById(row.id)) ?? row;
+        return { device: await toDevice(ctx, updated) };
     }
 });
 
@@ -209,7 +271,7 @@ export const deviceRequestDeleteFeature: FeatureDefinition<
             metadata: { deviceId: row.id, ownerId: row.owner_id, online }
         });
         const updated = (await ctx.db.devices.findById(row.id)) ?? row;
-        return { device: toDevice(ctx, updated) };
+        return { device: await toDevice(ctx, updated) };
     }
 });
 
@@ -229,7 +291,7 @@ export const deviceCancelDeleteFeature: FeatureDefinition<
             description: `Suppression annulée : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id }
         });
-        return { device: toDevice(ctx, updated) };
+        return { device: await toDevice(ctx, updated) };
     }
 });
 
@@ -256,7 +318,7 @@ export const deviceForceDeleteFeature: FeatureDefinition<
             description: `Suppression forcée (archivé sans auto-destruction de l'agent) : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id }
         });
-        return { device: toDevice(ctx, updated) };
+        return { device: await toDevice(ctx, updated) };
     }
 });
 
@@ -290,6 +352,7 @@ export const deviceFeatures: FeatureDefinition<string, any, any>[] = [
     deviceReactivateFeature,
     deviceRenameFeature,
     deviceSetConfigFeature,
+    deviceUpdateAgentFeature,
     deviceRequestDeleteFeature,
     deviceCancelDeleteFeature,
     deviceForceDeleteFeature,

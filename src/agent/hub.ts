@@ -3,10 +3,12 @@ import {
     AGENT_COLLECT,
     AGENT_CONFIG,
     AGENT_DESTROY,
+    AGENT_UPDATE,
     DEVICE_PRESENCE_EVENT,
     DEVICE_REPORT_EVENT,
     METRICS_PUSH_EVENT,
     type AgentConfigPayload,
+    type AgentUpdatePayload,
     type DevicePresence,
     type DeviceReport,
     type MetricSnapshot
@@ -34,7 +36,12 @@ export class MonitorHub {
         this.publishPresence(deviceId, true);
     }
 
-    agentOffline(deviceId: string): void {
+    agentOffline(deviceId: string, socket: WebSocket): void {
+        // Only forget the agent if the socket closing is the one we still hold. A
+        // fast reconnect — or a self-update relaunch — may have already replaced it,
+        // and a late close from the *old* socket must not evict the new one (which
+        // would leave a live agent wrongly marked offline until its next reconnect).
+        if (this.agents.get(deviceId) !== socket) return;
         this.agents.delete(deviceId);
         this.publishPresence(deviceId, false);
     }
@@ -64,6 +71,14 @@ export class MonitorHub {
         const socket = this.agents.get(deviceId);
         if (!socket) return false;
         socket.send(JSON.stringify({ command: AGENT_DESTROY, payload: {} }));
+        return true;
+    }
+
+    /** Order a connected agent to self-update to a newer signed binary. No-op if offline. */
+    requestUpdate(deviceId: string, payload: AgentUpdatePayload): boolean {
+        const socket = this.agents.get(deviceId);
+        if (!socket) return false;
+        socket.send(JSON.stringify({ command: AGENT_UPDATE, payload }));
         return true;
     }
 
@@ -183,6 +198,8 @@ export interface MonitorTransport {
     pushConfig(deviceId: string, config: AgentConfigPayload): boolean;
     /** Tell the device's agent to self-destruct now; false if offline. */
     requestDestroy(deviceId: string): boolean;
+    /** Order the device's agent to self-update; false if offline. */
+    requestUpdate(deviceId: string, payload: AgentUpdatePayload): boolean;
 }
 
 export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): MonitorTransport {
@@ -193,6 +210,7 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         sendInitial: (deviceId, snapshot, report) => hub.sendInitial(socket, deviceId, snapshot, report),
         requestCollect: (deviceId) => hub.requestCollect(deviceId),
         pushConfig: (deviceId, config) => hub.pushConfig(deviceId, config),
-        requestDestroy: (deviceId) => hub.requestDestroy(deviceId)
+        requestDestroy: (deviceId) => hub.requestDestroy(deviceId),
+        requestUpdate: (deviceId, payload) => hub.requestUpdate(deviceId, payload)
     };
 }

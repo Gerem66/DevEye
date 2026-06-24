@@ -13,12 +13,14 @@ import {
     linkCodeResponseSchema,
     linkCodesListResponseSchema,
     linkCodeUpdateSchema,
-    ok
+    ok,
+    type AgentTarget,
+    type DeviceRow
 } from 'deveye-types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { ACCESS_COOKIE } from '@/auth/cookies';
-import { signDeviceToken, verifyAccessToken } from '@/auth/jwt';
+import { signDeviceToken, verifyAccessToken, verifyDeviceToken } from '@/auth/jwt';
 import { sha256hex } from '@/Utils/hash';
 import { env } from '@/Utils/Env';
 import type { AuditLog } from '@/Services/AuditLog';
@@ -36,6 +38,30 @@ interface AgentRouteDeps {
 
 /** Directory the agent binaries are served from (shared with the reconciler). */
 const AGENT_DIST_DIR = agentDistDir();
+
+/**
+ * Stream a (validated) target's binary from disk as an octet-stream download.
+ * Shared by the admin download and the device-token self-update endpoints.
+ */
+async function serveBinary(reply: FastifyReply, target: AgentTarget): Promise<FastifyReply> {
+    const meta = AGENT_TARGETS.find((t) => t.id === target);
+    if (!meta) return reply.code(400).send(err('validation', 'Unknown agent target'));
+
+    const filePath = join(AGENT_DIST_DIR, meta.filename);
+    let size: number;
+    try {
+        const s = await stat(filePath);
+        if (!s.isFile()) throw new Error('not a file');
+        size = s.size;
+    } catch {
+        return reply.code(404).send(err('not_found', 'Binaire indisponible pour cette plateforme'));
+    }
+
+    reply.header('Content-Type', 'application/octet-stream');
+    reply.header('Content-Length', size);
+    reply.header('Content-Disposition', `attachment; filename="${meta.filename}"`);
+    return reply.send(createReadStream(filePath));
+}
 
 /**
  * HTTP endpoints for the device-linking handshake:
@@ -155,24 +181,55 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, audit }: Agen
 
         const parsed = agentTargetSchema.safeParse(req.params.target);
         if (!parsed.success) return reply.code(400).send(err('validation', 'Unknown agent target'));
+        return serveBinary(reply, parsed.data);
+    });
 
-        const meta = AGENT_TARGETS.find((t) => t.id === parsed.data);
-        if (!meta) return reply.code(400).send(err('validation', 'Unknown agent target'));
-
-        const filePath = join(AGENT_DIST_DIR, meta.filename);
-        let size: number;
-        try {
-            const s = await stat(filePath);
-            if (!s.isFile()) throw new Error('not a file');
-            size = s.size;
-        } catch {
-            return reply.code(404).send(err('not_found', 'Binaire indisponible pour cette plateforme'));
+    /**
+     * Authenticate the caller as an enrolled device via its device token (Bearer
+     * header or `?token=`), mirroring the `/agent` WS auth. Used by the self-update
+     * download — the agent isn't an admin, it presents its own token. Returns the
+     * device row, or `null` after already sending the 401/403.
+     */
+    const authDevice = async (req: FastifyRequest, reply: FastifyReply): Promise<DeviceRow | null> => {
+        const authHeader = req.headers['authorization'];
+        let token: string | null = null;
+        if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) token = authHeader.slice(7);
+        else {
+            const q = req.query as { token?: unknown } | undefined;
+            if (q && typeof q.token === 'string') token = q.token;
         }
+        if (!token) {
+            void reply.code(401).send(err('auth_required', 'No device token'));
+            return null;
+        }
+        const claims = await verifyDeviceToken(token);
+        const device = claims ? await db.devices.findById(claims.sub) : null;
+        if (!device || device.token_hash !== sha256hex(token)) {
+            void reply.code(401).send(err('auth_invalid', 'Invalid device token'));
+            return null;
+        }
+        if (device.status === 'revoked' || device.status === 'archived') {
+            void reply.code(403).send(err('forbidden', 'Device not allowed'));
+            return null;
+        }
+        return device;
+    };
 
-        reply.header('Content-Type', 'application/octet-stream');
-        reply.header('Content-Length', size);
-        reply.header('Content-Disposition', `attachment; filename="${meta.filename}"`);
-        return reply.send(createReadStream(filePath));
+    // Device-token download for the self-update flow: an authenticated agent pulls
+    // the binary for its OWN reported build target. Distinct from the admin
+    // `/download` above (cookie auth, any target). The `agent.update` order tells
+    // the agent which target + sha256 + signature to expect.
+    app.get<{ Params: { target: string } }>('/api/agent/self-update/:target', async (req, reply) => {
+        const device = await authDevice(req, reply);
+        if (!device) return;
+
+        const parsed = agentTargetSchema.safeParse(req.params.target);
+        if (!parsed.success) return reply.code(400).send(err('validation', 'Unknown agent target'));
+        // An agent may only fetch the binary matching the target it reported.
+        if (device.agent_target && device.agent_target !== parsed.data) {
+            return reply.code(403).send(err('forbidden', 'Target mismatch'));
+        }
+        return serveBinary(reply, parsed.data);
     });
 
     app.post('/api/agent/enroll', async (req, reply) => {

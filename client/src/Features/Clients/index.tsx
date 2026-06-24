@@ -118,6 +118,8 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
     const [customMinutes, setCustomMinutes] = useState<string>('30');
     // Whether a newly generated code auto-approves the device on enrollment.
     const [autoApprove, setAutoApprove] = useState(false);
+    // Device whose agent self-update is in flight (button shows a spinner/label).
+    const [updatingId, setUpdatingId] = useState<string | null>(null);
 
     const fetchCodes = async (): Promise<LinkCodeResponse[]> => {
         try {
@@ -271,6 +273,24 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
             await refresh();
         } catch {
             setActionError('Révocation impossible.');
+        }
+    };
+
+    const updateAgent = async (id: string) => {
+        setActionError(null);
+        setUpdatingId(id);
+        try {
+            await ws.send('device.updateAgent', { deviceId: id });
+            // The agent verifies, swaps its binary and restarts; it reconnects with
+            // its new version shortly. Refresh now and once more after a beat so the
+            // card reflects the new version without the user reopening the page.
+            await refresh();
+            setTimeout(() => void refresh(), 4000);
+        } catch (e) {
+            // Surface the server's reason (offline, already up to date, unsigned…).
+            setActionError(e instanceof Error ? e.message : "Mise à jour de l'agent impossible.");
+        } finally {
+            setUpdatingId(null);
         }
     };
 
@@ -471,6 +491,21 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                                                     title='Réactiver'
                                                 >
                                                     <span className='icon icon-check-circle' /> Réactiver
+                                                </button>
+                                            )}
+                                            {device.online && device.agentUpdateAvailable && (
+                                                <button
+                                                    className={`${styles.actionBtn} ${styles.actionPrimary}`}
+                                                    onClick={() => updateAgent(device.id)}
+                                                    disabled={updatingId === device.id}
+                                                    title={
+                                                        device.latestAgentVersion
+                                                            ? `Mettre à jour l’agent vers la v${device.latestAgentVersion}`
+                                                            : 'Mettre à jour l’agent'
+                                                    }
+                                                >
+                                                    <span className='icon icon-cloud' />{' '}
+                                                    {updatingId === device.id ? 'Mise à jour…' : 'Mettre à jour'}
                                                 </button>
                                             )}
                                             <button

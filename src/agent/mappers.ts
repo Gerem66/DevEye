@@ -1,6 +1,7 @@
 import {
     deviceReportSchema,
     type AgentConfigPayload,
+    type AgentManifest,
     type Device,
     type DeviceReport,
     type DeviceRow,
@@ -26,6 +27,28 @@ export function deviceAgentConfig(row: DeviceRow): AgentConfigPayload {
     };
 }
 
+/** Whether/where a device's agent can self-update, derived from the synced manifest. */
+export interface AgentUpdateInfo {
+    /** Version of the served binary set (manifest), or null when nothing is synced. */
+    latest: string | null;
+    /** A newer **signed** binary exists for the device's reported target. */
+    available: boolean;
+}
+
+/**
+ * Resolve a device's self-update status against the served manifest. `available`
+ * requires a known build target whose binary is both present *and signed* (no
+ * signature ⇒ never self-updatable) and a version that differs from what's running.
+ */
+export function computeAgentUpdate(row: DeviceRow, manifest: AgentManifest | null): AgentUpdateInfo {
+    if (!manifest) return { latest: null, available: false };
+    const latest = manifest.version;
+    if (!row.agent_target || !row.agent_version) return { latest, available: false };
+    const target = manifest.targets.find((t) => t.id === row.agent_target);
+    if (!target || !target.signature) return { latest, available: false };
+    return { latest, available: row.agent_version !== latest };
+}
+
 /** Safely decode the stored JSON report; returns null on absence or corruption. */
 export function parseDeviceReport(reportJson: string | null): DeviceReport | null {
     if (!reportJson) return null;
@@ -37,8 +60,16 @@ export function parseDeviceReport(reportJson: string | null): DeviceReport | nul
     }
 }
 
-/** Map a persisted device row to the client-facing domain shape. */
-export function deviceRowToDevice(row: DeviceRow, online: boolean): Device {
+/**
+ * Map a persisted device row to the client-facing domain shape. `update` carries
+ * the self-update status (from {@link computeAgentUpdate}); it defaults to "no
+ * update" for call sites that don't have the manifest at hand (e.g. enrollment).
+ */
+export function deviceRowToDevice(
+    row: DeviceRow,
+    online: boolean,
+    update: AgentUpdateInfo = { latest: null, available: false }
+): Device {
     return {
         id: row.id,
         ownerId: row.owner_id,
@@ -50,6 +81,8 @@ export function deviceRowToDevice(row: DeviceRow, online: boolean): Device {
         lastSeen: row.last_seen === null ? null : Number(row.last_seen),
         created: Number(row.created),
         agentVersion: row.agent_version ?? null,
+        latestAgentVersion: update.latest,
+        agentUpdateAvailable: update.available,
         report: parseDeviceReport(row.report_json),
         metricIntervalSeconds: row.metric_interval_seconds === null ? null : Number(row.metric_interval_seconds),
         snapshotIntervalSeconds: row.snapshot_interval_seconds === null ? null : Number(row.snapshot_interval_seconds),

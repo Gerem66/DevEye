@@ -77,6 +77,7 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
 
     loop {
         match stream_session(
+            &config,
             &ws_url,
             &device_id,
             opts.interval,
@@ -151,6 +152,7 @@ async fn run_once(ws_url: &str, device_id: &str) -> Result<()> {
 
 /// One connected session.
 async fn stream_session(
+    config: &Config,
     ws_url: &str,
     device_id: &str,
     initial_metric_interval: Duration,
@@ -280,6 +282,20 @@ async fn stream_session(
                                 // Only reached if self-destruct failed → end session.
                                 return Ok(SessionOutcome::Established);
                             }
+                            // Self-update: verify + swap the binary, then restart.
+                            Ok(ServerMessage::Update {
+                                target_id,
+                                version,
+                                sha256,
+                                signature,
+                            }) => {
+                                handle_update(
+                                    &mut sink, config, device_id, &target_id, &version, &sha256, &signature,
+                                )
+                                .await;
+                                // Only reached if the update was refused/failed → keep
+                                // running on the current binary.
+                            }
                             Ok(ServerMessage::Ack { received }) => debug!(received, "ack"),
                             Ok(ServerMessage::Error { code, message }) => {
                                 warn!(%code, %message, "server error")
@@ -313,10 +329,14 @@ where
     S: SinkExt<Message> + Unpin,
     S::Error: std::error::Error + Send + Sync + 'static,
 {
+    // Build target (e.g. `linux-x86_64`), injected by build.rs; empty on an
+    // unrecognised triple, in which case we omit it (self-update then unavailable).
+    let target = env!("DEVEYE_TARGET");
     let hello = serde_json::to_string(&ClientMessage::Hello {
         // Injected from the root package.json at build time (see build.rs), so the
         // agent reports the same version as the server/client.
         agent_version: env!("DEVEYE_VERSION").to_string(),
+        target: (!target.is_empty()).then(|| target.to_string()),
     })?;
     sink.send(Message::Text(hello))
         .await
@@ -422,6 +442,65 @@ where
     sink.send(Message::Text(msg))
         .await
         .context("sending destroyed")?;
+    Ok(())
+}
+
+/// Apply a server-requested self-update. On success the new binary is in place;
+/// we report it, close the socket cleanly and **restart** (never returns). On
+/// failure the current binary is untouched: we report why and return, so the
+/// session continues running the old version.
+#[allow(clippy::too_many_arguments)]
+async fn handle_update<S>(
+    sink: &mut S,
+    config: &Config,
+    device_id: &str,
+    target_id: &str,
+    version: &str,
+    sha256: &str,
+    signature: &str,
+) where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    match crate::update::apply(config, target_id, version, sha256, signature).await {
+        Ok(()) => {
+            info!(%version, "update installed; restarting");
+            let _ = send_updated(sink, device_id, true, Some(version.to_string()), None).await;
+            let _ = sink.send(Message::Close(None)).await;
+            let _ = sink.flush().await;
+            // Let the confirmation + close reach the server (so it audits success
+            // and registers our disconnect) before the new process connects.
+            tokio::time::sleep(Duration::from_millis(400)).await;
+            crate::update::restart_and_exit();
+        }
+        Err(e) => {
+            warn!(error = %e, "self-update refused/failed; keeping current binary");
+            let _ = send_updated(sink, device_id, false, None, Some(e.to_string())).await;
+            let _ = sink.flush().await;
+        }
+    }
+}
+
+async fn send_updated<S>(
+    sink: &mut S,
+    device_id: &str,
+    ok: bool,
+    version: Option<String>,
+    error: Option<String>,
+) -> Result<()>
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let msg = serde_json::to_string(&ClientMessage::Updated {
+        device_id: device_id.to_string(),
+        ok,
+        version,
+        error,
+    })?;
+    sink.send(Message::Text(msg))
+        .await
+        .context("sending updated")?;
     Ok(())
 }
 

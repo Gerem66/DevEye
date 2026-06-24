@@ -9,6 +9,7 @@ import {
     AGENT_METRICS_BATCH,
     AGENT_PROCESSES,
     AGENT_REPORT,
+    AGENT_UPDATED,
     agentClientMessageSchema,
     type AgentServerMessage
 } from 'deveye-types';
@@ -122,13 +123,36 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: 
 
             const msg = parsed.data;
             if (msg.command === AGENT_HELLO) {
-                // Remember which agent build is running so the UI can flag stale agents.
+                // Remember which agent build + target is running so the UI can flag
+                // stale agents and the server can resolve the right self-update binary.
                 try {
                     await db.devices.setAgentVersion(deviceId, msg.payload.agentVersion);
+                    if (msg.payload.target) await db.devices.setAgentTarget(deviceId, msg.payload.target);
                 } catch (e) {
-                    reqLogger.warn({ err: (e as Error).message }, 'Failed to persist agent version');
+                    reqLogger.warn({ err: (e as Error).message }, 'Failed to persist agent version/target');
                 }
                 send(socket, { command: AGENT_ACK, payload: { received: 0 } });
+                return;
+            }
+
+            if (msg.command === AGENT_UPDATED) {
+                // Outcome of an `agent.update`. On success the agent restarts and
+                // reconnects with its new version (via `agent.hello`); we just audit
+                // the result here. On failure the agent kept its old binary.
+                const { ok, version, error } = msg.payload;
+                audit.record({
+                    source: 'agent',
+                    category: 'device',
+                    action: ok ? 'device.agentUpdated' : 'device.agentUpdateFailed',
+                    level: ok ? 'info' : 'error',
+                    uid: claims.oid,
+                    ip: req.ip,
+                    description: ok
+                        ? `Agent mis à jour : « ${device.name} »${version ? ` → ${version}` : ''}`
+                        : `Échec de la mise à jour de l'agent : « ${device.name} » — ${error ?? 'raison inconnue'}`,
+                    metadata: { deviceId, version: version ?? null, error: error ?? null }
+                });
+                send(socket, { command: AGENT_ACK, payload: { received: 1 } });
                 return;
             }
 
@@ -232,7 +256,7 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: 
         for (const raw of earlyFrames.splice(0)) onMessage(raw);
 
         socket.on('close', () => {
-            hub.agentOffline(deviceId);
+            hub.agentOffline(deviceId, socket);
             void db.presence.record(deviceId, Date.now(), false).catch(() => {});
             reqLogger.info('Agent disconnected');
         });
