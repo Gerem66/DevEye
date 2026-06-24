@@ -3,17 +3,26 @@ import {
     AGENT_COLLECT,
     AGENT_CONFIG,
     AGENT_DESTROY,
+    AGENT_PKG_LIST,
+    AGENT_PKG_UPGRADE,
     AGENT_SERVICE,
     AGENT_UPDATE,
     DEVICE_PRESENCE_EVENT,
     DEVICE_REPORT_EVENT,
     METRICS_PUSH_EVENT,
+    PACKAGE_DONE_EVENT,
+    PACKAGE_LIST_EVENT,
+    PACKAGE_PROGRESS_EVENT,
     type AgentConfigPayload,
+    type AgentPkgUpgradePayload,
     type AgentServicePayload,
     type AgentUpdatePayload,
     type DevicePresence,
     type DeviceReport,
-    type MetricSnapshot
+    type MetricSnapshot,
+    type PackageDonePush,
+    type PackageListPush,
+    type PackageProgressPush
 } from 'deveye-types';
 
 /**
@@ -90,6 +99,44 @@ export class MonitorHub {
         if (!socket) return false;
         socket.send(JSON.stringify({ command: AGENT_SERVICE, payload }));
         return true;
+    }
+
+    /** Ask a connected agent to enumerate its package managers. No-op if offline. */
+    requestPkgList(deviceId: string): boolean {
+        const socket = this.agents.get(deviceId);
+        if (!socket) return false;
+        socket.send(JSON.stringify({ command: AGENT_PKG_LIST, payload: {} }));
+        return true;
+    }
+
+    /** Ask a connected agent to apply a manager's updates. No-op if offline. */
+    requestPkgUpgrade(deviceId: string, payload: AgentPkgUpgradePayload): boolean {
+        const socket = this.agents.get(deviceId);
+        if (!socket) return false;
+        socket.send(JSON.stringify({ command: AGENT_PKG_UPGRADE, payload }));
+        return true;
+    }
+
+    /** Fan out a package-manager inventory to the device's subscribers. */
+    publishPackageList(payload: PackageListPush): void {
+        this.publishToSubscribers(payload.deviceId, PACKAGE_LIST_EVENT, payload);
+    }
+
+    /** Fan out one live upgrade-progress line to the device's subscribers. */
+    publishPackageProgress(payload: PackageProgressPush): void {
+        this.publishToSubscribers(payload.deviceId, PACKAGE_PROGRESS_EVENT, payload);
+    }
+
+    /** Fan out an upgrade completion to the device's subscribers. */
+    publishPackageDone(payload: PackageDonePush): void {
+        this.publishToSubscribers(payload.deviceId, PACKAGE_DONE_EVENT, payload);
+    }
+
+    private publishToSubscribers(deviceId: string, command: string, data: unknown): void {
+        const set = this.subscribers.get(deviceId);
+        if (!set || set.size === 0) return;
+        const frame = JSON.stringify({ command, payload: { ok: true, data } });
+        for (const socket of set) socket.send(frame);
     }
 
     onlineDevices(deviceIds: string[]): Record<string, boolean> {
@@ -212,6 +259,10 @@ export interface MonitorTransport {
     requestUpdate(deviceId: string, payload: AgentUpdatePayload): boolean;
     /** Ask the device's agent to change its persistence/privilege install; false if offline. */
     requestService(deviceId: string, payload: AgentServicePayload): boolean;
+    /** Ask the device's agent to enumerate package managers; false if offline. */
+    requestPkgList(deviceId: string): boolean;
+    /** Ask the device's agent to apply a manager's updates; false if offline. */
+    requestPkgUpgrade(deviceId: string, payload: AgentPkgUpgradePayload): boolean;
 }
 
 export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): MonitorTransport {
@@ -224,6 +275,8 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         pushConfig: (deviceId, config) => hub.pushConfig(deviceId, config),
         requestDestroy: (deviceId) => hub.requestDestroy(deviceId),
         requestUpdate: (deviceId, payload) => hub.requestUpdate(deviceId, payload),
-        requestService: (deviceId, payload) => hub.requestService(deviceId, payload)
+        requestService: (deviceId, payload) => hub.requestService(deviceId, payload),
+        requestPkgList: (deviceId) => hub.requestPkgList(deviceId),
+        requestPkgUpgrade: (deviceId, payload) => hub.requestPkgUpgrade(deviceId, payload)
     };
 }

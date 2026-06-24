@@ -142,6 +142,19 @@ pub struct AgentInfo {
     pub managed: bool,
 }
 
+/// One detected package manager + its pending state (mirrors deveye-types
+/// `packageManagerSchema`).
+#[derive(Debug, Clone, Serialize)]
+pub struct PackageManagerInfo {
+    pub id: &'static str,
+    #[serde(rename = "pendingCount")]
+    pub pending_count: Option<u32>,
+    #[serde(rename = "needsRoot")]
+    pub needs_root: bool,
+    #[serde(rename = "rebootRequired")]
+    pub reboot_required: bool,
+}
+
 /// One listening socket. `address` is the bind address (e.g. `0.0.0.0`, `::`,
 /// `127.0.0.1`) so the UI can tell world-exposed ports from loopback-only ones.
 #[derive(Debug, Clone, Serialize)]
@@ -261,6 +274,37 @@ pub enum ClientMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
+    /// Reply to `pkg.list`: the package managers present + their pending counts.
+    #[serde(rename = "pkg.listResult")]
+    PkgListResult {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        managers: Vec<PackageManagerInfo>,
+    },
+    /// One live output line of an in-progress `pkg.upgrade`.
+    #[serde(rename = "pkg.progress")]
+    PkgProgress {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        manager: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        percent: Option<f64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        phase: Option<String>,
+        line: String,
+    },
+    /// Final outcome of a `pkg.upgrade`.
+    #[serde(rename = "pkg.done")]
+    PkgDone {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        manager: String,
+        ok: bool,
+        #[serde(rename = "rebootRequired", skip_serializing_if = "Option::is_none")]
+        reboot_required: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
 }
 
 /// Messages the server sends back to the agent.
@@ -291,6 +335,12 @@ pub enum ServerMessage {
     /// `uninstall-user` | `elevate` | `drop`.
     #[serde(rename = "agent.service")]
     Service { action: String },
+    /// Enumerate package managers + pending updates (replies `pkg.listResult`).
+    #[serde(rename = "pkg.list")]
+    PkgList {},
+    /// Apply all updates of one manager, streaming `pkg.progress` then `pkg.done`.
+    #[serde(rename = "pkg.upgrade")]
+    PkgUpgrade { manager: String },
     /// Per-device collection config (cadences + capture mode), pushed by the
     /// server on connect and whenever the user changes it in the UI.
     #[serde(rename = "agent.config")]

@@ -11,6 +11,7 @@ import TextInput from '@/Components/TextInput';
 import { useDevices } from '@/stores/devices';
 import { LinkInfo } from './LinkInfo';
 import { DownloadAgent } from './DownloadAgent';
+import { PackagesPanel } from './PackagesPanel';
 import { agentVersionInfo, APP_VERSION } from '../agentVersion';
 import {
     LINK_CODE_TTL_MAX_SECONDS,
@@ -122,6 +123,8 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
     const [updatingId, setUpdatingId] = useState<string | null>(null);
     // Device whose persistence/privilege change is in flight.
     const [serviceBusyId, setServiceBusyId] = useState<string | null>(null);
+    // Device whose package-update panel is open.
+    const [packagesTarget, setPackagesTarget] = useState<{ id: string; name: string } | null>(null);
 
     const fetchCodes = async (): Promise<LinkCodeResponse[]> => {
         try {
@@ -603,6 +606,17 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                                                     <span className='icon icon-check-circle' /> Réactiver
                                                 </button>
                                             )}
+                                            {device.online && (
+                                                <button
+                                                    className={styles.actionBtn}
+                                                    onClick={() =>
+                                                        setPackagesTarget({ id: device.id, name: device.name })
+                                                    }
+                                                    title='Mises à jour système'
+                                                >
+                                                    <span className='icon icon-refresh' /> Mises à jour
+                                                </button>
+                                            )}
                                             {device.online && device.agentUpdateAvailable && (
                                                 <button
                                                     className={`${styles.actionBtn} ${styles.actionPrimary}`}
@@ -848,6 +862,20 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                     L’agent ne sera pas auto-détruit. À utiliser s’il n’existe plus, ou si peu importe qu’il se nettoie.
                     Ses données restent consultables dans Monitoring.
                 </p>
+            </Dialog>
+
+            <Dialog
+                open={packagesTarget !== null}
+                onClose={() => setPackagesTarget(null)}
+                title={packagesTarget ? `Mises à jour — « ${packagesTarget.name} »` : 'Mises à jour'}
+                description='Gestionnaires détectés sur l’appareil et application des mises à jour en direct.'
+                footer={
+                    <Button variant='secondary' onClick={() => setPackagesTarget(null)}>
+                        Fermer
+                    </Button>
+                }
+            >
+                {packagesTarget && <PackagesPanel deviceId={packagesTarget.id} />}
             </Dialog>
 
             <DownloadAgent open={showDownloadModal} onClose={() => setShowDownloadModal(false)} />

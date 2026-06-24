@@ -7,6 +7,9 @@ import {
     AGENT_ERROR,
     AGENT_HELLO,
     AGENT_METRICS_BATCH,
+    AGENT_PKG_DONE,
+    AGENT_PKG_LIST_RESULT,
+    AGENT_PKG_PROGRESS,
     AGENT_PROCESSES,
     AGENT_REPORT,
     AGENT_SERVICE_RESULT,
@@ -215,6 +218,36 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: 
                     ip: req.ip,
                     description,
                     metadata: { deviceId, serviceAction: action, ok, needsManualCommand: needsManualCommand ?? false }
+                });
+                send(socket, { command: AGENT_ACK, payload: { received: 1 } });
+                return;
+            }
+
+            if (msg.command === AGENT_PKG_LIST_RESULT) {
+                hub.publishPackageList(msg.payload);
+                send(socket, { command: AGENT_ACK, payload: { received: msg.payload.managers.length } });
+                return;
+            }
+
+            if (msg.command === AGENT_PKG_PROGRESS) {
+                // Fire-and-forget stream: fan out, no ack (avoids ack flooding).
+                hub.publishPackageProgress(msg.payload);
+                return;
+            }
+
+            if (msg.command === AGENT_PKG_DONE) {
+                hub.publishPackageDone(msg.payload);
+                audit.record({
+                    source: 'agent',
+                    category: 'device',
+                    action: msg.payload.ok ? 'device.packagesUpgraded' : 'device.packagesUpgradeFailed',
+                    level: msg.payload.ok ? 'info' : 'warning',
+                    uid: claims.oid,
+                    ip: req.ip,
+                    description: msg.payload.ok
+                        ? `Mises à jour appliquées (${msg.payload.manager}) : « ${device.name} »${msg.payload.rebootRequired ? ' — redémarrage requis' : ''}`
+                        : `Échec des mises à jour (${msg.payload.manager}) : « ${device.name} »${msg.payload.error ? ` — ${msg.payload.error}` : ''}`,
+                    metadata: { deviceId, manager: msg.payload.manager, ok: msg.payload.ok }
                 });
                 send(socket, { command: AGENT_ACK, payload: { received: 1 } });
                 return;

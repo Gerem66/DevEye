@@ -228,8 +228,16 @@ async fn stream_session(
     let mut snapshot_ticker = new_ticker(snapshot_interval);
     let mut report_ticker = new_ticker(REPORT_INTERVAL);
 
+    // Package list/upgrade tasks run off the loop (an upgrade can take minutes) and
+    // stream their results back through this channel, so the loop stays responsive
+    // (pings, metrics) and forwards each event to the server as it arrives.
+    let (pkg_tx, mut pkg_rx) = tokio::sync::mpsc::channel::<crate::packages::PkgEvent>(256);
+
     loop {
         tokio::select! {
+            Some(ev) = pkg_rx.recv() => {
+                send_pkg_event(&mut sink, device_id, ev).await;
+            }
             _ = metric_ticker.tick() => {
                 push_bounded(queue, collector.collect_fine());
                 flush_queue(&mut sink, device_id, queue).await?;
@@ -299,6 +307,20 @@ async fn stream_session(
                             // Persistence/privilege change (install autostart, elevate…).
                             Ok(ServerMessage::Service { action }) => {
                                 handle_service(&mut sink, device_id, &action).await;
+                            }
+                            // Enumerate package managers (off-loop; replies via pkg_rx).
+                            Ok(ServerMessage::PkgList {}) => {
+                                let tx = pkg_tx.clone();
+                                tokio::spawn(async move {
+                                    let managers = tokio::task::spawn_blocking(crate::packages::detect)
+                                        .await
+                                        .unwrap_or_default();
+                                    let _ = tx.send(crate::packages::PkgEvent::List(managers)).await;
+                                });
+                            }
+                            // Apply a manager's updates (off-loop; streams via pkg_rx).
+                            Ok(ServerMessage::PkgUpgrade { manager }) => {
+                                tokio::spawn(crate::packages::run_upgrade(manager, pkg_tx.clone()));
                             }
                             Ok(ServerMessage::Ack { received }) => debug!(received, "ack"),
                             Ok(ServerMessage::Error { code, message }) => {
@@ -575,6 +597,47 @@ where
         .await
         .context("sending service result")?;
     Ok(())
+}
+
+/// Forward one package task event to the server, stamping it with the device id.
+async fn send_pkg_event<S>(sink: &mut S, device_id: &str, ev: crate::packages::PkgEvent)
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    use crate::packages::PkgEvent;
+    let msg = match ev {
+        PkgEvent::List(managers) => ClientMessage::PkgListResult {
+            device_id: device_id.to_string(),
+            managers,
+        },
+        PkgEvent::Progress {
+            manager,
+            percent,
+            line,
+        } => ClientMessage::PkgProgress {
+            device_id: device_id.to_string(),
+            manager,
+            percent,
+            phase: None,
+            line,
+        },
+        PkgEvent::Done {
+            manager,
+            ok,
+            reboot_required,
+            error,
+        } => ClientMessage::PkgDone {
+            device_id: device_id.to_string(),
+            manager,
+            ok,
+            reboot_required: Some(reboot_required),
+            error,
+        },
+    };
+    if let Ok(text) = serde_json::to_string(&msg) {
+        let _ = sink.send(Message::Text(text)).await;
+    }
 }
 
 fn push_bounded(queue: &mut VecDeque<MetricSnapshot>, snapshot: MetricSnapshot) {

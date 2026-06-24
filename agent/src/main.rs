@@ -13,6 +13,7 @@ mod elevate;
 mod enroll;
 mod identity;
 mod metrics;
+mod packages;
 mod protocol;
 mod report;
 mod runner;
@@ -90,6 +91,8 @@ enum Command {
         #[command(subcommand)]
         action: ServiceCmd,
     },
+    /// List detected package managers + their pending updates (diagnostic).
+    Packages,
     /// Forget the local enrollment (deletes the config + token).
     Unlink,
 }
@@ -135,6 +138,21 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Command::Service { action } => service_cmd(action),
+        Command::Packages => {
+            for m in packages::detect() {
+                let n = m
+                    .pending_count
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "?".into());
+                println!(
+                    "{:<16} {} MAJ{}",
+                    m.id,
+                    n,
+                    if m.needs_root { " (root)" } else { "" }
+                );
+            }
+            Ok(())
+        }
         Command::Unlink => unlink(),
     }
 }

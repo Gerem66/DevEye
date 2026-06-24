@@ -6,6 +6,7 @@ import {
     deviceElevate,
     deviceForceDelete,
     deviceList,
+    deviceListPackages,
     deviceReactivate,
     deviceRename,
     deviceRequestDelete,
@@ -13,6 +14,7 @@ import {
     deviceSetAutostart,
     deviceSetConfig,
     deviceUpdateAgent,
+    deviceUpgradePackages,
     type Device,
     type DeviceRow
 } from 'deveye-types';
@@ -338,6 +340,42 @@ export const deviceDropPrivilegesFeature: FeatureDefinition<
     }
 });
 
+export const deviceListPackagesFeature: FeatureDefinition<
+    typeof deviceListPackages.command,
+    typeof deviceListPackages.input,
+    typeof deviceListPackages.output
+> = defineFeature({
+    ...deviceListPackages,
+    handler: async (ctx, input) => {
+        const row = await authorizeOnlineDevice(ctx, input.deviceId);
+        const ok = ctx.monitor?.requestPkgList(row.id) ?? false;
+        if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
+        // Result streams back asynchronously as a `package.list` push event.
+        return { ok: true };
+    }
+});
+
+export const deviceUpgradePackagesFeature: FeatureDefinition<
+    typeof deviceUpgradePackages.command,
+    typeof deviceUpgradePackages.input,
+    typeof deviceUpgradePackages.output
+> = defineFeature({
+    ...deviceUpgradePackages,
+    handler: async (ctx, input) => {
+        const row = await authorizeOnlineDevice(ctx, input.deviceId);
+        const ok = ctx.monitor?.requestPkgUpgrade(row.id, { manager: input.manager }) ?? false;
+        if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
+        ctx.audit({
+            action: 'device.upgradePackages',
+            level: 'warning',
+            description: `Mise à jour « ${input.manager} » lancée : « ${row.name} »`,
+            metadata: { deviceId: row.id, ownerId: row.owner_id, manager: input.manager }
+        });
+        // Progress streams back as `package.progress` then `package.done` events.
+        return { ok: true };
+    }
+});
+
 export const deviceRequestDeleteFeature: FeatureDefinition<
     typeof deviceRequestDelete.command,
     typeof deviceRequestDelete.input,
@@ -447,6 +485,8 @@ export const deviceFeatures: FeatureDefinition<string, any, any>[] = [
     deviceSetAutostartFeature,
     deviceElevateFeature,
     deviceDropPrivilegesFeature,
+    deviceListPackagesFeature,
+    deviceUpgradePackagesFeature,
     deviceRequestDeleteFeature,
     deviceCancelDeleteFeature,
     deviceForceDeleteFeature,
