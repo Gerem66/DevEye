@@ -337,6 +337,9 @@ export default function HomePage() {
                         widgetId={v.widgetId}
                         title={v.title}
                         icon={v.icon}
+                        // Hidden while its popup is open so frequent re-renders can't
+                        // make the source card flash behind the morphed popup.
+                        style={expandedWidget === v.widgetId ? { opacity: 0 } : undefined}
                         onExpand={(e) => handleExpand(v.widgetId, isForceReload(e))}
                     >
                         {v.body}
@@ -355,6 +358,10 @@ export default function HomePage() {
                         title={v.title}
                         icon={v.icon}
                         compact
+                        // Hidden while its popup is open (the device tile re-renders
+                        // on usage/device polls, which would otherwise flash it back
+                        // behind the morphed popup).
+                        style={expandedWidget === v.widgetId ? { opacity: 0 } : undefined}
                         onExpand={(e) => handleExpand(v.widgetId, isForceReload(e))}
                     >
                         {v.body}
