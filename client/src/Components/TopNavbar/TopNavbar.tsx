@@ -170,7 +170,9 @@ export default function TopNavbar({
 
             {/* Right section: deployment readiness (only while not ready) + live status + user profile */}
             <div className={styles.right} ref={menuRef}>
-                <DeploymentStatus />
+                {/* Hidden in the dev server — the agents aren't built there, so the
+                    deployment status would load forever. */}
+                {!import.meta.env.DEV && <DeploymentStatus />}
                 <TopbarStatus />
 
                 {user && (

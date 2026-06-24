@@ -61,6 +61,10 @@ async function poll(): Promise<void> {
 function startOnce(): void {
     if (started) return;
     started = true;
+    // In the Vite dev server (`npm run dev`) the agents aren't built — CI/releases
+    // build them — so the boot status never settles. Skip the polling entirely;
+    // `current` stays null and the topbar deployment zone never shows.
+    if (import.meta.env.DEV) return;
     void poll();
 }
 
