@@ -10,7 +10,9 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    min-height: 158px;
+    /* border-box (global): 158px of content + the 24px×2 padding ≈ 206px tall,
+       the card's pre-border-box height — preserved so the grid rhythm is unchanged. */
+    min-height: 206px;
     position: relative;
     transition: border-color var(--transition-fast);
     /* The card can render as an anchor (shortcut tiles) — keep it looking like a card. */
@@ -19,11 +21,8 @@
 }
 
 /* Shorter cards (devices) — and the even shorter "thin & long" shortcut cards.
-   These use border-box (unlike the rest of the app) so `min-height` is the real
-   card height: with content-box the large padding would otherwise stack on top
-   of min-height and leave a big empty area. Tighter padding too. */
+   `min-height` is the real card height (border-box, tighter padding). */
 .widget.compact {
-    box-sizing: border-box;
     min-height: 88px;
     padding: var(--space-md);
     align-self: start;
@@ -33,7 +32,6 @@
    Tall enough that a rich shortcut (GitHub-style: avatar + line + stats) fits, so
    every shortcut card — simple or not — has the same height. */
 .widget.slim {
-    box-sizing: border-box;
     min-height: 104px;
     padding: var(--space-md);
     align-self: start;

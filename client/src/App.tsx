@@ -1,3 +1,5 @@
+import { MotionConfig } from 'framer-motion';
+
 import HomePage from './Pages/Home/index.js';
 import LoginPage from './Pages/Login/index.js';
 import { SecrecyGate } from './Components/SecrecyGate';
@@ -22,9 +24,14 @@ function AppRoot() {
 
 function App() {
     return (
-        <AuthProvider>
-            <AppRoot />
-        </AuthProvider>
+        // `reducedMotion="user"` honours the OS "reduce motion" setting: framer
+        // skips the heavy transform/layout morphs (keeping cheap opacity fades),
+        // which is both an accessibility win and lighter on low-end GPUs.
+        <MotionConfig reducedMotion='user'>
+            <AuthProvider>
+                <AppRoot />
+            </AuthProvider>
+        </MotionConfig>
     );
 }
 

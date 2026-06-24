@@ -18,9 +18,6 @@
 
 .dialog {
     position: relative;
-    /* Without a global border-box reset, the padding would add to max-height and
-       push a tall dialog past the viewport edges; include it in the box. */
-    box-sizing: border-box;
     width: 100%;
     max-height: calc(100vh - 2 * var(--space-lg));
     overflow-y: auto;

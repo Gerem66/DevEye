@@ -17,7 +17,6 @@
     background-clip: padding-box;
     border: 1px solid var(--input-border);
     border-radius: var(--radius-sm);
-    box-sizing: border-box;
     outline: none;
     transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }

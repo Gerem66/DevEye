@@ -51,7 +51,7 @@ const Widget = forwardRef<HTMLDivElement, WidgetProps>(function Widget(
             layoutId={interactive ? widgetId : undefined}
             className={`${styles.widget} ${compact ? styles.compact : ''} ${slim ? styles.slim : ''} ${interactive ? '' : styles.static} ${className ?? ''}`}
             onClick={interactive && !href ? (e: MouseEvent<HTMLDivElement>) => onExpand?.(e) : undefined}
-            whileHover={interactive ? { y: -4, willChange: 'transform' } : undefined}
+            whileHover={interactive ? { y: -4 } : undefined}
             whileTap={interactive ? { scale: 0.985 } : undefined}
             transition={{ type: 'spring', stiffness: 300, damping: 26, mass: 0.8 }}
             {...linkProps}

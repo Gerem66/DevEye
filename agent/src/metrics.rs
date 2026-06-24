@@ -2,17 +2,34 @@
 //! few best-effort host signals (load, uptime, temperature, connections).
 
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use sysinfo::{Components, Disks, Networks, ProcessesToUpdate, System};
 
 use crate::protocol::{MetricSnapshot, ReportDisk};
+
+/// Slow-moving signals (disk capacity, battery, logged-in users) refreshed at
+/// most every [`SLOW_TTL`]. They barely change between 10-s metric ticks yet are
+/// comparatively expensive to read — a full mount scan plus `pmset`/`who`
+/// subprocess spawns — so sampling them every cycle wasted CPU and wakeups on the
+/// monitored device (and, on laptops, battery). Cached here and reused in between.
+#[derive(Clone, Copy)]
+struct SlowSignals {
+    disk_used: u64,
+    disk_total: u64,
+    users: u32,
+    battery: (Option<f64>, Option<bool>),
+}
+
+const SLOW_TTL: Duration = Duration::from_secs(60);
 
 /// Holds `sysinfo` state between cycles so CPU/network deltas are meaningful.
 pub struct Collector {
     sys: System,
     networks: Networks,
     components: Components,
+    /// Cached slow signals and when they were last collected (see [`SlowSignals`]).
+    slow: Option<(SlowSignals, Instant)>,
 }
 
 impl Collector {
@@ -26,7 +43,29 @@ impl Collector {
             sys,
             networks,
             components,
+            slow: None,
         }
+    }
+
+    /// Disk/battery/user signals, recomputed only when the cache is empty or
+    /// older than [`SLOW_TTL`]; otherwise the last values are reused. Returns an
+    /// owned copy so the `&mut self` borrow is released before the caller reads
+    /// the (immutably borrowed) `sysinfo` state.
+    fn slow_signals(&mut self) -> SlowSignals {
+        if let Some((s, at)) = self.slow {
+            if at.elapsed() < SLOW_TTL {
+                return s;
+            }
+        }
+        let disks = read_disks();
+        let s = SlowSignals {
+            disk_used: disks.iter().map(|d| d.used_bytes).sum(),
+            disk_total: disks.iter().map(|d| d.total_bytes).sum::<u64>().max(1),
+            users: logged_in_users(),
+            battery: read_battery(),
+        };
+        self.slow = Some((s, Instant::now()));
+        s
     }
 
     /// Light metric sample for the graphs (every ~10 s). In-process reads plus a
@@ -38,15 +77,15 @@ impl Collector {
         self.networks.refresh();
         self.components.refresh();
 
+        // Disk/battery/user signals: cached for SLOW_TTL (cheap on most ticks).
+        let slow = self.slow_signals();
+
         let cpu_percent = ((self.sys.global_cpu_usage() as f64) * 10.0).round() / 10.0;
         let cpu_percent = cpu_percent.clamp(0.0, 100.0);
 
         let mem_used = self.sys.used_memory();
         let mem_total = self.sys.total_memory().max(1);
 
-        let disks = read_disks();
-        let disk_used: u64 = disks.iter().map(|d| d.used_bytes).sum();
-        let disk_total: u64 = disks.iter().map(|d| d.total_bytes).sum();
         let (net_rx, net_tx) = read_network(&self.networks);
 
         let load_avg_1 = {
@@ -57,18 +96,17 @@ impl Collector {
                 None
             }
         };
-        let battery = read_battery();
 
         MetricSnapshot {
             timestamp: now_millis(),
             cpu_percent,
             mem_used_bytes: mem_used,
             mem_total_bytes: mem_total,
-            disk_used_bytes: disk_used,
-            disk_total_bytes: disk_total.max(1),
+            disk_used_bytes: slow.disk_used,
+            disk_total_bytes: slow.disk_total,
             net_rx_bytes: net_rx,
             net_tx_bytes: net_tx,
-            users_count: logged_in_users(),
+            users_count: slow.users,
             load_avg_1,
             cpu_temp_c: read_cpu_temp(&self.components),
             uptime_seconds: Some(System::uptime()),
@@ -77,8 +115,8 @@ impl Collector {
             gpu_percent: read_gpu_percent(),
             disk_read_bytes: None,
             disk_write_bytes: None,
-            battery_percent: battery.0,
-            battery_charging: battery.1,
+            battery_percent: slow.battery.0,
+            battery_charging: slow.battery.1,
         }
     }
 

@@ -82,13 +82,36 @@
   --transition-slow: 400ms ease;
 }
 
+/* Global box model: border-box everywhere. Several components used to opt in
+   locally (with comments lamenting "unlike the rest of the app"); this makes it
+   the default so `width`/`min-height` + padding never overflow their box. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Global page reset. Lives here (not in a page stylesheet) so it always applies.
+   `height: 100%` rather than `100vh` — 100vh includes the vertical scrollbar and
+   mobile browser chrome, which caused a few-pixel horizontal scroll and layout
+   jumps. `overflow-x: hidden` is a final guard against any stray overflow. */
 html,
 body {
-  font-family: var(--font-sans);
+  height: 100%;
+}
+
+html {
+  color: #fff;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
   background: #06080f;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -116,4 +139,17 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.28);
+}
+
+/* Honour the OS "reduce motion" preference for CSS-driven animations/transitions
+   (framer-motion is handled separately via <MotionConfig reducedMotion="user">). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

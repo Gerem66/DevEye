@@ -209,7 +209,6 @@
     align-items: center;
     justify-content: center;
     gap: var(--space-xs);
-    box-sizing: border-box;
     padding: var(--space-md);
     border: 1px dashed var(--glass-border-strong, var(--glass-border));
     border-radius: var(--radius-lg);

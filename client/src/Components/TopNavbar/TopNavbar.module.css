@@ -49,9 +49,8 @@
     align-items: center;
     justify-content: center;
     height: 34px;
-    /* width is driven by framer-motion (collapses to 0 when leaving); border-box
-       so the 1px border is included and width truly reaches 0 with no residue. */
-    box-sizing: border-box;
+    /* width is driven by framer-motion (collapses to 0 when leaving); with the
+       global border-box the 1px border sits inside, so width truly reaches 0. */
     background: var(--glass-bg-light);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
