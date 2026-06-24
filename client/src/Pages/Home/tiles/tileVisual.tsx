@@ -34,13 +34,13 @@ export function featureTileVisual(featureId: HomeFeatureId): TileVisual | null {
     return { widgetId: entry.id, title: entry.title, icon: entry.icon, body: <entry.WidgetContent /> };
 }
 
-export function deviceTileVisual(device: Device): TileVisual {
+export function deviceTileVisual(device: Device, opts?: { editing?: boolean }): TileVisual {
     // No Widget header — DeviceWidget owns the whole card (name + status + the
     // full-bleed activity background).
     return {
         widgetId: deviceViewId(device.id),
         compact: true,
-        body: <DeviceWidget deviceId={device.id} />
+        body: <DeviceWidget deviceId={device.id} hideStatus={opts?.editing} />
     };
 }
 

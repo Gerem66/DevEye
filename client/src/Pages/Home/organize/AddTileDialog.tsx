@@ -35,7 +35,7 @@ function FeaturePicker() {
 }
 
 /** Picker for connected devices not yet on the grid (archived ones excluded). */
-function DevicePicker() {
+function DevicePicker({ onAdded }: { onAdded: () => void }) {
     const layout = useHomeLayout();
     const { devices } = useDevices();
     const used = new Set(findCategory(layout, 'device')?.items ?? []);
@@ -51,7 +51,14 @@ function DevicePicker() {
     return (
         <div className={styles.addList}>
             {available.map((d) => (
-                <button key={d.id} className={styles.addItem} onClick={() => addDevice(d.id)}>
+                <button
+                    key={d.id}
+                    className={styles.addItem}
+                    onClick={() => {
+                        addDevice(d.id);
+                        onAdded();
+                    }}
+                >
                     <span className={`icon icon-server ${styles.addItemIcon}`} />
                     <span className={styles.addItemLabel}>
                         {d.name}
@@ -87,10 +94,10 @@ export function AddTileDialog({ kind, editShortcut, onClose }: AddTileDialogProp
                 <ShortcutForm initial={editShortcut} onDone={onClose} />
             ) : (
                 <>
-                    {kind === 'device' && <DevicePicker />}
+                    {/* Devices & shortcuts are added one at a time → close on success.
+                        The feature picker stays open (you often add several). */}
+                    {kind === 'device' && <DevicePicker onAdded={onClose} />}
                     {kind === 'feature' && <FeaturePicker />}
-                    {/* A shortcut is added one at a time → close on success (unlike
-                        the device/feature pickers, which stay open for several adds). */}
                     {kind === 'shortcut' && <ShortcutForm onDone={onClose} />}
                 </>
             )}

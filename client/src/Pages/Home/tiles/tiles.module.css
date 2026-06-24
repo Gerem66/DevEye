@@ -7,6 +7,12 @@
     flex-direction: column;
     justify-content: center;
     gap: 2px;
+    transition: opacity var(--transition-fast);
+}
+
+/* Brief dim while a Ctrl/Cmd-click refresh is in flight (visible feedback). */
+.refreshing {
+    opacity: 0.45;
 }
 
 /* Small "type" logo (the service) in the top-right corner. */

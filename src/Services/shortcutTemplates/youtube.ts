@@ -31,16 +31,49 @@ function extractViews(html: string): string | null {
     return null;
 }
 
-/** Subscriber count from a channel page (several layouts over the years). */
-function extractSubscribers(html: string): string | null {
+/** Find the first "<count> <word>" near a channel header (subscribers / videos),
+ *  across YouTube's various layouts. */
+function extractCount(html: string, words: string): string | null {
     const patterns = [
-        /"subscriberCountText"\s*:\s*\{[^{}]*?"(?:simpleText|content)"\s*:\s*"([^"]+)"/i,
-        /"([\d.,]+\s?[KMB]?)\s+(?:subscribers?|abonn[ée]s)"/i,
-        /([\d.,]+\s?[KMB]?)\s+(?:subscribers?|abonn[ée]s)/i
+        new RegExp(`"(?:simpleText|content|text)"\\s*:\\s*"([\\d.,]+\\s?[KMB]?)\\s+(?:${words})"`, 'i'),
+        new RegExp(`([\\d.,]+\\s?[KMB]?)\\s+(?:${words})`, 'i')
     ];
     for (const re of patterns) {
         const num = html.match(re)?.[1]?.match(/[\d.,]+\s?[KMB]?/);
         if (num) return num[0].replace(/\s/g, '');
+    }
+    return null;
+}
+
+/** Subscriber count from a channel page (several layouts over the years). */
+function extractSubscribers(html: string): string | null {
+    const fromOld = html.match(/"subscriberCountText"\s*:\s*\{[^{}]*?"(?:simpleText|content)"\s*:\s*"([^"]+)"/i);
+    const num = fromOld?.[1]?.match(/[\d.,]+\s?[KMB]?/);
+    if (num) return num[0].replace(/\s/g, '');
+    return extractCount(html, 'subscribers?|abonn[ée]s');
+}
+
+/**
+ * Channel video count — taken only from the structured header fields, and only
+ * for the plural "videos", so a stray "1 video" elsewhere on the page can't win
+ * (a loose match made it always report "1").
+ */
+function extractVideos(html: string): string | null {
+    // Structured count fields first (older layouts).
+    const structured =
+        html.match(/"videosCountText"\s*:\s*\{[^{}]*?"(?:simpleText|content)"\s*:\s*"([\d.,]+\s?[KMB]?)/i)?.[1] ??
+        html.match(/"videosCountText"\s*:\s*\{[^{}]*?"runs"\s*:\s*\[\s*\{\s*"text"\s*:\s*"([\d.,]+\s?[KMB]?)/i)?.[1];
+    if (structured) return structured.replace(/\s/g, '');
+
+    // Otherwise the channel's video count sits right next to the subscriber count
+    // in the header metadata — search just after it, plural "videos" only so a
+    // stray "1 video" elsewhere on the page can't win.
+    const subIdx = html.search(/[\d.,]+\s?[KMB]?\s+subscribers/i);
+    const slices = subIdx >= 0 ? [html.slice(subIdx, subIdx + 400)] : [];
+    slices.push(html);
+    for (const s of slices) {
+        const m = s.match(/([\d.,]+\s?[KMB]?)\s+videos\b/i);
+        if (m) return m[1].replace(/\s/g, '');
     }
     return null;
 }
@@ -105,12 +138,16 @@ export const youtube: TemplateAdapter = {
             if (!title || title.toLowerCase() === 'youtube') return openGraphPreview(url);
             const image = metaTag(html, 'og:image');
             const subs = extractSubscribers(html);
+            const videos = extractVideos(html);
+            const stats: { label: string; value: string }[] = [];
+            if (subs) stats.push({ label: 'Abonnés', value: subs });
+            if (videos) stats.push({ label: 'vidéos', value: videos });
             return {
                 ok: true,
                 title,
                 subtitle: metaTag(html, 'og:description'),
                 imageUrl: image && isValidHttpUrl(image) ? image : faviconUrl('youtube.com'),
-                stats: subs ? [{ label: 'Abonnés', value: subs }] : []
+                stats
             };
         } catch {
             return openGraphPreview(url);

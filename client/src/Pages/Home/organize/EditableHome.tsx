@@ -177,7 +177,7 @@ function CategoryTiles({
                     key={id}
                     id={id}
                     compact={compact}
-                    visual={device ? deviceTileVisual(device) : null}
+                    visual={device ? deviceTileVisual(device, { editing: true }) : null}
                     onRemove={() => removeDevice(id)}
                 />
             );

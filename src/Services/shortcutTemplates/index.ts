@@ -56,12 +56,17 @@ const cache = new Map<string, CachedPreview>();
  * a dedicated adapter failing falls back to the generic Open Graph preview, so a
  * tile always at least gets an icon — never an error.
  */
-export async function fetchShortcutPreview(template: ShortcutTemplate, url: string): Promise<ShortcutPreview> {
+export async function fetchShortcutPreview(
+    template: ShortcutTemplate,
+    url: string,
+    refresh = false
+): Promise<ShortcutPreview> {
     const key = `${template}|${url}`;
     const now = Date.now();
 
     const hit = cache.get(key);
-    if (hit && hit.expires > now) return hit.preview;
+    // `refresh` (Ctrl/Cmd-click on the tile) forces a re-fetch past the TTL.
+    if (!refresh && hit && hit.expires > now) return hit.preview;
     if (hit) cache.delete(key);
 
     let preview: ShortcutPreview;

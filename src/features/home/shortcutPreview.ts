@@ -11,6 +11,6 @@ export const homeShortcutPreviewFeature: FeatureDefinition<
     handler: async (_ctx, input) => {
         // Best-effort: the service never throws — a failed fetch returns an empty
         // (`ok: false`) preview so the shortcut tile still works as a plain link.
-        return fetchShortcutPreview(input.template, input.url);
+        return fetchShortcutPreview(input.template, input.url, input.refresh);
     }
 });

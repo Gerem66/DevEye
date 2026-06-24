@@ -5,6 +5,8 @@ import styles from './DeviceWidget.module.css';
 
 export interface DeviceWidgetProps {
     deviceId: string;
+    /** Hide the corner status (in edit mode it would sit under the remove button). */
+    hideStatus?: boolean;
 }
 
 /** CSS class carrying the activity tint, per level (mirrors the Monitoring hero). */
@@ -31,7 +33,7 @@ function Metric({ label, value }: { label: string; value: number | null }) {
  * {@link useDeviceUsage} store (no live subscription). Clicking opens the device
  * popup (wired in the home grid).
  */
-export function DeviceWidget({ deviceId }: DeviceWidgetProps) {
+export function DeviceWidget({ deviceId, hideStatus }: DeviceWidgetProps) {
     const { devices } = useDevices();
     const device = devices.find((d) => d.id === deviceId) ?? null;
     const usage = useDeviceUsage(deviceId);
@@ -66,10 +68,12 @@ export function DeviceWidget({ deviceId }: DeviceWidgetProps) {
                     <span className={`icon icon-server ${styles.nameIcon}`} />
                     {device.name}
                 </span>
-                <span className={`${styles.status} ${statusKind}`}>
-                    <span className={styles.statusDot} />
-                    {statusLabel}
-                </span>
+                {!hideStatus && (
+                    <span className={`${styles.status} ${statusKind}`}>
+                        <span className={styles.statusDot} />
+                        {statusLabel}
+                    </span>
+                )}
             </div>
 
             {showUsage ? (

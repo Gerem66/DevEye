@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useState } from 'react';
 import { ws } from '@/api/ws';
 import type { ShortcutItem, ShortcutPreview } from 'deveye-types';
+import { isForceReload } from '../forceReload';
 import styles from './tiles.module.css';
 
 /** The link's own favicon — its real brand logo, whatever the site. */
@@ -26,6 +27,7 @@ export interface ShortcutTileProps {
  */
 export function ShortcutTile({ item, hideBadge }: ShortcutTileProps) {
     const [preview, setPreview] = useState<ShortcutPreview | null>(null);
+    const [refreshing, setRefreshing] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -45,6 +47,22 @@ export function ShortcutTile({ item, hideBadge }: ShortcutTileProps) {
             off();
         };
     }, [item.template, item.url]);
+
+    // Ctrl/Cmd-click refreshes the preview (bypasses the server cache) instead of
+    // opening the link — the click bubbles to the Widget anchor, so preventDefault
+    // stops the navigation. Mirrors the Ctrl/Cmd force-reload on feature popups.
+    const onClick = useCallback(
+        (e: ReactMouseEvent) => {
+            if (!isForceReload(e)) return;
+            e.preventDefault();
+            setRefreshing(true);
+            ws.send('home.shortcutPreview', { template: item.template, url: item.url, refresh: true })
+                .then(setPreview)
+                .catch(() => {})
+                .finally(() => setRefreshing(false));
+        },
+        [item.template, item.url]
+    );
 
     const favicon = hostFavicon(item.url);
     const realImage = preview?.imageUrl ?? null;
@@ -66,7 +84,7 @@ export function ShortcutTile({ item, hideBadge }: ShortcutTileProps) {
     const showBadge = !hideBadge && !!realImage && !!favicon;
 
     return (
-        <div className={styles.shortcut}>
+        <div className={`${styles.shortcut} ${refreshing ? styles.refreshing : ''}`} onClick={onClick}>
             {/* Small service logo in the corner (the "type"). Hidden in edit mode,
                 where the action buttons occupy that corner. */}
             {showBadge && (

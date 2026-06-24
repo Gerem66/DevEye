@@ -23,6 +23,7 @@ import FeatureLogs from '@/Features/Logs';
 import MonitoringPanel from '@/Features/Monitoring/MonitoringPanel';
 
 import { FEATURE_CATALOG } from './catalog';
+import { isForceReload } from './forceReload';
 import { deviceTileVisual, deviceViewId, featureTileVisual, shortcutTileVisual } from './tiles/tileVisual';
 import { OrganizeToolbar } from './organize/OrganizeToolbar';
 import { EditableHome } from './organize/EditableHome';
@@ -30,15 +31,6 @@ import { EditableHome } from './organize/EditableHome';
 import type { HomeCategory } from 'deveye-types';
 import type { FeatureProps } from '@/Features/types';
 import styles from './Dashboard.module.css';
-
-/**
- * Force-reload modifier: Cmd on macOS (Ctrl+click there opens the context menu),
- * Ctrl elsewhere.
- */
-const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent);
-function isForceReload(e: { ctrlKey: boolean; metaKey: boolean }): boolean {
-    return IS_MAC ? e.metaKey : e.ctrlKey;
-}
 
 /** A view openable full-screen in the popup (feature, structural page or device). */
 interface ViewConfig {
