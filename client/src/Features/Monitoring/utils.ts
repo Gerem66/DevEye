@@ -55,8 +55,8 @@ export function activityLevel(s: MetricSnapshot | null, cores: number): Activity
     const ram = pct(s.memUsedBytes, s.memTotalBytes);
     const gpu = s.gpuPercent ?? 0;
     const loadRatio = s.loadAvg1 != null && cores > 0 ? s.loadAvg1 / cores : 0;
-    if (s.cpuPercent >= 60 || gpu >= 60 || loadRatio >= 0.9 || ram >= 88) return 'intensive';
-    if (s.cpuPercent < 10 && gpu < 12 && loadRatio < 0.35 && ram < 60) return 'idle';
+    if (s.cpuPercent >= 80 || gpu >= 80 || loadRatio >= 0.9 || ram >= 90) return 'intensive';
+    if (s.cpuPercent < 10 && gpu < 12 && loadRatio < 0.3 && ram < 75) return 'idle';
     return 'normal';
 }
 
