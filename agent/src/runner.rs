@@ -296,6 +296,10 @@ async fn stream_session(
                                 // Only reached if the update was refused/failed → keep
                                 // running on the current binary.
                             }
+                            // Persistence/privilege change (install autostart, elevate…).
+                            Ok(ServerMessage::Service { action }) => {
+                                handle_service(&mut sink, device_id, &action).await;
+                            }
                             Ok(ServerMessage::Ack { received }) => debug!(received, "ack"),
                             Ok(ServerMessage::Error { code, message }) => {
                                 warn!(%code, %message, "server error")
@@ -501,6 +505,75 @@ where
     sink.send(Message::Text(msg))
         .await
         .context("sending updated")?;
+    Ok(())
+}
+
+/// Apply a server-requested persistence/privilege change and report the outcome.
+/// On a successful `elevate` the system service now runs, so we drop our own
+/// per-user autostart and exit (never returns in that case).
+async fn handle_service<S>(sink: &mut S, device_id: &str, action: &str)
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    use crate::elevate::Outcome;
+    let result: Result<Outcome> = match action {
+        "install-user" => crate::service::install(false).map(|()| Outcome::Done),
+        "uninstall-user" => crate::service::uninstall().map(|()| Outcome::Done),
+        "elevate" => crate::elevate::elevate(),
+        "drop" => crate::elevate::drop_privileges(),
+        other => Err(anyhow::anyhow!("action de service inconnue : {other}")),
+    };
+
+    match result {
+        Ok(Outcome::Done) => {
+            info!(%action, "service action applied");
+            let _ = send_service_result(sink, device_id, action, true, None, None).await;
+            let _ = sink.flush().await;
+            if action == "elevate" {
+                // The system service is installed + running. Drop our own per-user
+                // autostart and exit so exactly one agent persists.
+                tokio::time::sleep(Duration::from_millis(400)).await;
+                let _ = crate::service::uninstall_user();
+                std::process::exit(0);
+            }
+        }
+        Ok(Outcome::NeedsManual) => {
+            warn!(%action, "no interactive session; guiding the user to run it on the device");
+            let _ = send_service_result(sink, device_id, action, false, Some(true), None).await;
+            let _ = sink.flush().await;
+        }
+        Err(e) => {
+            warn!(%action, error = %e, "service action failed");
+            let _ = send_service_result(sink, device_id, action, false, None, Some(e.to_string()))
+                .await;
+            let _ = sink.flush().await;
+        }
+    }
+}
+
+async fn send_service_result<S>(
+    sink: &mut S,
+    device_id: &str,
+    action: &str,
+    ok: bool,
+    needs_manual_command: Option<bool>,
+    error: Option<String>,
+) -> Result<()>
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let msg = serde_json::to_string(&ClientMessage::ServiceResult {
+        device_id: device_id.to_string(),
+        action: action.to_string(),
+        ok,
+        needs_manual_command,
+        error,
+    })?;
+    sink.send(Message::Text(msg))
+        .await
+        .context("sending service result")?;
     Ok(())
 }
 

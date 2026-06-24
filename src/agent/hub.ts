@@ -3,11 +3,13 @@ import {
     AGENT_COLLECT,
     AGENT_CONFIG,
     AGENT_DESTROY,
+    AGENT_SERVICE,
     AGENT_UPDATE,
     DEVICE_PRESENCE_EVENT,
     DEVICE_REPORT_EVENT,
     METRICS_PUSH_EVENT,
     type AgentConfigPayload,
+    type AgentServicePayload,
     type AgentUpdatePayload,
     type DevicePresence,
     type DeviceReport,
@@ -79,6 +81,14 @@ export class MonitorHub {
         const socket = this.agents.get(deviceId);
         if (!socket) return false;
         socket.send(JSON.stringify({ command: AGENT_UPDATE, payload }));
+        return true;
+    }
+
+    /** Ask a connected agent to change its persistence/privilege install. No-op if offline. */
+    requestService(deviceId: string, payload: AgentServicePayload): boolean {
+        const socket = this.agents.get(deviceId);
+        if (!socket) return false;
+        socket.send(JSON.stringify({ command: AGENT_SERVICE, payload }));
         return true;
     }
 
@@ -200,6 +210,8 @@ export interface MonitorTransport {
     requestDestroy(deviceId: string): boolean;
     /** Order the device's agent to self-update; false if offline. */
     requestUpdate(deviceId: string, payload: AgentUpdatePayload): boolean;
+    /** Ask the device's agent to change its persistence/privilege install; false if offline. */
+    requestService(deviceId: string, payload: AgentServicePayload): boolean;
 }
 
 export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): MonitorTransport {
@@ -211,6 +223,7 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         requestCollect: (deviceId) => hub.requestCollect(deviceId),
         pushConfig: (deviceId, config) => hub.pushConfig(deviceId, config),
         requestDestroy: (deviceId) => hub.requestDestroy(deviceId),
-        requestUpdate: (deviceId, payload) => hub.requestUpdate(deviceId, payload)
+        requestUpdate: (deviceId, payload) => hub.requestUpdate(deviceId, payload),
+        requestService: (deviceId, payload) => hub.requestService(deviceId, payload)
     };
 }

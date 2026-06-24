@@ -707,3 +707,17 @@
     border-color: var(--danger);
     color: var(--danger);
 }
+
+/* Guided fallback command shown when the agent can't pop an OS auth prompt. */
+.manualCommand {
+    display: block;
+    padding: var(--space-sm);
+    background: var(--surface-2, var(--surface));
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.85rem;
+    word-break: break-all;
+    user-select: all;
+}

@@ -120,6 +120,8 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
     const [autoApprove, setAutoApprove] = useState(false);
     // Device whose agent self-update is in flight (button shows a spinner/label).
     const [updatingId, setUpdatingId] = useState<string | null>(null);
+    // Device whose persistence/privilege change is in flight.
+    const [serviceBusyId, setServiceBusyId] = useState<string | null>(null);
 
     const fetchCodes = async (): Promise<LinkCodeResponse[]> => {
         try {
@@ -294,6 +296,67 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
         }
     };
 
+    const setAutostart = async (id: string, enabled: boolean) => {
+        setActionError(null);
+        setServiceBusyId(id);
+        try {
+            await ws.send('device.setAutostart', { deviceId: id, enabled });
+            await refresh();
+            // The agent reports its new service scope on its next report.
+            setTimeout(() => void refresh(), 3000);
+        } catch (e) {
+            setActionError(e instanceof Error ? e.message : 'Action impossible.');
+        } finally {
+            setServiceBusyId(null);
+        }
+    };
+
+    // Show the guided fallback command (hybrid elevation): if no OS prompt appears
+    // on the device, the user runs this. The change confirms via the next report.
+    const showManualCommand = (title: string, command: string) =>
+        void openInfo({
+            title,
+            width: 520,
+            body: (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <p>
+                        Une fenêtre d’autorisation devrait apparaître sur l’appareil. Si rien ne s’affiche, exécutez-y :
+                    </p>
+                    <code className={styles.manualCommand}>{command}</code>
+                </div>
+            )
+        });
+
+    const elevateDevice = async (id: string) => {
+        setActionError(null);
+        setServiceBusyId(id);
+        try {
+            const res = await ws.send('device.elevate', { deviceId: id });
+            showManualCommand('Élever l’agent en root', res.manualCommand);
+            await refresh();
+            setTimeout(() => void refresh(), 4000);
+        } catch (e) {
+            setActionError(e instanceof Error ? e.message : 'Élévation impossible.');
+        } finally {
+            setServiceBusyId(null);
+        }
+    };
+
+    const dropPrivilegesDevice = async (id: string) => {
+        setActionError(null);
+        setServiceBusyId(id);
+        try {
+            const res = await ws.send('device.dropPrivileges', { deviceId: id });
+            showManualCommand('Rétrograder l’agent', res.manualCommand);
+            await refresh();
+            setTimeout(() => void refresh(), 4000);
+        } catch (e) {
+            setActionError(e instanceof Error ? e.message : 'Rétrogradation impossible.');
+        } finally {
+            setServiceBusyId(null);
+        }
+    };
+
     const openRename = (id: string, current: string) => {
         setActionError(null);
         setRenameValue(current);
@@ -385,6 +448,8 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                         {visibleDevices.map((device) => {
                             const pendingDeletion = device.status === 'pending_deletion';
                             const version = agentVersionInfo(device.agentVersion);
+                            const agent = device.report?.agent ?? null;
+                            const scope = agent?.serviceScope ?? 'none';
                             return (
                                 <motion.div
                                     key={device.id}
@@ -437,6 +502,51 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                                             </div>
                                         )}
                                     </div>
+
+                                    {device.online && agent && !pendingDeletion && (
+                                        <div className={styles.deviceInfo}>
+                                            <div className={styles.infoRow}>
+                                                <span
+                                                    className={`icon ${agent.privileged ? 'icon-shield' : 'icon-cpu'}`}
+                                                />
+                                                <span>
+                                                    {agent.privileged ? 'root' : agent.user}
+                                                    {' · '}
+                                                    {scope === 'system'
+                                                        ? 'Service système'
+                                                        : scope === 'user'
+                                                          ? 'Démarrage auto (utilisateur)'
+                                                          : 'Démarrage manuel'}
+                                                </span>
+                                            </div>
+                                            <div className={styles.deviceActions}>
+                                                <Switch
+                                                    checked={scope !== 'none'}
+                                                    onChange={(v) => setAutostart(device.id, v)}
+                                                    label='Démarrage auto'
+                                                />
+                                                {scope !== 'system' ? (
+                                                    <button
+                                                        className={styles.actionBtn}
+                                                        disabled={serviceBusyId === device.id}
+                                                        onClick={() => elevateDevice(device.id)}
+                                                        title='Élever en service système (root)'
+                                                    >
+                                                        <span className='icon icon-shield' /> Élever en root
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        className={styles.actionBtn}
+                                                        disabled={serviceBusyId === device.id}
+                                                        onClick={() => dropPrivilegesDevice(device.id)}
+                                                        title='Rétrograder en service utilisateur'
+                                                    >
+                                                        <span className='icon icon-arrow-left' /> Rétrograder
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {device.deleteError && (
                                         <p className={styles.deleteErrorHint}>

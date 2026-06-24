@@ -29,11 +29,6 @@ use crate::config::Config;
 /// Public key (base64) the agent was built with; empty when no key was embedded.
 const UPDATE_PUBKEY_B64: &str = env!("DEVEYE_UPDATE_PUBKEY");
 
-/// Set by a managing service (systemd/launchd/SCM, future increment) to mean
-/// "don't re-spawn yourself after an update — I'll restart you". Absent today, so
-/// the agent re-launches itself.
-const MANAGED_ENV: &str = "DEVEYE_MANAGED";
-
 /// Download, verify (sha256 + ed25519 signature) and atomically swap in the new
 /// binary for `target_id`. On success the running executable on disk is the new
 /// version; the caller should then [`restart_and_exit`]. On any failure the
@@ -162,10 +157,12 @@ pub fn cleanup_after_update() {
 /// otherwise we re-launch a fresh detached `run` ourselves so the agent keeps
 /// running. Never returns.
 pub fn restart_and_exit() -> ! {
-    if std::env::var_os(MANAGED_ENV).is_none() {
-        if let Err(e) = spawn_detached() {
-            tracing::error!(error = %e, "failed to relaunch after update");
-        }
+    if crate::managed() {
+        // A service manager will relaunch us — just exit cleanly.
+        std::process::exit(0);
+    }
+    if let Err(e) = spawn_detached() {
+        tracing::error!(error = %e, "failed to relaunch after update");
     }
     std::process::exit(0);
 }

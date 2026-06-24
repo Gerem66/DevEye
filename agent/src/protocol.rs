@@ -135,6 +135,11 @@ pub struct AgentInfo {
     pub privileged: bool,
     /// The OS account the agent runs as (e.g. `root`, `deploy`).
     pub user: String,
+    /// Installed persistence scope: `none` | `user` | `system`.
+    #[serde(rename = "serviceScope")]
+    pub service_scope: &'static str,
+    /// `true` when launched under a service manager (so a self-update just exits).
+    pub managed: bool,
 }
 
 /// One listening socket. `address` is the bind address (e.g. `0.0.0.0`, `::`,
@@ -244,6 +249,18 @@ pub enum ClientMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
+    /// Outcome of an `agent.service` persistence/privilege change.
+    #[serde(rename = "agent.serviceResult")]
+    ServiceResult {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        action: String,
+        ok: bool,
+        #[serde(rename = "needsManualCommand", skip_serializing_if = "Option::is_none")]
+        needs_manual_command: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
 }
 
 /// Messages the server sends back to the agent.
@@ -270,6 +287,10 @@ pub enum ServerMessage {
         sha256: String,
         signature: String,
     },
+    /// Persistence/privilege change: `action` is one of `install-user` |
+    /// `uninstall-user` | `elevate` | `drop`.
+    #[serde(rename = "agent.service")]
+    Service { action: String },
     /// Per-device collection config (cadences + capture mode), pushed by the
     /// server on connect and whenever the user changes it in the UI.
     #[serde(rename = "agent.config")]

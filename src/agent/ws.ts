@@ -9,6 +9,7 @@ import {
     AGENT_METRICS_BATCH,
     AGENT_PROCESSES,
     AGENT_REPORT,
+    AGENT_SERVICE_RESULT,
     AGENT_UPDATED,
     agentClientMessageSchema,
     type AgentServerMessage
@@ -192,6 +193,29 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: 
                         reqLogger.error({ err: (e as Error).message }, 'Failed to record destroy failure');
                     }
                 }
+                send(socket, { command: AGENT_ACK, payload: { received: 1 } });
+                return;
+            }
+
+            if (msg.command === AGENT_SERVICE_RESULT) {
+                // Outcome of an `agent.service` change. The effective scope comes
+                // back on the next `agent.report`; here we just audit the result.
+                const { action, ok, needsManualCommand, error } = msg.payload;
+                const description = ok
+                    ? `Service agent modifié (${action}) : « ${device.name} »`
+                    : needsManualCommand
+                      ? `Action service « ${action} » à exécuter sur l'appareil : « ${device.name} »`
+                      : `Échec action service « ${action} » : « ${device.name} »${error ? ` — ${error}` : ''}`;
+                audit.record({
+                    source: 'agent',
+                    category: 'device',
+                    action: ok ? 'device.serviceChanged' : 'device.serviceFailed',
+                    level: ok ? 'info' : 'warning',
+                    uid: claims.oid,
+                    ip: req.ip,
+                    description,
+                    metadata: { deviceId, serviceAction: action, ok, needsManualCommand: needsManualCommand ?? false }
+                });
                 send(socket, { command: AGENT_ACK, payload: { received: 1 } });
                 return;
             }

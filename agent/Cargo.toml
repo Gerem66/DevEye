@@ -6,6 +6,8 @@ version = "0.0.0"
 edition = "2021"
 description = "DevEye Agent — lightweight cross-platform monitoring daemon (Linux, macOS, Windows)"
 license = "ISC"
+# `deveye-sign` is a gated helper bin; keep `cargo run`/release defaulting to the agent.
+default-run = "deveye-agent"
 
 [[bin]]
 name = "deveye-agent"
