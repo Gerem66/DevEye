@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 
 import styles from './style.module.css';
 
@@ -98,7 +98,6 @@ function showLockInfo() {
  * popup over the editor too; the editor only closes once confirmed.
  */
 export default function NoteEditor() {
-    const titleRef = useRef<HTMLInputElement | null>(null);
     const [mode, setMode] = useState<'add' | 'edit'>('add');
     const [title, setTitle] = useState('');
     const [folderId, setFolderId] = useState<number | null>(null);
@@ -123,7 +122,6 @@ export default function NoteEditor() {
             setWasLocked(false);
             setCreated(null);
             setUpdated(null);
-            setTimeout(() => titleRef.current?.focus(), 0);
             return;
         }
         setMode('edit');
@@ -199,6 +197,7 @@ export default function NoteEditor() {
             width={560}
             onInputChange={handleOpen}
             onClosePopup={() => close(null)}
+            onSubmit={save}
             headerAction={
                 <button
                     type='button'
@@ -213,7 +212,6 @@ export default function NoteEditor() {
         >
             <div className={styles.editor}>
                 <input
-                    ref={titleRef}
                     className={styles.editorTitleInput}
                     placeholder={mode === 'add' ? 'Titre de la nouvelle note' : 'Titre de la note'}
                     value={title}

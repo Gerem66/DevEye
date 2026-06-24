@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 
 import styles from './style.module.css';
 
@@ -21,7 +21,6 @@ export interface NoteLockSetInput {
 }
 
 export default function LockSetPopup() {
-    const inputRef = useRef<HTMLInputElement | null>(null);
     const [changing, setChanging] = useState(false);
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
@@ -36,7 +35,6 @@ export default function LockSetPopup() {
     function handleOpen(input: NoteLockSetInput) {
         setChanging(input?.changing ?? false);
         reset();
-        setTimeout(() => inputRef.current?.focus(), 0);
     }
 
     function close(result: string | null) {
@@ -63,6 +61,7 @@ export default function LockSetPopup() {
             width={420}
             onInputChange={handleOpen}
             onClosePopup={() => close(null)}
+            onSubmit={submit}
         >
             <p className={styles.popupHint}>
                 {changing
@@ -70,7 +69,6 @@ export default function LockSetPopup() {
                     : 'Cette note sera protégée par son propre mot de passe, distinct de celui de votre compte.'}
             </p>
             <TextInput
-                ref={inputRef}
                 type='password'
                 enableShowHideButton
                 autoComplete='new-password'
@@ -92,9 +90,6 @@ export default function LockSetPopup() {
                     onChange={(e) => {
                         setConfirm(e.target.value);
                         if (error) setError('');
-                    }}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter') submit();
                     }}
                 />
             </div>

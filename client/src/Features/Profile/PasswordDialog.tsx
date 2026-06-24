@@ -88,15 +88,12 @@ export function PasswordDialog({ open, onClose }: PasswordDialogProps) {
         }
     };
 
-    const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-        if (e.key === 'Enter') void onSubmit();
-    };
-
     return (
         <Dialog
             open={open}
             onClose={close}
             title='Modifier le mot de passe'
+            onSubmit={() => (done ? close() : void onSubmit())}
             footer={
                 done ? (
                     <Button onClick={close}>Fermer</Button>
@@ -115,7 +112,7 @@ export function PasswordDialog({ open, onClose }: PasswordDialogProps) {
             {done ? (
                 <p className={styles.formSuccess}>Votre mot de passe a été modifié.</p>
             ) : (
-                <div className={styles.form} onKeyDown={onKeyDown}>
+                <div className={styles.form}>
                     <label className={styles.field}>
                         <span className={styles.fieldLabel}>Mot de passe actuel</span>
                         <TextInput

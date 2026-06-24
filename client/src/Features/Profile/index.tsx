@@ -133,6 +133,7 @@ export default function FeatureProfile({ user, workspace }: FeatureProps) {
                 open={avatarError !== null}
                 onClose={() => setAvatarError(null)}
                 title="Modification de l'image"
+                onSubmit={() => setAvatarError(null)}
                 footer={<Button onClick={() => setAvatarError(null)}>Compris</Button>}
             >
                 {avatarError}

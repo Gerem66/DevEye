@@ -109,6 +109,7 @@ export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogPro
             onClose={onClose}
             title={device ? `Configuration — ${device.name}` : 'Configuration'}
             description='Cadences de collecte et durées de conservation. Appliqué dès le prochain relevé, que l’agent soit connecté ou non.'
+            onSubmit={() => void save()}
             footer={
                 <>
                     <Button variant='secondary' onClick={onClose}>

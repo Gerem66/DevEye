@@ -419,6 +419,9 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                         onClose={closeSetup}
                         title='Configurer la 2FA'
                         width={520}
+                        onSubmit={() => {
+                            if (setupData && verifyCode.length === 6) void verifyAndEnable();
+                        }}
                         footer={
                             <>
                                 <Button variant='secondary' onClick={closeSetup} disabled={verifying}>
@@ -470,10 +473,6 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                             value={verifyCode}
                                             onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, ''))}
                                             placeholder='000000'
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' && verifyCode.length === 6)
-                                                    void verifyAndEnable();
-                                            }}
                                         />
                                     </div>
                                 </div>
@@ -486,6 +485,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                         onClose={() => setShowBackupCodes(false)}
                         title='Codes de secours'
                         description='⚠️ Sauvegardez ces codes dans un endroit sûr. Ils ne seront plus affichés après fermeture.'
+                        onSubmit={() => setShowBackupCodes(false)}
                         footer={
                             <>
                                 <Button
@@ -514,6 +514,9 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                         onClose={() => setShowDisableConfirm(false)}
                         title='Désactiver la 2FA'
                         description='⚠️ Votre compte sera moins sécurisé. Entrez un code de votre application pour confirmer.'
+                        onSubmit={() => {
+                            if (disableCode.length === 6) void disable2FA();
+                        }}
                         footer={
                             <>
                                 <Button variant='ghost' onClick={() => setShowDisableConfirm(false)}>
@@ -542,6 +545,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                         onClose={() => setShowRegenConfirm(false)}
                         title='Réinitialiser les codes de secours'
                         description='⚠️ Vos anciens codes de secours seront définitivement invalidés et de nouveaux seront générés. Continuer ?'
+                        onSubmit={() => void regenerateBackupCodes()}
                         footer={
                             <>
                                 <Button variant='ghost' onClick={() => setShowRegenConfirm(false)}>

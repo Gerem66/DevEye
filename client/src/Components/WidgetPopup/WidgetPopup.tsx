@@ -1,5 +1,6 @@
-import { type ReactNode, useEffect } from 'react';
+import { type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useDismissLayer } from '@/Components/Dialog';
 import styles from './WidgetPopup.module.css';
 
 export interface WidgetPopupProps {
@@ -35,14 +36,9 @@ export interface WidgetPopupProps {
  * it into `bodyRef` from the dashboard, rather than being a normal child here.
  */
 export default function WidgetPopup({ layoutId, open, onClose, bodyRef, onExitComplete, children }: WidgetPopupProps) {
-    useEffect(() => {
-        if (!open) return;
-        const handler = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') onClose();
-        };
-        window.addEventListener('keydown', handler);
-        return () => window.removeEventListener('keydown', handler);
-    }, [open, onClose]);
+    // Escape closes the topmost layer only: a dialog opened over the feature panel
+    // closes first, then a second Escape closes the panel itself (tree order).
+    useDismissLayer(open, onClose);
 
     return (
         <AnimatePresence onExitComplete={onExitComplete}>

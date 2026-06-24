@@ -510,6 +510,7 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                 onClose={closeModal}
                 title='Codes de liaison'
                 description="Générez un code, puis utilisez-le dans l'agent DevEye pour lier un appareil."
+                onSubmit={() => void generateLinkCode()}
                 headerAction={
                     <button
                         className={styles.iconBtn}
@@ -631,6 +632,7 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                 onClose={() => setDeleteTarget(null)}
                 title={deleteTarget ? `Supprimer « ${deleteTarget.name} » ?` : 'Supprimer'}
                 description='La suppression de l’appareil entraînera la destruction définitive de l’agent.'
+                onSubmit={() => void confirmRemoveDevice()}
                 footer={
                     <>
                         <Button variant='secondary' onClick={() => setDeleteTarget(null)} disabled={deleting}>
@@ -654,6 +656,7 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                 title='Renommer l’appareil'
                 description={renameTarget ? `Choisissez un nouveau nom pour « ${renameTarget.name} ».` : 'Renommer'}
                 width={420}
+                onSubmit={() => void confirmRename()}
                 footer={
                     <>
                         <Button variant='secondary' onClick={() => setRenameTarget(null)} disabled={renaming}>
@@ -671,15 +674,11 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                 }
             >
                 <TextInput
-                    autoFocus
                     value={renameValue}
                     maxLength={128}
                     placeholder='Nom de l’appareil'
                     aria-label='Nouveau nom de l’appareil'
                     onChange={(e) => setRenameValue(e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter') void confirmRename();
-                    }}
                 />
             </Dialog>
 
@@ -688,6 +687,7 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                 onClose={() => setForceTarget(null)}
                 title={forceTarget ? `Supprimer « ${forceTarget.name} » sans attendre ?` : 'Supprimer'}
                 description='L’appareil sera archivé immédiatement, sans attendre la reconnexion de l’agent.'
+                onSubmit={() => void confirmForceDelete()}
                 footer={
                     <>
                         <Button variant='secondary' onClick={() => setForceTarget(null)} disabled={forcing}>

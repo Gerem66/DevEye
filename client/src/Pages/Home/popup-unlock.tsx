@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 
 import Popup, { ClosePopup } from '@/Components/Popup';
 import Button from '@/Components/Button';
@@ -14,7 +14,6 @@ interface PopupUnlockProps {
 }
 
 function PopupUnlock({ workspace }: PopupUnlockProps) {
-    const inputRef = useRef<HTMLInputElement | null>(null);
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [submitting, setSubmitting] = useState(false);
@@ -53,29 +52,18 @@ function PopupUnlock({ workspace }: PopupUnlockProps) {
         }
     };
 
-    const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter') void submit();
-    };
-
     return (
-        <Popup
-            id='popup-unlock'
-            title='Déverrouiller'
-            onInputChange={() => inputRef.current?.focus()}
-            onClosePopup={close}
-        >
+        <Popup id='popup-unlock' title='Déverrouiller' onClosePopup={close} onSubmit={submit}>
             <p className={styles.popupHint}>
                 Cet espace de travail est protégé. Saisissez son mot de passe pour y accéder.
             </p>
 
             <TextInput
-                ref={inputRef}
                 type='password'
                 placeholder='Mot de passe de l’espace de travail'
                 value={password}
                 error={error}
                 onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={onKeyDown}
                 enableShowHideButton
             />
 

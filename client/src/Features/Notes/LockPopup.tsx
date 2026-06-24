@@ -48,7 +48,6 @@ export default function LockPopup() {
         setPassword('');
         setError('');
         setSubmitting(false);
-        setTimeout(() => inputRef.current?.focus(), 0);
     }
 
     function close(result: string | null) {
@@ -88,6 +87,7 @@ export default function LockPopup() {
             title='Note verrouillée'
             onInputChange={handleOpen}
             onClosePopup={() => close(null)}
+            onSubmit={() => void submit()}
         >
             <p className={styles.popupHint}>
                 {intent === 'delete'
@@ -105,9 +105,6 @@ export default function LockPopup() {
                 onChange={(e) => {
                     setPassword(e.target.value);
                     if (error) setError('');
-                }}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter') void submit();
                 }}
             />
             <div className={styles.editorFooter} style={{ marginTop: 'var(--space-md)' }}>

@@ -30,6 +30,12 @@
     padding: var(--space-lg);
 }
 
+/* The panel is focusable (tabIndex -1) so fieldless dialogs still catch Enter;
+   never show a focus ring for that programmatic focus. */
+.dialog:focus {
+    outline: none;
+}
+
 /* Top-right corner cluster: optional header action(s) + the close button, laid
    out together so a headerAction (e.g. an "i") never overlaps the ×. */
 .corner {

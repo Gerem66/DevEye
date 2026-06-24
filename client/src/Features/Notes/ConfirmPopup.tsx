@@ -28,6 +28,7 @@ export default function ConfirmPopup() {
             width={420}
             onInputChange={(input) => input && setData(input)}
             onClosePopup={() => close(false)}
+            onSubmit={() => close(true)}
         >
             <p className={styles.popupHint}>{data.message}</p>
             <div className={styles.editorFooter} style={{ marginTop: 'var(--space-md)' }}>

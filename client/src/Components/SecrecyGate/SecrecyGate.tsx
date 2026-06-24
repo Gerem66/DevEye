@@ -48,16 +48,13 @@ export default function SecrecyGate() {
         }
     };
 
-    const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-        if (e.key === 'Enter') void onSubmit();
-    };
-
     return (
         <Dialog
             open={prompting}
             onClose={onCancel}
             title='Déverrouiller vos données'
             description='Le chiffrement par mot de passe est activé. Saisissez votre mot de passe pour accéder à vos données chiffrées.'
+            onSubmit={() => void onSubmit()}
             footer={
                 <>
                     <Button variant='secondary' onClick={onCancel} disabled={loading}>
@@ -69,17 +66,15 @@ export default function SecrecyGate() {
                 </>
             }
         >
-            <div onKeyDown={onKeyDown}>
-                <TextInput
-                    type='password'
-                    enableShowHideButton
-                    autoComplete='current-password'
-                    placeholder='Mot de passe'
-                    value={password}
-                    error={error ?? undefined}
-                    onChange={(e) => setPassword(e.target.value)}
-                />
-            </div>
+            <TextInput
+                type='password'
+                enableShowHideButton
+                autoComplete='current-password'
+                placeholder='Mot de passe'
+                value={password}
+                error={error ?? undefined}
+                onChange={(e) => setPassword(e.target.value)}
+            />
         </Dialog>
     );
 }

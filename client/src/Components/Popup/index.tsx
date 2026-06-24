@@ -55,6 +55,10 @@ interface PopupProps<TInput> {
     onInputChange?: ((input: TInput) => void) | null;
     /** Overrides the default close (which resolves OpenPopup with null). */
     onClosePopup?: ((id: string) => void) | null;
+    /** Primary action — pressing Enter triggers it (see Dialog's `onSubmit`). */
+    onSubmit?: () => void;
+    /** Autofocus the first field on open (see Dialog's `autoFocus`). Defaults true. */
+    autoFocus?: boolean;
 }
 
 function Popup<TInput = unknown>({
@@ -64,7 +68,9 @@ function Popup<TInput = unknown>({
     width,
     headerAction,
     onInputChange = null,
-    onClosePopup = null
+    onClosePopup = null,
+    onSubmit,
+    autoFocus
 }: PopupProps<TInput>): React.JSX.Element {
     const [opened, setOpened] = React.useState(false);
 
@@ -88,7 +94,15 @@ function Popup<TInput = unknown>({
     };
 
     return (
-        <Dialog open={opened} onClose={handleClose} title={title} width={width} headerAction={headerAction}>
+        <Dialog
+            open={opened}
+            onClose={handleClose}
+            title={title}
+            width={width}
+            headerAction={headerAction}
+            onSubmit={onSubmit}
+            autoFocus={autoFocus}
+        >
             {children}
         </Dialog>
     );

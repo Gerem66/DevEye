@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ws } from '@/api/ws';
+import { useDialogSubmit } from '@/Components/Dialog';
 import { openInfo } from '@/Components/InfoPopup';
 import Button from '@/Components/Button';
 import TextInput from '@/Components/TextInput';
@@ -210,6 +211,10 @@ export function ShortcutForm({ initial, onDone }: ShortcutFormProps) {
         }
         onDone?.();
     };
+
+    // Enter confirms when this form is hosted in a Dialog (add-tile / edit). The
+    // submit itself no-ops while the URL is invalid.
+    useDialogSubmit(submit);
 
     const previewSub = description.trim() || preview?.subtitle || null;
     const showTemplatesInfo = () =>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useDismissLayer } from '@/Components/Dialog';
 import {
     useTheme,
     setTheme,
@@ -38,14 +39,7 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
         setNotice(null);
     }, [open]);
 
-    useEffect(() => {
-        if (!open) return;
-        const handler = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') onClose();
-        };
-        window.addEventListener('keydown', handler);
-        return () => window.removeEventListener('keydown', handler);
-    }, [open, onClose]);
+    useDismissLayer(open, onClose);
 
     const activeAccent = (theme.accent ?? DEFAULT_ACCENT).toLowerCase();
     const customized = Boolean(

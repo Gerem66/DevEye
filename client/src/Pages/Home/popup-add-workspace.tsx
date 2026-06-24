@@ -47,12 +47,8 @@ function AddWorkspacePopup({ onCreated }: AddWorkspacePopupProps) {
         }
     };
 
-    const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter') void submit();
-    };
-
     return (
-        <Popup id='popup-add-workspace' title='Ajouter une entreprise' onClosePopup={close}>
+        <Popup id='popup-add-workspace' title='Ajouter une entreprise' onClosePopup={close} onSubmit={submit}>
             <p className={styles.popupHint}>Quel est le nom de la nouvelle entreprise ?</p>
 
             <TextInput
@@ -63,7 +59,6 @@ function AddWorkspacePopup({ onCreated }: AddWorkspacePopupProps) {
                     setName(e.target.value);
                     setError('');
                 }}
-                onKeyDown={onKeyDown}
             />
 
             <div className={styles.popupActions}>

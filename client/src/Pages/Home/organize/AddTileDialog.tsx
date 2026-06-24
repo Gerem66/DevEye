@@ -13,7 +13,7 @@ const TITLE: Record<HomeCategoryKind, string> = {
 };
 
 /** Picker for built-in features not yet on the grid. */
-function FeaturePicker() {
+function FeaturePicker({ onAdded }: { onAdded: () => void }) {
     const layout = useHomeLayout();
     const used = new Set(findCategory(layout, 'feature')?.items ?? []);
     const available = FEATURE_CATALOG.filter((f) => !used.has(f.id));
@@ -24,7 +24,14 @@ function FeaturePicker() {
     return (
         <div className={styles.addList}>
             {available.map((f) => (
-                <button key={f.id} className={styles.addItem} onClick={() => addFeature(f.id)}>
+                <button
+                    key={f.id}
+                    className={styles.addItem}
+                    onClick={() => {
+                        addFeature(f.id);
+                        onAdded();
+                    }}
+                >
                     <span className={`icon icon-${f.icon} ${styles.addItemIcon}`} />
                     <span className={styles.addItemLabel}>{f.title}</span>
                     <span className={`icon icon-plus ${styles.addItemPlus}`} />
@@ -82,8 +89,8 @@ export interface AddTileDialogProps {
 
 /**
  * Per-category add dialog: a focused picker (devices / features), the shortcut
- * creation form, or — when `editShortcut` is set — the shortcut edit form. The
- * pickers stay open after each add so several can be placed in a row.
+ * creation form, or — when `editShortcut` is set — the shortcut edit form. Each
+ * add closes the dialog, so the three kinds behave consistently.
  */
 export function AddTileDialog({ kind, editShortcut, onClose }: AddTileDialogProps) {
     const open = kind !== null || !!editShortcut;
@@ -94,10 +101,10 @@ export function AddTileDialog({ kind, editShortcut, onClose }: AddTileDialogProp
                 <ShortcutForm initial={editShortcut} onDone={onClose} />
             ) : (
                 <>
-                    {/* Devices & shortcuts are added one at a time → close on success.
-                        The feature picker stays open (you often add several). */}
+                    {/* Devices, features & shortcuts are all added one at a time and
+                        close the dialog on success — consistent across the three. */}
                     {kind === 'device' && <DevicePicker onAdded={onClose} />}
-                    {kind === 'feature' && <FeaturePicker />}
+                    {kind === 'feature' && <FeaturePicker onAdded={onClose} />}
                     {kind === 'shortcut' && <ShortcutForm onDone={onClose} />}
                 </>
             )}

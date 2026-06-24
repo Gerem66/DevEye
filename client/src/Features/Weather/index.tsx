@@ -190,6 +190,7 @@ function WeatherSettingsModal({
             open
             onClose={onClose}
             title={`Réglages — ${loc.label}`}
+            onSubmit={() => void submit()}
             footer={
                 <>
                     <Button variant='secondary' onClick={onClose} disabled={saving}>

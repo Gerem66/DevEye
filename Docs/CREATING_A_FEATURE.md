@@ -88,15 +88,36 @@ Tout passe par des schémas zod partagés. Le serveur **et** le client importent
    - Pattern déverrouillage : envelopper les appels chiffrés dans un helper qui
      intercepte l'erreur `locked` et relance après `ensureSecrecyUnlocked()`
      (voir `Features/Notes/index.tsx → withSecrecy`).
-2. **Enregistrement** — `src/Pages/Home/index.tsx` :
+2. **Popups & dialogues** — toujours `Dialog` (statique) ou `Popup` +
+   `OpenPopup`/`ClosePopup` (impératif, request→response). Jamais de modale
+   maison. Comportements **unifiés, fournis par `Dialog`** — ne pas les
+   réimplémenter par popup :
+   - **Entrée → action principale** : passer `onSubmit={submit}` (le même handler
+     que le bouton principal du footer). Ne **pas** remettre de `onKeyDown`
+     « Enter » sur les champs. `textarea`, `select` et contenteditable gardent leur
+     Entrée. Pour les confirmations destructives, `onSubmit` câble la confirmation.
+   - **Autofocus** : à l'ouverture, `Dialog` focus le `[data-autofocus]`, sinon le
+     1er champ texte. Ne **pas** remettre de `inputRef` + `focus()` manuel à
+     l'ouverture (garder un ref seulement pour un re-focus *après erreur*).
+     `autoFocus={false}` pour désactiver.
+   - **Échap** : géré par la pile `useDismissLayer` (`Components/Dialog`). `Dialog`,
+     `WidgetPopup` (panneau feature) et `SettingsPanel` y sont déjà inscrits → Échap
+     ferme **la couche la plus haute d'abord** (popup avant feature). N'ajoute
+     **jamais** de listener `window` `keydown`/Escape dans une feature.
+   - **Bouton principal dans un enfant** : si le formulaire est rendu *dans* un
+     `Dialog` qu'il ne possède pas (ex. `ShortcutForm` dans `AddTileDialog`),
+     enregistrer son action via `useDialogSubmit(submit)` au lieu de `onSubmit`.
+   - **Cohérence d'ajout** : une popup/sous-formulaire d'ajout se ferme après un
+     ajout réussi (appareils, raccourcis, features, formulaires — tous pareils).
+3. **Enregistrement** — `src/Pages/Home/index.tsx` :
    - widget de grille → ajouter à `FEATURES` (`{ id, title, icon, WidgetContent,
      FullComponent, cacheDurationMinutes, preload? }`) ;
    - page structurelle → ajouter à `PAGES` et passer un `onOpenX` au `TopNavbar`
      (gater par rôle si besoin : `user.role === 'admin' ? () => handleExpand('x') : undefined`).
-3. **Navbar** (page structurelle) — `src/Components/TopNavbar/TopNavbar.tsx` :
+4. **Navbar** (page structurelle) — `src/Components/TopNavbar/TopNavbar.tsx` :
    ajouter la prop `onOpenX?` et l'entrée de menu (rendue seulement si la prop est
    fournie → gating naturel).
-4. **Icône** — réutiliser une classe de `src/Styles/icons.css` (`icon-…`).
+5. **Icône** — réutiliser une classe de `src/Styles/icons.css` (`icon-…`).
 
 ---
 

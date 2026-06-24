@@ -1090,6 +1090,7 @@ export default function MonitoringPanel({ deviceId, onPurged }: MonitoringPanelP
                 onClose={() => setPurgeOpen(false)}
                 title={`Supprimer « ${selected.name} » ?`}
                 description='Cette action efface définitivement l’appareil et tout son historique de monitoring.'
+                onSubmit={() => void purgeDevice()}
                 footer={
                     <>
                         <Button variant='secondary' onClick={() => setPurgeOpen(false)} disabled={purging}>
@@ -1115,6 +1116,7 @@ export default function MonitoringPanel({ deviceId, onPurged }: MonitoringPanelP
                     deleteTarget?.kind === 'range' ? 'Supprimer les snapshots de la zone ?' : 'Supprimer ce snapshot ?'
                 }
                 description='Cette action efface définitivement les relevés de processus sélectionnés.'
+                onSubmit={() => void deleteSnapshots()}
                 footer={
                     <>
                         <Button variant='secondary' onClick={() => setDeleteOpen(false)} disabled={deleting}>

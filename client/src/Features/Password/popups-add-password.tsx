@@ -89,6 +89,7 @@ function PasswordPopupAdd({ passwordCategories }: PasswordPopupAddProps) {
             width={520}
             onInputChange={handleOpenPopup}
             onClosePopup={() => handleBack()}
+            onSubmit={handleAddPassword}
         >
             <p className={styles.popupHint}>
                 Stocker un mot de passe est une bonne pratique pour protéger vos comptes. Les informations sont

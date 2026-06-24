@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 
 import styles from './style.module.css';
 
@@ -20,14 +20,12 @@ export type FolderNameResult = string | null;
  * separate from the note editor so folder management stays out of the note form.
  */
 export default function FolderNamePopup() {
-    const inputRef = useRef<HTMLInputElement | null>(null);
     const [mode, setMode] = useState<'add' | 'rename'>('add');
     const [name, setName] = useState('');
 
     function handleOpen(input: FolderNameInput) {
         setMode(input?.mode ?? 'add');
         setName(input?.name ?? '');
-        setTimeout(() => inputRef.current?.focus(), 0);
     }
 
     function close(result: FolderNameResult) {
@@ -50,16 +48,13 @@ export default function FolderNamePopup() {
             width={420}
             onInputChange={handleOpen}
             onClosePopup={() => close(null)}
+            onSubmit={save}
         >
             <TextInput
-                ref={inputRef}
                 placeholder='Nom du dossier'
                 value={name}
                 maxLength={NOTE_FOLDER_MAX_LENGTH}
                 onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter') save();
-                }}
             />
             <div className={styles.editorFooter} style={{ marginTop: 'var(--space-md)' }}>
                 <span />

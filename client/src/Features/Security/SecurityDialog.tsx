@@ -93,18 +93,13 @@ export function SecurityDialog({ open, enabled, onClose, onChanged }: SecurityDi
         }
     };
 
-    const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-        if (e.key !== 'Enter') return;
-        if (mode === 'enable') void onEnable();
-        else if (mode === 'disable') void onDisable();
-    };
-
     if (mode === 'showRecovery') {
         return (
             <Dialog
                 open={open}
                 onClose={close}
                 title='Code de récupération'
+                onSubmit={close}
                 description='⚠️ Conservez ce code en lieu sûr. Il permet de récupérer vos données si vous oubliez votre mot de passe, et ne sera plus affiché.'
                 footer={
                     <>
@@ -130,6 +125,7 @@ export function SecurityDialog({ open, enabled, onClose, onChanged }: SecurityDi
                 onClose={close}
                 title='Désactiver le chiffrement par mot de passe'
                 description='Vos données seront de nouveau protégées par la clé du serveur uniquement. Saisissez votre mot de passe pour confirmer.'
+                onSubmit={() => void onDisable()}
                 footer={
                     <>
                         <Button variant='secondary' onClick={close} disabled={loading}>
@@ -141,17 +137,15 @@ export function SecurityDialog({ open, enabled, onClose, onChanged }: SecurityDi
                     </>
                 }
             >
-                <div onKeyDown={onKeyDown}>
-                    <TextInput
-                        type='password'
-                        enableShowHideButton
-                        autoComplete='current-password'
-                        placeholder='Mot de passe'
-                        value={password}
-                        error={error ?? undefined}
-                        onChange={(e) => setPassword(e.target.value)}
-                    />
-                </div>
+                <TextInput
+                    type='password'
+                    enableShowHideButton
+                    autoComplete='current-password'
+                    placeholder='Mot de passe'
+                    value={password}
+                    error={error ?? undefined}
+                    onChange={(e) => setPassword(e.target.value)}
+                />
             </Dialog>
         );
     }
@@ -162,6 +156,7 @@ export function SecurityDialog({ open, enabled, onClose, onChanged }: SecurityDi
             onClose={close}
             title='Activer le chiffrement par mot de passe'
             description='Vos données chiffrées seront verrouillées par votre mot de passe. Même en cas de vol de la base, elles resteront illisibles sans celui-ci.'
+            onSubmit={() => void onEnable()}
             footer={
                 <>
                     <Button variant='secondary' onClick={close} disabled={loading}>
@@ -173,7 +168,7 @@ export function SecurityDialog({ open, enabled, onClose, onChanged }: SecurityDi
                 </>
             }
         >
-            <div className={styles.form} onKeyDown={onKeyDown}>
+            <div className={styles.form}>
                 <label className={styles.field}>
                     <span className={styles.fieldLabel}>Mot de passe</span>
                     <TextInput
