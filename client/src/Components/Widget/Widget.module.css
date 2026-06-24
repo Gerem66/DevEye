@@ -13,6 +13,36 @@
     min-height: 158px;
     position: relative;
     transition: border-color var(--transition-fast);
+    /* The card can render as an anchor (shortcut tiles) — keep it looking like a card. */
+    text-decoration: none;
+    color: inherit;
+}
+
+/* Shorter cards (devices) — and the even shorter "thin & long" shortcut cards.
+   These use border-box (unlike the rest of the app) so `min-height` is the real
+   card height: with content-box the large padding would otherwise stack on top
+   of min-height and leave a big empty area. Tighter padding too. */
+.widget.compact {
+    box-sizing: border-box;
+    min-height: 88px;
+    padding: var(--space-md);
+    align-self: start;
+}
+
+/* Declared after `.compact` so it wins the min-height at equal (0,2,0) specificity.
+   Tall enough that a rich shortcut (GitHub-style: avatar + line + stats) fits, so
+   every shortcut card — simple or not — has the same height. */
+.widget.slim {
+    box-sizing: border-box;
+    min-height: 104px;
+    padding: var(--space-md);
+    align-self: start;
+}
+
+/* Edit-mode card: no hover lift, default cursor (drag/affordances live on the
+   sortable wrapper around it). */
+.widget.static {
+    cursor: default;
 }
 
 /* Hover shadow via opacity — GPU-composited, no repaint */

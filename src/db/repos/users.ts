@@ -15,6 +15,7 @@ export interface UsersRepo {
     updateAvatar(id: number, avatar: string): Promise<void>;
     setRole(id: number, role: 'user' | 'admin'): Promise<void>;
     setTheme(id: number, theme: string): Promise<void>;
+    setHomeLayout(id: number, homeLayout: string): Promise<void>;
     /** Password re-validation window in seconds; `null` resets to the default. */
     setReAuthInterval(id: number, seconds: number | null): Promise<void>;
 }
@@ -64,6 +65,9 @@ export function usersRepo(pool: Q): UsersRepo {
         },
         async setTheme(id, theme) {
             await pool.query('UPDATE users SET theme = ? WHERE id = ?', [theme, id]);
+        },
+        async setHomeLayout(id, homeLayout) {
+            await pool.query('UPDATE users SET home_layout = ? WHERE id = ?', [homeLayout, id]);
         },
         async setReAuthInterval(id, seconds) {
             await pool.query('UPDATE users SET re_auth_interval = ? WHERE id = ?', [seconds, id]);

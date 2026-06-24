@@ -1,0 +1,123 @@
+/* Device tile body. Owns the whole card (no Widget header): name + status on
+   top, small metrics below, and a full-bleed activity tint behind it all. */
+.widget {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--space-sm);
+}
+
+/* Full-bleed activity background. Negative inset reaches past the Widget's own
+   padding to the card edges; the Widget's `overflow: hidden` clips it to the
+   rounded card. Tinted by `--activity-color`, set per level below. */
+.bg {
+    position: absolute;
+    inset: calc(-1 * var(--space-md));
+    z-index: 0;
+    --activity-color: transparent;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--activity-color) 22%, transparent), transparent 72%);
+    transition: background var(--transition-slow, 0.4s);
+}
+
+.lvlIdle {
+    --activity-color: var(--text-muted);
+}
+.lvlNormal {
+    --activity-color: var(--success, #3ecf8e);
+}
+.lvlIntense {
+    --activity-color: var(--warning);
+}
+
+.top,
+.metrics,
+.hint {
+    position: relative;
+    z-index: 1;
+}
+
+.top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.name {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.nameIcon {
+    width: 14px;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+/* Status, pinned to the top-right corner. */
+.status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.statusDot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.online .statusDot {
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success);
+}
+
+.offline .statusDot {
+    background: var(--text-muted);
+}
+
+.archived .statusDot {
+    background: var(--warning);
+}
+
+/* Three small, equal metrics (CPU / RAM / Disk). */
+.metrics {
+    display: flex;
+    gap: var(--space-lg);
+}
+
+.metric {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.metricValue {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.metricLabel {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+}
+
+.hint {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}

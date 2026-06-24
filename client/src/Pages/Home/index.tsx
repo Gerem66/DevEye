@@ -1,8 +1,10 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef, type ComponentType, type ReactNode } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { ws } from '@/api/ws';
 import { isHomeReady, onHomeReady } from '@/stores/homeReady';
+import { useDevices } from '@/stores/devices';
+import { useHomeLayout, getHomeLayout, findCategory, pruneMissingDevices } from '@/stores/homeLayout';
 import { TopNavbar } from '@/Components/TopNavbar';
 import { Widget } from '@/Components/Widget';
 import { WidgetGrid } from '@/Components/WidgetGrid';
@@ -12,21 +14,20 @@ import { SettingsPanel } from '@/Components/SettingsPanel';
 import { InfoPopup } from '@/Components/InfoPopup';
 import PopupUnlock from './popup-unlock';
 
-// Widget content (compact)
-import { MonitoringWidget } from '@/Features/Monitoring';
-import { WeatherWidget } from '@/Features/Weather';
-// Full feature components
-import Monitoring from '@/Features/Monitoring';
-import Weather from '@/Features/Weather';
+// Structural feature views (no grid card)
 import Clients from '@/Features/Clients';
 import Security from '@/Features/Security';
 import FeatureProfile from '@/Features/Profile';
-import FeaturePassword from '@/Features/Password';
-import FeatureNotes from '@/Features/Notes';
 import FeatureLogs from '@/Features/Logs';
-import { NotesWidget } from '@/Features/Notes/NotesWidget';
-import { PasswordWidget } from '@/Features/Password/PasswordWidget';
+// Device popup content (Monitoring panel without the sidebar)
+import MonitoringPanel from '@/Features/Monitoring/MonitoringPanel';
 
+import { FEATURE_CATALOG } from './catalog';
+import { deviceTileVisual, deviceViewId, featureTileVisual, shortcutTileVisual } from './tiles/tileVisual';
+import { OrganizeToolbar } from './organize/OrganizeToolbar';
+import { EditableHome } from './organize/EditableHome';
+
+import type { HomeCategory } from 'deveye-types';
 import type { FeatureProps } from '@/Features/types';
 import styles from './Dashboard.module.css';
 
@@ -39,112 +40,61 @@ function isForceReload(e: { ctrlKey: boolean; metaKey: boolean }): boolean {
     return IS_MAC ? e.metaKey : e.ctrlKey;
 }
 
-/** A view that can be opened full-screen in the popup. */
+/** A view openable full-screen in the popup (feature, structural page or device). */
 interface ViewConfig {
     id: string;
     title: string;
     icon: string;
-    FullComponent: React.ComponentType<FeatureProps>;
-    /**
-     * How long (minutes) the view stays mounted after its popup closes.
-     * - `0`         → unmount immediately on close.
-     * - `> 0`       → keep mounted for that many minutes, then auto-unmount.
-     * - `undefined` → keep mounted indefinitely (until a Ctrl+click reset).
-     */
+    /** Minutes the view stays mounted after its popup closes (see handleExitComplete). */
     cacheDurationMinutes?: number;
-    /**
-     * Whether to mount this view eagerly at page load (parked hidden), before
-     * it is ever opened — so its content is already loaded the first time the
-     * user opens it. The preloaded instance respects `cacheDurationMinutes`:
-     * its TTL timer starts immediately, so a view that is never opened within
-     * its duration is auto-unmounted (`cacheDurationMinutes: 0` is therefore
-     * meaningless to preload and is ignored).
-     */
+    /** Warm eagerly at idle after load (only honoured for grid features). */
     preload?: boolean;
+    /** Has a grid card to morph from (feature/device) vs. fades in (page). */
+    hasCard: boolean;
+    /** Static feature/page view component (typed to accept FeatureProps). */
+    FullComponent?: ComponentType<FeatureProps>;
+    /** Custom render for a device view, bound to its deviceId. */
+    renderDevice?: () => ReactNode;
 }
 
-/** A modular feature: a view that also shows as a card on the home grid. */
-interface FeatureConfig extends ViewConfig {
-    WidgetContent: React.ComponentType;
-}
-
-// Modular features — shown as cards on the home grid; their popup morphs open
-// from the card via a shared-element transition.
-const FEATURES: FeatureConfig[] = [
-    {
-        id: 'monitoring',
-        title: 'Monitoring',
-        icon: 'activity',
-        WidgetContent: MonitoringWidget,
-        FullComponent: Monitoring,
-        cacheDurationMinutes: 5,
-        preload: true
-    },
-    {
-        id: 'weather',
-        title: 'Météo',
-        icon: 'cloud',
-        WidgetContent: WeatherWidget,
-        FullComponent: Weather,
-        cacheDurationMinutes: 60,
-        preload: true
-    },
-    {
-        id: 'password',
-        title: 'Mot de passe',
-        icon: 'lock',
-        WidgetContent: PasswordWidget,
-        FullComponent: FeaturePassword,
-        cacheDurationMinutes: 0
-    },
-    {
-        id: 'notes',
-        title: 'Notes',
-        icon: 'notes',
-        WidgetContent: NotesWidget,
-        FullComponent: FeatureNotes,
-        cacheDurationMinutes: 5
-    }
-];
-
-// Structural DevEye pages — part of the app itself, reached from the navbar
-// menu rather than the grid; they fade in (no card to morph from).
-const PAGES: ViewConfig[] = [
+// Static views: the built-in feature catalog (grid cards) + structural pages
+// (reached from the navbar menu, no card).
+const STATIC_VIEWS: ViewConfig[] = [
+    ...FEATURE_CATALOG.map((f) => ({
+        id: f.id,
+        title: f.title,
+        icon: f.icon,
+        cacheDurationMinutes: f.cacheDurationMinutes,
+        preload: f.preload,
+        hasCard: true,
+        FullComponent: f.FullComponent
+    })),
     {
         id: 'profile',
         title: 'Profil',
         icon: 'user',
-        FullComponent: FeatureProfile,
-        cacheDurationMinutes: 0
+        cacheDurationMinutes: 0,
+        hasCard: false,
+        FullComponent: FeatureProfile
     },
     {
-        // Device management & pairing — reached from the navbar menu, grouped
-        // with Logs (both are "fleet" concerns) rather than shown as a card.
         id: 'clients',
         title: 'Appareils',
         icon: 'server',
-        FullComponent: Clients,
-        cacheDurationMinutes: 5
+        cacheDurationMinutes: 5,
+        hasCard: false,
+        FullComponent: Clients
     },
     {
         id: 'security',
         title: 'Sécurité',
         icon: 'shield',
-        FullComponent: Security,
-        cacheDurationMinutes: 0
+        cacheDurationMinutes: 0,
+        hasCard: false,
+        FullComponent: Security
     },
-    {
-        // Admin-only system audit trail; the navbar only exposes it to admins,
-        // and the server gates every logs.* command on the admin role too.
-        id: 'logs',
-        title: 'Logs',
-        icon: 'activity',
-        FullComponent: FeatureLogs,
-        cacheDurationMinutes: 5
-    }
+    { id: 'logs', title: 'Logs', icon: 'activity', cacheDurationMinutes: 5, hasCard: false, FullComponent: FeatureLogs }
 ];
-
-const VIEWS: ViewConfig[] = [...FEATURES, ...PAGES];
 
 function getGreeting(): string {
     const hour = new Date().getHours();
@@ -154,48 +104,35 @@ function getGreeting(): string {
 }
 
 function formatDate(): string {
-    return new Date().toLocaleDateString('fr-FR', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long'
-    });
+    return new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
 export default function HomePage() {
     const { user, workspaces, setWorkspaces } = useAuth();
+    const layout = useHomeLayout();
+    const { devices, loading: devicesLoading } = useDevices();
+
     const [expandedWidget, setExpandedWidget] = useState<string | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [editing, setEditing] = useState(false);
 
-    // Set of feature ids whose components are currently mounted (cached).
+    // Set of view ids whose components are currently mounted (cached).
     const [mountedFeatures, setMountedFeatures] = useState<Set<string>>(new Set());
-
-    // Per-feature "generation" counter. Bumping it changes the component key,
-    // forcing React to fully unmount (running the feature's onUnmount cleanup)
-    // and remount a fresh instance — used for the Ctrl+click forced reset.
+    // Per-view "generation" counter — bumping it remounts the view (Ctrl+click reset).
     const [featureGen, setFeatureGen] = useState<Map<string, number>>(new Map());
-
     // The open popup's body element — feature content is portaled into it.
     const [popupBodyEl, setPopupBodyEl] = useState<HTMLDivElement | null>(null);
-
-    // Timers for TTL-based auto-unmount, keyed by feature id.
+    // Timers for TTL-based auto-unmount, keyed by view id.
     const ttlTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-
-    // The feature whose popup is currently animating out (policy applied on exit).
+    // The view whose popup is currently animating out (policy applied on exit).
     const closingFeatureRef = useRef<string | null>(null);
-
-    // Feature expand requested while another popup is still open / animating out.
-    // Applied in handleExitComplete once the current popup finishes closing.
+    // Expand requested while another popup is still open / animating out.
     const pendingExpandRef = useRef<{ widgetId: string; forceReset: boolean } | null>(null);
 
     const currentWorkspace = useMemo(() => {
         return workspaces.find((w) => w.id === user?.defaultWorkspace) ?? workspaces[0] ?? null;
     }, [workspaces, user]);
 
-    /**
-     * Remove a feature from the DOM. React unmounts the component, which runs
-     * its `useFeatureLifecycle` cleanup (onUnmount) — so save/teardown happens
-     * automatically regardless of why the feature is being unloaded.
-     */
     const unmountFeature = useCallback((featureId: string) => {
         clearTimeout(ttlTimers.current.get(featureId));
         ttlTimers.current.delete(featureId);
@@ -226,8 +163,6 @@ export default function HomePage() {
 
     const handleExpand = useCallback(
         (widgetId: string, forceReset = false) => {
-            // If a popup is already open (or animating out), close it first and
-            // defer the new open until the exit animation completes.
             if (expandedWidget && expandedWidget !== widgetId) {
                 pendingExpandRef.current = { widgetId, forceReset };
                 closingFeatureRef.current = expandedWidget;
@@ -240,24 +175,46 @@ export default function HomePage() {
     );
 
     const handleClose = useCallback(() => {
-        // Remember which feature is closing; the unload policy is applied once
-        // the morph-back animation finishes (handleExitComplete), so the content
-        // stays visible *inside* the panel during the close animation.
         closingFeatureRef.current = expandedWidget;
         setExpandedWidget(null);
     }, [expandedWidget]);
+
+    // Device views: one per device tile whose device still exists. Built here
+    // because they depend on the live device list and need a close-on-purge hook.
+    const deviceViews = useMemo<ViewConfig[]>(() => {
+        const onPurged = () => setExpandedWidget(null);
+        const out: ViewConfig[] = [];
+        const seen = new Set<string>();
+        for (const id of findCategory(layout, 'device')?.items ?? []) {
+            if (seen.has(id)) continue;
+            const device = devices.find((d) => d.id === id);
+            if (!device) continue;
+            seen.add(id);
+            out.push({
+                id: deviceViewId(device.id),
+                title: device.name,
+                icon: 'server',
+                cacheDurationMinutes: 5,
+                hasCard: true,
+                renderDevice: () => <MonitoringPanel deviceId={device.id} onPurged={onPurged} />
+            });
+        }
+        return out;
+    }, [layout, devices]);
+
+    const views = useMemo(() => [...STATIC_VIEWS, ...deviceViews], [deviceViews]);
+    const viewsRef = useRef(views);
+    viewsRef.current = views;
 
     const handleExitComplete = useCallback(() => {
         const featureId = closingFeatureRef.current;
         closingFeatureRef.current = null;
         if (!featureId) return;
 
-        const config = VIEWS.find((v) => v.id === featureId);
-        if (!config) return;
+        const config = viewsRef.current.find((v) => v.id === featureId);
+        const duration = config?.cacheDurationMinutes;
 
-        const duration = config.cacheDurationMinutes;
-
-        if (duration === 0) {
+        if (duration === 0 || !config) {
             unmountFeature(featureId);
         } else if (duration !== undefined) {
             clearTimeout(ttlTimers.current.get(featureId));
@@ -265,7 +222,6 @@ export default function HomePage() {
             ttlTimers.current.set(featureId, timer);
         }
 
-        // If another feature was waiting to open, trigger it now.
         const pending = pendingExpandRef.current;
         if (pending) {
             pendingExpandRef.current = null;
@@ -273,52 +229,38 @@ export default function HomePage() {
         }
     }, [unmountFeature, doExpand]);
 
-    // Eagerly mount preload views (parked hidden), so their content is already
-    // loaded the first time the user opens them. Each starts its TTL timer
-    // immediately — a preloaded view that is never opened within its
-    // `cacheDurationMinutes` is auto-unmounted, just like one left to expire
-    // after a close.
-    //
-    // Deferred on purpose. A preloaded feature fetches its data on mount (e.g.
-    // Monitoring fires a burst of `metrics.*` queries) — doing that *during*
-    // connect would contend the single socket with the above-the-fold critical
-    // load (the device list that gates the splash, and the weather widget),
-    // making the home feel slow exactly when it must feel fast. So we warm the
-    // heavy features only once the home is ready, and in browser idle time, so
-    // the first open is still instant without stealing the opening moment.
-    //
-    // Still gated on the WS being `open`: features' initial `ws.send` rejects
-    // (and isn't retried) while the socket is connecting, so mounting before
-    // then would leave them blank. Runs once.
+    // Drop device tiles whose device no longer exists (deleted). Only once devices
+    // have actually loaded, so a transient empty list can't wipe the layout.
+    useEffect(() => {
+        if (devicesLoading) return;
+        pruneMissingDevices(new Set(devices.map((d) => d.id)));
+    }, [devices, devicesLoading]);
+
+    // Eagerly warm preload feature views that are on the grid, at idle, once the
+    // home is ready — so the first open is instant without stealing the opening
+    // moment. (See the original rationale; unchanged beyond gating on the layout.)
     const preloadedRef = useRef(false);
     useEffect(() => {
         const mountPreloads = () => {
             if (preloadedRef.current || ws.state !== 'open') return;
             preloadedRef.current = true;
-            VIEWS.forEach((config) => {
+            const gridFeatureIds = new Set<string>(findCategory(getHomeLayout(), 'feature')?.items ?? []);
+            for (const config of viewsRef.current) {
                 const duration = config.cacheDurationMinutes;
-                // `0` (unmount-on-close) can't be preloaded; `undefined` keeps
-                // it mounted indefinitely with no timer.
-                if (!config.preload || duration === 0) return;
-
+                if (!config.preload || duration === 0 || !gridFeatureIds.has(config.id)) continue;
                 setMountedFeatures((prev) => new Set(prev).add(config.id));
-
                 if (duration !== undefined) {
                     const timer = setTimeout(() => unmountFeature(config.id), duration * 60 * 1000);
                     ttlTimers.current.set(config.id, timer);
                 }
-            });
+            }
         };
 
-        // Run the warm-up in idle time so it never blocks rendering; fall back to
-        // a short timeout where requestIdleCallback isn't available.
         const ric = window.requestIdleCallback;
         const scheduleIdle = ric
             ? () => ric(() => mountPreloads(), { timeout: 2000 })
             : () => window.setTimeout(mountPreloads, 200);
 
-        // Trigger once the critical home is settled (devices loaded), with a
-        // safety fallback so a stalled `device.list` can't block warm-up forever.
         let offReady: (() => void) | undefined;
         let fallback: ReturnType<typeof setTimeout> | undefined;
         const arm = () => {
@@ -348,11 +290,10 @@ export default function HomePage() {
         };
     }, []);
 
-    const expandedConfig = expandedWidget ? (VIEWS.find((v) => v.id === expandedWidget) ?? null) : null;
+    const expandedConfig = expandedWidget ? (views.find((v) => v.id === expandedWidget) ?? null) : null;
 
     // Keep the last opened config around so the panel still has content (and the
-    // correct layoutId) during its close animation. While open we always use the
-    // *current* config, so a freshly opened card morphs from its own position.
+    // correct layoutId) during its close animation.
     const [lastConfig, setLastConfig] = useState<ViewConfig | null>(null);
     useEffect(() => {
         if (expandedConfig) setLastConfig(expandedConfig);
@@ -376,6 +317,68 @@ export default function HomePage() {
         setWorkspaces((prev) => prev.map((w) => (w.id === ws.id ? ws : w)));
     };
 
+    const startOrganizing = () => {
+        if (expandedWidget) handleClose();
+        setEditing(true);
+    };
+
+    /** Normal-mode rendering of one category as its own grid block. Returns null
+     *  for an empty category, so categories read as lightly-spaced groups with no
+     *  titles. Missing devices are skipped (pruned by the effect above). */
+    const renderCategory = (cat: HomeCategory): ReactNode => {
+        const tiles: ReactNode[] = [];
+        if (cat.kind === 'feature') {
+            for (const fid of cat.items) {
+                const v = featureTileVisual(fid);
+                if (!v) continue;
+                tiles.push(
+                    <Widget
+                        key={fid}
+                        widgetId={v.widgetId}
+                        title={v.title}
+                        icon={v.icon}
+                        onExpand={(e) => handleExpand(v.widgetId, isForceReload(e))}
+                    >
+                        {v.body}
+                    </Widget>
+                );
+            }
+        } else if (cat.kind === 'device') {
+            for (const id of cat.items) {
+                const device = devices.find((d) => d.id === id);
+                if (!device) continue;
+                const v = deviceTileVisual(device);
+                tiles.push(
+                    <Widget
+                        key={id}
+                        widgetId={v.widgetId}
+                        title={v.title}
+                        icon={v.icon}
+                        compact
+                        onExpand={(e) => handleExpand(v.widgetId, isForceReload(e))}
+                    >
+                        {v.body}
+                    </Widget>
+                );
+            }
+        } else {
+            for (const item of cat.items) {
+                const v = shortcutTileVisual(item);
+                tiles.push(
+                    <Widget key={item.id} widgetId={v.widgetId} slim={v.slim} href={v.href}>
+                        {v.body}
+                    </Widget>
+                );
+            }
+        }
+        if (tiles.length === 0) return null;
+        return (
+            <div key={cat.kind} className={styles.categoryGroup}>
+                <WidgetGrid>{tiles}</WidgetGrid>
+            </div>
+        );
+    };
+
     return (
         <div className={styles.dashboard}>
             <Wallpaper />
@@ -388,6 +391,7 @@ export default function HomePage() {
                 onOpenDevices={user.role === 'admin' ? (e) => handleExpand('clients', isForceReload(e)) : undefined}
                 onOpenLogs={user.role === 'admin' ? (e) => handleExpand('logs', isForceReload(e)) : undefined}
                 onOpenSettings={() => setSettingsOpen(true)}
+                onOrganize={startOrganizing}
             />
 
             {/* The grid stays mounted under the popup so the shared-element morph
@@ -401,30 +405,23 @@ export default function HomePage() {
                         <p className={styles.dateText}>{formatDate()}</p>
                     </header>
 
-                    <WidgetGrid>
-                        {FEATURES.map((config) => (
-                            <Widget
-                                key={config.id}
-                                widgetId={config.id}
-                                title={config.title}
-                                icon={config.icon}
-                                onExpand={(e) => handleExpand(config.id, isForceReload(e))}
-                            >
-                                <config.WidgetContent />
-                            </Widget>
-                        ))}
-                    </WidgetGrid>
+                    {editing ? (
+                        <>
+                            <OrganizeToolbar onDone={() => setEditing(false)} />
+                            <EditableHome />
+                        </>
+                    ) : (
+                        <div className={styles.categories}>{layout.categories.map(renderCategory)}</div>
+                    )}
                 </div>
             </main>
 
-            {/* The animated popup shell. It stays visually empty — the active
-                view's content is portaled into its body by the keep-alive layer
-                below, so closing the popup never unmounts the view. Features
-                morph from/back to their grid card; pages have no card and fade. */}
+            {/* The animated popup shell. Feature content is portaled into its body
+                by the keep-alive layer below, so closing never unmounts the view. */}
             {popupConfig && (
                 <WidgetPopup
-                    key={FEATURES.some((f) => f.id === popupConfig.id) ? popupConfig.id : 'page'}
-                    layoutId={FEATURES.some((f) => f.id === popupConfig.id) ? popupConfig.id : undefined}
+                    key={popupConfig.hasCard ? popupConfig.id : 'page'}
+                    layoutId={popupConfig.hasCard ? popupConfig.id : undefined}
                     open={!!expandedWidget}
                     onClose={handleClose}
                     bodyRef={setPopupBodyEl}
@@ -432,37 +429,32 @@ export default function HomePage() {
                 />
             )}
 
-            {/* Keep-alive layer: every cached feature stays mounted here and is
+            {/* Keep-alive layer: every cached view stays mounted here and is
                 portaled into the open popup body when active, or parked hidden
                 otherwise — preserving its state across close/reopen. */}
             {[...mountedFeatures].map((id) => {
-                const config = VIEWS.find((v) => v.id === id);
+                const config = views.find((v) => v.id === id);
                 if (!config) return null;
 
                 const featureProps: FeatureProps = {
                     user,
                     workspace: defaultWorkspace,
-                    feature: {
-                        id: config.id,
-                        name: config.title,
-                        icon: config.icon,
-                        component: config.FullComponent
-                    },
+                    feature: { id: config.id, name: config.title, icon: config.icon, component: () => null },
                     setWorkspace: handleSetWorkspace,
                     setFeature: () => {}
                 };
 
                 const gen = featureGen.get(id) ?? 0;
-                // Portal into the popup body while this feature owns the popup
-                // (open *or* animating out); otherwise keep it parked hidden.
                 const target = popupConfig?.id === id ? popupBodyEl : null;
+                const body = config.FullComponent ? (
+                    <config.FullComponent {...featureProps} />
+                ) : (
+                    (config.renderDevice?.() ?? null)
+                );
 
                 return (
-                    // The generation in the key forces a fresh remount on a forced
-                    // reset (Ctrl+click): old instance unmounts (onUnmount fires)
-                    // and a fresh one mounts, reloading the feature from scratch.
                     <FeatureKeepAlive key={`${id}-${gen}`} target={target}>
-                        <config.FullComponent {...featureProps} />
+                        {body}
                     </FeatureKeepAlive>
                 );
             })}
@@ -474,8 +466,7 @@ export default function HomePage() {
             <PopupUnlock workspace={currentWorkspace} />
 
             {/* Shared info dialog, registered once here so any feature's "i" button
-                opens it via openInfo(). Mounted at this level (not inside a feature
-                popup) so its own backdrop closes it, never a popup underneath. */}
+                opens it via openInfo(). */}
             <InfoPopup />
         </div>
     );

@@ -1,0 +1,105 @@
+/* Shortcut (link) tile body. Lives inside a slim Widget that is the <a href>.
+   Centered vertically so the (short) content is balanced top/bottom. */
+.shortcut {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+}
+
+/* Small "type" logo (the service) in the top-right corner. */
+.typeBadge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    opacity: 0.9;
+}
+
+.typeBadgeImg {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    object-fit: contain;
+}
+
+.typeBadgeIcon {
+    color: var(--text-muted);
+}
+
+.shortcutHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-width: 0;
+    /* Leave room for the type badge so the title never runs under it. */
+    padding-right: 22px;
+}
+
+.shortcutImg {
+    width: 30px;
+    height: 30px;
+    border-radius: var(--radius-sm);
+    object-fit: cover;
+    flex-shrink: 0;
+    background: var(--glass-bg);
+}
+
+.shortcutIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: var(--radius-sm);
+    background: var(--accent-bg);
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.shortcutGlyph {
+    width: 16px;
+}
+
+.shortcutTitle {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.shortcutDesc {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    /* One line — keeps every shortcut card the same height. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* One line (no wrap) so every shortcut card keeps the same height. */
+.shortcutStats {
+    display: flex;
+    gap: var(--space-sm);
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.shortcutStat {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.shortcutStat strong {
+    color: var(--text-primary);
+    font-weight: 700;
+}

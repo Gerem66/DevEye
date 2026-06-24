@@ -5,6 +5,7 @@ import { ws } from '../api/ws';
 import { refreshSecrecyStatus, setUnlocked } from '../stores/secrecy';
 import { resetHomeReady } from '../stores/homeReady';
 import { syncThemeFromServer } from '../stores/theme';
+import { syncHomeLayoutFromServer } from '../stores/homeLayout';
 
 interface AuthState {
     status: 'unknown' | 'authenticated' | 'anonymous';
@@ -30,6 +31,7 @@ type FullBundle = { user: User; workspaces: Workspace[] };
 
 function applyBundle(bundle: FullBundle): AuthState {
     syncThemeFromServer(bundle.user.theme);
+    syncHomeLayoutFromServer(bundle.user.homeLayout);
     return {
         status: 'authenticated',
         user: bundle.user,

@@ -33,6 +33,8 @@ export interface TopNavbarProps {
     onOpenLogs?: (e: ReactMouseEvent) => void;
     /** Open the settings panel. */
     onOpenSettings?: () => void;
+    /** Enter the home grid organization (edit) mode. */
+    onOrganize?: () => void;
 }
 
 /** Always-visible main info: current weather (primary city) + online devices. */
@@ -76,7 +78,8 @@ export default function TopNavbar({
     onOpenSecurity,
     onOpenDevices,
     onOpenLogs,
-    onOpenSettings
+    onOpenSettings,
+    onOrganize
 }: TopNavbarProps) {
     const { user, logout } = useAuth();
     const [menuOpen, setMenuOpen] = useState(false);
@@ -218,6 +221,17 @@ export default function TopNavbar({
                             >
                                 <span className='icon icon-appearance' /> Apparence
                             </button>
+                            {onOrganize && (
+                                <button
+                                    className={styles.menuItem}
+                                    onClick={() => {
+                                        onOrganize();
+                                        setMenuOpen(false);
+                                    }}
+                                >
+                                    <span className='icon icon-edit' /> Organiser l’accueil
+                                </button>
+                            )}
                             {/* Second separator: groups "fleet" entries (Appareils,
                                 Logs) apart from the personal settings above. */}
                             {(onOpenDevices || onOpenLogs) && <hr className={styles.divider} />}
