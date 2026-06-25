@@ -8,6 +8,7 @@
 //!   - `status`       Print the local enrollment + running state.
 //!   - `unlink`       Forget the local enrollment (config + token).
 
+mod commands;
 mod config;
 mod elevate;
 mod enroll;

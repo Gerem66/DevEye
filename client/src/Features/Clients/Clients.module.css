@@ -795,3 +795,9 @@
     font-size: 0.85rem;
     word-break: break-word;
 }
+
+.manualCommandBox {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
