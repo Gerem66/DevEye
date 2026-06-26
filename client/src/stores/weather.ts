@@ -28,6 +28,10 @@ let timer: ReturnType<typeof setInterval> | null = null;
 let unsubState: (() => void) | null = null;
 let refCount = 0;
 let inFlight = false;
+// A refresh requested while one was already running: we run exactly one more
+// pass when the current one settles, so a "socket just opened" retry arriving
+// mid-flight is never swallowed by the `inFlight` guard.
+let pending = false;
 
 function emit(next: Partial<WeatherStoreState>): void {
     state = { ...state, ...next };
@@ -40,24 +44,40 @@ export function primaryLocation(locations: WeatherLocation[]): WeatherLocation |
 }
 
 export async function refreshWeather(): Promise<void> {
-    if (inFlight) return;
+    // Coalesce concurrent calls: note that another refresh was asked for and run
+    // it once the in-flight one settles (see the `pending` handling below).
+    if (inFlight) {
+        pending = true;
+        return;
+    }
     inFlight = true;
     try {
         const list = await ws.send('weather.list', {});
+        // Surface the configured cities as soon as we have them, *before* the
+        // slower, provider-dependent report fetch. This is what stops a failed
+        // or slow report from masquerading as "Aucune météo configurée": the
+        // primary city stays known even when its report isn't here yet.
+        emit({ locations: list.locations });
         const primary = primaryLocation(list.locations);
         if (!primary) {
-            emit({ locations: list.locations, report: null, loading: false });
+            emit({ report: null, loading: false });
             return;
         }
         const res = await ws.send('weather.get', { id: primary.id });
-        emit({ locations: list.locations, report: res.report, loading: false });
+        emit({ report: res.report, loading: false });
     } catch {
         // If the socket isn't open yet, stay in the loading state — the state
         // listener retries the moment it connects (avoids a misleading "no
-        // weather" flash). Only give up the spinner on a real, connected error.
+        // weather" flash). Only give up the spinner on a real, connected error;
+        // locations surfaced above survive, so a failed report never reads as
+        // "Aucune météo configurée".
         if (ws.state === 'open') emit({ loading: false });
     } finally {
         inFlight = false;
+        if (pending) {
+            pending = false;
+            void refreshWeather();
+        }
     }
 }
 
@@ -90,6 +110,7 @@ function stop(): void {
         clearInterval(timer);
         timer = null;
     }
+    pending = false;
     unsubState?.();
     unsubState = null;
 }
