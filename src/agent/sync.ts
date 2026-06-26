@@ -106,37 +106,48 @@ async function downloadDiffs(source: AgentSource, manifest: AgentManifest, distD
     return errors;
 }
 
-async function finalize(
-    distDir: string,
-    manifest: AgentManifest | null,
-    errors: string[],
-    want: string
-): Promise<void> {
+/** How many of the shippable targets are present on disk right now. */
+async function presentCount(distDir: string): Promise<number> {
     const present = await Promise.all(AGENT_TARGETS.map((t) => fileExists(join(distDir, t.filename))));
-    const available = present.filter(Boolean).length;
-    if (available === 0) {
+    return present.filter(Boolean).length;
+}
+
+/**
+ * Settle the task `done` (ready) with a usable set on disk — possibly partial, or
+ * an older version than `want` while the matching build is still pending. Per-target
+ * gaps and version mismatches are surfaced as a non-blocking detail/error (shown in
+ * the download popup), never held against the whole app's readiness.
+ */
+function settleServing(distDir: string, errors: string[], want: string, available: number): Promise<void> {
+    return readSyncedManifest(distDir).then((manifest) => {
+        const version = manifest?.version ?? null;
+        const mismatch = version !== null && version !== want;
         status.update(TASK_ID, {
-            state: 'error',
-            progress: null,
-            detail: null,
-            error: errors.length ? errors.join(' · ') : 'Aucun binaire disponible'
+            state: 'done',
+            progress: 1,
+            error: errors.length ? errors.join(' · ') : null,
+            detail: mismatch
+                ? `Version ${version} (serveur ${want})`
+                : version
+                  ? `Version ${version}`
+                  : `${available}/${AGENT_TARGETS.length} binaires`
         });
-        return;
-    }
-    // A usable set is present (maybe an older version than `want`, or a target or
-    // two short): "ready" for serving. Per-target gaps and version mismatches are
-    // surfaced in the download popup, not held against the whole app's readiness.
-    const version = manifest?.version ?? null;
-    const mismatch = version !== null && version !== want;
+    });
+}
+
+/**
+ * Settle the task `error` when not a single agent binary could be obtained — e.g. a
+ * first deploy whose agent build failed and left nothing on the (empty) volume. The
+ * app still runs (binaries only power download + self-update), but this is a real
+ * deployment problem worth surfacing, so the topbar keeps a clear, frozen error chip
+ * rather than a spinner (the client stops polling once a task reaches a terminal state).
+ */
+function settleEmpty(want: string, errors: string[]): void {
     status.update(TASK_ID, {
-        state: 'done',
-        progress: 1,
-        error: errors.length ? errors.join(' · ') : null,
-        detail: mismatch
-            ? `Version ${version} (serveur ${want})`
-            : version
-              ? `Version ${version}`
-              : `${available}/${AGENT_TARGETS.length} binaires`
+        state: 'error',
+        progress: null,
+        detail: null,
+        error: errors.length ? errors.join(' · ') : `Build des agents indisponible (version ${want})`
     });
 }
 
@@ -150,9 +161,18 @@ interface ReconcileOptions {
 
 /**
  * Boot-time reconcile (bounded, terminating). Fetches the manifest and downloads
- * only the changed binaries; if the build for *this* deploy's version isn't
- * published yet, it keeps a usable set and retries until `want` lands or the cap
- * is hit — then stops for good. No steady-state polling.
+ * only the changed binaries.
+ *
+ * Readiness is **never** held on getting *this* deploy's exact version: the agent
+ * binaries are an optional capability (download + self-update), so the moment a
+ * usable set is on disk — typically a prior deploy's, on the persistent volume —
+ * the task settles `done` and the app is ready, while it keeps chasing `want` in
+ * the background until it lands or the cap is hit. That way a slow *or failed*
+ * agent build no longer spins the boot loader: it resolves at once on whatever is
+ * already served. The blocking loader only persists while there is genuinely
+ * nothing to serve yet (e.g. a first deploy, mid-build); if even the deadline
+ * passes with nothing, the task ends in a clear error (not an endless spinner).
+ * No steady-state polling.
  */
 export async function reconcileAgents({ source, distDir, want, maxWaitMs, pollMs }: ReconcileOptions): Promise<void> {
     status.update(TASK_ID, { state: 'running', detail: 'Recherche du manifeste…', progress: null });
@@ -167,18 +187,35 @@ export async function reconcileAgents({ source, distDir, want, maxWaitMs, pollMs
             if (lastErrors.length === 0) {
                 // Persist so the runtime knows the served version with zero GitHub.
                 await writeFile(join(distDir, MANIFEST_FILE), JSON.stringify(manifest, null, 2));
-                if (manifest.version === want) return finalize(distDir, manifest, [], want);
+                // Got exactly what this deploy wants → fully done.
+                if (manifest.version === want) {
+                    return settleServing(distDir, [], want, await presentCount(distDir));
+                }
             }
         }
-        if (Date.now() >= deadline) return finalize(distDir, await readSyncedManifest(distDir), lastErrors, want);
-        // Back to waiting (build not published yet, or no manifest): drop the bar
-        // so it's loader-only. `status.update` patches, so progress would
-        // otherwise stay stuck at the last value set during downloadDiffs.
-        status.update(TASK_ID, {
-            state: 'running',
-            progress: null,
-            detail: manifest ? `En attente de la version ${want}…` : 'Manifeste indisponible, nouvel essai…'
-        });
+
+        const available = await presentCount(distDir);
+        const reached = Date.now() >= deadline;
+        if (available > 0) {
+            // Ready: serve what we have (older / partial set) and keep chasing `want`
+            // in the background. Once settled this never re-blocks — the files stay on
+            // disk, so we always take this branch from here on.
+            await settleServing(distDir, lastErrors, want, available);
+            if (reached) return;
+        } else if (reached) {
+            // Deadline hit with nothing to serve (first deploy + a build that's late
+            // or failed): settle on a clear error instead of spinning forever.
+            return settleEmpty(want, lastErrors);
+        } else {
+            // Still nothing usable, within the window: keep the loader up. Drop the
+            // bar to null so it's loader-only (`status.update` patches, so progress
+            // would otherwise stay stuck at the last downloadDiffs value).
+            status.update(TASK_ID, {
+                state: 'running',
+                progress: null,
+                detail: manifest ? `En attente de la version ${want}…` : 'Manifeste indisponible, nouvel essai…'
+            });
+        }
         await sleep(pollMs);
     }
 }
