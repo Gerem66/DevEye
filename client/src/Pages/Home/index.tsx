@@ -117,6 +117,9 @@ export default function HomePage() {
     const ttlTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
     // The view whose popup is currently animating out (policy applied on exit).
     const closingFeatureRef = useRef<string | null>(null);
+    // Views that must unmount on close regardless of their cache TTL (a feature
+    // asked to close itself with nothing to show — see requestCloseFeature).
+    const forceUnmountRef = useRef<Set<string>>(new Set());
     // Expand requested while another popup is still open / animating out.
     const pendingExpandRef = useRef<{ widgetId: string; forceReset: boolean } | null>(null);
 
@@ -170,6 +173,24 @@ export default function HomePage() {
         setExpandedWidget(null);
     }, [expandedWidget]);
 
+    // Mirror of expandedWidget for stable callbacks that must read it at call time.
+    const expandedWidgetRef = useRef(expandedWidget);
+    expandedWidgetRef.current = expandedWidget;
+
+    /**
+     * Close the popup on a feature's own request. Guarded so only the feature
+     * currently shown can dismiss it, and marks the view for a fresh remount on
+     * reopen (so e.g. a cancelled unlock prompt re-appears instead of leaving the
+     * cached, empty view behind). Stable identity: features read current state
+     * via refs, so this never re-triggers their load effects.
+     */
+    const requestCloseFeature = useCallback((featureId: string) => {
+        if (expandedWidgetRef.current !== featureId) return;
+        forceUnmountRef.current.add(featureId);
+        closingFeatureRef.current = featureId;
+        setExpandedWidget(null);
+    }, []);
+
     // Device views: one per device tile whose device still exists. Built here
     // because they depend on the live device list.
     const deviceViews = useMemo<ViewConfig[]>(() => {
@@ -203,8 +224,9 @@ export default function HomePage() {
 
         const config = viewsRef.current.find((v) => v.id === featureId);
         const duration = config?.cacheDurationMinutes;
+        const forceUnmount = forceUnmountRef.current.delete(featureId);
 
-        if (duration === 0 || !config) {
+        if (forceUnmount || duration === 0 || !config) {
             unmountFeature(featureId);
         } else if (duration !== undefined) {
             clearTimeout(ttlTimers.current.get(featureId));
@@ -437,7 +459,8 @@ export default function HomePage() {
                     workspace: defaultWorkspace,
                     feature: { id: config.id, name: config.title, icon: config.icon, component: () => null },
                     setWorkspace: handleSetWorkspace,
-                    setFeature: () => {}
+                    setFeature: () => {},
+                    closeFeature: () => requestCloseFeature(id)
                 };
 
                 const gen = featureGen.get(id) ?? 0;

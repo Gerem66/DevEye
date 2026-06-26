@@ -10,7 +10,7 @@ import { OpenPopup } from '@/Components/Popup';
 import { ws, WsError } from '@/api/ws';
 import TextInput from '@/Components/TextInput';
 import Button from '@/Components/Button';
-import { ensureUnlocked as ensureSecrecyUnlocked, touchSecrecy } from '@/stores/secrecy';
+import { ensureUnlocked as ensureSecrecyUnlocked, touchSecrecy, UnlockCancelledError } from '@/stores/secrecy';
 
 import type { FeatureProps } from '@/Features/types';
 import type { PasswordEntry, PasswordEntryMasked } from 'deveye-types';
@@ -45,12 +45,15 @@ function humanizeError(e: unknown, fallback: string): string {
     return fallback;
 }
 
-function FeaturePassword({ workspace }: FeatureProps) {
+function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
     const [loaded, setLoaded] = useState(false);
     const [search, setSearch] = useState('');
     const [allPasswords, setAllPasswords] = useState<RowPassword[]>([]);
     const [actionError, setActionError] = useState<string | null>(null);
     const reloadRef = useRef<Promise<void> | null>(null);
+    // Read at call time so the load effect never depends on this changing prop.
+    const closeFeatureRef = useRef(closeFeature);
+    closeFeatureRef.current = closeFeature;
 
     const reload = useCallback(async () => {
         if (reloadRef.current) return reloadRef.current;
@@ -58,8 +61,11 @@ function FeaturePassword({ workspace }: FeatureProps) {
             try {
                 const res = await withSecrecy(() => ws.send('password.list', { workspaceId: workspace.id }));
                 setAllPasswords(res.entries as PasswordEntryMasked[]);
-            } catch {
+            } catch (e) {
                 setAllPasswords([]);
+                // Nothing to show without the password: close instead of leaving
+                // an empty, unusable view behind.
+                if (e instanceof UnlockCancelledError) closeFeatureRef.current();
             } finally {
                 setLoaded(true);
             }

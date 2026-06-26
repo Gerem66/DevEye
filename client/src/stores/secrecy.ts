@@ -17,6 +17,19 @@ export interface SecrecyState {
 }
 
 /**
+ * Rejection raised by {@link ensureUnlocked} when the user dismisses the unlock
+ * prompt without entering their password. Callers can detect it to react to a
+ * deliberate cancel (e.g. close a feature that has nothing to show) instead of
+ * treating it as a generic failure.
+ */
+export class UnlockCancelledError extends Error {
+    constructor() {
+        super('cancelled');
+        this.name = 'UnlockCancelledError';
+    }
+}
+
+/**
  * Client mirror of the server's "sudo-like" grace window (see SecureStore on the
  * backend). Must stay <= the server value so the client re-prompts proactively
  * instead of firing a request that fails with `locked`.
@@ -116,7 +129,7 @@ export function cancelUnlock(): void {
     set({ prompting: false });
     const pending = waiters;
     waiters = [];
-    for (const w of pending) w.reject(new Error('cancelled'));
+    for (const w of pending) w.reject(new UnlockCancelledError());
 }
 
 /**

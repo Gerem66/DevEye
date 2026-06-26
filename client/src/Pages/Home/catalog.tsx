@@ -66,7 +66,7 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         icon: 'notes',
         WidgetContent: NotesWidget,
         FullComponent: FeatureNotes,
-        cacheDurationMinutes: 5
+        cacheDurationMinutes: 0
     }
 ];
 

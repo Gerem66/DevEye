@@ -20,6 +20,13 @@ export interface FeatureProps {
     feature: FeatureType;
     setWorkspace: (workspace: Workspace) => void;
     setFeature: (feature: FeatureType) => void;
+    /**
+     * Ask the host to close this feature's popup. No-op unless this feature is
+     * the one currently shown. The feature is force-unmounted on close (ignoring
+     * its cache TTL) so a later reopen starts a fresh load. Used when there is
+     * nothing to show — e.g. the user cancelled the encryption unlock prompt.
+     */
+    closeFeature: () => void;
 }
 
 /**

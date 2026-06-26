@@ -19,7 +19,7 @@ import { OpenPopup } from '@/Components/Popup';
 import { ws, WsError } from '@/api/ws';
 import TextInput from '@/Components/TextInput';
 import Button from '@/Components/Button';
-import { ensureUnlocked as ensureSecrecyUnlocked, touchSecrecy } from '@/stores/secrecy';
+import { ensureUnlocked as ensureSecrecyUnlocked, touchSecrecy, UnlockCancelledError } from '@/stores/secrecy';
 
 import type { FeatureProps } from '@/Features/types';
 import type { Note, NoteFolder, NoteSummary } from 'deveye-types';
@@ -58,7 +58,7 @@ function humanizeError(e: unknown, fallback: string): string {
     return fallback;
 }
 
-function FeatureNotes({ workspace }: FeatureProps) {
+function FeatureNotes({ workspace, closeFeature }: FeatureProps) {
     const [loaded, setLoaded] = useState(false);
     const [search, setSearch] = useState('');
     const [notes, setNotes] = useState<NoteSummary[]>([]);
@@ -67,6 +67,9 @@ function FeatureNotes({ workspace }: FeatureProps) {
     const [dragOverKey, setDragOverKey] = useState<string | null>(null);
     const reloadRef = useRef<Promise<void> | null>(null);
     const draggingRef = useRef<NoteSummary | null>(null);
+    // Read at call time so the load effect never depends on this changing prop.
+    const closeFeatureRef = useRef(closeFeature);
+    closeFeatureRef.current = closeFeature;
 
     const reload = useCallback(async () => {
         if (reloadRef.current) return reloadRef.current;
@@ -78,9 +81,12 @@ function FeatureNotes({ workspace }: FeatureProps) {
                 ]);
                 setNotes(notesRes.notes);
                 setFolders(foldersRes.folders);
-            } catch {
+            } catch (e) {
                 setNotes([]);
                 setFolders([]);
+                // Nothing to show without the password: close instead of leaving
+                // an empty, unusable view behind.
+                if (e instanceof UnlockCancelledError) closeFeatureRef.current();
             } finally {
                 setLoaded(true);
             }
