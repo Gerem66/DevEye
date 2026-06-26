@@ -135,6 +135,24 @@ pub struct AgentInfo {
     pub privileged: bool,
     /// The OS account the agent runs as (e.g. `root`, `deploy`).
     pub user: String,
+    /// Installed persistence scope: `none` | `user` | `system`.
+    #[serde(rename = "serviceScope")]
+    pub service_scope: &'static str,
+    /// `true` when launched under a service manager (so a self-update just exits).
+    pub managed: bool,
+}
+
+/// One detected package manager + its pending state (mirrors deveye-types
+/// `packageManagerSchema`).
+#[derive(Debug, Clone, Serialize)]
+pub struct PackageManagerInfo {
+    pub id: &'static str,
+    #[serde(rename = "pendingCount")]
+    pub pending_count: Option<u32>,
+    #[serde(rename = "needsRoot")]
+    pub needs_root: bool,
+    #[serde(rename = "rebootRequired")]
+    pub reboot_required: bool,
 }
 
 /// One listening socket. `address` is the bind address (e.g. `0.0.0.0`, `::`,
@@ -199,6 +217,10 @@ pub enum ClientMessage {
     Hello {
         #[serde(rename = "agentVersion")]
         agent_version: String,
+        /// Build target id (e.g. `linux-x86_64`); omitted when unknown. Lets the
+        /// server resolve which binary to push for a self-update.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        target: Option<String>,
     },
     #[serde(rename = "metrics.batch")]
     MetricsBatch {
@@ -229,6 +251,60 @@ pub enum ClientMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
+    /// Outcome of an `agent.update`: whether the new binary verified and swapped in.
+    #[serde(rename = "agent.updated")]
+    Updated {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        version: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    /// Outcome of an `agent.service` persistence/privilege change.
+    #[serde(rename = "agent.serviceResult")]
+    ServiceResult {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        action: String,
+        ok: bool,
+        #[serde(rename = "needsManualCommand", skip_serializing_if = "Option::is_none")]
+        needs_manual_command: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    /// Reply to `pkg.list`: the package managers present + their pending counts.
+    #[serde(rename = "pkg.listResult")]
+    PkgListResult {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        managers: Vec<PackageManagerInfo>,
+    },
+    /// One live output line of an in-progress `pkg.upgrade`.
+    #[serde(rename = "pkg.progress")]
+    PkgProgress {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        manager: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        percent: Option<f64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        phase: Option<String>,
+        line: String,
+    },
+    /// Final outcome of a `pkg.upgrade`.
+    #[serde(rename = "pkg.done")]
+    PkgDone {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        manager: String,
+        ok: bool,
+        #[serde(rename = "rebootRequired", skip_serializing_if = "Option::is_none")]
+        reboot_required: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
 }
 
 /// Messages the server sends back to the agent.
@@ -245,6 +321,26 @@ pub enum ServerMessage {
     /// Self-destruct: wipe local config + binary and exit (device being deleted).
     #[serde(rename = "agent.destroy")]
     Destroy {},
+    /// Self-update: download, verify (sha256 + ed25519 signature) and swap in a
+    /// newer binary for `target_id`, then restart.
+    #[serde(rename = "agent.update")]
+    Update {
+        #[serde(rename = "targetId")]
+        target_id: String,
+        version: String,
+        sha256: String,
+        signature: String,
+    },
+    /// Persistence/privilege change: `action` is one of `install-user` |
+    /// `uninstall-user` | `elevate` | `drop`.
+    #[serde(rename = "agent.service")]
+    Service { action: String },
+    /// Enumerate package managers + pending updates (replies `pkg.listResult`).
+    #[serde(rename = "pkg.list")]
+    PkgList {},
+    /// Apply all updates of one manager, streaming `pkg.progress` then `pkg.done`.
+    #[serde(rename = "pkg.upgrade")]
+    PkgUpgrade { manager: String },
     /// Per-device collection config (cadences + capture mode), pushed by the
     /// server on connect and whenever the user changes it in the UI.
     #[serde(rename = "agent.config")]

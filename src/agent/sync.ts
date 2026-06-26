@@ -60,6 +60,21 @@ export async function readSyncedManifest(distDir: string): Promise<AgentManifest
     }
 }
 
+let manifestCache: { at: number; value: AgentManifest | null } | null = null;
+
+/**
+ * Cached `readSyncedManifest` for the hot path (every `device.list` consults it
+ * to flag self-updatable agents). The synced manifest only changes at the bounded
+ * boot reconcile, so a short TTL bounds disk reads while still reflecting a sync.
+ */
+export async function readServedManifestCached(distDir: string, ttlMs = 5000): Promise<AgentManifest | null> {
+    const now = Date.now();
+    if (manifestCache && now - manifestCache.at < ttlMs) return manifestCache.value;
+    const value = await readSyncedManifest(distDir);
+    manifestCache = { at: now, value };
+    return value;
+}
+
 /** Download every target whose on-disk sha differs from the manifest (verified + atomic). */
 async function downloadDiffs(source: AgentSource, manifest: AgentManifest, distDir: string): Promise<string[]> {
     const errors: string[] = [];

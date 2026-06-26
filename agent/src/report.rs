@@ -320,6 +320,8 @@ fn agent_info() -> AgentInfo {
     AgentInfo {
         privileged: is_privileged(),
         user: current_user(),
+        service_scope: crate::service::installed_scope().as_wire(),
+        managed: crate::managed(),
     }
 }
 

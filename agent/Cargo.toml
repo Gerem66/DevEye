@@ -6,13 +6,27 @@ version = "0.0.0"
 edition = "2021"
 description = "DevEye Agent — lightweight cross-platform monitoring daemon (Linux, macOS, Windows)"
 license = "ISC"
+# `deveye-sign` is a gated helper bin; keep `cargo run`/release defaulting to the agent.
+default-run = "deveye-agent"
 
 [[bin]]
 name = "deveye-agent"
 path = "src/main.rs"
 
+# Offline signing helper (keygen + sign), used by the CI release to sign each
+# binary's sha256 with the update-signing key, and locally to bootstrap the key.
+# Gated behind the `signer` feature so the cross-compiled agent builds never pull
+# it in (a normal `cargo build --release` skips it).
+[[bin]]
+name = "deveye-sign"
+path = "src/sign.rs"
+required-features = ["signer"]
+
+[features]
+signer = []
+
 [dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal", "net"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal", "net", "process", "io-util"] }
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
@@ -28,6 +42,7 @@ clap = { version = "4", features = ["derive"] }
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand = "0.8"
 base64 = "0.22"
+sha2 = "0.10"
 
 # Used by build.rs to read the version out of the root package.json.
 [build-dependencies]

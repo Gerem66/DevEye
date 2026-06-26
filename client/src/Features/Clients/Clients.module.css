@@ -217,6 +217,14 @@
     gap: var(--space-sm);
 }
 
+/* Name + inline rename button, kept together at the left of the header. */
+.deviceNameRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    min-width: 0;
+}
+
 .deviceName {
     font-size: 1rem;
     font-weight: 600;
@@ -225,6 +233,29 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
+}
+
+.nameEditBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0.55;
+    transition:
+        opacity var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.nameEditBtn:hover {
+    opacity: 1;
+    color: var(--text-primary);
 }
 
 .deviceInfo {
@@ -245,27 +276,6 @@
     width: 15px;
     color: var(--text-muted);
     flex-shrink: 0;
-}
-
-/* Agent-version row turns amber when the agent lags the interface build. */
-.infoRow.versionWarn {
-    color: var(--warning);
-}
-
-.infoRow.versionWarn .icon {
-    color: var(--warning);
-}
-
-/* Small inline pill nudging an agent update, kept subtle (no hard background). */
-.versionTag {
-    margin-left: var(--space-xs);
-    padding: 1px 6px;
-    border-radius: var(--radius-sm);
-    background: var(--warning-bg);
-    color: var(--warning);
-    font-size: 0.68rem;
-    font-weight: 600;
-    white-space: nowrap;
 }
 
 .pendingHint {
@@ -346,6 +356,53 @@
     background: var(--danger-bg);
     border-color: var(--danger);
     color: var(--danger);
+}
+
+/* Update-available action: accent by default so it reads as "an update is ready". */
+.actionUpdate {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.actionUpdate:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+}
+
+/* Persistence/privileges: a small stack of toggle rows (autostart + root). */
+.serviceBox {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+/* One toggle row: an icon toggle (auto-approve style) + its label. */
+.toggleRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.toggleLabel {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+/* Discreet "a newer build is available" note next to the agent version. */
+.updateNote {
+    color: var(--accent);
+    font-size: 0.78rem;
+}
+
+.spinning {
+    animation: clients-spin 0.7s linear infinite;
+}
+
+@keyframes clients-spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* Pending-deletion actions: two full-width labeled buttons stacked, so long
@@ -706,4 +763,24 @@
     background: var(--danger-bg);
     border-color: var(--danger);
     color: var(--danger);
+}
+
+/* Guided fallback command shown when the agent can't pop an OS auth prompt. */
+.manualCommand {
+    display: block;
+    padding: var(--space-sm);
+    background: var(--surface-2, var(--surface));
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.85rem;
+    word-break: break-all;
+    user-select: all;
+}
+
+.manualCommandBox {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
 }

@@ -8,15 +8,30 @@
 //!   - `status`       Print the local enrollment + running state.
 //!   - `unlink`       Forget the local enrollment (config + token).
 
+mod commands;
 mod config;
+mod elevate;
 mod enroll;
 mod identity;
 mod metrics;
+mod packages;
 mod protocol;
 mod report;
 mod runner;
+mod service;
+mod update;
 
 use std::fs;
+use std::sync::OnceLock;
+
+/// Whether this process is supervised by a service manager (systemd/launchd/task),
+/// set once at startup from `run --managed`. When true, a self-update just exits
+/// and lets the manager relaunch us (instead of re-spawning ourselves).
+static MANAGED: OnceLock<bool> = OnceLock::new();
+
+pub fn managed() -> bool {
+    *MANAGED.get().unwrap_or(&false)
+}
 use std::process::{Command as PCommand, Stdio};
 
 use anyhow::{Context, Result};
@@ -59,13 +74,45 @@ enum Command {
         /// Run in the background and write a PID file.
         #[arg(long)]
         detach: bool,
+        /// Internal: set by the installed service so a self-update exits cleanly
+        /// (the manager restarts us) instead of re-spawning a detached child.
+        #[arg(long)]
+        managed: bool,
+        /// Use this config file instead of the default location. Baked into the
+        /// service definition so a system service finds the enrolled config.
+        #[arg(long)]
+        config: Option<String>,
     },
     /// Stop a backgrounded agent (started with `run --detach`).
     Stop,
     /// Print local enrollment and running status.
     Status,
+    /// Manage the autostart service (persistence across reboots).
+    Service {
+        #[command(subcommand)]
+        action: ServiceCmd,
+    },
+    /// List detected package managers + their pending updates (diagnostic).
+    Packages,
     /// Forget the local enrollment (deletes the config + token).
     Unlink,
+}
+
+#[derive(Subcommand)]
+enum ServiceCmd {
+    /// Install the autostart service. Per-user by default; `--system` needs root.
+    Install {
+        /// Install a system-wide service (boot, root) instead of a per-user one.
+        #[arg(long)]
+        system: bool,
+        /// Explicit per-user install (the default; accepted for clarity).
+        #[arg(long, conflicts_with = "system")]
+        user: bool,
+    },
+    /// Remove the autostart service (user and/or system).
+    Uninstall,
+    /// Print the installed service scope.
+    Status,
 }
 
 #[tokio::main]
@@ -83,13 +130,51 @@ async fn main() -> Result<()> {
             once,
             interval,
             detach,
-        } => run(once, interval, detach).await,
+            managed,
+            config,
+        } => run(once, interval, detach, managed, config).await,
         Command::Stop => stop(),
         Command::Status => {
             status();
             Ok(())
         }
+        Command::Service { action } => service_cmd(action),
+        Command::Packages => {
+            for m in packages::detect() {
+                let n = m
+                    .pending_count
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "?".into());
+                println!(
+                    "{:<16} {} MAJ{}",
+                    m.id,
+                    n,
+                    if m.needs_root { " (root)" } else { "" }
+                );
+            }
+            Ok(())
+        }
         Command::Unlink => unlink(),
+    }
+}
+
+fn service_cmd(action: ServiceCmd) -> Result<()> {
+    match action {
+        ServiceCmd::Install { system, user: _ } => {
+            service::install(system)?;
+            let scope = if system { "système" } else { "utilisateur" };
+            println!("✓ Service ({scope}) installé — l'agent démarrera automatiquement.");
+            Ok(())
+        }
+        ServiceCmd::Uninstall => {
+            service::uninstall()?;
+            println!("✓ Service désinstallé.");
+            Ok(())
+        }
+        ServiceCmd::Status => {
+            println!("Service: {}", service::installed_scope().as_wire());
+            Ok(())
+        }
     }
 }
 
@@ -133,7 +218,25 @@ async fn link(code: String, server: String, name: Option<String>) -> Result<()> 
     Ok(())
 }
 
-async fn run(once: bool, interval: u64, detach: bool) -> Result<()> {
+async fn run(
+    once: bool,
+    interval: u64,
+    detach: bool,
+    managed: bool,
+    config_path: Option<String>,
+) -> Result<()> {
+    // A `--config` points Config at a specific file (services bake an absolute
+    // path so a system service finds the enrolled config). Set it before loading.
+    if let Some(path) = config_path {
+        std::env::set_var("DEVEYE_CONFIG", path);
+    }
+    // `--managed` (set by the service) or a `DEVEYE_MANAGED` env both mark us as
+    // supervised — either way a self-update exits and lets the manager relaunch us.
+    let _ = MANAGED.set(managed || std::env::var_os("DEVEYE_MANAGED").is_some());
+
+    // Sweep any binary a previous self-update left behind (Windows `.old`).
+    update::cleanup_after_update();
+
     let config = Config::load().context("loading config (run `link` first)")?;
 
     if detach {
@@ -239,6 +342,7 @@ fn status() {
     match Config::load() {
         Ok(c) => {
             println!("Platform:    {}", identity::current_platform());
+            println!("Service:     {}", service::installed_scope().as_wire());
             println!("Server:      {}", c.server);
             println!("Name:        {}", c.name);
             println!("Fingerprint: {}", c.fingerprint);

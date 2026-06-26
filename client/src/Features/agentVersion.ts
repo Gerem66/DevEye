@@ -1,25 +1,21 @@
-/**
- * Shared agent-version helpers. The agent ships with each DevEye release, so its
- * version is expected to match the interface build — a mismatch means the agent
- * lags (or leads) the server and is worth a discreet "mise à jour disponible".
- */
+import { compareVersions } from 'deveye-types';
 
-/** DevEye version this UI was built from (single source of truth: package.json). */
+/**
+ * The DevEye version this UI was built from (single source of truth: package.json).
+ * Also the reference an agent's reported version is compared against to decide
+ * whether to offer a self-update.
+ */
 export const APP_VERSION = __APP_VERSION__;
 
-export interface AgentVersionInfo {
-    /** Version string the agent reported (no leading "v"). */
-    version: string;
-    /** True when it differs from the interface build version. */
-    mismatch: boolean;
-}
-
 /**
- * Normalize a device's reported agent version for display. Returns `null` when
- * nothing has been reported yet (the device has never connected), so callers can
- * simply skip rendering.
+ * Whether a self-update is worth offering for a device. The operator-facing signal
+ * is the version gap: the agent runs an older build than this interface (e.g. v0.4.1
+ * vs interface v0.4.2). `agentUpdateAvailable` additionally covers the case where the
+ * server already advertises a newer signed binary. Showing the affordance is decoupled
+ * from whether the update will succeed: the update only goes through if a signed binary
+ * is actually served — otherwise the agent reports a clear error, surfaced to the user.
  */
-export function agentVersionInfo(agentVersion: string | null): AgentVersionInfo | null {
-    if (!agentVersion) return null;
-    return { version: agentVersion, mismatch: agentVersion !== APP_VERSION };
+export function agentUpdatable(device: { agentVersion: string | null; agentUpdateAvailable: boolean }): boolean {
+    const outdated = device.agentVersion !== null && compareVersions(device.agentVersion, APP_VERSION) < 0;
+    return outdated || device.agentUpdateAvailable;
 }

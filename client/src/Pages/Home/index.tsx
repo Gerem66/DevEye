@@ -172,9 +172,8 @@ export default function HomePage() {
     }, [expandedWidget]);
 
     // Device views: one per device tile whose device still exists. Built here
-    // because they depend on the live device list and need a close-on-purge hook.
+    // because they depend on the live device list.
     const deviceViews = useMemo<ViewConfig[]>(() => {
-        const onPurged = () => setExpandedWidget(null);
         const out: ViewConfig[] = [];
         const seen = new Set<string>();
         for (const id of findCategory(layout, 'device')?.items ?? []) {
@@ -188,7 +187,7 @@ export default function HomePage() {
                 icon: 'server',
                 cacheDurationMinutes: 5,
                 hasCard: true,
-                renderDevice: () => <MonitoringPanel deviceId={device.id} onPurged={onPurged} />
+                renderDevice: () => <MonitoringPanel deviceId={device.id} />
             });
         }
         return out;

@@ -21,6 +21,7 @@ use tokio::time::{interval_at, Instant, MissedTickBehavior};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, info, warn};
 
+use crate::commands;
 use crate::config::Config;
 use crate::metrics::Collector;
 use crate::protocol::{ClientMessage, DeviceReport, MetricSnapshot, ProcessSample, ServerMessage};
@@ -77,6 +78,7 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
 
     loop {
         match stream_session(
+            &config,
             &ws_url,
             &device_id,
             opts.interval,
@@ -151,6 +153,7 @@ async fn run_once(ws_url: &str, device_id: &str) -> Result<()> {
 
 /// One connected session.
 async fn stream_session(
+    config: &Config,
     ws_url: &str,
     device_id: &str,
     initial_metric_interval: Duration,
@@ -196,7 +199,7 @@ async fn stream_session(
                     // The server may greet a pending-deletion device with destroy
                     // straight away, before any config.
                     Ok(ServerMessage::Destroy {}) => {
-                        handle_destroy(&mut sink, device_id).await;
+                        commands::handle_destroy(&mut sink, device_id).await;
                         // Only reached if self-destruct failed → end the session.
                         return Ok(SessionOutcome::Established);
                     }
@@ -226,8 +229,16 @@ async fn stream_session(
     let mut snapshot_ticker = new_ticker(snapshot_interval);
     let mut report_ticker = new_ticker(REPORT_INTERVAL);
 
+    // Package list/upgrade tasks run off the loop (an upgrade can take minutes) and
+    // stream their results back through this channel, so the loop stays responsive
+    // (pings, metrics) and forwards each event to the server as it arrives.
+    let (pkg_tx, mut pkg_rx) = tokio::sync::mpsc::channel::<crate::packages::PkgEvent>(256);
+
     loop {
         tokio::select! {
+            Some(ev) = pkg_rx.recv() => {
+                commands::send_pkg_event(&mut sink, device_id, ev).await;
+            }
             _ = metric_ticker.tick() => {
                 push_bounded(queue, collector.collect_fine());
                 flush_queue(&mut sink, device_id, queue).await?;
@@ -276,9 +287,41 @@ async fn stream_session(
                             }
                             // Device deleted while we're online: wipe and exit.
                             Ok(ServerMessage::Destroy {}) => {
-                                handle_destroy(&mut sink, device_id).await;
+                                commands::handle_destroy(&mut sink, device_id).await;
                                 // Only reached if self-destruct failed → end session.
                                 return Ok(SessionOutcome::Established);
+                            }
+                            // Self-update: verify + swap the binary, then restart.
+                            Ok(ServerMessage::Update {
+                                target_id,
+                                version,
+                                sha256,
+                                signature,
+                            }) => {
+                                commands::handle_update(
+                                    &mut sink, config, device_id, &target_id, &version, &sha256, &signature,
+                                )
+                                .await;
+                                // Only reached if the update was refused/failed → keep
+                                // running on the current binary.
+                            }
+                            // Persistence/privilege change (install autostart, elevate…).
+                            Ok(ServerMessage::Service { action }) => {
+                                commands::handle_service(&mut sink, device_id, &action).await;
+                            }
+                            // Enumerate package managers (off-loop; replies via pkg_rx).
+                            Ok(ServerMessage::PkgList {}) => {
+                                let tx = pkg_tx.clone();
+                                tokio::spawn(async move {
+                                    let managers = tokio::task::spawn_blocking(crate::packages::detect)
+                                        .await
+                                        .unwrap_or_default();
+                                    let _ = tx.send(crate::packages::PkgEvent::List(managers)).await;
+                                });
+                            }
+                            // Apply a manager's updates (off-loop; streams via pkg_rx).
+                            Ok(ServerMessage::PkgUpgrade { manager }) => {
+                                tokio::spawn(crate::packages::run_upgrade(manager, pkg_tx.clone()));
                             }
                             Ok(ServerMessage::Ack { received }) => debug!(received, "ack"),
                             Ok(ServerMessage::Error { code, message }) => {
@@ -313,10 +356,14 @@ where
     S: SinkExt<Message> + Unpin,
     S::Error: std::error::Error + Send + Sync + 'static,
 {
+    // Build target (e.g. `linux-x86_64`), injected by build.rs; empty on an
+    // unrecognised triple, in which case we omit it (self-update then unavailable).
+    let target = env!("DEVEYE_TARGET");
     let hello = serde_json::to_string(&ClientMessage::Hello {
         // Injected from the root package.json at build time (see build.rs), so the
         // agent reports the same version as the server/client.
         agent_version: env!("DEVEYE_VERSION").to_string(),
+        target: (!target.is_empty()).then(|| target.to_string()),
     })?;
     sink.send(Message::Text(hello))
         .await
@@ -375,56 +422,6 @@ where
     Ok(())
 }
 
-/// Self-destruct on the server's request. On success the agent wipes its local
-/// state, reports it, and **exits the process** (never returns). On failure it
-/// reports the error and returns, so the session ends and the server can abort
-/// the deletion (it restores the device's previous status).
-async fn handle_destroy<S>(sink: &mut S, device_id: &str)
-where
-    S: SinkExt<Message> + Unpin,
-    S::Error: std::error::Error + Send + Sync + 'static,
-{
-    match crate::config::Config::self_destruct() {
-        Ok(()) => {
-            info!("self-destruct requested: local config + binary wiped, exiting");
-            let _ = send_destroyed(sink, device_id, true, None).await;
-            let _ = sink.flush().await;
-            // Let the confirmation reach the server before we drop the socket.
-            tokio::time::sleep(Duration::from_millis(300)).await;
-            std::process::exit(0);
-        }
-        Err(e) => {
-            warn!(error = %e, "self-destruct failed; aborting deletion");
-            let _ = send_destroyed(sink, device_id, false, Some(e.to_string())).await;
-            let _ = sink.flush().await;
-            // Give the server time to record the failure (restore status) before
-            // the caller ends the session and reconnects.
-            tokio::time::sleep(Duration::from_millis(500)).await;
-        }
-    }
-}
-
-async fn send_destroyed<S>(
-    sink: &mut S,
-    device_id: &str,
-    ok: bool,
-    error: Option<String>,
-) -> Result<()>
-where
-    S: SinkExt<Message> + Unpin,
-    S::Error: std::error::Error + Send + Sync + 'static,
-{
-    let msg = serde_json::to_string(&ClientMessage::Destroyed {
-        device_id: device_id.to_string(),
-        ok,
-        error,
-    })?;
-    sink.send(Message::Text(msg))
-        .await
-        .context("sending destroyed")?;
-    Ok(())
-}
-
 fn push_bounded(queue: &mut VecDeque<MetricSnapshot>, snapshot: MetricSnapshot) {
     if queue.len() >= QUEUE_CAPACITY {
         queue.pop_front();
@@ -432,7 +429,9 @@ fn push_bounded(queue: &mut VecDeque<MetricSnapshot>, snapshot: MetricSnapshot) 
     queue.push_back(snapshot);
 }
 
-/// Send queued snapshots in batches; only drop those the server accepted.
+/// Send queued snapshots in batches, dropping each batch once it has been handed
+/// to the socket. (A send error propagates and leaves the rest queued for the next
+/// connection; the bounded queue caps how much a long outage can accumulate.)
 async fn flush_queue<S>(
     sink: &mut S,
     device_id: &str,
