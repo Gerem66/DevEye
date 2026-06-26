@@ -12,8 +12,9 @@ const twoFaResponseSchema = z.object({
     workspaces: z.unknown()
 });
 
-/** Total duration of the card → progress-bar fill (0.5s delay + 1s fill). */
-const PROGRESS_MS = 1500;
+/** Total duration of the card → progress-bar fill (0.3s delay + 1s fill, see the
+ *  `.progress-bar.filling` transition in style.css — keep these in sync). */
+const PROGRESS_MS = 1300;
 /** Minimum visible time for a failed attempt before the error shows. */
 const ERROR_MS = PROGRESS_MS;
 /** Hard cap on how long the splash waits for the home to load past the
@@ -27,6 +28,25 @@ function waitUntil(startedAt: number, minMs: number): Promise<void> {
     return remaining > 0 ? new Promise((resolve) => setTimeout(resolve, remaining)) : Promise.resolve();
 }
 
+/**
+ * `CardPhase` drives the card's geometry/content (kept in React state — this part
+ * is purely declarative and reliable):
+ * - `form`      : open card showing the login or 2FA form.
+ * - `collapsing`: card animates down to a 3px bar (a submit is in progress).
+ * - `auto`      : auto-login on boot — instantly collapsed, no transition, no form.
+ */
+type CardPhase = 'form' | 'collapsing' | 'auto';
+
+/** Extra classes appended to `.login-card` for each phase (see style.css). */
+const CARD_PHASE_CLASS: Record<CardPhase, string> = {
+    form: '',
+    collapsing: ' card-to-progressbar',
+    auto: ' card-to-progressbar auto-login'
+};
+
+// The fill's own timing (0.3s delay + 1s sweep) lives in style.css; PROGRESS_MS
+// above must stay equal to their sum so the splash fades exactly as it completes.
+
 function LoginPage() {
     const { status, login, refresh } = useAuth();
     const [username, setUsername] = useState('');
@@ -35,6 +55,12 @@ function LoginPage() {
     const [loading, setLoading] = useState(false);
     const [twoFaRequired, setTwoFaRequired] = useState(false);
     const [twoFaCode, setTwoFaCode] = useState('');
+    // Start collapsed when the app is still resolving the session (`unknown`), so
+    // an auto-login lands directly on the bar with no flash of the open card.
+    const [phase, setPhase] = useState<CardPhase>(status === 'unknown' ? 'auto' : 'form');
+    // Whether the progress bar is filling. This is the ONLY state behind the fill:
+    // a single boolean → a `filling` class → a CSS transition on `transform`.
+    const [filling, setFilling] = useState(false);
 
     const cardRef = useRef<HTMLDivElement | null>(null);
     const contentRef = useRef<HTMLDivElement | null>(null);
@@ -45,14 +71,28 @@ function LoginPage() {
 
     const [hide, setHide] = useState(false);
 
+    // The fill is a CSS transition on `transform: scaleX` (see style.css), toggled
+    // by the `filling` class. `transform` runs on the compositor, so the fill keeps
+    // animating even while a successful login mounts the (heavy) HomePage on the
+    // main thread — a JS/rAF fill froze there. It also can't leak state between
+    // attempts (it's pure declarative state) and behaves the same in every engine.
+    const startProgress = () => {
+        animStartRef.current = Date.now();
+        setFilling(true);
+    };
+    const clearProgress = () => setFilling(false);
+
     useEffect(() => {
         if (status === 'unknown') {
-            cardRef.current?.classList.add('card-to-progressbar', 'auto-login');
+            // Auto-login on boot: collapse the card straight to the bar and fill it.
+            setPhase('auto');
+            setFilling(true);
         } else if (status === 'anonymous') {
             // Reset the card only when the form is (re)shown. When authenticated the
             // login page is fading out, so keep the card collapsed — reverting it here
             // would flash the card back open during the fade.
-            cardRef.current?.classList.remove('card-to-progressbar', 'auto-login');
+            setPhase('form');
+            setFilling(false);
             // LoginPage is never unmounted (only hidden), so wipe any residual form
             // state when the user lands back here — otherwise a previous 2FA prompt,
             // typed code or error would resurface after logout / session expiry.
@@ -126,12 +166,15 @@ function LoginPage() {
         };
     }, [status]);
 
+    // Collapse the card and (re)start the progress fill — a submit is under way.
     const startAnim = () => {
-        animStartRef.current = Date.now();
-        cardRef.current?.classList.add('card-to-progressbar');
+        setPhase('collapsing');
+        startProgress();
     };
+    // Re-open the card and clear the bar — back to the form (error / cancel).
     const stopAnim = () => {
-        cardRef.current?.classList.remove('card-to-progressbar', 'auto-login');
+        setPhase('form');
+        clearProgress();
     };
 
     const onSubmit = async () => {
@@ -155,11 +198,10 @@ function LoginPage() {
         try {
             const result = await login(username, password);
             if (result.twoFactorRequired) {
-                // The collapse-to-progress-bar animation only starts filling after a
-                // 0.5s delay; reverting before then makes the card flash collapsed.
-                // Let that initial phase play out so the swap to the 2FA prompt reads
-                // as a smooth expansion rather than a jump.
-                await waitUntil(startedAt, 500);
+                // Let the whole collapse-and-fill animation finish before re-opening
+                // the card as the 2FA prompt — like every other transition (success,
+                // error), we never reveal the next view mid-fill. Consistent and clean.
+                await waitUntil(startedAt, PROGRESS_MS);
                 stopAnim();
                 // The username/password already authenticated against the server, so
                 // clear them now: going Back must return to a fresh form, and they
@@ -239,8 +281,8 @@ function LoginPage() {
                     <b>Dev</b> <p>Eye</p>
                 </span>
 
-                <div ref={cardRef} className='login-card' onKeyDown={onKeyDown}>
-                    <div className='progress-bar' />
+                <div ref={cardRef} className={'login-card' + CARD_PHASE_CLASS[phase]} onKeyDown={onKeyDown}>
+                    <div className={'progress-bar' + (filling ? ' filling' : '')} />
 
                     <div ref={contentRef} className='login-card-content'>
                         {!twoFaRequired ? (
