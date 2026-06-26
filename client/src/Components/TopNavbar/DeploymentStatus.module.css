@@ -20,6 +20,12 @@
     color: var(--danger);
 }
 
+.zone.warning {
+    background: var(--warning-bg);
+    border-color: var(--warning);
+    color: var(--warning);
+}
+
 .icon {
     flex-shrink: 0;
     width: 14px;
@@ -34,12 +40,17 @@
 }
 
 .zone:hover .icon,
-.zone.error .icon {
+.zone.error .icon,
+.zone.warning .icon {
     margin-right: var(--space-xs);
 }
 
 .error .icon {
     background-color: var(--danger);
+}
+
+.warning .icon {
+    background-color: var(--warning);
 }
 
 .spin {
@@ -67,7 +78,8 @@
 }
 
 .zone:hover .text,
-.zone.error .text {
+.zone.error .text,
+.zone.warning .text {
     grid-template-columns: 1fr;
     opacity: 1;
 }
@@ -87,7 +99,8 @@
 }
 
 .zone:hover .textInner,
-.zone.error .textInner {
+.zone.error .textInner,
+.zone.warning .textInner {
     transform: translateX(0);
 }
 
@@ -107,6 +120,11 @@
 
 .error .detail {
     color: var(--danger);
+    opacity: 0.85;
+}
+
+.warning .detail {
+    color: var(--warning);
     opacity: 0.85;
 }
 

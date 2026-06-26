@@ -44,6 +44,11 @@ export const env = {
     AGENT_DOWNLOAD_TOKEN: getEnvVar('AGENT_DOWNLOAD_TOKEN', 'string', false),
     AGENT_RELEASE_TAG: getEnvVar('AGENT_RELEASE_TAG', 'string', false),
     AGENT_REPO: getEnvVar('AGENT_REPO', 'string', false),
+    // How long the boot reconcile waits for THIS deploy's agent build to publish
+    // before it stops the loader and surfaces a verdict (served older set ⇒ warning,
+    // nothing ⇒ error). Lower = a failed build is flagged faster; too low risks
+    // flagging a build that's merely slow. Raise it above your agent build time.
+    AGENT_SYNC_TIMEOUT_SECONDS: getEnvVar('AGENT_SYNC_TIMEOUT_SECONDS', 'number', false) || 300,
 
     // Interim 2FA challenge token (between password check and TOTP verify).
     TWOFA_ISSUER: getEnvVar('TWOFA_ISSUER', 'string', false) || 'DevEye',

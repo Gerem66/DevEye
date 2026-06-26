@@ -86,7 +86,7 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
             {agentVersion !== null &&
                 (versionMismatch ? (
                     <p className={`${styles.agentVersion} ${styles.agentVersionWarn}`}>
-                        <span className='icon icon-error' />
+                        <span className='icon icon-info' />
                         Agent v{agentVersion} — différent de l’interface (v{APP_VERSION}). Une nouvelle version est
                         peut-être en cours de déploiement.
                     </p>
