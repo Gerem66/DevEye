@@ -25,7 +25,6 @@ import MonitoringPanel from '@/Features/Monitoring/MonitoringPanel';
 import { FEATURE_CATALOG } from './catalog';
 import { isForceReload } from './forceReload';
 import { deviceTileVisual, deviceViewId, featureTileVisual, shortcutTileVisual } from './tiles/tileVisual';
-import { OrganizeToolbar } from './organize/OrganizeToolbar';
 import { EditableHome } from './organize/EditableHome';
 
 import type { HomeCategory } from 'deveye-types';
@@ -390,6 +389,8 @@ export default function HomePage() {
                 onOpenLogs={user.role === 'admin' ? (e) => handleExpand('logs', isForceReload(e)) : undefined}
                 onOpenSettings={() => setSettingsOpen(true)}
                 onOrganize={startOrganizing}
+                organizing={editing}
+                onDoneOrganizing={() => setEditing(false)}
             />
 
             {/* The grid stays mounted under the popup so the shared-element morph
@@ -404,10 +405,7 @@ export default function HomePage() {
                     </header>
 
                     {editing ? (
-                        <>
-                            <OrganizeToolbar onDone={() => setEditing(false)} />
-                            <EditableHome />
-                        </>
+                        <EditableHome />
                     ) : (
                         <div className={styles.categories}>{layout.categories.map(renderCategory)}</div>
                     )}

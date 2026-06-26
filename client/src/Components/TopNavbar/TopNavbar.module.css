@@ -138,6 +138,57 @@
     white-space: nowrap;
 }
 
+/* Home-organization banner — text + "Terminer" as a single block, absolutely
+   centered in the navbar so it tracks the viewport centre regardless of the
+   left/right cluster widths. The container is click-through (so the profile /
+   status behind it stay reachable on overlap); only the button opts back in. */
+.organizeBanner {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    max-width: min(680px, 60vw);
+    pointer-events: none;
+}
+
+.organizeBannerIcon {
+    width: 20px;
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.organizeBannerDone {
+    flex-shrink: 0;
+    pointer-events: auto;
+}
+
+.organizeBannerText {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    text-align: left;
+}
+
+.organizeBannerTitle {
+    font-weight: 600;
+    font-size: 0.9rem;
+    line-height: 1.2;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.organizeBannerHint {
+    font-size: 0.72rem;
+    line-height: 1.2;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Right side: live status cluster + profile */
 .right {
     position: relative;
@@ -304,6 +355,14 @@
     margin: var(--space-xs) calc(-1 * var(--space-xs));
 }
 
+/* Drop the hint first when the centre gets tight, so the title can stay centred
+   without colliding with the left/right clusters. */
+@media (max-width: 860px) {
+    .organizeBannerHint {
+        display: none;
+    }
+}
+
 @media (max-width: 640px) {
     .navbar {
         padding: 0 var(--space-md);
@@ -314,6 +373,12 @@
     .version,
     .username,
     .status {
+        display: none;
+    }
+
+    /* Too tight to centre the wording once the brand/status collapse — keep just
+       the icon + "Terminer" button as the edit-mode affordance. */
+    .organizeBannerText {
         display: none;
     }
 }

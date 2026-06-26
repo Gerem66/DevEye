@@ -1,5 +1,6 @@
 import { type MouseEvent as ReactMouseEvent, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Button from '@/Components/Button';
 import { useAuth } from '@/auth/AuthProvider';
 import { useDevices } from '@/stores/devices';
 import { useWeather } from '@/stores/weather';
@@ -35,6 +36,11 @@ export interface TopNavbarProps {
     onOpenSettings?: () => void;
     /** Enter the home grid organization (edit) mode. */
     onOrganize?: () => void;
+    /** When true, the navbar carries the home-organization banner + a "Terminer"
+     *  exit button (replacing the inline edit-mode toolbar). */
+    organizing?: boolean;
+    /** Leave the home organization mode. */
+    onDoneOrganizing?: () => void;
 }
 
 /** Always-visible main info: current weather (primary city) + online devices. */
@@ -79,7 +85,9 @@ export default function TopNavbar({
     onOpenDevices,
     onOpenLogs,
     onOpenSettings,
-    onOrganize
+    onOrganize,
+    organizing,
+    onDoneOrganizing
 }: TopNavbarProps) {
     const { user, logout } = useAuth();
     const [menuOpen, setMenuOpen] = useState(false);
@@ -167,6 +175,39 @@ export default function TopNavbar({
                     </AnimatePresence>
                 </div>
             </div>
+
+            {/* Center: home-organization banner. Lives in the (always sticky) navbar
+                so the instructions stay reachable while scrolling the edit grid.
+                Text + "Terminer" form one centered block; only opacity is animated
+                so the CSS centering transform survives. */}
+            <AnimatePresence>
+                {organizing && (
+                    <motion.div
+                        key='organizeBanner'
+                        className={styles.organizeBanner}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={FADE}
+                    >
+                        <span className={`icon icon-edit ${styles.organizeBannerIcon}`} />
+                        <span className={styles.organizeBannerText}>
+                            <span className={styles.organizeBannerTitle}>Organisation de l’accueil</span>
+                            <span className={styles.organizeBannerHint}>Glissez les tuiles ou les catégories.</span>
+                        </span>
+                        {onDoneOrganizing && (
+                            <Button
+                                variant='primary'
+                                icon='check-circle'
+                                className={styles.organizeBannerDone}
+                                onClick={onDoneOrganizing}
+                            >
+                                Terminer
+                            </Button>
+                        )}
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Right section: deployment readiness (only while not ready) + live status + user profile */}
             <div className={styles.right} ref={menuRef}>
