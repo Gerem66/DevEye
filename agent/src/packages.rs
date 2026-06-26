@@ -46,6 +46,10 @@ fn probe(program: &str, args: &[&str]) -> Option<(bool, String)> {
     ))
 }
 
+/// Count non-blank lines — the pending-update heuristic for managers that print
+/// one entry per line. Only the Linux/macOS managers use it; Windows parses winget
+/// and Windows Update differently, so the helper isn't compiled there.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn count_nonempty(s: &str) -> u32 {
     s.lines().filter(|l| !l.trim().is_empty()).count() as u32
 }
@@ -368,6 +372,7 @@ mod tests {
         assert_eq!(parse_percent("150%"), None); // out of 0..=100
     }
 
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn count_nonempty_skips_blank_lines() {
         assert_eq!(count_nonempty("a\n\nb\n   \nc"), 3);

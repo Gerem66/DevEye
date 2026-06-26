@@ -46,7 +46,7 @@ export function DeploymentStatus() {
                     aria-live='polite'
                     title={primary.error ?? primary.detail ?? primary.label}
                 >
-                    <span className={`icon ${settled ? 'icon-error' : `icon-spinner ${styles.spin}`} ${styles.icon}`} />
+                    <span className={`icon ${settled ? 'icon-info' : `icon-spinner ${styles.spin}`} ${styles.icon}`} />
                     {/* Text is hidden during normal progress and revealed on hover
                         (see CSS) — a settled warning/error keeps it shown. The inner
                         wrapper is the clip surface for the grid reveal animation. */}

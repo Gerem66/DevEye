@@ -4,11 +4,11 @@
     aspect-ratio: 1;
     flex-shrink: 0;
     -webkit-mask-size: contain;
-            mask-size: contain;
+    mask-size: contain;
     -webkit-mask-repeat: no-repeat;
-            mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
     -webkit-mask-position: center;
-            mask-position: center;
+    mask-position: center;
     /* Inherit the element's text color so icons can be tinted via `color`. */
     background-color: currentColor;
 }
@@ -51,10 +51,6 @@
 .icon.icon-edit {
     -webkit-mask-image: url(/icons/edit.svg);
     mask-image: url(/icons/edit.svg);
-}
-.icon.icon-error {
-    -webkit-mask-image: url(/icons/error.svg);
-    mask-image: url(/icons/error.svg);
 }
 .icon.icon-eye-open {
     -webkit-mask-image: url(/icons/eye-open.svg);
