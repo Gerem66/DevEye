@@ -429,7 +429,9 @@ fn push_bounded(queue: &mut VecDeque<MetricSnapshot>, snapshot: MetricSnapshot) 
     queue.push_back(snapshot);
 }
 
-/// Send queued snapshots in batches; only drop those the server accepted.
+/// Send queued snapshots in batches, dropping each batch once it has been handed
+/// to the socket. (A send error propagates and leaves the rest queued for the next
+/// connection; the bounded queue caps how much a long outage can accumulate.)
 async fn flush_queue<S>(
     sink: &mut S,
     device_id: &str,

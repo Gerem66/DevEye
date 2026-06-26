@@ -1,21 +1,11 @@
+import { compareVersions } from 'deveye-types';
+
 /**
  * The DevEye version this UI was built from (single source of truth: package.json).
  * Also the reference an agent's reported version is compared against to decide
  * whether to offer a self-update.
  */
 export const APP_VERSION = __APP_VERSION__;
-
-/** Compare dotted numeric versions: <0 if a<b, >0 if a>b, 0 if equal. */
-function compareVersions(a: string, b: string): number {
-    const pa = a.split('.').map((p) => parseInt(p, 10) || 0);
-    const pb = b.split('.').map((p) => parseInt(p, 10) || 0);
-    const len = Math.max(pa.length, pb.length);
-    for (let i = 0; i < len; i++) {
-        const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
-        if (diff !== 0) return diff;
-    }
-    return 0;
-}
 
 /**
  * Whether a self-update is worth offering for a device. The operator-facing signal

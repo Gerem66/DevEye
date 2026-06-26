@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import type { Device } from 'deveye-types';
 import { ws } from '@/api/ws';
 import { openInfo } from '@/Components/InfoPopup';
+import { runAgentUpdate } from '../agentUpdate';
 import styles from './Clients.module.css';
 
 type Target = { id: string; name: string } | null;
@@ -15,9 +16,18 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
  */
 export function useDeviceActions(devices: Device[], refresh: () => Promise<void> | void) {
     // Live device list read inside async handlers, to tell once a privilege change
-    // has actually been avered by the agent's next report.
+    // has actually been confirmed by the agent's next report.
     const devicesRef = useRef(devices);
     devicesRef.current = devices;
+
+    // Refresh now, wait for the agent to apply the change and re-report its scope,
+    // then refresh again — so a toggle/privilege only settles on the *confirmed*
+    // state, never the merely-requested one. Shared by the service actions below.
+    const settle = async (ms: number) => {
+        await refresh();
+        await sleep(ms);
+        await refresh();
+    };
     const [actionError, setActionError] = useState<string | null>(null);
     const [updatingId, setUpdatingId] = useState<string | null>(null);
     // Which toggle (per device) is mid-change, so only that one shows a loader.
@@ -65,12 +75,7 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
         setActionError(null);
         setUpdatingId(id);
         try {
-            await ws.send('device.updateAgent', { deviceId: id });
-            // The agent verifies, swaps its binary and restarts; it reconnects with
-            // its new version shortly. Refresh now and once more after a beat so the
-            // card reflects the new version without the user reopening the page.
-            await refresh();
-            setTimeout(() => void refresh(), 4000);
+            await runAgentUpdate(id, refresh);
         } catch (e) {
             // Surface the server's reason (offline, already up to date, unsigned…).
             setActionError(e instanceof Error ? e.message : "Mise à jour de l'agent impossible.");
@@ -85,10 +90,8 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
         try {
             await ws.send('device.setAutostart', { deviceId: id, enabled });
             // Keep the loader on until the agent has applied the change and
-            // re-reported its scope, so the toggle only flips once it's avered.
-            await refresh();
-            await sleep(3000);
-            await refresh();
+            // re-reported its scope, so the toggle only flips once it's confirmed.
+            await settle(3000);
         } catch (e) {
             setActionError(e instanceof Error ? e.message : 'Action impossible.');
         } finally {
@@ -114,10 +117,10 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
 
     /**
      * Elevate / drop privileges — behaves exactly like the autostart toggle: a
-     * loader runs until the change is avered by the agent's next report. The agent
-     * restarts under the new scope, so we wait, refresh, then check the reported
-     * scope. Only if it *didn't* reach the target (no interactive session on the
-     * device → hybrid elevation) do we surface the manual command to run there.
+     * loader runs until the change is confirmed by the agent's next report. The
+     * agent restarts under the new scope, so we wait, refresh, then check the
+     * reported scope. Only if it *didn't* reach the target (no interactive session
+     * on the device → hybrid elevation) do we surface the manual command to run there.
      */
     const changePrivilege = async (
         id: string,
@@ -130,9 +133,7 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
         setServiceBusy({ id, kind: 'privilege' });
         try {
             const res = await ws.send(command, { deviceId: id });
-            await refresh();
-            await sleep(4000);
-            await refresh();
+            await settle(4000);
             const scope = devicesRef.current.find((d) => d.id === id)?.report?.agent?.serviceScope ?? 'none';
             if (!reached(scope)) showManualCommand(title, res.manualCommand);
         } catch (e) {

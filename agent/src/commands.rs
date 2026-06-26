@@ -154,7 +154,7 @@ where
                 std::process::exit(0);
             }
             // install-user / uninstall-user / drop don't restart us, so push a fresh
-            // report immediately — otherwise the UI's "avered" service scope would
+            // report immediately — otherwise the UI's confirmed service scope would
             // only refresh at the next hourly report.
             send_fresh_report(sink, device_id).await;
             let _ = sink.flush().await;

@@ -188,3 +188,37 @@ fn spawn_detached() -> Result<()> {
     info!(pid = child.id(), "relaunched after update");
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ed25519_dalek::{Signer, SigningKey};
+
+    #[test]
+    fn decode_hex32_roundtrips_and_rejects_bad_input() {
+        let hex = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+        let bytes = decode_hex32(hex).expect("valid 64-char hex");
+        assert_eq!(bytes[0], 0x00);
+        assert_eq!(bytes[1], 0x11);
+        assert_eq!(bytes[31], 0xff);
+
+        assert!(decode_hex32("abcd").is_err()); // too short
+        assert!(decode_hex32(&"zz".repeat(32)).is_err()); // non-hex chars
+    }
+
+    /// The same `verify_strict` over the announced sha256 the agent runs before it
+    /// swaps a binary: a correctly-signed digest verifies, any tamper is rejected.
+    #[test]
+    fn signature_gate_accepts_valid_and_rejects_tampered() {
+        let signing = SigningKey::from_bytes(&[7u8; 32]);
+        let verifying = signing.verifying_key();
+        let digest = [0xABu8; 32];
+        let signature = signing.sign(&digest);
+
+        assert!(verifying.verify_strict(&digest, &signature).is_ok());
+
+        let mut tampered = digest;
+        tampered[0] ^= 0x01;
+        assert!(verifying.verify_strict(&tampered, &signature).is_err());
+    }
+}

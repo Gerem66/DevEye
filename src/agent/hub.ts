@@ -61,60 +61,51 @@ export class MonitorHub {
         return this.agents.has(deviceId);
     }
 
-    /** Ask a connected agent to push a fresh sample + report now. */
-    requestCollect(deviceId: string): boolean {
+    /**
+     * Send one command frame to a device's connected agent. Returns false (a no-op)
+     * when the agent is offline — every `requestX`/`pushConfig` below is a thin,
+     * self-documenting wrapper over this so they all share the offline semantics.
+     */
+    private sendToAgent(deviceId: string, command: string, payload: unknown = {}): boolean {
         const socket = this.agents.get(deviceId);
         if (!socket) return false;
-        socket.send(JSON.stringify({ command: AGENT_COLLECT, payload: {} }));
+        socket.send(JSON.stringify({ command, payload }));
         return true;
+    }
+
+    /** Ask a connected agent to push a fresh sample + report now. No-op if offline. */
+    requestCollect(deviceId: string): boolean {
+        return this.sendToAgent(deviceId, AGENT_COLLECT);
     }
 
     /** Push updated collection config to a connected agent. No-op if offline. */
     pushConfig(deviceId: string, config: AgentConfigPayload): boolean {
-        const socket = this.agents.get(deviceId);
-        if (!socket) return false;
-        socket.send(JSON.stringify({ command: AGENT_CONFIG, payload: config }));
-        return true;
+        return this.sendToAgent(deviceId, AGENT_CONFIG, config);
     }
 
     /** Tell a connected agent to self-destruct now. No-op if offline. */
     requestDestroy(deviceId: string): boolean {
-        const socket = this.agents.get(deviceId);
-        if (!socket) return false;
-        socket.send(JSON.stringify({ command: AGENT_DESTROY, payload: {} }));
-        return true;
+        return this.sendToAgent(deviceId, AGENT_DESTROY);
     }
 
     /** Order a connected agent to self-update to a newer signed binary. No-op if offline. */
     requestUpdate(deviceId: string, payload: AgentUpdatePayload): boolean {
-        const socket = this.agents.get(deviceId);
-        if (!socket) return false;
-        socket.send(JSON.stringify({ command: AGENT_UPDATE, payload }));
-        return true;
+        return this.sendToAgent(deviceId, AGENT_UPDATE, payload);
     }
 
     /** Ask a connected agent to change its persistence/privilege install. No-op if offline. */
     requestService(deviceId: string, payload: AgentServicePayload): boolean {
-        const socket = this.agents.get(deviceId);
-        if (!socket) return false;
-        socket.send(JSON.stringify({ command: AGENT_SERVICE, payload }));
-        return true;
+        return this.sendToAgent(deviceId, AGENT_SERVICE, payload);
     }
 
     /** Ask a connected agent to enumerate its package managers. No-op if offline. */
     requestPkgList(deviceId: string): boolean {
-        const socket = this.agents.get(deviceId);
-        if (!socket) return false;
-        socket.send(JSON.stringify({ command: AGENT_PKG_LIST, payload: {} }));
-        return true;
+        return this.sendToAgent(deviceId, AGENT_PKG_LIST);
     }
 
     /** Ask a connected agent to apply a manager's updates. No-op if offline. */
     requestPkgUpgrade(deviceId: string, payload: AgentPkgUpgradePayload): boolean {
-        const socket = this.agents.get(deviceId);
-        if (!socket) return false;
-        socket.send(JSON.stringify({ command: AGENT_PKG_UPGRADE, payload }));
-        return true;
+        return this.sendToAgent(deviceId, AGENT_PKG_UPGRADE, payload);
     }
 
     /** Fan out a package-manager inventory to the device's subscribers. */

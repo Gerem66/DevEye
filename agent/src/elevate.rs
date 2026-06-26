@@ -85,13 +85,29 @@ fn has_interactive_session() -> bool {
 }
 
 // ───────────────────────── OS-prompted privileged install ───────────────────
+/// Quote a string for a POSIX shell (single-quoted; an embedded `'` becomes `'\''`).
+#[cfg(target_os = "macos")]
+fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
+
+/// Escape a string for embedding inside an AppleScript double-quoted literal.
+#[cfg(target_os = "macos")]
+fn applescript_escape(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
 #[cfg(target_os = "macos")]
 fn run_elevated_install() -> Result<()> {
     let exe = current_exe_str()?;
     // `do shell script … with administrator privileges` shows the native auth
-    // dialog and runs the command as root.
+    // dialog and runs the command as root. Two quoting layers so an exe path with a
+    // space or quote can't break out: the inner shell command single-quotes the
+    // path, then the whole command is escaped for the AppleScript string literal.
+    let shell_cmd = format!("{} service install --system", shell_quote(&exe));
     let script = format!(
-        "do shell script \"'{exe}' service install --system\" with administrator privileges"
+        "do shell script \"{}\" with administrator privileges",
+        applescript_escape(&shell_cmd)
     );
     let status = Command::new("osascript").arg("-e").arg(&script).status()?;
     if !status.success() {
@@ -117,8 +133,11 @@ fn run_elevated_install() -> Result<()> {
 fn run_elevated_install() -> Result<()> {
     let exe = current_exe_str()?;
     // Start-Process -Verb RunAs triggers UAC; -Wait blocks until it finishes.
+    // A PowerShell single-quoted string escapes an embedded quote by doubling it,
+    // so a path containing `'` can't terminate the -FilePath argument early.
+    let exe_ps = exe.replace('\'', "''");
     let ps = format!(
-        "Start-Process -FilePath '{exe}' -ArgumentList 'service install --system' -Verb RunAs -Wait",
+        "Start-Process -FilePath '{exe_ps}' -ArgumentList 'service install --system' -Verb RunAs -Wait",
     );
     let status = Command::new("powershell")
         .args(["-NoProfile", "-Command", &ps])

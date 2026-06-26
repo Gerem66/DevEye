@@ -348,3 +348,30 @@ fn progress(manager: &str, line: &str) -> PkgEvent {
         line: line.trim_end().to_string(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_percent_extracts_values() {
+        assert_eq!(parse_percent("Progress: 42%"), Some(42.0));
+        assert_eq!(parse_percent("12.5% done"), Some(12.5));
+        assert_eq!(parse_percent("0% complete"), Some(0.0));
+        assert_eq!(parse_percent("Unpacking 100%"), Some(100.0));
+    }
+
+    #[test]
+    fn parse_percent_rejects_garbage_and_out_of_range() {
+        assert_eq!(parse_percent("no percent here"), None);
+        assert_eq!(parse_percent("just a % sign"), None); // no digits before '%'
+        assert_eq!(parse_percent("150%"), None); // out of 0..=100
+    }
+
+    #[test]
+    fn count_nonempty_skips_blank_lines() {
+        assert_eq!(count_nonempty("a\n\nb\n   \nc"), 3);
+        assert_eq!(count_nonempty(""), 0);
+        assert_eq!(count_nonempty("\n\n"), 0);
+    }
+}

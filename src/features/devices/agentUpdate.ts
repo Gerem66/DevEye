@@ -1,4 +1,4 @@
-import { deviceUpdateAgent } from 'deveye-types';
+import { deviceUpdateAgent, isNewerVersion } from 'deveye-types';
 
 import { agentDistDir, readServedManifestCached } from '@/agent/sync';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
@@ -34,7 +34,9 @@ export const deviceUpdateAgentFeature: FeatureDefinition<
         if (!target.signature) {
             throw new FeatureError('conflict', 'Binaire non signé : mise à jour refusée');
         }
-        if (manifest.version === row.agent_version) {
+        // Only ever push an upgrade: refuse when the served version isn't strictly
+        // newer than what's running (already up to date, or — after a rollback — older).
+        if (!row.agent_version || !isNewerVersion(manifest.version, row.agent_version)) {
             throw new FeatureError('conflict', "L'agent est déjà à jour");
         }
 

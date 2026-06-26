@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { ws } from '@/api/ws';
 import { openInfo } from '@/Components/InfoPopup';
 import { useDevices } from '@/stores/devices';
+import { runAgentUpdate } from '../agentUpdate';
 
 /**
  * Trigger signed agent self-updates with per-device in-flight state. Shared by
@@ -15,11 +15,7 @@ export function useAgentUpdate() {
     const update = async (deviceId: string) => {
         setBusy((s) => new Set(s).add(deviceId));
         try {
-            await ws.send('device.updateAgent', { deviceId });
-            // The agent verifies, swaps its binary and reconnects with the new
-            // version shortly; refresh now and once more after a beat.
-            await refresh();
-            setTimeout(() => void refresh(), 4000);
+            await runAgentUpdate(deviceId, refresh);
         } catch (e) {
             void openInfo({
                 title: 'Mise à jour impossible',

@@ -75,7 +75,7 @@ export function DeviceCard({ device, actions }: { device: Device; actions: Devic
             {device.online && agent && !pendingDeletion && (
                 <div className={styles.serviceBox}>
                     {/* Each toggle's "on" colour reflects the agent's *reported* scope
-                        (the avered state), never the action that was requested. */}
+                        (the confirmed state), never the action that was requested. */}
                     <div className={styles.toggleRow}>
                         <button
                             className={`${styles.iconBtn} ${scope !== 'none' ? styles.iconApprove : ''}`}

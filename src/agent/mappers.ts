@@ -1,5 +1,6 @@
 import {
     deviceReportSchema,
+    isNewerVersion,
     type AgentConfigPayload,
     type AgentManifest,
     type Device,
@@ -38,7 +39,8 @@ export interface AgentUpdateInfo {
 /**
  * Resolve a device's self-update status against the served manifest. `available`
  * requires a known build target whose binary is both present *and signed* (no
- * signature ⇒ never self-updatable) and a version that differs from what's running.
+ * signature ⇒ never self-updatable) and a served version that is **strictly newer**
+ * than what's running — so a server lagging a running agent never offers a downgrade.
  */
 export function computeAgentUpdate(row: DeviceRow, manifest: AgentManifest | null): AgentUpdateInfo {
     if (!manifest) return { latest: null, available: false };
@@ -46,7 +48,7 @@ export function computeAgentUpdate(row: DeviceRow, manifest: AgentManifest | nul
     if (!row.agent_target || !row.agent_version) return { latest, available: false };
     const target = manifest.targets.find((t) => t.id === row.agent_target);
     if (!target || !target.signature) return { latest, available: false };
-    return { latest, available: row.agent_version !== latest };
+    return { latest, available: isNewerVersion(latest, row.agent_version) };
 }
 
 /** Safely decode the stored JSON report; returns null on absence or corruption. */

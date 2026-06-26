@@ -1,6 +1,5 @@
 import type { WebSocket } from '@fastify/websocket';
 import {
-    AGENT_ACK,
     AGENT_CONFIG,
     AGENT_DESTROY,
     AGENT_DESTROYED,
@@ -15,6 +14,7 @@ import {
     AGENT_SERVICE_RESULT,
     AGENT_UPDATED,
     agentClientMessageSchema,
+    type AgentClientMessage,
     type AgentServerMessage
 } from 'deveye-types';
 import type { FastifyInstance } from 'fastify';
@@ -22,6 +22,19 @@ import type { FastifyInstance } from 'fastify';
 import { verifyDeviceToken } from '@/auth/jwt';
 import { sha256hex } from '@/Utils/hash';
 import { logger } from '@/logger';
+import {
+    handleDestroyed,
+    handleHello,
+    handleMetricsBatch,
+    handlePkgDone,
+    handlePkgListResult,
+    handlePkgProgress,
+    handleProcesses,
+    handleReport,
+    handleServiceResult,
+    handleUpdated,
+    type AgentSession
+} from './handlers';
 import { deviceAgentConfig } from './mappers';
 import type { MonitorHub } from './hub';
 
@@ -46,9 +59,38 @@ function extractToken(req: { headers: Record<string, unknown>; query: unknown })
     return null;
 }
 
+/** Route one validated agent frame to its handler. The big per-message logic lives
+ *  in the focused `handlers/*` modules; this stays a thin, exhaustive dispatcher. */
+function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promise<void> {
+    switch (msg.command) {
+        case AGENT_HELLO:
+            return handleHello(session, msg.payload);
+        case AGENT_UPDATED:
+            return handleUpdated(session, msg.payload);
+        case AGENT_DESTROYED:
+            return handleDestroyed(session, msg.payload);
+        case AGENT_SERVICE_RESULT:
+            return handleServiceResult(session, msg.payload);
+        case AGENT_PKG_LIST_RESULT:
+            return handlePkgListResult(session, msg.payload);
+        case AGENT_PKG_PROGRESS:
+            return handlePkgProgress(session, msg.payload);
+        case AGENT_PKG_DONE:
+            return handlePkgDone(session, msg.payload);
+        case AGENT_REPORT:
+            return handleReport(session, msg.payload);
+        case AGENT_PROCESSES:
+            return handleProcesses(session, msg.payload);
+        case AGENT_METRICS_BATCH:
+            return handleMetricsBatch(session, msg.payload);
+    }
+}
+
 /**
  * Agent <-> server WebSocket. Authenticated with a device token; streams metric
- * batches which are persisted and fanned out to subscribed user sockets.
+ * batches which are persisted and fanned out to subscribed user sockets. This
+ * module owns the socket *lifecycle* (auth, connect, dispatch); the per-message
+ * handling lives in `handlers/`.
  */
 export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: AgentWSDeps): Promise<void> {
     app.get('/agent', { websocket: true }, async (socket, req) => {
@@ -109,6 +151,17 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: 
             });
         }
 
+        const session: AgentSession = {
+            socket,
+            db,
+            hub,
+            audit,
+            logger: reqLogger,
+            ownerId: claims.oid,
+            ip: req.ip,
+            device
+        };
+
         const handleMessage = async (raw: Buffer): Promise<void> => {
             let parsed;
             try {
@@ -124,186 +177,7 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: 
                 });
                 return;
             }
-
-            const msg = parsed.data;
-            if (msg.command === AGENT_HELLO) {
-                // Remember which agent build + target is running so the UI can flag
-                // stale agents and the server can resolve the right self-update binary.
-                try {
-                    await db.devices.setAgentVersion(deviceId, msg.payload.agentVersion);
-                    if (msg.payload.target) await db.devices.setAgentTarget(deviceId, msg.payload.target);
-                } catch (e) {
-                    reqLogger.warn({ err: (e as Error).message }, 'Failed to persist agent version/target');
-                }
-                send(socket, { command: AGENT_ACK, payload: { received: 0 } });
-                return;
-            }
-
-            if (msg.command === AGENT_UPDATED) {
-                // Outcome of an `agent.update`. On success the agent restarts and
-                // reconnects with its new version (via `agent.hello`); we just audit
-                // the result here. On failure the agent kept its old binary.
-                const { ok, version, error } = msg.payload;
-                audit.record({
-                    source: 'agent',
-                    category: 'device',
-                    action: ok ? 'device.agentUpdated' : 'device.agentUpdateFailed',
-                    level: ok ? 'info' : 'error',
-                    uid: claims.oid,
-                    ip: req.ip,
-                    description: ok
-                        ? `Agent mis à jour : « ${device.name} »${version ? ` → ${version}` : ''}`
-                        : `Échec de la mise à jour de l'agent : « ${device.name} » — ${error ?? 'raison inconnue'}`,
-                    metadata: { deviceId, version: version ?? null, error: error ?? null }
-                });
-                send(socket, { command: AGENT_ACK, payload: { received: 1 } });
-                return;
-            }
-
-            if (msg.command === AGENT_DESTROYED) {
-                // The agent reports the outcome of its self-destruction.
-                if (msg.payload.ok) {
-                    try {
-                        await db.devices.archive(deviceId);
-                        audit.record({
-                            source: 'agent',
-                            category: 'device',
-                            action: 'device.destroyed',
-                            level: 'warning',
-                            uid: claims.oid,
-                            ip: req.ip,
-                            description: `Agent auto-détruit, appareil archivé : « ${device.name} »`,
-                            metadata: { deviceId }
-                        });
-                    } catch (e) {
-                        reqLogger.error({ err: (e as Error).message }, 'Failed to archive destroyed device');
-                    }
-                } else {
-                    const reason = msg.payload.error ?? "Échec de l'auto-destruction";
-                    try {
-                        await db.devices.failDeletion(deviceId, reason);
-                        audit.record({
-                            source: 'agent',
-                            category: 'device',
-                            action: 'device.destroyFailed',
-                            level: 'error',
-                            uid: claims.oid,
-                            ip: req.ip,
-                            description: `Échec de l'auto-destruction : « ${device.name} » — ${reason}`,
-                            metadata: { deviceId }
-                        });
-                    } catch (e) {
-                        reqLogger.error({ err: (e as Error).message }, 'Failed to record destroy failure');
-                    }
-                }
-                send(socket, { command: AGENT_ACK, payload: { received: 1 } });
-                return;
-            }
-
-            if (msg.command === AGENT_SERVICE_RESULT) {
-                // Outcome of an `agent.service` change. The effective scope comes
-                // back on the next `agent.report`; here we just audit the result.
-                const { action, ok, needsManualCommand, error } = msg.payload;
-                const description = ok
-                    ? `Service agent modifié (${action}) : « ${device.name} »`
-                    : needsManualCommand
-                      ? `Action service « ${action} » à exécuter sur l'appareil : « ${device.name} »`
-                      : `Échec action service « ${action} » : « ${device.name} »${error ? ` — ${error}` : ''}`;
-                audit.record({
-                    source: 'agent',
-                    category: 'device',
-                    action: ok ? 'device.serviceChanged' : 'device.serviceFailed',
-                    level: ok ? 'info' : 'warning',
-                    uid: claims.oid,
-                    ip: req.ip,
-                    description,
-                    metadata: { deviceId, serviceAction: action, ok, needsManualCommand: needsManualCommand ?? false }
-                });
-                send(socket, { command: AGENT_ACK, payload: { received: 1 } });
-                return;
-            }
-
-            if (msg.command === AGENT_PKG_LIST_RESULT) {
-                hub.publishPackageList(msg.payload);
-                send(socket, { command: AGENT_ACK, payload: { received: msg.payload.managers.length } });
-                return;
-            }
-
-            if (msg.command === AGENT_PKG_PROGRESS) {
-                // Fire-and-forget stream: fan out, no ack (avoids ack flooding).
-                hub.publishPackageProgress(msg.payload);
-                return;
-            }
-
-            if (msg.command === AGENT_PKG_DONE) {
-                hub.publishPackageDone(msg.payload);
-                audit.record({
-                    source: 'agent',
-                    category: 'device',
-                    action: msg.payload.ok ? 'device.packagesUpgraded' : 'device.packagesUpgradeFailed',
-                    level: msg.payload.ok ? 'info' : 'warning',
-                    uid: claims.oid,
-                    ip: req.ip,
-                    description: msg.payload.ok
-                        ? `Mises à jour appliquées (${msg.payload.manager}) : « ${device.name} »${msg.payload.rebootRequired ? ' — redémarrage requis' : ''}`
-                        : `Échec des mises à jour (${msg.payload.manager}) : « ${device.name} »${msg.payload.error ? ` — ${msg.payload.error}` : ''}`,
-                    metadata: { deviceId, manager: msg.payload.manager, ok: msg.payload.ok }
-                });
-                send(socket, { command: AGENT_ACK, payload: { received: 1 } });
-                return;
-            }
-
-            if (msg.command === AGENT_REPORT) {
-                // Reports persist only for confirmed devices (same gate as metrics).
-                if (device.status !== 'active') {
-                    send(socket, { command: AGENT_ACK, payload: { received: 0 } });
-                    return;
-                }
-                try {
-                    await db.devices.setReport(deviceId, JSON.stringify(msg.payload.report));
-                    hub.publishReport(deviceId, msg.payload.report);
-                    await db.devices.touchSeen(deviceId, Math.floor(Date.now() / 1000));
-                    send(socket, { command: AGENT_ACK, payload: { received: 1 } });
-                } catch (e) {
-                    reqLogger.error({ err: (e as Error).message }, 'Failed to persist device report');
-                    send(socket, { command: AGENT_ERROR, payload: { code: 'internal', message: 'Persist failed' } });
-                }
-                return;
-            }
-
-            if (msg.command === AGENT_PROCESSES) {
-                // Process history persists only for confirmed devices.
-                if (device.status !== 'active') {
-                    send(socket, { command: AGENT_ACK, payload: { received: 0 } });
-                    return;
-                }
-                try {
-                    await db.processSamples.insertSample(deviceId, msg.payload.sample);
-                    send(socket, { command: AGENT_ACK, payload: { received: msg.payload.sample.processes.length } });
-                } catch (e) {
-                    reqLogger.error({ err: (e as Error).message }, 'Failed to persist process sample');
-                    send(socket, { command: AGENT_ERROR, payload: { code: 'internal', message: 'Persist failed' } });
-                }
-                return;
-            }
-
-            if (msg.command === AGENT_METRICS_BATCH) {
-                // Devices only persist metrics once the owner has confirmed them.
-                if (device.status !== 'active') {
-                    send(socket, { command: AGENT_ACK, payload: { received: 0 } });
-                    return;
-                }
-                const { snapshots } = msg.payload;
-                try {
-                    await db.metrics.insertBatch(deviceId, snapshots);
-                    for (const snapshot of snapshots) hub.publishMetric(deviceId, snapshot);
-                    await db.devices.touchSeen(deviceId, Math.floor(Date.now() / 1000));
-                    send(socket, { command: AGENT_ACK, payload: { received: snapshots.length } });
-                } catch (e) {
-                    reqLogger.error({ err: (e as Error).message }, 'Failed to persist metrics batch');
-                    send(socket, { command: AGENT_ERROR, payload: { code: 'internal', message: 'Persist failed' } });
-                }
-            }
+            await dispatch(session, parsed.data);
         };
 
         // Wire the real handler, then flush whatever arrived during auth/connect
