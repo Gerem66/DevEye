@@ -166,6 +166,19 @@ function LoginPage() {
         };
     }, [status]);
 
+    // Whenever the card (re)opens to a form — first show, after an error, on Back —
+    // return focus to that form's primary field, once it's interactive again
+    // (`loading` gates this so we never try to focus the disabled 2FA input). One
+    // place for it, so every reopen path behaves the same.
+    useEffect(() => {
+        if (phase !== 'form' || loading) return;
+        // `username` is read but intentionally NOT a dependency: we only refocus on a
+        // reopen (phase/loading/twoFaRequired change), never while the user is typing.
+        if (twoFaRequired) inputTwoFa.current?.focus();
+        else if (username !== '') inputPassword.current?.focus();
+        else inputUsername.current?.focus();
+    }, [phase, loading, twoFaRequired]);
+
     // Collapse the card and (re)start the progress fill — a submit is under way.
     const startAnim = () => {
         setPhase('collapsing');
@@ -209,7 +222,6 @@ function LoginPage() {
                 setUsername('');
                 setPassword('');
                 setTwoFaRequired(true);
-                setTimeout(() => inputTwoFa.current?.focus(), 50);
             } else {
                 await waitUntil(startedAt, PROGRESS_MS);
                 setPassword('');
@@ -222,21 +234,23 @@ function LoginPage() {
                 setError('Erreur réseau');
             }
             setPassword('');
-            inputPassword.current?.focus();
             stopAnim();
         } finally {
             setLoading(false);
         }
     };
 
-    const onSubmit2FA = async () => {
-        if (loading || twoFaCode.length !== 6) return;
+    // `code` is passed explicitly by the input's auto-submit so we verify the
+    // freshly-entered value without waiting for the `twoFaCode` state to settle;
+    // it defaults to the state for the Enter-key path.
+    const onSubmit2FA = async (code: string = twoFaCode) => {
+        if (loading || code.length !== 6) return;
         setError('');
         setLoading(true);
         startAnim();
         const startedAt = Date.now();
         try {
-            await post('/api/auth/2fa/challenge', { code: twoFaCode }, twoFaResponseSchema);
+            await post('/api/auth/2fa/challenge', { code }, twoFaResponseSchema);
             await refresh();
             await waitUntil(startedAt, PROGRESS_MS);
         } catch (e) {
@@ -247,7 +261,6 @@ function LoginPage() {
                 setError('Erreur réseau');
             }
             setTwoFaCode('');
-            inputTwoFa.current?.focus();
             stopAnim();
         } finally {
             setLoading(false);
@@ -324,21 +337,27 @@ function LoginPage() {
                                         ref={inputTwoFa}
                                         placeholder='000000'
                                         value={twoFaCode}
-                                        onChange={(e) => setTwoFaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                        inputMode='numeric'
+                                        autoComplete='one-time-code'
+                                        disabled={loading}
+                                        onChange={(e) => {
+                                            const code = e.target.value.replace(/\D/g, '').slice(0, 6);
+                                            setTwoFaCode(code);
+                                            // No "Verify" button: auto-submit the instant a full
+                                            // 6-digit code is present, whether typed or pasted.
+                                            if (code.length === 6) void onSubmit2FA(code);
+                                        }}
                                         error={error}
                                     />
                                     <span className='icon icon-shield' />
                                 </div>
 
-                                <button
-                                    className='submit'
-                                    onClick={onSubmit2FA}
-                                    disabled={loading || twoFaCode.length !== 6}
-                                >
-                                    Vérifier
-                                </button>
-                                <button className='cancel' onClick={onCancel2FA}>
-                                    Retour
+                                <button className='cancel' onClick={onCancel2FA} disabled={loading}>
+                                    {loading ? (
+                                        <span className='icon icon-spinner login-spin' aria-label='Vérification' />
+                                    ) : (
+                                        'Retour'
+                                    )}
                                 </button>
                             </>
                         )}

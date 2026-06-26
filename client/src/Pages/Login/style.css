@@ -221,7 +221,23 @@
     border: 1px solid var(--glass-border);
 }
 
-.login .cancel:hover {
+.login .cancel:hover:not(:disabled) {
     background: var(--surface-subtle);
     color: var(--text-secondary);
+}
+.login .cancel:disabled {
+    opacity: 0.7;
+    cursor: default;
+}
+
+/* Spinner shown on the "Back" button while the 2FA code auto-verifies (replaces
+   the removed "Verify" button — the code submits as soon as 6 digits are in). */
+.login .login-spin {
+    vertical-align: middle;
+    animation: login-spin 0.7s linear infinite;
+}
+@keyframes login-spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
