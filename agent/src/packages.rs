@@ -84,7 +84,7 @@ fn privileged() -> bool {
 fn reboot_required(_id: &str) -> bool {
     #[cfg(target_os = "linux")]
     {
-        return std::path::Path::new("/var/run/reboot-required").exists();
+        std::path::Path::new("/var/run/reboot-required").exists()
     }
     #[cfg(not(target_os = "linux"))]
     {
