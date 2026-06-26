@@ -144,14 +144,20 @@ where
         Ok(Outcome::Done) => {
             info!(%action, "service action applied");
             let _ = send_service_result(sink, device_id, action, true, None, None).await;
-            let _ = sink.flush().await;
             if action == "elevate" {
                 // The system service is installed + running. Drop our own per-user
-                // autostart and exit so exactly one agent persists.
+                // autostart and exit so exactly one agent persists (the new process
+                // re-reports its scope on connect).
+                let _ = sink.flush().await;
                 tokio::time::sleep(Duration::from_millis(400)).await;
                 let _ = crate::service::uninstall_user();
                 std::process::exit(0);
             }
+            // install-user / uninstall-user / drop don't restart us, so push a fresh
+            // report immediately — otherwise the UI's "avered" service scope would
+            // only refresh at the next hourly report.
+            send_fresh_report(sink, device_id).await;
+            let _ = sink.flush().await;
         }
         Ok(Outcome::NeedsManual) => {
             warn!(%action, "no interactive session; guiding the user to run it on the device");
@@ -190,6 +196,25 @@ where
         .await
         .context("sending service result")?;
     Ok(())
+}
+
+/// Collect and push a fresh OS/security report so the server (and UI) pick up a
+/// just-changed service scope without waiting for the periodic report.
+async fn send_fresh_report<S>(sink: &mut S, device_id: &str)
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    // Security probes shell out — run them off the runtime.
+    let Ok(report) = tokio::task::spawn_blocking(crate::report::collect).await else {
+        return;
+    };
+    if let Ok(msg) = serde_json::to_string(&ClientMessage::Report {
+        device_id: device_id.to_string(),
+        report: Box::new(report),
+    }) {
+        let _ = sink.send(Message::Text(msg)).await;
+    }
 }
 
 /// Forward one package task event to the server, stamping it with the device id.

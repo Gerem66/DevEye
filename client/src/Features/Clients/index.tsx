@@ -5,7 +5,6 @@ import Button from '@/Components/Button';
 import TextInput from '@/Components/TextInput';
 import { useDevices } from '@/stores/devices';
 import { DownloadAgent } from './DownloadAgent';
-import { PackagesPanel } from './PackagesPanel';
 import { DeviceCard } from './DeviceCard';
 import { LinkCodesDialog } from './LinkCodesDialog';
 import { useLinkCodes } from './useLinkCodes';
@@ -23,7 +22,7 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
     const { devices, loading, error, refresh } = useDevices();
     const [showDownloadModal, setShowDownloadModal] = useState(false);
     const links = useLinkCodes(refresh);
-    const actions = useDeviceActions(refresh);
+    const actions = useDeviceActions(devices, refresh);
 
     // Archived devices are gone from management; they live (read-only) in
     // Monitoring for browsing their frozen history.
@@ -181,20 +180,6 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                     L’agent ne sera pas auto-détruit. À utiliser s’il n’existe plus, ou si peu importe qu’il se nettoie.
                     Ses données restent consultables dans Monitoring.
                 </p>
-            </Dialog>
-
-            <Dialog
-                open={actions.packagesTarget !== null}
-                onClose={() => actions.setPackagesTarget(null)}
-                title={actions.packagesTarget ? `Mises à jour — « ${actions.packagesTarget.name} »` : 'Mises à jour'}
-                description='Gestionnaires détectés sur l’appareil et application des mises à jour en direct.'
-                footer={
-                    <Button variant='secondary' onClick={() => actions.setPackagesTarget(null)}>
-                        Fermer
-                    </Button>
-                }
-            >
-                {actions.packagesTarget && <PackagesPanel deviceId={actions.packagesTarget.id} />}
             </Dialog>
 
             <DownloadAgent open={showDownloadModal} onClose={() => setShowDownloadModal(false)} />

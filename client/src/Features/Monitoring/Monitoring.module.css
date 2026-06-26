@@ -98,6 +98,30 @@
     gap: var(--space-sm);
 }
 
+/* Title on the left; actions (update-all + info) on the right, hugging the panel. */
+.titleHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.titleActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+/* Sidebar variant: compact, sits atop the device list (frees the full-width band). */
+.titleSidebar .title {
+    font-size: 1.25rem;
+}
+
+.titleSidebar .subtitle {
+    margin-bottom: var(--space-sm);
+    font-size: 0.8rem;
+}
+
 .loader {
     color: var(--text-muted);
     text-align: center;
@@ -215,13 +239,33 @@
     white-space: nowrap;
 }
 
-/* Tiny amber glyph next to the version when the agent lags the interface build. */
-.deviceCardWarn {
-    width: 12px;
-    height: 12px;
-    margin-left: 4px;
-    vertical-align: -1px;
-    color: var(--warning);
+/* Per-device update affordance in the sidebar card (accent, right-aligned). */
+.cardUpdateBtn {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    background: transparent;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    color: var(--accent);
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.cardUpdateBtn:hover:not(:disabled) {
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
+.cardUpdateBtn:disabled {
+    cursor: default;
+    opacity: 0.7;
 }
 
 .metricsPanel {
@@ -463,17 +507,17 @@
     font-style: italic;
 }
 
-/* Outdated-agent value inside the "Agent" group: amber text + leading glyph. */
+/* Update-available value inside the "Agent" group: accent text + leading glyph. */
 .agentVersionWarn {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    color: var(--warning);
+    color: var(--accent);
 }
 .agentVersionWarn .icon {
     width: 14px;
     height: 14px;
-    color: var(--warning);
+    color: var(--accent);
 }
 
 /* ── Activity hero (idle / normal / intensive) ── */
@@ -1049,6 +1093,12 @@
     color: var(--danger);
 }
 
+/* Update-available button: accent by default so it stands out among the header icons. */
+.iconHeaderUpdate {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
 .spinning {
     display: inline-block;
     animation: monitoring-spin 0.7s linear infinite;
@@ -1330,4 +1380,78 @@
 .calSelected:hover:not(:disabled) {
     background: var(--accent);
     color: var(--on-accent);
+}
+
+/* ── Package-update panel ─────────────────────────────────────────────── */
+.pkgHint {
+    color: var(--text-muted);
+    padding: var(--space-sm) 0;
+}
+.pkgList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+.pkgRow {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-sm);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+.pkgRowHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+.pkgName {
+    font-weight: 600;
+}
+.pkgCount {
+    flex: 1;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+.pkgRoot {
+    color: var(--text-muted);
+}
+.pkgProgress {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+.pkgBar {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--surface-2, var(--surface));
+    overflow: hidden;
+}
+.pkgBarFill {
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.2s ease;
+}
+.pkgBarIndet {
+    width: 35%;
+    animation: pkgIndet 1.1s ease-in-out infinite;
+}
+@keyframes pkgIndet {
+    0% { margin-left: -35%; }
+    100% { margin-left: 100%; }
+}
+.pkgLine {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    word-break: break-all;
+}
+.pkgOk {
+    color: var(--success, var(--accent));
+    font-size: 0.85rem;
+}
+.pkgErr {
+    color: var(--danger);
+    font-size: 0.85rem;
+    word-break: break-word;
 }

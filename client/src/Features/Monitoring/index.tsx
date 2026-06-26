@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { useDevices } from '@/stores/devices';
 import { openInfo } from '@/Components/InfoPopup';
 import type { FeatureProps } from '../types';
-import { agentVersionInfo } from '../agentVersion';
 import { MonitoringInfo } from './MonitoringInfo';
 import MonitoringPanel from './MonitoringPanel';
+import { useAgentUpdate } from './useAgentUpdate';
+import { agentUpdatable } from '../agentVersion';
 import styles from './Monitoring.module.css';
 
 // ─── Widget compact ─────────────────────────────────────────────────────────
@@ -45,13 +46,66 @@ export function MonitoringWidget() {
 
 // ─── Full view ──────────────────────────────────────────────────────────────
 
+/**
+ * Feature title + "how it works" info button (right-aligned, hugging the panel),
+ * with an optional "update all agents" button to its left. Rendered in the sidebar
+ * (grid view) so it doesn't eat a full-width band, or above the loading/empty states.
+ */
+function MonitoringTitle({
+    onInfo,
+    sidebar,
+    updatableIds,
+    onUpdateAll,
+    updating
+}: {
+    onInfo: () => void;
+    sidebar?: boolean;
+    updatableIds?: string[];
+    onUpdateAll?: () => void;
+    updating?: boolean;
+}) {
+    const count = updatableIds?.length ?? 0;
+    return (
+        <div className={sidebar ? styles.titleSidebar : ''}>
+            <div className={styles.titleHead}>
+                <h2 className={styles.title}>Monitoring</h2>
+                <div className={styles.titleActions}>
+                    {count > 0 && onUpdateAll && (
+                        <button
+                            className={`${styles.iconHeaderBtn} ${styles.iconHeaderUpdate}`}
+                            onClick={onUpdateAll}
+                            disabled={updating}
+                            title={`Mettre à jour ${count} agent${count > 1 ? 's' : ''}`}
+                        >
+                            <span className={`icon ${updating ? `icon-spinner ${styles.spinning}` : 'icon-cloud'}`} />
+                        </button>
+                    )}
+                    <button className={styles.iconHeaderBtn} onClick={onInfo} title='Comment ça marche ?'>
+                        <span className='icon icon-info' />
+                    </button>
+                </div>
+            </div>
+            <p className={styles.subtitle}>Surveillance et historique de vos appareils</p>
+        </div>
+    );
+}
+
 export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps) {
     const { devices, loading } = useDevices();
     const [selectedId, setSelectedId] = useState<string | null>(null);
+    const updater = useAgentUpdate();
 
-    // Auto-select the first device.
+    // Devices whose agent runs an older build than this interface (online).
+    const updatableIds = devices.filter((d) => d.online && agentUpdatable(d)).map((d) => d.id);
+
+    // Keep a valid selection: auto-select the first device, and drop a selection
+    // that points at a device which no longer exists (e.g. deleted elsewhere).
     useEffect(() => {
-        if (selectedId === null && devices.length > 0) setSelectedId(devices[0].id);
+        if (devices.length === 0) {
+            if (selectedId !== null) setSelectedId(null);
+        } else if (selectedId === null || !devices.some((d) => d.id === selectedId)) {
+            setSelectedId(devices[0].id);
+        }
     }, [devices, selectedId]);
 
     const showInfo = () =>
@@ -59,35 +113,43 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
 
     return (
         <div className={styles.container}>
-            <div className={styles.titleRow}>
-                <div>
-                    <h2 className={styles.title}>Monitoring</h2>
-                    <p className={styles.subtitle}>Surveillance et historique de vos appareils</p>
-                </div>
-                <button className={styles.iconHeaderBtn} onClick={showInfo} title='Comment ça marche ?'>
-                    <span className='icon icon-info' />
-                </button>
-            </div>
-
             {loading && devices.length === 0 ? (
-                <div className={styles.loader}>Chargement...</div>
+                <>
+                    <MonitoringTitle onInfo={showInfo} />
+                    <div className={styles.loader}>Chargement...</div>
+                </>
             ) : devices.length === 0 ? (
-                <div className={styles.empty}>
-                    <span className={`icon icon-server ${styles.emptyIcon}`} />
-                    <p>Aucun appareil configuré</p>
-                    <p className={styles.hint}>Liez un agent depuis le menu « Appareils » (en haut à droite).</p>
-                </div>
+                <>
+                    <MonitoringTitle onInfo={showInfo} />
+                    <div className={styles.empty}>
+                        <span className={`icon icon-server ${styles.emptyIcon}`} />
+                        <p>Aucun appareil configuré</p>
+                        <p className={styles.hint}>Liez un agent depuis le menu « Appareils » (en haut à droite).</p>
+                    </div>
+                </>
             ) : (
                 <div className={styles.grid}>
-                    {/* Left: device list */}
+                    {/* Left: title + device list */}
                     <div className={styles.deviceListFull}>
+                        <MonitoringTitle
+                            onInfo={showInfo}
+                            sidebar
+                            updatableIds={updatableIds}
+                            onUpdateAll={() => void updater.updateAll(updatableIds)}
+                            updating={updater.anyBusy}
+                        />
                         {devices.map((d) => {
-                            const version = agentVersionInfo(d.agentVersion);
+                            const canUpdate = d.online && agentUpdatable(d);
                             return (
-                                <button
+                                <div
                                     key={d.id}
+                                    role='button'
+                                    tabIndex={0}
                                     className={`${styles.deviceCard} ${d.id === selectedId ? styles.selected : ''}`}
                                     onClick={() => setSelectedId(d.id)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') setSelectedId(d.id);
+                                    }}
                                 >
                                     <div
                                         className={`${styles.statusDot} ${d.online ? styles.online : styles.offline}`}
@@ -96,22 +158,35 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                                         <span className={styles.deviceCardName}>{d.name}</span>
                                         <span className={styles.deviceCardPlatform}>
                                             {d.platform}
-                                            {version && ` · v${version.version}`}
-                                            {version?.mismatch && (
-                                                <span
-                                                    className={`icon icon-error ${styles.deviceCardWarn}`}
-                                                    title='Mise à jour de l’agent disponible'
-                                                />
-                                            )}
+                                            {d.agentVersion && ` · v${d.agentVersion}`}
                                         </span>
                                     </div>
-                                </button>
+                                    {canUpdate && (
+                                        <button
+                                            className={styles.cardUpdateBtn}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                void updater.update(d.id);
+                                            }}
+                                            disabled={updater.isBusy(d.id)}
+                                            title={
+                                                d.latestAgentVersion
+                                                    ? `Mettre à jour l’agent vers la v${d.latestAgentVersion}`
+                                                    : 'Mettre à jour l’agent'
+                                            }
+                                        >
+                                            <span
+                                                className={`icon ${updater.isBusy(d.id) ? `icon-spinner ${styles.spinning}` : 'icon-cloud'}`}
+                                            />
+                                        </button>
+                                    )}
+                                </div>
                             );
                         })}
                     </div>
 
                     {/* Right: per-device panel (shared with the home device popup) */}
-                    {selectedId && <MonitoringPanel deviceId={selectedId} onPurged={() => setSelectedId(null)} />}
+                    {selectedId && <MonitoringPanel deviceId={selectedId} />}
                 </div>
             )}
         </div>

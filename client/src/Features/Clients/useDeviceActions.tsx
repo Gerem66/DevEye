@@ -1,19 +1,27 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import type { Device } from 'deveye-types';
 import { ws } from '@/api/ws';
 import { openInfo } from '@/Components/InfoPopup';
 import styles from './Clients.module.css';
 
 type Target = { id: string; name: string } | null;
 
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 /**
  * All device-management actions for the Appareils page (approve/revoke/rename,
  * self-update, persistence & privileges, deletion), with their in-flight state.
  * Returned as one object so `DeviceCard` and the dialogs share it.
  */
-export function useDeviceActions(refresh: () => Promise<void> | void) {
+export function useDeviceActions(devices: Device[], refresh: () => Promise<void> | void) {
+    // Live device list read inside async handlers, to tell once a privilege change
+    // has actually been avered by the agent's next report.
+    const devicesRef = useRef(devices);
+    devicesRef.current = devices;
     const [actionError, setActionError] = useState<string | null>(null);
     const [updatingId, setUpdatingId] = useState<string | null>(null);
-    const [serviceBusyId, setServiceBusyId] = useState<string | null>(null);
+    // Which toggle (per device) is mid-change, so only that one shows a loader.
+    const [serviceBusy, setServiceBusy] = useState<{ id: string; kind: 'autostart' | 'privilege' } | null>(null);
     // Dialog targets (the confirmation dialogs live in the page).
     const [deleteTarget, setDeleteTarget] = useState<Target>(null);
     const [deleting, setDeleting] = useState(false);
@@ -22,7 +30,6 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
     const [renameTarget, setRenameTarget] = useState<Target>(null);
     const [renameValue, setRenameValue] = useState('');
     const [renaming, setRenaming] = useState(false);
-    const [packagesTarget, setPackagesTarget] = useState<Target>(null);
 
     const confirmDevice = async (id: string) => {
         setActionError(null);
@@ -74,16 +81,18 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
 
     const setAutostart = async (id: string, enabled: boolean) => {
         setActionError(null);
-        setServiceBusyId(id);
+        setServiceBusy({ id, kind: 'autostart' });
         try {
             await ws.send('device.setAutostart', { deviceId: id, enabled });
+            // Keep the loader on until the agent has applied the change and
+            // re-reported its scope, so the toggle only flips once it's avered.
             await refresh();
-            // The agent reports its new service scope on its next report.
-            setTimeout(() => void refresh(), 3000);
+            await sleep(3000);
+            await refresh();
         } catch (e) {
             setActionError(e instanceof Error ? e.message : 'Action impossible.');
         } finally {
-            setServiceBusyId(null);
+            setServiceBusy(null);
         }
     };
 
@@ -103,35 +112,53 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
             )
         });
 
-    const elevateDevice = async (id: string) => {
+    /**
+     * Elevate / drop privileges — behaves exactly like the autostart toggle: a
+     * loader runs until the change is avered by the agent's next report. The agent
+     * restarts under the new scope, so we wait, refresh, then check the reported
+     * scope. Only if it *didn't* reach the target (no interactive session on the
+     * device → hybrid elevation) do we surface the manual command to run there.
+     */
+    const changePrivilege = async (
+        id: string,
+        command: 'device.elevate' | 'device.dropPrivileges',
+        title: string,
+        reached: (scope: string) => boolean,
+        errorLabel: string
+    ) => {
         setActionError(null);
-        setServiceBusyId(id);
+        setServiceBusy({ id, kind: 'privilege' });
         try {
-            const res = await ws.send('device.elevate', { deviceId: id });
-            showManualCommand('Élever l’agent en root', res.manualCommand);
+            const res = await ws.send(command, { deviceId: id });
             await refresh();
-            setTimeout(() => void refresh(), 4000);
+            await sleep(4000);
+            await refresh();
+            const scope = devicesRef.current.find((d) => d.id === id)?.report?.agent?.serviceScope ?? 'none';
+            if (!reached(scope)) showManualCommand(title, res.manualCommand);
         } catch (e) {
-            setActionError(e instanceof Error ? e.message : 'Élévation impossible.');
+            setActionError(e instanceof Error ? e.message : errorLabel);
         } finally {
-            setServiceBusyId(null);
+            setServiceBusy(null);
         }
     };
 
-    const dropPrivilegesDevice = async (id: string) => {
-        setActionError(null);
-        setServiceBusyId(id);
-        try {
-            const res = await ws.send('device.dropPrivileges', { deviceId: id });
-            showManualCommand('Rétrograder l’agent', res.manualCommand);
-            await refresh();
-            setTimeout(() => void refresh(), 4000);
-        } catch (e) {
-            setActionError(e instanceof Error ? e.message : 'Rétrogradation impossible.');
-        } finally {
-            setServiceBusyId(null);
-        }
-    };
+    const elevateDevice = (id: string) =>
+        changePrivilege(
+            id,
+            'device.elevate',
+            'Élever l’agent en root',
+            (scope) => scope === 'system',
+            'Élévation impossible.'
+        );
+
+    const dropPrivilegesDevice = (id: string) =>
+        changePrivilege(
+            id,
+            'device.dropPrivileges',
+            'Rétrograder l’agent',
+            (scope) => scope !== 'system',
+            'Rétrogradation impossible.'
+        );
 
     const openRename = (id: string, current: string) => {
         setActionError(null);
@@ -206,7 +233,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
     return {
         actionError,
         updatingId,
-        serviceBusyId,
+        serviceBusy,
         deleteTarget,
         setDeleteTarget,
         deleting,
@@ -218,8 +245,6 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
         renameValue,
         setRenameValue,
         renaming,
-        packagesTarget,
-        setPackagesTarget,
         confirmDevice,
         revokeDevice,
         reactivateDevice,

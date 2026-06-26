@@ -12,7 +12,7 @@ import {
     type PackageManagerId,
     type PackageProgressPush
 } from 'deveye-types';
-import styles from './Clients.module.css';
+import styles from './Monitoring.module.css';
 
 /** Human label per manager id. */
 const MANAGER_LABELS: Record<PackageManagerId, string> = {

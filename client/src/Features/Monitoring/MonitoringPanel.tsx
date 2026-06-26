@@ -26,6 +26,9 @@ import { ConfigDialog } from './ConfigDialog';
 import { GraphDetail, type DetailRow } from './GraphDetail';
 import { Timeline } from './Timeline';
 import { MiniGraph, type Series } from './MiniGraph';
+import { PackagesPanel } from './PackagesPanel';
+import { useAgentUpdate } from './useAgentUpdate';
+import { agentUpdatable } from '../agentVersion';
 import {
     ACTIVITY_META,
     activityLevel,
@@ -200,9 +203,6 @@ function stats(points: { t: number; v: number }[]): { cur: number; avg: number; 
 export interface MonitoringPanelProps {
     /** Device whose metrics this panel shows. */
     deviceId: string;
-    /** Called after the device (and its history) is purged, so the host can react
-     *  (clear the sidebar selection, or close the device popup). */
-    onPurged?: () => void;
 }
 
 /**
@@ -212,12 +212,12 @@ export interface MonitoringPanelProps {
  * no sidebar). Owns the device's live state (presence/report/metric pushes) and
  * its metric subscription, scoped to `deviceId`.
  */
-export default function MonitoringPanel({ deviceId, onPurged }: MonitoringPanelProps) {
+export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const { devices: baseDevices, loading, refresh } = useDevices();
     const [override, setOverride] = useState<{ online?: boolean; report?: DeviceReport | null }>({});
     const [configOpen, setConfigOpen] = useState(false);
-    const [purgeOpen, setPurgeOpen] = useState(false);
-    const [purging, setPurging] = useState(false);
+    const [packagesOpen, setPackagesOpen] = useState(false);
+    const updater = useAgentUpdate();
     // Storage footprint of the device's stored snapshots.
     const [storage, setStorage] = useState<{ snapshots: number; rows: number; bytes: number } | null>(null);
     // Snapshot-deletion confirmation (targets the current snapshot/zone focus).
@@ -389,24 +389,6 @@ export default function MonitoringPanel({ deviceId, onPurged }: MonitoringPanelP
         });
         return off;
     }, [deviceId, liveTail]);
-
-    // Hard-purge: remove the device and ALL its monitoring history (works whether
-    // the agent is online or not). Used to clear an archived device's frozen data,
-    // or to reset an active one.
-    const purgeDevice = useCallback(async () => {
-        const id = idRef.current;
-        setPurging(true);
-        try {
-            await ws.send('device.delete', { deviceId: id });
-            setPurgeOpen(false);
-            onPurged?.();
-            await refresh();
-        } catch {
-            // Keep the dialog open; the failure is rare (network) and retryable.
-        } finally {
-            setPurging(false);
-        }
-    }, [refresh, onPurged]);
 
     // What a delete action would remove, per the current focus.
     const deleteTarget = useMemo(() => {
@@ -753,6 +735,22 @@ export default function MonitoringPanel({ deviceId, onPurged }: MonitoringPanelP
             <div className={styles.metricsPanelHeader}>
                 <h3>{selected.name}</h3>
                 <div className={styles.headerRight}>
+                    {online && !archived && agentUpdatable(selected) && (
+                        <button
+                            className={`${styles.iconHeaderBtn} ${styles.iconHeaderUpdate}`}
+                            onClick={() => void updater.update(selected.id)}
+                            disabled={updater.isBusy(selected.id)}
+                            title={
+                                selected.latestAgentVersion
+                                    ? `Mettre à jour l’agent vers la v${selected.latestAgentVersion}`
+                                    : 'Mettre à jour l’agent'
+                            }
+                        >
+                            <span
+                                className={`icon ${updater.isBusy(selected.id) ? `icon-spinner ${styles.spinning}` : 'icon-cloud'}`}
+                            />
+                        </button>
+                    )}
                     <button className={styles.iconHeaderBtn} onClick={showHardwareInfo} title='Matériel & agent'>
                         <span className='icon icon-cpu' />
                     </button>
@@ -768,6 +766,15 @@ export default function MonitoringPanel({ deviceId, onPurged }: MonitoringPanelP
                     {online && !archived && (
                         <button
                             className={styles.iconHeaderBtn}
+                            onClick={() => setPackagesOpen(true)}
+                            title='Mises à jour système'
+                        >
+                            <span className='icon icon-database' />
+                        </button>
+                    )}
+                    {online && !archived && (
+                        <button
+                            className={styles.iconHeaderBtn}
                             onClick={refreshNow}
                             disabled={refreshing}
                             title='Rafraîchir maintenant'
@@ -775,13 +782,6 @@ export default function MonitoringPanel({ deviceId, onPurged }: MonitoringPanelP
                             <span className={`icon icon-refresh ${refreshing ? styles.spinning : ''}`} />
                         </button>
                     )}
-                    <button
-                        className={`${styles.iconHeaderBtn} ${styles.iconHeaderDanger}`}
-                        onClick={() => setPurgeOpen(true)}
-                        title='Supprimer l’appareil et ses données'
-                    >
-                        <span className='icon icon-trash' />
-                    </button>
                     {archived ? (
                         <span className={`${styles.onlineBadge} ${styles.archived}`}>Archivé</span>
                     ) : (
@@ -1086,27 +1086,17 @@ export default function MonitoringPanel({ deviceId, onPurged }: MonitoringPanelP
             />
 
             <Dialog
-                open={purgeOpen}
-                onClose={() => setPurgeOpen(false)}
-                title={`Supprimer « ${selected.name} » ?`}
-                description='Cette action efface définitivement l’appareil et tout son historique de monitoring.'
-                onSubmit={() => void purgeDevice()}
+                open={packagesOpen}
+                onClose={() => setPackagesOpen(false)}
+                title={`Mises à jour — « ${selected.name} »`}
+                description='Gestionnaires détectés sur l’appareil et application des mises à jour en direct.'
                 footer={
-                    <>
-                        <Button variant='secondary' onClick={() => setPurgeOpen(false)} disabled={purging}>
-                            Annuler
-                        </Button>
-                        <Button variant='danger' onClick={() => void purgeDevice()} disabled={purging}>
-                            {purging ? 'Suppression…' : 'Supprimer les données'}
-                        </Button>
-                    </>
+                    <Button variant='secondary' onClick={() => setPackagesOpen(false)}>
+                        Fermer
+                    </Button>
                 }
             >
-                <p className={styles.focusCaption}>
-                    {archived
-                        ? 'Les données figées de cet appareil archivé seront définitivement effacées et il disparaîtra de cette page.'
-                        : 'Toutes les métriques, snapshots et historiques de cet appareil seront supprimés. L’agent, s’il est encore actif, n’est pas détruit : utilisez « Supprimer » depuis la page Appareils pour cela.'}
-                </p>
+                {packagesOpen && <PackagesPanel deviceId={selected.id} />}
             </Dialog>
 
             <Dialog

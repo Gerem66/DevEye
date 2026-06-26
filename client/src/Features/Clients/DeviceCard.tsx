@@ -1,7 +1,6 @@
 import { StatusBadge } from '@/Components/StatusBadge';
 import type { Device } from 'deveye-types';
-import { agentVersionInfo, APP_VERSION } from '../agentVersion';
-import { Switch } from './Switch';
+import { agentUpdatable } from '../agentVersion';
 import { statusMeta, formatLastSeen } from './format';
 import type { DeviceActions } from './useDeviceActions';
 import styles from './Clients.module.css';
@@ -9,14 +8,29 @@ import styles from './Clients.module.css';
 /** One device card (header + info + persistence/privileges + actions). */
 export function DeviceCard({ device, actions }: { device: Device; actions: DeviceActions }) {
     const pendingDeletion = device.status === 'pending_deletion';
-    const version = agentVersionInfo(device.agentVersion);
     const agent = device.report?.agent ?? null;
     const scope = agent?.serviceScope ?? 'none';
+    const updating = actions.updatingId === device.id;
+    const serviceActive = actions.serviceBusy?.id === device.id;
+    const autostartBusy = serviceActive && actions.serviceBusy?.kind === 'autostart';
+    const rootBusy = serviceActive && actions.serviceBusy?.kind === 'privilege';
+    // An update is worth offering when the agent runs an older build than this
+    // interface (or the server advertises a newer signed binary).
+    const updatable = device.online && agentUpdatable(device);
 
     return (
         <>
             <div className={styles.deviceHeader}>
-                <span className={styles.deviceName}>{device.name}</span>
+                <div className={styles.deviceNameRow}>
+                    <span className={styles.deviceName}>{device.name}</span>
+                    <button
+                        className={styles.nameEditBtn}
+                        onClick={() => actions.openRename(device.id, device.name)}
+                        title='Renommer'
+                    >
+                        <span className='icon icon-edit' />
+                    </button>
+                </div>
                 <StatusBadge tone={device.online ? 'online' : 'offline'}>
                     {device.online ? 'En ligne' : 'Hors ligne'}
                 </StatusBadge>
@@ -25,7 +39,10 @@ export function DeviceCard({ device, actions }: { device: Device; actions: Devic
             <div className={styles.deviceInfo}>
                 <div className={styles.infoRow}>
                     <span className='icon icon-cpu' />
-                    <span>{device.platform}</span>
+                    <span>
+                        {device.platform}
+                        {agent && ` · ${agent.privileged ? 'root' : agent.user}`}
+                    </span>
                 </div>
                 <div className={styles.infoRow}>
                     <span className='icon icon-shield' />
@@ -37,63 +54,73 @@ export function DeviceCard({ device, actions }: { device: Device; actions: Devic
                     <span className='icon icon-clock' />
                     <span>{device.online ? 'En ligne' : formatLastSeen(device.lastSeen)}</span>
                 </div>
-                {version && (
-                    <div
-                        className={`${styles.infoRow} ${version.mismatch ? styles.versionWarn : ''}`}
-                        title={
-                            version.mismatch
-                                ? `Interface en v${APP_VERSION} — une mise à jour de l’agent est disponible.`
-                                : undefined
-                        }
-                    >
-                        <span className={`icon ${version.mismatch ? 'icon-error' : 'icon-info'}`} />
+                {device.agentVersion && (
+                    <div className={styles.infoRow}>
+                        <span className={`icon ${updatable ? 'icon-cloud' : 'icon-info'}`} />
                         <span>
-                            Agent v{version.version}
-                            {version.mismatch && <span className={styles.versionTag}>Mise à jour disponible</span>}
+                            Agent v{device.agentVersion}
+                            {updatable && (
+                                <span className={styles.updateNote}>
+                                    {' · '}
+                                    {device.latestAgentVersion
+                                        ? `mise à jour disponible (v${device.latestAgentVersion})`
+                                        : 'mise à jour disponible'}
+                                </span>
+                            )}
                         </span>
                     </div>
                 )}
             </div>
 
             {device.online && agent && !pendingDeletion && (
-                <div className={styles.deviceInfo}>
-                    <div className={styles.infoRow}>
-                        <span className={`icon ${agent.privileged ? 'icon-shield' : 'icon-cpu'}`} />
-                        <span>
-                            {agent.privileged ? 'root' : agent.user}
-                            {' · '}
-                            {scope === 'system'
-                                ? 'Service système'
-                                : scope === 'user'
-                                  ? 'Démarrage auto (utilisateur)'
-                                  : 'Démarrage manuel'}
-                        </span>
+                <div className={styles.serviceBox}>
+                    {/* Each toggle's "on" colour reflects the agent's *reported* scope
+                        (the avered state), never the action that was requested. */}
+                    <div className={styles.toggleRow}>
+                        <button
+                            className={`${styles.iconBtn} ${scope !== 'none' ? styles.iconApprove : ''}`}
+                            aria-pressed={scope !== 'none'}
+                            disabled={serviceActive}
+                            onClick={() => actions.setAutostart(device.id, scope === 'none')}
+                            title={
+                                scope === 'none'
+                                    ? 'Activer le démarrage automatique'
+                                    : 'Désactiver le démarrage automatique'
+                            }
+                        >
+                            {autostartBusy ? (
+                                <span className={`icon icon-spinner ${styles.spinning}`} />
+                            ) : (
+                                <span className={`icon ${scope !== 'none' ? 'icon-check-circle' : 'icon-x-circle'}`} />
+                            )}
+                        </button>
+                        <span className={styles.toggleLabel}>Démarrage auto</span>
                     </div>
-                    <div className={styles.deviceActions}>
-                        <Switch
-                            checked={scope !== 'none'}
-                            onChange={(v) => actions.setAutostart(device.id, v)}
-                            label='Démarrage auto'
-                        />
-                        {scope !== 'system' ? (
-                            <button
-                                className={styles.actionBtn}
-                                disabled={actions.serviceBusyId === device.id}
-                                onClick={() => actions.elevateDevice(device.id)}
-                                title='Élever en service système (root)'
-                            >
-                                <span className='icon icon-shield' /> Élever en root
-                            </button>
-                        ) : (
-                            <button
-                                className={styles.actionBtn}
-                                disabled={actions.serviceBusyId === device.id}
-                                onClick={() => actions.dropPrivilegesDevice(device.id)}
-                                title='Rétrograder en service utilisateur'
-                            >
-                                <span className='icon icon-arrow-left' /> Rétrograder
-                            </button>
-                        )}
+                    <div className={styles.toggleRow}>
+                        <button
+                            className={`${styles.iconBtn} ${scope === 'system' ? styles.iconApprove : ''}`}
+                            aria-pressed={scope === 'system'}
+                            disabled={serviceActive}
+                            onClick={() =>
+                                scope === 'system'
+                                    ? actions.dropPrivilegesDevice(device.id)
+                                    : actions.elevateDevice(device.id)
+                            }
+                            title={
+                                scope === 'system'
+                                    ? 'Rétrograder en service utilisateur'
+                                    : 'Élever en service système (root)'
+                            }
+                        >
+                            {rootBusy ? (
+                                <span className={`icon icon-spinner ${styles.spinning}`} />
+                            ) : (
+                                <span
+                                    className={`icon ${scope === 'system' ? 'icon-check-circle' : 'icon-x-circle'}`}
+                                />
+                            )}
+                        </button>
+                        <span className={styles.toggleLabel}>Service système (root)</span>
                     </div>
                 </div>
             )}
@@ -152,37 +179,20 @@ export function DeviceCard({ device, actions }: { device: Device; actions: Devic
                             <span className='icon icon-check-circle' /> Réactiver
                         </button>
                     )}
-                    {device.online && (
+                    {updatable && (
                         <button
-                            className={styles.actionBtn}
-                            onClick={() => actions.setPackagesTarget({ id: device.id, name: device.name })}
-                            title='Mises à jour système'
-                        >
-                            <span className='icon icon-refresh' /> Mises à jour
-                        </button>
-                    )}
-                    {device.online && device.agentUpdateAvailable && (
-                        <button
-                            className={`${styles.actionBtn} ${styles.actionPrimary}`}
+                            className={`${styles.actionBtn} ${styles.actionUpdate}`}
                             onClick={() => actions.updateAgent(device.id)}
-                            disabled={actions.updatingId === device.id}
+                            disabled={updating}
                             title={
                                 device.latestAgentVersion
                                     ? `Mettre à jour l’agent vers la v${device.latestAgentVersion}`
                                     : 'Mettre à jour l’agent'
                             }
                         >
-                            <span className='icon icon-cloud' />{' '}
-                            {actions.updatingId === device.id ? 'Mise à jour…' : 'Mettre à jour'}
+                            <span className={`icon ${updating ? `icon-spinner ${styles.spinning}` : 'icon-cloud'}`} />
                         </button>
                     )}
-                    <button
-                        className={styles.actionBtn}
-                        onClick={() => actions.openRename(device.id, device.name)}
-                        title='Renommer'
-                    >
-                        <span className='icon icon-edit' />
-                    </button>
                     {device.status === 'active' && (
                         <button
                             className={`${styles.actionBtn} ${styles.actionDanger}`}
