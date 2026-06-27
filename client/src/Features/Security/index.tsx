@@ -110,6 +110,9 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     const [backupCodes, setBackupCodes] = useState<string[]>([]);
     const [showDisableConfirm, setShowDisableConfirm] = useState(false);
     const [disableCode, setDisableCode] = useState('');
+    // Disable-dialog error (e.g. wrong code) lives here, not in the page-level
+    // `error`, so it shows inside the dialog where the code was entered.
+    const [disableError, setDisableError] = useState<string | null>(null);
     const [showRegenConfirm, setShowRegenConfirm] = useState(false);
     const [secrecy, setSecrecy] = useState<SecrecyStatus | null>(null);
     const [securityOpen, setSecurityOpen] = useState(false);
@@ -213,15 +216,28 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
 
     const disable2FA = async () => {
         if (!disableCode.trim()) return;
-        setError(null);
+        setDisableError(null);
         try {
             await ws.send('twofa.disable', { code: disableCode.trim() });
             setShowDisableConfirm(false);
             setDisableCode('');
             await fetchStatus();
         } catch {
-            setError('Code invalide');
+            setDisableCode('');
+            setDisableError('Code invalide');
         }
+    };
+
+    /** Open the disable dialog from a clean slate (no stale code or error). */
+    const openDisableConfirm = () => {
+        setDisableCode('');
+        setDisableError(null);
+        setShowDisableConfirm(true);
+    };
+
+    const closeDisableConfirm = () => {
+        setShowDisableConfirm(false);
+        setDisableError(null);
     };
 
     const regenerateBackupCodes = async () => {
@@ -337,7 +353,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                 >
                                     <span className='icon icon-refresh' />
                                 </button>
-                                <Button variant='danger' onClick={() => setShowDisableConfirm(true)}>
+                                <Button variant='danger' onClick={openDisableConfirm}>
                                     Désactiver
                                 </Button>
                             </>
@@ -526,7 +542,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
 
                     <Dialog
                         open={showDisableConfirm}
-                        onClose={() => setShowDisableConfirm(false)}
+                        onClose={closeDisableConfirm}
                         title='Désactiver la 2FA'
                         description='⚠️ Votre compte sera moins sécurisé. Entrez un code de votre application pour confirmer.'
                         onSubmit={() => {
@@ -534,7 +550,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                         }}
                         footer={
                             <>
-                                <Button variant='ghost' onClick={() => setShowDisableConfirm(false)}>
+                                <Button variant='ghost' onClick={closeDisableConfirm}>
                                     Annuler
                                 </Button>
                                 <Button variant='danger' onClick={disable2FA} disabled={disableCode.length !== 6}>
@@ -550,9 +566,13 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                             maxLength={6}
                             className={styles.codeInput}
                             value={disableCode}
-                            onChange={(e) => setDisableCode(e.target.value.replace(/\D/g, ''))}
+                            onChange={(e) => {
+                                setDisableCode(e.target.value.replace(/\D/g, ''));
+                                setDisableError(null);
+                            }}
                             placeholder='000000'
                         />
+                        {disableError && <div className={`${styles.error} ${styles.disableError}`}>{disableError}</div>}
                     </Dialog>
 
                     <Dialog

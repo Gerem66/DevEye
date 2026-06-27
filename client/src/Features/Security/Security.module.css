@@ -348,6 +348,11 @@
     font-size: 0.85rem;
 }
 
+/* The disable-dialog variant follows the code input, so keep it off the field. */
+.disableError {
+    margin-top: var(--space-md);
+}
+
 /* 2FA setup steps (rendered inside the setup Dialog). */
 .steps {
     display: flex;
