@@ -49,11 +49,29 @@ export class DevEyeWs {
     private readonly listeners = new Set<EventListener>();
     private readonly stateListeners = new Set<(s: ConnectionState) => void>();
     private reconnectAttempt = 0;
+    private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     private intentionallyClosed = false;
+    private _hasConnected = false;
     private readonly unauthorizedListeners = new Set<() => void>();
+
+    constructor() {
+        // Auto-retry when the user comes back to the tab/window: a connection that
+        // dropped while the tab was hidden comes back on its own, so the user only
+        // sees the "Connexion perdue" banner + loader for a moment, no click needed.
+        if (typeof window !== 'undefined') {
+            window.addEventListener('focus', this.handleWake);
+            document.addEventListener('visibilitychange', this.handleWake);
+        }
+    }
 
     get state(): ConnectionState {
         return this._state;
+    }
+
+    /** True once the socket has opened at least once. Lets the UI tell a genuine
+     *  drop apart from the very first connect (where no banner should flash). */
+    get hasConnected(): boolean {
+        return this._hasConnected;
     }
 
     onMessage(fn: EventListener): () => void {
@@ -80,6 +98,11 @@ export class DevEyeWs {
         if (this.socket && (this._state === 'open' || this._state === 'connecting')) {
             return Promise.resolve();
         }
+        // A manual/awaited connect supersedes any pending backoff retry.
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
         this.intentionallyClosed = false;
         this.setState('connecting');
         return new Promise((resolve, reject) => {
@@ -87,6 +110,7 @@ export class DevEyeWs {
             this.socket = ws;
 
             ws.addEventListener('open', () => {
+                this._hasConnected = true;
                 this.setState('open');
                 resolve();
             });
@@ -102,6 +126,7 @@ export class DevEyeWs {
                 this.failAllPending(new WsError('closed', `WS closed (${ev.code})`));
                 if (ev.code === 4401) {
                     this.intentionallyClosed = true;
+                    this._hasConnected = false;
                     for (const fn of this.unauthorizedListeners) fn();
                     return;
                 }
@@ -112,18 +137,50 @@ export class DevEyeWs {
 
     close(): void {
         this.intentionallyClosed = true;
+        // Forget this session: the next login is a fresh first connect, so the
+        // topbar mustn't flash "Reconnexion…" while it opens.
+        this._hasConnected = false;
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
         this.socket?.close();
         this.socket = null;
         this.setState('closed');
     }
 
+    /**
+     * Force an immediate reconnection: cancels any pending backoff delay and
+     * resets the attempt counter so the socket comes back at once instead of
+     * waiting out the exponential backoff. Drives the topbar "Reconnecter" button
+     * and the focus/visibility auto-retry. Safe to call when already open
+     * (no-op via `connect`'s guard).
+     */
+    reconnect(): Promise<void> {
+        this.reconnectAttempt = 0;
+        return this.connect();
+    }
+
     private scheduleReconnect(): void {
         this.reconnectAttempt += 1;
         const delay = Math.min(30_000, 500 * 2 ** this.reconnectAttempt);
-        setTimeout(() => {
+        if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
             if (!this.intentionallyClosed) void this.connect().catch(() => {});
         }, delay);
     }
+
+    /** Reconnect on tab focus / visibility regain, but only when the socket was
+     *  actually lost — never before the first login (idle) nor after an intentional
+     *  close (logout / unauthorized). */
+    private handleWake = (): void => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+        if (this.intentionallyClosed) return;
+        if (this._state === 'closed' || this._state === 'error') {
+            void this.reconnect().catch(() => {});
+        }
+    };
 
     private handleRawMessage(raw: unknown): void {
         let data: unknown;

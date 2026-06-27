@@ -6,6 +6,7 @@ import { useDevices } from '@/stores/devices';
 import { useWeather } from '@/stores/weather';
 import { wmoIcon } from '@/Features/Weather/wmoIcon';
 import { DeploymentStatus } from './DeploymentStatus';
+import { ConnectionStatus } from './ConnectionStatus';
 import styles from './TopNavbar.module.css';
 
 const ENV = import.meta.env.VITE_ENV;
@@ -211,6 +212,9 @@ export default function TopNavbar({
 
             {/* Right section: deployment readiness (only while not ready) + live status + user profile */}
             <div className={styles.right} ref={menuRef}>
+                {/* Surfaces a dropped WS connection + a manual reconnect; hidden when
+                    the socket is healthy or never connected. */}
+                <ConnectionStatus />
                 {/* Hidden in the dev server — the agents aren't built there, so the
                     deployment status would load forever. */}
                 {!import.meta.env.DEV && <DeploymentStatus />}

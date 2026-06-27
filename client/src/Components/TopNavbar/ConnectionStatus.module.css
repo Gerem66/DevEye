@@ -1,0 +1,96 @@
+/* Single danger button in the topbar, shown only when an established connection
+   drops. Sober by design — a light --danger-bg wash with a --danger border, sized
+   to sit next to its neighbour DeploymentStatus. It appears/leaves via framer
+   (opacity + scale only); the *single* width change on this element is the
+   hover-revealed retry icon below, so nothing ever fights or clips.
+
+   NOTE: every icon size is scoped under `.pill` on purpose. The global `.icon`
+   rule sets `width: 18px` with the same specificity as a bare module class, so the
+   bundle order decided the winner — which left the icons at 18px (clipped + mis-
+   aligned). The descendant selectors here (0,2,0) reliably beat `.icon` (0,1,0). */
+.pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 12px;
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-pill);
+    background: var(--danger-bg);
+    color: var(--danger);
+    font: inherit;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.pill:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
+.pill:disabled {
+    cursor: default;
+}
+
+/* Leading state icon — x-circle when lost, the spinner while reconnecting. */
+.pill .statusIcon {
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    background-color: var(--danger);
+}
+
+.label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1;
+}
+
+/* Retry affordance. The wrapper only animates its *width* (0 → icon width) to
+   reserve space at rest with no gap or shift — deliberately NO `overflow: hidden`:
+   a rectangular clip ignores the pill's border-radius and would slice the icon on
+   a straight line inside the rounded shape. Instead the icon reveals itself by
+   fading + scaling in, so it appears within the real (rounded) bounds. */
+.pill .retry {
+    display: flex;
+    align-items: center;
+    width: 0;
+    margin-left: 0;
+    transition:
+        width var(--transition-normal),
+        margin-left var(--transition-normal);
+}
+
+.pill:hover:not(:disabled) .retry {
+    width: 14px;
+    margin-left: 5px;
+}
+
+/* Hidden at rest purely via opacity (+ a slight scale), never clipped. */
+.pill .retryIcon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    background-color: var(--danger);
+    opacity: 0;
+    transform: scale(0.9);
+    transform-origin: center;
+    transition:
+        opacity var(--transition-normal),
+        transform var(--transition-normal);
+}
+
+.pill:hover:not(:disabled) .retryIcon {
+    opacity: 1;
+    transform: none;
+}
+
+/* Reconnect spinner. */
+.spin {
+    animation: connection-spin 0.8s linear infinite;
+}
+
+@keyframes connection-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
