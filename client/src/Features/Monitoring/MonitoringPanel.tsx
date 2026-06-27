@@ -260,6 +260,19 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
 
     const snapshotIntervalMs = (selected?.snapshotIntervalSeconds ?? DEFAULT_SNAPSHOT_INTERVAL_S) * 1000;
 
+    // The most recent process measurement in the loaded series: its count and when
+    // it was taken. `processCount` is captured only in the heavy (~5-min) snapshot,
+    // never in the light metric cycle, so this is the authoritative "last known".
+    // Used both for the always-visible Processus KPI and to align the process-list
+    // fetch (`processAt`) with the same snapshot — so the count and the list match.
+    const lastProc = useMemo<{ count: number; at: number } | null>(() => {
+        for (let i = points.length - 1; i >= 0; i--) {
+            const c = points[i].processCount;
+            if (c != null) return { count: c, at: points[i].timestamp };
+        }
+        return null;
+    }, [points]);
+
     // The time window the graphs cover, derived from the focus.
     const graphWindow = useMemo(() => {
         if (focus.kind === 'range') return { start: focus.start, end: focus.end };
@@ -267,7 +280,10 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         return windowRange;
     }, [focus, windowRange, snapshotIntervalMs]);
     const resolution = spanResolution(graphWindow.end - graphWindow.start);
-    const processAt = focus.kind === 'snapshot' ? focus.at : focus.kind === 'range' ? focus.end : windowRange.end;
+    // In live focus, track the last full snapshot's timestamp so the process list
+    // re-fetches when a new snapshot lands and stays in lockstep with the KPI count.
+    const processAt =
+        focus.kind === 'snapshot' ? focus.at : focus.kind === 'range' ? focus.end : (lastProc?.at ?? windowRange.end);
 
     // Changing device: drop the previous machine's transient data so its graphs,
     // activity and KPIs never bleed into the new selection. The per-device effects
@@ -487,6 +503,25 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const archived = selected?.status === 'archived';
     const cores = report?.os.cores ?? 0;
     const valuesMuted = !online && focus.kind === 'live';
+
+    // Processus KPI — always rendered for stability; `procStale` marks a value that
+    // isn't the current live one (offline, or older than one snapshot cycle), so the
+    // UI prefixes "~" and the hint gives its age. The card never disappears silently.
+    const procView =
+        focus.kind === 'range'
+            ? { count: display?.processCount ?? null, at: null as number | null, averaged: true }
+            : focus.kind === 'snapshot'
+              ? { count: display?.processCount ?? null, at: focus.at, averaged: false }
+              : { count: lastProc?.count ?? null, at: lastProc?.at ?? null, averaged: false };
+    const procStale =
+        focus.kind === 'live' &&
+        procView.count != null &&
+        (!online || procView.at == null || Date.now() - procView.at > snapshotIntervalMs * 1.5);
+    const procAgeMin = Math.max(1, Math.round(snapshotIntervalMs / 60000));
+    const ageLabel = (ts: number) => {
+        const a = formatAgo(ts);
+        return a === "à l'instant" ? a : `il y a ${a}`;
+    };
 
     const focusCaption =
         focus.kind === 'snapshot'
@@ -892,13 +927,18 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                             value={String(display.usersCount)}
                             muted={valuesMuted}
                         />
-                        {display.processCount !== null && (
-                            <InfoCard
-                                label={averaged ? 'Processus (moy.)' : 'Processus'}
-                                value={String(display.processCount)}
-                                muted={valuesMuted}
-                            />
-                        )}
+                        <InfoCard
+                            label={procView.averaged ? 'Processus (moy.)' : 'Processus'}
+                            value={procView.count == null ? '—' : `${procStale ? '~' : ''}${procView.count}`}
+                            muted={valuesMuted}
+                            hint={
+                                procView.count == null
+                                    ? `Aucun relevé de processus pour le moment (relevé périodique, ~${procAgeMin} min)`
+                                    : procView.at != null
+                                      ? `Nombre total de processus · relevé ${ageLabel(procView.at)} (périodique, ~${procAgeMin} min)`
+                                      : 'Nombre total de processus (moyenne sur la sélection)'
+                            }
+                        />
                         {display.activeConnections !== null && (
                             <InfoCard
                                 label={averaged ? 'Connexions (moy.)' : 'Connexions'}
@@ -978,9 +1018,17 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 <h4 className={styles.sectionTitle}>
                     Processus les plus actifs
                     {procSample && (
-                        <span className={styles.sectionMeta}>
-                            {new Date(procSample.ts).toLocaleString('fr-FR')} · {procSample.processes.length} processus
-                            {procSample.kind === 'all' ? ' (complet)' : ' (top 20)'}
+                        <span
+                            className={styles.sectionMeta}
+                            title={`Relevé périodique (~${procAgeMin} min), pas en temps réel · ${new Date(procSample.ts).toLocaleString('fr-FR')}`}
+                        >
+                            {procSample.kind === 'all' ? 'Relevé complet' : 'Top 20'} · {procSample.processes.length}{' '}
+                            processus · relevé {ageLabel(procSample.ts)} (
+                            {new Date(procSample.ts).toLocaleTimeString('fr-FR', {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            })}
+                            )
                         </span>
                     )}
                 </h4>
@@ -1065,7 +1113,11 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                         )}
                     </>
                 ) : (
-                    <p className={styles.waitingMsg}>Aucun relevé de processus sur cette période.</p>
+                    <p className={styles.waitingMsg}>
+                        {focus.kind === 'live'
+                            ? `Pas encore de relevé de processus (relevé périodique, ~${procAgeMin} min).`
+                            : 'Aucun relevé de processus sur cette période.'}
+                    </p>
                 )}
             </div>
 
