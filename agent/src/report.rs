@@ -71,6 +71,24 @@ fn hardware() -> DeviceHardware {
 /// Network interfaces with their MAC and an inferred class. On macOS the class is
 /// resolved from `networksetup -listallhardwareports` (reliable: `en0` may be
 /// Wi-Fi or Ethernet); elsewhere it's inferred from the interface name.
+/// Hard cap on reported network interfaces (mirrors the ports/connections caps): a
+/// container host can expose dozens of virtual `veth*`/`br-*` devices, and an
+/// over-long list would be rejected wholesale by the report schema's `.max(64)`.
+const NET_INTERFACES_LIMIT: usize = 64;
+
+/// Sort key so truncation drops noise (container veths, loopback) before real NICs.
+fn iface_rank(kind: &str) -> u8 {
+    match kind {
+        "ethernet" => 0,
+        "wifi" => 1,
+        "bluetooth" => 2,
+        "other" => 3,
+        "virtual" => 4,
+        "loopback" => 5,
+        _ => 6,
+    }
+}
+
 fn read_network_interfaces() -> Vec<NetInterface> {
     #[cfg(target_os = "macos")]
     let ports = macos_hardware_ports();
@@ -99,7 +117,11 @@ fn read_network_interfaces() -> Vec<NetInterface> {
             }
         })
         .collect();
-    out.sort_by(|a, b| a.name.cmp(&b.name));
+    // Meaningful interfaces first (physical before virtual/loopback) then
+    // alphabetical, and cap the count so a container host's many veths can't push
+    // the list past the report schema's limit and get the whole report rejected.
+    out.sort_by(|a, b| iface_rank(a.kind).cmp(&iface_rank(b.kind)).then_with(|| a.name.cmp(&b.name)));
+    out.truncate(NET_INTERFACES_LIMIT);
     out
 }
 
