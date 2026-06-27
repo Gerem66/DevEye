@@ -221,7 +221,18 @@ export default function NoteEditor() {
 
                 <hr className={styles.divider} />
 
-                <BlockEditor blocks={blocks} onChange={setBlocks} />
+                <BlockEditor
+                    blocks={blocks}
+                    onChange={setBlocks}
+                    aside={
+                        mode === 'edit' && created !== null && updated !== null ? (
+                            <p className={styles.editorDates}>
+                                <span>Créée le {formatStamp(created)}</span>
+                                <span>Modifiée le {formatStamp(updated)}</span>
+                            </p>
+                        ) : undefined
+                    }
+                />
 
                 {lockChange && 'set' in lockChange && (
                     <p className={styles.lockNotice}>
@@ -235,13 +246,6 @@ export default function NoteEditor() {
                     <p className={styles.lockNotice}>
                         <span className={`icon ${styles.toggleIcon} icon-unlock`} />
                         Le verrou sera retiré à l’enregistrement.
-                    </p>
-                )}
-
-                {mode === 'edit' && created !== null && updated !== null && (
-                    <p className={styles.editorDates}>
-                        <span>Créée le {formatStamp(created)}</span>
-                        <span>Modifiée le {formatStamp(updated)}</span>
                     </p>
                 )}
 

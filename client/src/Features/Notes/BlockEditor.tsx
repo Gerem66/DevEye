@@ -7,7 +7,19 @@ import type { NoteBlock } from 'deveye-types';
 interface BlockEditorProps {
     blocks: NoteBlock[];
     onChange: (blocks: NoteBlock[]) => void;
+    /** Content shown right-aligned on the add-block row (e.g. the note's
+     *  created/updated stamps), so it shares that line rather than taking one
+     *  of its own. */
+    aside?: React.ReactNode;
 }
+
+/**
+ * Markdown-ish prefix that turns a paragraph into a checklist item as soon as
+ * it is typed at the very start of a line: `[]`, `[ ]`, `- []`, `- [ ]`
+ * (optionally followed by a space). Only the prefix is stripped — any text
+ * already on the line is preserved as the item's content.
+ */
+const CHECK_TRIGGER = /^(?:- )?\[ ?\] ?/;
 
 /** Auto-grow a textarea to fit its content (no inner scrollbar). */
 function autosize(el: HTMLTextAreaElement | null): void {
@@ -36,9 +48,15 @@ interface DragState {
 
 /**
  * The modular note body: an ordered list of typed blocks (paragraph or
- * checklist item). One clean surface — Enter splits into a new block of the
- * same kind, Backspace at the start of an empty block removes it and focuses the
- * previous one, so it reads like a native notes editor rather than a form.
+ * checklist item). One clean surface that reads like a native notes editor:
+ *  - Enter splits the block at the caret into a sibling of the same kind (a
+ *    paragraph spawns a paragraph, a checklist item a new item).
+ *  - Ctrl/⌘+Enter inserts a literal line break inside the current block.
+ *  - Backspace at the start of a checklist item demotes it to a paragraph
+ *    before it can be removed; on an empty paragraph it removes the row.
+ *  - Typing a `[]`/`- [ ]`-style prefix at the start of a paragraph turns it
+ *    into a checklist item (see CHECK_TRIGGER).
+ * New blocks can also be added explicitly through the discreet "+" menu.
  *
  * Rows reorder by dragging the grip on the left:
  *  - The grabbed row's element is handed to `setDragImage`, so the browser
@@ -50,11 +68,15 @@ interface DragState {
  *  - The target is computed from thresholds frozen at drag start, so the
  *    cursor→slot mapping never oscillates as the layout shifts.
  */
-export default function BlockEditor({ blocks, onChange }: BlockEditorProps) {
+export default function BlockEditor({ blocks, onChange, aside }: BlockEditorProps) {
     const refs = useRef<(HTMLTextAreaElement | null)[]>([]);
     const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
     const focusIndex = useRef<number | null>(null);
+    /** Where to drop the caret in the focused block; null = end of its value. */
+    const caretPos = useRef<number | null>(null);
     const [drag, setDrag] = useState<DragState | null>(null);
+    const [addMenuOpen, setAddMenuOpen] = useState(false);
+    const addMenuRef = useRef<HTMLDivElement | null>(null);
 
     // After a structural change we may want to move focus to a specific block.
     useEffect(() => {
@@ -62,16 +84,38 @@ export default function BlockEditor({ blocks, onChange }: BlockEditorProps) {
         const el = refs.current[focusIndex.current];
         if (el) {
             el.focus();
-            const end = el.value.length;
-            el.setSelectionRange(end, end);
+            const pos = caretPos.current ?? el.value.length;
+            el.setSelectionRange(pos, pos);
             autosize(el);
         }
         focusIndex.current = null;
+        caretPos.current = null;
     });
+
+    // Close the add menu on an outside click (same lightweight pattern as the
+    // per-card move menu).
+    useEffect(() => {
+        if (!addMenuOpen) return;
+        const onDocClick = (e: MouseEvent) => {
+            if (addMenuRef.current && !addMenuRef.current.contains(e.target as Node)) setAddMenuOpen(false);
+        };
+        document.addEventListener('mousedown', onDocClick);
+        return () => document.removeEventListener('mousedown', onDocClick);
+    }, [addMenuOpen]);
 
     const update = useCallback(
         (index: number, patch: Partial<NoteBlock>) => {
             onChange(blocks.map((b, i) => (i === index ? ({ ...b, ...patch } as NoteBlock) : b)));
+        },
+        [blocks, onChange]
+    );
+
+    /** Replace a whole block (used to switch its type), focusing it at `caret`. */
+    const replaceBlock = useCallback(
+        (index: number, block: NoteBlock, caret: number | null = null) => {
+            focusIndex.current = index;
+            caretPos.current = caret;
+            onChange(blocks.map((b, i) => (i === index ? block : b)));
         },
         [blocks, onChange]
     );
@@ -94,6 +138,18 @@ export default function BlockEditor({ blocks, onChange }: BlockEditorProps) {
         [blocks, onChange]
     );
 
+    /** Split block `index` at the caret: it keeps `before`, `next` follows it. */
+    const splitAt = useCallback(
+        (index: number, before: string, next: NoteBlock) => {
+            const blocksNext = blocks.map((b, i) => (i === index ? ({ ...b, text: before } as NoteBlock) : b));
+            blocksNext.splice(index + 1, 0, next);
+            focusIndex.current = index + 1;
+            caretPos.current = 0;
+            onChange(blocksNext);
+        },
+        [blocks, onChange]
+    );
+
     const removeAt = useCallback(
         (index: number) => {
             const next = blocks.filter((_, i) => i !== index);
@@ -106,21 +162,69 @@ export default function BlockEditor({ blocks, onChange }: BlockEditorProps) {
     const onKeyDown = useCallback(
         (e: React.KeyboardEvent<HTMLTextAreaElement>, index: number) => {
             const b = blocks[index];
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                // Ctrl+Enter (or ⌘+Enter on Mac) creates a sibling block.
+            const ta = e.currentTarget;
+            if (e.key === 'Enter') {
+                if (e.ctrlKey || e.metaKey) {
+                    // Ctrl+Enter (or ⌘+Enter on Mac) inserts a line break in place.
+                    e.preventDefault();
+                    const text = b.text.slice(0, ta.selectionStart) + '\n' + b.text.slice(ta.selectionEnd);
+                    replaceBlock(index, { ...b, text } as NoteBlock, ta.selectionStart + 1);
+                    return;
+                }
+                // Plain Enter splits into a sibling of the same kind.
                 e.preventDefault();
-                insertAfter(
+                const before = b.text.slice(0, ta.selectionStart);
+                const after = b.text.slice(ta.selectionEnd);
+                splitAt(
                     index,
-                    b.type === 'check' ? { type: 'check', text: '', done: false } : { type: 'text', text: '' }
+                    before,
+                    b.type === 'check' ? { type: 'check', text: after, done: false } : { type: 'text', text: after }
                 );
                 return;
             }
-            if (e.key === 'Backspace' && b.text === '' && blocks.length > 1) {
-                e.preventDefault();
-                removeAt(index);
+            if (e.key === 'Backspace' && ta.selectionStart === 0 && ta.selectionEnd === 0) {
+                // At the start of a checklist item, demote it to a paragraph
+                // (keeping its text) before it can be removed by a second press.
+                if (b.type === 'check') {
+                    e.preventDefault();
+                    replaceBlock(index, { type: 'text', text: b.text }, 0);
+                    return;
+                }
+                if (b.text === '' && blocks.length > 1) {
+                    e.preventDefault();
+                    removeAt(index);
+                }
             }
         },
-        [blocks, insertAfter, removeAt]
+        [blocks, replaceBlock, splitAt, removeAt]
+    );
+
+    const onTextChange = useCallback(
+        (e: React.ChangeEvent<HTMLTextAreaElement>, index: number) => {
+            const value = e.target.value;
+            const block = blocks[index];
+            // Typing a checklist prefix at the start of a paragraph converts it
+            // to a checklist item, keeping any text that already followed.
+            if (block.type === 'text') {
+                const m = CHECK_TRIGGER.exec(value);
+                if (m) {
+                    replaceBlock(index, { type: 'check', text: value.slice(m[0].length), done: false }, 0);
+                    autosize(e.target);
+                    return;
+                }
+            }
+            update(index, { text: value });
+            autosize(e.target);
+        },
+        [blocks, replaceBlock, update]
+    );
+
+    const addBlock = useCallback(
+        (block: NoteBlock) => {
+            setAddMenuOpen(false);
+            insertAfter(blocks.length - 1, block);
+        },
+        [blocks.length, insertAfter]
     );
 
     const onGripDragStart = useCallback(
@@ -224,10 +328,7 @@ export default function BlockEditor({ blocks, onChange }: BlockEditorProps) {
                 rows={1}
                 value={block.text}
                 placeholder={block.type === 'check' ? 'Élément…' : 'Écrivez quelque chose…'}
-                onChange={(e) => {
-                    update(index, { text: e.target.value });
-                    autosize(e.target);
-                }}
+                onChange={(e) => onTextChange(e, index)}
                 onKeyDown={(e) => onKeyDown(e, index)}
             />
             {blocks.length > 1 && (
@@ -268,35 +369,52 @@ export default function BlockEditor({ blocks, onChange }: BlockEditorProps) {
         })();
 
     return (
-        <div
-            className={`${styles.blocks} ${drag !== null ? styles.dragging : ''}`}
-            onDragOver={onContainerDragOver}
-            onDrop={finishDrag}
-        >
-            {blocks.map((block, index) => (
-                <Fragment key={index}>
-                    {placeholderBefore === index && placeholder}
-                    {renderRow(block, index)}
-                </Fragment>
-            ))}
-            {placeholderBefore === -1 && placeholder}
-
-            <div className={styles.addBlockRow}>
-                <button
-                    type='button'
-                    className={styles.addBlockBtn}
-                    onClick={() => insertAfter(blocks.length - 1, { type: 'text', text: '' })}
-                >
-                    <span className={`icon ${styles.toggleIcon} icon-add`} /> Paragraphe
-                </button>
-                <button
-                    type='button'
-                    className={styles.addBlockBtn}
-                    onClick={() => insertAfter(blocks.length - 1, { type: 'check', text: '', done: false })}
-                >
-                    <span className={`icon ${styles.toggleIcon} icon-square-empty`} /> Case à cocher
-                </button>
+        <>
+            <div
+                className={`${styles.blocks} ${drag !== null ? styles.dragging : ''}`}
+                onDragOver={onContainerDragOver}
+                onDrop={finishDrag}
+            >
+                {blocks.map((block, index) => (
+                    <Fragment key={index}>
+                        {placeholderBefore === index && placeholder}
+                        {renderRow(block, index)}
+                    </Fragment>
+                ))}
+                {placeholderBefore === -1 && placeholder}
             </div>
-        </div>
+
+            <div className={styles.addMenu} ref={addMenuRef}>
+                <button
+                    type='button'
+                    className={styles.addMenuBtn}
+                    aria-label='Ajouter un bloc'
+                    aria-expanded={addMenuOpen}
+                    title='Ajouter un bloc'
+                    onClick={() => setAddMenuOpen((v) => !v)}
+                >
+                    <span className={`icon ${styles.toggleIcon} icon-add`} />
+                </button>
+                {addMenuOpen && (
+                    <div className={`${styles.menu} ${styles.addMenuList}`}>
+                        <button
+                            type='button'
+                            className={styles.menuItem}
+                            onClick={() => addBlock({ type: 'text', text: '' })}
+                        >
+                            <span className={`icon ${styles.toggleIcon} icon-add`} /> Paragraphe
+                        </button>
+                        <button
+                            type='button'
+                            className={styles.menuItem}
+                            onClick={() => addBlock({ type: 'check', text: '', done: false })}
+                        >
+                            <span className={`icon ${styles.toggleIcon} icon-square-empty`} /> Case à cocher
+                        </button>
+                    </div>
+                )}
+                {aside}
+            </div>
+        </>
     );
 }

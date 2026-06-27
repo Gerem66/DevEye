@@ -497,13 +497,16 @@
     margin: 0;
 }
 
-/* Created / last-modified stamps shown when editing an existing note. */
+/* Created / last-modified stamps shown when editing an existing note. Stacked
+   and right-aligned so they share the add-block row with the "+" button. */
 .editorDates {
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-md);
+    flex-direction: column;
+    align-items: flex-end;
+    text-align: right;
     margin: 0;
     font-size: 0.75rem;
+    line-height: 1.35;
     color: var(--text-muted);
 }
 
@@ -694,34 +697,57 @@
     height: 14px;
 }
 
-.addBlockRow {
+/* Discreet "+" trigger that reveals the block-type menu; takes far less room
+   than the former pair of dashed buttons. */
+.addMenu {
+    position: relative;
     display: flex;
-    gap: var(--space-sm);
-    margin-top: var(--space-md);
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-md);
+    margin-top: var(--space-sm);
 }
 
-.addBlockBtn {
+.addMenuBtn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    font-size: 0.82rem;
-    color: var(--text-secondary);
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    color: var(--text-muted);
     background: transparent;
     border: 1px dashed var(--glass-border);
     border-radius: var(--radius-sm);
-    padding: 6px 12px;
     cursor: pointer;
     transition:
         border-color 0.12s ease,
-        color 0.12s ease;
+        color 0.12s ease,
+        background 0.12s ease;
 }
 
-.addBlockBtn:hover {
+.addMenuBtn:hover {
     border-color: var(--accent, var(--text-secondary));
     color: var(--text-primary);
 }
 
-.addBlockBtn .toggleIcon {
+/* Opens upward from the small trigger (anchored bottom-left), since it sits at
+   the foot of the block list. Reuses the shared `.menu` look. */
+.addMenuList {
+    top: auto;
+    bottom: calc(100% + 4px);
+    right: auto;
+    left: 0;
+    min-width: 160px;
+}
+
+.addMenuList .menuItem {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.addMenuList .toggleIcon {
     width: 13px;
     height: 13px;
 }
