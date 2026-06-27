@@ -360,14 +360,24 @@ fn status() {
     status_row("Name", &c.name);
     status_row("Platform", identity::current_platform());
     status_row("Fingerprint", &c.fingerprint);
-    status_row("Device id", c.device_id.as_deref().unwrap_or("(not enrolled)"));
+    status_row(
+        "Device id",
+        c.device_id.as_deref().unwrap_or("(not enrolled)"),
+    );
 
     println!();
     status_section("Agent");
     status_row("Version", env!("DEVEYE_VERSION"));
     status_row("User", &report::current_user());
     status_row("Server", &c.server);
-    status_row("Enrolled", if c.device_token.is_some() { "yes" } else { "no" });
+    status_row(
+        "Enrolled",
+        if c.device_token.is_some() {
+            "yes"
+        } else {
+            "no"
+        },
+    );
 
     println!();
     status_section("Status");
