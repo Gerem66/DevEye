@@ -20,7 +20,8 @@ const PROCESS_ROW_COLUMN_BYTES = {
     ts: 8, // BIGINT
     kind: 1, // ENUM('top','full')
     cpu_percent: 4, // FLOAT
-    mem_bytes: 8 // BIGINT
+    mem_bytes: 8, // BIGINT
+    pinned: 1 // TINYINT
 } as const;
 
 /**
@@ -42,12 +43,18 @@ export interface SnapshotStorage {
     bytes: number;
 }
 
+/** Snapshot instants in a window, split into all vs the pinned subset. */
+export interface SnapshotTimes {
+    timestamps: number[];
+    pinned: number[];
+}
+
 export interface ProcessSamplesRepo {
     insertSample(deviceId: string, sample: ProcessSample): Promise<void>;
     /** The process list captured nearest `at` (within tolerance), else null. */
     nearest(deviceId: string, at: number): Promise<ProcessSample | null>;
     /** Distinct snapshot timestamps within [from, to], ascending (timeline marks). */
-    snapshotTimes(deviceId: string, from: number, to: number): Promise<number[]>;
+    snapshotTimes(deviceId: string, from: number, to: number): Promise<SnapshotTimes>;
     /** Estimated storage taken by a device's stored snapshots. */
     storage(deviceId: string): Promise<SnapshotStorage>;
     /**
@@ -55,7 +62,19 @@ export interface ProcessSamplesRepo {
      * number of distinct instants and process rows removed.
      */
     deleteRange(deviceId: string, from: number, to: number): Promise<{ snapshots: number; rows: number }>;
-    /** Delete samples past each device's process retention (NULL → default). */
+    /** Set the pinned flag on every row in [from, to]; returns distinct instants touched. */
+    setPinnedRange(deviceId: string, from: number, to: number, pinned: boolean): Promise<{ snapshots: number }>;
+    /**
+     * Delete unpinned rows in [from, to] already past the device's process
+     * retention (used right after unpinning). Returns instants and rows removed.
+     */
+    deleteExpiredInRange(
+        deviceId: string,
+        from: number,
+        to: number,
+        defaultDays: number
+    ): Promise<{ snapshots: number; rows: number }>;
+    /** Delete samples past each device's process retention (NULL → default); skips pinned. */
     pruneByRetention(defaultDays: number): Promise<number>;
 }
 
@@ -111,14 +130,24 @@ export function processSamplesRepo(pool: Q): ProcessSamplesRepo {
             return { ts, kind, processes };
         },
         async snapshotTimes(deviceId, from, to) {
-            const r = await pool.query<{ ts: number }>(
-                `SELECT DISTINCT ts FROM device_process_samples
+            // MAX(pinned): a snapshot instant counts as pinned as soon as any of
+            // its process rows is pinned (pin/unpin always sets the whole instant).
+            const r = await pool.query<{ ts: number; pinned: number }>(
+                `SELECT ts, MAX(pinned) AS pinned FROM device_process_samples
                  WHERE device_id = ? AND ts BETWEEN ? AND ?
+                 GROUP BY ts
                  ORDER BY ts ASC
                  LIMIT 5000`,
                 [deviceId, from, to]
             );
-            return r.rows.map((row) => Number(row.ts));
+            const timestamps: number[] = [];
+            const pinned: number[] = [];
+            for (const row of r.rows) {
+                const ts = Number(row.ts);
+                timestamps.push(ts);
+                if (Number(row.pinned) === 1) pinned.push(ts);
+            }
+            return { timestamps, pinned };
         },
         async storage(deviceId) {
             const r = await pool.query<{ total: number; snapshots: number; name_bytes: number }>(
@@ -149,12 +178,46 @@ export function processSamplesRepo(pool: Q): ProcessSamplesRepo {
             );
             return { snapshots: Number(counted.rows[0]?.snapshots ?? 0), rows: del.rowCount };
         },
+        async setPinnedRange(deviceId, from, to, pinned) {
+            const counted = await pool.query<{ snapshots: number }>(
+                `SELECT COUNT(DISTINCT ts) AS snapshots FROM device_process_samples
+                 WHERE device_id = ? AND ts BETWEEN ? AND ?`,
+                [deviceId, from, to]
+            );
+            await pool.query(
+                `UPDATE device_process_samples SET pinned = ?
+                 WHERE device_id = ? AND ts BETWEEN ? AND ?`,
+                [pinned ? 1 : 0, deviceId, from, to]
+            );
+            return { snapshots: Number(counted.rows[0]?.snapshots ?? 0) };
+        },
+        async deleteExpiredInRange(deviceId, from, to, defaultDays) {
+            const counted = await pool.query<{ snapshots: number }>(
+                `SELECT COUNT(DISTINCT s.ts) AS snapshots FROM device_process_samples s
+                 JOIN devices d ON d.id = s.device_id
+                 WHERE s.device_id = ? AND s.ts BETWEEN ? AND ?
+                   AND s.pinned = 0 AND d.status <> 'archived'
+                   AND s.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.process_retention_days, ?) * 86400000`,
+                [deviceId, from, to, defaultDays]
+            );
+            const del = await pool.query(
+                `DELETE s FROM device_process_samples s
+                 JOIN devices d ON d.id = s.device_id
+                 WHERE s.device_id = ? AND s.ts BETWEEN ? AND ?
+                   AND s.pinned = 0 AND d.status <> 'archived'
+                   AND s.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.process_retention_days, ?) * 86400000`,
+                [deviceId, from, to, defaultDays]
+            );
+            return { snapshots: Number(counted.rows[0]?.snapshots ?? 0), rows: del.rowCount };
+        },
         async pruneByRetention(defaultDays) {
             // Process history has its own (shorter) retention; it's the bulkiest data.
+            // Pinned rows are kept regardless of age.
             const r = await pool.query(
                 `DELETE s FROM device_process_samples s
                  JOIN devices d ON d.id = s.device_id
-                 WHERE d.status <> 'archived'
+                 WHERE s.pinned = 0
+                   AND d.status <> 'archived'
                    AND s.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.process_retention_days, ?) * 86400000`,
                 [defaultDays]
             );

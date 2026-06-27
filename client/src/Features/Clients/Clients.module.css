@@ -389,6 +389,14 @@
     color: var(--text-secondary);
 }
 
+/* Offline device: the toggles stay (showing the last-known state) but are greyed
+   and inert, with this note explaining why they can't be changed right now. */
+.serviceOfflineHint {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
 /* Discreet "a newer build is available" note next to the agent version. */
 .updateNote {
     color: var(--accent);
@@ -750,6 +758,18 @@
 .iconBtn:hover {
     border-color: var(--glass-border-strong);
     color: var(--text-primary);
+}
+
+/* Disabled (e.g. an offline device's persistence/privilege toggles): greyed and
+   inert, keeping the last-known state readable without inviting interaction. */
+.iconBtn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.iconBtn:disabled:hover {
+    border-color: var(--glass-border);
+    color: var(--text-secondary);
 }
 
 /* Copied confirmation: a clear accent-green check, not a bare dot. */

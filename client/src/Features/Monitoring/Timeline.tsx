@@ -10,6 +10,8 @@ interface TimelineProps {
     events: PresenceEvent[];
     /** Timestamps of process snapshots in the window (clickable tick marks). */
     snapshotTimes: number[];
+    /** Subset of `snapshotTimes` that are pinned (kept past retention). */
+    pinnedTimes: number[];
     /** Current zone selection, or null when not in range mode. */
     selection: { start: number; end: number } | null;
     /** Current single-point selection, or null when not in snapshot mode. */
@@ -37,6 +39,27 @@ interface Segment {
 
 /** A click that moves less than this (px) is a point pick, not a drag-select. */
 const CLICK_SLOP_PX = 5;
+
+/**
+ * Largest number of snapshots a dragged selection may span. Beyond it the graphs
+ * downsample and points get lost, so the moving edge is clamped to this many
+ * snapshots from the anchor (the drag simply stops growing).
+ */
+const MAX_SELECTION_SNAPSHOTS = 200;
+
+/**
+ * Clamp the moving edge `candidate` so the selection `[anchor, candidate]` holds
+ * at most `max` of `snaps` — the edge sticks at the max-th snapshot from `anchor`.
+ */
+function clampToMaxSnapshots(anchor: number, candidate: number, snaps: number[], max: number): number {
+    if (snaps.length === 0 || max <= 0) return candidate;
+    if (candidate >= anchor) {
+        const right = snaps.filter((t) => t >= anchor && t <= candidate).sort((a, b) => a - b);
+        return right.length > max ? right[max - 1] : candidate;
+    }
+    const left = snaps.filter((t) => t <= anchor && t >= candidate).sort((a, b) => b - a);
+    return left.length > max ? left[max - 1] : candidate;
+}
 
 function startOfDay(ts: number): number {
     const d = new Date(ts);
@@ -88,6 +111,7 @@ export function Timeline({
     onlineAtStart,
     events,
     snapshotTimes,
+    pinnedTimes,
     selection,
     pointAt,
     onSelectRange,
@@ -145,7 +169,8 @@ export function Timeline({
     };
     const onPointerMove = (e: React.PointerEvent) => {
         if (!drag) return;
-        setDrag({ ...drag, b: timeAt(e.clientX) });
+        const b = clampToMaxSnapshots(drag.a, timeAt(e.clientX), snapshotTimes, MAX_SELECTION_SNAPSHOTS);
+        setDrag({ ...drag, b });
     };
     const onPointerUp = (e: React.PointerEvent) => {
         if (!drag) return;
@@ -164,6 +189,11 @@ export function Timeline({
 
     const dragSel = drag ? { start: Math.min(drag.a, drag.b), end: Math.max(drag.a, drag.b) } : null;
     const sel = dragSel ?? selection;
+
+    const pinnedSet = useMemo(() => new Set(pinnedTimes), [pinnedTimes]);
+    // Adjacent snapshots around the focused instant, to step through with arrows.
+    const prevSnap = pointAt === null ? null : (snapshotTimes.filter((t) => t < pointAt).at(-1) ?? null);
+    const nextSnap = pointAt === null ? null : (snapshotTimes.find((t) => t > pointAt) ?? null);
 
     const fmtTime = (t: number) => new Date(t).toLocaleString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     const showLive = dayStart !== null || selection !== null || pointAt !== null;
@@ -241,7 +271,11 @@ export function Timeline({
                     />
                 ))}
                 {snapshotTimes.map((t) => (
-                    <div key={`m${t}`} className={styles.snapshotMark} style={{ left: `${pctOf(t)}%` }} />
+                    <div
+                        key={`m${t}`}
+                        className={`${styles.snapshotMark} ${pinnedSet.has(t) ? styles.snapshotMarkPinned : ''}`}
+                        style={{ left: `${pctOf(t)}%` }}
+                    />
                 ))}
                 {sel && (
                     <div
@@ -264,9 +298,27 @@ export function Timeline({
                         Sélection : {fmtTime(selection.start)} – {fmtTime(selection.end)} ✕
                     </button>
                 ) : pointAt !== null ? (
-                    <button className={styles.resetSel} onClick={onLive}>
-                        Instant : {fmtTime(pointAt)} ✕
-                    </button>
+                    <span className={styles.instantNav}>
+                        <button
+                            className={styles.instantArrow}
+                            onClick={() => prevSnap !== null && onPickSnapshot(prevSnap)}
+                            disabled={prevSnap === null}
+                            title='Snapshot précédent'
+                        >
+                            <span className='icon icon-arrow-left' />
+                        </button>
+                        <button className={styles.resetSel} onClick={onLive}>
+                            Instant : {fmtTime(pointAt)} ✕
+                        </button>
+                        <button
+                            className={styles.instantArrow}
+                            onClick={() => nextSnap !== null && onPickSnapshot(nextSnap)}
+                            disabled={nextSnap === null}
+                            title='Snapshot suivant'
+                        >
+                            <span className='icon icon-arrow-left' style={{ transform: 'rotate(180deg)' }} />
+                        </button>
+                    </span>
                 ) : (
                     <span className={styles.dragHint}>Cliquez un instant · glissez pour une période</span>
                 )}

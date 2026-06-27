@@ -453,6 +453,102 @@
     font-weight: 600;
 }
 
+/* Discreet label: total time span the graphs cover (live / zone / snapshot). */
+.graphsSpan {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+    margin-bottom: calc(-1 * var(--space-xs));
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+.graphsSpan .icon {
+    font-size: 0.85em;
+    opacity: 0.8;
+}
+
+/* ── Detail chart: hour grid + hover readout (tall mode only) ── */
+.graphGridLine {
+    stroke: var(--glass-border);
+    stroke-width: 1;
+    opacity: 0.5;
+}
+.graphOverlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: visible;
+}
+.graphGridLabel {
+    position: absolute;
+    bottom: 2px;
+    transform: translateX(-50%);
+    font-size: 0.62rem;
+    line-height: 1;
+    color: var(--text-muted);
+    opacity: 0.65;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.graphCursor {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--text-secondary);
+    opacity: 0.4;
+}
+.graphHoverDot {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    border: 2px solid var(--surface-popup);
+    box-shadow: 0 0 0 1px var(--glass-border-strong);
+}
+.graphTooltip {
+    position: absolute;
+    top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 5px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-popup);
+    border: 1px solid var(--glass-border-strong);
+    box-shadow: var(--shadow-md);
+    font-size: 0.72rem;
+    line-height: 1.25;
+    white-space: nowrap;
+    transform: translateX(10px);
+    z-index: 2;
+}
+.graphTooltip[data-side='left'] {
+    transform: translateX(-100%) translateX(-10px);
+}
+.graphTooltipTime {
+    color: var(--text-muted);
+    font-size: 0.66rem;
+    font-variant-numeric: tabular-nums;
+}
+.graphTooltipRow {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text-primary);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.graphTooltipDot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex: none;
+}
+
 /* ── Hardware / agent info dialog ── */
 .hwContent {
     display: flex;
@@ -649,12 +745,13 @@
 }
 
 .graphBody {
+    position: relative;
     height: 60px;
 }
 
 .graphSvg {
     width: 100%;
-    height: 60px;
+    height: 100%;
     display: block;
 }
 
@@ -858,6 +955,41 @@
 .snapshotDeleteBtn:hover {
     color: var(--danger);
     border-color: var(--danger);
+}
+
+.snapshotActions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.snapshotPinBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--glass-bg);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+.snapshotPinBtn:hover:not(:disabled) {
+    color: var(--warning);
+    border-color: var(--warning);
+}
+.snapshotPinBtn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+/* Already conserved: filled state so it reads as "on". */
+.snapshotPinBtnActive {
+    color: var(--warning);
+    border-color: var(--warning);
+    background: var(--warning-bg);
 }
 
 .secGrid {
@@ -1238,6 +1370,14 @@
     pointer-events: none;
 }
 
+/* Pinned (conservé) snapshot: stands out from the muted ticks. */
+.snapshotMarkPinned {
+    width: 2px;
+    background: var(--warning);
+    opacity: 0.9;
+    box-shadow: 0 0 4px var(--warning);
+}
+
 /* The currently focused single instant. */
 .pointMark {
     position: absolute;
@@ -1269,6 +1409,38 @@
     font-size: 0.72rem;
     cursor: pointer;
     padding: 0;
+}
+
+/* Prev/next snapshot stepper around the focused "Instant : hh:mm". */
+.instantNav {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+.instantArrow {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg-light);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+.instantArrow .icon {
+    font-size: 0.8em;
+}
+.instantArrow:hover:not(:disabled) {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+.instantArrow:disabled {
+    opacity: 0.35;
+    cursor: default;
 }
 
 /* ─── Day picker (button + calendar popover) ──────────────────────────────── */

@@ -120,7 +120,11 @@ fn read_network_interfaces() -> Vec<NetInterface> {
     // Meaningful interfaces first (physical before virtual/loopback) then
     // alphabetical, and cap the count so a container host's many veths can't push
     // the list past the report schema's limit and get the whole report rejected.
-    out.sort_by(|a, b| iface_rank(a.kind).cmp(&iface_rank(b.kind)).then_with(|| a.name.cmp(&b.name)));
+    out.sort_by(|a, b| {
+        iface_rank(a.kind)
+            .cmp(&iface_rank(b.kind))
+            .then_with(|| a.name.cmp(&b.name))
+    });
     out.truncate(NET_INTERFACES_LIMIT);
     out
 }
@@ -365,7 +369,9 @@ fn is_privileged() -> bool {
         .unwrap_or(false)
 }
 
-fn current_user() -> String {
+/// The OS account the agent runs as (effective user on Unix). Also surfaced by the
+/// `status` command.
+pub fn current_user() -> String {
     #[cfg(unix)]
     {
         // `id -un` is the effective user (matches `id -u`); fall back to $USER.

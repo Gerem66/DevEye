@@ -17,7 +17,14 @@ export interface MetricsRepo {
      * the client's timezone (`tzOffsetMinutes` = `Date.getTimezoneOffset()`).
      */
     availableDays(deviceId: string, tzOffsetMinutes: number): Promise<string[]>;
-    /** Delete samples past each device's retention (NULL → `defaultDays`). */
+    /** Set the pinned flag on every metric row in [from, to] for a device. */
+    setPinnedRange(deviceId: string, from: number, to: number, pinned: boolean): Promise<void>;
+    /**
+     * Delete unpinned metric rows in [from, to] already past the device's
+     * retention (used right after unpinning). Returns rows removed.
+     */
+    deleteExpiredInRange(deviceId: string, from: number, to: number, defaultDays: number): Promise<number>;
+    /** Delete samples past each device's retention (NULL → `defaultDays`); skips pinned. */
     pruneByRetention(defaultDays: number): Promise<number>;
 }
 
@@ -175,11 +182,30 @@ export function metricsRepo(pool: Q): MetricsRepo {
             // a UTC instant, so formatting it as UTC yields the local calendar day.
             return r.rows.map((row) => new Date(Number(row.d) * dayMs).toISOString().slice(0, 10));
         },
+        async setPinnedRange(deviceId, from, to, pinned) {
+            await pool.query(
+                `UPDATE device_metrics SET pinned = ?
+                 WHERE device_id = ? AND ts BETWEEN ? AND ?`,
+                [pinned ? 1 : 0, deviceId, from, to]
+            );
+        },
+        async deleteExpiredInRange(deviceId, from, to, defaultDays) {
+            const r = await pool.query(
+                `DELETE m FROM device_metrics m
+                 JOIN devices d ON d.id = m.device_id
+                 WHERE m.device_id = ? AND m.ts BETWEEN ? AND ?
+                   AND m.pinned = 0 AND d.status <> 'archived'
+                   AND m.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.retention_days, ?) * 86400000`,
+                [deviceId, from, to, defaultDays]
+            );
+            return r.rowCount;
+        },
         async pruneByRetention(defaultDays) {
             const r = await pool.query(
                 `DELETE m FROM device_metrics m
                  JOIN devices d ON d.id = m.device_id
-                 WHERE d.status <> 'archived'
+                 WHERE m.pinned = 0
+                   AND d.status <> 'archived'
                    AND m.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.retention_days, ?) * 86400000`,
                 [defaultDays]
             );

@@ -35,6 +35,7 @@ import {
     formatAgo,
     formatBytes,
     formatBytesFr,
+    formatDuration,
     formatRate,
     formatUptime,
     pct
@@ -223,6 +224,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     // Snapshot-deletion confirmation (targets the current snapshot/zone focus).
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    // Pin (permanent keep) in flight for the current snapshot/zone focus.
+    const [pinning, setPinning] = useState(false);
 
     // Timeline window: dayStart null = live (rolling last 24h); otherwise a day.
     const [dayStart, setDayStart] = useState<number | null>(null);
@@ -239,6 +242,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         events: []
     });
     const [snapshotTimes, setSnapshotTimes] = useState<number[]>([]);
+    const [pinnedTimes, setPinnedTimes] = useState<number[]>([]);
     const [points, setPoints] = useState<MetricSnapshot[]>([]);
     const [procSample, setProcSample] = useState<ProcessSample | null>(null);
     const [showAllProcs, setShowAllProcs] = useState(false);
@@ -296,6 +300,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         setLiveSnapshot(null);
         setProcSample(null);
         setSnapshotTimes([]);
+        setPinnedTimes([]);
         setStorage(null);
         setPresence({ onlineAtStart: false, events: [] });
     }, [deviceId]);
@@ -345,7 +350,10 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             .catch(() => {});
         ws.send('metrics.snapshots', { deviceId: id, from: start, to: end })
             .then((res) => {
-                if (idRef.current === id) setSnapshotTimes(res.timestamps);
+                if (idRef.current === id) {
+                    setSnapshotTimes(res.timestamps);
+                    setPinnedTimes(res.pinned);
+                }
             })
             .catch(() => {});
     }, [deviceId, dayStart, spanMs]);
@@ -416,6 +424,48 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         return null;
     }, [focus, snapshotTimes]);
 
+    const pinnedSet = useMemo(() => new Set(pinnedTimes), [pinnedTimes]);
+
+    // What a pin/unpin action targets, per the current focus: the bounds, how many
+    // snapshots fall inside, and how many of those are already pinned (so the UI
+    // can flip between "Conserver" and "Ne plus conserver").
+    const pinTarget = useMemo(() => {
+        if (focus.kind === 'snapshot') {
+            return { from: focus.at, to: focus.at, count: 1, pinnedCount: pinnedSet.has(focus.at) ? 1 : 0 };
+        }
+        if (focus.kind === 'range') {
+            const inRange = snapshotTimes.filter((t) => t >= focus.start && t <= focus.end);
+            const pinnedCount = inRange.filter((t) => pinnedSet.has(t)).length;
+            return { from: focus.start, to: focus.end, count: inRange.length, pinnedCount };
+        }
+        return null;
+    }, [focus, snapshotTimes, pinnedSet]);
+    // Fully pinned already → the action unpins; otherwise it pins the whole target.
+    const allPinned = !!pinTarget && pinTarget.count > 0 && pinTarget.pinnedCount === pinTarget.count;
+
+    // Re-fetch the timeline's snapshot marks (incl. pin state) for the window.
+    const refreshSnapshotMarks = useCallback(() => {
+        const id = idRef.current;
+        ws.send('metrics.snapshots', { deviceId: id, from: windowRange.start, to: windowRange.end })
+            .then((res) => {
+                if (idRef.current === id) {
+                    setSnapshotTimes(res.timestamps);
+                    setPinnedTimes(res.pinned);
+                }
+            })
+            .catch(() => {});
+    }, [windowRange]);
+
+    // Re-fetch the stored-snapshot footprint (count + DB bytes).
+    const refreshStorage = useCallback(() => {
+        const id = idRef.current;
+        ws.send('metrics.storage', { deviceId: id })
+            .then((res) => {
+                if (idRef.current === id) setStorage({ snapshots: res.snapshots, rows: res.rows, bytes: res.bytes });
+            })
+            .catch(() => {});
+    }, []);
+
     // Delete the targeted snapshot(s), then drop back to live and refresh marks.
     const deleteSnapshots = useCallback(async () => {
         const id = idRef.current;
@@ -425,23 +475,40 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             await ws.send('metrics.deleteSnapshots', { deviceId: id, from: deleteTarget.from, to: deleteTarget.to });
             setDeleteOpen(false);
             setFocus({ kind: 'live' });
-            ws.send('metrics.snapshots', { deviceId: id, from: windowRange.start, to: windowRange.end })
-                .then((res) => {
-                    if (idRef.current === id) setSnapshotTimes(res.timestamps);
-                })
-                .catch(() => {});
-            ws.send('metrics.storage', { deviceId: id })
-                .then((res) => {
-                    if (idRef.current === id)
-                        setStorage({ snapshots: res.snapshots, rows: res.rows, bytes: res.bytes });
-                })
-                .catch(() => {});
+            refreshSnapshotMarks();
+            refreshStorage();
         } catch {
             // Keep the dialog open; the failure is rare (network) and retryable.
         } finally {
             setDeleting(false);
         }
-    }, [deleteTarget, windowRange]);
+    }, [deleteTarget, refreshSnapshotMarks, refreshStorage]);
+
+    // Pin (keep past retention) or unpin the targeted snapshot(s). Unpinning may
+    // delete instants already past their deadline — drop to live if so.
+    const setPinned = useCallback(
+        async (pinned: boolean) => {
+            const id = idRef.current;
+            if (!pinTarget || pinning) return;
+            setPinning(true);
+            try {
+                const res = await ws.send('metrics.setSnapshotsPinned', {
+                    deviceId: id,
+                    from: pinTarget.from,
+                    to: pinTarget.to,
+                    pinned
+                });
+                if (res.deletedSnapshots > 0) setFocus({ kind: 'live' });
+                refreshSnapshotMarks();
+                refreshStorage();
+            } catch {
+                // Rare (network) and retryable; leave the UI as-is.
+            } finally {
+                setPinning(false);
+            }
+        },
+        [pinTarget, pinning, refreshSnapshotMarks, refreshStorage]
+    );
 
     // Refresh: ask the agent to push fresh data now.
     const refreshNow = useCallback(() => {
@@ -536,8 +603,18 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const fmtPct1 = (v: number) => `${v.toFixed(0)}%`;
     const fmtTemp = (v: number) => `${v.toFixed(0)}°C`;
     const compact = (text: string) => <span className={styles.graphStat}>{text}</span>;
-    const openGraph = (title: string, series: Series[], yMax: number | undefined, rows: DetailRow[]) =>
-        void openInfo({ title, body: <GraphDetail series={series} yMax={yMax} rows={rows} />, width: 520 });
+    const openGraph = (
+        title: string,
+        series: Series[],
+        yMax: number | undefined,
+        rows: DetailRow[],
+        format?: (v: number) => string
+    ) =>
+        void openInfo({
+            title,
+            body: <GraphDetail series={series} yMax={yMax} rows={rows} period={graphWindow} format={format} />,
+            width: 520
+        });
 
     type S = ReturnType<typeof stats>;
     const unitRows = (s: S, fmt: (v: number) => string): DetailRow[] =>
@@ -580,13 +657,13 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const cpuColor = [{ points: cpuS, color: 'var(--accent)' }];
     const ramSeries = [{ points: ramS, color: 'var(--accent)' }];
     const netSeries = [
-        { points: netRx, color: 'var(--accent)' },
-        { points: netTx, color: 'var(--warning)' }
+        { points: netRx, color: 'var(--accent)', label: 'Réception' },
+        { points: netTx, color: 'var(--warning)', label: 'Émission' }
     ];
     const diskSeries = [{ points: diskS, color: 'var(--accent)' }];
     const ioSeries = [
-        { points: diskRead, color: 'var(--accent)' },
-        { points: diskWrite, color: 'var(--warning)' }
+        { points: diskRead, color: 'var(--accent)', label: 'Lecture' },
+        { points: diskWrite, color: 'var(--warning)', label: 'Écriture' }
     ];
 
     const allGraphs: { key: string; node: React.ReactNode }[] = [
@@ -599,7 +676,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     series={cpuColor}
                     yMax={100}
                     stat={compact(fmtPct1(display?.cpuPercent ?? stats(cpuS)?.cur ?? 0))}
-                    onClick={() => openGraph('CPU', cpuColor, 100, unitRows(stats(cpuS), fmtPct1))}
+                    onClick={() => openGraph('CPU', cpuColor, 100, unitRows(stats(cpuS), fmtPct1), fmtPct1)}
                 />
             )
         },
@@ -614,7 +691,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     stat={compact(
                         `${fmtPct1(pct(ramUsed, ramTotal))} · ${formatBytes(ramUsed)} / ${formatBytes(ramTotal)}`
                     )}
-                    onClick={() => openGraph('RAM', ramSeries, 100, pctRows(stats(ramS), ramUsed, ramTotal))}
+                    onClick={() => openGraph('RAM', ramSeries, 100, pctRows(stats(ramS), ramUsed, ramTotal), fmtPct1)}
                 />
             )
         },
@@ -627,10 +704,13 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     series={netSeries}
                     stat={compact(`↓ ${formatRate(netRx.at(-1)?.v ?? 0)} · ↑ ${formatRate(netTx.at(-1)?.v ?? 0)}`)}
                     onClick={() =>
-                        openGraph('Réseau', netSeries, undefined, [
-                            ...rateRows('Réception', stats(netRx)),
-                            ...rateRows('Émission', stats(netTx))
-                        ])
+                        openGraph(
+                            'Réseau',
+                            netSeries,
+                            undefined,
+                            [...rateRows('Réception', stats(netRx)), ...rateRows('Émission', stats(netTx))],
+                            formatRate
+                        )
                     }
                 />
             )
@@ -646,7 +726,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     stat={compact(
                         `${fmtPct1(pct(diskUsed, diskTotal))} · ${formatBytes(diskUsed)} / ${formatBytes(diskTotal)}`
                     )}
-                    onClick={() => openGraph('Disque', diskSeries, 100, diskDetailRows)}
+                    onClick={() => openGraph('Disque', diskSeries, 100, diskDetailRows, fmtPct1)}
                 />
             )
         }
@@ -663,10 +743,13 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                         `L ${formatRate(diskRead.at(-1)?.v ?? 0)} · É ${formatRate(diskWrite.at(-1)?.v ?? 0)}`
                     )}
                     onClick={() =>
-                        openGraph('Disque E/S', ioSeries, undefined, [
-                            ...rateRows('Lecture', stats(diskRead)),
-                            ...rateRows('Écriture', stats(diskWrite))
-                        ])
+                        openGraph(
+                            'Disque E/S',
+                            ioSeries,
+                            undefined,
+                            [...rateRows('Lecture', stats(diskRead)), ...rateRows('Écriture', stats(diskWrite))],
+                            formatRate
+                        )
                     }
                 />
             )
@@ -686,7 +769,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                             'Température',
                             [{ points: tempS, color: 'var(--warning)' }],
                             undefined,
-                            unitRows(stats(tempS), fmtTemp)
+                            unitRows(stats(tempS), fmtTemp),
+                            fmtTemp
                         )
                     }
                 />
@@ -708,7 +792,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                             'GPU',
                             [{ points: gpuS, color: 'var(--accent)' }],
                             100,
-                            unitRows(stats(gpuS), fmtPct1)
+                            unitRows(stats(gpuS), fmtPct1),
+                            fmtPct1
                         )
                     }
                 />
@@ -727,7 +812,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     series={battSeries}
                     yMax={100}
                     stat={compact(`${fmtPct1(battCur)}${display?.batteryCharging ? ' ⚡' : ''}`)}
-                    onClick={() => openGraph('Batterie', battSeries, 100, unitRows(stats(batteryS), fmtPct1))}
+                    onClick={() => openGraph('Batterie', battSeries, 100, unitRows(stats(batteryS), fmtPct1), fmtPct1)}
                 />
             )
         });
@@ -860,6 +945,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 onlineAtStart={presence.onlineAtStart}
                 events={presence.events}
                 snapshotTimes={snapshotTimes}
+                pinnedTimes={pinnedTimes}
                 selection={focus.kind === 'range' ? { start: focus.start, end: focus.end } : null}
                 pointAt={focus.kind === 'snapshot' ? focus.at : null}
                 onSelectRange={(sel) => setFocus({ kind: 'range', ...sel })}
@@ -877,6 +963,10 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             />
 
             {/* Graphs */}
+            <div className={styles.graphsSpan} title='Durée couverte par les graphiques'>
+                <span className='icon icon-clock' />
+                <span>{formatDuration(graphWindow.end - graphWindow.start)}</span>
+            </div>
             <div className={styles.graphsGrid}>
                 {metricsReady
                     ? shownGraphs.map((g) => g.node)
@@ -1044,23 +1134,47 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                             ? `${storage.snapshots} snapshot${storage.snapshots > 1 ? 's' : ''} · ≈ ${formatBytesFr(storage.bytes)} en base`
                             : 'Calcul de l’espace…'}
                     </span>
-                    {deleteTarget && (deleteTarget.kind === 'snapshot' || deleteTarget.count > 0) && (
-                        <button
-                            type='button'
-                            className={styles.snapshotDeleteBtn}
-                            onClick={() => setDeleteOpen(true)}
-                            title={
-                                deleteTarget.kind === 'snapshot'
-                                    ? 'Supprimer le snapshot sélectionné'
-                                    : 'Supprimer les snapshots de la zone sélectionnée'
-                            }
-                        >
-                            <span className='icon icon-trash' />
-                            {deleteTarget.kind === 'snapshot'
-                                ? 'Supprimer ce snapshot'
-                                : `Supprimer la zone (${deleteTarget.count})`}
-                        </button>
-                    )}
+                    <div className={styles.snapshotActions}>
+                        {pinTarget && pinTarget.count > 0 && (
+                            <button
+                                type='button'
+                                className={`${styles.snapshotPinBtn} ${allPinned ? styles.snapshotPinBtnActive : ''}`}
+                                onClick={() => void setPinned(!allPinned)}
+                                disabled={pinning}
+                                title={
+                                    allPinned
+                                        ? 'Lever la conservation : le(s) snapshot(s) pourront de nouveau être nettoyés'
+                                        : 'Conserver indéfiniment : ce(s) snapshot(s) ignore(nt) le nettoyage automatique'
+                                }
+                            >
+                                <span className={`icon ${allPinned ? 'icon-star' : 'icon-star-outline'}`} />
+                                {pinTarget.count > 1
+                                    ? allPinned
+                                        ? `Ne plus conserver (${pinTarget.count})`
+                                        : `Conserver la zone (${pinTarget.count})`
+                                    : allPinned
+                                      ? 'Ne plus conserver'
+                                      : 'Conserver'}
+                            </button>
+                        )}
+                        {deleteTarget && (deleteTarget.kind === 'snapshot' || deleteTarget.count > 0) && (
+                            <button
+                                type='button'
+                                className={styles.snapshotDeleteBtn}
+                                onClick={() => setDeleteOpen(true)}
+                                title={
+                                    deleteTarget.kind === 'snapshot'
+                                        ? 'Supprimer le snapshot sélectionné'
+                                        : 'Supprimer les snapshots de la zone sélectionnée'
+                                }
+                            >
+                                <span className='icon icon-trash' />
+                                {deleteTarget.kind === 'snapshot'
+                                    ? 'Supprimer ce snapshot'
+                                    : `Supprimer la zone (${deleteTarget.count})`}
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {procSample && procSample.processes.length > 0 ? (

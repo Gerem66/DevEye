@@ -5,6 +5,7 @@ import {
     metricsProcessesAt,
     metricsQuery,
     metricsRefresh,
+    metricsSetSnapshotsPinned,
     metricsSnapshots,
     metricsStorage,
     metricsSubscribe,
@@ -13,6 +14,7 @@ import {
 } from 'deveye-types';
 
 import { parseDeviceReport } from '@/agent/mappers';
+import { env } from '@/Utils/Env';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
 async function isAdmin(ctx: FeatureContext): Promise<boolean> {
@@ -148,8 +150,8 @@ export const metricsSnapshotsFeature: FeatureDefinition<
     ...metricsSnapshots,
     handler: async (ctx, input) => {
         await authorizeRead(ctx, input.deviceId);
-        const timestamps = await ctx.db.processSamples.snapshotTimes(input.deviceId, input.from, input.to);
-        return { deviceId: input.deviceId, timestamps };
+        const { timestamps, pinned } = await ctx.db.processSamples.snapshotTimes(input.deviceId, input.from, input.to);
+        return { deviceId: input.deviceId, timestamps, pinned };
     }
 });
 
@@ -190,6 +192,50 @@ export const metricsDeleteSnapshotsFeature: FeatureDefinition<
     }
 });
 
+export const metricsSetSnapshotsPinnedFeature: FeatureDefinition<
+    typeof metricsSetSnapshotsPinned.command,
+    typeof metricsSetSnapshotsPinned.input,
+    typeof metricsSetSnapshotsPinned.output
+> = defineFeature({
+    ...metricsSetSnapshotsPinned,
+    handler: async (ctx, input) => {
+        const row = await authorizeRead(ctx, input.deviceId);
+        const { deviceId, from, to, pinned } = input;
+
+        // Pin/unpin the whole instant (process list + metric point) so a saved
+        // moment stays fully consultable past the device's retention.
+        const [{ snapshots }] = await Promise.all([
+            ctx.db.processSamples.setPinnedRange(deviceId, from, to, pinned),
+            ctx.db.metrics.setPinnedRange(deviceId, from, to, pinned)
+        ]);
+
+        // On unpin, the rows revert to normal retention: drop those already past
+        // their deadline right now; the rest expire at the next hourly sweep.
+        let deletedSnapshots = 0;
+        let deletedRows = 0;
+        if (!pinned) {
+            const [proc] = await Promise.all([
+                ctx.db.processSamples.deleteExpiredInRange(deviceId, from, to, env.PROCESS_RETENTION_DAYS),
+                ctx.db.metrics.deleteExpiredInRange(deviceId, from, to, env.METRICS_RETENTION_DAYS)
+            ]);
+            deletedSnapshots = proc.snapshots;
+            deletedRows = proc.rows;
+        }
+
+        if (snapshots > 0) {
+            ctx.audit({
+                action: 'metrics.setSnapshotsPinned',
+                description: pinned
+                    ? `${snapshots} snapshot(s) épinglé(s) : « ${row.name} »`
+                    : `${snapshots} snapshot(s) désépinglé(s) : « ${row.name} »`,
+                metadata: { deviceId, from, to, pinned, snapshots, deletedSnapshots, deletedRows }
+            });
+        }
+
+        return { deviceId, affected: snapshots, deletedSnapshots, deletedRows };
+    }
+});
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const metricsFeatures: FeatureDefinition<string, any, any>[] = [
     metricsQueryFeature,
@@ -201,5 +247,6 @@ export const metricsFeatures: FeatureDefinition<string, any, any>[] = [
     metricsAvailabilityFeature,
     metricsSnapshotsFeature,
     metricsStorageFeature,
-    metricsDeleteSnapshotsFeature
+    metricsDeleteSnapshotsFeature,
+    metricsSetSnapshotsPinnedFeature
 ];

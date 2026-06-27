@@ -339,29 +339,50 @@ fn status() {
         println!("Not enrolled. Run: deveye-agent link <code> --server <url>");
         return;
     }
-    match Config::load() {
-        Ok(c) => {
-            println!("Platform:    {}", identity::current_platform());
-            println!("Service:     {}", service::installed_scope().as_wire());
-            println!("Server:      {}", c.server);
-            println!("Name:        {}", c.name);
-            println!("Fingerprint: {}", c.fingerprint);
-            println!(
-                "Device id:   {}",
-                c.device_id.as_deref().unwrap_or("(not enrolled)")
-            );
-            println!(
-                "Enrolled:    {}",
-                if c.device_token.is_some() {
-                    "yes"
-                } else {
-                    "no"
-                }
-            );
-            println!("Running:     {}", running_state());
+    let c = match Config::load() {
+        Ok(c) => c,
+        Err(e) => {
+            println!("Failed to read config: {e}");
+            return;
         }
-        Err(e) => println!("Failed to read config: {e}"),
-    }
+    };
+
+    let scope = service::installed_scope().as_wire();
+    let autostart = if scope == "none" {
+        "no".to_string()
+    } else {
+        format!("yes ({scope})")
+    };
+
+    // Grouped so each block answers one question: which machine this is, how this
+    // local agent install is wired, and whether it's operating right now.
+    status_section("Device");
+    status_row("Name", &c.name);
+    status_row("Platform", identity::current_platform());
+    status_row("Fingerprint", &c.fingerprint);
+    status_row("Device id", c.device_id.as_deref().unwrap_or("(not enrolled)"));
+
+    println!();
+    status_section("Agent");
+    status_row("Version", env!("DEVEYE_VERSION"));
+    status_row("User", &report::current_user());
+    status_row("Server", &c.server);
+    status_row("Enrolled", if c.device_token.is_some() { "yes" } else { "no" });
+
+    println!();
+    status_section("Status");
+    status_row("Running", &running_state());
+    status_row("Autostart", &autostart);
+}
+
+/// A `status` section header.
+fn status_section(title: &str) {
+    println!("=== {title} ===");
+}
+
+/// One left-aligned `label: value` row under a `status` section.
+fn status_row(label: &str, value: &str) {
+    println!("{:<13}{}", format!("{label}:"), value);
 }
 
 fn running_state() -> String {
@@ -384,6 +405,10 @@ fn running_state() -> String {
 fn process_alive(pid: &str) -> bool {
     PCommand::new("kill")
         .args(["-0", pid])
+        // Silence `kill`'s "No such process" on stderr for a dead PID — absence is
+        // an expected, non-error outcome here (reflected in the boolean).
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()
         .map(|s| s.success())
         .unwrap_or(false)

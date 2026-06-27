@@ -72,20 +72,23 @@ export function DeviceCard({ device, actions }: { device: Device; actions: Devic
                 )}
             </div>
 
-            {device.online && agent && !pendingDeletion && (
+            {agent && !pendingDeletion && (
                 <div className={styles.serviceBox}>
                     {/* Each toggle's "on" colour reflects the agent's *reported* scope
-                        (the confirmed state), never the action that was requested. */}
+                        (the confirmed state), never the action that was requested.
+                        Offline: the toggles stay (last-known state) but are disabled. */}
                     <div className={styles.toggleRow}>
                         <button
                             className={`${styles.iconBtn} ${scope !== 'none' ? styles.iconApprove : ''}`}
                             aria-pressed={scope !== 'none'}
-                            disabled={serviceActive}
+                            disabled={serviceActive || !device.online}
                             onClick={() => actions.setAutostart(device.id, scope === 'none')}
                             title={
-                                scope === 'none'
-                                    ? 'Activer le démarrage automatique'
-                                    : 'Désactiver le démarrage automatique'
+                                !device.online
+                                    ? 'Appareil hors ligne — dernière configuration connue'
+                                    : scope === 'none'
+                                      ? 'Activer le démarrage automatique'
+                                      : 'Désactiver le démarrage automatique'
                             }
                         >
                             {autostartBusy ? (
@@ -100,16 +103,18 @@ export function DeviceCard({ device, actions }: { device: Device; actions: Devic
                         <button
                             className={`${styles.iconBtn} ${scope === 'system' ? styles.iconApprove : ''}`}
                             aria-pressed={scope === 'system'}
-                            disabled={serviceActive}
+                            disabled={serviceActive || !device.online}
                             onClick={() =>
                                 scope === 'system'
                                     ? actions.dropPrivilegesDevice(device.id)
                                     : actions.elevateDevice(device.id)
                             }
                             title={
-                                scope === 'system'
-                                    ? 'Rétrograder en service utilisateur'
-                                    : 'Élever en service système (root)'
+                                !device.online
+                                    ? 'Appareil hors ligne — dernière configuration connue'
+                                    : scope === 'system'
+                                      ? 'Rétrograder en service utilisateur'
+                                      : 'Élever en service système (root)'
                             }
                         >
                             {rootBusy ? (
@@ -122,6 +127,9 @@ export function DeviceCard({ device, actions }: { device: Device; actions: Devic
                         </button>
                         <span className={styles.toggleLabel}>Service système (root)</span>
                     </div>
+                    {!device.online && (
+                        <span className={styles.serviceOfflineHint}>Hors ligne — dernière configuration connue</span>
+                    )}
                 </div>
             )}
 

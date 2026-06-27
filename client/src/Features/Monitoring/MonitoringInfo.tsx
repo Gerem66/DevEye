@@ -48,6 +48,12 @@ export function MonitoringInfo() {
                 <li>
                     <b>Direct</b> : revient au suivi temps réel.
                 </li>
+                <li>
+                    <b>Conserver</b> : épingle un instant (ou une zone) pour le garder au-delà de la durée de
+                    conservation habituelle — ses repères passent en doré sur la frise. « Ne plus conserver » lève le
+                    verrou : l&apos;instant expirera de nouveau (supprimé aussitôt s&apos;il a déjà dépassé sa date
+                    limite).
+                </li>
             </ul>
             <h4>Processus & CPU</h4>
             <p>
