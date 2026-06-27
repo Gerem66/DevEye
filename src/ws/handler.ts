@@ -9,7 +9,7 @@ import { createMonitorTransport, type MonitorHub } from '@/agent/hub';
 import { FeatureError } from '@/features/_define';
 import { forgetSession } from '@/features/password/_shared';
 import { featureHandlerMap } from '@/features/registry';
-import { createSecureStore, forgetSessionDek } from '@/Services/SecureStore';
+import { createSecureStore, enterSessionCommand, exitSessionCommand, forgetSessionDek } from '@/Services/SecureStore';
 import { logger } from '@/logger';
 
 import type { Database } from '@/db';
@@ -127,6 +127,10 @@ export async function registerWS(app: FastifyInstance, { db, crypt, hub, audit }
                 });
             };
 
+            // Bracket the call for single-use DEK accounting ("validate on every
+            // action"): the unlocked DEK is wiped as soon as this command — and
+            // any concurrent siblings unlocked alongside it — finish.
+            const dekTicket = enterSessionCommand(session!.sessionId);
             try {
                 const result = await def.handler(
                     {
@@ -171,6 +175,8 @@ export async function registerWS(app: FastifyInstance, { db, crypt, hub, audit }
                     command,
                     payload: err('internal', 'Internal server error')
                 });
+            } finally {
+                exitSessionCommand(session!.sessionId, dekTicket);
             }
         });
 

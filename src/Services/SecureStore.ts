@@ -14,6 +14,15 @@ import { SecretKeyService } from './SecretKeyService';
  */
 export const DEFAULT_DEK_GRACE_MS = 60_000;
 
+/**
+ * Safety bridge for a single-use DEK (`re_auth_interval = 0`, "validate on every
+ * action"). The DEK is normally wiped as soon as the command(s) it unlocked
+ * finish (see {@link exitSessionCommand}); this only bounds how long an *unused*
+ * unlock lingers — long enough to bridge the unlock → action round-trip on a slow
+ * link, short enough that an abandoned unlock doesn't sit in memory.
+ */
+const SINGLE_USE_BRIDGE_MS = 30_000;
+
 interface DekEntry {
     dek: Buffer;
     /** Epoch ms after which the DEK is considered expired. */
@@ -23,7 +32,23 @@ interface DekEntry {
      * access. Mirrors `users.re_auth_interval` (seconds) at unlock time.
      */
     graceMs: number;
+    /**
+     * "Validate on every action" (`re_auth_interval = 0`). The DEK is not cached
+     * across actions: it survives only long enough to serve the unlock-triggered
+     * command(s), then is wiped as soon as they drain. Such an entry never slides
+     * its expiry.
+     */
+    singleUse: boolean;
+    /** Whether a command has actually read this single-use DEK yet. */
+    consumed: boolean;
+    /** In-flight commands currently holding this single-use DEK. */
+    holders: number;
+    /** Identity tag so a stale command's exit can't wipe a newer DEK. */
+    id: number;
 }
+
+/** Monotonic id stamped on single-use DEK entries (see {@link DekEntry.id}). */
+let dekEntrySeq = 0;
 
 /**
  * In-memory registry of unlocked DEKs, keyed by WS sessionId. Populated only
@@ -42,8 +67,9 @@ function dropDek(sessionId: string, entry: DekEntry | undefined): void {
 
 /**
  * Read the live DEK for a session, enforcing the grace window. Returns null when
- * absent or expired (expired entries are wiped). Each successful read slides the
- * expiry forward by the entry's configured grace window.
+ * absent or expired (expired entries are wiped). For a normal entry each read
+ * slides the expiry forward; a single-use entry never slides but records that a
+ * command read it, so it can be wiped the moment that command drains.
  */
 function liveDek(sessionId: string): Buffer | null {
     const entry = sessionDeks.get(sessionId);
@@ -52,7 +78,11 @@ function liveDek(sessionId: string): Buffer | null {
         dropDek(sessionId, entry);
         return null;
     }
-    entry.expiresAt = Date.now() + entry.graceMs;
+    if (entry.singleUse) {
+        entry.consumed = true;
+    } else {
+        entry.expiresAt = Date.now() + entry.graceMs;
+    }
     return entry.dek;
 }
 
@@ -70,25 +100,72 @@ function hasLiveDek(sessionId: string): boolean {
 /**
  * Cache the unlocked DEK for the session under a grace window.
  *
- * @param graceMs sliding window in ms. `0` means "always re-prompt": the DEK is
- *   wiped immediately instead of being remembered. Defaults to
- *   {@link DEFAULT_DEK_GRACE_MS}.
+ * @param graceMs sliding window in ms. `0` means "validate on every action": the
+ *   DEK is held only as a single-use entry — enough to serve the action that
+ *   triggered the unlock (a separate WS command), then wiped as soon as that
+ *   command burst drains (see {@link exitSessionCommand}) or after a short safety
+ *   bridge if it's never used. Defaults to {@link DEFAULT_DEK_GRACE_MS}.
  */
 export function rememberSessionDek(sessionId: string, dek: Buffer, graceMs: number = DEFAULT_DEK_GRACE_MS): void {
     const prev = sessionDeks.get(sessionId);
     if (prev && prev.dek !== dek) prev.dek.fill(0);
     if (graceMs <= 0) {
-        // Validation disabled: keep nothing in memory so the next encrypted
-        // action prompts for the password again.
-        dropDek(sessionId, sessionDeks.get(sessionId));
-        dek.fill(0);
+        // Validate on every action: don't cache across actions, but the DEK must
+        // still bridge from this unlock to the action that prompted it. Hold it
+        // single-use; it's wiped as soon as that action's command drains.
+        sessionDeks.set(sessionId, {
+            dek,
+            expiresAt: Date.now() + SINGLE_USE_BRIDGE_MS,
+            graceMs: SINGLE_USE_BRIDGE_MS,
+            singleUse: true,
+            consumed: false,
+            holders: 0,
+            id: ++dekEntrySeq
+        });
         return;
     }
-    sessionDeks.set(sessionId, { dek, expiresAt: Date.now() + graceMs, graceMs });
+    sessionDeks.set(sessionId, {
+        dek,
+        expiresAt: Date.now() + graceMs,
+        graceMs,
+        singleUse: false,
+        consumed: false,
+        holders: 0,
+        id: 0
+    });
 }
 
 export function forgetSessionDek(sessionId: string): void {
     dropDek(sessionId, sessionDeks.get(sessionId));
+}
+
+/**
+ * Mark the start of a WS command for single-use DEK accounting. Returns the
+ * entry's id when the session currently holds a single-use DEK (the caller must
+ * then pass it to {@link exitSessionCommand}), or `0` otherwise. A no-op for
+ * normal or absent DEKs.
+ */
+export function enterSessionCommand(sessionId: string): number {
+    const entry = sessionDeks.get(sessionId);
+    if (!entry || !entry.singleUse) return 0;
+    entry.holders += 1;
+    return entry.id;
+}
+
+/**
+ * Mark the end of a WS command. Once the last in-flight command holding a
+ * single-use DEK finishes — and the DEK was actually read — it is wiped so the
+ * next action re-prompts. The `id` guards against a stale command wiping a DEK
+ * minted by a newer unlock. Pairs with {@link enterSessionCommand}.
+ */
+export function exitSessionCommand(sessionId: string, ticketId: number): void {
+    if (ticketId === 0) return;
+    const entry = sessionDeks.get(sessionId);
+    if (!entry || entry.id !== ticketId) return;
+    entry.holders -= 1;
+    if (entry.consumed && entry.holders <= 0) {
+        dropDek(sessionId, entry);
+    }
 }
 
 /**

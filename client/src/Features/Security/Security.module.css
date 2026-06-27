@@ -265,6 +265,11 @@
     border-color: var(--accent);
 }
 
+.reAuthInput:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 .reAuthUnit {
     font-size: 0.85rem;
     color: var(--text-secondary);

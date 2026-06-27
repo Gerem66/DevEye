@@ -39,6 +39,13 @@ const GRACE_MS = 60_000;
 let state: SecrecyState = { unlocked: false, prompting: false };
 const listeners = new Set<() => void>();
 
+/**
+ * "Validate on every action" mode (`re_auth_interval = 0` with encryption ON).
+ * The server forgets the DEK right after each action, so the client must never
+ * hold the session as persistently unlocked: every encrypted action re-prompts.
+ */
+let singleUse = false;
+
 /** Timer that flips `unlocked` back to false once the grace window elapses. */
 let graceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -87,18 +94,36 @@ export function useSecrecy(): SecrecyState {
     return useSyncExternalStore(subscribe, getSecrecy, getSecrecy);
 }
 
+/**
+ * Toggle "validate on every action" mode. Turning it on drops any standing
+ * unlock so the very next encrypted action re-prompts.
+ */
+export function setSingleUse(on: boolean): void {
+    singleUse = on;
+    if (on) {
+        clearGraceTimer();
+        set({ unlocked: false });
+    }
+}
+
 /** Mark the session unlocked/locked from anywhere (status sync, logout, …). */
 export function setUnlocked(unlocked: boolean): void {
-    if (unlocked) armGraceTimer();
+    // In "validate on every action" mode the session is never held unlocked:
+    // each encrypted action must re-prompt (the server forgets the DEK between
+    // actions), so collapse any unlock request to locked.
+    const effective = unlocked && !singleUse;
+    if (effective) armGraceTimer();
     else clearGraceTimer();
-    set({ unlocked });
+    set({ unlocked: effective });
 }
 
 /**
  * Signal an encrypted action just happened: slides the grace window forward to
- * match the server. No-op when already locked (the next action will prompt).
+ * match the server. No-op when already locked (the next action will prompt) or
+ * in "validate on every action" mode (nothing is cached).
  */
 export function touchSecrecy(): void {
+    if (singleUse) return;
     if (state.unlocked) armGraceTimer();
 }
 
@@ -117,8 +142,14 @@ export function ensureUnlocked(): Promise<void> {
 
 /** Called by the dialog after a successful `secrecy.unlock`. */
 export function resolveUnlock(): void {
-    armGraceTimer();
-    set({ unlocked: true, prompting: false });
+    // Release the waiting action(s). In "validate on every action" mode we don't
+    // keep the session unlocked afterwards — the next action prompts again.
+    if (singleUse) {
+        set({ prompting: false });
+    } else {
+        armGraceTimer();
+        set({ unlocked: true, prompting: false });
+    }
     const pending = waiters;
     waiters = [];
     for (const w of pending) w.resolve();
@@ -139,6 +170,8 @@ export function cancelUnlock(): void {
 export async function refreshSecrecyStatus(): Promise<void> {
     try {
         const { status } = await ws.send('secrecy.status', {});
+        // `re_auth_interval === 0` with encryption ON = validate on every action.
+        setSingleUse(status.enabled && status.reAuthInterval === 0);
         // When the feature is off, treat the session as always unlocked.
         setUnlocked(!status.enabled || status.unlocked);
     } catch {

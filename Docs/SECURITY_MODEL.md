@@ -40,9 +40,20 @@ Handlers dans `src/features/secrecy/index.ts`. Quand elle est **ON** :
 - La DEK déverrouillée est cachée par `sessionId` dans une Map en mémoire
   (`sessionDeks`), jamais persistée, effacée à la déconnexion.
 - **Fenêtre de grâce glissante** (`reAuthInterval`, en secondes ; défaut
-  `DEFAULT_DEK_GRACE_MS` = 60 s ; `0` = re-prompt à chaque action). Chaque accès
-  réarme le minuteur. Passé ce délai d'inactivité, la DEK est effacée et la
-  prochaine action chiffrée redemande le mot de passe.
+  `DEFAULT_DEK_GRACE_MS` = 60 s). Chaque accès réarme le minuteur. Passé ce délai
+  d'inactivité, la DEK est effacée et la prochaine action chiffrée redemande le
+  mot de passe.
+- **`reAuthInterval = 0` = validation à chaque action.** La DEK n'est pas mise en
+  cache d'une action à l'autre, mais l'unlock et l'action déclenchée sont deux
+  commandes WS distinctes : la DEK déballée est donc gardée en **usage unique**
+  (`singleUse`, non glissante) le temps de servir cette/ces commande(s), puis
+  effacée dès que la rafale se vide. Le dispatcher compte les commandes en vol
+  (`enterSessionCommand`/`exitSessionCommand`) : la DEK part quand le dernier
+  consommateur termine — ce qui couvre les rafales concurrentes (ex. `note.list`
+    - `folder.list`). Un court pont (`SINGLE_USE_BRIDGE_MS` = 30 s) borne un unlock
+      jamais consommé. **Côté client**, le store secrecy passe en mode `singleUse` :
+      la session n'est jamais tenue pour « déverrouillée », chaque action chiffrée
+      redemande le mot de passe.
 - Un handler verrouillé renvoie `FeatureError('locked')` → le client affiche le
   prompt de mot de passe habituel.
 

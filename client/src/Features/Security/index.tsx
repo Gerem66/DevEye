@@ -153,11 +153,12 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     // Keep the global user.security in sync so the profile's "Sécurité x / 3"
     // counter updates live, without a full page reload. Only patches once both
     // statuses are known to avoid flicker from partial state. The re-auth window
-    // counts when strict: short enough (≤ 5 min), 0 being the strongest setting.
+    // counts when strict (≤ 5 min, 0 being the strongest) — but only while
+    // password encryption is ON, since the window is meaningless without it.
     useEffect(() => {
         if (status === null || secrecy === null) return;
         const reAuth = secrecy.reAuthInterval ?? 60;
-        const reAuthValidation = reAuth <= 300;
+        const reAuthValidation = secrecy.enabled && reAuth <= 300;
         updateUser({
             security: {
                 twoFactor: status.enabled,
@@ -237,26 +238,31 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
         }
     };
 
+    // The re-auth window only makes sense once password encryption is ON: it
+    // governs how often that password is re-checked. Disabled otherwise.
+    const encryptionEnabled = secrecy?.enabled ?? false;
     // Current persisted window in minutes (null = server default of 1 min).
     const currentReAuthMinutes = Math.round((secrecy?.reAuthInterval ?? 60) / 60);
     // Whether the window is strict enough to count as a protection (≤ 5 min,
     // including 0 = "always re-prompt", the strongest setting). Same threshold as
-    // the profile security counter.
-    const reAuthStrict = currentReAuthMinutes <= 5;
-    const reAuthTitle =
-        currentReAuthMinutes === 0
-            ? 'Validation du mot de passe : à chaque action'
-            : `Validation du mot de passe : toutes les ${currentReAuthMinutes} min`;
-    const reAuthDescription =
-        currentReAuthMinutes === 0
-            ? 'Sécurité maximale : votre mot de passe est redemandé à chaque action chiffrée.'
-            : reAuthStrict
-              ? `Bon niveau : votre mot de passe reste valide ${currentReAuthMinutes} min avant d’être redemandé.`
-              : `Confort privilégié : votre mot de passe reste valide ${currentReAuthMinutes} min avant d’être redemandé. Réduisez à 5 min ou moins pour renforcer la sécurité.`;
+    // the profile security counter — and only when encryption is enabled.
+    const reAuthStrict = encryptionEnabled && currentReAuthMinutes <= 5;
+    const reAuthTitle = !encryptionEnabled
+        ? 'Validation du mot de passe'
+        : currentReAuthMinutes === 0
+          ? 'Validation du mot de passe : à chaque action'
+          : `Validation du mot de passe : toutes les ${currentReAuthMinutes} min`;
+    const reAuthDescription = !encryptionEnabled
+        ? 'Dépend du chiffrement par mot de passe : activez-le pour définir ce délai.'
+        : currentReAuthMinutes === 0
+          ? 'Sécurité maximale : votre mot de passe est redemandé à chaque action chiffrée.'
+          : reAuthStrict
+            ? `Bon niveau : votre mot de passe reste valide ${currentReAuthMinutes} min avant d’être redemandé.`
+            : `Confort privilégié : votre mot de passe reste valide ${currentReAuthMinutes} min avant d’être redemandé. Réduisez à 5 min ou moins pour renforcer la sécurité.`;
     const parsedReAuth = Number(reAuthInput);
     const reAuthValid =
         reAuthInput.trim() !== '' && Number.isInteger(parsedReAuth) && parsedReAuth >= 0 && parsedReAuth <= 1440;
-    const reAuthDirty = reAuthValid && parsedReAuth !== currentReAuthMinutes;
+    const reAuthDirty = encryptionEnabled && reAuthValid && parsedReAuth !== currentReAuthMinutes;
 
     const saveReAuth = useCallback(async () => {
         if (!reAuthValid) return;
@@ -264,6 +270,9 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
         try {
             const res = await ws.send('secrecy.setReauth', { seconds: parsedReAuth * 60 });
             setSecrecy(res.status);
+            // Keep the global unlock store in sync: switching to/from 0 changes the
+            // "validate on every action" mode, which governs whether actions re-prompt.
+            void refreshSecrecyStatus();
             setReAuthSaveState('saved');
             window.clearTimeout(reAuthSavedTimer.current);
             reAuthSavedTimer.current = window.setTimeout(() => setReAuthSaveState('idle'), 2000);
@@ -379,11 +388,17 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                 step={1}
                                 className={styles.reAuthInput}
                                 value={reAuthInput}
+                                disabled={!encryptionEnabled}
                                 onChange={(e) => setReAuthInput(e.target.value.replace(/\D/g, ''))}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' && reAuthDirty) void saveReAuth();
                                 }}
                                 aria-label='Délai de validation en minutes'
+                                title={
+                                    encryptionEnabled
+                                        ? undefined
+                                        : 'Activez le chiffrement par mot de passe pour configurer ce délai'
+                                }
                             />
                             <span className={styles.reAuthUnit}>min</span>
                             <span className={styles.reAuthStatus} aria-live='polite'>
