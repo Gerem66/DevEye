@@ -2,10 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { ws } from '@/api/ws';
+import { useResourceVersion, type ResourceKey } from '@/stores/invalidation';
 import styles from './CountWidget.module.css';
 
-/** Commands that return a plain `{ count }` for a workspace. */
-type CountCommand = 'note.count' | 'password.count';
+/** Commands that return a plain `{ count }` for a workspace. Each doubles as
+ *  its own invalidation key (see `invalidate`), so the card refreshes when the
+ *  matching data changes. */
+type CountCommand = ResourceKey;
 
 export type CountState = { kind: 'loading' } | { kind: 'ready'; count: number };
 
@@ -14,7 +17,9 @@ export type CountState = { kind: 'loading' } | { kind: 'ready'; count: number };
  * opens. These commands are NOT gated by the password-encryption unlock, so the
  * result is a normal number even when the session is locked — no `locked` state,
  * no prompt. A transient send failure (socket not open yet, a drop) keeps the
- * last good value instead of collapsing into a misleading "0".
+ * last good value instead of collapsing into a misleading "0". It also
+ * re-fetches when its resource is invalidated (e.g. a note/password created or
+ * deleted), so the card stays in sync without a reload.
  */
 export function useWorkspaceCount(command: CountCommand): CountState {
     const { user, workspaces } = useAuth();
@@ -22,6 +27,7 @@ export function useWorkspaceCount(command: CountCommand): CountState {
         () => workspaces.find((w) => w.id === user?.defaultWorkspace) ?? workspaces[0] ?? null,
         [workspaces, user]
     );
+    const version = useResourceVersion(command);
     const [state, setState] = useState<CountState>({ kind: 'loading' });
 
     useEffect(() => {
@@ -47,7 +53,9 @@ export function useWorkspaceCount(command: CountCommand): CountState {
             cancelled = true;
             off();
         };
-    }, [workspace, command]);
+        // `version` re-runs this effect when the resource is invalidated,
+        // re-fetching the count (when the socket is open) after a mutation.
+    }, [workspace, command, version]);
 
     return state;
 }

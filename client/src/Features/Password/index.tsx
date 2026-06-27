@@ -11,6 +11,7 @@ import { ws, WsError } from '@/api/ws';
 import TextInput from '@/Components/TextInput';
 import Button from '@/Components/Button';
 import { ensureUnlocked as ensureSecrecyUnlocked, touchSecrecy, UnlockCancelledError } from '@/stores/secrecy';
+import { invalidate } from '@/stores/invalidation';
 
 import type { FeatureProps } from '@/Features/types';
 import type { PasswordEntry, PasswordEntryMasked } from 'deveye-types';
@@ -173,6 +174,7 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
                 try {
                     await ws.send('password.delete', { workspaceId: workspace.id, passwordId: id });
                     setAllPasswords((prev) => prev.filter((p) => p.id !== id));
+                    invalidate('password.count');
                 } catch (e) {
                     setActionError(humanizeError(e, 'Suppression impossible.'));
                 }
@@ -188,6 +190,7 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
                             ws.send('password.add', { workspaceId: workspace.id, entry })
                         );
                         upsertMasked(res.entry);
+                        invalidate('password.count');
                     } else {
                         const res = await withSecrecy(() =>
                             ws.send('password.edit', { workspaceId: workspace.id, entry: result })

@@ -56,14 +56,11 @@ Tout passe par des schémas zod partagés. Le serveur **et** le client importent
 ## C. Handlers serveur — `DevEye/src/features/`
 
 1. **Handlers** — `src/features/<feature>/index.ts` : un `defineFeature({ ...cmd,
-   handler })` par commande. Le handler reçoit un `FeatureContext` (`ctx.db`,
+handler })` par commande. Le handler reçoit un `FeatureContext` (`ctx.db`,
    `ctx.userId`, `ctx.secure`, `ctx.audit`, `ctx.ip`, `ctx.logger`…) et renvoie
-   l'`output`. Lever `FeatureError(code, message)` pour une erreur typée.
-   - **Autorisation** : vérifie l'appartenance au workspace
-     (`assertWorkspaceMember`) et/ou le rôle (`user.role === 'admin'`) selon le cas.
-   - **Déverrouillage** : si données chiffrées par mot de passe, garder le
-     `assertSecureUnlocked` (lève `locked` → le client demande le mot de passe).
-   - Exporter `export const <feature>Features: FeatureDefinition<string, any, any>[] = [...]`.
+   l'`output`. Lever `FeatureError(code, message)` pour une erreur typée. - **Autorisation** : vérifie l'appartenance au workspace
+   (`assertWorkspaceMember`) et/ou le rôle (`user.role === 'admin'`) selon le cas. - **Déverrouillage** : si données chiffrées par mot de passe, garder le
+   `assertSecureUnlocked` (lève `locked` → le client demande le mot de passe). - Exporter `export const <feature>Features: FeatureDefinition<string, any, any>[] = [...]`.
 2. **Registre** — `src/features/registry.ts` : importer et **spread** dans
    `featureHandlers` (`...<feature>Features`).
 3. **Audit** (recommandé) — sur les actions notables, appeler
@@ -85,39 +82,46 @@ Tout passe par des schémas zod partagés. Le serveur **et** le client importent
    `Button`, `TextInput`, `SelectInput`, `OpenPopup`, et les **CSS vars du thème**
    (`var(--accent)`, `var(--space-md)`, `var(--text-primary)`… — jamais de
    couleurs en dur). UI en **français**.
-   - Pattern déverrouillage : envelopper les appels chiffrés dans un helper qui
-     intercepte l'erreur `locked` et relance après `ensureSecrecyUnlocked()`
-     (voir `Features/Notes/index.tsx → withSecrecy`).
+    - Pattern déverrouillage : envelopper les appels chiffrés dans un helper qui
+      intercepte l'erreur `locked` et relance après `ensureSecrecyUnlocked()`
+      (voir `Features/Notes/index.tsx → withSecrecy`).
 2. **Popups & dialogues** — toujours `Dialog` (statique) ou `Popup` +
    `OpenPopup`/`ClosePopup` (impératif, request→response). Jamais de modale
    maison. Comportements **unifiés, fournis par `Dialog`** — ne pas les
    réimplémenter par popup :
-   - **Entrée → action principale** : passer `onSubmit={submit}` (le même handler
-     que le bouton principal du footer). Ne **pas** remettre de `onKeyDown`
-     « Enter » sur les champs. `textarea`, `select` et contenteditable gardent leur
-     Entrée. Pour les confirmations destructives, `onSubmit` câble la confirmation.
-   - **Autofocus** : à l'ouverture, `Dialog` focus le `[data-autofocus]`, sinon le
-     1er champ texte. Ne **pas** remettre de `inputRef` + `focus()` manuel à
-     l'ouverture (garder un ref seulement pour un re-focus *après erreur*).
-     `autoFocus={false}` pour désactiver.
-   - **Échap** : géré par la pile `useDismissLayer` (`Components/Dialog`). `Dialog`,
-     `WidgetPopup` (panneau feature) et `SettingsPanel` y sont déjà inscrits → Échap
-     ferme **la couche la plus haute d'abord** (popup avant feature). N'ajoute
-     **jamais** de listener `window` `keydown`/Escape dans une feature.
-   - **Bouton principal dans un enfant** : si le formulaire est rendu *dans* un
-     `Dialog` qu'il ne possède pas (ex. `ShortcutForm` dans `AddTileDialog`),
-     enregistrer son action via `useDialogSubmit(submit)` au lieu de `onSubmit`.
-   - **Cohérence d'ajout** : une popup/sous-formulaire d'ajout se ferme après un
-     ajout réussi (appareils, raccourcis, features, formulaires — tous pareils).
-3. **Enregistrement** — `src/Pages/Home/index.tsx` :
-   - widget de grille → ajouter à `FEATURES` (`{ id, title, icon, WidgetContent,
-     FullComponent, cacheDurationMinutes, preload? }`) ;
-   - page structurelle → ajouter à `PAGES` et passer un `onOpenX` au `TopNavbar`
-     (gater par rôle si besoin : `user.role === 'admin' ? () => handleExpand('x') : undefined`).
+    - **Entrée → action principale** : passer `onSubmit={submit}` (le même handler
+      que le bouton principal du footer). Ne **pas** remettre de `onKeyDown`
+      « Enter » sur les champs. `textarea`, `select` et contenteditable gardent leur
+      Entrée. Pour les confirmations destructives, `onSubmit` câble la confirmation.
+    - **Autofocus** : à l'ouverture, `Dialog` focus le `[data-autofocus]`, sinon le
+      1er champ texte. Ne **pas** remettre de `inputRef` + `focus()` manuel à
+      l'ouverture (garder un ref seulement pour un re-focus _après erreur_).
+      `autoFocus={false}` pour désactiver.
+    - **Échap** : géré par la pile `useDismissLayer` (`Components/Dialog`). `Dialog`,
+      `WidgetPopup` (panneau feature) et `SettingsPanel` y sont déjà inscrits → Échap
+      ferme **la couche la plus haute d'abord** (popup avant feature). N'ajoute
+      **jamais** de listener `window` `keydown`/Escape dans une feature.
+    - **Bouton principal dans un enfant** : si le formulaire est rendu _dans_ un
+      `Dialog` qu'il ne possède pas (ex. `ShortcutForm` dans `AddTileDialog`),
+      enregistrer son action via `useDialogSubmit(submit)` au lieu de `onSubmit`.
+    - **Cohérence d'ajout** : une popup/sous-formulaire d'ajout se ferme après un
+      ajout réussi (appareils, raccourcis, features, formulaires — tous pareils).
+3. **Enregistrement** — `src/Pages/Home/index.tsx` : - widget de grille → ajouter à `FEATURES` (`{ id, title, icon, WidgetContent,
+FullComponent, cacheDurationMinutes, preload? }`) ; - page structurelle → ajouter à `PAGES` et passer un `onOpenX` au `TopNavbar`
+   (gater par rôle si besoin : `user.role === 'admin' ? () => handleExpand('x') : undefined`).
 4. **Navbar** (page structurelle) — `src/Components/TopNavbar/TopNavbar.tsx` :
    ajouter la prop `onOpenX?` et l'entrée de menu (rendue seulement si la prop est
    fournie → gating naturel).
 5. **Icône** — réutiliser une classe de `src/Styles/icons.css` (`icon-…`).
+6. **Fraîcheur des widgets résumé** — un widget de grille qui affiche une donnée
+   dérivée (ex. un compteur via `CountWidget` / `useWorkspaceCount`) se rafraîchit
+   seul à l'(ré)ouverture de la socket, mais **pas** après une mutation. Quand une
+   action de la feature change cette donnée (ajout/suppression), appeler
+   `invalidate('<clé>')` (`@/stores/invalidation`) **juste après l'appel WS
+   réussi** ; tout widget lisant cette clé via `useResourceVersion` re-fetch
+   aussitôt. La clé est par convention la commande de comptage (`note.count`,
+   `password.count`) et doit figurer dans `ResourceKey`. Invalider **à la source
+   de la mutation**, pas au cycle de vie du popup. Exemple : `Features/Notes/index.tsx`.
 
 ---
 
@@ -176,18 +180,19 @@ réinstaller côté serveur/client.
 
 ## Récapitulatif des points d'enregistrement (à ne pas oublier)
 
-| # | Fichier | Action |
-|---|---------|--------|
-| 1 | `DevEye-Types/src/domain/<f>.ts` | schémas + types entité |
-| 2 | `DevEye-Types/src/features/<f>.ts` | commandes + `<f>Commands` |
-| 3 | `DevEye-Types/src/features/registry.ts` | spread `...<f>Commands` |
-| 4 | `DevEye-Types/src/index.ts` | exports |
-| 5 | `DevEye-Types/package.json` | bump version + mirror node_modules |
-| 6 | `DevEye/src/db/migrations/0NN_*.sql` | migration (si table) |
-| 7 | `DevEye/src/db/repos/<f>.ts` | repo (si table) |
-| 8 | `DevEye/src/db/index.ts` | `Database` + `createDatabase` |
-| 9 | `DevEye/src/features/<f>/index.ts` | handlers + `<f>Features` |
-| 10 | `DevEye/src/features/registry.ts` | spread `...<f>Features` |
-| 11 | `DevEye/client/src/Features/<F>/` | composant + styles |
-| 12 | `DevEye/client/src/Pages/Home/index.tsx` | `FEATURES` ou `PAGES` |
-| 13 | `DevEye/client/src/Components/TopNavbar/TopNavbar.tsx` | entrée menu (page structurelle) |
+| #   | Fichier                                                | Action                                                              |
+| --- | ------------------------------------------------------ | ------------------------------------------------------------------- |
+| 1   | `DevEye-Types/src/domain/<f>.ts`                       | schémas + types entité                                              |
+| 2   | `DevEye-Types/src/features/<f>.ts`                     | commandes + `<f>Commands`                                           |
+| 3   | `DevEye-Types/src/features/registry.ts`                | spread `...<f>Commands`                                             |
+| 4   | `DevEye-Types/src/index.ts`                            | exports                                                             |
+| 5   | `DevEye-Types/package.json`                            | bump version + mirror node_modules                                  |
+| 6   | `DevEye/src/db/migrations/0NN_*.sql`                   | migration (si table)                                                |
+| 7   | `DevEye/src/db/repos/<f>.ts`                           | repo (si table)                                                     |
+| 8   | `DevEye/src/db/index.ts`                               | `Database` + `createDatabase`                                       |
+| 9   | `DevEye/src/features/<f>/index.ts`                     | handlers + `<f>Features`                                            |
+| 10  | `DevEye/src/features/registry.ts`                      | spread `...<f>Features`                                             |
+| 11  | `DevEye/client/src/Features/<F>/`                      | composant + styles                                                  |
+| 12  | `DevEye/client/src/Pages/Home/index.tsx`               | `FEATURES` ou `PAGES`                                               |
+| 13  | `DevEye/client/src/Components/TopNavbar/TopNavbar.tsx` | entrée menu (page structurelle)                                     |
+| 14  | `DevEye/client/src/stores/invalidation.ts`             | clé `ResourceKey` + `invalidate()` aux mutations (si widget résumé) |

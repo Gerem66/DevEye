@@ -20,6 +20,7 @@ import { ws, WsError } from '@/api/ws';
 import TextInput from '@/Components/TextInput';
 import Button from '@/Components/Button';
 import { ensureUnlocked as ensureSecrecyUnlocked, touchSecrecy, UnlockCancelledError } from '@/stores/secrecy';
+import { invalidate } from '@/stores/invalidation';
 
 import type { FeatureProps } from '@/Features/types';
 import type { Note, NoteFolder, NoteSummary } from 'deveye-types';
@@ -164,6 +165,7 @@ function FeatureNotes({ workspace, closeFeature }: FeatureProps) {
                         ws.send('note.add', { workspaceId: workspace.id, note: draft })
                     );
                     upsert(res.note);
+                    invalidate('note.count');
                 }
             } catch (e) {
                 setActionError(humanizeError(e, 'Enregistrement impossible.'));
@@ -214,6 +216,7 @@ function FeatureNotes({ workspace, closeFeature }: FeatureProps) {
                         password: unlockPassword
                     });
                     setNotes((prev) => prev.filter((n) => n.id !== existing!.id));
+                    invalidate('note.count');
                 } catch (e) {
                     setActionError(humanizeError(e, 'Suppression impossible.'));
                 }
