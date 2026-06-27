@@ -42,6 +42,7 @@ function applyBundle(bundle: FullBundle): AuthState {
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [state, setState] = useState<AuthState>({ status: 'unknown', user: null, workspaces: [] });
     const refreshing = useRef<Promise<void> | null>(null);
+    const reauthLock = useRef(false);
 
     const setAnonymous = useCallback(() => {
         setUnlocked(false);
@@ -115,13 +116,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setState((prev) => ({ ...prev, workspaces: updater(prev.workspaces) }));
     }, []);
 
+    // A WS `4401` only means the *access* token expired — typically while the tab
+    // sat in the background. The refresh cookie is usually still valid, so instead
+    // of dropping the user to the login screen we silently refresh the session and
+    // reconnect the socket, keeping them on the populated dashboard. Only a failed
+    // refresh (refresh token also gone) falls back to anonymous. The lock throttles
+    // the pathological case where a freshly-refreshed socket is rejected again, so
+    // we can't spin in a refresh/reconnect loop.
+    const reauthenticate = useCallback(async () => {
+        if (reauthLock.current) return;
+        reauthLock.current = true;
+        try {
+            await apiRefresh();
+            setState(applyBundle(await apiMe()));
+            await ws.connect().catch(() => {});
+            void refreshSecrecyStatus();
+        } catch {
+            setAnonymous();
+        } finally {
+            setTimeout(() => {
+                reauthLock.current = false;
+            }, 3000);
+        }
+    }, [setAnonymous]);
+
     useEffect(() => {
         void refresh();
     }, [refresh]);
 
     useEffect(() => {
-        return ws.onUnauthorized(() => setAnonymous());
-    }, [setAnonymous]);
+        return ws.onUnauthorized(() => void reauthenticate());
+    }, [reauthenticate]);
 
     const value = useMemo<AuthContextValue>(
         () => ({ ...state, login, logout, refresh, updateUser, setWorkspaces }),
