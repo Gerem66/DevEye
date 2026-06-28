@@ -49,7 +49,7 @@ const PREVIEW_MAX = 140;
 /** First non-empty block's text, trimmed to a short single-line preview. */
 function buildPreview(blocks: NoteBlock[]): string {
     for (const b of blocks) {
-        const t = b.text.trim();
+        const t = 'text' in b ? b.text.trim() : '';
         if (t) return t.length > PREVIEW_MAX ? `${t.slice(0, PREVIEW_MAX)}…` : t;
     }
     return '';
