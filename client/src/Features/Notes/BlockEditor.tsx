@@ -159,10 +159,45 @@ export default function BlockEditor({ blocks, onChange, aside }: BlockEditorProp
         [blocks, onChange]
     );
 
+    /** Move focus to block `index`, dropping the caret at `caret` (clamped). */
+    const focusBlock = useCallback((index: number, caret: number) => {
+        const el = refs.current[index];
+        if (!el) return;
+        el.focus();
+        const pos = Math.max(0, Math.min(caret, el.value.length));
+        el.setSelectionRange(pos, pos);
+    }, []);
+
     const onKeyDown = useCallback(
         (e: React.KeyboardEvent<HTMLTextAreaElement>, index: number) => {
             const b = blocks[index];
             const ta = e.currentTarget;
+            // Up/Down cross block boundaries only from the edge lines: on the
+            // first text line, Up moves to the previous block; on the last line,
+            // Down moves to the next — so within a multi-line block the arrows
+            // still walk its own lines. The caret's column is carried over.
+            if (e.key === 'ArrowUp' && ta.selectionStart === ta.selectionEnd && index > 0) {
+                const lineStart = b.text.lastIndexOf('\n', ta.selectionStart - 1) + 1;
+                if (lineStart === 0) {
+                    e.preventDefault();
+                    const prev = blocks[index - 1].text;
+                    const prevLineStart = prev.lastIndexOf('\n') + 1;
+                    focusBlock(index - 1, prevLineStart + ta.selectionStart);
+                    return;
+                }
+            }
+            if (e.key === 'ArrowDown' && ta.selectionStart === ta.selectionEnd && index < blocks.length - 1) {
+                if (b.text.indexOf('\n', ta.selectionStart) === -1) {
+                    e.preventDefault();
+                    const lineStart = b.text.lastIndexOf('\n', ta.selectionStart - 1) + 1;
+                    const column = ta.selectionStart - lineStart;
+                    const next = blocks[index + 1].text;
+                    const nextLineEnd = next.indexOf('\n');
+                    const firstLineLen = nextLineEnd === -1 ? next.length : nextLineEnd;
+                    focusBlock(index + 1, Math.min(column, firstLineLen));
+                    return;
+                }
+            }
             if (e.key === 'Enter') {
                 if (e.ctrlKey || e.metaKey) {
                     // Ctrl+Enter (or ⌘+Enter on Mac) inserts a line break in place.
@@ -196,7 +231,7 @@ export default function BlockEditor({ blocks, onChange, aside }: BlockEditorProp
                 }
             }
         },
-        [blocks, replaceBlock, splitAt, removeAt]
+        [blocks, replaceBlock, splitAt, removeAt, focusBlock]
     );
 
     const onTextChange = useCallback(
