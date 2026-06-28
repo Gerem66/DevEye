@@ -77,36 +77,55 @@ function blocksToHtml(blocks: NoteBlock[]): string {
     return html;
 }
 
-/** The print-only stylesheet: refined serif, generous margins, sober rhythm. */
+/* A clean, modern sans-serif stack — system UI fonts, no web download needed. */
+const SANS =
+    "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif";
+
+/**
+ * The print-only stylesheet: a modern sans-serif, generous margins and a sober
+ * vertical rhythm. A discreet page number sits bottom-centre — the most neutral,
+ * widely accepted convention (supported via CSS page margin boxes in Chrome 131+
+ * / Safari 18.2+). The document carries no URL/site chrome, only its own title.
+ */
 const STYLE = `
-    @page { margin: 2.2cm 2.4cm; }
+    @page {
+        margin: 2cm 2.2cm 1.8cm;
+        @bottom-center {
+            content: counter(page);
+            font-family: ${SANS};
+            font-size: 9pt;
+            color: #a0a0a6;
+        }
+    }
     * { box-sizing: border-box; }
     body {
         margin: 0;
-        font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+        font-family: ${SANS};
         color: #1d1d1f;
-        font-size: 12pt;
-        line-height: 1.62;
+        font-size: 11pt;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
     }
-    .title { font-size: 23pt; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 4pt; }
-    .meta { color: #8a8a8e; font-size: 9.5pt; margin: 0; padding-bottom: 14pt; border-bottom: 1px solid #e6e6e9; }
-    .body { margin-top: 16pt; }
-    h1, h2, h3, h4, h5 { font-weight: 700; line-height: 1.25; margin: 16pt 0 6pt; }
-    h1 { font-size: 18pt; }
-    h2 { font-size: 15.5pt; }
-    h3 { font-size: 13.5pt; }
-    h4 { font-size: 12pt; }
-    h5 { font-size: 11pt; text-transform: uppercase; letter-spacing: 0.05em; color: #555; }
-    p { margin: 0 0 8pt; }
-    ul, ol { margin: 0 0 8pt; padding-left: 1.5em; }
-    li { margin: 2.5pt 0; }
+    .title { font-size: 22pt; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; margin: 0 0 6pt; }
+    .meta { color: #9a9a9f; font-size: 9.5pt; margin: 0; padding-bottom: 16pt; border-bottom: 1px solid #ededf1; }
+    .body { margin-top: 22pt; }
+    h1, h2, h3, h4, h5 { font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; margin: 18pt 0 6pt; }
+    h1 { font-size: 17pt; }
+    h2 { font-size: 14.5pt; }
+    h3 { font-size: 12.5pt; }
+    h4 { font-size: 11.5pt; }
+    h5 { font-size: 10pt; text-transform: uppercase; letter-spacing: 0.06em; color: #6a6a70; }
+    .body > :first-child { margin-top: 0; }
+    p { margin: 0 0 9pt; }
+    ul, ol { margin: 0 0 9pt; padding-left: 1.4em; }
+    li { margin: 3pt 0; padding-left: 2px; }
     ul.checks { list-style: none; padding-left: 0; }
-    ul.checks li { display: flex; gap: 8px; align-items: baseline; }
-    ul.checks .box { font-size: 12.5pt; line-height: 1; }
-    ul.checks li.done span:last-child { color: #8a8a8e; text-decoration: line-through; }
-    hr { border: none; border-top: 1px solid #d9d9de; margin: 16pt 0; }
+    ul.checks li { display: flex; gap: 9px; align-items: baseline; }
+    ul.checks .box { font-size: 12pt; line-height: 1; color: #6a6a70; }
+    ul.checks li.done span:last-child { color: #a0a0a6; text-decoration: line-through; }
+    hr { border: none; border-top: 1px solid #e4e4e8; margin: 18pt 0; }
     strong { font-weight: 700; }
     em { font-style: italic; }
     u { text-decoration: underline; }
