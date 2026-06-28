@@ -10,7 +10,7 @@ export function DeviceCard({ device, actions }: { device: Device; actions: Devic
     const pendingDeletion = device.status === 'pending_deletion';
     const agent = device.report?.agent ?? null;
     const scope = agent?.serviceScope ?? 'none';
-    const updating = actions.updatingId === device.id;
+    const updating = actions.isUpdating(device.id);
     const serviceActive = actions.serviceBusy?.id === device.id;
     const autostartBusy = serviceActive && actions.serviceBusy?.kind === 'autostart';
     const rootBusy = serviceActive && actions.serviceBusy?.kind === 'privilege';

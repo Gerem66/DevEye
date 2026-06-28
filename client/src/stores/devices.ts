@@ -97,3 +97,13 @@ export function useDevices(): DevicesState & { refresh: () => Promise<void> } {
     }, []);
     return { devices: snap.devices, loading: snap.loading, error: snap.error, refresh: refreshDevices };
 }
+
+/** Current device list, read synchronously by non-React module stores (e.g. agent updates). */
+export function currentDevices(): Device[] {
+    return state.devices;
+}
+
+/** Subscribe to device-list changes outside React (mirrors the internal listener set). */
+export function onDevicesChange(cb: () => void): () => void {
+    return subscribe(cb);
+}

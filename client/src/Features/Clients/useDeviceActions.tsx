@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import type { Device } from 'deveye-types';
 import { ws } from '@/api/ws';
 import { openInfo } from '@/Components/InfoPopup';
-import { runAgentUpdate } from '../agentUpdate';
+import { startAgentUpdate, useAgentUpdates } from '@/stores/agentUpdates';
 import styles from './Clients.module.css';
 
 type Target = { id: string; name: string } | null;
@@ -29,7 +29,9 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
         await refresh();
     };
     const [actionError, setActionError] = useState<string | null>(null);
-    const [updatingId, setUpdatingId] = useState<string | null>(null);
+    // In-flight self-updates live in the socket-global store so this card spins in
+    // lock-step with the Monitoring surfaces, for the whole update (not just the order).
+    const { isUpdating } = useAgentUpdates();
     // Which toggle (per device) is mid-change, so only that one shows a loader.
     const [serviceBusy, setServiceBusy] = useState<{ id: string; kind: 'autostart' | 'privilege' } | null>(null);
     // Dialog targets (the confirmation dialogs live in the page).
@@ -73,14 +75,11 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
 
     const updateAgent = async (id: string) => {
         setActionError(null);
-        setUpdatingId(id);
         try {
-            await runAgentUpdate(id, refresh);
+            await startAgentUpdate(id);
         } catch (e) {
             // Surface the server's reason (offline, already up to date, unsigned…).
             setActionError(e instanceof Error ? e.message : "Mise à jour de l'agent impossible.");
-        } finally {
-            setUpdatingId(null);
         }
     };
 
@@ -233,7 +232,7 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
 
     return {
         actionError,
-        updatingId,
+        isUpdating,
         serviceBusy,
         deleteTarget,
         setDeleteTarget,
