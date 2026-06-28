@@ -65,6 +65,8 @@ interface PopupProps<TInput> {
     onSave?: () => void;
     /** Fixed viewport-tall layout with a scrollable body (see Dialog's `tall`). */
     tall?: boolean;
+    /** Hold the password-encryption DEK alive while open (see Dialog's `holdSecrecy`). */
+    holdSecrecy?: boolean;
 }
 
 function Popup<TInput = unknown>({
@@ -79,7 +81,8 @@ function Popup<TInput = unknown>({
     autoFocus,
     dirty,
     onSave,
-    tall
+    tall,
+    holdSecrecy
 }: PopupProps<TInput>): React.JSX.Element {
     const [opened, setOpened] = React.useState(false);
 
@@ -114,6 +117,7 @@ function Popup<TInput = unknown>({
             dirty={dirty}
             onSave={onSave}
             tall={tall}
+            holdSecrecy={holdSecrecy}
         >
             {children}
         </Dialog>

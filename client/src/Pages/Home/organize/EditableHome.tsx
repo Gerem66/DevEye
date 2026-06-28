@@ -20,6 +20,9 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import type { Device, HomeCategory, HomeCategoryKind, HomeFeatureId, ShortcutItem } from 'deveye-types';
 
+/** On-grid categories only — the topbar widgets are edited in the navbar. */
+type GridCategory = Exclude<HomeCategory, { kind: 'topbar' }>;
+
 import { useDevices } from '@/stores/devices';
 import {
     removeDevice,
@@ -36,16 +39,22 @@ import { deviceTileVisual, featureTileVisual, shortcutTileVisual, type TileVisua
 import { AddTileDialog } from './AddTileDialog';
 import styles from './organize.module.css';
 
+// The `topbar` category is intentionally not rendered here: its widgets are
+// edited in place in the navbar (see Components/TopNavbar/EditableTopbarWidgets),
+// not as a grid block. It's filtered out of the categories below, so its labels
+// are never shown.
 const CATEGORY_TITLE: Record<HomeCategoryKind, string> = {
     device: 'Appareils',
     feature: 'Fonctionnalités',
-    shortcut: 'Raccourcis'
+    shortcut: 'Raccourcis',
+    topbar: ''
 };
 
 const ADD_LABEL: Record<HomeCategoryKind, string> = {
     device: 'Ajouter un appareil',
     feature: 'Ajouter une fonctionnalité',
-    shortcut: 'Créer un raccourci'
+    shortcut: 'Créer un raccourci',
+    topbar: ''
 };
 
 /** One draggable tile inside a category grid. The whole card is the drag handle;
@@ -127,20 +136,20 @@ function CategoryTiles({
     onAdd,
     onEditShortcut
 }: {
-    category: HomeCategory;
+    category: GridCategory;
     devices: Device[];
     sensors: SensorDescriptor<object>[];
     onAdd: () => void;
     onEditShortcut: (item: ShortcutItem) => void;
 }) {
-    // Devices and shortcuts use the shorter card; features keep the full height.
+    // Only features keep the full height; the rest use the shorter card.
     const compact = category.kind !== 'feature';
     const addClass =
         category.kind === 'feature'
             ? styles.addFeature
-            : category.kind === 'device'
-              ? styles.addDevice
-              : styles.addShortcut;
+            : category.kind === 'shortcut'
+              ? styles.addShortcut
+              : styles.addDevice;
 
     const ids = useMemo<string[]>(() => {
         if (category.kind === 'shortcut') return category.items.map((s) => s.id);
@@ -155,7 +164,7 @@ function CategoryTiles({
         if (from < 0 || to < 0) return;
         if (category.kind === 'feature') setFeatureOrder(arrayMove(category.items, from, to));
         else if (category.kind === 'device') setDeviceOrder(arrayMove(category.items, from, to));
-        else setShortcutOrder(arrayMove(category.items, from, to));
+        else if (category.kind === 'shortcut') setShortcutOrder(arrayMove(category.items, from, to));
     };
 
     const renderTile = (id: string) => {
@@ -218,7 +227,7 @@ function SortableCategory({
     onAdd,
     onEditShortcut
 }: {
-    category: HomeCategory;
+    category: GridCategory;
     devices: Device[];
     sensors: SensorDescriptor<object>[];
     onAdd: () => void;
@@ -282,7 +291,10 @@ export function EditableHome() {
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
     );
 
-    const kinds = layout.categories.map((c) => c.kind);
+    // The topbar widgets are arranged in the navbar itself, so the grid editor
+    // only handles the on-grid categories.
+    const gridCategories = layout.categories.filter((c): c is GridCategory => c.kind !== 'topbar');
+    const kinds: HomeCategoryKind[] = gridCategories.map((c) => c.kind);
 
     const onCategoryDragEnd = (e: DragEndEvent) => {
         const { active, over } = e;
@@ -290,6 +302,7 @@ export function EditableHome() {
         const from = kinds.indexOf(active.id as HomeCategoryKind);
         const to = kinds.indexOf(over.id as HomeCategoryKind);
         if (from < 0 || to < 0) return;
+        // setCategoryOrder keeps any kind not listed (i.e. topbar) at the end.
         setCategoryOrder(arrayMove(kinds, from, to));
     };
 
@@ -297,7 +310,7 @@ export function EditableHome() {
         <div className={styles.editRoot}>
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onCategoryDragEnd}>
                 <SortableContext items={kinds} strategy={verticalListSortingStrategy}>
-                    {layout.categories.map((category) => (
+                    {gridCategories.map((category) => (
                         <SortableCategory
                             key={category.kind}
                             category={category}

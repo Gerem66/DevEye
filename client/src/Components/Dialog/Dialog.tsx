@@ -5,6 +5,7 @@ import { useDismissLayer } from './dismissLayer';
 import { DialogPrimaryContext, type RegisterPrimary } from './dialogPrimary';
 import { DialogCloseContext } from './dialogClose';
 import Button from '@/Components/Button';
+import { useSecrecyHold } from '@/stores/secrecy';
 import styles from './Dialog.module.css';
 
 export interface DialogProps {
@@ -68,6 +69,14 @@ export interface DialogProps {
      * Used by surfaces that switch to a large editor for long content.
      */
     tall?: boolean;
+    /**
+     * When true, hold the password-encryption DEK alive for as long as this
+     * dialog is open: a long edit then never trips the re-validation prompt
+     * mid-action, and a fresh window restarts the instant the dialog closes (for
+     * any reason). A no-op when the feature is off / locked. Set on any dialog
+     * whose primary purpose is to *perform* an encrypted action (forms, editors).
+     */
+    holdSecrecy?: boolean;
 }
 
 /** Fields the open-focus should land on (skips checkboxes/radios and selects). */
@@ -104,9 +113,14 @@ export default function Dialog({
     autoFocus = true,
     dirty = false,
     onSave,
-    tall = false
+    tall = false,
+    holdSecrecy = false
 }: DialogProps) {
     const dialogRef = useRef<HTMLDivElement>(null);
+
+    // Keep the encrypted DEK alive while this dialog stays open (no-op unless
+    // password encryption is on). Released on close/unmount → fresh grace window.
+    useSecrecyHold(open && holdSecrecy);
     // Whether the "unsaved changes" confirmation is currently shown over this
     // dialog. Only reachable when `dirty` and an `onSave` are provided.
     const [confirmDiscard, setConfirmDiscard] = useState(false);

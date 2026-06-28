@@ -5,6 +5,7 @@ import {
     type HomeCategoryKind,
     type HomeFeatureId,
     type HomeLayout,
+    type HomeTopbarWidgetId,
     type ShortcutItem,
     type ShortcutTemplate
 } from 'deveye-types';
@@ -22,7 +23,7 @@ import { ws } from '@/api/ws';
 const KEY = 'deveye:homeLayout';
 
 /** Canonical category order, used to seed defaults and append missing ones. */
-const CANONICAL_KINDS: HomeCategoryKind[] = ['device', 'feature', 'shortcut'];
+const CANONICAL_KINDS: HomeCategoryKind[] = ['device', 'feature', 'shortcut', 'topbar'];
 /** Default feature tiles for a fresh user, in their historical grid order. */
 const DEFAULT_FEATURES: HomeFeatureId[] = ['monitoring', 'weather', 'password', 'notes'];
 
@@ -39,7 +40,10 @@ function defaultLayout(): HomeLayout {
         categories: [
             { kind: 'device', items: [] },
             { kind: 'feature', items: [...DEFAULT_FEATURES] },
-            { kind: 'shortcut', items: [] }
+            { kind: 'shortcut', items: [] },
+            // Topbar mini-widgets default to none — the navbar shows them only once
+            // the user opts in via "Organiser l'accueil".
+            { kind: 'topbar', items: [] }
         ]
     };
 }
@@ -138,6 +142,9 @@ export function setDeviceOrder(items: string[]): void {
 export function setShortcutOrder(items: ShortcutItem[]): void {
     replaceCategory('shortcut', items);
 }
+export function setTopbarOrder(items: HomeTopbarWidgetId[]): void {
+    replaceCategory('topbar', items);
+}
 
 // ── Add / remove ───────────────────────────────────────────────────────────
 export function addFeature(featureId: HomeFeatureId): void {
@@ -151,6 +158,20 @@ export function removeFeature(featureId: HomeFeatureId): void {
     replaceCategory(
         'feature',
         cat.items.filter((id) => id !== featureId)
+    );
+}
+
+export function addTopbarWidget(id: HomeTopbarWidgetId): void {
+    const cat = findCategory(state, 'topbar');
+    if (!cat || cat.items.includes(id)) return;
+    replaceCategory('topbar', [...cat.items, id]);
+}
+export function removeTopbarWidget(id: HomeTopbarWidgetId): void {
+    const cat = findCategory(state, 'topbar');
+    if (!cat) return;
+    replaceCategory(
+        'topbar',
+        cat.items.filter((w) => w !== id)
     );
 }
 

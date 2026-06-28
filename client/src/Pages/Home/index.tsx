@@ -42,6 +42,8 @@ interface ViewConfig {
     preload?: boolean;
     /** Has a grid card to morph from (feature/device) vs. fades in (page). */
     hasCard: boolean;
+    /** Hold the encrypted DEK alive while open (see WidgetPopup's `holdSecrecy`). */
+    holdSecrecy?: boolean;
     /** Static feature/page view component (typed to accept FeatureProps). */
     FullComponent?: ComponentType<FeatureProps>;
     /** Custom render for a device view, bound to its deviceId. */
@@ -58,6 +60,7 @@ const STATIC_VIEWS: ViewConfig[] = [
         cacheDurationMinutes: f.cacheDurationMinutes,
         preload: f.preload,
         hasCard: true,
+        holdSecrecy: f.holdSecrecy,
         FullComponent: f.FullComponent
     })),
     {
@@ -338,6 +341,8 @@ export default function HomePage() {
      *  for an empty category, so categories read as lightly-spaced groups with no
      *  titles. Missing devices are skipped (pruned by the effect above). */
     const renderCategory = (cat: HomeCategory): ReactNode => {
+        // The topbar widgets render in the navbar, not as a grid block.
+        if (cat.kind === 'topbar') return null;
         const tiles: ReactNode[] = [];
         if (cat.kind === 'feature') {
             for (const fid of cat.items) {
@@ -444,6 +449,7 @@ export default function HomePage() {
                     onClose={handleClose}
                     bodyRef={setPopupBodyEl}
                     onExitComplete={handleExitComplete}
+                    holdSecrecy={popupConfig.holdSecrecy}
                 />
             )}
 

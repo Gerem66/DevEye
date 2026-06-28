@@ -1,0 +1,176 @@
+/* In-place editor for the navbar mini-widgets. Sits where the live widgets are,
+   wrapped in a subtle dashed frame so it reads as "editable here" without the
+   heavy grid tiles. */
+.editor {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 3px 5px;
+    border: 1px dashed var(--glass-border-strong, var(--glass-border));
+    border-radius: var(--radius-pill);
+    background: var(--glass-bg-light);
+}
+
+/* A widget chip: the live preview + a corner remove button. */
+.chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: 2px;
+    border-radius: var(--radius-pill);
+    cursor: grab;
+    transition: background var(--transition-fast);
+}
+
+.chip:hover {
+    background: var(--glass-bg);
+}
+
+.chip.dragging {
+    cursor: grabbing;
+    background: var(--glass-bg);
+}
+
+/* The live widget rendered inert — drag + remove own all interactions. */
+.preview {
+    display: inline-flex;
+    align-items: center;
+    pointer-events: none;
+}
+
+/* Remove × — a small glass badge floating on the chip's top-right corner, in the
+   same key as the grid tiles' remove button: neutral at rest, danger on hover. */
+.remove {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 1px solid var(--glass-border-strong);
+    border-radius: 50%;
+    background: var(--surface-widget);
+    color: var(--text-secondary);
+    box-shadow: var(--shadow-sm);
+    cursor: pointer;
+    opacity: 0;
+    transform: scale(0.85);
+    transition:
+        opacity var(--transition-fast),
+        transform var(--transition-fast),
+        color var(--transition-fast),
+        background var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.chip:hover .remove {
+    opacity: 1;
+    transform: none;
+}
+
+.remove:hover {
+    color: var(--danger);
+    background: var(--danger-bg);
+    border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+    transform: scale(1.1);
+}
+
+.remove > span {
+    width: 10px;
+    height: 10px;
+    background-color: currentColor;
+}
+
+/* Trailing add button — matches the chip height, dashed-accent affordance. */
+.add {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px dashed var(--glass-border-strong, var(--glass-border));
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        border-color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.add:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.add .icon {
+    width: 14px;
+    height: 14px;
+    background-color: currentColor;
+}
+
+/* ── Add picker dialog ──────────────────────────────────────────────────── */
+.empty {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.addList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.addItem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-primary);
+    text-align: left;
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.addItem:hover {
+    background: var(--glass-bg);
+    border-color: var(--accent);
+}
+
+.addItemIcon {
+    width: 18px;
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.addItemLabel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    font-weight: 600;
+}
+
+.addItemSub {
+    font-size: 0.78rem;
+    font-weight: 400;
+    color: var(--text-muted);
+}
+
+.addItemPlus {
+    width: 16px;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}

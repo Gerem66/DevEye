@@ -6,10 +6,12 @@ import { FEATURE_CATALOG } from '../catalog';
 import { ShortcutForm } from './ShortcutForm';
 import styles from './organize.module.css';
 
+// `topbar` is never opened here (its widgets are added from the navbar editor).
 const TITLE: Record<HomeCategoryKind, string> = {
     device: 'Ajouter un appareil',
     feature: 'Ajouter une fonctionnalité',
-    shortcut: 'Nouveau raccourci'
+    shortcut: 'Nouveau raccourci',
+    topbar: ''
 };
 
 /** Picker for built-in features not yet on the grid. */

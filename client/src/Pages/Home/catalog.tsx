@@ -31,6 +31,12 @@ export interface FeatureCatalogEntry {
     cacheDurationMinutes?: number;
     /** Warm this view at idle after load so the first open is instant. */
     preload?: boolean;
+    /**
+     * Reads/writes password-encrypted data: hold the DEK alive while the view is
+     * open so a long edit never trips the re-validation prompt (see WidgetPopup's
+     * `holdSecrecy`). Left unset for non-encrypted views (monitoring, weather).
+     */
+    holdSecrecy?: boolean;
 }
 
 export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
@@ -58,7 +64,8 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         icon: 'lock',
         WidgetContent: PasswordWidget,
         FullComponent: FeaturePassword,
-        cacheDurationMinutes: 0
+        cacheDurationMinutes: 0,
+        holdSecrecy: true
     },
     {
         id: 'notes',
@@ -66,7 +73,8 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         icon: 'notes',
         WidgetContent: NotesWidget,
         FullComponent: FeatureNotes,
-        cacheDurationMinutes: 0
+        cacheDurationMinutes: 0,
+        holdSecrecy: true
     }
 ];
 

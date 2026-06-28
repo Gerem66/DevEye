@@ -45,7 +45,24 @@ interface DekEntry {
     holders: number;
     /** Identity tag so a stale command's exit can't wipe a newer DEK. */
     id: number;
+    /**
+     * Lease deadline (epoch ms) of an active "popup hold": while `now < heldUntil`
+     * the DEK is pinned and the grace window cannot flush it. Renewed by client
+     * heartbeats ({@link holdSessionDek}); `0` means no hold. The lease is short
+     * by design so a popup that disappears without releasing (crash, navigation)
+     * lets the DEK fall back to a normal countdown within {@link DEK_HOLD_TTL_MS}.
+     */
+    heldUntil: number;
 }
+
+/**
+ * Lease length of a single popup-hold heartbeat. The client re-sends a hold
+ * every ~10s while an action popup is open; this must comfortably exceed that
+ * cadence (tolerate one dropped beat) yet stay short enough that an abandoned
+ * popup releases the DEK quickly. After the last beat the DEK lives at most
+ * `DEK_HOLD_TTL_MS + graceMs` — never indefinitely.
+ */
+export const DEK_HOLD_TTL_MS = 25_000;
 
 /** Monotonic id stamped on single-use DEK entries (see {@link DekEntry.id}). */
 let dekEntrySeq = 0;
@@ -74,14 +91,17 @@ function dropDek(sessionId: string, entry: DekEntry | undefined): void {
 function liveDek(sessionId: string): Buffer | null {
     const entry = sessionDeks.get(sessionId);
     if (!entry) return null;
-    if (Date.now() >= entry.expiresAt) {
+    const now = Date.now();
+    // An active popup hold pins the DEK: it stays live even past expiresAt until
+    // its lease lapses (see {@link holdSessionDek}).
+    if (now >= entry.expiresAt && now >= entry.heldUntil) {
         dropDek(sessionId, entry);
         return null;
     }
     if (entry.singleUse) {
         entry.consumed = true;
     } else {
-        entry.expiresAt = Date.now() + entry.graceMs;
+        entry.expiresAt = now + entry.graceMs;
     }
     return entry.dek;
 }
@@ -90,11 +110,74 @@ function liveDek(sessionId: string): Buffer | null {
 function hasLiveDek(sessionId: string): boolean {
     const entry = sessionDeks.get(sessionId);
     if (!entry) return false;
-    if (Date.now() >= entry.expiresAt) {
+    const now = Date.now();
+    if (now >= entry.expiresAt && now >= entry.heldUntil) {
         dropDek(sessionId, entry);
         return false;
     }
     return true;
+}
+
+/**
+ * Passive read of when the session's grace window expires (epoch ms), without
+ * sliding it — for status polling / the topbar countdown. Returns null when the
+ * DEK is absent/expired or held single-use (no meaningful countdown to show).
+ */
+export function peekDekExpiry(sessionId: string): number | null {
+    if (!hasLiveDek(sessionId)) return null;
+    const entry = sessionDeks.get(sessionId);
+    if (!entry || entry.singleUse) return null;
+    return entry.expiresAt;
+}
+
+/**
+ * Pin or release the session DEK for an open action popup.
+ *
+ * `active` renews a short lease ({@link DEK_HOLD_TTL_MS}) so the DEK survives a
+ * long-running popup even with no encrypted activity, and slides the underlying
+ * grace window to `lease + graceMs` so releasing (or the lease simply lapsing)
+ * leaves a fresh, full countdown. `!active` clears the lease and restarts a
+ * fresh grace window immediately. A no-op when the session holds no DEK (locked
+ * or feature off) — there is nothing to keep alive.
+ */
+export function holdSessionDek(sessionId: string, active: boolean, graceMs: number): void {
+    const entry = sessionDeks.get(sessionId);
+    if (!entry) return;
+    const now = Date.now();
+    // Don't resurrect an already-expired entry; if the window lapsed before the
+    // first heartbeat landed, treat it as gone.
+    if (now >= entry.expiresAt && now >= entry.heldUntil) {
+        dropDek(sessionId, entry);
+        return;
+    }
+    // Track the freshest configured window so a re-auth-interval change mid-popup
+    // takes effect on release.
+    entry.graceMs = graceMs;
+    if (active) {
+        entry.heldUntil = now + DEK_HOLD_TTL_MS;
+        // Bound the post-popup lifetime: once heartbeats stop, the DEK lives at
+        // most one lease + one fresh grace window, then flushes on its own.
+        entry.expiresAt = entry.heldUntil + graceMs;
+    } else {
+        entry.heldUntil = 0;
+        entry.expiresAt = now + graceMs;
+    }
+}
+
+/**
+ * Slide the grace window forward by one full interval, as if an encrypted action
+ * had just occurred — backs the topbar widget's "postpone the flush" click. A
+ * no-op for single-use or absent/expired entries.
+ */
+export function touchSessionDek(sessionId: string): void {
+    const entry = sessionDeks.get(sessionId);
+    if (!entry || entry.singleUse) return;
+    const now = Date.now();
+    if (now >= entry.expiresAt && now >= entry.heldUntil) {
+        dropDek(sessionId, entry);
+        return;
+    }
+    entry.expiresAt = now + entry.graceMs;
 }
 
 /**
@@ -120,7 +203,8 @@ export function rememberSessionDek(sessionId: string, dek: Buffer, graceMs: numb
             singleUse: true,
             consumed: false,
             holders: 0,
-            id: ++dekEntrySeq
+            id: ++dekEntrySeq,
+            heldUntil: 0
         });
         return;
     }
@@ -131,7 +215,8 @@ export function rememberSessionDek(sessionId: string, dek: Buffer, graceMs: numb
         singleUse: false,
         consumed: false,
         holders: 0,
-        id: 0
+        id: 0,
+        heldUntil: 0
     });
 }
 

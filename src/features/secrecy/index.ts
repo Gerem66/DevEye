@@ -1,16 +1,26 @@
 import {
     secrecyDisable,
     secrecyEnable,
+    secrecyHold,
+    secrecyLock,
     secrecyRecover,
     secrecySetReauth,
     secrecyStatus,
+    secrecyTouch,
     secrecyUnlock,
     type SecrecyStatus
 } from 'deveye-types';
 
 import { hashPassword, verifyPassword } from '@/auth/argon';
 import { WrongSecretError } from '@/Services/SecretKeyService';
-import { DEFAULT_DEK_GRACE_MS, rememberSessionDek } from '@/Services/SecureStore';
+import {
+    DEFAULT_DEK_GRACE_MS,
+    forgetSessionDek,
+    holdSessionDek,
+    peekDekExpiry,
+    rememberSessionDek,
+    touchSessionDek
+} from '@/Services/SecureStore';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
 /**
@@ -36,7 +46,10 @@ async function buildStatus(ctx: FeatureContext): Promise<SecrecyStatus> {
         enabled,
         unlocked: await ctx.secure.isUnlockedPassive(),
         recoveryEnabled: row.recovery_wrapped !== null,
-        reAuthInterval: await reAuthInterval(ctx)
+        reAuthInterval: await reAuthInterval(ctx),
+        // Only meaningful while the feature is on and the session is unlocked with
+        // a real (non single-use) cached DEK; null otherwise (see peekDekExpiry).
+        unlockedUntil: enabled ? peekDekExpiry(ctx.sessionId) : null
     };
 }
 
@@ -171,6 +184,49 @@ export const secrecySetReauthFeature: FeatureDefinition<
     }
 });
 
+export const secrecyHoldFeature: FeatureDefinition<
+    typeof secrecyHold.command,
+    typeof secrecyHold.input,
+    typeof secrecyHold.output
+> = defineFeature({
+    ...secrecyHold,
+    handler: async (ctx, input) => {
+        // Heartbeat from an open action popup: pin (or release) the cached DEK so a
+        // long edit can't trip the re-validation prompt mid-action. A no-op when
+        // locked / feature off (nothing cached to hold), so it's always safe to send.
+        holdSessionDek(ctx.sessionId, input.active, await graceMs(ctx));
+        return { status: await buildStatus(ctx) };
+    }
+});
+
+export const secrecyTouchFeature: FeatureDefinition<
+    typeof secrecyTouch.command,
+    typeof secrecyTouch.input,
+    typeof secrecyTouch.output
+> = defineFeature({
+    ...secrecyTouch,
+    handler: async (ctx) => {
+        // Manual "postpone the flush" from the topbar timer widget.
+        touchSessionDek(ctx.sessionId);
+        return { status: await buildStatus(ctx) };
+    }
+});
+
+export const secrecyLockFeature: FeatureDefinition<
+    typeof secrecyLock.command,
+    typeof secrecyLock.input,
+    typeof secrecyLock.output
+> = defineFeature({
+    ...secrecyLock,
+    handler: async (ctx) => {
+        // Manual re-lock from the topbar widget: drop the cached DEK now so the
+        // next encrypted action re-prompts. No-op when nothing is cached.
+        forgetSessionDek(ctx.sessionId);
+        ctx.audit({ action: 'secrecy.lock', description: 'Coffre chiffré re-verrouillé manuellement' });
+        return { status: await buildStatus(ctx) };
+    }
+});
+
 export const secrecyRecoverFeature: FeatureDefinition<
     typeof secrecyRecover.command,
     typeof secrecyRecover.input,
@@ -211,5 +267,8 @@ export const secrecyFeatures: FeatureDefinition<string, any, any>[] = [
     secrecyEnableFeature,
     secrecyDisableFeature,
     secrecySetReauthFeature,
+    secrecyHoldFeature,
+    secrecyTouchFeature,
+    secrecyLockFeature,
     secrecyRecoverFeature
 ];

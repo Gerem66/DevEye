@@ -1,0 +1,180 @@
+/* Topbar mini-widget for password encryption — a compact pill in the spirit of
+   ConnectionStatus. Three skins (off / locked / unlocked) share the base shape.
+
+   NOTE (same rationale as ConnectionStatus): icon sizes are scoped under `.pill`
+   so the descendant selector (0,2,0) reliably beats the global `.icon` rule. */
+.pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 10px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    background: var(--glass-bg-light);
+    color: var(--text-secondary);
+    font: inherit;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.pill .icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    background-color: currentColor;
+}
+
+/* Label revealed on hover (off / locked states) — width-animated like the
+   reconnect retry, fading + scaling in so it never clips on the rounded edge. */
+.hoverLabel {
+    display: inline-block;
+    max-width: 0;
+    margin-left: 0;
+    overflow: hidden;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.3;
+    opacity: 0;
+    transform: scale(0.96);
+    transform-origin: left center;
+    transition:
+        max-width var(--transition-normal),
+        margin-left var(--transition-normal),
+        opacity var(--transition-normal),
+        transform var(--transition-normal);
+}
+
+.pill:hover .hoverLabel {
+    max-width: 120px;
+    margin-left: 6px;
+    opacity: 1;
+    transform: none;
+}
+
+/* ── State 3: feature off — sober, neutral. ─────────────────────────────── */
+.off {
+    color: var(--text-muted);
+}
+.off:hover {
+    color: var(--text-secondary);
+    border-color: var(--glass-border-strong, var(--glass-border));
+    background: var(--glass-bg);
+}
+
+/* ── State 4: enabled but "validate on every action" — informational, routes to
+   config. Distinct from `off`: a present (not muted) closed padlock with a faint
+   accent edge, so it reads as "active, but nothing to unlock here". ─────────── */
+.always {
+    color: var(--text-secondary);
+    border-style: dashed;
+    border-color: var(--glass-border-strong, var(--glass-border));
+}
+.always:hover {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    background: var(--accent-bg);
+}
+
+/* ── State 1: locked — accent padlock inviting an unlock. ───────────────── */
+.locked {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    background: var(--accent-bg);
+}
+.locked:hover {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* ── State 2: unlocked — a container with padlock + countdown bar. ──────── */
+.unlocked {
+    gap: 7px;
+    color: var(--success);
+    border-color: color-mix(in srgb, var(--success) 35%, transparent);
+    background: color-mix(in srgb, var(--success) 10%, transparent);
+    /* The children own the clicks; the container itself isn't a button. */
+    cursor: default;
+    transition: background var(--transition-fast);
+}
+.unlocked:hover {
+    background: color-mix(in srgb, var(--success) 18%, transparent);
+}
+
+/* Both inner actions are bare, color-inheriting buttons. */
+.lockBtn,
+.barBtn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.lockBtn {
+    border-radius: 50%;
+    transition: opacity var(--transition-fast);
+}
+.lockBtn:hover {
+    opacity: 0.65;
+}
+
+.track {
+    width: 46px;
+    height: 5px;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--success) 22%, transparent);
+    overflow: hidden;
+}
+
+.fill {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--success);
+    transform-origin: left center;
+    /* Smoothly track the 1s ticks without visible stepping. */
+    transition: transform 1s linear;
+}
+
+/* Remaining time — hidden at rest (no reserved space), revealed only on hover.
+   Natural width on hover: a bit of horizontal instability there is acceptable. */
+.hoverTime {
+    max-width: 0;
+    margin-left: 0;
+    overflow: hidden;
+    font-size: 0.74rem;
+    font-weight: 600;
+    line-height: 1.3;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    opacity: 0;
+    transition:
+        max-width var(--transition-normal),
+        margin-left var(--transition-normal),
+        opacity var(--transition-normal);
+}
+.unlocked:hover .hoverTime {
+    max-width: 80px;
+    margin-left: 6px;
+    opacity: 1;
+}
+
+/* Running low — shift the whole pill to a warning hue. */
+.expiring {
+    color: var(--danger);
+    border-color: color-mix(in srgb, var(--danger) 38%, transparent);
+    background: var(--danger-bg);
+}
+.expiring .track {
+    background: color-mix(in srgb, var(--danger) 22%, transparent);
+}
+.expiring .fill {
+    background: var(--danger);
+}

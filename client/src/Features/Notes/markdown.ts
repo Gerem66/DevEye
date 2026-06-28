@@ -16,8 +16,7 @@
 export type InlineMark = 'bold' | 'italic' | 'underline' | 'strike';
 
 type InlineNode =
-    | { type: 'text'; text: string }
-    | { type: 'mark'; mark: InlineMark; delim: string; children: InlineNode[] };
+    { type: 'text'; text: string } | { type: 'mark'; mark: InlineMark; delim: string; children: InlineNode[] };
 
 const DELIMITERS: { delim: string; mark: InlineMark }[] = [
     { delim: '**', mark: 'bold' },

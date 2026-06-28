@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDismissLayer } from '@/Components/Dialog';
+import { useSecrecyHold } from '@/stores/secrecy';
 import styles from './WidgetPopup.module.css';
 
 export interface WidgetPopupProps {
@@ -21,6 +22,12 @@ export interface WidgetPopupProps {
     bodyRef?: (el: HTMLDivElement | null) => void;
     /** Called once the close (exit) animation has fully completed. */
     onExitComplete?: () => void;
+    /**
+     * Hold the password-encryption DEK alive while this panel is open — set for
+     * feature views that read/write encrypted data (notes, passwords) so a long
+     * edit never trips the re-validation prompt. A fresh window restarts on close.
+     */
+    holdSecrecy?: boolean;
     /** Optional fallback content rendered directly in the body. */
     children?: ReactNode;
 }
@@ -35,10 +42,21 @@ export interface WidgetPopupProps {
  * plays both ways). Feature *content* is kept alive across opens by portaling
  * it into `bodyRef` from the dashboard, rather than being a normal child here.
  */
-export default function WidgetPopup({ layoutId, open, onClose, bodyRef, onExitComplete, children }: WidgetPopupProps) {
+export default function WidgetPopup({
+    layoutId,
+    open,
+    onClose,
+    bodyRef,
+    onExitComplete,
+    holdSecrecy,
+    children
+}: WidgetPopupProps) {
     // Escape closes the topmost layer only: a dialog opened over the feature panel
     // closes first, then a second Escape closes the panel itself (tree order).
     useDismissLayer(open, onClose);
+
+    // Keep the encrypted DEK alive for sensitive feature views while open.
+    useSecrecyHold(Boolean(open && holdSecrecy));
 
     return (
         <AnimatePresence onExitComplete={onExitComplete}>

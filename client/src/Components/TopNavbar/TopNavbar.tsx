@@ -2,11 +2,10 @@ import { type MouseEvent as ReactMouseEvent, useState, useRef, useEffect } from 
 import { motion, AnimatePresence } from 'framer-motion';
 import Button from '@/Components/Button';
 import { useAuth } from '@/auth/AuthProvider';
-import { useDevices } from '@/stores/devices';
-import { useWeather } from '@/stores/weather';
-import { wmoIcon } from '@/Features/Weather/wmoIcon';
 import { DeploymentStatus } from './DeploymentStatus';
 import { ConnectionStatus } from './ConnectionStatus';
+import { TopbarWidgets } from './topbarWidgets';
+import { EditableTopbarWidgets } from './EditableTopbarWidgets';
 import styles from './TopNavbar.module.css';
 
 const ENV = import.meta.env.VITE_ENV;
@@ -42,36 +41,6 @@ export interface TopNavbarProps {
     organizing?: boolean;
     /** Leave the home organization mode. */
     onDoneOrganizing?: () => void;
-}
-
-/** Always-visible main info: current weather (primary city) + online devices. */
-function TopbarStatus() {
-    const { devices: allDevices } = useDevices();
-    const { report } = useWeather();
-    const current = report?.current ?? null;
-
-    // Exclude archived devices (history-only) from the live fleet count.
-    const devices = allDevices.filter((d) => d.status !== 'archived');
-    const onlineCount = devices.filter((d) => d.online).length;
-    if (devices.length === 0 && !current) return null;
-
-    return (
-        <div className={styles.status}>
-            {current && (
-                <span className={styles.statusItem} title={report?.label ?? 'Météo'}>
-                    <span className={styles.statusTemp}>
-                        {wmoIcon(current.code)} {Math.round(current.temperature)}°
-                    </span>
-                </span>
-            )}
-            {devices.length > 0 && (
-                <span className={styles.statusItem} title='Appareils en ligne'>
-                    <span className={`${styles.statusDot} ${onlineCount > 0 ? styles.live : ''}`} />
-                    {onlineCount}/{devices.length}
-                </span>
-            )}
-        </div>
-    );
 }
 
 /**
@@ -218,7 +187,9 @@ export default function TopNavbar({
                 {/* Hidden in the dev server — the agents aren't built there, so the
                     deployment status would load forever. */}
                 {!import.meta.env.DEV && <DeploymentStatus />}
-                <TopbarStatus />
+                {/* The navbar mini-widgets — edited right here while organizing the
+                    home (no detour through the grid), live otherwise. */}
+                {organizing ? <EditableTopbarWidgets /> : <TopbarWidgets onOpenSecurity={onOpenSecurity} />}
 
                 {user && (
                     <button className={styles.profileBtn} onClick={() => setMenuOpen((v) => !v)}>
