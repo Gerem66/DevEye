@@ -506,13 +506,18 @@
 }
 
 /* Created / last-modified stamps shown when editing, sitting in the footer just
-   left of the "Annuler" button. Kept on one line and allowed to shrink. */
+   left of the "Annuler" button. Allowed to shrink (and ellipsize) so they never
+   force the footer wider than the popup. */
 .editorDates {
+    flex: 0 1 auto;
+    min-width: 0;
     margin: 0;
     font-size: 0.75rem;
     line-height: 1.35;
     color: var(--text-muted);
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Blocks editor */
@@ -797,8 +802,17 @@
     height: 14px;
 }
 
-/* The "+" (add block) and "Aa" (format) menu triggers, grouped together in the
-   footer just after the note's icon actions. */
+/* Compact layout only: the +/Aa tools share a row above the footer with the
+   note's date stamps (pushed to the right). */
+.addBar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-md);
+    margin-top: var(--space-sm);
+}
+
+/* The "+" (add block) and "Aa" (format) menu triggers, grouped together. */
 .addTools {
     display: inline-flex;
     align-items: center;

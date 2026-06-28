@@ -330,13 +330,15 @@ export default function NoteEditor() {
                             </button>
                         </>
                     }
-                    footerEnd={
+                    footerDates={
+                        mode === 'edit' && created !== null && updated !== null ? (
+                            <p className={styles.editorDates}>
+                                Créée le {formatStamp(created)} · Modifiée le {formatStamp(updated)}
+                            </p>
+                        ) : undefined
+                    }
+                    footerButtons={
                         <>
-                            {mode === 'edit' && created !== null && updated !== null && (
-                                <p className={styles.editorDates}>
-                                    Créée le {formatStamp(created)} · Modifiée le {formatStamp(updated)}
-                                </p>
-                            )}
                             <DialogCancelButton>Annuler</DialogCancelButton>
                             <Button onClick={save}>Enregistrer</Button>
                         </>
