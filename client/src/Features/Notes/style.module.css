@@ -497,14 +497,12 @@
     margin: 0;
 }
 
-/* Created / last-modified stamps shown when editing an existing note. Stacked
-   and right-aligned so they share the add-block row with the "+" button. */
+/* Created / last-modified stamps shown when editing an existing note. Kept on a
+   single right-aligned line so they share the add-block row with the "+" button
+   while taking less room. */
 .editorDates {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    text-align: right;
     margin: 0;
+    text-align: right;
     font-size: 0.75rem;
     line-height: 1.35;
     color: var(--text-muted);

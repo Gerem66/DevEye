@@ -243,8 +243,7 @@ export default function NoteEditor() {
                     aside={
                         mode === 'edit' && created !== null && updated !== null ? (
                             <p className={styles.editorDates}>
-                                <span>Créée le {formatStamp(created)}</span>
-                                <span>Modifiée le {formatStamp(updated)}</span>
+                                Créée le {formatStamp(created)} · Modifiée le {formatStamp(updated)}
                             </p>
                         ) : undefined
                     }
