@@ -645,6 +645,31 @@
     color: var(--success, var(--accent));
 }
 
+/* Bullet list marker: a small solid dot aligned with the first text line. */
+.blockBullet {
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin-top: 8px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+}
+
+/* Numbered list marker: the item's ordinal, sharing the text metrics so its
+   baseline lines up with the first line of the textarea. */
+.blockNumber {
+    flex-shrink: 0;
+    align-self: flex-start;
+    min-width: 16px;
+    text-align: right;
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+    user-select: none;
+}
+
 .blockText {
     flex: 1 1 auto;
     border: none;

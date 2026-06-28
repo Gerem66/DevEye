@@ -21,6 +21,26 @@ interface BlockEditorProps {
  */
 const CHECK_TRIGGER = /^(?:- )?\[ ?\] ?/;
 
+/** `- ` (or `* `) at the very start turns a paragraph into a bullet list item. */
+const BULLET_TRIGGER = /^[-*] /;
+
+/** `1. ` / `1) ` (any number) at the start turns it into a numbered list item. */
+const NUMBER_TRIGGER = /^\d+[.)] /;
+
+/** A fresh block of the same kind as `b`, carrying `text` (used on Enter). */
+function siblingBlock(b: NoteBlock, text: string): NoteBlock {
+    switch (b.type) {
+        case 'check':
+            return { type: 'check', text, done: false };
+        case 'bullet':
+            return { type: 'bullet', text };
+        case 'number':
+            return { type: 'number', text };
+        default:
+            return { type: 'text', text };
+    }
+}
+
 /** Auto-grow a textarea to fit its content (no inner scrollbar). */
 function autosize(el: HTMLTextAreaElement | null): void {
     if (!el) return;
@@ -210,17 +230,14 @@ export default function BlockEditor({ blocks, onChange, aside }: BlockEditorProp
                 e.preventDefault();
                 const before = b.text.slice(0, ta.selectionStart);
                 const after = b.text.slice(ta.selectionEnd);
-                splitAt(
-                    index,
-                    before,
-                    b.type === 'check' ? { type: 'check', text: after, done: false } : { type: 'text', text: after }
-                );
+                splitAt(index, before, siblingBlock(b, after));
                 return;
             }
             if (e.key === 'Backspace' && ta.selectionStart === 0 && ta.selectionEnd === 0) {
-                // At the start of a checklist item, demote it to a paragraph
-                // (keeping its text) before it can be removed by a second press.
-                if (b.type === 'check') {
+                // At the start of a typed item (checklist / list), demote it to a
+                // plain paragraph (keeping its text) before it can be removed by a
+                // second press.
+                if (b.type !== 'text') {
                     e.preventDefault();
                     replaceBlock(index, { type: 'text', text: b.text }, 0);
                     return;
@@ -238,12 +255,24 @@ export default function BlockEditor({ blocks, onChange, aside }: BlockEditorProp
         (e: React.ChangeEvent<HTMLTextAreaElement>, index: number) => {
             const value = e.target.value;
             const block = blocks[index];
-            // Typing a checklist prefix at the start of a paragraph converts it
-            // to a checklist item, keeping any text that already followed.
+            // Typing a markdown-ish prefix at the start of a paragraph converts it
+            // to the matching item kind, keeping any text that already followed.
             if (block.type === 'text') {
-                const m = CHECK_TRIGGER.exec(value);
-                if (m) {
-                    replaceBlock(index, { type: 'check', text: value.slice(m[0].length), done: false }, 0);
+                const check = CHECK_TRIGGER.exec(value);
+                if (check) {
+                    replaceBlock(index, { type: 'check', text: value.slice(check[0].length), done: false }, 0);
+                    autosize(e.target);
+                    return;
+                }
+                const bullet = BULLET_TRIGGER.exec(value);
+                if (bullet) {
+                    replaceBlock(index, { type: 'bullet', text: value.slice(bullet[0].length) }, 0);
+                    autosize(e.target);
+                    return;
+                }
+                const number = NUMBER_TRIGGER.exec(value);
+                if (number) {
+                    replaceBlock(index, { type: 'number', text: value.slice(number[0].length) }, 0);
                     autosize(e.target);
                     return;
                 }
@@ -326,6 +355,15 @@ export default function BlockEditor({ blocks, onChange, aside }: BlockEditorProp
     const remaining = drag === null ? [] : blocks.map((_, i) => i).filter((i) => i !== drag.from);
     const placeholderBefore = drag === null ? null : drag.to < remaining.length ? remaining[drag.to] : -1;
 
+    // Display index of each numbered item, restarting at 1 after any non-number
+    // block — so consecutive numbered rows read 1, 2, 3… and stay coherent.
+    const numbering: number[] = [];
+    let run = 0;
+    for (let i = 0; i < blocks.length; i++) {
+        run = blocks[i].type === 'number' ? run + 1 : 0;
+        numbering[i] = run;
+    }
+
     const renderRow = (block: NoteBlock, index: number) => (
         <div
             key={index}
@@ -354,6 +392,12 @@ export default function BlockEditor({ blocks, onChange, aside }: BlockEditorProp
                     <span className={`icon ${styles.badge} icon-${block.done ? 'square-check' : 'square-empty'}`} />
                 </button>
             )}
+            {block.type === 'bullet' && <span className={styles.blockBullet} aria-hidden='true' />}
+            {block.type === 'number' && (
+                <span className={styles.blockNumber} aria-hidden='true'>
+                    {numbering[index]}.
+                </span>
+            )}
             <textarea
                 ref={(el) => {
                     refs.current[index] = el;
@@ -362,7 +406,7 @@ export default function BlockEditor({ blocks, onChange, aside }: BlockEditorProp
                 className={`${styles.blockText} ${block.type === 'check' && block.done ? styles.blockTextDone : ''}`}
                 rows={1}
                 value={block.text}
-                placeholder={block.type === 'check' ? 'Élément…' : 'Écrivez quelque chose…'}
+                placeholder={block.type === 'text' ? 'Écrivez quelque chose…' : 'Élément…'}
                 onChange={(e) => onTextChange(e, index)}
                 onKeyDown={(e) => onKeyDown(e, index)}
             />
@@ -396,8 +440,10 @@ export default function BlockEditor({ blocks, onChange, aside }: BlockEditorProp
                             }`}
                         />
                     )}
+                    {b.type === 'bullet' && <span className={styles.blockBullet} />}
+                    {b.type === 'number' && <span className={styles.blockNumber}>{numbering[drag.from]}.</span>}
                     <span className={`${styles.ghostText} ${b.type === 'check' && b.done ? styles.blockTextDone : ''}`}>
-                        {b.text || (b.type === 'check' ? 'Élément…' : 'Écrivez quelque chose…')}
+                        {b.text || (b.type === 'text' ? 'Écrivez quelque chose…' : 'Élément…')}
                     </span>
                 </div>
             );
@@ -445,6 +491,20 @@ export default function BlockEditor({ blocks, onChange, aside }: BlockEditorProp
                             onClick={() => addBlock({ type: 'check', text: '', done: false })}
                         >
                             <span className={`icon ${styles.toggleIcon} icon-square-empty`} /> Case à cocher
+                        </button>
+                        <button
+                            type='button'
+                            className={styles.menuItem}
+                            onClick={() => addBlock({ type: 'bullet', text: '' })}
+                        >
+                            <span className={`icon ${styles.toggleIcon} icon-list`} /> Liste
+                        </button>
+                        <button
+                            type='button'
+                            className={styles.menuItem}
+                            onClick={() => addBlock({ type: 'number', text: '' })}
+                        >
+                            <span className={`icon ${styles.toggleIcon} icon-list-numbered`} /> Liste numérotée
                         </button>
                     </div>
                 )}
