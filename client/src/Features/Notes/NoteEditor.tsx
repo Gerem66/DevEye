@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import styles from './style.module.css';
 
 import Popup, { ClosePopup, OpenPopup } from '@/Components/Popup';
+import { DialogCancelButton } from '@/Components/Dialog';
 import { openInfo } from '@/Components/InfoPopup';
 import Button from '@/Components/Button';
 import BlockEditor from './BlockEditor';
@@ -109,6 +110,9 @@ export default function NoteEditor() {
     const [lockChange, setLockChange] = useState<LockChange>(undefined);
     const [created, setCreated] = useState<number | null>(null);
     const [updated, setUpdated] = useState<number | null>(null);
+    // Snapshot of the editable state the editor opened with, to detect unsaved
+    // edits (blocks compared structurally).
+    const initial = useRef({ title: '', pinned: false, blocks: '' });
 
     function handleOpen(input: NoteEditorInput) {
         const note = input?.note ?? null;
@@ -122,17 +126,27 @@ export default function NoteEditor() {
             setWasLocked(false);
             setCreated(null);
             setUpdated(null);
+            initial.current = { title: '', pinned: false, blocks: JSON.stringify(emptyBlocks()) };
             return;
         }
         setMode('edit');
         setTitle(note.title);
         setFolderId(note.folderId);
-        setBlocks(note.blocks.length > 0 ? note.blocks : emptyBlocks());
+        const openBlocks = note.blocks.length > 0 ? note.blocks : emptyBlocks();
+        setBlocks(openBlocks);
         setPinned(note.pinned);
         setWasLocked(note.locked);
         setCreated(note.created);
         setUpdated(note.updated);
+        initial.current = { title: note.title, pinned: note.pinned, blocks: JSON.stringify(openBlocks) };
     }
+
+    // Dirty when content/pin changed or a lock change is pending.
+    const dirty =
+        lockChange !== undefined ||
+        title !== initial.current.title ||
+        pinned !== initial.current.pinned ||
+        JSON.stringify(blocks) !== initial.current.blocks;
 
     function close(result: NoteEditorResult = null) {
         ClosePopup(NOTE_EDITOR_POPUP, result);
@@ -198,6 +212,8 @@ export default function NoteEditor() {
             onInputChange={handleOpen}
             onClosePopup={() => close(null)}
             onSubmit={save}
+            dirty={dirty}
+            onSave={save}
             headerAction={
                 <button
                     type='button'
@@ -284,9 +300,7 @@ export default function NoteEditor() {
                         </button>
                     </div>
                     <div className={styles.footerRight}>
-                        <Button variant='secondary' onClick={() => close(null)}>
-                            Annuler
-                        </Button>
+                        <DialogCancelButton>Annuler</DialogCancelButton>
                         <Button onClick={save}>Enregistrer</Button>
                     </div>
                 </div>

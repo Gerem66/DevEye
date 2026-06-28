@@ -59,6 +59,10 @@ interface PopupProps<TInput> {
     onSubmit?: () => void;
     /** Autofocus the first field on open (see Dialog's `autoFocus`). Defaults true. */
     autoFocus?: boolean;
+    /** Unsaved changes present — guard the close (see Dialog's `dirty`). Needs `onSave`. */
+    dirty?: boolean;
+    /** Save action used by the unsaved-changes prompt (see Dialog's `onSave`). */
+    onSave?: () => void;
 }
 
 function Popup<TInput = unknown>({
@@ -70,7 +74,9 @@ function Popup<TInput = unknown>({
     onInputChange = null,
     onClosePopup = null,
     onSubmit,
-    autoFocus
+    autoFocus,
+    dirty,
+    onSave
 }: PopupProps<TInput>): React.JSX.Element {
     const [opened, setOpened] = React.useState(false);
 
@@ -102,6 +108,8 @@ function Popup<TInput = unknown>({
             headerAction={headerAction}
             onSubmit={onSubmit}
             autoFocus={autoFocus}
+            dirty={dirty}
+            onSave={onSave}
         >
             {children}
         </Dialog>

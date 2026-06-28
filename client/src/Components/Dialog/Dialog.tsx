@@ -1,8 +1,10 @@
-import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useRef } from 'react';
+import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDismissLayer } from './dismissLayer';
 import { DialogPrimaryContext, type RegisterPrimary } from './dialogPrimary';
+import { DialogCloseContext } from './dialogClose';
+import Button from '@/Components/Button';
 import styles from './Dialog.module.css';
 
 export interface DialogProps {
@@ -47,6 +49,19 @@ export interface DialogProps {
      * false for dialogs where grabbing focus is undesirable. Defaults to true.
      */
     autoFocus?: boolean;
+    /**
+     * When true, the dialog holds unsaved changes: any close attempt (overlay /
+     * Escape / × / a cancel button wired through {@link useDialogClose}) first
+     * pops a confirmation offering Annuler / Quitter sans enregistrer /
+     * Enregistrer, so edits are never lost by accident. Requires `onSave`.
+     */
+    dirty?: boolean;
+    /**
+     * The dialog's save action, used by the unsaved-changes confirmation's
+     * "Enregistrer" choice. Typically the same handler as `onSubmit` / the
+     * footer's primary button.
+     */
+    onSave?: () => void;
 }
 
 /** Fields the open-focus should land on (skips checkboxes/radios and selects). */
@@ -74,9 +89,26 @@ export default function Dialog({
     width = 460,
     dismissible = true,
     onSubmit,
-    autoFocus = true
+    autoFocus = true,
+    dirty = false,
+    onSave
 }: DialogProps) {
     const dialogRef = useRef<HTMLDivElement>(null);
+    // Whether the "unsaved changes" confirmation is currently shown over this
+    // dialog. Only reachable when `dirty` and an `onSave` are provided.
+    const [confirmDiscard, setConfirmDiscard] = useState(false);
+    const guarded = dirty && !!onSave;
+
+    // A close attempt either pops the confirmation (when dirty) or closes outright.
+    const attemptClose = useCallback(() => {
+        if (guarded) setConfirmDiscard(true);
+        else onClose();
+    }, [guarded, onClose]);
+
+    // Once the dialog is gone (or no longer dirty) the confirmation can't linger.
+    useEffect(() => {
+        if (!open || !guarded) setConfirmDiscard(false);
+    }, [open, guarded]);
     // Primary action registered by inner content via useDialogSubmit (fallback
     // when no onSubmit prop is given).
     const contentPrimaryRef = useRef<(() => void) | null>(null);
@@ -86,7 +118,9 @@ export default function Dialog({
 
     // Escape closes the topmost layer only. A non-dismissible dialog still pushes
     // a layer (absorbing Escape) so it never leaks to whatever is underneath.
-    useDismissLayer(open, dismissible ? onClose : null);
+    // While the discard confirmation is up it owns the topmost layer, so Escape
+    // there cancels it rather than this dialog.
+    useDismissLayer(open, dismissible ? attemptClose : null);
 
     // Autofocus the main field (or the dialog) once the panel has mounted.
     useEffect(() => {
@@ -115,12 +149,21 @@ export default function Dialog({
         primary();
     };
 
+    const discard = () => {
+        setConfirmDiscard(false);
+        onClose();
+    };
+    const saveAndClose = () => {
+        setConfirmDiscard(false);
+        onSave?.();
+    };
+
     // Render through a portal to <body> so every dialog escapes its declaring
     // subtree: its full-screen backdrop always sits at the document root, above
     // any feature popup it was opened from. Clicking the backdrop then dismisses
     // *this* dialog, never a popup underneath — and ancestor transforms (the
     // morphing widget popup) can't shift or clip it.
-    return createPortal(
+    const portal = createPortal(
         <AnimatePresence>
             {open && (
                 <div className={styles.root}>
@@ -130,7 +173,7 @@ export default function Dialog({
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.2, ease: 'easeOut' }}
-                        onClick={dismissible ? onClose : undefined}
+                        onClick={dismissible ? attemptClose : undefined}
                     />
                     <motion.div
                         ref={dialogRef}
@@ -147,20 +190,56 @@ export default function Dialog({
                     >
                         <div className={styles.corner}>
                             {headerAction}
-                            <button className={styles.close} onClick={onClose} aria-label='Fermer'>
+                            <button className={styles.close} onClick={attemptClose} aria-label='Fermer'>
                                 <span className='icon icon-x' />
                             </button>
                         </div>
                         {title && <h3 className={styles.title}>{title}</h3>}
                         {description && <p className={styles.description}>{description}</p>}
-                        <DialogPrimaryContext.Provider value={registerPrimary}>
-                            <div className={styles.body}>{children}</div>
-                        </DialogPrimaryContext.Provider>
+                        <DialogCloseContext.Provider value={attemptClose}>
+                            <DialogPrimaryContext.Provider value={registerPrimary}>
+                                <div className={styles.body}>{children}</div>
+                            </DialogPrimaryContext.Provider>
+                        </DialogCloseContext.Provider>
                         {footer && <div className={styles.footer}>{footer}</div>}
                     </motion.div>
                 </div>
             )}
         </AnimatePresence>,
         document.body
+    );
+
+    // The unsaved-changes confirmation, normalised here so every dirty Dialog
+    // gets the same three-way prompt. It's a plain (non-guarded) Dialog stacked
+    // over this one, so it owns the topmost dismiss layer.
+    // The confirmation is only ever needed by a dialog that can save, so gate it
+    // on `onSave`. This also stops the self-recursion: the confirmation Dialog
+    // below carries no `onSave`, so it renders no confirmation of its own.
+    return (
+        <>
+            {portal}
+            {onSave && (
+                <Dialog
+                    open={confirmDiscard}
+                    onClose={() => setConfirmDiscard(false)}
+                    onSubmit={saveAndClose}
+                    title='Modifications non enregistrées'
+                    width={460}
+                    footer={
+                        <>
+                            <Button variant='secondary' onClick={() => setConfirmDiscard(false)}>
+                                Annuler
+                            </Button>
+                            <Button variant='danger' onClick={discard}>
+                                Quitter sans enregistrer
+                            </Button>
+                            <Button onClick={saveAndClose}>Enregistrer</Button>
+                        </>
+                    }
+                >
+                    <p>Des modifications n’ont pas été enregistrées. Voulez-vous les enregistrer avant de fermer ?</p>
+                </Dialog>
+            )}
+        </>
     );
 }

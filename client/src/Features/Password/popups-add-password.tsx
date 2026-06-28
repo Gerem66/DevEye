@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import styles from './style.module.css';
 
 import Popup, { ClosePopup } from '@/Components/Popup';
+import { DialogCancelButton } from '@/Components/Dialog';
 import Button from '@/Components/Button';
 import TextInput from '@/Components/TextInput';
 import SelectInput from '@/Components/SelectInput';
@@ -28,6 +29,9 @@ function PasswordPopupAdd({ passwordCategories }: PasswordPopupAddProps) {
     const [errorService, setErrorService] = useState('');
     const [errorEmail, setErrorEmail] = useState('');
 
+    // Snapshot of the values the popup opened with, to detect unsaved edits.
+    const initial = useRef({ category: '', service: '', email: '', password: '', status: 'active' as PasswordStatus });
+
     function handleOpenPopup(input: PasswordEntry | null) {
         if (!input || input.id === 0) {
             setMode('add');
@@ -37,6 +41,7 @@ function PasswordPopupAdd({ passwordCategories }: PasswordPopupAddProps) {
             setEmail('');
             setPassword('');
             setStatus('active');
+            initial.current = { category: '', service: '', email: '', password: '', status: 'active' };
             return;
         }
 
@@ -47,7 +52,21 @@ function PasswordPopupAdd({ passwordCategories }: PasswordPopupAddProps) {
         setEmail(input.email);
         setPassword(input.password);
         setStatus(input.status);
+        initial.current = {
+            category: input.category,
+            service: input.service,
+            email: input.email,
+            password: input.password,
+            status: input.status
+        };
     }
+
+    const dirty =
+        category !== initial.current.category ||
+        service !== initial.current.service ||
+        email !== initial.current.email ||
+        password !== initial.current.password ||
+        status !== initial.current.status;
 
     function handleAddPassword() {
         if (category === '' || service === '' || email === '') {
@@ -90,6 +109,8 @@ function PasswordPopupAdd({ passwordCategories }: PasswordPopupAddProps) {
             onInputChange={handleOpenPopup}
             onClosePopup={() => handleBack()}
             onSubmit={handleAddPassword}
+            dirty={dirty}
+            onSave={handleAddPassword}
         >
             <p className={styles.popupHint}>
                 Stocker un mot de passe est une bonne pratique pour protéger vos comptes. Les informations sont
@@ -143,9 +164,7 @@ function PasswordPopupAdd({ passwordCategories }: PasswordPopupAddProps) {
 
             <div className={styles.popupActions}>
                 <div className={styles.popupActionsLeft}>
-                    <Button variant='secondary' onClick={() => handleBack()}>
-                        Fermer
-                    </Button>
+                    <DialogCancelButton>Fermer</DialogCancelButton>
                     {mode === 'edit' && (
                         <Button variant='danger' onClick={handleDelete}>
                             Supprimer
