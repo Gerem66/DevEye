@@ -7,6 +7,7 @@ import { DialogCancelButton } from '@/Components/Dialog';
 import { openInfo } from '@/Components/InfoPopup';
 import Button from '@/Components/Button';
 import BlockEditor from './BlockEditor';
+import { exportNotePdf } from './exportPdf';
 import { NOTE_LOCK_SET_POPUP, type NoteLockSetInput } from './LockSetPopup';
 import { NOTE_LOCK_MANAGE_POPUP, type LockManageResult } from './LockManagePopup';
 import { NOTE_CONFIRM_POPUP, type ConfirmInput } from './ConfirmPopup';
@@ -308,6 +309,23 @@ export default function NoteEditor() {
                             onClick={() => void toggleLock()}
                         >
                             <span className={`icon ${styles.toggleIcon} icon-${lockedAfterSave ? 'lock' : 'unlock'}`} />
+                        </button>
+                        <button
+                            type='button'
+                            className={styles.iconToggle}
+                            title='Exporter en PDF'
+                            aria-label='Exporter en PDF'
+                            onClick={() =>
+                                exportNotePdf(
+                                    title,
+                                    normalizeBlocks(blocks),
+                                    mode === 'edit' && updated !== null
+                                        ? `Modifiée le ${formatStamp(updated)}`
+                                        : undefined
+                                )
+                            }
+                        >
+                            <span className={`icon ${styles.toggleIcon} icon-download`} />
                         </button>
                     </div>
                     <div className={styles.footerRight}>
