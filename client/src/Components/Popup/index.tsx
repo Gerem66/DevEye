@@ -63,6 +63,8 @@ interface PopupProps<TInput> {
     dirty?: boolean;
     /** Save action used by the unsaved-changes prompt (see Dialog's `onSave`). */
     onSave?: () => void;
+    /** Fixed viewport-tall layout with a scrollable body (see Dialog's `tall`). */
+    tall?: boolean;
 }
 
 function Popup<TInput = unknown>({
@@ -76,7 +78,8 @@ function Popup<TInput = unknown>({
     onSubmit,
     autoFocus,
     dirty,
-    onSave
+    onSave,
+    tall
 }: PopupProps<TInput>): React.JSX.Element {
     const [opened, setOpened] = React.useState(false);
 
@@ -110,6 +113,7 @@ function Popup<TInput = unknown>({
             autoFocus={autoFocus}
             dirty={dirty}
             onSave={onSave}
+            tall={tall}
         >
             {children}
         </Dialog>

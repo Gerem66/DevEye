@@ -62,6 +62,12 @@ export interface DialogProps {
      * footer's primary button.
      */
     onSave?: () => void;
+    /**
+     * Lay the dialog out at a fixed, viewport-tall height as a flex column: the
+     * title and footer stay pinned and the body becomes the single scroll area.
+     * Used by surfaces that switch to a large editor for long content.
+     */
+    tall?: boolean;
 }
 
 /** Fields the open-focus should land on (skips checkboxes/radios and selects). */
@@ -91,7 +97,8 @@ export default function Dialog({
     onSubmit,
     autoFocus = true,
     dirty = false,
-    onSave
+    onSave,
+    tall = false
 }: DialogProps) {
     const dialogRef = useRef<HTMLDivElement>(null);
     // Whether the "unsaved changes" confirmation is currently shown over this
@@ -179,7 +186,7 @@ export default function Dialog({
                         ref={dialogRef}
                         tabIndex={-1}
                         onKeyDown={handleKeyDown}
-                        className={styles.dialog}
+                        className={`${styles.dialog} ${tall ? styles.dialogTall : ''}`}
                         style={{ maxWidth: width }}
                         role='dialog'
                         aria-modal='true'
@@ -198,7 +205,7 @@ export default function Dialog({
                         {description && <p className={styles.description}>{description}</p>}
                         <DialogCloseContext.Provider value={attemptClose}>
                             <DialogPrimaryContext.Provider value={registerPrimary}>
-                                <div className={styles.body}>{children}</div>
+                                <div className={`${styles.body} ${tall ? styles.bodyFill : ''}`}>{children}</div>
                             </DialogPrimaryContext.Provider>
                         </DialogCloseContext.Provider>
                         {footer && <div className={styles.footer}>{footer}</div>}

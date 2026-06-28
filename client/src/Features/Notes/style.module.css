@@ -401,6 +401,14 @@
     gap: var(--space-md);
 }
 
+/* In the large layout the editor fills the tall dialog body so its block list
+   (.blocksFill) can flex and scroll while the title/footer stay pinned. */
+.editorFill {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+}
+
 /* Info button rendered in the Dialog's top-right corner cluster (headerAction),
    styled like the info buttons on the Security page. The Dialog owns its
    placement next to the ×, so there's no manual positioning here. */
@@ -515,7 +523,14 @@
     gap: 2px;
     max-height: 42vh;
     overflow: auto;
-    transition: max-height 0.25s ease;
+}
+
+/* Large editor layout: the block list fills the available height and is the
+   sole scroll area, keeping the title and footer pinned. */
+.blocksFill {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
 }
 
 .block {

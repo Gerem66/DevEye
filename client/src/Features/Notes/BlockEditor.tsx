@@ -9,8 +9,9 @@ import type { NoteBlock } from 'deveye-types';
 interface BlockEditorProps {
     blocks: NoteBlock[];
     onChange: (blocks: NoteBlock[]) => void;
-    /** Lift the inner scroll cap so the popup itself grows (in vh). */
-    maxHeightVh?: number;
+    /** Let the block list flex to fill its parent and be the only scroll area
+     *  (used when the editor popup is in its large, fixed-height layout). */
+    fill?: boolean;
     /** Content shown right-aligned on the add-block row (e.g. the note's
      *  created/updated stamps), so it shares that line rather than taking one
      *  of its own. */
@@ -93,7 +94,7 @@ interface DragState {
  *
  * Rows reorder by dragging the grip on the left (see {@link DragState}).
  */
-export default function BlockEditor({ blocks, onChange, maxHeightVh, aside }: BlockEditorProps) {
+export default function BlockEditor({ blocks, onChange, fill, aside }: BlockEditorProps) {
     const refs = useRef<(RichTextHandle | null)[]>([]);
     const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
     const focusIndex = useRef<number | null>(null);
@@ -517,8 +518,7 @@ export default function BlockEditor({ blocks, onChange, maxHeightVh, aside }: Bl
     return (
         <>
             <div
-                className={`${styles.blocks} ${drag !== null ? styles.dragging : ''}`}
-                style={maxHeightVh ? { maxHeight: `${maxHeightVh}vh` } : undefined}
+                className={`${styles.blocks} ${fill ? styles.blocksFill : ''} ${drag !== null ? styles.dragging : ''}`}
                 onDragOver={onContainerDragOver}
                 onDrop={finishDrag}
             >

@@ -179,17 +179,16 @@ export default function NoteEditor() {
         if (confirmed === true) close('delete');
     }
 
-    // Past ~10 lines of content the base dialog gets cramped, so the editor grows
-    // — wider and taller — up toward a feature-sized surface, and shrinks back as
-    // the content does. Below the threshold it keeps the compact base size.
-    const BASE_WIDTH = 560;
+    // Past ~10 lines of content the compact dialog gets cramped, so the editor
+    // switches — in one step — to a large, feature-sized surface: a fixed tall
+    // popup whose title and footer stay pinned while only the block list scrolls.
+    // It snaps back to the compact size once the content drops below again.
     const lineCount = blocks.reduce(
         (n, b) => n + (b.type === 'divider' ? 1 : Math.max(1, b.text.split('\n').length)),
         0
     );
-    const overflow = Math.max(0, lineCount - 10);
-    const editorWidth = overflow === 0 ? BASE_WIDTH : Math.min(1040, BASE_WIDTH + overflow * 30);
-    const blocksMaxVh = overflow === 0 ? undefined : Math.min(72, 42 + overflow * 2);
+    const expanded = lineCount > 10;
+    const editorWidth = expanded ? 960 : 560;
 
     /** Whether the note will be locked after saving (existing lock + pending change). */
     const lockedAfterSave =
@@ -226,6 +225,7 @@ export default function NoteEditor() {
             onSubmit={save}
             dirty={dirty}
             onSave={save}
+            tall={expanded}
             headerAction={
                 <button
                     type='button'
@@ -238,7 +238,7 @@ export default function NoteEditor() {
                 </button>
             }
         >
-            <div className={styles.editor}>
+            <div className={`${styles.editor} ${expanded ? styles.editorFill : ''}`}>
                 <input
                     className={styles.editorTitleInput}
                     placeholder={mode === 'add' ? 'Titre de la nouvelle note' : 'Titre de la note'}
@@ -252,7 +252,7 @@ export default function NoteEditor() {
                 <BlockEditor
                     blocks={blocks}
                     onChange={setBlocks}
-                    maxHeightVh={blocksMaxVh}
+                    fill={expanded}
                     aside={
                         mode === 'edit' && created !== null && updated !== null ? (
                             <p className={styles.editorDates}>
