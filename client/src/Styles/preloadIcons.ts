@@ -26,9 +26,7 @@ function collectIconUrls(): Set<string> {
         }
         for (const rule of Array.from(rules)) {
             if (!(rule instanceof CSSStyleRule)) continue;
-            const mask =
-                rule.style.getPropertyValue('mask-image') ||
-                rule.style.getPropertyValue('-webkit-mask-image');
+            const mask = rule.style.getPropertyValue('mask-image') || rule.style.getPropertyValue('-webkit-mask-image');
             const match = mask.match(/url\(["']?([^"')]+\.svg)["']?\)/);
             if (match && match[1].includes('/icons/')) urls.add(match[1]);
         }
