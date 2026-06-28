@@ -178,6 +178,18 @@ export default function NoteEditor() {
         if (confirmed === true) close('delete');
     }
 
+    // Past ~10 lines of content the base dialog gets cramped, so the editor grows
+    // — wider and taller — up toward a feature-sized surface, and shrinks back as
+    // the content does. Below the threshold it keeps the compact base size.
+    const BASE_WIDTH = 560;
+    const lineCount = blocks.reduce(
+        (n, b) => n + (b.type === 'divider' ? 1 : Math.max(1, b.text.split('\n').length)),
+        0
+    );
+    const overflow = Math.max(0, lineCount - 10);
+    const editorWidth = overflow === 0 ? BASE_WIDTH : Math.min(1040, BASE_WIDTH + overflow * 30);
+    const blocksMaxVh = overflow === 0 ? undefined : Math.min(72, 42 + overflow * 2);
+
     /** Whether the note will be locked after saving (existing lock + pending change). */
     const lockedAfterSave =
         lockChange && 'set' in lockChange ? true : lockChange && 'remove' in lockChange ? false : wasLocked;
@@ -207,7 +219,7 @@ export default function NoteEditor() {
         <Popup<NoteEditorInput>
             id={NOTE_EDITOR_POPUP}
             title=''
-            width={560}
+            width={editorWidth}
             onInputChange={handleOpen}
             onClosePopup={() => close(null)}
             onSubmit={save}
@@ -239,6 +251,7 @@ export default function NoteEditor() {
                 <BlockEditor
                     blocks={blocks}
                     onChange={setBlocks}
+                    maxHeightVh={blocksMaxVh}
                     aside={
                         mode === 'edit' && created !== null && updated !== null ? (
                             <p className={styles.editorDates}>

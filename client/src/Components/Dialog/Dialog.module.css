@@ -28,6 +28,9 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
     padding: var(--space-lg);
+    /* Smoothly grow/shrink when a dialog resizes itself (e.g. the note editor
+       expanding as its content passes ~10 lines). */
+    transition: max-width 0.25s ease;
 }
 
 /* The panel is focusable (tabIndex -1) so fieldless dialogs still catch Enter;
