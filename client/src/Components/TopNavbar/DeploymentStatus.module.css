@@ -30,19 +30,10 @@
     flex-shrink: 0;
     width: 14px;
     height: 14px;
-    /* No trailing gap by default: this gutter is *only* the icon↔text spacing, so
-       it opens — in sync with the text reveal — when the text is shown (hover, or
-       an error that forces it open). The gap before the bar lives on `.bar`, so
-       the lone spinner (no text, no bar) stays perfectly centered. */
-    margin-right: 0;
+    /* No gutter here: the icon↔text spacing is carried by the text wrapper's own
+       margin-left, which opens in sync with its reveal — so the lone spinner (no
+       text, no bar) stays perfectly centered. The gap before the bar lives on `.bar`. */
     background-color: var(--accent);
-    transition: margin-right var(--transition-slow);
-}
-
-.zone:hover .icon,
-.zone.error .icon,
-.zone.warning .icon {
-    margin-right: var(--space-xs);
 }
 
 .error .icon {
@@ -63,45 +54,41 @@
     }
 }
 
-/* Reveal-on-hover wrapper. During normal progress the spinner + bar already say
-   "working", so the text stays hidden and slides open only when the user hovers
-   the zone — discreet by default, legible on intent. The grid 0fr→1fr trick
-   animates the width to the exact content size (no magic numbers). An error is
-   never hidden: `.zone.error` forces the text open, hover or not. */
+/* Reveal-on-hover wrapper, in the same key as the widget's "Déverrouiller" label:
+   it width-animates open (max-width 0 → content) while fading and scaling in from
+   the left edge, so it appears within the rounded pill rather than wiping in. The
+   margin-left carries the icon↔text gap, opening in step with the reveal — so a
+   lone spinner stays centered. An error/warning is never hidden: it forces it open. */
 .text {
-    display: grid;
-    grid-template-columns: 0fr;
+    display: flex;
+    max-width: 0;
+    margin-left: 0;
+    overflow: hidden;
     opacity: 0;
+    transform: scale(0.96);
+    transform-origin: left center;
     transition:
-        grid-template-columns var(--transition-slow),
-        opacity var(--transition-normal);
+        max-width var(--transition-normal),
+        margin-left var(--transition-normal),
+        opacity var(--transition-normal),
+        transform var(--transition-normal);
 }
 
 .zone:hover .text,
 .zone.error .text,
 .zone.warning .text {
-    grid-template-columns: 1fr;
+    max-width: 220px;
+    margin-left: var(--space-xs);
     opacity: 1;
+    transform: none;
 }
 
 .textInner {
     display: flex;
     flex-direction: column;
     min-width: 0;
-    /* Clip surface for the width reveal. With min-width:0 + overflow:hidden and
-       NO padding, the 0fr track collapses to a *true* zero width — padding here
-       would floor the track at a few px and push the lone spinner off-centre
-       (that was the bug). Breathing room before the bar lives on `.bar`. */
     overflow: hidden;
     line-height: 1.15;
-    transform: translateX(-6px);
-    transition: transform var(--transition-slow);
-}
-
-.zone:hover .textInner,
-.zone.error .textInner,
-.zone.warning .textInner {
-    transform: translateX(0);
 }
 
 .label {
