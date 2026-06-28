@@ -274,6 +274,16 @@ pub enum ClientMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
+    /// Outcome of an `agent.power` system power action (shutdown/reboot/suspend…).
+    #[serde(rename = "agent.powerResult")]
+    PowerResult {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        action: String,
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
     /// Reply to `pkg.list`: the package managers present + their pending counts.
     #[serde(rename = "pkg.listResult")]
     PkgListResult {
@@ -335,6 +345,11 @@ pub enum ServerMessage {
     /// `uninstall-user` | `elevate` | `drop`.
     #[serde(rename = "agent.service")]
     Service { action: String },
+    /// System power action: `action` is one of `shutdown` | `reboot` | `suspend` |
+    /// `hibernate` | `lock`. The agent applies it best-effort and replies
+    /// `agent.powerResult`.
+    #[serde(rename = "agent.power")]
+    Power { action: String },
     /// Enumerate package managers + pending updates (replies `pkg.listResult`).
     #[serde(rename = "pkg.list")]
     PkgList {},

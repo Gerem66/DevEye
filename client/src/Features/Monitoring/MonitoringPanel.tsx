@@ -27,6 +27,7 @@ import { GraphDetail, type DetailRow } from './GraphDetail';
 import { Timeline } from './Timeline';
 import { MiniGraph, type Series } from './MiniGraph';
 import { PackagesPanel } from './PackagesPanel';
+import { PowerMenu } from './PowerMenu';
 import { useAgentUpdate } from './useAgentUpdate';
 import { agentUpdatable } from '../agentVersion';
 import {
@@ -218,6 +219,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const [override, setOverride] = useState<{ online?: boolean; report?: DeviceReport | null }>({});
     const [configOpen, setConfigOpen] = useState(false);
     const [packagesOpen, setPackagesOpen] = useState(false);
+    const [powerOpen, setPowerOpen] = useState(false);
     const updater = useAgentUpdate();
     // Storage footprint of the device's stored snapshots.
     const [storage, setStorage] = useState<{ snapshots: number; rows: number; bytes: number } | null>(null);
@@ -895,6 +897,15 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     {online && !archived && (
                         <button
                             className={styles.iconHeaderBtn}
+                            onClick={() => setPowerOpen(true)}
+                            title='Commandes système'
+                        >
+                            <span className='icon icon-power' />
+                        </button>
+                    )}
+                    {online && !archived && (
+                        <button
+                            className={styles.iconHeaderBtn}
                             onClick={refreshNow}
                             disabled={refreshing}
                             title='Rafraîchir maintenant'
@@ -1263,6 +1274,20 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 }
             >
                 {packagesOpen && <PackagesPanel deviceId={selected.id} />}
+            </Dialog>
+
+            <Dialog
+                open={powerOpen}
+                onClose={() => setPowerOpen(false)}
+                title={`Commandes système — « ${selected.name} »`}
+                description='Actions exécutées sur l’appareil par l’agent (selon ses privilèges et l’OS).'
+                footer={
+                    <Button variant='secondary' onClick={() => setPowerOpen(false)}>
+                        Fermer
+                    </Button>
+                }
+            >
+                {powerOpen && <PowerMenu deviceId={selected.id} />}
             </Dialog>
 
             <Dialog

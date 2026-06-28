@@ -5,8 +5,10 @@ import {
     AGENT_DESTROY,
     AGENT_PKG_LIST,
     AGENT_PKG_UPGRADE,
+    AGENT_POWER,
     AGENT_SERVICE,
     AGENT_UPDATE,
+    DEVICE_POWER_EVENT,
     DEVICE_PRESENCE_EVENT,
     DEVICE_REPORT_EVENT,
     METRICS_PUSH_EVENT,
@@ -15,8 +17,10 @@ import {
     PACKAGE_PROGRESS_EVENT,
     type AgentConfigPayload,
     type AgentPkgUpgradePayload,
+    type AgentPowerPayload,
     type AgentServicePayload,
     type AgentUpdatePayload,
+    type DevicePowerPush,
     type DevicePresence,
     type DeviceReport,
     type MetricSnapshot,
@@ -106,6 +110,16 @@ export class MonitorHub {
     /** Ask a connected agent to apply a manager's updates. No-op if offline. */
     requestPkgUpgrade(deviceId: string, payload: AgentPkgUpgradePayload): boolean {
         return this.sendToAgent(deviceId, AGENT_PKG_UPGRADE, payload);
+    }
+
+    /** Ask a connected agent to run a system power action (shutdown/reboot…). No-op if offline. */
+    requestPower(deviceId: string, payload: AgentPowerPayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_POWER, payload);
+    }
+
+    /** Fan out a system power-action outcome to the device's subscribers. */
+    publishPower(payload: DevicePowerPush): void {
+        this.publishToSubscribers(payload.deviceId, DEVICE_POWER_EVENT, payload);
     }
 
     /** Fan out a package-manager inventory to the device's subscribers. */
@@ -254,6 +268,8 @@ export interface MonitorTransport {
     requestPkgList(deviceId: string): boolean;
     /** Ask the device's agent to apply a manager's updates; false if offline. */
     requestPkgUpgrade(deviceId: string, payload: AgentPkgUpgradePayload): boolean;
+    /** Ask the device's agent to run a system power action; false if offline. */
+    requestPower(deviceId: string, payload: AgentPowerPayload): boolean;
 }
 
 export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): MonitorTransport {
@@ -268,6 +284,7 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         requestUpdate: (deviceId, payload) => hub.requestUpdate(deviceId, payload),
         requestService: (deviceId, payload) => hub.requestService(deviceId, payload),
         requestPkgList: (deviceId) => hub.requestPkgList(deviceId),
-        requestPkgUpgrade: (deviceId, payload) => hub.requestPkgUpgrade(deviceId, payload)
+        requestPkgUpgrade: (deviceId, payload) => hub.requestPkgUpgrade(deviceId, payload),
+        requestPower: (deviceId, payload) => hub.requestPower(deviceId, payload)
     };
 }

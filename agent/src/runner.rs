@@ -309,6 +309,10 @@ async fn stream_session(
                             Ok(ServerMessage::Service { action }) => {
                                 commands::handle_service(&mut sink, device_id, &action).await;
                             }
+                            // System power action (shutdown/reboot/suspend/hibernate/lock).
+                            Ok(ServerMessage::Power { action }) => {
+                                commands::handle_power(&mut sink, device_id, &action).await;
+                            }
                             // Enumerate package managers (off-loop; replies via pkg_rx).
                             Ok(ServerMessage::PkgList {}) => {
                                 let tx = pkg_tx.clone();

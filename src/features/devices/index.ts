@@ -13,6 +13,7 @@ import {
     deviceSetConfigFeature
 } from './lifecycle';
 import { deviceListPackagesFeature, deviceUpgradePackagesFeature } from './packages';
+import { devicePowerFeature } from './power';
 import { deviceDropPrivilegesFeature, deviceElevateFeature, deviceSetAutostartFeature } from './service';
 
 /**
@@ -21,6 +22,7 @@ import { deviceDropPrivilegesFeature, deviceElevateFeature, deviceSetAutostartFe
  * - `agentUpdate` — signed self-update push
  * - `service`    — persistence/privileges (autostart, elevate, drop)
  * - `packages`   — update-manager detection + live upgrades
+ * - `power`      — system power actions (shutdown, reboot, suspend, lock…)
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const deviceFeatures: FeatureDefinition<string, any, any>[] = [
@@ -36,6 +38,7 @@ export const deviceFeatures: FeatureDefinition<string, any, any>[] = [
     deviceDropPrivilegesFeature,
     deviceListPackagesFeature,
     deviceUpgradePackagesFeature,
+    devicePowerFeature,
     deviceRequestDeleteFeature,
     deviceCancelDeleteFeature,
     deviceForceDeleteFeature,

@@ -15,6 +15,7 @@ mod enroll;
 mod identity;
 mod metrics;
 mod packages;
+mod power;
 mod protocol;
 mod report;
 mod runner;

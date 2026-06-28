@@ -1627,3 +1627,98 @@
     font-size: 0.85rem;
     word-break: break-word;
 }
+
+/* ── System power menu (device.power) ── */
+.powerMenu {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+.powerList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+.powerRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    width: 100%;
+    text-align: left;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-primary);
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
+}
+.powerRow:hover:not(:disabled) {
+    background: var(--glass-bg);
+    border-color: var(--accent);
+}
+.powerRow:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+.powerRowDanger:hover:not(:disabled) {
+    border-color: var(--danger);
+}
+.powerIcon {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+.powerRowDanger .powerIcon {
+    color: var(--danger);
+}
+.powerText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.powerLabel {
+    font-weight: 600;
+}
+.powerDesc {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+.powerConfirm {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+.powerConfirmText {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+.powerConfirmActions {
+    display: flex;
+    gap: var(--space-sm);
+}
+.powerHint {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin: 0;
+}
+.powerOk {
+    color: var(--success);
+    font-size: 0.85rem;
+    margin: 0;
+}
+.powerErr {
+    color: var(--danger);
+    font-size: 0.85rem;
+    margin: 0;
+    word-break: break-word;
+}

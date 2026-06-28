@@ -54,3 +54,17 @@ export async function authorizeOnlineDevice(ctx: FeatureContext, deviceId: strin
     }
     return row;
 }
+
+/**
+ * Owner-or-admin guard that also requires the agent to be online. Like
+ * `authorizeOnlineDevice` but *without* the admin-only gate — for Monitoring
+ * commands the device owner may drive too (e.g. live power actions), as with
+ * `device.setConfig`/`device.delete`.
+ */
+export async function authorizeReachableDevice(ctx: FeatureContext, deviceId: string): Promise<DeviceRow> {
+    const row = await authorizeDevice(ctx, deviceId);
+    if (!(online(ctx, [row.id])[row.id] ?? false)) {
+        throw new FeatureError('conflict', 'Agent hors ligne');
+    }
+    return row;
+}

@@ -9,6 +9,7 @@ import {
     AGENT_PKG_DONE,
     AGENT_PKG_LIST_RESULT,
     AGENT_PKG_PROGRESS,
+    AGENT_POWER_RESULT,
     AGENT_PROCESSES,
     AGENT_REPORT,
     AGENT_SERVICE_RESULT,
@@ -29,6 +30,7 @@ import {
     handlePkgDone,
     handlePkgListResult,
     handlePkgProgress,
+    handlePowerResult,
     handleProcesses,
     handleReport,
     handleServiceResult,
@@ -71,6 +73,8 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
             return handleDestroyed(session, msg.payload);
         case AGENT_SERVICE_RESULT:
             return handleServiceResult(session, msg.payload);
+        case AGENT_POWER_RESULT:
+            return handlePowerResult(session, msg.payload);
         case AGENT_PKG_LIST_RESULT:
             return handlePkgListResult(session, msg.payload);
         case AGENT_PKG_PROGRESS:

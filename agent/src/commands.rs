@@ -284,6 +284,57 @@ where
     }
 }
 
+/// Apply a server-requested system power action and report the outcome. For
+/// shutdown/reboot the host goes down right after, so we flush the result and give
+/// it a brief moment to reach the server before the machine (and this process)
+/// disappear. Suspend/hibernate/lock leave the agent running.
+pub(crate) async fn handle_power<S>(sink: &mut S, device_id: &str, action: &str)
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let act = action.to_string();
+    let outcome = tokio::task::spawn_blocking(move || crate::power::execute(&act)).await;
+    let (ok, error) = match outcome {
+        Ok(Ok(())) => (true, None),
+        Ok(Err(e)) => (false, Some(e.to_string())),
+        Err(e) => (false, Some(e.to_string())),
+    };
+    if ok {
+        info!(%action, "power action applied");
+    } else {
+        warn!(%action, error = ?error, "power action failed");
+    }
+    let _ = send_power_result(sink, device_id, action, ok, error).await;
+    let _ = sink.flush().await;
+    if ok && matches!(action, "shutdown" | "reboot") {
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    }
+}
+
+async fn send_power_result<S>(
+    sink: &mut S,
+    device_id: &str,
+    action: &str,
+    ok: bool,
+    error: Option<String>,
+) -> Result<()>
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let msg = serde_json::to_string(&ClientMessage::PowerResult {
+        device_id: device_id.to_string(),
+        action: action.to_string(),
+        ok,
+        error,
+    })?;
+    sink.send(Message::Text(msg))
+        .await
+        .context("sending power result")?;
+    Ok(())
+}
+
 /// Forward one package task event to the server, stamping it with the device id.
 pub(crate) async fn send_pkg_event<S>(sink: &mut S, device_id: &str, ev: PkgEvent)
 where
