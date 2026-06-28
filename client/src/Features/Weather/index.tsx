@@ -614,6 +614,12 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
                                                     {new Date(day.date).toLocaleDateString('fr-FR', {
                                                         weekday: 'short'
                                                     })}
+                                                    <span className={styles.forecastDate}>
+                                                        {new Date(day.date).toLocaleDateString('fr-FR', {
+                                                            day: 'numeric',
+                                                            month: 'numeric'
+                                                        })}
+                                                    </span>
                                                 </span>
                                                 <span className={styles.forecastIcon}>{wmoIcon(day.code)}</span>
                                                 <div className={styles.forecastTemps}>
