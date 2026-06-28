@@ -161,15 +161,17 @@ pub fn restart_and_exit() -> ! {
         // A service manager will relaunch us — just exit cleanly.
         std::process::exit(0);
     }
-    if let Err(e) = spawn_detached() {
+    if let Err(e) = relaunch_detached() {
         tracing::error!(error = %e, "failed to relaunch after update");
     }
     std::process::exit(0);
 }
 
-/// Re-exec a fresh background `run` of the (now updated) binary, mirroring the
-/// detach path in `main.rs`: log to the config dir, record the new PID.
-fn spawn_detached() -> Result<()> {
+/// Re-exec a fresh **unmanaged** background `run`, mirroring the detach path in
+/// `main.rs`: log to the config dir, record the new PID. Shared by the self-update
+/// restart and the autostart-disable handoff (where a supervised agent hands off to
+/// a standalone copy before the service that supervises it is removed).
+pub(crate) fn relaunch_detached() -> Result<()> {
     let exe = std::env::current_exe().context("locating agent executable")?;
     let log = std::fs::File::create(Config::log_path()).context("creating log file")?;
     let log_err = log.try_clone()?;
@@ -182,6 +184,14 @@ fn spawn_detached() -> Result<()> {
     cmd.stdin(Stdio::null())
         .stdout(Stdio::from(log))
         .stderr(Stdio::from(log_err));
+    // Detach into a new process group so the successor survives a signal aimed at
+    // *our* group — notably the autostart-disable handoff, where the service
+    // manager SIGTERMs the supervised job (us) as it tears the service down.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
 
     let child = cmd.spawn().context("spawning updated agent")?;
     let _ = std::fs::write(Config::pid_path(), child.id().to_string());

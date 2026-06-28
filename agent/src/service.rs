@@ -241,7 +241,8 @@ mod imp {
              [Service]\n\
              ExecStart={exe} run --managed --config {cfg}\n\
              Restart=always\n\
-             RestartSec=5\n\n\
+             RestartSec=5\n\
+             KillMode=process\n\n\
              [Install]\n\
              WantedBy={wanted_by}\n"
         ))

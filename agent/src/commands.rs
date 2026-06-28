@@ -132,9 +132,16 @@ where
     S::Error: std::error::Error + Send + Sync + 'static,
 {
     use crate::elevate::Outcome;
+    // Disabling autostart removes the very service that supervises us, which on
+    // launchd/systemd would terminate this process — dropping the device offline
+    // with autostart gone and nothing to relaunch it. Handle it specially so the
+    // agent keeps running (see `handle_disable_autostart`).
+    if action == "uninstall-user" {
+        return handle_disable_autostart(sink, device_id).await;
+    }
+
     let result: Result<Outcome> = match action {
         "install-user" => crate::service::install(false).map(|()| Outcome::Done),
-        "uninstall-user" => crate::service::uninstall().map(|()| Outcome::Done),
         "elevate" => crate::elevate::elevate(),
         "drop" => crate::elevate::drop_privileges(),
         other => Err(anyhow::anyhow!("action de service inconnue : {other}")),
@@ -153,9 +160,9 @@ where
                 let _ = crate::service::uninstall_user();
                 std::process::exit(0);
             }
-            // install-user / uninstall-user / drop don't restart us, so push a fresh
-            // report immediately — otherwise the UI's confirmed service scope would
-            // only refresh at the next hourly report.
+            // install-user / drop don't restart us, so push a fresh report
+            // immediately — otherwise the UI's confirmed service scope would only
+            // refresh at the next hourly report.
             send_fresh_report(sink, device_id).await;
             let _ = sink.flush().await;
         }
@@ -168,6 +175,61 @@ where
             warn!(%action, error = %e, "service action failed");
             let _ = send_service_result(sink, device_id, action, false, None, Some(e.to_string()))
                 .await;
+            let _ = sink.flush().await;
+        }
+    }
+}
+
+/// Disable autostart (`uninstall-user`) while keeping the agent running.
+///
+/// On launchd/systemd the running agent often *is* the service we're removing, so
+/// a plain uninstall would SIGTERM us and leave the device offline with nothing to
+/// relaunch it. When we're that supervised process, we hand monitoring off to a
+/// standalone (unmanaged) background copy that reconnects — the hub swaps to it —
+/// before tearing the service down, then exit. The orphan's fresh report carries
+/// the new `serviceScope = none`, which is what the UI confirms the change from.
+///
+/// When we're *not* supervised (a foreground/detached agent that merely has a
+/// service installed), removing it can't kill us, so we just report as usual.
+async fn handle_disable_autostart<S>(sink: &mut S, device_id: &str)
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let supervised = crate::managed();
+    match crate::service::uninstall() {
+        Ok(()) => {
+            info!(supervised, "autostart disabled");
+            if supervised {
+                // Spawn the standalone successor immediately — the unload that just
+                // happened will SIGTERM us shortly. It inherits our config via
+                // DEVEYE_CONFIG and reconnects with `serviceScope = none`.
+                if let Err(e) = crate::update::relaunch_detached() {
+                    warn!(error = %e, "failed to hand off to a standalone agent");
+                }
+                let _ =
+                    send_service_result(sink, device_id, "uninstall-user", true, None, None).await;
+                let _ = sink.flush().await;
+                // Give the successor time to connect (the hub keeps the device
+                // online across the swap) before we step aside.
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                std::process::exit(0);
+            }
+            let _ = send_service_result(sink, device_id, "uninstall-user", true, None, None).await;
+            send_fresh_report(sink, device_id).await;
+            let _ = sink.flush().await;
+        }
+        Err(e) => {
+            warn!(error = %e, "disabling autostart failed");
+            let _ = send_service_result(
+                sink,
+                device_id,
+                "uninstall-user",
+                false,
+                None,
+                Some(e.to_string()),
+            )
+            .await;
             let _ = sink.flush().await;
         }
     }
