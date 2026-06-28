@@ -590,13 +590,14 @@ function toLockedSummary(note: Note): NoteSummary {
 /** Build an optimistic summary from a full (open) note after add/edit. */
 function toSummary(note: Note): NoteSummary {
     const checks = note.blocks.filter((b) => b.type === 'check');
-    const previewBlock = note.blocks.find((b) => b.text.trim() !== '');
+    const previewBlock = note.blocks.find((b) => 'text' in b && b.text.trim() !== '');
+    const previewText = previewBlock && 'text' in previewBlock ? previewBlock.text.trim() : '';
     return {
         id: note.id,
         title: note.title,
         folderId: note.folderId,
         pinned: note.pinned,
-        preview: previewBlock ? previewBlock.text.trim().slice(0, 140) : '',
+        preview: previewText.slice(0, 140),
         checkTotal: checks.length,
         checkDone: checks.filter((b) => b.type === 'check' && b.done).length,
         locked: false,

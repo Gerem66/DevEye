@@ -60,10 +60,9 @@ function formatStamp(time: number): string {
     });
 }
 
-/** Drop trailing empty blocks but always keep at least one. */
+/** Drop empty text blocks but keep structural ones (dividers). */
 function normalizeBlocks(blocks: NoteBlock[]): NoteBlock[] {
-    const trimmed = blocks.filter((b) => b.text.trim() !== '');
-    return trimmed.length > 0 ? trimmed : [];
+    return blocks.filter((b) => b.type === 'divider' || b.text.trim() !== '');
 }
 
 /** Open the shared, root-level explainer about locked notes. */

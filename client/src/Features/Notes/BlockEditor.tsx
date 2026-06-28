@@ -1,12 +1,16 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 
 import styles from './style.module.css';
+import RichText, { type RichTextHandle } from './RichText';
+import { stripInline, MARK_DELIMITERS, type InlineMark } from './markdown';
 
 import type { NoteBlock } from 'deveye-types';
 
 interface BlockEditorProps {
     blocks: NoteBlock[];
     onChange: (blocks: NoteBlock[]) => void;
+    /** Lift the inner scroll cap so the popup itself grows (in vh). */
+    maxHeightVh?: number;
     /** Content shown right-aligned on the add-block row (e.g. the note's
      *  created/updated stamps), so it shares that line rather than taking one
      *  of its own. */
@@ -27,7 +31,18 @@ const BULLET_TRIGGER = /^[-*] /;
 /** `1. ` / `1) ` (any number) at the start turns it into a numbered list item. */
 const NUMBER_TRIGGER = /^\d+[.)] /;
 
-/** A fresh block of the same kind as `b`, carrying `text` (used on Enter). */
+/** `# `…`##### ` at the start turns a paragraph into a heading of that level. */
+const HEADING_TRIGGER = /^(#{1,5}) /;
+
+/** A whole-line `---` turns the paragraph into a horizontal divider. */
+const DIVIDER_TRIGGER = '---';
+
+/** Whether a block kind carries editable text (i.e. renders a RichText surface). */
+function isEditable(block: NoteBlock): boolean {
+    return block.type !== 'divider';
+}
+
+/** A fresh block to follow `b` when Enter splits it (a heading yields a paragraph). */
 function siblingBlock(b: NoteBlock, text: string): NoteBlock {
     switch (b.type) {
         case 'check':
@@ -39,13 +54,6 @@ function siblingBlock(b: NoteBlock, text: string): NoteBlock {
         default:
             return { type: 'text', text };
     }
-}
-
-/** Auto-grow a textarea to fit its content (no inner scrollbar). */
-function autosize(el: HTMLTextAreaElement | null): void {
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
 }
 
 interface DragState {
@@ -67,61 +75,63 @@ interface DragState {
 }
 
 /**
- * The modular note body: an ordered list of typed blocks (paragraph or
- * checklist item). One clean surface that reads like a native notes editor:
+ * The modular note body: an ordered list of typed blocks (paragraph, heading,
+ * checklist / list item, divider). One clean surface that reads like a native
+ * notes editor:
  *  - Enter splits the block at the caret into a sibling of the same kind (a
- *    paragraph spawns a paragraph, a checklist item a new item).
+ *    heading yields a paragraph).
  *  - Ctrl/⌘+Enter inserts a literal line break inside the current block.
- *  - Backspace at the start of a checklist item demotes it to a paragraph
- *    before it can be removed; on an empty paragraph it removes the row.
- *  - Typing a `[]`/`- [ ]`-style prefix at the start of a paragraph turns it
- *    into a checklist item (see CHECK_TRIGGER).
- * New blocks can also be added explicitly through the discreet "+" menu.
+ *  - Up/Down cross block boundaries from the edge lines, skipping dividers.
+ *  - Backspace at the start of a typed item / heading demotes it to a paragraph;
+ *    on an empty paragraph it removes the row.
+ *  - Start-of-line prefixes convert a paragraph: `[]` → checklist, `- ` → bullet,
+ *    `1. ` → numbered, `# `…`##### ` → heading, a lone `---` → divider.
  *
- * Rows reorder by dragging the grip on the left:
- *  - The grabbed row's element is handed to `setDragImage`, so the browser
- *    trails a translucent copy under the cursor — no manual positioning, immune
- *    to the popup's ancestor transforms.
- *  - The source row collapses for the whole drag (kept mounted so `dragend`
- *    still fires) and a single placeholder of the same height marks where it
- *    will land. One mechanism, no special-casing of the original slot.
- *  - The target is computed from thresholds frozen at drag start, so the
- *    cursor→slot mapping never oscillates as the layout shifts.
+ * Inline emphasis (bold/italic/underline/strike) is typed as markdown markers
+ * and rendered live by {@link RichText}; the "Aa" menu wraps the selection.
+ * New blocks are added through the discreet "+" menu.
+ *
+ * Rows reorder by dragging the grip on the left (see {@link DragState}).
  */
-export default function BlockEditor({ blocks, onChange, aside }: BlockEditorProps) {
-    const refs = useRef<(HTMLTextAreaElement | null)[]>([]);
+export default function BlockEditor({ blocks, onChange, maxHeightVh, aside }: BlockEditorProps) {
+    const refs = useRef<(RichTextHandle | null)[]>([]);
     const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
     const focusIndex = useRef<number | null>(null);
     /** Where to drop the caret in the focused block; null = end of its value. */
     const caretPos = useRef<number | null>(null);
+    /** The block whose RichText currently holds focus (target of the Aa menu). */
+    const activeIndex = useRef<number | null>(null);
     const [drag, setDrag] = useState<DragState | null>(null);
     const [addMenuOpen, setAddMenuOpen] = useState(false);
+    const [formatMenuOpen, setFormatMenuOpen] = useState(false);
     const addMenuRef = useRef<HTMLDivElement | null>(null);
+    const formatMenuRef = useRef<HTMLDivElement | null>(null);
 
     // After a structural change we may want to move focus to a specific block.
     useEffect(() => {
         if (focusIndex.current === null) return;
-        const el = refs.current[focusIndex.current];
-        if (el) {
-            el.focus();
-            const pos = caretPos.current ?? el.value.length;
-            el.setSelectionRange(pos, pos);
-            autosize(el);
+        const handle = refs.current[focusIndex.current];
+        const block = blocks[focusIndex.current];
+        if (handle && block) {
+            handle.focus();
+            const len = 'text' in block ? block.text.length : 0;
+            handle.setCaret(caretPos.current ?? len);
         }
         focusIndex.current = null;
         caretPos.current = null;
     });
 
-    // Close the add menu on an outside click (same lightweight pattern as the
+    // Close the menus on an outside click (same lightweight pattern as the
     // per-card move menu).
     useEffect(() => {
-        if (!addMenuOpen) return;
+        if (!addMenuOpen && !formatMenuOpen) return;
         const onDocClick = (e: MouseEvent) => {
             if (addMenuRef.current && !addMenuRef.current.contains(e.target as Node)) setAddMenuOpen(false);
+            if (formatMenuRef.current && !formatMenuRef.current.contains(e.target as Node)) setFormatMenuOpen(false);
         };
         document.addEventListener('mousedown', onDocClick);
         return () => document.removeEventListener('mousedown', onDocClick);
-    }, [addMenuOpen]);
+    }, [addMenuOpen, formatMenuOpen]);
 
     const update = useCallback(
         (index: number, patch: Partial<NoteBlock>) => {
@@ -179,42 +189,60 @@ export default function BlockEditor({ blocks, onChange, aside }: BlockEditorProp
         [blocks, onChange]
     );
 
+    /** Nearest editable block index from `from` walking in `dir` (±1), or -1. */
+    const editableNeighbor = useCallback(
+        (from: number, dir: 1 | -1) => {
+            for (let i = from + dir; i >= 0 && i < blocks.length; i += dir) {
+                if (isEditable(blocks[i])) return i;
+            }
+            return -1;
+        },
+        [blocks]
+    );
+
     /** Move focus to block `index`, dropping the caret at `caret` (clamped). */
     const focusBlock = useCallback((index: number, caret: number) => {
-        const el = refs.current[index];
-        if (!el) return;
-        el.focus();
-        const pos = Math.max(0, Math.min(caret, el.value.length));
-        el.setSelectionRange(pos, pos);
+        const handle = refs.current[index];
+        if (!handle) return;
+        handle.focus();
+        handle.setCaret(Math.max(0, caret));
     }, []);
 
     const onKeyDown = useCallback(
-        (e: React.KeyboardEvent<HTMLTextAreaElement>, index: number) => {
+        (e: React.KeyboardEvent<HTMLDivElement>, index: number) => {
             const b = blocks[index];
-            const ta = e.currentTarget;
-            // Up/Down cross block boundaries only from the edge lines: on the
-            // first text line, Up moves to the previous block; on the last line,
-            // Down moves to the next — so within a multi-line block the arrows
-            // still walk its own lines. The caret's column is carried over.
-            if (e.key === 'ArrowUp' && ta.selectionStart === ta.selectionEnd && index > 0) {
-                const lineStart = b.text.lastIndexOf('\n', ta.selectionStart - 1) + 1;
-                if (lineStart === 0) {
+            if (!('text' in b)) return;
+            const handle = refs.current[index];
+            if (!handle) return;
+            const { start, end } = handle.getCaret();
+
+            // Up/Down cross block boundaries only from the edge lines, skipping
+            // dividers: on the first text line, Up moves to the previous editable
+            // block; on the last line, Down moves to the next. The caret column is
+            // carried over.
+            if (e.key === 'ArrowUp' && start === end) {
+                const lineStart = b.text.lastIndexOf('\n', start - 1) + 1;
+                const prevIndex = editableNeighbor(index, -1);
+                if (lineStart === 0 && prevIndex !== -1) {
                     e.preventDefault();
-                    const prev = blocks[index - 1].text;
-                    const prevLineStart = prev.lastIndexOf('\n') + 1;
-                    focusBlock(index - 1, prevLineStart + ta.selectionStart);
+                    const prev = blocks[prevIndex];
+                    const prevText = 'text' in prev ? prev.text : '';
+                    const prevLineStart = prevText.lastIndexOf('\n') + 1;
+                    focusBlock(prevIndex, prevLineStart + start);
                     return;
                 }
             }
-            if (e.key === 'ArrowDown' && ta.selectionStart === ta.selectionEnd && index < blocks.length - 1) {
-                if (b.text.indexOf('\n', ta.selectionStart) === -1) {
+            if (e.key === 'ArrowDown' && start === end) {
+                const nextIndex = editableNeighbor(index, 1);
+                if (b.text.indexOf('\n', start) === -1 && nextIndex !== -1) {
                     e.preventDefault();
-                    const lineStart = b.text.lastIndexOf('\n', ta.selectionStart - 1) + 1;
-                    const column = ta.selectionStart - lineStart;
-                    const next = blocks[index + 1].text;
-                    const nextLineEnd = next.indexOf('\n');
-                    const firstLineLen = nextLineEnd === -1 ? next.length : nextLineEnd;
-                    focusBlock(index + 1, Math.min(column, firstLineLen));
+                    const lineStart = b.text.lastIndexOf('\n', start - 1) + 1;
+                    const column = start - lineStart;
+                    const next = blocks[nextIndex];
+                    const nextText = 'text' in next ? next.text : '';
+                    const nextLineEnd = nextText.indexOf('\n');
+                    const firstLineLen = nextLineEnd === -1 ? nextText.length : nextLineEnd;
+                    focusBlock(nextIndex, Math.min(column, firstLineLen));
                     return;
                 }
             }
@@ -222,21 +250,18 @@ export default function BlockEditor({ blocks, onChange, aside }: BlockEditorProp
                 if (e.ctrlKey || e.metaKey) {
                     // Ctrl+Enter (or ⌘+Enter on Mac) inserts a line break in place.
                     e.preventDefault();
-                    const text = b.text.slice(0, ta.selectionStart) + '\n' + b.text.slice(ta.selectionEnd);
-                    replaceBlock(index, { ...b, text } as NoteBlock, ta.selectionStart + 1);
+                    const text = b.text.slice(0, start) + '\n' + b.text.slice(end);
+                    replaceBlock(index, { ...b, text } as NoteBlock, start + 1);
                     return;
                 }
                 // Plain Enter splits into a sibling of the same kind.
                 e.preventDefault();
-                const before = b.text.slice(0, ta.selectionStart);
-                const after = b.text.slice(ta.selectionEnd);
-                splitAt(index, before, siblingBlock(b, after));
+                splitAt(index, b.text.slice(0, start), siblingBlock(b, b.text.slice(end)));
                 return;
             }
-            if (e.key === 'Backspace' && ta.selectionStart === 0 && ta.selectionEnd === 0) {
-                // At the start of a typed item (checklist / list), demote it to a
-                // plain paragraph (keeping its text) before it can be removed by a
-                // second press.
+            if (e.key === 'Backspace' && start === 0 && end === 0) {
+                // At the start of a typed item / heading, demote it to a plain
+                // paragraph (keeping its text) before it can be removed.
                 if (b.type !== 'text') {
                     e.preventDefault();
                     replaceBlock(index, { type: 'text', text: b.text }, 0);
@@ -248,39 +273,66 @@ export default function BlockEditor({ blocks, onChange, aside }: BlockEditorProp
                 }
             }
         },
-        [blocks, replaceBlock, splitAt, removeAt, focusBlock]
+        [blocks, replaceBlock, splitAt, removeAt, focusBlock, editableNeighbor]
     );
 
-    const onTextChange = useCallback(
-        (e: React.ChangeEvent<HTMLTextAreaElement>, index: number) => {
-            const value = e.target.value;
+    const handleBlockChange = useCallback(
+        (index: number, value: string) => {
             const block = blocks[index];
-            // Typing a markdown-ish prefix at the start of a paragraph converts it
-            // to the matching item kind, keeping any text that already followed.
+            // Start-of-line prefixes convert a paragraph to another kind, keeping
+            // any text that already followed.
             if (block.type === 'text') {
                 const check = CHECK_TRIGGER.exec(value);
-                if (check) {
-                    replaceBlock(index, { type: 'check', text: value.slice(check[0].length), done: false }, 0);
-                    autosize(e.target);
-                    return;
-                }
+                if (check)
+                    return replaceBlock(index, { type: 'check', text: value.slice(check[0].length), done: false }, 0);
                 const bullet = BULLET_TRIGGER.exec(value);
-                if (bullet) {
-                    replaceBlock(index, { type: 'bullet', text: value.slice(bullet[0].length) }, 0);
-                    autosize(e.target);
-                    return;
-                }
+                if (bullet) return replaceBlock(index, { type: 'bullet', text: value.slice(bullet[0].length) }, 0);
                 const number = NUMBER_TRIGGER.exec(value);
-                if (number) {
-                    replaceBlock(index, { type: 'number', text: value.slice(number[0].length) }, 0);
-                    autosize(e.target);
+                if (number) return replaceBlock(index, { type: 'number', text: value.slice(number[0].length) }, 0);
+                const heading = HEADING_TRIGGER.exec(value);
+                if (heading) {
+                    return replaceBlock(
+                        index,
+                        { type: 'heading', text: value.slice(heading[0].length), level: heading[1].length },
+                        0
+                    );
+                }
+                if (value === DIVIDER_TRIGGER) {
+                    // Turn the paragraph into a divider and continue typing below it.
+                    const next = blocks.map((b, i) => (i === index ? ({ type: 'divider' } as NoteBlock) : b));
+                    next.splice(index + 1, 0, { type: 'text', text: '' });
+                    focusIndex.current = index + 1;
+                    caretPos.current = 0;
+                    onChange(next);
                     return;
                 }
             }
             update(index, { text: value });
-            autosize(e.target);
         },
-        [blocks, replaceBlock, update]
+        [blocks, replaceBlock, update, onChange]
+    );
+
+    /** Wrap the active block's selection (or insert an empty pair) with a mark. */
+    const applyMark = useCallback(
+        (mark: InlineMark) => {
+            setFormatMenuOpen(false);
+            const index = activeIndex.current;
+            if (index === null) return;
+            const handle = refs.current[index];
+            const b = blocks[index];
+            if (!handle || !b || b.type === 'divider') return;
+            const { start, end } = handle.getCaret();
+            const delim = MARK_DELIMITERS[mark];
+            const text = b.text;
+            if (start === end) {
+                const next = text.slice(0, start) + delim + delim + text.slice(start);
+                replaceBlock(index, { ...b, text: next }, start + delim.length);
+            } else {
+                const next = text.slice(0, start) + delim + text.slice(start, end) + delim + text.slice(end);
+                replaceBlock(index, { ...b, text: next }, end + 2 * delim.length);
+            }
+        },
+        [blocks, replaceBlock]
     );
 
     const addBlock = useCallback(
@@ -398,18 +450,25 @@ export default function BlockEditor({ blocks, onChange, aside }: BlockEditorProp
                     {numbering[index]}.
                 </span>
             )}
-            <textarea
-                ref={(el) => {
-                    refs.current[index] = el;
-                    autosize(el);
-                }}
-                className={`${styles.blockText} ${block.type === 'check' && block.done ? styles.blockTextDone : ''}`}
-                rows={1}
-                value={block.text}
-                placeholder={block.type === 'text' ? 'Écrivez quelque chose…' : 'Élément…'}
-                onChange={(e) => onTextChange(e, index)}
-                onKeyDown={(e) => onKeyDown(e, index)}
-            />
+            {block.type === 'divider' ? (
+                <div className={styles.dividerLine} role='separator' />
+            ) : (
+                <RichText
+                    ref={(handle) => {
+                        refs.current[index] = handle;
+                    }}
+                    className={`${styles.blockText} ${block.type === 'heading' ? styles[`heading${block.level}`] : ''} ${
+                        block.type === 'check' && block.done ? styles.blockTextDone : ''
+                    }`}
+                    value={block.text}
+                    placeholder={block.type === 'text' ? 'Écrivez quelque chose…' : 'Élément…'}
+                    onChange={(v) => handleBlockChange(index, v)}
+                    onKeyDown={(e) => onKeyDown(e, index)}
+                    onFocus={() => {
+                        activeIndex.current = index;
+                    }}
+                />
+            )}
             {blocks.length > 1 && (
                 <button
                     type='button'
@@ -442,9 +501,15 @@ export default function BlockEditor({ blocks, onChange, aside }: BlockEditorProp
                     )}
                     {b.type === 'bullet' && <span className={styles.blockBullet} />}
                     {b.type === 'number' && <span className={styles.blockNumber}>{numbering[drag.from]}.</span>}
-                    <span className={`${styles.ghostText} ${b.type === 'check' && b.done ? styles.blockTextDone : ''}`}>
-                        {b.text || (b.type === 'text' ? 'Écrivez quelque chose…' : 'Élément…')}
-                    </span>
+                    {b.type === 'divider' ? (
+                        <div className={styles.dividerLine} />
+                    ) : (
+                        <span
+                            className={`${styles.ghostText} ${b.type === 'check' && b.done ? styles.blockTextDone : ''}`}
+                        >
+                            {stripInline(b.text) || (b.type === 'text' ? 'Écrivez quelque chose…' : 'Élément…')}
+                        </span>
+                    )}
                 </div>
             );
         })();
@@ -453,6 +518,7 @@ export default function BlockEditor({ blocks, onChange, aside }: BlockEditorProp
         <>
             <div
                 className={`${styles.blocks} ${drag !== null ? styles.dragging : ''}`}
+                style={maxHeightVh ? { maxHeight: `${maxHeightVh}vh` } : undefined}
                 onDragOver={onContainerDragOver}
                 onDrop={finishDrag}
             >
@@ -465,49 +531,123 @@ export default function BlockEditor({ blocks, onChange, aside }: BlockEditorProp
                 {placeholderBefore === -1 && placeholder}
             </div>
 
-            <div className={styles.addMenu} ref={addMenuRef}>
-                <button
-                    type='button'
-                    className={styles.addMenuBtn}
-                    aria-label='Ajouter un bloc'
-                    aria-expanded={addMenuOpen}
-                    title='Ajouter un bloc'
-                    onClick={() => setAddMenuOpen((v) => !v)}
-                >
-                    <span className={`icon ${styles.toggleIcon} icon-add`} />
-                </button>
-                {addMenuOpen && (
-                    <div className={`${styles.menu} ${styles.addMenuList}`}>
+            <div className={styles.addBar}>
+                <div className={styles.addTools}>
+                    <div className={styles.addMenu} ref={addMenuRef}>
                         <button
                             type='button'
-                            className={styles.menuItem}
-                            onClick={() => addBlock({ type: 'text', text: '' })}
+                            className={styles.addMenuBtn}
+                            aria-label='Ajouter un bloc'
+                            aria-expanded={addMenuOpen}
+                            title='Ajouter un bloc'
+                            onClick={() => {
+                                setFormatMenuOpen(false);
+                                setAddMenuOpen((v) => !v);
+                            }}
                         >
-                            <span className={`icon ${styles.toggleIcon} icon-add`} /> Paragraphe
+                            <span className={`icon ${styles.toggleIcon} icon-add`} />
                         </button>
-                        <button
-                            type='button'
-                            className={styles.menuItem}
-                            onClick={() => addBlock({ type: 'check', text: '', done: false })}
-                        >
-                            <span className={`icon ${styles.toggleIcon} icon-square-empty`} /> Case à cocher
-                        </button>
-                        <button
-                            type='button'
-                            className={styles.menuItem}
-                            onClick={() => addBlock({ type: 'bullet', text: '' })}
-                        >
-                            <span className={`icon ${styles.toggleIcon} icon-list`} /> Liste
-                        </button>
-                        <button
-                            type='button'
-                            className={styles.menuItem}
-                            onClick={() => addBlock({ type: 'number', text: '' })}
-                        >
-                            <span className={`icon ${styles.toggleIcon} icon-list-numbered`} /> Liste numérotée
-                        </button>
+                        {addMenuOpen && (
+                            <div className={`${styles.menu} ${styles.addMenuList}`}>
+                                <button
+                                    type='button'
+                                    className={styles.menuItem}
+                                    onClick={() => addBlock({ type: 'text', text: '' })}
+                                >
+                                    <span className={`icon ${styles.toggleIcon} icon-add`} /> Paragraphe
+                                </button>
+                                <button
+                                    type='button'
+                                    className={styles.menuItem}
+                                    onClick={() => addBlock({ type: 'heading', text: '', level: 2 })}
+                                >
+                                    <span className={`icon ${styles.toggleIcon} icon-heading`} /> Titre
+                                </button>
+                                <button
+                                    type='button'
+                                    className={styles.menuItem}
+                                    onClick={() => addBlock({ type: 'check', text: '', done: false })}
+                                >
+                                    <span className={`icon ${styles.toggleIcon} icon-square-empty`} /> Case à cocher
+                                </button>
+                                <button
+                                    type='button'
+                                    className={styles.menuItem}
+                                    onClick={() => addBlock({ type: 'bullet', text: '' })}
+                                >
+                                    <span className={`icon ${styles.toggleIcon} icon-list`} /> Liste
+                                </button>
+                                <button
+                                    type='button'
+                                    className={styles.menuItem}
+                                    onClick={() => addBlock({ type: 'number', text: '' })}
+                                >
+                                    <span className={`icon ${styles.toggleIcon} icon-list-numbered`} /> Liste numérotée
+                                </button>
+                                <button
+                                    type='button'
+                                    className={styles.menuItem}
+                                    onClick={() => addBlock({ type: 'divider' })}
+                                >
+                                    <span className={`icon ${styles.toggleIcon} icon-divider`} /> Séparateur
+                                </button>
+                            </div>
+                        )}
                     </div>
-                )}
+
+                    <div className={styles.addMenu} ref={formatMenuRef}>
+                        <button
+                            type='button'
+                            className={styles.addMenuBtn}
+                            aria-label='Mettre en forme le texte'
+                            aria-expanded={formatMenuOpen}
+                            title='Mettre en forme la sélection'
+                            onClick={() => {
+                                setAddMenuOpen(false);
+                                setFormatMenuOpen((v) => !v);
+                            }}
+                        >
+                            <span className={`icon ${styles.toggleIcon} icon-format`} />
+                        </button>
+                        {formatMenuOpen && (
+                            <div className={`${styles.menu} ${styles.addMenuList}`}>
+                                <button
+                                    type='button'
+                                    className={styles.menuItem}
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => applyMark('bold')}
+                                >
+                                    <span className={styles.mdBold}>Gras</span>
+                                </button>
+                                <button
+                                    type='button'
+                                    className={styles.menuItem}
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => applyMark('italic')}
+                                >
+                                    <span className={styles.mdItalic}>Italique</span>
+                                </button>
+                                <button
+                                    type='button'
+                                    className={styles.menuItem}
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => applyMark('underline')}
+                                >
+                                    <span className={styles.mdUnderline}>Souligné</span>
+                                </button>
+                                <button
+                                    type='button'
+                                    className={styles.menuItem}
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => applyMark('strike')}
+                                >
+                                    <span className={styles.mdStrike}>Barré</span>
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
                 {aside}
             </div>
         </>

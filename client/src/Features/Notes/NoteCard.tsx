@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import styles from './style.module.css';
+import { stripInline } from './markdown';
 
 import type { NoteFolder, NoteSummary } from 'deveye-types';
 
@@ -136,7 +137,7 @@ export default function NoteCard({ note, folders, onOpen, onMove, onDragStart, o
                 </span>
             </div>
 
-            {note.preview && <p className={styles.cardPreview}>{note.preview}</p>}
+            {note.preview && <p className={styles.cardPreview}>{stripInline(note.preview)}</p>}
 
             <div className={styles.cardMeta}>
                 {hasChecks && (

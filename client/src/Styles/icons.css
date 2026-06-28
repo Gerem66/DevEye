@@ -76,6 +76,18 @@
     -webkit-mask-image: url(/icons/key.svg);
     mask-image: url(/icons/key.svg);
 }
+.icon.icon-heading {
+    -webkit-mask-image: url(/icons/heading.svg);
+    mask-image: url(/icons/heading.svg);
+}
+.icon.icon-divider {
+    -webkit-mask-image: url(/icons/divider.svg);
+    mask-image: url(/icons/divider.svg);
+}
+.icon.icon-format {
+    -webkit-mask-image: url(/icons/format.svg);
+    mask-image: url(/icons/format.svg);
+}
 .icon.icon-list {
     -webkit-mask-image: url(/icons/list.svg);
     mask-image: url(/icons/list.svg);

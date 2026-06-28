@@ -670,6 +670,7 @@
 
 .blockText {
     flex: 1 1 auto;
+    min-width: 0;
     border: none;
     background: transparent;
     color: var(--text-primary);
@@ -677,9 +678,10 @@
     line-height: 1.5;
     padding: 0;
     outline: none;
-    resize: none;
-    overflow: hidden;
     font-family: inherit;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    min-height: 1.5em;
 }
 
 .blockTextDone {
@@ -687,8 +689,68 @@
     color: var(--text-muted);
 }
 
-.blockText::placeholder {
+/* Placeholder for the (contentEditable) block surface when it's empty. */
+.blockText[data-empty='true']::before {
+    content: attr(data-placeholder);
     color: var(--text-muted);
+    pointer-events: none;
+}
+
+/* Heading blocks: same surface, larger/bolder type per level (1 = largest). */
+.heading1,
+.heading2,
+.heading3,
+.heading4,
+.heading5 {
+    font-weight: 700;
+    line-height: 1.3;
+    color: var(--text-primary);
+}
+.heading1 {
+    font-size: 1.6rem;
+}
+.heading2 {
+    font-size: 1.35rem;
+}
+.heading3 {
+    font-size: 1.15rem;
+}
+.heading4 {
+    font-size: 1rem;
+    font-weight: 600;
+}
+.heading5 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+}
+
+/* Divider block: a slim rule spanning the row's text column. */
+.dividerLine {
+    flex: 1 1 auto;
+    align-self: center;
+    height: 0;
+    border-top: 1px solid var(--glass-border);
+    margin: 10px 0;
+}
+
+/* Inline emphasis rendered live by RichText: dimmed markers, styled content. */
+.mdMarker {
+    opacity: 0.35;
+}
+.mdBold {
+    font-weight: 700;
+}
+.mdItalic {
+    font-style: italic;
+}
+.mdUnderline {
+    text-decoration: underline;
+}
+.mdStrike {
+    text-decoration: line-through;
 }
 
 .blockRemove {
@@ -720,15 +782,28 @@
     height: 14px;
 }
 
-/* Discreet "+" trigger that reveals the block-type menu; takes far less room
-   than the former pair of dashed buttons. */
-.addMenu {
-    position: relative;
+/* Foot of the block list: the discreet "+" (add block) and "Aa" (format) menu
+   triggers on the left, the note's date stamps pushed to the right. */
+.addBar {
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
     gap: var(--space-md);
     margin-top: var(--space-sm);
+}
+
+/* Left cluster grouping the trigger buttons together. */
+.addTools {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: var(--space-sm);
+}
+
+/* Anchor for one trigger button + its popover menu. */
+.addMenu {
+    position: relative;
+    display: inline-flex;
+    align-items: flex-end;
 }
 
 .addMenuBtn {
