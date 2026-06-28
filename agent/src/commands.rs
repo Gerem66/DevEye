@@ -82,7 +82,7 @@ pub(crate) async fn handle_update<S>(
     S::Error: std::error::Error + Send + Sync + 'static,
 {
     match crate::update::apply(config, target_id, version, sha256, signature).await {
-        Ok(()) => {
+        Ok(exe) => {
             info!(%version, "update installed; restarting");
             let _ = send_updated(sink, device_id, true, Some(version.to_string()), None).await;
             let _ = sink.send(Message::Close(None)).await;
@@ -90,7 +90,7 @@ pub(crate) async fn handle_update<S>(
             // Let the confirmation + close reach the server (so it audits success
             // and registers our disconnect) before the new process connects.
             tokio::time::sleep(Duration::from_millis(400)).await;
-            crate::update::restart_and_exit();
+            crate::update::restart_and_exit(&exe);
         }
         Err(e) => {
             warn!(error = %e, "self-update refused/failed; keeping current binary");
@@ -204,8 +204,13 @@ where
                 // Spawn the standalone successor immediately — the unload that just
                 // happened will SIGTERM us shortly. It inherits our config via
                 // DEVEYE_CONFIG and reconnects with `serviceScope = none`.
-                if let Err(e) = crate::update::relaunch_detached() {
-                    warn!(error = %e, "failed to hand off to a standalone agent");
+                match std::env::current_exe() {
+                    Ok(exe) => {
+                        if let Err(e) = crate::update::relaunch_detached(&exe) {
+                            warn!(error = %e, "failed to hand off to a standalone agent");
+                        }
+                    }
+                    Err(e) => warn!(error = %e, "cannot locate executable to hand off"),
                 }
                 let _ =
                     send_service_result(sink, device_id, "uninstall-user", true, None, None).await;

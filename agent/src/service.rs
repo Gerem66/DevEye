@@ -237,11 +237,12 @@ mod imp {
             "[Unit]\n\
              Description=DevEye monitoring agent\n\
              After=network-online.target\n\
-             Wants=network-online.target\n\n\
+             Wants=network-online.target\n\
+             StartLimitIntervalSec=0\n\n\
              [Service]\n\
              ExecStart={exe} run --managed --config {cfg}\n\
              Restart=always\n\
-             RestartSec=5\n\
+             RestartSec=2\n\
              KillMode=process\n\n\
              [Install]\n\
              WantedBy={wanted_by}\n"

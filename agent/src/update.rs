@@ -13,9 +13,7 @@
 //! running .exe aside first (it can't be overwritten while open) and drop the new
 //! one in its place. The caller then restarts (see [`restart_and_exit`]).
 
-use std::path::Path;
-#[cfg(windows)]
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use anyhow::{anyhow, Context, Result};
@@ -31,15 +29,16 @@ const UPDATE_PUBKEY_B64: &str = env!("DEVEYE_UPDATE_PUBKEY");
 
 /// Download, verify (sha256 + ed25519 signature) and atomically swap in the new
 /// binary for `target_id`. On success the running executable on disk is the new
-/// version; the caller should then [`restart_and_exit`]. On any failure the
-/// current binary is left untouched and an error is returned (reported upstream).
+/// version and its path is returned, so the caller can [`restart_and_exit`] into
+/// it. On any failure the current binary is left untouched and an error is
+/// returned (reported upstream).
 pub async fn apply(
     config: &Config,
     target_id: &str,
     version: &str,
     sha256_hex: &str,
     signature_b64: &str,
-) -> Result<()> {
+) -> Result<PathBuf> {
     let verifying_key =
         embedded_key().context("update refused: no signing key embedded in this agent")?;
 
@@ -86,7 +85,9 @@ pub async fn apply(
     info!(%version, "update verified (sha256 + signature); swapping binary");
     let exe = std::env::current_exe().context("locating current executable")?;
     swap_binary(&exe, &bytes).context("swapping in the new binary")?;
-    Ok(())
+    // Return the (stable) install path: after the swap it holds the new binary,
+    // whereas `current_exe()` may now resolve to the unlinked old inode on Linux.
+    Ok(exe)
 }
 
 /// Parse the embedded base64 public key into a verifier; `None` when no key was
@@ -152,31 +153,40 @@ pub fn cleanup_after_update() {
     }
 }
 
-/// Restart the (already-swapped) agent and terminate this process. Under a
-/// managing service (`DEVEYE_MANAGED` set) we just exit and let it restart us;
-/// otherwise we re-launch a fresh detached `run` ourselves so the agent keeps
-/// running. Never returns.
-pub fn restart_and_exit() -> ! {
-    if crate::managed() {
-        // A service manager will relaunch us — just exit cleanly.
-        std::process::exit(0);
+/// Restart into the (already-swapped) binary at `exe` and terminate this process.
+/// Never returns.
+///
+/// On Unix we **re-exec in place**: same PID, so whatever supervises us (systemd,
+/// launchd, or nothing) just keeps running it — no restart delay, respawn throttle
+/// or rate limit, and no second process to deduplicate. The original args (incl.
+/// `--managed`/`--config`) and environment carry over untouched. `exec` only
+/// returns on failure, where we fall back to a detached relaunch.
+///
+/// Windows has no `exec`, so there we always spawn a detached successor and exit
+/// (Task Scheduler wouldn't relaunch us on its own anyway).
+pub fn restart_and_exit(exe: &Path) -> ! {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        let err = Command::new(exe).args(std::env::args_os().skip(1)).exec();
+        tracing::error!(error = %err, "re-exec after update failed; falling back to detached relaunch");
     }
-    if let Err(e) = relaunch_detached() {
+    if let Err(e) = relaunch_detached(exe) {
         tracing::error!(error = %e, "failed to relaunch after update");
     }
     std::process::exit(0);
 }
 
-/// Re-exec a fresh **unmanaged** background `run`, mirroring the detach path in
-/// `main.rs`: log to the config dir, record the new PID. Shared by the self-update
-/// restart and the autostart-disable handoff (where a supervised agent hands off to
-/// a standalone copy before the service that supervises it is removed).
-pub(crate) fn relaunch_detached() -> Result<()> {
-    let exe = std::env::current_exe().context("locating agent executable")?;
+/// Spawn a fresh **unmanaged** background `run` of `exe`, mirroring the detach path
+/// in `main.rs`: log to the config dir, record the new PID. Used for the Windows
+/// update restart (and as the Unix re-exec fallback), and for the autostart-disable
+/// handoff (where a supervised agent hands off to a standalone copy before the
+/// service that supervises it is removed).
+pub(crate) fn relaunch_detached(exe: &Path) -> Result<()> {
     let log = std::fs::File::create(Config::log_path()).context("creating log file")?;
     let log_err = log.try_clone()?;
 
-    let mut cmd = Command::new(&exe);
+    let mut cmd = Command::new(exe);
     cmd.arg("run");
     if let Ok(cfg) = std::env::var("DEVEYE_CONFIG") {
         cmd.env("DEVEYE_CONFIG", cfg);
@@ -193,9 +203,9 @@ pub(crate) fn relaunch_detached() -> Result<()> {
         cmd.process_group(0);
     }
 
-    let child = cmd.spawn().context("spawning updated agent")?;
+    let child = cmd.spawn().context("spawning standalone agent")?;
     let _ = std::fs::write(Config::pid_path(), child.id().to_string());
-    info!(pid = child.id(), "relaunched after update");
+    info!(pid = child.id(), "spawned standalone agent");
     Ok(())
 }
 
