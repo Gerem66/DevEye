@@ -74,6 +74,12 @@ export interface DialogProps {
 const FOCUSABLE_FIELD =
     'input:not([type=checkbox]):not([type=radio]):not([type=hidden]), textarea, [contenteditable="true"]';
 
+/** Pixel height of the "tall" layout: the viewport minus the dialog's margins. */
+function viewportTall(): number {
+    const lg = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--space-lg'), 10) || 24;
+    return window.innerHeight - 2 * lg;
+}
+
 /**
  * The single modal/dialog used across the app (link codes, 2FA, password forms,
  * confirmations…). Animated glass surface, closes on overlay click or Escape.
@@ -105,6 +111,15 @@ export default function Dialog({
     // dialog. Only reachable when `dirty` and an `onSave` are provided.
     const [confirmDiscard, setConfirmDiscard] = useState(false);
     const guarded = dirty && !!onSave;
+
+    // Target height for the tall layout, kept in sync with the viewport so the
+    // size switch can animate to a concrete value.
+    const [tallHeight, setTallHeight] = useState(viewportTall);
+    useEffect(() => {
+        const onResize = () => setTallHeight(viewportTall());
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
 
     // A close attempt either pops the confirmation (when dirty) or closes outright.
     const attemptClose = useCallback(() => {
@@ -187,12 +202,11 @@ export default function Dialog({
                         tabIndex={-1}
                         onKeyDown={handleKeyDown}
                         className={`${styles.dialog} ${tall ? styles.dialogTall : ''}`}
-                        style={{ maxWidth: width }}
                         role='dialog'
                         aria-modal='true'
-                        initial={{ opacity: 0, scale: 0.94, y: 0 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.94, y: 0 }}
+                        initial={{ opacity: 0, scale: 0.94, maxWidth: width, height: tall ? tallHeight : 'auto' }}
+                        animate={{ opacity: 1, scale: 1, maxWidth: width, height: tall ? tallHeight : 'auto' }}
+                        exit={{ opacity: 0, scale: 0.94 }}
                         transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.9 }}
                     >
                         <div className={styles.corner}>

@@ -30,12 +30,12 @@
     padding: var(--space-lg);
 }
 
-/* "Tall" mode: a fixed, viewport-tall flex column. The title/footer stay pinned
-   and the body becomes the only scroll area (see .bodyFill). */
+/* "Tall" mode: a fixed-height flex column (the height is animated inline by
+   framer-motion). The title/footer stay pinned and the body becomes the only
+   scroll area (see .bodyFill). */
 .dialogTall {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 2 * var(--space-lg));
     overflow: hidden;
 }
 
