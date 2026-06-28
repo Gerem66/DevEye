@@ -19,6 +19,7 @@ mod protocol;
 mod report;
 mod runner;
 mod service;
+mod state;
 mod update;
 
 use std::fs;
@@ -246,8 +247,11 @@ async fn run(
         return spawn_detached(interval);
     }
 
-    // Record our PID so `stop`/`status` can find a foreground agent too.
+    // Record our PID so `stop`/`status` can find a foreground agent too, plus the
+    // richer runtime state (the account we run as) so `status` reports *our* facts
+    // even when asked from another user's session.
     let _ = fs::write(Config::pid_path(), std::process::id().to_string());
+    state::write_running();
 
     let opts = RunOptions {
         once,
@@ -255,6 +259,7 @@ async fn run(
     };
     let result = runner::run(config, opts).await;
     let _ = fs::remove_file(Config::pid_path());
+    state::clear();
     result
 }
 
@@ -297,10 +302,12 @@ fn stop() -> Result<()> {
     if !process_alive(&pid) {
         println!("Agent not running (stale PID file removed).");
         let _ = fs::remove_file(&pid_path);
+        state::clear();
         return Ok(());
     }
     kill_process(&pid)?;
     let _ = fs::remove_file(&pid_path);
+    state::clear();
     println!("✓ Agent stopped (pid {pid}).");
     Ok(())
 }
@@ -354,6 +361,21 @@ fn status() {
         format!("yes ({scope})")
     };
 
+    // Prefer the running agent's own recorded facts (the account it runs as, its
+    // pid) over re-deriving them from this `status` process — they differ when the
+    // agent runs elevated (root system service) and you ask from a user terminal.
+    let running = state::read_running();
+    let user = running
+        .as_ref()
+        .map(|s| s.user.clone())
+        .unwrap_or_else(report::current_user);
+    let running_text = match &running {
+        Some(s) => format!("yes (pid {})", s.pid),
+        // Fall back to the bare pid file (detach-handshake window, or an older agent
+        // that predates the state file).
+        None => running_state(),
+    };
+
     // Grouped so each block answers one question: which machine this is, how this
     // local agent install is wired, and whether it's operating right now.
     status_section("Device");
@@ -368,7 +390,7 @@ fn status() {
     println!();
     status_section("Agent");
     status_row("Version", env!("DEVEYE_VERSION"));
-    status_row("User", &report::current_user());
+    status_row("User", &user);
     status_row("Server", &c.server);
     status_row(
         "Enrolled",
@@ -381,7 +403,7 @@ fn status() {
 
     println!();
     status_section("Status");
-    status_row("Running", &running_state());
+    status_row("Running", &running_text);
     status_row("Autostart", &autostart);
 }
 
@@ -409,34 +431,13 @@ fn running_state() -> String {
     }
 }
 
-/// Whether a PID is currently a live process. Unix uses `kill -0` (succeeds iff
-/// the process exists and is signalable); Windows asks `tasklist` for that PID.
-#[cfg(unix)]
+/// Whether a PID (as written in the pid file) is currently a live process.
+/// Cross-user safe — see [`state::process_alive`].
 fn process_alive(pid: &str) -> bool {
-    PCommand::new("kill")
-        .args(["-0", pid])
-        // Silence `kill`'s "No such process" on stderr for a dead PID — absence is
-        // an expected, non-error outcome here (reflected in the boolean).
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|s| s.success())
+    pid.trim()
+        .parse::<u32>()
+        .map(state::process_alive)
         .unwrap_or(false)
-}
-
-#[cfg(windows)]
-fn process_alive(pid: &str) -> bool {
-    let out = match PCommand::new("tasklist")
-        .args(["/FI", &format!("PID eq {pid}"), "/NH", "/FO", "CSV"])
-        .output()
-    {
-        Ok(o) if o.status.success() => o.stdout,
-        _ => return false,
-    };
-    // CSV rows quote each field, e.g. `"deveye-agent.exe","1234",...`; absence
-    // prints an "INFO: No tasks…" notice that won't contain the quoted PID.
-    let text = String::from_utf8_lossy(&out);
-    text.contains(&format!("\"{pid}\""))
 }
 
 fn unlink() -> Result<()> {
@@ -447,6 +448,7 @@ fn unlink() -> Result<()> {
     if path.exists() {
         fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
         let _ = fs::remove_file(Config::pid_path());
+        state::clear();
         println!("✓ Local enrollment removed. Delete the device in DevEye → Appareils too.");
     } else {
         println!("Nothing to remove (not enrolled).");

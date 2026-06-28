@@ -62,6 +62,12 @@ impl Config {
         Self::sibling("agent.log")
     }
 
+    /// Runtime-state file the running agent records (pid + the account it runs as),
+    /// so out-of-process commands like `status` report *its* facts. Alongside config.
+    pub fn state_path() -> PathBuf {
+        Self::sibling("agent.state")
+    }
+
     fn sibling(name: &str) -> PathBuf {
         Self::path()
             .parent()
@@ -102,6 +108,7 @@ impl Config {
         }
         let _ = std::fs::remove_file(Self::pid_path());
         let _ = std::fs::remove_file(Self::log_path());
+        let _ = std::fs::remove_file(Self::state_path());
         if let Ok(exe) = std::env::current_exe() {
             let _ = std::fs::remove_file(&exe);
         }

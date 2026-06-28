@@ -352,13 +352,13 @@ fn agent_info() -> AgentInfo {
 }
 
 #[cfg(unix)]
-fn is_privileged() -> bool {
+pub fn is_privileged() -> bool {
     // Effective uid 0 ⇒ root. Shelling out keeps us libc-free (matches the rest).
     run("id", &["-u"]).map(|s| s.trim() == "0").unwrap_or(false)
 }
 
 #[cfg(windows)]
-fn is_privileged() -> bool {
+pub fn is_privileged() -> bool {
     // `net session` only succeeds from an elevated token (else "Access is denied").
     Command::new("net")
         .arg("session")
