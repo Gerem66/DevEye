@@ -61,6 +61,11 @@ function formatStamp(time: number): string {
     });
 }
 
+/** Date only (no time) — used for the PDF's neutral metadata line. */
+function formatDate(time: number): string {
+    return new Date(time * 1000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 /** Drop empty text blocks but keep structural ones (dividers). */
 function normalizeBlocks(blocks: NoteBlock[]): NoteBlock[] {
     return blocks.filter((b) => b.type === 'divider' || b.text.trim() !== '');
@@ -253,86 +258,90 @@ export default function NoteEditor() {
                     blocks={blocks}
                     onChange={setBlocks}
                     fill={expanded}
-                    aside={
-                        mode === 'edit' && created !== null && updated !== null ? (
-                            <p className={styles.editorDates}>
-                                Créée le {formatStamp(created)} · Modifiée le {formatStamp(updated)}
-                            </p>
-                        ) : undefined
+                    notice={
+                        <>
+                            {lockChange && 'set' in lockChange && (
+                                <p className={styles.lockNotice}>
+                                    <span className={`icon ${styles.toggleIcon} icon-lock`} />
+                                    {wasLocked
+                                        ? 'Nouveau mot de passe appliqué à l’enregistrement.'
+                                        : 'La note sera verrouillée à l’enregistrement.'}
+                                </p>
+                            )}
+                            {lockChange && 'remove' in lockChange && (
+                                <p className={styles.lockNotice}>
+                                    <span className={`icon ${styles.toggleIcon} icon-unlock`} />
+                                    Le verrou sera retiré à l’enregistrement.
+                                </p>
+                            )}
+                        </>
                     }
-                />
-
-                {lockChange && 'set' in lockChange && (
-                    <p className={styles.lockNotice}>
-                        <span className={`icon ${styles.toggleIcon} icon-lock`} />
-                        {wasLocked
-                            ? 'Nouveau mot de passe appliqué à l’enregistrement.'
-                            : 'La note sera verrouillée à l’enregistrement.'}
-                    </p>
-                )}
-                {lockChange && 'remove' in lockChange && (
-                    <p className={styles.lockNotice}>
-                        <span className={`icon ${styles.toggleIcon} icon-unlock`} />
-                        Le verrou sera retiré à l’enregistrement.
-                    </p>
-                )}
-
-                <hr className={styles.divider} />
-
-                <div className={styles.editorFooter}>
-                    <div className={styles.footerLeft}>
-                        {mode === 'edit' && (
+                    footerActions={
+                        <>
+                            {mode === 'edit' && (
+                                <button
+                                    type='button'
+                                    className={styles.iconAction}
+                                    aria-label='Supprimer la note'
+                                    title='Supprimer la note'
+                                    onClick={() => void requestDelete()}
+                                >
+                                    <span className={`icon ${styles.toggleIcon} icon-trash`} />
+                                </button>
+                            )}
                             <button
                                 type='button'
-                                className={styles.iconAction}
-                                aria-label='Supprimer la note'
-                                title='Supprimer la note'
-                                onClick={() => void requestDelete()}
+                                className={`${styles.iconToggle} ${pinned ? styles.iconToggleActive : ''}`}
+                                aria-pressed={pinned}
+                                title={pinned ? 'Désépingler' : 'Épingler'}
+                                onClick={() => setPinned((v) => !v)}
                             >
-                                <span className={`icon ${styles.toggleIcon} icon-trash`} />
+                                <span
+                                    className={`icon ${styles.toggleIcon} icon-${pinned ? 'star' : 'star-outline'}`}
+                                />
                             </button>
-                        )}
-                        <button
-                            type='button'
-                            className={`${styles.iconToggle} ${pinned ? styles.iconToggleActive : ''}`}
-                            aria-pressed={pinned}
-                            title={pinned ? 'Désépingler' : 'Épingler'}
-                            onClick={() => setPinned((v) => !v)}
-                        >
-                            <span className={`icon ${styles.toggleIcon} icon-${pinned ? 'star' : 'star-outline'}`} />
-                        </button>
-                        <button
-                            type='button'
-                            className={`${styles.iconToggle} ${lockedAfterSave ? styles.iconToggleActive : ''}`}
-                            aria-pressed={lockedAfterSave}
-                            title={lockedAfterSave ? 'Gérer le verrou' : 'Verrouiller cette note'}
-                            onClick={() => void toggleLock()}
-                        >
-                            <span className={`icon ${styles.toggleIcon} icon-${lockedAfterSave ? 'lock' : 'unlock'}`} />
-                        </button>
-                        <button
-                            type='button'
-                            className={styles.iconToggle}
-                            title='Exporter en PDF'
-                            aria-label='Exporter en PDF'
-                            onClick={() =>
-                                exportNotePdf(
-                                    title,
-                                    normalizeBlocks(blocks),
-                                    mode === 'edit' && updated !== null
-                                        ? `Modifiée le ${formatStamp(updated)}`
-                                        : undefined
-                                )
-                            }
-                        >
-                            <span className={`icon ${styles.toggleIcon} icon-download`} />
-                        </button>
-                    </div>
-                    <div className={styles.footerRight}>
-                        <DialogCancelButton>Annuler</DialogCancelButton>
-                        <Button onClick={save}>Enregistrer</Button>
-                    </div>
-                </div>
+                            <button
+                                type='button'
+                                className={`${styles.iconToggle} ${lockedAfterSave ? styles.iconToggleActive : ''}`}
+                                aria-pressed={lockedAfterSave}
+                                title={lockedAfterSave ? 'Gérer le verrou' : 'Verrouiller cette note'}
+                                onClick={() => void toggleLock()}
+                            >
+                                <span
+                                    className={`icon ${styles.toggleIcon} icon-${lockedAfterSave ? 'lock' : 'unlock'}`}
+                                />
+                            </button>
+                            <button
+                                type='button'
+                                className={styles.iconToggle}
+                                title='Exporter en PDF'
+                                aria-label='Exporter en PDF'
+                                onClick={() =>
+                                    exportNotePdf(
+                                        title,
+                                        normalizeBlocks(blocks),
+                                        mode === 'edit' && updated !== null
+                                            ? `Modifiée le ${formatDate(updated)}`
+                                            : undefined
+                                    )
+                                }
+                            >
+                                <span className={`icon ${styles.toggleIcon} icon-download`} />
+                            </button>
+                        </>
+                    }
+                    footerEnd={
+                        <>
+                            {mode === 'edit' && created !== null && updated !== null && (
+                                <p className={styles.editorDates}>
+                                    Créée le {formatStamp(created)} · Modifiée le {formatStamp(updated)}
+                                </p>
+                            )}
+                            <DialogCancelButton>Annuler</DialogCancelButton>
+                            <Button onClick={save}>Enregistrer</Button>
+                        </>
+                    }
+                />
             </div>
         </Popup>
     );

@@ -505,15 +505,14 @@
     margin: 0;
 }
 
-/* Created / last-modified stamps shown when editing an existing note. Kept on a
-   single right-aligned line so they share the add-block row with the "+" button
-   while taking less room. */
+/* Created / last-modified stamps shown when editing, sitting in the footer just
+   left of the "Annuler" button. Kept on one line and allowed to shrink. */
 .editorDates {
     margin: 0;
-    text-align: right;
     font-size: 0.75rem;
     line-height: 1.35;
     color: var(--text-muted);
+    white-space: nowrap;
 }
 
 /* Blocks editor */
@@ -798,20 +797,11 @@
     height: 14px;
 }
 
-/* Foot of the block list: the discreet "+" (add block) and "Aa" (format) menu
-   triggers on the left, the note's date stamps pushed to the right. */
-.addBar {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: var(--space-md);
-    margin-top: var(--space-sm);
-}
-
-/* Left cluster grouping the trigger buttons together. */
+/* The "+" (add block) and "Aa" (format) menu triggers, grouped together in the
+   footer just after the note's icon actions. */
 .addTools {
     display: inline-flex;
-    align-items: flex-end;
+    align-items: center;
     gap: var(--space-sm);
 }
 
@@ -819,7 +809,15 @@
 .addMenu {
     position: relative;
     display: inline-flex;
-    align-items: flex-end;
+    align-items: center;
+}
+
+/* Thin vertical rule separating the icon actions from the +/Aa tools. */
+.vsep {
+    width: 1px;
+    height: 20px;
+    margin: 0 2px;
+    background: var(--glass-border);
 }
 
 .addMenuBtn {
@@ -871,12 +869,17 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--space-sm);
+    /* Wrap the right cluster below on narrow widths rather than overflowing. */
+    flex-wrap: wrap;
+    row-gap: var(--space-sm);
 }
 
 .footerRight {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
+    min-width: 0;
+    margin-left: auto;
 }
 
 .popupHint {

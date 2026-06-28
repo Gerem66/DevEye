@@ -12,10 +12,13 @@ interface BlockEditorProps {
     /** Let the block list flex to fill its parent and be the only scroll area
      *  (used when the editor popup is in its large, fixed-height layout). */
     fill?: boolean;
-    /** Content shown right-aligned on the add-block row (e.g. the note's
-     *  created/updated stamps), so it shares that line rather than taking one
-     *  of its own. */
-    aside?: React.ReactNode;
+    /** Rendered in the footer's left cluster, before the "+"/"Aa" tools (a thin
+     *  vertical separator sits between the two groups). */
+    footerActions?: React.ReactNode;
+    /** Rendered in the footer's right cluster (e.g. date stamps + cancel/save). */
+    footerEnd?: React.ReactNode;
+    /** Rendered between the block list and the footer (e.g. pending-lock notices). */
+    notice?: React.ReactNode;
 }
 
 /**
@@ -94,7 +97,7 @@ interface DragState {
  *
  * Rows reorder by dragging the grip on the left (see {@link DragState}).
  */
-export default function BlockEditor({ blocks, onChange, fill, aside }: BlockEditorProps) {
+export default function BlockEditor({ blocks, onChange, fill, footerActions, footerEnd, notice }: BlockEditorProps) {
     const refs = useRef<(RichTextHandle | null)[]>([]);
     const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
     const focusIndex = useRef<number | null>(null);
@@ -531,124 +534,132 @@ export default function BlockEditor({ blocks, onChange, fill, aside }: BlockEdit
                 {placeholderBefore === -1 && placeholder}
             </div>
 
-            <div className={styles.addBar}>
-                <div className={styles.addTools}>
-                    <div className={styles.addMenu} ref={addMenuRef}>
-                        <button
-                            type='button'
-                            className={styles.addMenuBtn}
-                            aria-label='Ajouter un bloc'
-                            aria-expanded={addMenuOpen}
-                            title='Ajouter un bloc'
-                            onClick={() => {
-                                setFormatMenuOpen(false);
-                                setAddMenuOpen((v) => !v);
-                            }}
-                        >
-                            <span className={`icon ${styles.toggleIcon} icon-add`} />
-                        </button>
-                        {addMenuOpen && (
-                            <div className={`${styles.menu} ${styles.addMenuList}`}>
-                                <button
-                                    type='button'
-                                    className={styles.menuItem}
-                                    onClick={() => addBlock({ type: 'text', text: '' })}
-                                >
-                                    <span className={`icon ${styles.toggleIcon} icon-add`} /> Paragraphe
-                                </button>
-                                <button
-                                    type='button'
-                                    className={styles.menuItem}
-                                    onClick={() => addBlock({ type: 'heading', text: '', level: 2 })}
-                                >
-                                    <span className={`icon ${styles.toggleIcon} icon-heading`} /> Titre
-                                </button>
-                                <button
-                                    type='button'
-                                    className={styles.menuItem}
-                                    onClick={() => addBlock({ type: 'check', text: '', done: false })}
-                                >
-                                    <span className={`icon ${styles.toggleIcon} icon-square-empty`} /> Case à cocher
-                                </button>
-                                <button
-                                    type='button'
-                                    className={styles.menuItem}
-                                    onClick={() => addBlock({ type: 'bullet', text: '' })}
-                                >
-                                    <span className={`icon ${styles.toggleIcon} icon-list`} /> Liste
-                                </button>
-                                <button
-                                    type='button'
-                                    className={styles.menuItem}
-                                    onClick={() => addBlock({ type: 'number', text: '' })}
-                                >
-                                    <span className={`icon ${styles.toggleIcon} icon-list-numbered`} /> Liste numérotée
-                                </button>
-                                <button
-                                    type='button'
-                                    className={styles.menuItem}
-                                    onClick={() => addBlock({ type: 'divider' })}
-                                >
-                                    <span className={`icon ${styles.toggleIcon} icon-divider`} /> Séparateur
-                                </button>
-                            </div>
-                        )}
-                    </div>
+            {notice}
 
-                    <div className={styles.addMenu} ref={formatMenuRef}>
-                        <button
-                            type='button'
-                            className={styles.addMenuBtn}
-                            aria-label='Mettre en forme le texte'
-                            aria-expanded={formatMenuOpen}
-                            title='Mettre en forme la sélection'
-                            onClick={() => {
-                                setAddMenuOpen(false);
-                                setFormatMenuOpen((v) => !v);
-                            }}
-                        >
-                            <span className={`icon ${styles.toggleIcon} icon-format`} />
-                        </button>
-                        {formatMenuOpen && (
-                            <div className={`${styles.menu} ${styles.addMenuList}`}>
-                                <button
-                                    type='button'
-                                    className={styles.menuItem}
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onClick={() => applyMark('bold')}
-                                >
-                                    <span className={styles.mdBold}>Gras</span>
-                                </button>
-                                <button
-                                    type='button'
-                                    className={styles.menuItem}
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onClick={() => applyMark('italic')}
-                                >
-                                    <span className={styles.mdItalic}>Italique</span>
-                                </button>
-                                <button
-                                    type='button'
-                                    className={styles.menuItem}
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onClick={() => applyMark('underline')}
-                                >
-                                    <span className={styles.mdUnderline}>Souligné</span>
-                                </button>
-                                <button
-                                    type='button'
-                                    className={styles.menuItem}
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onClick={() => applyMark('strike')}
-                                >
-                                    <span className={styles.mdStrike}>Barré</span>
-                                </button>
-                            </div>
-                        )}
+            <hr className={styles.divider} />
+
+            <div className={styles.editorFooter}>
+                <div className={styles.footerLeft}>
+                    {footerActions}
+                    {footerActions && <span className={styles.vsep} aria-hidden='true' />}
+                    <div className={styles.addTools}>
+                        <div className={styles.addMenu} ref={addMenuRef}>
+                            <button
+                                type='button'
+                                className={styles.addMenuBtn}
+                                aria-label='Ajouter un bloc'
+                                aria-expanded={addMenuOpen}
+                                title='Ajouter un bloc'
+                                onClick={() => {
+                                    setFormatMenuOpen(false);
+                                    setAddMenuOpen((v) => !v);
+                                }}
+                            >
+                                <span className={`icon ${styles.toggleIcon} icon-add`} />
+                            </button>
+                            {addMenuOpen && (
+                                <div className={`${styles.menu} ${styles.addMenuList}`}>
+                                    <button
+                                        type='button'
+                                        className={styles.menuItem}
+                                        onClick={() => addBlock({ type: 'text', text: '' })}
+                                    >
+                                        <span className={`icon ${styles.toggleIcon} icon-add`} /> Paragraphe
+                                    </button>
+                                    <button
+                                        type='button'
+                                        className={styles.menuItem}
+                                        onClick={() => addBlock({ type: 'heading', text: '', level: 2 })}
+                                    >
+                                        <span className={`icon ${styles.toggleIcon} icon-heading`} /> Titre
+                                    </button>
+                                    <button
+                                        type='button'
+                                        className={styles.menuItem}
+                                        onClick={() => addBlock({ type: 'check', text: '', done: false })}
+                                    >
+                                        <span className={`icon ${styles.toggleIcon} icon-square-empty`} /> Case à cocher
+                                    </button>
+                                    <button
+                                        type='button'
+                                        className={styles.menuItem}
+                                        onClick={() => addBlock({ type: 'bullet', text: '' })}
+                                    >
+                                        <span className={`icon ${styles.toggleIcon} icon-list`} /> Liste
+                                    </button>
+                                    <button
+                                        type='button'
+                                        className={styles.menuItem}
+                                        onClick={() => addBlock({ type: 'number', text: '' })}
+                                    >
+                                        <span className={`icon ${styles.toggleIcon} icon-list-numbered`} /> Liste
+                                        numérotée
+                                    </button>
+                                    <button
+                                        type='button'
+                                        className={styles.menuItem}
+                                        onClick={() => addBlock({ type: 'divider' })}
+                                    >
+                                        <span className={`icon ${styles.toggleIcon} icon-divider`} /> Séparateur
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className={styles.addMenu} ref={formatMenuRef}>
+                            <button
+                                type='button'
+                                className={styles.addMenuBtn}
+                                aria-label='Mettre en forme le texte'
+                                aria-expanded={formatMenuOpen}
+                                title='Mettre en forme la sélection'
+                                onClick={() => {
+                                    setAddMenuOpen(false);
+                                    setFormatMenuOpen((v) => !v);
+                                }}
+                            >
+                                <span className={`icon ${styles.toggleIcon} icon-format`} />
+                            </button>
+                            {formatMenuOpen && (
+                                <div className={`${styles.menu} ${styles.addMenuList}`}>
+                                    <button
+                                        type='button'
+                                        className={styles.menuItem}
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => applyMark('bold')}
+                                    >
+                                        <span className={styles.mdBold}>Gras</span>
+                                    </button>
+                                    <button
+                                        type='button'
+                                        className={styles.menuItem}
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => applyMark('italic')}
+                                    >
+                                        <span className={styles.mdItalic}>Italique</span>
+                                    </button>
+                                    <button
+                                        type='button'
+                                        className={styles.menuItem}
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => applyMark('underline')}
+                                    >
+                                        <span className={styles.mdUnderline}>Souligné</span>
+                                    </button>
+                                    <button
+                                        type='button'
+                                        className={styles.menuItem}
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => applyMark('strike')}
+                                    >
+                                        <span className={styles.mdStrike}>Barré</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
-
-                {aside}
+                <div className={styles.footerRight}>{footerEnd}</div>
             </div>
         </>
     );
