@@ -82,11 +82,21 @@ export function ShortcutTile({ item, hideBadge }: ShortcutTileProps) {
     // Show the type badge only when the main image is a real avatar — otherwise
     // the main image is already the favicon and the badge would duplicate it.
     const showBadge = !hideBadge && !!realImage && !!favicon;
+    // Live/online status dot (e.g. Twitch), sat just left of the type badge.
+    // Hidden in edit mode, where the action buttons occupy that corner.
+    const status = !hideBadge ? (preview?.status ?? null) : null;
 
     return (
         <div className={`${styles.shortcut} ${refreshing ? styles.refreshing : ''}`} onClick={onClick}>
-            {/* Small service logo in the corner (the "type"). Hidden in edit mode,
+            {/* Status dot + small service logo in the corner. Hidden in edit mode,
                 where the action buttons occupy that corner. */}
+            {status && (
+                <span
+                    className={`${styles.statusDot} ${status === 'online' ? styles.statusOnline : styles.statusOffline}`}
+                    aria-label={status === 'online' ? 'En ligne' : 'Hors ligne'}
+                    title={status === 'online' ? 'En ligne' : 'Hors ligne'}
+                />
+            )}
             {showBadge && (
                 <span className={styles.typeBadge} aria-hidden='true'>
                     <img className={styles.typeBadgeImg} src={favicon} alt='' referrerPolicy='no-referrer' />

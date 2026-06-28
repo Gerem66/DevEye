@@ -39,6 +39,25 @@
     color: var(--text-muted);
 }
 
+/* Live/online status dot, sat just left of the type badge in the top-right. */
+.statusDot {
+    position: absolute;
+    top: 4px;
+    right: 22px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px var(--glass-bg);
+}
+
+.statusOnline {
+    background: var(--success);
+}
+
+.statusOffline {
+    background: var(--danger);
+}
+
 .shortcutHead {
     display: flex;
     align-items: center;
