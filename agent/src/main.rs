@@ -30,10 +30,11 @@ use std::fs;
 use std::sync::OnceLock;
 
 /// Whether this process is supervised by a service manager (systemd/launchd/task),
-/// set once at startup from `run --managed`. Reported to the server and used when
-/// disabling autostart (we must hand off before the supervising service is removed,
-/// or it would kill us). Self-update no longer branches on this — it re-execs in
-/// place (see `update::restart_and_exit`).
+/// set once at startup from `run --managed`. Drives the self-update restart (a
+/// supervised agent just exits and lets the manager relaunch it; otherwise it
+/// respawns itself — see `update::restart_and_exit`), is reported to the server,
+/// and is used when disabling autostart (we must hand off before the supervising
+/// service is removed, or it would kill us).
 static MANAGED: OnceLock<bool> = OnceLock::new();
 
 pub fn managed() -> bool {

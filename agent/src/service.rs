@@ -143,6 +143,7 @@ mod imp {
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>1</integer>
   <key>StandardOutPath</key><string>{log}</string>
   <key>StandardErrorPath</key><string>{log}</string>
 </dict>

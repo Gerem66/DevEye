@@ -156,23 +156,23 @@ pub fn cleanup_after_update() {
 /// Restart into the (already-swapped) binary at `exe` and terminate this process.
 /// Never returns.
 ///
-/// On Unix we **re-exec in place**: same PID, so whatever supervises us (systemd,
-/// launchd, or nothing) just keeps running it — no restart delay, respawn throttle
-/// or rate limit, and no second process to deduplicate. The original args (incl.
-/// `--managed`/`--config`) and environment carry over untouched. `exec` only
-/// returns on failure, where we fall back to a detached relaunch.
+/// We restart by letting a **fresh process** load the new binary, never by
+/// re-exec-ing in place: macOS refuses to exec a just-replaced executable image
+/// (code-signing/AMFI kills it), so an in-place re-exec leaves the agent stuck on
+/// the old version. A clean exit + relaunch is the portable, reliable path.
 ///
-/// Windows has no `exec`, so there we always spawn a detached successor and exit
-/// (Task Scheduler wouldn't relaunch us on its own anyway).
+/// - **Supervised** (systemd `Restart=always`, launchd `KeepAlive`): just exit; the
+///   manager relaunches us at once (tuned via `RestartSec` / `ThrottleInterval`).
+/// - **Unsupervised** (foreground/detached) **or Windows** (Task Scheduler won't
+///   relaunch a task that exits): spawn a detached successor ourselves, then exit.
 pub fn restart_and_exit(exe: &Path) -> ! {
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        let err = Command::new(exe).args(std::env::args_os().skip(1)).exec();
-        tracing::error!(error = %err, "re-exec after update failed; falling back to detached relaunch");
-    }
-    if let Err(e) = relaunch_detached(exe) {
-        tracing::error!(error = %e, "failed to relaunch after update");
+    // On Windows nothing relaunches us on exit; on Unix a service manager does
+    // (when we're managed). Otherwise we respawn ourselves.
+    let respawn_ourselves = cfg!(windows) || !crate::managed();
+    if respawn_ourselves {
+        if let Err(e) = relaunch_detached(exe) {
+            tracing::error!(error = %e, "failed to relaunch after update");
+        }
     }
     std::process::exit(0);
 }
