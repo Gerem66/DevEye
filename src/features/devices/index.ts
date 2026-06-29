@@ -15,6 +15,12 @@ import {
 import { deviceLogQueryFeature, deviceLogSourcesFeature } from './logs';
 import { deviceListPackagesFeature, deviceUpgradePackagesFeature } from './packages';
 import { devicePowerFeature } from './power';
+import {
+    deviceTermCloseFeature,
+    deviceTermInputFeature,
+    deviceTermOpenFeature,
+    deviceTermResizeFeature
+} from './terminal';
 import { deviceDropPrivilegesFeature, deviceElevateFeature, deviceSetAutostartFeature } from './service';
 
 /**
@@ -25,6 +31,7 @@ import { deviceDropPrivilegesFeature, deviceElevateFeature, deviceSetAutostartFe
  * - `packages`   — update-manager detection + live upgrades
  * - `power`      — system power actions (shutdown, reboot, suspend, lock…)
  * - `logs`       — on-device log viewer (journald, Docker, files…)
+ * - `terminal`   — interactive remote shell (PTY) sessions
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const deviceFeatures: FeatureDefinition<string, any, any>[] = [
@@ -43,6 +50,10 @@ export const deviceFeatures: FeatureDefinition<string, any, any>[] = [
     devicePowerFeature,
     deviceLogSourcesFeature,
     deviceLogQueryFeature,
+    deviceTermOpenFeature,
+    deviceTermInputFeature,
+    deviceTermResizeFeature,
+    deviceTermCloseFeature,
     deviceRequestDeleteFeature,
     deviceCancelDeleteFeature,
     deviceForceDeleteFeature,

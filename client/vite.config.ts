@@ -36,6 +36,9 @@ export default defineConfig({
                 manualChunks(id) {
                     if (!id.includes('node_modules')) return undefined;
                     if (id.includes('framer-motion')) return 'framer-motion';
+                    // xterm is only pulled in by the lazily-loaded terminal panel; keep
+                    // it in its own chunk so it loads on demand, not on first paint.
+                    if (id.includes('@xterm')) return 'xterm';
                     if (id.includes('/react') || id.includes('/scheduler')) return 'react-vendor';
                     return 'vendor';
                 }

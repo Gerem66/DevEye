@@ -348,6 +348,27 @@ pub enum ClientMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
+    /// A chunk of PTY output for a terminal session (`data` is base64 of raw bytes).
+    #[serde(rename = "term.output")]
+    TermOutput {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        data: String,
+    },
+    /// A terminal session ended (shell exited, killed, or open failed).
+    #[serde(rename = "term.exit")]
+    TermExit {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        code: Option<i32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
     /// Reply to `pkg.list`: the package managers present + their pending counts.
     #[serde(rename = "pkg.listResult")]
     PkgListResult {
@@ -428,6 +449,35 @@ pub enum ServerMessage {
         filter: Option<LogFilter>,
         #[serde(default)]
         limit: Option<u32>,
+    },
+    /// Open an interactive PTY session running the agent user's shell.
+    #[serde(rename = "term.open")]
+    TermOpen {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        cols: u16,
+        rows: u16,
+    },
+    /// Write input bytes (base64) to a session's PTY.
+    #[serde(rename = "term.input")]
+    TermInput {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        data: String,
+    },
+    /// Resize a session's PTY.
+    #[serde(rename = "term.resize")]
+    TermResize {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        cols: u16,
+        rows: u16,
+    },
+    /// Close a session (kill the shell, free the PTY).
+    #[serde(rename = "term.close")]
+    TermClose {
+        #[serde(rename = "sessionId")]
+        session_id: String,
     },
     /// Enumerate package managers + pending updates (replies `pkg.listResult`).
     #[serde(rename = "pkg.list")]

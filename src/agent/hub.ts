@@ -9,12 +9,18 @@ import {
     AGENT_PKG_UPGRADE,
     AGENT_POWER,
     AGENT_SERVICE,
+    AGENT_TERM_CLOSE,
+    AGENT_TERM_INPUT,
+    AGENT_TERM_OPEN,
+    AGENT_TERM_RESIZE,
     AGENT_UPDATE,
     DEVICE_LOG_LINES_EVENT,
     DEVICE_LOG_SOURCES_EVENT,
     DEVICE_POWER_EVENT,
     DEVICE_PRESENCE_EVENT,
     DEVICE_REPORT_EVENT,
+    DEVICE_TERM_EXIT_EVENT,
+    DEVICE_TERM_OUTPUT_EVENT,
     METRICS_PUSH_EVENT,
     PACKAGE_DONE_EVENT,
     PACKAGE_LIST_EVENT,
@@ -24,12 +30,18 @@ import {
     type AgentPkgUpgradePayload,
     type AgentPowerPayload,
     type AgentServicePayload,
+    type AgentTermClosePayload,
+    type AgentTermInputPayload,
+    type AgentTermOpenPayload,
+    type AgentTermResizePayload,
     type AgentUpdatePayload,
     type DeviceLogLinesPush,
     type DeviceLogSourcesPush,
     type DevicePowerPush,
     type DevicePresence,
     type DeviceReport,
+    type DeviceTermExitPush,
+    type DeviceTermOutputPush,
     type MetricSnapshot,
     type PackageDonePush,
     type PackageListPush,
@@ -147,6 +159,36 @@ export class MonitorHub {
     /** Fan out one chunk of queried log lines to a device's subscribers. */
     publishLogLines(payload: DeviceLogLinesPush): void {
         this.publishToSubscribers(payload.deviceId, DEVICE_LOG_LINES_EVENT, payload);
+    }
+
+    /** Open an interactive terminal session on a connected agent. No-op if offline. */
+    requestTermOpen(deviceId: string, payload: AgentTermOpenPayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_TERM_OPEN, payload);
+    }
+
+    /** Send terminal input to a connected agent. No-op if offline. */
+    requestTermInput(deviceId: string, payload: AgentTermInputPayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_TERM_INPUT, payload);
+    }
+
+    /** Resize a terminal session on a connected agent. No-op if offline. */
+    requestTermResize(deviceId: string, payload: AgentTermResizePayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_TERM_RESIZE, payload);
+    }
+
+    /** Close a terminal session on a connected agent. No-op if offline. */
+    requestTermClose(deviceId: string, payload: AgentTermClosePayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_TERM_CLOSE, payload);
+    }
+
+    /** Fan out a chunk of terminal output to a device's subscribers. */
+    publishTermOutput(payload: DeviceTermOutputPush): void {
+        this.publishToSubscribers(payload.deviceId, DEVICE_TERM_OUTPUT_EVENT, payload);
+    }
+
+    /** Fan out a terminal session-end to a device's subscribers. */
+    publishTermExit(payload: DeviceTermExitPush): void {
+        this.publishToSubscribers(payload.deviceId, DEVICE_TERM_EXIT_EVENT, payload);
     }
 
     /** Fan out a package-manager inventory to the device's subscribers. */
@@ -301,6 +343,14 @@ export interface MonitorTransport {
     requestLogSources(deviceId: string): boolean;
     /** Ask the device's agent to run one log query; false if offline. */
     requestLogQuery(deviceId: string, payload: AgentLogQueryPayload): boolean;
+    /** Open a terminal session on the device's agent; false if offline. */
+    requestTermOpen(deviceId: string, payload: AgentTermOpenPayload): boolean;
+    /** Send terminal input to the device's agent; false if offline. */
+    requestTermInput(deviceId: string, payload: AgentTermInputPayload): boolean;
+    /** Resize a terminal session on the device's agent; false if offline. */
+    requestTermResize(deviceId: string, payload: AgentTermResizePayload): boolean;
+    /** Close a terminal session on the device's agent; false if offline. */
+    requestTermClose(deviceId: string, payload: AgentTermClosePayload): boolean;
 }
 
 export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): MonitorTransport {
@@ -318,6 +368,10 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         requestPkgUpgrade: (deviceId, payload) => hub.requestPkgUpgrade(deviceId, payload),
         requestPower: (deviceId, payload) => hub.requestPower(deviceId, payload),
         requestLogSources: (deviceId) => hub.requestLogSources(deviceId),
-        requestLogQuery: (deviceId, payload) => hub.requestLogQuery(deviceId, payload)
+        requestLogQuery: (deviceId, payload) => hub.requestLogQuery(deviceId, payload),
+        requestTermOpen: (deviceId, payload) => hub.requestTermOpen(deviceId, payload),
+        requestTermInput: (deviceId, payload) => hub.requestTermInput(deviceId, payload),
+        requestTermResize: (deviceId, payload) => hub.requestTermResize(deviceId, payload),
+        requestTermClose: (deviceId, payload) => hub.requestTermClose(deviceId, payload)
     };
 }

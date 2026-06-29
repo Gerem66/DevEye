@@ -270,3 +270,7 @@
     -webkit-mask-image: url(/icons/snowflake.svg);
     mask-image: url(/icons/snowflake.svg);
 }
+.icon.icon-terminal {
+    -webkit-mask-image: url(/icons/terminal.svg);
+    mask-image: url(/icons/terminal.svg);
+}

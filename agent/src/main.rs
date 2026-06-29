@@ -22,6 +22,7 @@ mod report;
 mod runner;
 mod service;
 mod state;
+mod terminal;
 mod update;
 
 use std::fs;

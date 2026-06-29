@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ws } from '@/api/ws';
 import { useDevices } from '@/stores/devices';
 import { acquireMetrics } from '@/stores/metricsSubscription';
@@ -30,6 +30,10 @@ import { PackagesPanel } from './PackagesPanel';
 import { PowerMenu } from './PowerMenu';
 import { LogsPanel } from './LogsPanel';
 import { useAgentUpdate } from './useAgentUpdate';
+
+// xterm.js is heavy and rarely opened — load the terminal panel on demand so it
+// doesn't weigh on the initial bundle.
+const TerminalPanel = lazy(() => import('./TerminalPanel').then((m) => ({ default: m.TerminalPanel })));
 import { agentUpdatable } from '../agentVersion';
 import {
     ACTIVITY_META,
@@ -222,6 +226,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const [packagesOpen, setPackagesOpen] = useState(false);
     const [powerOpen, setPowerOpen] = useState(false);
     const [logsOpen, setLogsOpen] = useState(false);
+    const [terminalOpen, setTerminalOpen] = useState(false);
     const updater = useAgentUpdate();
     // Storage footprint of the device's stored snapshots.
     const [storage, setStorage] = useState<{ snapshots: number; rows: number; bytes: number } | null>(null);
@@ -899,6 +904,15 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     {online && !archived && (
                         <button
                             className={styles.iconHeaderBtn}
+                            onClick={() => setTerminalOpen(true)}
+                            title='Terminal distant'
+                        >
+                            <span className='icon icon-terminal' />
+                        </button>
+                    )}
+                    {online && !archived && (
+                        <button
+                            className={styles.iconHeaderBtn}
                             onClick={() => setLogsOpen(true)}
                             title='Logs de l’appareil'
                         >
@@ -1314,6 +1328,25 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 }
             >
                 {logsOpen && <LogsPanel deviceId={selected.id} />}
+            </Dialog>
+
+            <Dialog
+                open={terminalOpen}
+                onClose={() => setTerminalOpen(false)}
+                title={`Terminal — « ${selected.name} »`}
+                description='Shell interactif distant, exécuté sous l’utilisateur de l’agent.'
+                width={900}
+                footer={
+                    <Button variant='secondary' onClick={() => setTerminalOpen(false)}>
+                        Fermer
+                    </Button>
+                }
+            >
+                {terminalOpen && (
+                    <Suspense fallback={<p className={styles.waitingMsg}>Chargement du terminal…</p>}>
+                        <TerminalPanel deviceId={selected.id} />
+                    </Suspense>
+                )}
             </Dialog>
 
             <Dialog

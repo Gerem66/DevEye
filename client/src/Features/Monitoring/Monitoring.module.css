@@ -1879,3 +1879,32 @@
     padding: var(--space-md);
     word-break: break-word;
 }
+
+/* ── Remote terminal (device.term*) ── */
+.terminalWrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+.terminalHost {
+    height: 58vh;
+    width: 100%;
+    background: var(--surface-2, var(--surface));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm);
+    overflow: hidden;
+}
+.terminalExit {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}

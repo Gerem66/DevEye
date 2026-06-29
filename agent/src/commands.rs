@@ -10,10 +10,13 @@ use futures_util::SinkExt;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{info, warn};
 
+use base64::Engine as _;
+
 use crate::config::Config;
 use crate::logs::LogEvent;
 use crate::packages::PkgEvent;
 use crate::protocol::ClientMessage;
+use crate::terminal::TermEvent;
 
 /// Self-destruct on the server's request. On success the agent wipes its local
 /// state, reports it, and **exits the process** (never returns). On failure it
@@ -368,6 +371,35 @@ where
             manager,
             ok,
             reboot_required: Some(reboot_required),
+            error,
+        },
+    };
+    if let Ok(text) = serde_json::to_string(&msg) {
+        let _ = sink.send(Message::Text(text)).await;
+    }
+}
+
+/// Forward one terminal event to the server (PTY output is base64-encoded so any
+/// raw bytes survive the JSON wire), stamping it with the device id.
+pub(crate) async fn send_term_event<S>(sink: &mut S, device_id: &str, ev: TermEvent)
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let msg = match ev {
+        TermEvent::Output { session_id, data } => ClientMessage::TermOutput {
+            device_id: device_id.to_string(),
+            session_id,
+            data: base64::engine::general_purpose::STANDARD.encode(&data),
+        },
+        TermEvent::Exit {
+            session_id,
+            code,
+            error,
+        } => ClientMessage::TermExit {
+            device_id: device_id.to_string(),
+            session_id,
+            code,
             error,
         },
     };

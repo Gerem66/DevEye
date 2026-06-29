@@ -16,6 +16,7 @@ use std::collections::VecDeque;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
+use base64::Engine as _;
 use futures_util::{SinkExt, StreamExt};
 use tokio::time::{interval_at, Instant, MissedTickBehavior};
 use tokio_tungstenite::tungstenite::Message;
@@ -236,6 +237,10 @@ async fn stream_session(
     // Log source/query tasks (a query shells out to journalctl/docker and can return
     // many lines) stream their results back through this channel, same as packages.
     let (log_tx, mut log_rx) = tokio::sync::mpsc::channel::<crate::logs::LogEvent>(256);
+    // Interactive terminals: PTY reader threads push output/exit events here; the
+    // manager owns the live sessions and is dropped (killing shells) when we return.
+    let (term_tx, mut term_rx) = tokio::sync::mpsc::channel::<crate::terminal::TermEvent>(1024);
+    let mut terminals = crate::terminal::TermManager::new(term_tx);
 
     loop {
         tokio::select! {
@@ -244,6 +249,14 @@ async fn stream_session(
             }
             Some(ev) = log_rx.recv() => {
                 commands::send_log_event(&mut sink, device_id, ev).await;
+            }
+            Some(ev) = term_rx.recv() => {
+                // A session that ended is also dropped from the manager (the reader
+                // thread is already gone; this frees the slot + writer thread).
+                if let crate::terminal::TermEvent::Exit { session_id, .. } = &ev {
+                    terminals.close(session_id);
+                }
+                commands::send_term_event(&mut sink, device_id, ev).await;
             }
             _ = metric_ticker.tick() => {
                 push_bounded(queue, collector.collect_fine());
@@ -337,6 +350,37 @@ async fn stream_session(
                                     limit.map(|l| l as usize).unwrap_or(crate::logs::DEFAULT_LIMIT),
                                     log_tx.clone(),
                                 ));
+                            }
+                            // Open an interactive terminal (PTY + shell).
+                            Ok(ServerMessage::TermOpen { session_id, cols, rows }) => {
+                                if let Err(e) = terminals.open(session_id.clone(), cols, rows) {
+                                    commands::send_term_event(
+                                        &mut sink,
+                                        device_id,
+                                        crate::terminal::TermEvent::Exit {
+                                            session_id,
+                                            code: None,
+                                            error: Some(e.to_string()),
+                                        },
+                                    )
+                                    .await;
+                                }
+                            }
+                            // Keystrokes for a terminal session (base64 → raw bytes).
+                            Ok(ServerMessage::TermInput { session_id, data }) => {
+                                if let Ok(bytes) =
+                                    base64::engine::general_purpose::STANDARD.decode(data.as_bytes())
+                                {
+                                    terminals.input(&session_id, bytes);
+                                }
+                            }
+                            // Resize a terminal session's PTY.
+                            Ok(ServerMessage::TermResize { session_id, cols, rows }) => {
+                                terminals.resize(&session_id, cols, rows);
+                            }
+                            // Close a terminal session (the reader then emits a final exit).
+                            Ok(ServerMessage::TermClose { session_id }) => {
+                                terminals.close(&session_id);
                             }
                             // Enumerate package managers (off-loop; replies via pkg_rx).
                             Ok(ServerMessage::PkgList {}) => {

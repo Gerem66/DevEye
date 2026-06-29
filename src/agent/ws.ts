@@ -15,6 +15,8 @@ import {
     AGENT_PROCESSES,
     AGENT_REPORT,
     AGENT_SERVICE_RESULT,
+    AGENT_TERM_EXIT,
+    AGENT_TERM_OUTPUT,
     AGENT_UPDATED,
     agentClientMessageSchema,
     type AgentClientMessage,
@@ -38,6 +40,8 @@ import {
     handleProcesses,
     handleReport,
     handleServiceResult,
+    handleTermExit,
+    handleTermOutput,
     handleUpdated,
     type AgentSession
 } from './handlers';
@@ -83,6 +87,10 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
             return handleLogSourcesResult(session, msg.payload);
         case AGENT_LOG_LINES:
             return handleLogLines(session, msg.payload);
+        case AGENT_TERM_OUTPUT:
+            return handleTermOutput(session, msg.payload);
+        case AGENT_TERM_EXIT:
+            return handleTermExit(session, msg.payload);
         case AGENT_PKG_LIST_RESULT:
             return handlePkgListResult(session, msg.payload);
         case AGENT_PKG_PROGRESS:
