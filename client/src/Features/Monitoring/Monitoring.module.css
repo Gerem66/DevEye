@@ -1991,9 +1991,17 @@
     display: flex;
     align-items: center;
     border-bottom: 1px solid var(--glass-border);
+    cursor: default;
 }
 .filesRow:hover {
     background: var(--glass-bg-light);
+}
+.filesRowClickable {
+    cursor: pointer;
+}
+.filesRowClickable:focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: -1px;
 }
 .filesRowMain {
     flex: 1;
@@ -2002,15 +2010,14 @@
     gap: var(--space-sm);
     min-width: 0;
     padding: var(--space-xs) var(--space-sm);
-    background: transparent;
-    border: none;
     color: var(--text-primary);
-    cursor: pointer;
     text-align: left;
     font-size: 0.85rem;
 }
-.filesRowMain:disabled {
-    cursor: default;
+.filesParentHint {
+    flex: 1;
+    color: var(--text-muted);
+    font-size: 0.78rem;
 }
 .filesRowIcon {
     flex-shrink: 0;
@@ -2037,6 +2044,26 @@
     height: 100%;
     background: var(--accent);
     opacity: 0.8;
+    transition: width 0.25s ease;
+}
+/* Indeterminate sweep shown while the recursive usage is still being computed —
+   kept very subtle so it reads as "loading", not as a real bar. */
+.filesBarIndet {
+    display: block;
+    height: 100%;
+    width: 45%;
+    border-radius: 4px;
+    background: var(--accent);
+    opacity: 0.15;
+    animation: filesIndet 1.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+@keyframes filesIndet {
+    0% {
+        margin-left: -45%;
+    }
+    100% {
+        margin-left: 100%;
+    }
 }
 .filesSize {
     flex-shrink: 0;
