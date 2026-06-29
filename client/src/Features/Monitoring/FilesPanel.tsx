@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ws } from '@/api/ws';
 import { acquireMetrics } from '@/stores/metricsSubscription';
 import Button from '@/Components/Button';
@@ -316,6 +316,18 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
         return { withSize, max };
     }, [listing, usage]);
 
+    // True while the recursive-usage pass for the current directory is still running
+    // (drives the indeterminate bars). Cleared once the usage result lands.
+    const computing = analyzing && usage === null;
+
+    // Keyboard activation for the row-as-button (Enter / Space → open the directory).
+    const rowKey = (e: KeyboardEvent, target: string) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            navigate(target);
+        }
+    };
+
     const breadcrumb = useMemo(() => {
         const sep = path.includes('\\') && !path.includes('/') ? '\\' : '/';
         const parts = path.split(sep).filter(Boolean);
@@ -442,65 +454,101 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                 />
             ) : (
                 <div className={styles.filesList}>
+                    {/* ".." — always on top for an easy step back (the arrow also does it). */}
+                    {listing?.parent && (
+                        <div
+                            className={`${styles.filesRow} ${styles.filesRowClickable}`}
+                            role='button'
+                            tabIndex={0}
+                            onClick={() => navigate(listing.parent as string)}
+                            onKeyDown={(e) => rowKey(e, listing.parent as string)}
+                        >
+                            <div className={styles.filesRowMain}>
+                                <span className={`icon icon-arrow-left ${styles.filesRowIcon}`} />
+                                <span className={styles.filesName}>..</span>
+                                <span className={styles.filesParentHint}>Dossier parent</span>
+                            </div>
+                        </div>
+                    )}
                     {rows.withSize.length === 0 && !loading ? (
                         <p className={styles.logHint}>Dossier vide.</p>
                     ) : (
-                        rows.withSize.map(({ entry, size, partial }) => (
-                            <div key={entry.name} className={styles.filesRow}>
-                                <button
-                                    type='button'
-                                    className={styles.filesRowMain}
-                                    onClick={() => entry.kind === 'dir' && navigate(joinPath(path, entry.name))}
-                                    disabled={entry.kind !== 'dir'}
+                        rows.withSize.map(({ entry, size, partial }) => {
+                            const isDir = entry.kind === 'dir';
+                            const target = joinPath(path, entry.name);
+                            return (
+                                <div
+                                    key={entry.name}
+                                    className={`${styles.filesRow} ${isDir ? styles.filesRowClickable : ''}`}
+                                    role={isDir ? 'button' : undefined}
+                                    tabIndex={isDir ? 0 : undefined}
+                                    onClick={isDir ? () => navigate(target) : undefined}
+                                    onKeyDown={isDir ? (e) => rowKey(e, target) : undefined}
                                     title={entry.symlinkTarget ? `→ ${entry.symlinkTarget}` : entry.name}
                                 >
-                                    <span className={`icon ${iconFor(entry.kind)} ${styles.filesRowIcon}`} />
-                                    <span className={styles.filesName}>{entry.name}</span>
-                                    <span className={styles.filesBarTrack}>
-                                        <span
-                                            className={styles.filesBarFill}
-                                            style={{ width: `${Math.round((size / rows.max) * 100)}%` }}
-                                        />
-                                    </span>
-                                    <span className={styles.filesSize}>
-                                        {formatBytes(size)}
-                                        {partial ? '+' : ''}
-                                    </span>
-                                    <span className={styles.filesMeta}>{fmtDate(entry.mtime)}</span>
-                                    <span className={styles.filesPerm}>{permString(entry.mode)}</span>
-                                </button>
-                                <div className={styles.filesRowActions}>
-                                    {entry.kind !== 'dir' && (
+                                    <div className={styles.filesRowMain}>
+                                        <span className={`icon ${iconFor(entry.kind)} ${styles.filesRowIcon}`} />
+                                        <span className={styles.filesName}>{entry.name}</span>
+                                        <span className={styles.filesBarTrack}>
+                                            {computing ? (
+                                                <span className={styles.filesBarIndet} />
+                                            ) : (
+                                                <span
+                                                    className={styles.filesBarFill}
+                                                    style={{ width: `${Math.round((size / rows.max) * 100)}%` }}
+                                                />
+                                            )}
+                                        </span>
+                                        <span className={styles.filesSize}>
+                                            {computing
+                                                ? isDir
+                                                    ? '…'
+                                                    : formatBytes(entry.size)
+                                                : `${formatBytes(size)}${partial ? '+' : ''}`}
+                                        </span>
+                                        <span className={styles.filesMeta}>{fmtDate(entry.mtime)}</span>
+                                        <span className={styles.filesPerm}>{permString(entry.mode)}</span>
+                                    </div>
+                                    <div className={styles.filesRowActions}>
+                                        {!isDir && (
+                                            <button
+                                                type='button'
+                                                title='Télécharger'
+                                                disabled={downloading !== null}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    download(entry);
+                                                }}
+                                            >
+                                                <span className='icon icon-download' />
+                                            </button>
+                                        )}
                                         <button
                                             type='button'
-                                            title='Télécharger'
-                                            disabled={downloading !== null}
-                                            onClick={() => download(entry)}
+                                            title='Renommer'
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setNameValue(entry.name);
+                                                setNameDialog({ mode: 'rename', entry });
+                                            }}
                                         >
-                                            <span className='icon icon-download' />
+                                            <span className='icon icon-edit' />
                                         </button>
-                                    )}
-                                    <button
-                                        type='button'
-                                        title='Renommer'
-                                        onClick={() => {
-                                            setNameValue(entry.name);
-                                            setNameDialog({ mode: 'rename', entry });
-                                        }}
-                                    >
-                                        <span className='icon icon-edit' />
-                                    </button>
-                                    <button
-                                        type='button'
-                                        className={styles.filesDeleteBtn}
-                                        title='Supprimer'
-                                        onClick={() => setConfirmDelete(entry)}
-                                    >
-                                        <span className='icon icon-trash' />
-                                    </button>
+                                        <button
+                                            type='button'
+                                            className={styles.filesDeleteBtn}
+                                            title='Supprimer'
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setConfirmDelete(entry);
+                                            }}
+                                        >
+                                            <span className='icon icon-trash' />
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
             )}
