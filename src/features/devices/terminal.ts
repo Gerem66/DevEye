@@ -21,14 +21,15 @@ export const deviceTermOpenFeature: FeatureDefinition<
         const ok = ctx.monitor?.requestTermOpen(row.id, {
             sessionId: input.sessionId,
             cols: input.cols,
-            rows: input.rows
+            rows: input.rows,
+            user: input.user
         });
         if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
         ctx.audit({
             action: 'device.terminal',
             level: 'warning',
-            description: `Terminal distant ouvert : « ${row.name} »`,
-            metadata: { deviceId: row.id, ownerId: row.owner_id, sessionId: input.sessionId }
+            description: `Terminal distant ouvert : « ${row.name} »${input.user ? ` (utilisateur ${input.user})` : ''}`,
+            metadata: { deviceId: row.id, ownerId: row.owner_id, sessionId: input.sessionId, user: input.user ?? null }
         });
         return { ok: true };
     }

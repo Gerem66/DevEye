@@ -56,8 +56,15 @@ impl TermManager {
     }
 
     /// Spawn a PTY + shell for `session_id` and start pumping I/O. A duplicate id is
-    /// a no-op (the existing session stays).
-    pub fn open(&mut self, session_id: String, cols: u16, rows: u16) -> Result<()> {
+    /// a no-op (the existing session stays). `user`, when set, runs the shell under
+    /// that account (`su -l`).
+    pub fn open(
+        &mut self,
+        session_id: String,
+        cols: u16,
+        rows: u16,
+        user: Option<String>,
+    ) -> Result<()> {
         if self.sessions.contains_key(&session_id) {
             return Ok(());
         }
@@ -71,7 +78,7 @@ impl TermManager {
             .context("ouverture du PTY")?;
         let child = pair
             .slave
-            .spawn_command(build_shell())
+            .spawn_command(build_shell(user.as_deref()))
             .context("lancement du shell")?;
         // The child owns the slave now; drop our handle so the reader sees EOF when
         // the shell exits.
@@ -164,13 +171,33 @@ impl Drop for TermManager {
 }
 
 /// The shell to run, with a sane terminal env and the agent user's home as cwd.
-fn build_shell() -> CommandBuilder {
+/// `user` (Unix only), when set to a *different* account, switches to it with
+/// `su -l` — a login shell, so that user's rc files (oh-my-zsh, etc.) load. As
+/// root this is seamless; otherwise `su` simply prompts for the password in the PTY.
+fn build_shell(user: Option<&str>) -> CommandBuilder {
     #[cfg(windows)]
-    let mut cmd =
-        CommandBuilder::new(std::env::var("ComSpec").unwrap_or_else(|_| "cmd.exe".to_string()));
+    let mut cmd = {
+        let _ = user; // Windows has no `su`; always the agent's own shell.
+        CommandBuilder::new(std::env::var("ComSpec").unwrap_or_else(|_| "cmd.exe".to_string()))
+    };
     #[cfg(unix)]
-    let mut cmd =
-        CommandBuilder::new(std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string()));
+    let mut cmd = {
+        let me = crate::report::current_user();
+        let switch = user
+            .map(str::trim)
+            .filter(|u| !u.is_empty() && *u != me.as_str());
+        match switch {
+            Some(u) => {
+                let mut c = CommandBuilder::new("su");
+                c.arg("-l");
+                c.arg(u);
+                c
+            }
+            None => CommandBuilder::new(
+                std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string()),
+            ),
+        }
+    };
     cmd.env("TERM", "xterm-256color");
     if let Some(home) = dirs::home_dir() {
         cmd.cwd(home);

@@ -357,8 +357,8 @@ async fn stream_session(
                                 ));
                             }
                             // Open an interactive terminal (PTY + shell).
-                            Ok(ServerMessage::TermOpen { session_id, cols, rows }) => {
-                                if let Err(e) = terminals.open(session_id.clone(), cols, rows) {
+                            Ok(ServerMessage::TermOpen { session_id, cols, rows, user }) => {
+                                if let Err(e) = terminals.open(session_id.clone(), cols, rows, user) {
                                     commands::send_term_event(
                                         &mut sink,
                                         device_id,

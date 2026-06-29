@@ -1331,12 +1331,12 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 open={terminalOpen}
                 onClose={() => setTerminalOpen(false)}
                 title={`Terminal — « ${selected.name} »`}
-                description='Shell interactif distant, exécuté sous l’utilisateur de l’agent.'
+                description='Shell interactif distant. Compte et comportement configurables via ⚙.'
                 width={900}
             >
                 {terminalOpen && (
                     <Suspense fallback={<p className={styles.waitingMsg}>Chargement du terminal…</p>}>
-                        <TerminalPanel deviceId={selected.id} />
+                        <TerminalPanel deviceId={selected.id} onClose={() => setTerminalOpen(false)} />
                     </Suspense>
                 )}
             </Dialog>

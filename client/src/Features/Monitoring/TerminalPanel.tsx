@@ -5,14 +5,23 @@ import '@xterm/xterm/css/xterm.css';
 import './terminalFont.css';
 import { ws } from '@/api/ws';
 import { acquireMetrics } from '@/stores/metricsSubscription';
+import { getTerminalPrefs } from '@/stores/terminalPrefs';
 import Button from '@/Components/Button';
+import { TerminalSettings } from './TerminalSettings';
 import {
     DEVICE_TERM_EXIT_EVENT,
     DEVICE_TERM_OUTPUT_EVENT,
+    terminalUser,
     type DeviceTermExitPush,
     type DeviceTermOutputPush
 } from 'deveye-types';
 import styles from './Monitoring.module.css';
+
+/** The validated default user to open a session under, or undefined for the agent's. */
+function sessionUser(): string | undefined {
+    const u = getTerminalPrefs().defaultUser.trim();
+    return u && terminalUser.safeParse(u).success ? u : undefined;
+}
 
 /** base64 → bytes, for PTY output coming off the wire. */
 function base64ToBytes(b64: string): Uint8Array {
@@ -48,11 +57,17 @@ function themeColors() {
  * and closes the session on unmount. Keystrokes and output are base64 so any raw
  * bytes survive the JSON transport.
  */
-export function TerminalPanel({ deviceId }: { deviceId: string }) {
+export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose?: () => void }) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [exited, setExited] = useState<{ code: number | null; error?: string } | null>(null);
+    const [settingsOpen, setSettingsOpen] = useState(false);
     // Bumped to force a full remount of the effect (a fresh session) on "restart".
     const [generation, setGeneration] = useState(0);
+    const relaunch = () => setGeneration((g) => g + 1);
+    // Kept in a ref so the session effect never re-runs just because the parent
+    // re-rendered (closing the dialog mid-session would tear the shell down twice).
+    const onCloseRef = useRef(onClose);
+    onCloseRef.current = onClose;
 
     useEffect(() => acquireMetrics(deviceId), [deviceId]);
 
@@ -102,7 +117,13 @@ export function TerminalPanel({ deviceId }: { deviceId: string }) {
                 term.refresh(0, term.rows - 1);
             });
             void ws
-                .send('device.termOpen', { deviceId, sessionId, cols: term.cols, rows: term.rows })
+                .send('device.termOpen', {
+                    deviceId,
+                    sessionId,
+                    cols: term.cols,
+                    rows: term.rows,
+                    user: sessionUser()
+                })
                 .catch((e) => setExited({ code: null, error: e instanceof Error ? e.message : 'Échec' }));
         });
 
@@ -133,7 +154,10 @@ export function TerminalPanel({ deviceId }: { deviceId: string }) {
             } else if (msg.command === DEVICE_TERM_EXIT_EVENT && msg.payload.ok) {
                 const d = msg.payload.data as DeviceTermExitPush;
                 if (d.deviceId === deviceId && d.sessionId === sessionId) {
-                    setExited({ code: d.code ?? null, error: d.error });
+                    // Default: end of shell → close the popup. Otherwise keep it open
+                    // with the relaunch/close banner.
+                    if (getTerminalPrefs().closeOnExit) onCloseRef.current?.();
+                    else setExited({ code: d.code ?? null, error: d.error });
                 }
             }
         });
@@ -151,6 +175,23 @@ export function TerminalPanel({ deviceId }: { deviceId: string }) {
 
     return (
         <div className={styles.terminalWrap}>
+            <div className={styles.terminalBar}>
+                <Button
+                    variant='ghost'
+                    icon='settings'
+                    onClick={() => setSettingsOpen((o) => !o)}
+                    aria-pressed={settingsOpen}
+                    title='Paramètres du terminal'
+                />
+            </div>
+            {settingsOpen && (
+                <TerminalSettings
+                    onRelaunch={() => {
+                        setSettingsOpen(false);
+                        relaunch();
+                    }}
+                />
+            )}
             <div className={styles.terminalHost} ref={containerRef} />
             {exited && (
                 <div className={styles.terminalExit}>
@@ -159,9 +200,14 @@ export function TerminalPanel({ deviceId }: { deviceId: string }) {
                             ? `Session terminée — ${exited.error}`
                             : `Session terminée${exited.code != null ? ` (code ${exited.code})` : ''}.`}
                     </span>
-                    <Button variant='secondary' onClick={() => setGeneration((g) => g + 1)}>
-                        Relancer
-                    </Button>
+                    <div className={styles.terminalExitActions}>
+                        <Button variant='secondary' onClick={relaunch}>
+                            Relancer
+                        </Button>
+                        <Button variant='ghost' onClick={() => onCloseRef.current?.()}>
+                            Fermer
+                        </Button>
+                    </div>
                 </div>
             )}
         </div>

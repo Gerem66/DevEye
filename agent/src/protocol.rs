@@ -575,13 +575,16 @@ pub enum ServerMessage {
         #[serde(default)]
         limit: Option<u32>,
     },
-    /// Open an interactive PTY session running the agent user's shell.
+    /// Open an interactive PTY session. `user`, when set, runs the shell under that
+    /// account (`su -l`); otherwise it's the account the agent runs as.
     #[serde(rename = "term.open")]
     TermOpen {
         #[serde(rename = "sessionId")]
         session_id: String,
         cols: u16,
         rows: u16,
+        #[serde(default)]
+        user: Option<String>,
     },
     /// Write input bytes (base64) to a session's PTY.
     #[serde(rename = "term.input")]

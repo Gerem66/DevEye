@@ -1908,6 +1908,42 @@
     color: var(--text-secondary);
     font-size: 0.85rem;
 }
+.terminalExitActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+.terminalBar {
+    display: flex;
+    justify-content: flex-end;
+}
+.terminalSettings {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+}
+.terminalField {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+.terminalFieldLabel {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.terminalFieldHint {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+.terminalSettingsFooter {
+    display: flex;
+    justify-content: flex-end;
+}
 
 /* ── File explorer (device.files*) ── */
 .filesPanel {
