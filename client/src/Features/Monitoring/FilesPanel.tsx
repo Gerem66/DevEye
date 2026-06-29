@@ -110,6 +110,10 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
 
     const listOp = useRef('');
     const usageOp = useRef('');
+    // The path the in-flight usage pass is for (to key its result into the cache),
+    // and the per-directory usage cache so navigating back is instant.
+    const usagePath = useRef('');
+    const usageCache = useRef<Map<string, Map<string, FileUsageEntry>>>(new Map());
     const searchOp = useRef('');
     const mutateOp = useRef('');
     const downloadOp = useRef('');
@@ -124,6 +128,7 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
         (target: string) => {
             const opId = crypto.randomUUID();
             usageOp.current = opId;
+            usagePath.current = target;
             setAnalyzing(true);
             void ws.send('device.filesAnalyze', { deviceId, opId, path: target }).catch(() => setAnalyzing(false));
         },
@@ -137,16 +142,42 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
             setLoading(true);
             setError(null);
             setUsage(null);
+            // Optimistically show the indeterminate bars until the cache hit / fresh
+            // analysis lands, so navigation never flashes misleading own-size bars.
+            setAnalyzing(true);
             void ws.send('device.filesList', { deviceId, opId, path: target }).catch((e) => {
                 setLoading(false);
+                setAnalyzing(false);
                 setError(e instanceof Error ? e.message : 'Échec');
             });
         },
         [deviceId]
     );
 
-    // Initial load + reset on device change.
+    // Drop the cached usage for a path and all its ancestors (whose recursive totals
+    // included it). Used after a mutation/upload and on manual refresh.
+    const invalidateUsage = useCallback((p: string) => {
+        const sep = p.includes('\\') && !p.includes('/') ? '\\' : '/';
+        usageCache.current.delete(p);
+        let cur = p;
+        while (cur.length > 0) {
+            const idx = cur.lastIndexOf(sep);
+            if (idx < 0) break;
+            cur = cur.slice(0, idx) || sep;
+            usageCache.current.delete(cur);
+            if (cur === sep) break;
+        }
+    }, []);
+
+    // Manual refresh: re-list and force a fresh usage pass for the current directory.
+    const refresh = useCallback(() => {
+        invalidateUsage(path);
+        navigate(path);
+    }, [invalidateUsage, navigate, path]);
+
+    // Initial load + reset on device change (the usage cache is per-device).
     useEffect(() => {
+        usageCache.current.clear();
         setPath('/');
         setPathInput('/');
         setSearchMode(false);
@@ -169,12 +200,24 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                 setListing(d.listing);
                 setPath(d.listing.path);
                 setPathInput(d.listing.path);
-                analyze(d.listing.path); // auto ncdu pass (bounded)
+                // Use the cached recursive sizes if we have them (instant), otherwise
+                // run the bounded ncdu pass and cache its result.
+                const cached = usageCache.current.get(d.listing.path);
+                if (cached) {
+                    setUsage(cached);
+                    setAnalyzing(false);
+                } else {
+                    analyze(d.listing.path);
+                }
             } else if (msg.command === DEVICE_FILES_USAGE_EVENT && msg.payload.ok) {
                 const d = msg.payload.data as DeviceFilesUsagePush;
                 if (d.deviceId !== deviceId || d.opId !== usageOp.current) return;
                 setAnalyzing(false);
-                if (!d.error) setUsage(new Map(d.entries.map((e) => [e.name, e])));
+                if (!d.error) {
+                    const map = new Map(d.entries.map((e) => [e.name, e]));
+                    usageCache.current.set(usagePath.current, map);
+                    setUsage(map);
+                }
             } else if (msg.command === DEVICE_FILES_MATCHES_EVENT && msg.payload.ok) {
                 const d = msg.payload.data as DeviceFilesMatchesPush;
                 if (d.deviceId !== deviceId || d.opId !== searchOp.current) return;
@@ -186,12 +229,16 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                 const d = msg.payload.data as DeviceFilesOpPush;
                 if (d.deviceId !== deviceId) return;
                 if (d.opId === mutateOp.current) {
-                    if (d.ok) navigate(path);
-                    else setError(d.error ?? 'Opération échouée');
+                    if (d.ok) {
+                        invalidateUsage(path); // sizes changed → drop this dir + ancestors
+                        navigate(path);
+                    } else setError(d.error ?? 'Opération échouée');
                 } else if (d.opId === uploadOp.current) {
                     setUploading(null);
-                    if (d.ok) navigate(path);
-                    else setError(d.error ?? 'Téléversement échoué');
+                    if (d.ok) {
+                        invalidateUsage(path);
+                        navigate(path);
+                    } else setError(d.error ?? 'Téléversement échoué');
                 }
             } else if (msg.command === DEVICE_FILES_CHUNK_EVENT && msg.payload.ok) {
                 const d = msg.payload.data as DeviceFilesChunkPush;
@@ -217,7 +264,7 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
             }
         });
         return off;
-    }, [deviceId, analyze, navigate, path]);
+    }, [deviceId, analyze, navigate, invalidateUsage, path]);
 
     const download = useCallback(
         (entry: FileEntry) => {
@@ -368,7 +415,7 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                         </button>
                     ))}
                 </div>
-                <button type='button' className={styles.filesIconBtn} title='Actualiser' onClick={() => navigate(path)}>
+                <button type='button' className={styles.filesIconBtn} title='Actualiser' onClick={refresh}>
                     <span className={`icon icon-refresh ${loading ? styles.spinning : ''}`} />
                 </button>
             </div>
