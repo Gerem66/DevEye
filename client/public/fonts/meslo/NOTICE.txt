@@ -1,0 +1,11 @@
+Meslo LG S — Powerline-patched
+
+Base typeface: Meslo LG (Menlo-derived) © André Berg, licensed under the
+Apache License, Version 2.0. <http://www.apache.org/licenses/LICENSE-2.0>
+
+Powerline glyph patch (segment separators, U+E0A0–U+E0D4) © the Powerline
+authors, from <https://github.com/powerline/fonts>, MIT License.
+
+Bundled here so the DevEye remote terminal renders oh-my-zsh / powerline /
+powerlevel10k prompt glyphs regardless of fonts installed on the viewer's
+machine. Files: MesloLGS-{Regular,Bold,Italic,BoldItalic}.ttf

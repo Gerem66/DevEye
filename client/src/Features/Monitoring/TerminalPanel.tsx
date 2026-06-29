@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import './terminalFont.css';
 import { ws } from '@/api/ws';
 import { acquireMetrics } from '@/stores/metricsSubscription';
 import Button from '@/Components/Button';
@@ -64,11 +65,12 @@ export function TerminalPanel({ deviceId }: { deviceId: string }) {
 
         const term = new Terminal({
             cursorBlink: true,
-            // Prefer a Nerd/Powerline font so oh-my-zsh / powerlevel10k prompt glyphs
-            // (segment separators, icons) render instead of tofu boxes — MesloLGS NF
-            // is the one p10k's wizard installs. Falls back to plain monospace.
+            // Lead with our bundled Powerline-patched Meslo (see terminalFont.css) so
+            // oh-my-zsh / powerline / p10k prompt separators render instead of tofu
+            // boxes, for every viewer. Then any locally-installed Nerd Font (for full
+            // icon coverage), then plain monospace.
             fontFamily:
-                "'MesloLGS NF', 'MesloLGS Nerd Font', 'FiraCode Nerd Font', 'Hack Nerd Font', 'JetBrainsMono Nerd Font', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                "'MesloLGS', 'MesloLGS NF', 'FiraCode Nerd Font', 'Hack Nerd Font', 'JetBrainsMono Nerd Font', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
             fontSize: 13,
             scrollback: 5000,
             theme: themeColors()
@@ -91,6 +93,14 @@ export function TerminalPanel({ deviceId }: { deviceId: string }) {
             if (disposed) return;
             safeFit();
             term.focus();
+            // xterm measures glyph-cell size eagerly; if the bundled font isn't loaded
+            // yet the first paint uses fallback metrics and looks misaligned. Re-fit and
+            // repaint once 'MesloLGS' is ready.
+            void document.fonts.load("13px 'MesloLGS'").then(() => {
+                if (disposed) return;
+                safeFit();
+                term.refresh(0, term.rows - 1);
+            });
             void ws
                 .send('device.termOpen', { deviceId, sessionId, cols: term.cols, rows: term.rows })
                 .catch((e) => setExited({ code: null, error: e instanceof Error ? e.message : 'Échec' }));
