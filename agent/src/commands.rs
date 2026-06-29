@@ -10,9 +10,14 @@ use futures_util::SinkExt;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{info, warn};
 
+use base64::Engine as _;
+
 use crate::config::Config;
+use crate::files::FilesEvent;
+use crate::logs::LogEvent;
 use crate::packages::PkgEvent;
 use crate::protocol::ClientMessage;
+use crate::terminal::TermEvent;
 
 /// Self-destruct on the server's request. On success the agent wipes its local
 /// state, reports it, and **exits the process** (never returns). On failure it
@@ -284,6 +289,57 @@ where
     }
 }
 
+/// Apply a server-requested system power action and report the outcome. For
+/// shutdown/reboot the host goes down right after, so we flush the result and give
+/// it a brief moment to reach the server before the machine (and this process)
+/// disappear. Suspend/hibernate/lock leave the agent running.
+pub(crate) async fn handle_power<S>(sink: &mut S, device_id: &str, action: &str)
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let act = action.to_string();
+    let outcome = tokio::task::spawn_blocking(move || crate::power::execute(&act)).await;
+    let (ok, error) = match outcome {
+        Ok(Ok(())) => (true, None),
+        Ok(Err(e)) => (false, Some(e.to_string())),
+        Err(e) => (false, Some(e.to_string())),
+    };
+    if ok {
+        info!(%action, "power action applied");
+    } else {
+        warn!(%action, error = ?error, "power action failed");
+    }
+    let _ = send_power_result(sink, device_id, action, ok, error).await;
+    let _ = sink.flush().await;
+    if ok && matches!(action, "shutdown" | "reboot") {
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    }
+}
+
+async fn send_power_result<S>(
+    sink: &mut S,
+    device_id: &str,
+    action: &str,
+    ok: bool,
+    error: Option<String>,
+) -> Result<()>
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let msg = serde_json::to_string(&ClientMessage::PowerResult {
+        device_id: device_id.to_string(),
+        action: action.to_string(),
+        ok,
+        error,
+    })?;
+    sink.send(Message::Text(msg))
+        .await
+        .context("sending power result")?;
+    Ok(())
+}
+
 /// Forward one package task event to the server, stamping it with the device id.
 pub(crate) async fn send_pkg_event<S>(sink: &mut S, device_id: &str, ev: PkgEvent)
 where
@@ -316,6 +372,133 @@ where
             manager,
             ok,
             reboot_required: Some(reboot_required),
+            error,
+        },
+    };
+    if let Ok(text) = serde_json::to_string(&msg) {
+        let _ = sink.send(Message::Text(text)).await;
+    }
+}
+
+/// Forward one terminal event to the server (PTY output is base64-encoded so any
+/// raw bytes survive the JSON wire), stamping it with the device id.
+pub(crate) async fn send_term_event<S>(sink: &mut S, device_id: &str, ev: TermEvent)
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let msg = match ev {
+        TermEvent::Output { session_id, data } => ClientMessage::TermOutput {
+            device_id: device_id.to_string(),
+            session_id,
+            data: base64::engine::general_purpose::STANDARD.encode(&data),
+        },
+        TermEvent::Exit {
+            session_id,
+            code,
+            error,
+        } => ClientMessage::TermExit {
+            device_id: device_id.to_string(),
+            session_id,
+            code,
+            error,
+        },
+    };
+    if let Ok(text) = serde_json::to_string(&msg) {
+        let _ = sink.send(Message::Text(text)).await;
+    }
+}
+
+/// Forward one file-explorer event to the server, stamping it with the device id.
+pub(crate) async fn send_files_event<S>(sink: &mut S, device_id: &str, ev: FilesEvent)
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let msg = match ev {
+        FilesEvent::Listing {
+            op_id,
+            listing,
+            error,
+        } => ClientMessage::FilesListing {
+            device_id: device_id.to_string(),
+            op_id,
+            listing,
+            error,
+        },
+        FilesEvent::Usage {
+            op_id,
+            entries,
+            error,
+        } => ClientMessage::FilesUsage {
+            device_id: device_id.to_string(),
+            op_id,
+            entries,
+            error,
+        },
+        FilesEvent::Matches {
+            op_id,
+            matches,
+            truncated,
+            error,
+        } => ClientMessage::FilesMatches {
+            device_id: device_id.to_string(),
+            op_id,
+            matches,
+            truncated,
+            error,
+        },
+        FilesEvent::Op {
+            op_id,
+            op,
+            ok,
+            error,
+        } => ClientMessage::FilesOpResult {
+            device_id: device_id.to_string(),
+            op_id,
+            op,
+            ok,
+            error,
+        },
+        FilesEvent::Chunk {
+            op_id,
+            data,
+            done,
+            error,
+        } => ClientMessage::FilesChunk {
+            device_id: device_id.to_string(),
+            op_id,
+            data: base64::engine::general_purpose::STANDARD.encode(&data),
+            done,
+            error,
+        },
+    };
+    if let Ok(text) = serde_json::to_string(&msg) {
+        let _ = sink.send(Message::Text(text)).await;
+    }
+}
+
+/// Forward one log task event to the server, stamping it with the device id.
+pub(crate) async fn send_log_event<S>(sink: &mut S, device_id: &str, ev: LogEvent)
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let msg = match ev {
+        LogEvent::Sources(sources) => ClientMessage::LogSourcesResult {
+            device_id: device_id.to_string(),
+            sources,
+        },
+        LogEvent::Lines {
+            query_id,
+            lines,
+            done,
+            error,
+        } => ClientMessage::LogLines {
+            device_id: device_id.to_string(),
+            query_id,
+            lines,
+            done,
             error,
         },
     };

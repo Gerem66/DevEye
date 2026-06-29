@@ -1627,3 +1627,534 @@
     font-size: 0.85rem;
     word-break: break-word;
 }
+
+/* ── System power menu (device.power) ── */
+.powerMenu {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+.powerList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+.powerRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    width: 100%;
+    text-align: left;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-primary);
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
+}
+.powerRow:hover:not(:disabled) {
+    background: var(--glass-bg);
+    border-color: var(--accent);
+}
+.powerRow:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+.powerRowDanger:hover:not(:disabled) {
+    border-color: var(--danger);
+}
+.powerIcon {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+.powerRowDanger .powerIcon {
+    color: var(--danger);
+}
+.powerText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.powerLabel {
+    font-weight: 600;
+}
+.powerDesc {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+.powerConfirm {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+.powerConfirmText {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+.powerConfirmActions {
+    display: flex;
+    gap: var(--space-sm);
+}
+.powerHint {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin: 0;
+}
+.powerOk {
+    color: var(--success);
+    font-size: 0.85rem;
+    margin: 0;
+}
+.powerErr {
+    color: var(--danger);
+    font-size: 0.85rem;
+    margin: 0;
+    word-break: break-word;
+}
+
+/* ── Device log viewer (device.logSources / device.logQuery) ── */
+.logsPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+.logToolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-sm);
+}
+.logSourceSelect {
+    flex: 1 1 180px;
+    min-width: 0;
+}
+.logSearch {
+    flex: 2 1 200px;
+    min-width: 0;
+}
+.logLevelSelect {
+    flex: 0 0 auto;
+}
+.logUnitInput {
+    flex: 1 1 160px;
+    min-width: 0;
+}
+.logToggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast),
+        border-color var(--transition-fast);
+}
+.logToggle:hover {
+    background: var(--glass-bg);
+}
+.logToggleOn {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-bg);
+}
+.logTimeRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+}
+.logTimeBtn {
+    padding: 2px var(--space-sm);
+    background: transparent;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast),
+        border-color var(--transition-fast);
+}
+.logTimeBtn:hover {
+    background: var(--glass-bg-light);
+}
+.logTimeBtnOn {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-bg);
+}
+.logCount {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+.logView {
+    height: 52vh;
+    overflow: auto;
+    background: var(--surface-2, var(--surface));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+.logLine {
+    display: flex;
+    gap: var(--space-sm);
+    align-items: baseline;
+    padding: 1px 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.logLine:hover {
+    background: var(--glass-bg-light);
+}
+.logTs {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+.logLvl {
+    flex-shrink: 0;
+    text-transform: uppercase;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    min-width: 64px;
+}
+.logLvlDebug {
+    color: var(--text-muted);
+}
+.logLvlInfo {
+    color: var(--text-secondary);
+}
+.logLvlNotice {
+    color: var(--accent);
+}
+.logLvlWarning {
+    color: var(--warning);
+}
+.logLvlError,
+.logLvlCritical {
+    color: var(--danger);
+}
+.logUnit {
+    flex-shrink: 0;
+    color: var(--accent);
+    opacity: 0.85;
+}
+.logMsg {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-primary);
+}
+.logHint {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: var(--space-md);
+    text-align: center;
+}
+.logErr {
+    color: var(--danger);
+    font-size: 0.85rem;
+    padding: var(--space-md);
+    word-break: break-word;
+}
+
+/* ── Remote terminal (device.term*) ── */
+.terminalWrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+.terminalHost {
+    height: 58vh;
+    width: 100%;
+    background: var(--surface-2, var(--surface));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm);
+    overflow: hidden;
+}
+.terminalExit {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+/* ── File explorer (device.files*) ── */
+.filesPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+.filesPathBar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+.filesIconBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-xs);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+.filesIconBtn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+.filesBreadcrumb {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    overflow: hidden;
+}
+.filesCrumb {
+    padding: 2px var(--space-xs);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+.filesCrumb:hover {
+    background: var(--glass-bg-light);
+}
+.filesToolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-sm);
+}
+.filesPathInput {
+    flex: 1 1 220px;
+    min-width: 0;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.82rem;
+}
+.filesUsageState {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+.filesError {
+    color: var(--danger);
+    font-size: 0.85rem;
+    margin: 0;
+    word-break: break-word;
+}
+.filesList {
+    height: 50vh;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+}
+.filesRow {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--glass-border);
+}
+.filesRow:hover {
+    background: var(--glass-bg-light);
+}
+.filesRowMain {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-width: 0;
+    padding: var(--space-xs) var(--space-sm);
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+    font-size: 0.85rem;
+}
+.filesRowMain:disabled {
+    cursor: default;
+}
+.filesRowIcon {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+.filesName {
+    flex: 0 1 auto;
+    min-width: 80px;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.filesBarTrack {
+    flex: 1;
+    height: 8px;
+    min-width: 40px;
+    background: var(--surface-2, var(--surface));
+    border-radius: 4px;
+    overflow: hidden;
+}
+.filesBarFill {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    opacity: 0.8;
+}
+.filesSize {
+    flex-shrink: 0;
+    width: 78px;
+    text-align: right;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+.filesMeta {
+    flex-shrink: 0;
+    width: 64px;
+    text-align: right;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+.filesPerm {
+    flex-shrink: 0;
+    width: 80px;
+    text-align: right;
+    color: var(--text-muted);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.72rem;
+}
+.filesRowActions {
+    display: flex;
+    gap: 2px;
+    padding-right: var(--space-xs);
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+}
+.filesRow:hover .filesRowActions {
+    opacity: 1;
+}
+.filesRowActions button {
+    padding: var(--space-xs);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+.filesRowActions button:hover {
+    background: var(--glass-bg);
+}
+.filesDeleteBtn:hover {
+    color: var(--danger);
+}
+.filesSearch {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+.filesSearchRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-sm);
+}
+.filesSearchInput {
+    flex: 2 1 200px;
+    min-width: 0;
+}
+.filesField {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+.filesField input {
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.82rem;
+}
+.filesNum {
+    width: 80px;
+}
+.filesTruncated {
+    color: var(--warning);
+    font-size: 0.78rem;
+    padding: var(--space-xs) var(--space-sm);
+    margin: 0;
+}
+.filesMatch {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--glass-border);
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+    font-size: 0.82rem;
+}
+.filesMatch:hover {
+    background: var(--glass-bg-light);
+}
+.filesMatchPath {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow: hidden;
+}
+.filesMatchPath .filesName {
+    max-width: none;
+    font-family: var(--font-mono, ui-monospace, monospace);
+}
+.filesPreview {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

@@ -1,6 +1,15 @@
-import { AGENT_DESTROYED, AGENT_SERVICE_RESULT, AGENT_UPDATED } from 'deveye-types';
+import { AGENT_DESTROYED, AGENT_POWER_RESULT, AGENT_SERVICE_RESULT, AGENT_UPDATED } from 'deveye-types';
 
 import { ack, type AgentSession, type PayloadOf } from './session';
+
+/** French label per power action, for human-readable audit descriptions. */
+const POWER_LABELS: Record<string, string> = {
+    shutdown: 'Extinction',
+    reboot: 'Redémarrage',
+    suspend: 'Mise en veille',
+    hibernate: 'Veille prolongée',
+    lock: 'Verrouillage'
+};
 
 /**
  * Outcomes of the commands the server pushes to an agent (`agent.update`,
@@ -90,5 +99,27 @@ export async function handleServiceResult(
         description,
         metadata: { deviceId: s.device.id, serviceAction: action, ok, needsManualCommand: needsManualCommand ?? false }
     });
+    ack(s, 1);
+}
+
+/** `agent.powerResult` — outcome of a system power action. Audit + fan out to the
+ *  device's subscribers so the UI confirms the action (or shows why it failed).
+ *  A successful shutdown/reboot is also followed by an offline presence event. */
+export async function handlePowerResult(s: AgentSession, payload: PayloadOf<typeof AGENT_POWER_RESULT>): Promise<void> {
+    const { action, ok, error } = payload;
+    const label = POWER_LABELS[action] ?? action;
+    s.audit.record({
+        source: 'agent',
+        category: 'device',
+        action: ok ? 'device.power' : 'device.powerFailed',
+        level: 'warning',
+        uid: s.ownerId,
+        ip: s.ip,
+        description: ok
+            ? `Commande système « ${label} » exécutée : « ${s.device.name} »`
+            : `Échec de la commande système « ${label} » : « ${s.device.name} »${error ? ` — ${error}` : ''}`,
+        metadata: { deviceId: s.device.id, powerAction: action, ok, error: error ?? null }
+    });
+    s.hub.publishPower({ deviceId: s.device.id, action, ok, error });
     ack(s, 1);
 }

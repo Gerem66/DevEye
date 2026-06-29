@@ -254,3 +254,27 @@
     -webkit-mask-image: url(/icons/info.svg);
     mask-image: url(/icons/info.svg);
 }
+.icon.icon-power {
+    -webkit-mask-image: url(/icons/power.svg);
+    mask-image: url(/icons/power.svg);
+}
+.icon.icon-restart {
+    -webkit-mask-image: url(/icons/restart.svg);
+    mask-image: url(/icons/restart.svg);
+}
+.icon.icon-moon {
+    -webkit-mask-image: url(/icons/moon.svg);
+    mask-image: url(/icons/moon.svg);
+}
+.icon.icon-snowflake {
+    -webkit-mask-image: url(/icons/snowflake.svg);
+    mask-image: url(/icons/snowflake.svg);
+}
+.icon.icon-terminal {
+    -webkit-mask-image: url(/icons/terminal.svg);
+    mask-image: url(/icons/terminal.svg);
+}
+.icon.icon-file {
+    -webkit-mask-image: url(/icons/file.svg);
+    mask-image: url(/icons/file.svg);
+}

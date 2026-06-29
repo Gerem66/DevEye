@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ws } from '@/api/ws';
 import { useDevices } from '@/stores/devices';
 import { acquireMetrics } from '@/stores/metricsSubscription';
@@ -27,7 +27,15 @@ import { GraphDetail, type DetailRow } from './GraphDetail';
 import { Timeline } from './Timeline';
 import { MiniGraph, type Series } from './MiniGraph';
 import { PackagesPanel } from './PackagesPanel';
+import { PowerMenu } from './PowerMenu';
+import { LogsPanel } from './LogsPanel';
 import { useAgentUpdate } from './useAgentUpdate';
+
+// xterm.js is heavy and rarely opened — load the terminal panel on demand so it
+// doesn't weigh on the initial bundle.
+const TerminalPanel = lazy(() => import('./TerminalPanel').then((m) => ({ default: m.TerminalPanel })));
+// The file explorer is a sizeable, on-demand panel — lazy-load it too.
+const FilesPanel = lazy(() => import('./FilesPanel').then((m) => ({ default: m.FilesPanel })));
 import { agentUpdatable } from '../agentVersion';
 import {
     ACTIVITY_META,
@@ -218,6 +226,10 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const [override, setOverride] = useState<{ online?: boolean; report?: DeviceReport | null }>({});
     const [configOpen, setConfigOpen] = useState(false);
     const [packagesOpen, setPackagesOpen] = useState(false);
+    const [powerOpen, setPowerOpen] = useState(false);
+    const [logsOpen, setLogsOpen] = useState(false);
+    const [terminalOpen, setTerminalOpen] = useState(false);
+    const [filesOpen, setFilesOpen] = useState(false);
     const updater = useAgentUpdate();
     // Storage footprint of the device's stored snapshots.
     const [storage, setStorage] = useState<{ snapshots: number; rows: number; bytes: number } | null>(null);
@@ -895,6 +907,42 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     {online && !archived && (
                         <button
                             className={styles.iconHeaderBtn}
+                            onClick={() => setFilesOpen(true)}
+                            title='Explorateur de fichiers'
+                        >
+                            <span className='icon icon-folder' />
+                        </button>
+                    )}
+                    {online && !archived && (
+                        <button
+                            className={styles.iconHeaderBtn}
+                            onClick={() => setTerminalOpen(true)}
+                            title='Terminal distant'
+                        >
+                            <span className='icon icon-terminal' />
+                        </button>
+                    )}
+                    {online && !archived && (
+                        <button
+                            className={styles.iconHeaderBtn}
+                            onClick={() => setLogsOpen(true)}
+                            title='Logs de l’appareil'
+                        >
+                            <span className='icon icon-logs' />
+                        </button>
+                    )}
+                    {online && !archived && (
+                        <button
+                            className={styles.iconHeaderBtn}
+                            onClick={() => setPowerOpen(true)}
+                            title='Commandes système'
+                        >
+                            <span className='icon icon-power' />
+                        </button>
+                    )}
+                    {online && !archived && (
+                        <button
+                            className={styles.iconHeaderBtn}
                             onClick={refreshNow}
                             disabled={refreshing}
                             title='Rafraîchir maintenant'
@@ -1263,6 +1311,73 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 }
             >
                 {packagesOpen && <PackagesPanel deviceId={selected.id} />}
+            </Dialog>
+
+            <Dialog
+                open={powerOpen}
+                onClose={() => setPowerOpen(false)}
+                title={`Commandes système — « ${selected.name} »`}
+                description='Actions exécutées sur l’appareil par l’agent (selon ses privilèges et l’OS).'
+                footer={
+                    <Button variant='secondary' onClick={() => setPowerOpen(false)}>
+                        Fermer
+                    </Button>
+                }
+            >
+                {powerOpen && <PowerMenu deviceId={selected.id} />}
+            </Dialog>
+
+            <Dialog
+                open={logsOpen}
+                onClose={() => setLogsOpen(false)}
+                title={`Logs — « ${selected.name} »`}
+                description='Journal système, conteneurs Docker et fichiers de logs de l’appareil, avec recherche avancée.'
+                width={860}
+                footer={
+                    <Button variant='secondary' onClick={() => setLogsOpen(false)}>
+                        Fermer
+                    </Button>
+                }
+            >
+                {logsOpen && <LogsPanel deviceId={selected.id} />}
+            </Dialog>
+
+            <Dialog
+                open={terminalOpen}
+                onClose={() => setTerminalOpen(false)}
+                title={`Terminal — « ${selected.name} »`}
+                description='Shell interactif distant, exécuté sous l’utilisateur de l’agent.'
+                width={900}
+                footer={
+                    <Button variant='secondary' onClick={() => setTerminalOpen(false)}>
+                        Fermer
+                    </Button>
+                }
+            >
+                {terminalOpen && (
+                    <Suspense fallback={<p className={styles.waitingMsg}>Chargement du terminal…</p>}>
+                        <TerminalPanel deviceId={selected.id} />
+                    </Suspense>
+                )}
+            </Dialog>
+
+            <Dialog
+                open={filesOpen}
+                onClose={() => setFilesOpen(false)}
+                title={`Fichiers — « ${selected.name} »`}
+                description='Explorateur de fichiers : navigation, analyse d’espace disque, recherche avancée et nettoyage.'
+                width={920}
+                footer={
+                    <Button variant='secondary' onClick={() => setFilesOpen(false)}>
+                        Fermer
+                    </Button>
+                }
+            >
+                {filesOpen && (
+                    <Suspense fallback={<p className={styles.waitingMsg}>Chargement de l’explorateur…</p>}>
+                        <FilesPanel deviceId={selected.id} />
+                    </Suspense>
+                )}
             </Dialog>
 
             <Dialog

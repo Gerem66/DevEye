@@ -16,6 +16,7 @@ use std::collections::VecDeque;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
+use base64::Engine as _;
 use futures_util::{SinkExt, StreamExt};
 use tokio::time::{interval_at, Instant, MissedTickBehavior};
 use tokio_tungstenite::tungstenite::Message;
@@ -233,11 +234,34 @@ async fn stream_session(
     // stream their results back through this channel, so the loop stays responsive
     // (pings, metrics) and forwards each event to the server as it arrives.
     let (pkg_tx, mut pkg_rx) = tokio::sync::mpsc::channel::<crate::packages::PkgEvent>(256);
+    // Log source/query tasks (a query shells out to journalctl/docker and can return
+    // many lines) stream their results back through this channel, same as packages.
+    let (log_tx, mut log_rx) = tokio::sync::mpsc::channel::<crate::logs::LogEvent>(256);
+    // Interactive terminals: PTY reader threads push output/exit events here; the
+    // manager owns the live sessions and is dropped (killing shells) when we return.
+    let (term_tx, mut term_rx) = tokio::sync::mpsc::channel::<crate::terminal::TermEvent>(1024);
+    let mut terminals = crate::terminal::TermManager::new(term_tx);
+    // File explorer tasks (list/analyze/search/mutate) stream their results here.
+    let (files_tx, mut files_rx) = tokio::sync::mpsc::channel::<crate::files::FilesEvent>(256);
 
     loop {
         tokio::select! {
             Some(ev) = pkg_rx.recv() => {
                 commands::send_pkg_event(&mut sink, device_id, ev).await;
+            }
+            Some(ev) = log_rx.recv() => {
+                commands::send_log_event(&mut sink, device_id, ev).await;
+            }
+            Some(ev) = files_rx.recv() => {
+                commands::send_files_event(&mut sink, device_id, ev).await;
+            }
+            Some(ev) = term_rx.recv() => {
+                // A session that ended is also dropped from the manager (the reader
+                // thread is already gone; this frees the slot + writer thread).
+                if let crate::terminal::TermEvent::Exit { session_id, .. } = &ev {
+                    terminals.close(session_id);
+                }
+                commands::send_term_event(&mut sink, device_id, ev).await;
             }
             _ = metric_ticker.tick() => {
                 push_bounded(queue, collector.collect_fine());
@@ -308,6 +332,107 @@ async fn stream_session(
                             // Persistence/privilege change (install autostart, elevate…).
                             Ok(ServerMessage::Service { action }) => {
                                 commands::handle_service(&mut sink, device_id, &action).await;
+                            }
+                            // System power action (shutdown/reboot/suspend/hibernate/lock).
+                            Ok(ServerMessage::Power { action }) => {
+                                commands::handle_power(&mut sink, device_id, &action).await;
+                            }
+                            // Enumerate log sources (off-loop; replies via log_rx).
+                            Ok(ServerMessage::LogSources {}) => {
+                                tokio::spawn(crate::logs::detect_task(log_tx.clone()));
+                            }
+                            // Run a log query (off-loop; streams via log_rx).
+                            Ok(ServerMessage::LogQuery {
+                                query_id,
+                                source_id,
+                                filter,
+                                limit,
+                            }) => {
+                                tokio::spawn(crate::logs::run_query_task(
+                                    query_id,
+                                    source_id,
+                                    filter.unwrap_or_default(),
+                                    limit.map(|l| l as usize).unwrap_or(crate::logs::DEFAULT_LIMIT),
+                                    log_tx.clone(),
+                                ));
+                            }
+                            // Open an interactive terminal (PTY + shell).
+                            Ok(ServerMessage::TermOpen { session_id, cols, rows }) => {
+                                if let Err(e) = terminals.open(session_id.clone(), cols, rows) {
+                                    commands::send_term_event(
+                                        &mut sink,
+                                        device_id,
+                                        crate::terminal::TermEvent::Exit {
+                                            session_id,
+                                            code: None,
+                                            error: Some(e.to_string()),
+                                        },
+                                    )
+                                    .await;
+                                }
+                            }
+                            // Keystrokes for a terminal session (base64 → raw bytes).
+                            Ok(ServerMessage::TermInput { session_id, data }) => {
+                                if let Ok(bytes) =
+                                    base64::engine::general_purpose::STANDARD.decode(data.as_bytes())
+                                {
+                                    terminals.input(&session_id, bytes);
+                                }
+                            }
+                            // Resize a terminal session's PTY.
+                            Ok(ServerMessage::TermResize { session_id, cols, rows }) => {
+                                terminals.resize(&session_id, cols, rows);
+                            }
+                            // Close a terminal session (the reader then emits a final exit).
+                            Ok(ServerMessage::TermClose { session_id }) => {
+                                terminals.close(&session_id);
+                            }
+                            // File explorer (all off-loop; stream via files_rx).
+                            Ok(ServerMessage::FilesList { op_id, path }) => {
+                                tokio::spawn(crate::files::list_task(op_id, path, files_tx.clone()));
+                            }
+                            Ok(ServerMessage::FilesAnalyze { op_id, path }) => {
+                                tokio::spawn(crate::files::analyze_task(op_id, path, files_tx.clone()));
+                            }
+                            Ok(ServerMessage::FilesSearch { op_id, path, filter }) => {
+                                tokio::spawn(crate::files::search_task(op_id, path, filter, files_tx.clone()));
+                            }
+                            Ok(ServerMessage::FilesMutate { op_id, op, path, dest }) => {
+                                tokio::spawn(crate::files::mutate_task(op_id, op, path, dest, files_tx.clone()));
+                            }
+                            // Download streams on its own thread (bounded by the channel).
+                            Ok(ServerMessage::FilesDownload { op_id, path }) => {
+                                crate::files::spawn_download(op_id, path, files_tx.clone());
+                            }
+                            // Upload chunks are applied inline (sequentially), so an
+                            // offset-based write never races another chunk of the same file.
+                            Ok(ServerMessage::FilesUpload { op_id, path, offset, data, done }) => {
+                                let bytes = base64::engine::general_purpose::STANDARD
+                                    .decode(data.as_bytes())
+                                    .unwrap_or_default();
+                                let res = tokio::task::spawn_blocking(move || {
+                                    crate::files::upload_chunk(&path, offset, &bytes)
+                                })
+                                .await;
+                                let outcome = match res {
+                                    Ok(Ok(())) => Ok(()),
+                                    Ok(Err(e)) => Err(e.to_string()),
+                                    Err(e) => Err(e.to_string()),
+                                };
+                                // Report only the final chunk's outcome, or any error.
+                                if done || outcome.is_err() {
+                                    commands::send_files_event(
+                                        &mut sink,
+                                        device_id,
+                                        crate::files::FilesEvent::Op {
+                                            op_id,
+                                            op: "upload".to_string(),
+                                            ok: outcome.is_ok(),
+                                            error: outcome.err(),
+                                        },
+                                    )
+                                    .await;
+                                }
                             }
                             // Enumerate package managers (off-loop; replies via pkg_rx).
                             Ok(ServerMessage::PkgList {}) => {

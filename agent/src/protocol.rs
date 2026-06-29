@@ -174,6 +174,118 @@ pub struct ReportDisk {
     pub total_bytes: u64,
 }
 
+/// One queryable log source on the host (mirrors deveye-types `deviceLogSourceSchema`).
+#[derive(Debug, Clone, Serialize)]
+pub struct LogSource {
+    /// Opaque token the agent resolves back to a reader (`journald`, `docker:<id>`,
+    /// `file:<path>`, `oslog`, `eventlog:<channel>`).
+    pub id: String,
+    /// One of: journald, docker, syslog, oslog, eventlog.
+    pub kind: &'static str,
+    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub running: Option<bool>,
+}
+
+/// One normalised log line (mirrors deveye-types `deviceLogLineSchema`). `ts` is
+/// unix milliseconds; both `ts` and `level` are nullable (sent as `null`).
+#[derive(Debug, Clone, Serialize)]
+pub struct LogLine {
+    pub ts: Option<i64>,
+    pub level: Option<&'static str>,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+}
+
+/// Advanced log-query filter as the server sends it (mirrors `deviceLogFilterSchema`).
+#[derive(Debug, Default, Clone, Deserialize)]
+pub struct LogFilter {
+    #[serde(default)]
+    pub search: Option<String>,
+    #[serde(default)]
+    pub regex: Option<bool>,
+    #[serde(rename = "levelMin", default)]
+    pub level_min: Option<String>,
+    #[serde(default)]
+    pub unit: Option<String>,
+    /// Window start, unix epoch seconds.
+    #[serde(default)]
+    pub since: Option<i64>,
+    /// Window end, unix epoch seconds.
+    #[serde(default)]
+    pub until: Option<i64>,
+}
+
+/// One directory entry (mirrors deveye-types `fileEntrySchema`). `size` is the
+/// entry's own size; recursive sizes come from the separate usage analysis.
+#[derive(Debug, Clone, Serialize)]
+pub struct FileEntry {
+    pub name: String,
+    /// One of: file, dir, symlink, other.
+    pub kind: &'static str,
+    pub size: u64,
+    /// Last-modified, unix milliseconds (null when unavailable).
+    pub mtime: Option<i64>,
+    /// Unix permission bits for display; null on platforms without them.
+    pub mode: Option<u32>,
+    #[serde(rename = "symlinkTarget", skip_serializing_if = "Option::is_none")]
+    pub symlink_target: Option<String>,
+}
+
+/// A directory listing (mirrors `fileListingSchema`).
+#[derive(Debug, Clone, Serialize)]
+pub struct FileListing {
+    pub path: String,
+    pub parent: Option<String>,
+    pub entries: Vec<FileEntry>,
+}
+
+/// One child's recursive size (mirrors `fileUsageEntrySchema`).
+#[derive(Debug, Clone, Serialize)]
+pub struct FileUsageEntry {
+    pub name: String,
+    pub kind: &'static str,
+    #[serde(rename = "totalSize")]
+    pub total_size: u64,
+    pub partial: bool,
+}
+
+/// One search hit (mirrors `fileMatchSchema`).
+#[derive(Debug, Clone, Serialize)]
+pub struct FileMatch {
+    pub path: String,
+    pub name: String,
+    pub kind: &'static str,
+    pub size: u64,
+    pub mtime: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preview: Option<String>,
+}
+
+/// Advanced file-search filter as the server sends it (mirrors `fileSearchFilterSchema`).
+#[derive(Debug, Default, Clone, Deserialize)]
+pub struct FileSearchFilter {
+    #[serde(default)]
+    pub query: Option<String>,
+    /// `name` (default) | `extension` | `content`.
+    #[serde(default)]
+    pub field: Option<String>,
+    #[serde(default)]
+    pub regex: Option<bool>,
+    /// mtime window, unix epoch seconds.
+    #[serde(default)]
+    pub since: Option<i64>,
+    #[serde(default)]
+    pub until: Option<i64>,
+    #[serde(rename = "minSize", default)]
+    pub min_size: Option<u64>,
+    #[serde(rename = "maxSize", default)]
+    pub max_size: Option<u64>,
+}
+
 /// A point-in-time process list. `kind` is "top" (heaviest ~20) or "all".
 #[derive(Debug, Clone, Serialize)]
 pub struct ProcessSample {
@@ -274,6 +386,114 @@ pub enum ClientMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
+    /// Outcome of an `agent.power` system power action (shutdown/reboot/suspend…).
+    #[serde(rename = "agent.powerResult")]
+    PowerResult {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        action: String,
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    /// Reply to `log.sources`: the log sources discovered on the host.
+    #[serde(rename = "log.sourcesResult")]
+    LogSourcesResult {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        sources: Vec<LogSource>,
+    },
+    /// Reply to `log.query`: one chunk of matched log lines (last one `done: true`).
+    #[serde(rename = "log.lines")]
+    LogLines {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "queryId")]
+        query_id: String,
+        lines: Vec<LogLine>,
+        done: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    /// A chunk of PTY output for a terminal session (`data` is base64 of raw bytes).
+    #[serde(rename = "term.output")]
+    TermOutput {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        data: String,
+    },
+    /// A terminal session ended (shell exited, killed, or open failed).
+    #[serde(rename = "term.exit")]
+    TermExit {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        code: Option<i32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    /// A directory listing (reply to `files.list`).
+    #[serde(rename = "files.listing")]
+    FilesListing {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "opId")]
+        op_id: String,
+        listing: Option<FileListing>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    /// Recursive usage of a directory's children (reply to `files.analyze`).
+    #[serde(rename = "files.usage")]
+    FilesUsage {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "opId")]
+        op_id: String,
+        entries: Vec<FileUsageEntry>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    /// Search hits (reply to `files.search`).
+    #[serde(rename = "files.matches")]
+    FilesMatches {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "opId")]
+        op_id: String,
+        matches: Vec<FileMatch>,
+        truncated: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    /// Outcome of a `files.mutate` (delete/mkdir/rename) or an upload.
+    #[serde(rename = "files.opResult")]
+    FilesOpResult {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "opId")]
+        op_id: String,
+        op: String,
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    /// One chunk of a downloaded file (`data` base64; the last carries `done`).
+    #[serde(rename = "files.chunk")]
+    FilesChunk {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "opId")]
+        op_id: String,
+        data: String,
+        done: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
     /// Reply to `pkg.list`: the package managers present + their pending counts.
     #[serde(rename = "pkg.listResult")]
     PkgListResult {
@@ -335,6 +555,104 @@ pub enum ServerMessage {
     /// `uninstall-user` | `elevate` | `drop`.
     #[serde(rename = "agent.service")]
     Service { action: String },
+    /// System power action: `action` is one of `shutdown` | `reboot` | `suspend` |
+    /// `hibernate` | `lock`. The agent applies it best-effort and replies
+    /// `agent.powerResult`.
+    #[serde(rename = "agent.power")]
+    Power { action: String },
+    /// Enumerate the host's log sources (replies `log.sourcesResult`).
+    #[serde(rename = "log.sources")]
+    LogSources {},
+    /// Run one log query; streams `log.lines` back, the last with `done: true`.
+    #[serde(rename = "log.query")]
+    LogQuery {
+        #[serde(rename = "queryId")]
+        query_id: String,
+        #[serde(rename = "sourceId")]
+        source_id: String,
+        #[serde(default)]
+        filter: Option<LogFilter>,
+        #[serde(default)]
+        limit: Option<u32>,
+    },
+    /// Open an interactive PTY session running the agent user's shell.
+    #[serde(rename = "term.open")]
+    TermOpen {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        cols: u16,
+        rows: u16,
+    },
+    /// Write input bytes (base64) to a session's PTY.
+    #[serde(rename = "term.input")]
+    TermInput {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        data: String,
+    },
+    /// Resize a session's PTY.
+    #[serde(rename = "term.resize")]
+    TermResize {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        cols: u16,
+        rows: u16,
+    },
+    /// Close a session (kill the shell, free the PTY).
+    #[serde(rename = "term.close")]
+    TermClose {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+    },
+    /// List a directory (replies `files.listing`).
+    #[serde(rename = "files.list")]
+    FilesList {
+        #[serde(rename = "opId")]
+        op_id: String,
+        path: String,
+    },
+    /// Analyse a directory's recursive usage (replies `files.usage`).
+    #[serde(rename = "files.analyze")]
+    FilesAnalyze {
+        #[serde(rename = "opId")]
+        op_id: String,
+        path: String,
+    },
+    /// Recursively search a directory (replies `files.matches`).
+    #[serde(rename = "files.search")]
+    FilesSearch {
+        #[serde(rename = "opId")]
+        op_id: String,
+        path: String,
+        filter: FileSearchFilter,
+    },
+    /// Mutate the filesystem: delete / mkdir / rename (replies `files.opResult`).
+    #[serde(rename = "files.mutate")]
+    FilesMutate {
+        #[serde(rename = "opId")]
+        op_id: String,
+        op: String,
+        path: String,
+        #[serde(default)]
+        dest: Option<String>,
+    },
+    /// Download a file (streams `files.chunk`).
+    #[serde(rename = "files.download")]
+    FilesDownload {
+        #[serde(rename = "opId")]
+        op_id: String,
+        path: String,
+    },
+    /// Upload one chunk of a file at `offset` (base64 `data`; confirms on `done`).
+    #[serde(rename = "files.upload")]
+    FilesUpload {
+        #[serde(rename = "opId")]
+        op_id: String,
+        path: String,
+        offset: u64,
+        data: String,
+        done: bool,
+    },
     /// Enumerate package managers + pending updates (replies `pkg.listResult`).
     #[serde(rename = "pkg.list")]
     PkgList {},

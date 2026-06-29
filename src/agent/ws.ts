@@ -4,14 +4,24 @@ import {
     AGENT_DESTROY,
     AGENT_DESTROYED,
     AGENT_ERROR,
+    AGENT_FILES_CHUNK,
+    AGENT_FILES_LISTING,
+    AGENT_FILES_MATCHES,
+    AGENT_FILES_OP_RESULT,
+    AGENT_FILES_USAGE,
     AGENT_HELLO,
+    AGENT_LOG_LINES,
+    AGENT_LOG_SOURCES_RESULT,
     AGENT_METRICS_BATCH,
     AGENT_PKG_DONE,
     AGENT_PKG_LIST_RESULT,
     AGENT_PKG_PROGRESS,
+    AGENT_POWER_RESULT,
     AGENT_PROCESSES,
     AGENT_REPORT,
     AGENT_SERVICE_RESULT,
+    AGENT_TERM_EXIT,
+    AGENT_TERM_OUTPUT,
     AGENT_UPDATED,
     agentClientMessageSchema,
     type AgentClientMessage,
@@ -25,13 +35,23 @@ import { logger } from '@/logger';
 import {
     handleDestroyed,
     handleHello,
+    handleFilesChunk,
+    handleFilesListing,
+    handleFilesMatches,
+    handleFilesOpResult,
+    handleFilesUsage,
+    handleLogLines,
+    handleLogSourcesResult,
     handleMetricsBatch,
     handlePkgDone,
     handlePkgListResult,
     handlePkgProgress,
+    handlePowerResult,
     handleProcesses,
     handleReport,
     handleServiceResult,
+    handleTermExit,
+    handleTermOutput,
     handleUpdated,
     type AgentSession
 } from './handlers';
@@ -71,6 +91,26 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
             return handleDestroyed(session, msg.payload);
         case AGENT_SERVICE_RESULT:
             return handleServiceResult(session, msg.payload);
+        case AGENT_POWER_RESULT:
+            return handlePowerResult(session, msg.payload);
+        case AGENT_LOG_SOURCES_RESULT:
+            return handleLogSourcesResult(session, msg.payload);
+        case AGENT_LOG_LINES:
+            return handleLogLines(session, msg.payload);
+        case AGENT_TERM_OUTPUT:
+            return handleTermOutput(session, msg.payload);
+        case AGENT_TERM_EXIT:
+            return handleTermExit(session, msg.payload);
+        case AGENT_FILES_LISTING:
+            return handleFilesListing(session, msg.payload);
+        case AGENT_FILES_USAGE:
+            return handleFilesUsage(session, msg.payload);
+        case AGENT_FILES_MATCHES:
+            return handleFilesMatches(session, msg.payload);
+        case AGENT_FILES_OP_RESULT:
+            return handleFilesOpResult(session, msg.payload);
+        case AGENT_FILES_CHUNK:
+            return handleFilesChunk(session, msg.payload);
         case AGENT_PKG_LIST_RESULT:
             return handlePkgListResult(session, msg.payload);
         case AGENT_PKG_PROGRESS:

@@ -12,14 +12,18 @@ mod commands;
 mod config;
 mod elevate;
 mod enroll;
+mod files;
 mod identity;
+mod logs;
 mod metrics;
 mod packages;
+mod power;
 mod protocol;
 mod report;
 mod runner;
 mod service;
 mod state;
+mod terminal;
 mod update;
 
 use std::fs;
