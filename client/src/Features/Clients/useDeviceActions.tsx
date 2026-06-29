@@ -83,6 +83,16 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
         }
     };
 
+    /** Push a self-update to several agents at once (the "Tout mettre à jour" button). */
+    const updateAllAgents = async (ids: string[]) => {
+        setActionError(null);
+        const results = await Promise.allSettled(ids.map((id) => startAgentUpdate(id)));
+        const failed = results.filter((r) => r.status === 'rejected').length;
+        if (failed > 0) {
+            setActionError(`Mise à jour impossible pour ${failed} appareil${failed > 1 ? 's' : ''}.`);
+        }
+    };
+
     const setAutostart = async (id: string, enabled: boolean) => {
         setActionError(null);
         setServiceBusy({ id, kind: 'autostart' });
@@ -249,6 +259,7 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
         revokeDevice,
         reactivateDevice,
         updateAgent,
+        updateAllAgents,
         setAutostart,
         elevateDevice,
         dropPrivilegesDevice,

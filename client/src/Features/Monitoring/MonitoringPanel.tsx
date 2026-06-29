@@ -1304,11 +1304,6 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 onClose={() => setPackagesOpen(false)}
                 title={`Mises à jour — « ${selected.name} »`}
                 description='Gestionnaires détectés sur l’appareil et application des mises à jour en direct.'
-                footer={
-                    <Button variant='secondary' onClick={() => setPackagesOpen(false)}>
-                        Fermer
-                    </Button>
-                }
             >
                 {packagesOpen && <PackagesPanel deviceId={selected.id} />}
             </Dialog>
@@ -1318,11 +1313,6 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 onClose={() => setPowerOpen(false)}
                 title={`Commandes système — « ${selected.name} »`}
                 description='Actions exécutées sur l’appareil par l’agent (selon ses privilèges et l’OS).'
-                footer={
-                    <Button variant='secondary' onClick={() => setPowerOpen(false)}>
-                        Fermer
-                    </Button>
-                }
             >
                 {powerOpen && <PowerMenu deviceId={selected.id} />}
             </Dialog>
@@ -1333,11 +1323,6 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 title={`Logs — « ${selected.name} »`}
                 description='Journal système, conteneurs Docker et fichiers de logs de l’appareil, avec recherche avancée.'
                 width={860}
-                footer={
-                    <Button variant='secondary' onClick={() => setLogsOpen(false)}>
-                        Fermer
-                    </Button>
-                }
             >
                 {logsOpen && <LogsPanel deviceId={selected.id} />}
             </Dialog>
@@ -1348,11 +1333,6 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 title={`Terminal — « ${selected.name} »`}
                 description='Shell interactif distant, exécuté sous l’utilisateur de l’agent.'
                 width={900}
-                footer={
-                    <Button variant='secondary' onClick={() => setTerminalOpen(false)}>
-                        Fermer
-                    </Button>
-                }
             >
                 {terminalOpen && (
                     <Suspense fallback={<p className={styles.waitingMsg}>Chargement du terminal…</p>}>
@@ -1367,11 +1347,6 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 title={`Fichiers — « ${selected.name} »`}
                 description='Explorateur de fichiers : navigation, analyse d’espace disque, recherche avancée et nettoyage.'
                 width={920}
-                footer={
-                    <Button variant='secondary' onClick={() => setFilesOpen(false)}>
-                        Fermer
-                    </Button>
-                }
             >
                 {filesOpen && (
                     <Suspense fallback={<p className={styles.waitingMsg}>Chargement de l’explorateur…</p>}>

@@ -9,6 +9,7 @@ import { DeviceCard } from './DeviceCard';
 import { LinkCodesDialog } from './LinkCodesDialog';
 import { useLinkCodes } from './useLinkCodes';
 import { useDeviceActions } from './useDeviceActions';
+import { agentUpdatable } from '../agentVersion';
 import type { FeatureProps } from '../types';
 import styles from './Clients.module.css';
 
@@ -28,6 +29,13 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
     // Monitoring for browsing their frozen history.
     const visibleDevices = devices.filter((d) => d.status !== 'archived');
 
+    // Devices that can take a self-update right now (same condition as each card's
+    // update button). The bulk "Tout mettre à jour" only appears when 2+ qualify.
+    const updatableDevices = visibleDevices.filter(
+        (d) => d.status !== 'pending_deletion' && d.online && agentUpdatable(d)
+    );
+    const anyUpdating = updatableDevices.some((d) => actions.isUpdating(d.id));
+
     return (
         <div className={styles.container}>
             <div className={styles.header}>
@@ -35,16 +43,31 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                     <h2 className={styles.title}>Appareils</h2>
                     <p className={styles.subtitle}>Gérez vos agents DevEye</p>
                 </div>
-                <button className={styles.addBtn} onClick={links.openLinkModal} disabled={links.generatingCode}>
-                    {links.generatingCode ? (
-                        <span className={styles.spinner} />
-                    ) : (
-                        <>
-                            <span className='icon icon-plus' />
-                            Ajouter un appareil
-                        </>
+                <div className={styles.headerActions}>
+                    {updatableDevices.length >= 2 && (
+                        <button
+                            className={styles.updateAllBtn}
+                            onClick={() => void actions.updateAllAgents(updatableDevices.map((d) => d.id))}
+                            disabled={anyUpdating}
+                            title='Mettre à jour tous les agents dont une mise à jour est disponible'
+                        >
+                            <span
+                                className={`icon ${anyUpdating ? `icon-spinner ${styles.spinning}` : 'icon-cloud'}`}
+                            />
+                            {anyUpdating ? 'Mise à jour…' : `Tout mettre à jour (${updatableDevices.length})`}
+                        </button>
                     )}
-                </button>
+                    <button className={styles.addBtn} onClick={links.openLinkModal} disabled={links.generatingCode}>
+                        {links.generatingCode ? (
+                            <span className={styles.spinner} />
+                        ) : (
+                            <>
+                                <span className='icon icon-plus' />
+                                Ajouter un appareil
+                            </>
+                        )}
+                    </button>
+                </div>
             </div>
 
             {actions.actionError && <div className={styles.errorBanner}>{actions.actionError}</div>}

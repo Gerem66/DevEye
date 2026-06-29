@@ -64,7 +64,11 @@ export function TerminalPanel({ deviceId }: { deviceId: string }) {
 
         const term = new Terminal({
             cursorBlink: true,
-            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+            // Prefer a Nerd/Powerline font so oh-my-zsh / powerlevel10k prompt glyphs
+            // (segment separators, icons) render instead of tofu boxes — MesloLGS NF
+            // is the one p10k's wizard installs. Falls back to plain monospace.
+            fontFamily:
+                "'MesloLGS NF', 'MesloLGS Nerd Font', 'FiraCode Nerd Font', 'Hack Nerd Font', 'JetBrainsMono Nerd Font', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
             fontSize: 13,
             scrollback: 5000,
             theme: themeColors()

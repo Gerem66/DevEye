@@ -107,6 +107,36 @@
     margin: 0;
 }
 
+.headerActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+.updateAllBtn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: transparent;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-md);
+    color: var(--accent);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+.updateAllBtn:hover:not(:disabled) {
+    background: var(--accent);
+    color: var(--on-accent);
+}
+.updateAllBtn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
 .addBtn {
     display: flex;
     align-items: center;
