@@ -400,6 +400,40 @@ async fn stream_session(
                             Ok(ServerMessage::FilesMutate { op_id, op, path, dest }) => {
                                 tokio::spawn(crate::files::mutate_task(op_id, op, path, dest, files_tx.clone()));
                             }
+                            // Download streams on its own thread (bounded by the channel).
+                            Ok(ServerMessage::FilesDownload { op_id, path }) => {
+                                crate::files::spawn_download(op_id, path, files_tx.clone());
+                            }
+                            // Upload chunks are applied inline (sequentially), so an
+                            // offset-based write never races another chunk of the same file.
+                            Ok(ServerMessage::FilesUpload { op_id, path, offset, data, done }) => {
+                                let bytes = base64::engine::general_purpose::STANDARD
+                                    .decode(data.as_bytes())
+                                    .unwrap_or_default();
+                                let res = tokio::task::spawn_blocking(move || {
+                                    crate::files::upload_chunk(&path, offset, &bytes)
+                                })
+                                .await;
+                                let outcome = match res {
+                                    Ok(Ok(())) => Ok(()),
+                                    Ok(Err(e)) => Err(e.to_string()),
+                                    Err(e) => Err(e.to_string()),
+                                };
+                                // Report only the final chunk's outcome, or any error.
+                                if done || outcome.is_err() {
+                                    commands::send_files_event(
+                                        &mut sink,
+                                        device_id,
+                                        crate::files::FilesEvent::Op {
+                                            op_id,
+                                            op: "upload".to_string(),
+                                            ok: outcome.is_ok(),
+                                            error: outcome.err(),
+                                        },
+                                    )
+                                    .await;
+                                }
+                            }
                             // Enumerate package managers (off-loop; replies via pkg_rx).
                             Ok(ServerMessage::PkgList {}) => {
                                 let tx = pkg_tx.clone();

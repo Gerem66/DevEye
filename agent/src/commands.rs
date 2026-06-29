@@ -460,6 +460,18 @@ where
             ok,
             error,
         },
+        FilesEvent::Chunk {
+            op_id,
+            data,
+            done,
+            error,
+        } => ClientMessage::FilesChunk {
+            device_id: device_id.to_string(),
+            op_id,
+            data: base64::engine::general_purpose::STANDARD.encode(&data),
+            done,
+            error,
+        },
     };
     if let Ok(text) = serde_json::to_string(&msg) {
         let _ = sink.send(Message::Text(text)).await;

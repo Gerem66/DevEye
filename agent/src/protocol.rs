@@ -470,7 +470,7 @@ pub enum ClientMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
-    /// Outcome of a `files.mutate` (delete/mkdir/rename).
+    /// Outcome of a `files.mutate` (delete/mkdir/rename) or an upload.
     #[serde(rename = "files.opResult")]
     FilesOpResult {
         #[serde(rename = "deviceId")]
@@ -479,6 +479,18 @@ pub enum ClientMessage {
         op_id: String,
         op: String,
         ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    /// One chunk of a downloaded file (`data` base64; the last carries `done`).
+    #[serde(rename = "files.chunk")]
+    FilesChunk {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "opId")]
+        op_id: String,
+        data: String,
+        done: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
@@ -623,6 +635,23 @@ pub enum ServerMessage {
         path: String,
         #[serde(default)]
         dest: Option<String>,
+    },
+    /// Download a file (streams `files.chunk`).
+    #[serde(rename = "files.download")]
+    FilesDownload {
+        #[serde(rename = "opId")]
+        op_id: String,
+        path: String,
+    },
+    /// Upload one chunk of a file at `offset` (base64 `data`; confirms on `done`).
+    #[serde(rename = "files.upload")]
+    FilesUpload {
+        #[serde(rename = "opId")]
+        op_id: String,
+        path: String,
+        offset: u64,
+        data: String,
+        done: bool,
     },
     /// Enumerate package managers + pending updates (replies `pkg.listResult`).
     #[serde(rename = "pkg.list")]

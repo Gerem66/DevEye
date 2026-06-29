@@ -1,4 +1,10 @@
-import { AGENT_FILES_LISTING, AGENT_FILES_MATCHES, AGENT_FILES_OP_RESULT, AGENT_FILES_USAGE } from 'deveye-types';
+import {
+    AGENT_FILES_CHUNK,
+    AGENT_FILES_LISTING,
+    AGENT_FILES_MATCHES,
+    AGENT_FILES_OP_RESULT,
+    AGENT_FILES_USAGE
+} from 'deveye-types';
 
 import { ack, type AgentSession, type PayloadOf } from './session';
 
@@ -54,6 +60,18 @@ export async function handleFilesOpResult(
         opId: payload.opId,
         op: payload.op,
         ok: payload.ok,
+        error: payload.error
+    });
+    ack(s, 1);
+}
+
+/** `files.chunk` — one chunk of a downloaded file (last carries `done`). */
+export async function handleFilesChunk(s: AgentSession, payload: PayloadOf<typeof AGENT_FILES_CHUNK>): Promise<void> {
+    s.hub.publishFilesChunk({
+        deviceId: s.device.id,
+        opId: payload.opId,
+        data: payload.data,
+        done: payload.done,
         error: payload.error
     });
     ack(s, 1);

@@ -6,10 +6,12 @@ import TextInput from '@/Components/TextInput';
 import SelectInput from '@/Components/SelectInput';
 import { Dialog } from '@/Components/Dialog';
 import {
+    DEVICE_FILES_CHUNK_EVENT,
     DEVICE_FILES_LISTING_EVENT,
     DEVICE_FILES_MATCHES_EVENT,
     DEVICE_FILES_OP_EVENT,
     DEVICE_FILES_USAGE_EVENT,
+    type DeviceFilesChunkPush,
     type DeviceFilesListingPush,
     type DeviceFilesMatchesPush,
     type DeviceFilesOpPush,
@@ -23,6 +25,21 @@ import {
 } from 'deveye-types';
 import { formatBytes } from './utils';
 import styles from './Monitoring.module.css';
+
+/** Upload chunk size (raw bytes; base64 keeps the frame under the wire cap). */
+const UPLOAD_CHUNK = 256 * 1024;
+
+function base64ToBytes(b64: string): Uint8Array {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+}
+function bytesToBase64(bytes: Uint8Array): string {
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+}
 
 /** Join a directory path with a child name, keeping the path's separator style. */
 function joinPath(base: string, name: string): string {
@@ -88,10 +105,18 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
     const [nameDialog, setNameDialog] = useState<{ mode: 'mkdir' | 'rename'; entry?: FileEntry } | null>(null);
     const [nameValue, setNameValue] = useState('');
 
+    const [downloading, setDownloading] = useState<string | null>(null);
+    const [uploading, setUploading] = useState<{ name: string; pct: number } | null>(null);
+
     const listOp = useRef('');
     const usageOp = useRef('');
     const searchOp = useRef('');
     const mutateOp = useRef('');
+    const downloadOp = useRef('');
+    const uploadOp = useRef('');
+    const dlBuf = useRef<Uint8Array[]>([]);
+    const dlName = useRef('');
+    const fileInput = useRef<HTMLInputElement>(null);
 
     useEffect(() => acquireMetrics(deviceId), [deviceId]);
 
@@ -159,13 +184,93 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                 if (d.error) setError(d.error);
             } else if (msg.command === DEVICE_FILES_OP_EVENT && msg.payload.ok) {
                 const d = msg.payload.data as DeviceFilesOpPush;
-                if (d.deviceId !== deviceId || d.opId !== mutateOp.current) return;
-                if (d.ok) navigate(path);
-                else setError(d.error ?? 'Opération échouée');
+                if (d.deviceId !== deviceId) return;
+                if (d.opId === mutateOp.current) {
+                    if (d.ok) navigate(path);
+                    else setError(d.error ?? 'Opération échouée');
+                } else if (d.opId === uploadOp.current) {
+                    setUploading(null);
+                    if (d.ok) navigate(path);
+                    else setError(d.error ?? 'Téléversement échoué');
+                }
+            } else if (msg.command === DEVICE_FILES_CHUNK_EVENT && msg.payload.ok) {
+                const d = msg.payload.data as DeviceFilesChunkPush;
+                if (d.deviceId !== deviceId || d.opId !== downloadOp.current) return;
+                if (d.error) {
+                    setError(d.error);
+                    setDownloading(null);
+                    dlBuf.current = [];
+                    return;
+                }
+                if (d.data) dlBuf.current.push(base64ToBytes(d.data));
+                if (d.done) {
+                    const blob = new Blob(dlBuf.current as BlobPart[]);
+                    dlBuf.current = [];
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = dlName.current || 'fichier';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    setDownloading(null);
+                }
             }
         });
         return off;
     }, [deviceId, analyze, navigate, path]);
+
+    const download = useCallback(
+        (entry: FileEntry) => {
+            const opId = crypto.randomUUID();
+            downloadOp.current = opId;
+            dlBuf.current = [];
+            dlName.current = entry.name;
+            setDownloading(entry.name);
+            setError(null);
+            void ws.send('device.filesDownload', { deviceId, opId, path: joinPath(path, entry.name) }).catch((e) => {
+                setDownloading(null);
+                setError(e instanceof Error ? e.message : 'Échec');
+            });
+        },
+        [deviceId, path]
+    );
+
+    const upload = useCallback(
+        async (file: File) => {
+            const opId = crypto.randomUUID();
+            uploadOp.current = opId;
+            const dest = joinPath(path, file.name);
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            setUploading({ name: file.name, pct: 0 });
+            setError(null);
+            try {
+                for (let off = 0; off === 0 || off < bytes.length; off += UPLOAD_CHUNK) {
+                    const slice = bytes.subarray(off, Math.min(off + UPLOAD_CHUNK, bytes.length));
+                    const done = off + UPLOAD_CHUNK >= bytes.length;
+                    await ws.send('device.filesUpload', {
+                        deviceId,
+                        opId,
+                        path: dest,
+                        offset: off,
+                        data: bytesToBase64(slice),
+                        done
+                    });
+                    setUploading({
+                        name: file.name,
+                        pct: bytes.length
+                            ? Math.round((Math.min(off + UPLOAD_CHUNK, bytes.length) / bytes.length) * 100)
+                            : 100
+                    });
+                    if (done) break;
+                }
+                // Completion is confirmed by the device.filesOp push (refreshes the listing).
+            } catch (e) {
+                setUploading(null);
+                setError(e instanceof Error ? e.message : 'Téléversement échoué');
+            }
+        },
+        [deviceId, path]
+    );
 
     const mutate = useCallback(
         (op: 'delete' | 'mkdir' | 'rename', target: string, dest?: string) => {
@@ -287,8 +392,34 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                 >
                     <span className='icon icon-folder-plus' /> Nouveau dossier
                 </button>
+                <button
+                    type='button'
+                    className={styles.logToggle}
+                    onClick={() => fileInput.current?.click()}
+                    disabled={uploading !== null}
+                >
+                    <span className='icon icon-download' /> Téléverser
+                </button>
+                <input
+                    ref={fileInput}
+                    type='file'
+                    hidden
+                    onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) void upload(f);
+                        e.target.value = '';
+                    }}
+                />
                 <span className={styles.filesUsageState}>
-                    {analyzing ? 'Analyse de l’espace…' : usage ? 'Taille = récursive' : ''}
+                    {uploading
+                        ? `Téléversement ${uploading.name} — ${uploading.pct}%`
+                        : downloading
+                          ? `Téléchargement ${downloading}…`
+                          : analyzing
+                            ? 'Analyse de l’espace…'
+                            : usage
+                              ? 'Taille = récursive'
+                              : ''}
                 </span>
             </div>
 
@@ -339,6 +470,16 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                                     <span className={styles.filesPerm}>{permString(entry.mode)}</span>
                                 </button>
                                 <div className={styles.filesRowActions}>
+                                    {entry.kind !== 'dir' && (
+                                        <button
+                                            type='button'
+                                            title='Télécharger'
+                                            disabled={downloading !== null}
+                                            onClick={() => download(entry)}
+                                        >
+                                            <span className='icon icon-download' />
+                                        </button>
+                                    )}
                                     <button
                                         type='button'
                                         title='Renommer'

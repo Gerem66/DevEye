@@ -14,9 +14,11 @@ import {
 } from './lifecycle';
 import {
     deviceFilesAnalyzeFeature,
+    deviceFilesDownloadFeature,
     deviceFilesListFeature,
     deviceFilesMutateFeature,
-    deviceFilesSearchFeature
+    deviceFilesSearchFeature,
+    deviceFilesUploadFeature
 } from './files';
 import { deviceLogQueryFeature, deviceLogSourcesFeature } from './logs';
 import { deviceListPackagesFeature, deviceUpgradePackagesFeature } from './packages';
@@ -65,6 +67,8 @@ export const deviceFeatures: FeatureDefinition<string, any, any>[] = [
     deviceFilesAnalyzeFeature,
     deviceFilesSearchFeature,
     deviceFilesMutateFeature,
+    deviceFilesDownloadFeature,
+    deviceFilesUploadFeature,
     deviceRequestDeleteFeature,
     deviceCancelDeleteFeature,
     deviceForceDeleteFeature,

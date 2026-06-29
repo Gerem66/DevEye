@@ -4,6 +4,7 @@ import {
     AGENT_DESTROY,
     AGENT_DESTROYED,
     AGENT_ERROR,
+    AGENT_FILES_CHUNK,
     AGENT_FILES_LISTING,
     AGENT_FILES_MATCHES,
     AGENT_FILES_OP_RESULT,
@@ -34,6 +35,7 @@ import { logger } from '@/logger';
 import {
     handleDestroyed,
     handleHello,
+    handleFilesChunk,
     handleFilesListing,
     handleFilesMatches,
     handleFilesOpResult,
@@ -107,6 +109,8 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
             return handleFilesMatches(session, msg.payload);
         case AGENT_FILES_OP_RESULT:
             return handleFilesOpResult(session, msg.payload);
+        case AGENT_FILES_CHUNK:
+            return handleFilesChunk(session, msg.payload);
         case AGENT_PKG_LIST_RESULT:
             return handlePkgListResult(session, msg.payload);
         case AGENT_PKG_PROGRESS:

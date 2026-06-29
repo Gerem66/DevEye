@@ -4,9 +4,11 @@ import {
     AGENT_CONFIG,
     AGENT_DESTROY,
     AGENT_FILES_ANALYZE,
+    AGENT_FILES_DOWNLOAD,
     AGENT_FILES_LIST,
     AGENT_FILES_MUTATE,
     AGENT_FILES_SEARCH,
+    AGENT_FILES_UPLOAD,
     AGENT_LOG_QUERY,
     AGENT_LOG_SOURCES,
     AGENT_PKG_LIST,
@@ -18,6 +20,7 @@ import {
     AGENT_TERM_OPEN,
     AGENT_TERM_RESIZE,
     AGENT_UPDATE,
+    DEVICE_FILES_CHUNK_EVENT,
     DEVICE_FILES_LISTING_EVENT,
     DEVICE_FILES_MATCHES_EVENT,
     DEVICE_FILES_OP_EVENT,
@@ -35,9 +38,11 @@ import {
     PACKAGE_PROGRESS_EVENT,
     type AgentConfigPayload,
     type AgentFilesAnalyzePayload,
+    type AgentFilesDownloadPayload,
     type AgentFilesListPayload,
     type AgentFilesMutatePayload,
     type AgentFilesSearchPayload,
+    type AgentFilesUploadPayload,
     type AgentLogQueryPayload,
     type AgentPkgUpgradePayload,
     type AgentPowerPayload,
@@ -47,6 +52,7 @@ import {
     type AgentTermOpenPayload,
     type AgentTermResizePayload,
     type AgentUpdatePayload,
+    type DeviceFilesChunkPush,
     type DeviceFilesListingPush,
     type DeviceFilesMatchesPush,
     type DeviceFilesOpPush,
@@ -247,6 +253,21 @@ export class MonitorHub {
         this.publishToSubscribers(payload.deviceId, DEVICE_FILES_OP_EVENT, payload);
     }
 
+    /** Ask a connected agent to download a file (streams chunks). No-op if offline. */
+    requestFilesDownload(deviceId: string, payload: AgentFilesDownloadPayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_FILES_DOWNLOAD, payload);
+    }
+
+    /** Send one upload chunk to a connected agent. No-op if offline. */
+    requestFilesUpload(deviceId: string, payload: AgentFilesUploadPayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_FILES_UPLOAD, payload);
+    }
+
+    /** Fan out one chunk of a downloaded file to a device's subscribers. */
+    publishFilesChunk(payload: DeviceFilesChunkPush): void {
+        this.publishToSubscribers(payload.deviceId, DEVICE_FILES_CHUNK_EVENT, payload);
+    }
+
     /** Fan out a package-manager inventory to the device's subscribers. */
     publishPackageList(payload: PackageListPush): void {
         this.publishToSubscribers(payload.deviceId, PACKAGE_LIST_EVENT, payload);
@@ -415,6 +436,10 @@ export interface MonitorTransport {
     requestFilesSearch(deviceId: string, payload: AgentFilesSearchPayload): boolean;
     /** Ask the device's agent to mutate the filesystem; false if offline. */
     requestFilesMutate(deviceId: string, payload: AgentFilesMutatePayload): boolean;
+    /** Ask the device's agent to download a file; false if offline. */
+    requestFilesDownload(deviceId: string, payload: AgentFilesDownloadPayload): boolean;
+    /** Send one upload chunk to the device's agent; false if offline. */
+    requestFilesUpload(deviceId: string, payload: AgentFilesUploadPayload): boolean;
 }
 
 export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): MonitorTransport {
@@ -440,6 +465,8 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         requestFilesList: (deviceId, payload) => hub.requestFilesList(deviceId, payload),
         requestFilesAnalyze: (deviceId, payload) => hub.requestFilesAnalyze(deviceId, payload),
         requestFilesSearch: (deviceId, payload) => hub.requestFilesSearch(deviceId, payload),
-        requestFilesMutate: (deviceId, payload) => hub.requestFilesMutate(deviceId, payload)
+        requestFilesMutate: (deviceId, payload) => hub.requestFilesMutate(deviceId, payload),
+        requestFilesDownload: (deviceId, payload) => hub.requestFilesDownload(deviceId, payload),
+        requestFilesUpload: (deviceId, payload) => hub.requestFilesUpload(deviceId, payload)
     };
 }

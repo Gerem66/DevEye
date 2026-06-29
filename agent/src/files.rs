@@ -48,7 +48,17 @@ pub enum FilesEvent {
         ok: bool,
         error: Option<String>,
     },
+    /// One chunk of a downloaded file (the last carries `done`).
+    Chunk {
+        op_id: String,
+        data: Vec<u8>,
+        done: bool,
+        error: Option<String>,
+    },
 }
+
+/// Bytes per download chunk (base64 keeps each frame well under the wire cap).
+const DOWNLOAD_CHUNK: usize = 256 * 1024;
 
 // ───────────────────────────── metadata helpers ───────────────────────────
 fn kind_of(ft: &std::fs::FileType) -> &'static str {
@@ -364,6 +374,86 @@ pub fn mutate(op: &str, path: &str, dest: Option<&str>) -> Result<()> {
         }
         other => bail!("opération de fichier inconnue : {other}"),
     }
+}
+
+// ──────────────────────────────── transfer ────────────────────────────────
+/// Write one chunk of an uploaded file at `offset`. Offset 0 creates/truncates the
+/// file; later offsets seek and overwrite — so chunks must arrive in order (the
+/// session loop processes them sequentially).
+pub fn upload_chunk(path: &str, offset: u64, data: &[u8]) -> Result<()> {
+    use std::io::{Seek, SeekFrom, Write};
+    let mut file = if offset == 0 {
+        std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(path)
+            .with_context(|| format!("création de {path}"))?
+    } else {
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .open(path)
+            .with_context(|| format!("écriture de {path}"))?;
+        f.seek(SeekFrom::Start(offset)).context("positionnement")?;
+        f
+    };
+    file.write_all(data)
+        .with_context(|| format!("écriture de {path}"))?;
+    Ok(())
+}
+
+/// Stream a file back to the server in chunks on a dedicated OS thread (blocking
+/// reads, back-pressured by the bounded channel). The final frame carries `done`,
+/// or an `error` if the file couldn't be opened/read.
+pub fn spawn_download(op_id: String, path: String, tx: Sender<FilesEvent>) {
+    std::thread::spawn(move || {
+        use std::io::Read;
+        let fail = |tx: &Sender<FilesEvent>, e: String| {
+            let _ = tx.blocking_send(FilesEvent::Chunk {
+                op_id: op_id.clone(),
+                data: vec![],
+                done: true,
+                error: Some(e),
+            });
+        };
+        let meta = match std::fs::metadata(&path) {
+            Ok(m) => m,
+            Err(e) => return fail(&tx, e.to_string()),
+        };
+        if meta.is_dir() {
+            return fail(&tx, "C'est un dossier, pas un fichier".to_string());
+        }
+        let mut file = match std::fs::File::open(&path) {
+            Ok(f) => f,
+            Err(e) => return fail(&tx, e.to_string()),
+        };
+        let mut buf = vec![0u8; DOWNLOAD_CHUNK];
+        loop {
+            match file.read(&mut buf) {
+                Ok(0) => {
+                    let _ = tx.blocking_send(FilesEvent::Chunk {
+                        op_id: op_id.clone(),
+                        data: vec![],
+                        done: true,
+                        error: None,
+                    });
+                    break;
+                }
+                Ok(n) => {
+                    let ev = FilesEvent::Chunk {
+                        op_id: op_id.clone(),
+                        data: buf[..n].to_vec(),
+                        done: false,
+                        error: None,
+                    };
+                    if tx.blocking_send(ev).is_err() {
+                        break;
+                    }
+                }
+                Err(e) => return fail(&tx, e.to_string()),
+            }
+        }
+    });
 }
 
 // ───────────────────────────────── tasks ──────────────────────────────────

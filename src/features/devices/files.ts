@@ -1,4 +1,11 @@
-import { deviceFilesAnalyze, deviceFilesList, deviceFilesMutate, deviceFilesSearch } from 'deveye-types';
+import {
+    deviceFilesAnalyze,
+    deviceFilesDownload,
+    deviceFilesList,
+    deviceFilesMutate,
+    deviceFilesSearch,
+    deviceFilesUpload
+} from 'deveye-types';
 
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { authorizeReachableDevice } from './shared';
@@ -90,6 +97,52 @@ export const deviceFilesMutateFeature: FeatureDefinition<
                 dest: input.dest ?? null
             }
         });
+        return { ok: true };
+    }
+});
+
+/** Download a file: chunks stream back as `device.filesChunk` push events. */
+export const deviceFilesDownloadFeature: FeatureDefinition<
+    typeof deviceFilesDownload.command,
+    typeof deviceFilesDownload.input,
+    typeof deviceFilesDownload.output
+> = defineFeature({
+    ...deviceFilesDownload,
+    handler: async (ctx, input) => {
+        const row = await authorizeReachableDevice(ctx, input.deviceId);
+        const ok = ctx.monitor?.requestFilesDownload(row.id, { opId: input.opId, path: input.path });
+        if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
+        return { ok: true };
+    }
+});
+
+/**
+ * Upload one chunk of a file. The first chunk (offset 0) is audited as the upload;
+ * later chunks just stream the bytes. Completion arrives as a `device.filesOp` push.
+ */
+export const deviceFilesUploadFeature: FeatureDefinition<
+    typeof deviceFilesUpload.command,
+    typeof deviceFilesUpload.input,
+    typeof deviceFilesUpload.output
+> = defineFeature({
+    ...deviceFilesUpload,
+    handler: async (ctx, input) => {
+        const row = await authorizeReachableDevice(ctx, input.deviceId);
+        const ok = ctx.monitor?.requestFilesUpload(row.id, {
+            opId: input.opId,
+            path: input.path,
+            offset: input.offset,
+            data: input.data,
+            done: input.done
+        });
+        if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
+        if (input.offset === 0) {
+            ctx.audit({
+                action: 'device.filesUpload',
+                description: `Téléversement : « ${row.name} » — ${input.path}`,
+                metadata: { deviceId: row.id, ownerId: row.owner_id, path: input.path }
+            });
+        }
         return { ok: true };
     }
 });
