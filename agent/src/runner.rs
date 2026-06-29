@@ -233,11 +233,17 @@ async fn stream_session(
     // stream their results back through this channel, so the loop stays responsive
     // (pings, metrics) and forwards each event to the server as it arrives.
     let (pkg_tx, mut pkg_rx) = tokio::sync::mpsc::channel::<crate::packages::PkgEvent>(256);
+    // Log source/query tasks (a query shells out to journalctl/docker and can return
+    // many lines) stream their results back through this channel, same as packages.
+    let (log_tx, mut log_rx) = tokio::sync::mpsc::channel::<crate::logs::LogEvent>(256);
 
     loop {
         tokio::select! {
             Some(ev) = pkg_rx.recv() => {
                 commands::send_pkg_event(&mut sink, device_id, ev).await;
+            }
+            Some(ev) = log_rx.recv() => {
+                commands::send_log_event(&mut sink, device_id, ev).await;
             }
             _ = metric_ticker.tick() => {
                 push_bounded(queue, collector.collect_fine());
@@ -312,6 +318,25 @@ async fn stream_session(
                             // System power action (shutdown/reboot/suspend/hibernate/lock).
                             Ok(ServerMessage::Power { action }) => {
                                 commands::handle_power(&mut sink, device_id, &action).await;
+                            }
+                            // Enumerate log sources (off-loop; replies via log_rx).
+                            Ok(ServerMessage::LogSources {}) => {
+                                tokio::spawn(crate::logs::detect_task(log_tx.clone()));
+                            }
+                            // Run a log query (off-loop; streams via log_rx).
+                            Ok(ServerMessage::LogQuery {
+                                query_id,
+                                source_id,
+                                filter,
+                                limit,
+                            }) => {
+                                tokio::spawn(crate::logs::run_query_task(
+                                    query_id,
+                                    source_id,
+                                    filter.unwrap_or_default(),
+                                    limit.map(|l| l as usize).unwrap_or(crate::logs::DEFAULT_LIMIT),
+                                    log_tx.clone(),
+                                ));
                             }
                             // Enumerate package managers (off-loop; replies via pkg_rx).
                             Ok(ServerMessage::PkgList {}) => {

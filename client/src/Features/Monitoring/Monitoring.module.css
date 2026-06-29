@@ -1722,3 +1722,160 @@
     margin: 0;
     word-break: break-word;
 }
+
+/* ── Device log viewer (device.logSources / device.logQuery) ── */
+.logsPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+.logToolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-sm);
+}
+.logSourceSelect {
+    flex: 1 1 180px;
+    min-width: 0;
+}
+.logSearch {
+    flex: 2 1 200px;
+    min-width: 0;
+}
+.logLevelSelect {
+    flex: 0 0 auto;
+}
+.logUnitInput {
+    flex: 1 1 160px;
+    min-width: 0;
+}
+.logToggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast),
+        border-color var(--transition-fast);
+}
+.logToggle:hover {
+    background: var(--glass-bg);
+}
+.logToggleOn {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-bg);
+}
+.logTimeRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+}
+.logTimeBtn {
+    padding: 2px var(--space-sm);
+    background: transparent;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast),
+        border-color var(--transition-fast);
+}
+.logTimeBtn:hover {
+    background: var(--glass-bg-light);
+}
+.logTimeBtnOn {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-bg);
+}
+.logCount {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+.logView {
+    height: 52vh;
+    overflow: auto;
+    background: var(--surface-2, var(--surface));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+.logLine {
+    display: flex;
+    gap: var(--space-sm);
+    align-items: baseline;
+    padding: 1px 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.logLine:hover {
+    background: var(--glass-bg-light);
+}
+.logTs {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+.logLvl {
+    flex-shrink: 0;
+    text-transform: uppercase;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    min-width: 64px;
+}
+.logLvlDebug {
+    color: var(--text-muted);
+}
+.logLvlInfo {
+    color: var(--text-secondary);
+}
+.logLvlNotice {
+    color: var(--accent);
+}
+.logLvlWarning {
+    color: var(--warning);
+}
+.logLvlError,
+.logLvlCritical {
+    color: var(--danger);
+}
+.logUnit {
+    flex-shrink: 0;
+    color: var(--accent);
+    opacity: 0.85;
+}
+.logMsg {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-primary);
+}
+.logHint {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: var(--space-md);
+    text-align: center;
+}
+.logErr {
+    color: var(--danger);
+    font-size: 0.85rem;
+    padding: var(--space-md);
+    word-break: break-word;
+}

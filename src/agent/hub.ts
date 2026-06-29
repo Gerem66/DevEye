@@ -3,11 +3,15 @@ import {
     AGENT_COLLECT,
     AGENT_CONFIG,
     AGENT_DESTROY,
+    AGENT_LOG_QUERY,
+    AGENT_LOG_SOURCES,
     AGENT_PKG_LIST,
     AGENT_PKG_UPGRADE,
     AGENT_POWER,
     AGENT_SERVICE,
     AGENT_UPDATE,
+    DEVICE_LOG_LINES_EVENT,
+    DEVICE_LOG_SOURCES_EVENT,
     DEVICE_POWER_EVENT,
     DEVICE_PRESENCE_EVENT,
     DEVICE_REPORT_EVENT,
@@ -16,10 +20,13 @@ import {
     PACKAGE_LIST_EVENT,
     PACKAGE_PROGRESS_EVENT,
     type AgentConfigPayload,
+    type AgentLogQueryPayload,
     type AgentPkgUpgradePayload,
     type AgentPowerPayload,
     type AgentServicePayload,
     type AgentUpdatePayload,
+    type DeviceLogLinesPush,
+    type DeviceLogSourcesPush,
     type DevicePowerPush,
     type DevicePresence,
     type DeviceReport,
@@ -120,6 +127,26 @@ export class MonitorHub {
     /** Fan out a system power-action outcome to the device's subscribers. */
     publishPower(payload: DevicePowerPush): void {
         this.publishToSubscribers(payload.deviceId, DEVICE_POWER_EVENT, payload);
+    }
+
+    /** Ask a connected agent to enumerate its log sources. No-op if offline. */
+    requestLogSources(deviceId: string): boolean {
+        return this.sendToAgent(deviceId, AGENT_LOG_SOURCES);
+    }
+
+    /** Ask a connected agent to run one log query. No-op if offline. */
+    requestLogQuery(deviceId: string, payload: AgentLogQueryPayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_LOG_QUERY, payload);
+    }
+
+    /** Fan out a device's log-source inventory to its subscribers. */
+    publishLogSources(payload: DeviceLogSourcesPush): void {
+        this.publishToSubscribers(payload.deviceId, DEVICE_LOG_SOURCES_EVENT, payload);
+    }
+
+    /** Fan out one chunk of queried log lines to a device's subscribers. */
+    publishLogLines(payload: DeviceLogLinesPush): void {
+        this.publishToSubscribers(payload.deviceId, DEVICE_LOG_LINES_EVENT, payload);
     }
 
     /** Fan out a package-manager inventory to the device's subscribers. */
@@ -270,6 +297,10 @@ export interface MonitorTransport {
     requestPkgUpgrade(deviceId: string, payload: AgentPkgUpgradePayload): boolean;
     /** Ask the device's agent to run a system power action; false if offline. */
     requestPower(deviceId: string, payload: AgentPowerPayload): boolean;
+    /** Ask the device's agent to enumerate its log sources; false if offline. */
+    requestLogSources(deviceId: string): boolean;
+    /** Ask the device's agent to run one log query; false if offline. */
+    requestLogQuery(deviceId: string, payload: AgentLogQueryPayload): boolean;
 }
 
 export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): MonitorTransport {
@@ -285,6 +316,8 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         requestService: (deviceId, payload) => hub.requestService(deviceId, payload),
         requestPkgList: (deviceId) => hub.requestPkgList(deviceId),
         requestPkgUpgrade: (deviceId, payload) => hub.requestPkgUpgrade(deviceId, payload),
-        requestPower: (deviceId, payload) => hub.requestPower(deviceId, payload)
+        requestPower: (deviceId, payload) => hub.requestPower(deviceId, payload),
+        requestLogSources: (deviceId) => hub.requestLogSources(deviceId),
+        requestLogQuery: (deviceId, payload) => hub.requestLogQuery(deviceId, payload)
     };
 }

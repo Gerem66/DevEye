@@ -11,6 +11,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tracing::{info, warn};
 
 use crate::config::Config;
+use crate::logs::LogEvent;
 use crate::packages::PkgEvent;
 use crate::protocol::ClientMessage;
 
@@ -367,6 +368,35 @@ where
             manager,
             ok,
             reboot_required: Some(reboot_required),
+            error,
+        },
+    };
+    if let Ok(text) = serde_json::to_string(&msg) {
+        let _ = sink.send(Message::Text(text)).await;
+    }
+}
+
+/// Forward one log task event to the server, stamping it with the device id.
+pub(crate) async fn send_log_event<S>(sink: &mut S, device_id: &str, ev: LogEvent)
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let msg = match ev {
+        LogEvent::Sources(sources) => ClientMessage::LogSourcesResult {
+            device_id: device_id.to_string(),
+            sources,
+        },
+        LogEvent::Lines {
+            query_id,
+            lines,
+            done,
+            error,
+        } => ClientMessage::LogLines {
+            device_id: device_id.to_string(),
+            query_id,
+            lines,
+            done,
             error,
         },
     };

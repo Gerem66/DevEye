@@ -13,6 +13,7 @@ mod config;
 mod elevate;
 mod enroll;
 mod identity;
+mod logs;
 mod metrics;
 mod packages;
 mod power;

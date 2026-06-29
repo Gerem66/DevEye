@@ -28,6 +28,7 @@ import { Timeline } from './Timeline';
 import { MiniGraph, type Series } from './MiniGraph';
 import { PackagesPanel } from './PackagesPanel';
 import { PowerMenu } from './PowerMenu';
+import { LogsPanel } from './LogsPanel';
 import { useAgentUpdate } from './useAgentUpdate';
 import { agentUpdatable } from '../agentVersion';
 import {
@@ -220,6 +221,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const [configOpen, setConfigOpen] = useState(false);
     const [packagesOpen, setPackagesOpen] = useState(false);
     const [powerOpen, setPowerOpen] = useState(false);
+    const [logsOpen, setLogsOpen] = useState(false);
     const updater = useAgentUpdate();
     // Storage footprint of the device's stored snapshots.
     const [storage, setStorage] = useState<{ snapshots: number; rows: number; bytes: number } | null>(null);
@@ -897,6 +899,15 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     {online && !archived && (
                         <button
                             className={styles.iconHeaderBtn}
+                            onClick={() => setLogsOpen(true)}
+                            title='Logs de l’appareil'
+                        >
+                            <span className='icon icon-logs' />
+                        </button>
+                    )}
+                    {online && !archived && (
+                        <button
+                            className={styles.iconHeaderBtn}
                             onClick={() => setPowerOpen(true)}
                             title='Commandes système'
                         >
@@ -1288,6 +1299,21 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 }
             >
                 {powerOpen && <PowerMenu deviceId={selected.id} />}
+            </Dialog>
+
+            <Dialog
+                open={logsOpen}
+                onClose={() => setLogsOpen(false)}
+                title={`Logs — « ${selected.name} »`}
+                description='Journal système, conteneurs Docker et fichiers de logs de l’appareil, avec recherche avancée.'
+                width={860}
+                footer={
+                    <Button variant='secondary' onClick={() => setLogsOpen(false)}>
+                        Fermer
+                    </Button>
+                }
+            >
+                {logsOpen && <LogsPanel deviceId={selected.id} />}
             </Dialog>
 
             <Dialog

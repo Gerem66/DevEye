@@ -5,6 +5,8 @@ import {
     AGENT_DESTROYED,
     AGENT_ERROR,
     AGENT_HELLO,
+    AGENT_LOG_LINES,
+    AGENT_LOG_SOURCES_RESULT,
     AGENT_METRICS_BATCH,
     AGENT_PKG_DONE,
     AGENT_PKG_LIST_RESULT,
@@ -26,6 +28,8 @@ import { logger } from '@/logger';
 import {
     handleDestroyed,
     handleHello,
+    handleLogLines,
+    handleLogSourcesResult,
     handleMetricsBatch,
     handlePkgDone,
     handlePkgListResult,
@@ -75,6 +79,10 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
             return handleServiceResult(session, msg.payload);
         case AGENT_POWER_RESULT:
             return handlePowerResult(session, msg.payload);
+        case AGENT_LOG_SOURCES_RESULT:
+            return handleLogSourcesResult(session, msg.payload);
+        case AGENT_LOG_LINES:
+            return handleLogLines(session, msg.payload);
         case AGENT_PKG_LIST_RESULT:
             return handlePkgListResult(session, msg.payload);
         case AGENT_PKG_PROGRESS:

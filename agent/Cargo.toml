@@ -43,6 +43,9 @@ ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand = "0.8"
 base64 = "0.22"
 sha2 = "0.10"
+# Advanced log/file search (reuses regex-automata/regex-syntax already pulled in by
+# tracing-subscriber's env-filter, so the marginal binary cost stays small).
+regex = "1"
 
 # Used by build.rs to read the version out of the root package.json.
 [build-dependencies]

@@ -174,6 +174,51 @@ pub struct ReportDisk {
     pub total_bytes: u64,
 }
 
+/// One queryable log source on the host (mirrors deveye-types `deviceLogSourceSchema`).
+#[derive(Debug, Clone, Serialize)]
+pub struct LogSource {
+    /// Opaque token the agent resolves back to a reader (`journald`, `docker:<id>`,
+    /// `file:<path>`, `oslog`, `eventlog:<channel>`).
+    pub id: String,
+    /// One of: journald, docker, syslog, oslog, eventlog.
+    pub kind: &'static str,
+    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub running: Option<bool>,
+}
+
+/// One normalised log line (mirrors deveye-types `deviceLogLineSchema`). `ts` is
+/// unix milliseconds; both `ts` and `level` are nullable (sent as `null`).
+#[derive(Debug, Clone, Serialize)]
+pub struct LogLine {
+    pub ts: Option<i64>,
+    pub level: Option<&'static str>,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+}
+
+/// Advanced log-query filter as the server sends it (mirrors `deviceLogFilterSchema`).
+#[derive(Debug, Default, Clone, Deserialize)]
+pub struct LogFilter {
+    #[serde(default)]
+    pub search: Option<String>,
+    #[serde(default)]
+    pub regex: Option<bool>,
+    #[serde(rename = "levelMin", default)]
+    pub level_min: Option<String>,
+    #[serde(default)]
+    pub unit: Option<String>,
+    /// Window start, unix epoch seconds.
+    #[serde(default)]
+    pub since: Option<i64>,
+    /// Window end, unix epoch seconds.
+    #[serde(default)]
+    pub until: Option<i64>,
+}
+
 /// A point-in-time process list. `kind` is "top" (heaviest ~20) or "all".
 #[derive(Debug, Clone, Serialize)]
 pub struct ProcessSample {
@@ -284,6 +329,25 @@ pub enum ClientMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
+    /// Reply to `log.sources`: the log sources discovered on the host.
+    #[serde(rename = "log.sourcesResult")]
+    LogSourcesResult {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        sources: Vec<LogSource>,
+    },
+    /// Reply to `log.query`: one chunk of matched log lines (last one `done: true`).
+    #[serde(rename = "log.lines")]
+    LogLines {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "queryId")]
+        query_id: String,
+        lines: Vec<LogLine>,
+        done: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
     /// Reply to `pkg.list`: the package managers present + their pending counts.
     #[serde(rename = "pkg.listResult")]
     PkgListResult {
@@ -350,6 +414,21 @@ pub enum ServerMessage {
     /// `agent.powerResult`.
     #[serde(rename = "agent.power")]
     Power { action: String },
+    /// Enumerate the host's log sources (replies `log.sourcesResult`).
+    #[serde(rename = "log.sources")]
+    LogSources {},
+    /// Run one log query; streams `log.lines` back, the last with `done: true`.
+    #[serde(rename = "log.query")]
+    LogQuery {
+        #[serde(rename = "queryId")]
+        query_id: String,
+        #[serde(rename = "sourceId")]
+        source_id: String,
+        #[serde(default)]
+        filter: Option<LogFilter>,
+        #[serde(default)]
+        limit: Option<u32>,
+    },
     /// Enumerate package managers + pending updates (replies `pkg.listResult`).
     #[serde(rename = "pkg.list")]
     PkgList {},
