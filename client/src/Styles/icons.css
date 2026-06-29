@@ -274,3 +274,7 @@
     -webkit-mask-image: url(/icons/terminal.svg);
     mask-image: url(/icons/terminal.svg);
 }
+.icon.icon-file {
+    -webkit-mask-image: url(/icons/file.svg);
+    mask-image: url(/icons/file.svg);
+}

@@ -13,6 +13,7 @@ use tracing::{info, warn};
 use base64::Engine as _;
 
 use crate::config::Config;
+use crate::files::FilesEvent;
 use crate::logs::LogEvent;
 use crate::packages::PkgEvent;
 use crate::protocol::ClientMessage;
@@ -400,6 +401,63 @@ where
             device_id: device_id.to_string(),
             session_id,
             code,
+            error,
+        },
+    };
+    if let Ok(text) = serde_json::to_string(&msg) {
+        let _ = sink.send(Message::Text(text)).await;
+    }
+}
+
+/// Forward one file-explorer event to the server, stamping it with the device id.
+pub(crate) async fn send_files_event<S>(sink: &mut S, device_id: &str, ev: FilesEvent)
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let msg = match ev {
+        FilesEvent::Listing {
+            op_id,
+            listing,
+            error,
+        } => ClientMessage::FilesListing {
+            device_id: device_id.to_string(),
+            op_id,
+            listing,
+            error,
+        },
+        FilesEvent::Usage {
+            op_id,
+            entries,
+            error,
+        } => ClientMessage::FilesUsage {
+            device_id: device_id.to_string(),
+            op_id,
+            entries,
+            error,
+        },
+        FilesEvent::Matches {
+            op_id,
+            matches,
+            truncated,
+            error,
+        } => ClientMessage::FilesMatches {
+            device_id: device_id.to_string(),
+            op_id,
+            matches,
+            truncated,
+            error,
+        },
+        FilesEvent::Op {
+            op_id,
+            op,
+            ok,
+            error,
+        } => ClientMessage::FilesOpResult {
+            device_id: device_id.to_string(),
+            op_id,
+            op,
+            ok,
             error,
         },
     };

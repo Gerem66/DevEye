@@ -3,6 +3,10 @@ import {
     AGENT_COLLECT,
     AGENT_CONFIG,
     AGENT_DESTROY,
+    AGENT_FILES_ANALYZE,
+    AGENT_FILES_LIST,
+    AGENT_FILES_MUTATE,
+    AGENT_FILES_SEARCH,
     AGENT_LOG_QUERY,
     AGENT_LOG_SOURCES,
     AGENT_PKG_LIST,
@@ -14,6 +18,10 @@ import {
     AGENT_TERM_OPEN,
     AGENT_TERM_RESIZE,
     AGENT_UPDATE,
+    DEVICE_FILES_LISTING_EVENT,
+    DEVICE_FILES_MATCHES_EVENT,
+    DEVICE_FILES_OP_EVENT,
+    DEVICE_FILES_USAGE_EVENT,
     DEVICE_LOG_LINES_EVENT,
     DEVICE_LOG_SOURCES_EVENT,
     DEVICE_POWER_EVENT,
@@ -26,6 +34,10 @@ import {
     PACKAGE_LIST_EVENT,
     PACKAGE_PROGRESS_EVENT,
     type AgentConfigPayload,
+    type AgentFilesAnalyzePayload,
+    type AgentFilesListPayload,
+    type AgentFilesMutatePayload,
+    type AgentFilesSearchPayload,
     type AgentLogQueryPayload,
     type AgentPkgUpgradePayload,
     type AgentPowerPayload,
@@ -35,6 +47,10 @@ import {
     type AgentTermOpenPayload,
     type AgentTermResizePayload,
     type AgentUpdatePayload,
+    type DeviceFilesListingPush,
+    type DeviceFilesMatchesPush,
+    type DeviceFilesOpPush,
+    type DeviceFilesUsagePush,
     type DeviceLogLinesPush,
     type DeviceLogSourcesPush,
     type DevicePowerPush,
@@ -189,6 +205,46 @@ export class MonitorHub {
     /** Fan out a terminal session-end to a device's subscribers. */
     publishTermExit(payload: DeviceTermExitPush): void {
         this.publishToSubscribers(payload.deviceId, DEVICE_TERM_EXIT_EVENT, payload);
+    }
+
+    /** Ask a connected agent to list a directory. No-op if offline. */
+    requestFilesList(deviceId: string, payload: AgentFilesListPayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_FILES_LIST, payload);
+    }
+
+    /** Ask a connected agent to analyse a directory's usage. No-op if offline. */
+    requestFilesAnalyze(deviceId: string, payload: AgentFilesAnalyzePayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_FILES_ANALYZE, payload);
+    }
+
+    /** Ask a connected agent to search a directory. No-op if offline. */
+    requestFilesSearch(deviceId: string, payload: AgentFilesSearchPayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_FILES_SEARCH, payload);
+    }
+
+    /** Ask a connected agent to mutate the filesystem. No-op if offline. */
+    requestFilesMutate(deviceId: string, payload: AgentFilesMutatePayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_FILES_MUTATE, payload);
+    }
+
+    /** Fan out a directory listing to a device's subscribers. */
+    publishFilesListing(payload: DeviceFilesListingPush): void {
+        this.publishToSubscribers(payload.deviceId, DEVICE_FILES_LISTING_EVENT, payload);
+    }
+
+    /** Fan out a directory usage analysis to a device's subscribers. */
+    publishFilesUsage(payload: DeviceFilesUsagePush): void {
+        this.publishToSubscribers(payload.deviceId, DEVICE_FILES_USAGE_EVENT, payload);
+    }
+
+    /** Fan out file search hits to a device's subscribers. */
+    publishFilesMatches(payload: DeviceFilesMatchesPush): void {
+        this.publishToSubscribers(payload.deviceId, DEVICE_FILES_MATCHES_EVENT, payload);
+    }
+
+    /** Fan out a filesystem mutation outcome to a device's subscribers. */
+    publishFilesOp(payload: DeviceFilesOpPush): void {
+        this.publishToSubscribers(payload.deviceId, DEVICE_FILES_OP_EVENT, payload);
     }
 
     /** Fan out a package-manager inventory to the device's subscribers. */
@@ -351,6 +407,14 @@ export interface MonitorTransport {
     requestTermResize(deviceId: string, payload: AgentTermResizePayload): boolean;
     /** Close a terminal session on the device's agent; false if offline. */
     requestTermClose(deviceId: string, payload: AgentTermClosePayload): boolean;
+    /** Ask the device's agent to list a directory; false if offline. */
+    requestFilesList(deviceId: string, payload: AgentFilesListPayload): boolean;
+    /** Ask the device's agent to analyse a directory's usage; false if offline. */
+    requestFilesAnalyze(deviceId: string, payload: AgentFilesAnalyzePayload): boolean;
+    /** Ask the device's agent to search a directory; false if offline. */
+    requestFilesSearch(deviceId: string, payload: AgentFilesSearchPayload): boolean;
+    /** Ask the device's agent to mutate the filesystem; false if offline. */
+    requestFilesMutate(deviceId: string, payload: AgentFilesMutatePayload): boolean;
 }
 
 export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): MonitorTransport {
@@ -372,6 +436,10 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         requestTermOpen: (deviceId, payload) => hub.requestTermOpen(deviceId, payload),
         requestTermInput: (deviceId, payload) => hub.requestTermInput(deviceId, payload),
         requestTermResize: (deviceId, payload) => hub.requestTermResize(deviceId, payload),
-        requestTermClose: (deviceId, payload) => hub.requestTermClose(deviceId, payload)
+        requestTermClose: (deviceId, payload) => hub.requestTermClose(deviceId, payload),
+        requestFilesList: (deviceId, payload) => hub.requestFilesList(deviceId, payload),
+        requestFilesAnalyze: (deviceId, payload) => hub.requestFilesAnalyze(deviceId, payload),
+        requestFilesSearch: (deviceId, payload) => hub.requestFilesSearch(deviceId, payload),
+        requestFilesMutate: (deviceId, payload) => hub.requestFilesMutate(deviceId, payload)
     };
 }

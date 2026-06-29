@@ -4,6 +4,10 @@ import {
     AGENT_DESTROY,
     AGENT_DESTROYED,
     AGENT_ERROR,
+    AGENT_FILES_LISTING,
+    AGENT_FILES_MATCHES,
+    AGENT_FILES_OP_RESULT,
+    AGENT_FILES_USAGE,
     AGENT_HELLO,
     AGENT_LOG_LINES,
     AGENT_LOG_SOURCES_RESULT,
@@ -30,6 +34,10 @@ import { logger } from '@/logger';
 import {
     handleDestroyed,
     handleHello,
+    handleFilesListing,
+    handleFilesMatches,
+    handleFilesOpResult,
+    handleFilesUsage,
     handleLogLines,
     handleLogSourcesResult,
     handleMetricsBatch,
@@ -91,6 +99,14 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
             return handleTermOutput(session, msg.payload);
         case AGENT_TERM_EXIT:
             return handleTermExit(session, msg.payload);
+        case AGENT_FILES_LISTING:
+            return handleFilesListing(session, msg.payload);
+        case AGENT_FILES_USAGE:
+            return handleFilesUsage(session, msg.payload);
+        case AGENT_FILES_MATCHES:
+            return handleFilesMatches(session, msg.payload);
+        case AGENT_FILES_OP_RESULT:
+            return handleFilesOpResult(session, msg.payload);
         case AGENT_PKG_LIST_RESULT:
             return handlePkgListResult(session, msg.payload);
         case AGENT_PKG_PROGRESS:

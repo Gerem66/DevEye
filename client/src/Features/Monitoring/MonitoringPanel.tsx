@@ -34,6 +34,8 @@ import { useAgentUpdate } from './useAgentUpdate';
 // xterm.js is heavy and rarely opened — load the terminal panel on demand so it
 // doesn't weigh on the initial bundle.
 const TerminalPanel = lazy(() => import('./TerminalPanel').then((m) => ({ default: m.TerminalPanel })));
+// The file explorer is a sizeable, on-demand panel — lazy-load it too.
+const FilesPanel = lazy(() => import('./FilesPanel').then((m) => ({ default: m.FilesPanel })));
 import { agentUpdatable } from '../agentVersion';
 import {
     ACTIVITY_META,
@@ -227,6 +229,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const [powerOpen, setPowerOpen] = useState(false);
     const [logsOpen, setLogsOpen] = useState(false);
     const [terminalOpen, setTerminalOpen] = useState(false);
+    const [filesOpen, setFilesOpen] = useState(false);
     const updater = useAgentUpdate();
     // Storage footprint of the device's stored snapshots.
     const [storage, setStorage] = useState<{ snapshots: number; rows: number; bytes: number } | null>(null);
@@ -904,6 +907,15 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     {online && !archived && (
                         <button
                             className={styles.iconHeaderBtn}
+                            onClick={() => setFilesOpen(true)}
+                            title='Explorateur de fichiers'
+                        >
+                            <span className='icon icon-folder' />
+                        </button>
+                    )}
+                    {online && !archived && (
+                        <button
+                            className={styles.iconHeaderBtn}
                             onClick={() => setTerminalOpen(true)}
                             title='Terminal distant'
                         >
@@ -1345,6 +1357,25 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 {terminalOpen && (
                     <Suspense fallback={<p className={styles.waitingMsg}>Chargement du terminal…</p>}>
                         <TerminalPanel deviceId={selected.id} />
+                    </Suspense>
+                )}
+            </Dialog>
+
+            <Dialog
+                open={filesOpen}
+                onClose={() => setFilesOpen(false)}
+                title={`Fichiers — « ${selected.name} »`}
+                description='Explorateur de fichiers : navigation, analyse d’espace disque, recherche avancée et nettoyage.'
+                width={920}
+                footer={
+                    <Button variant='secondary' onClick={() => setFilesOpen(false)}>
+                        Fermer
+                    </Button>
+                }
+            >
+                {filesOpen && (
+                    <Suspense fallback={<p className={styles.waitingMsg}>Chargement de l’explorateur…</p>}>
+                        <FilesPanel deviceId={selected.id} />
                     </Suspense>
                 )}
             </Dialog>

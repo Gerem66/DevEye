@@ -1,5 +1,6 @@
 export { handleHello } from './connect';
 export { handleDestroyed, handlePowerResult, handleServiceResult, handleUpdated } from './actions';
+export { handleFilesListing, handleFilesMatches, handleFilesOpResult, handleFilesUsage } from './files';
 export { handleLogLines, handleLogSourcesResult } from './logs';
 export { handlePkgDone, handlePkgListResult, handlePkgProgress } from './packages';
 export { handleTermExit, handleTermOutput } from './terminal';

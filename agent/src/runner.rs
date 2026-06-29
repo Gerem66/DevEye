@@ -241,6 +241,8 @@ async fn stream_session(
     // manager owns the live sessions and is dropped (killing shells) when we return.
     let (term_tx, mut term_rx) = tokio::sync::mpsc::channel::<crate::terminal::TermEvent>(1024);
     let mut terminals = crate::terminal::TermManager::new(term_tx);
+    // File explorer tasks (list/analyze/search/mutate) stream their results here.
+    let (files_tx, mut files_rx) = tokio::sync::mpsc::channel::<crate::files::FilesEvent>(256);
 
     loop {
         tokio::select! {
@@ -249,6 +251,9 @@ async fn stream_session(
             }
             Some(ev) = log_rx.recv() => {
                 commands::send_log_event(&mut sink, device_id, ev).await;
+            }
+            Some(ev) = files_rx.recv() => {
+                commands::send_files_event(&mut sink, device_id, ev).await;
             }
             Some(ev) = term_rx.recv() => {
                 // A session that ended is also dropped from the manager (the reader
@@ -381,6 +386,19 @@ async fn stream_session(
                             // Close a terminal session (the reader then emits a final exit).
                             Ok(ServerMessage::TermClose { session_id }) => {
                                 terminals.close(&session_id);
+                            }
+                            // File explorer (all off-loop; stream via files_rx).
+                            Ok(ServerMessage::FilesList { op_id, path }) => {
+                                tokio::spawn(crate::files::list_task(op_id, path, files_tx.clone()));
+                            }
+                            Ok(ServerMessage::FilesAnalyze { op_id, path }) => {
+                                tokio::spawn(crate::files::analyze_task(op_id, path, files_tx.clone()));
+                            }
+                            Ok(ServerMessage::FilesSearch { op_id, path, filter }) => {
+                                tokio::spawn(crate::files::search_task(op_id, path, filter, files_tx.clone()));
+                            }
+                            Ok(ServerMessage::FilesMutate { op_id, op, path, dest }) => {
+                                tokio::spawn(crate::files::mutate_task(op_id, op, path, dest, files_tx.clone()));
                             }
                             // Enumerate package managers (off-loop; replies via pkg_rx).
                             Ok(ServerMessage::PkgList {}) => {
