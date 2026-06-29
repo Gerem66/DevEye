@@ -111,10 +111,10 @@ fn hibernate() -> Result<()> {
 }
 #[cfg(target_os = "macos")]
 fn lock() -> Result<()> {
-    run(
-        "/System/Library/CoreServices/Menu Extras/User.menu/Contents/Resources/CGSession",
-        &["-suspend"],
-    )
+    // The old `CGSession -suspend` helper was removed from recent macOS. Sleeping
+    // the display is the modern, daemon-friendly equivalent and locks the screen
+    // when "require password after sleep" is set (the default).
+    run("pmset", &["displaysleepnow"])
 }
 
 // ──────────────────────────────── Windows ─────────────────────────────────
