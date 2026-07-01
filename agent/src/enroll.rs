@@ -32,8 +32,15 @@ pub async fn enroll(config: &mut Config, code: &str) -> Result<String> {
         .await
         .with_context(|| format!("POST {url}"))?;
 
-    let result: ApiResult<EnrollData> =
-        resp.json().await.context("decoding enrollment response")?;
+    // Read the body as text first so a non-enveloped error (e.g. a server 500 that
+    // isn't the {ok,error} shape, or a proxy page) yields a clear message with the
+    // HTTP status, instead of an opaque JSON-decoding error.
+    let status = resp.status();
+    let text = resp.text().await.context("reading enrollment response")?;
+    let result: ApiResult<EnrollData> = serde_json::from_str(&text).map_err(|e| {
+        let snippet: String = text.chars().take(200).collect();
+        anyhow::anyhow!("server returned HTTP {} ({e}): {snippet}", status.as_u16())
+    })?;
 
     if !result.ok {
         let msg = result

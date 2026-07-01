@@ -7,8 +7,8 @@ import fastifyHelmet from '@fastify/helmet';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
-import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
-import { ok, serverStatusSchema } from 'deveye-types';
+import Fastify, { type FastifyBaseLogger, type FastifyError, type FastifyInstance } from 'fastify';
+import { err, ok, serverStatusSchema, type ErrorCode } from 'deveye-types';
 
 import { agentRoutes } from '@/agent/routes';
 import { registerAgentWS } from '@/agent/ws';
@@ -62,6 +62,21 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
             e.statusCode = 400;
             done(e, undefined);
         }
+    });
+
+    // Turn any uncaught route error into the app's standard {ok:false,error}
+    // envelope. Fastify's default {statusCode,error,message} body matches neither
+    // the web client's decoder nor the agent's (the agent crashed on it with
+    // "invalid type: string, expected struct ApiError"). 5xx are logged with the
+    // stack so the real cause is visible; their message is kept generic (no leak).
+    app.setErrorHandler((error: FastifyError, req, reply) => {
+        const explicit = typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 500;
+        const status = explicit ? (error.statusCode as number) : 500;
+        if (status >= 500) req.log.error({ err: error }, 'unhandled request error');
+        else req.log.warn({ err: error, status }, 'request error');
+        const code: ErrorCode = error.validation || status === 400 ? 'validation' : 'internal';
+        const message = status >= 500 ? 'Erreur interne du serveur' : error.message || 'Requête invalide';
+        return reply.code(status).send(err(code, message));
     });
 
     app.get('/api/health', { logLevel: 'silent' }, async () => ({ ok: true }));
