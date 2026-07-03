@@ -23,6 +23,7 @@ mod report;
 mod runner;
 mod service;
 mod state;
+mod sync;
 mod terminal;
 mod update;
 

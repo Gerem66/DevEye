@@ -15,11 +15,19 @@ import {
     AGENT_PKG_UPGRADE,
     AGENT_POWER,
     AGENT_SERVICE,
+    AGENT_SYNC_APPLY_CHUNK,
+    AGENT_SYNC_CONFIG,
+    AGENT_SYNC_DELETE,
+    AGENT_SYNC_PUSH,
+    AGENT_SYNC_SCAN,
     AGENT_TERM_CLOSE,
     AGENT_TERM_INPUT,
     AGENT_TERM_OPEN,
     AGENT_TERM_RESIZE,
     AGENT_UPDATE,
+    CLOUD_SYNC_CHUNK_EVENT,
+    CLOUD_SYNC_PROGRESS_EVENT,
+    CLOUD_SYNC_STATE_EVENT,
     DEVICE_FILES_CHUNK_EVENT,
     DEVICE_FILES_LISTING_EVENT,
     DEVICE_FILES_MATCHES_EVENT,
@@ -47,11 +55,19 @@ import {
     type AgentPkgUpgradePayload,
     type AgentPowerPayload,
     type AgentServicePayload,
+    type AgentSyncApplyChunkPayload,
+    type AgentSyncConfigPayload,
+    type AgentSyncDeletePayload,
+    type AgentSyncPushPayload,
+    type AgentSyncScanPayload,
     type AgentTermClosePayload,
     type AgentTermInputPayload,
     type AgentTermOpenPayload,
     type AgentTermResizePayload,
     type AgentUpdatePayload,
+    type CloudSyncChunkPush,
+    type CloudSyncProgressPush,
+    type CloudSyncStatePush,
     type DeviceFilesChunkPush,
     type DeviceFilesListingPush,
     type DeviceFilesMatchesPush,
@@ -86,6 +102,10 @@ export class MonitorHub {
     private readonly subscribers = new Map<string, Set<WebSocket>>();
     /** subscriber socket -> set of deviceIds it watches (for cleanup). */
     private readonly socketDevices = new Map<WebSocket, Set<string>>();
+    /** shareId (CloudSync) -> set of subscriber (user) sockets. */
+    private readonly syncSubscribers = new Map<number, Set<WebSocket>>();
+    /** subscriber socket -> set of shareIds it watches (for cleanup). */
+    private readonly socketShares = new Map<WebSocket, Set<number>>();
 
     agentOnline(deviceId: string, socket: WebSocket): void {
         this.agents.set(deviceId, socket);
@@ -268,6 +288,82 @@ export class MonitorHub {
         this.publishToSubscribers(payload.deviceId, DEVICE_FILES_CHUNK_EVENT, payload);
     }
 
+    /** Push a device's CloudSync assignments to its agent. No-op if offline. */
+    requestSyncConfig(deviceId: string, payload: AgentSyncConfigPayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_SYNC_CONFIG, payload);
+    }
+
+    /** Ask a connected agent to scan a share's local folder. No-op if offline. */
+    requestSyncScan(deviceId: string, payload: AgentSyncScanPayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_SYNC_SCAN, payload);
+    }
+
+    /** Ask a connected agent to upload one file (streams `sync.chunk`). No-op if offline. */
+    requestSyncPush(deviceId: string, payload: AgentSyncPushPayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_SYNC_PUSH, payload);
+    }
+
+    /** Send one download chunk for the agent to install. No-op if offline. */
+    requestSyncApplyChunk(deviceId: string, payload: AgentSyncApplyChunkPayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_SYNC_APPLY_CHUNK, payload);
+    }
+
+    /** Propagate a deletion (local recycle) to a connected agent. No-op if offline. */
+    requestSyncDelete(deviceId: string, payload: AgentSyncDeletePayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_SYNC_DELETE, payload);
+    }
+
+    /** Fan out CloudSync session progress to the share's subscribers. */
+    publishSyncProgress(payload: CloudSyncProgressPush): void {
+        this.publishToSyncSubscribers(payload.shareId, CLOUD_SYNC_PROGRESS_EVENT, payload);
+    }
+
+    /** Fan out a share's aggregated state to its subscribers. */
+    publishSyncState(payload: CloudSyncStatePush): void {
+        this.publishToSyncSubscribers(payload.shareId, CLOUD_SYNC_STATE_EVENT, payload);
+    }
+
+    /** Send one CloudSync download chunk to the requesting socket only.
+     *  Returns the socket's send-buffer size so the caller can apply backpressure. */
+    sendSyncChunk(socket: WebSocket, payload: CloudSyncChunkPush): number {
+        socket.send(JSON.stringify({ command: CLOUD_SYNC_CHUNK_EVENT, payload: { ok: true, data: payload } }));
+        return socket.bufferedAmount;
+    }
+
+    subscribeSync(socket: WebSocket, shareIds: number[]): void {
+        let watched = this.socketShares.get(socket);
+        if (!watched) {
+            watched = new Set();
+            this.socketShares.set(socket, watched);
+        }
+        for (const id of shareIds) {
+            watched.add(id);
+            let set = this.syncSubscribers.get(id);
+            if (!set) {
+                set = new Set();
+                this.syncSubscribers.set(id, set);
+            }
+            set.add(socket);
+        }
+    }
+
+    unsubscribeSync(socket: WebSocket, shareIds: number[]): void {
+        const watched = this.socketShares.get(socket);
+        for (const id of shareIds) {
+            watched?.delete(id);
+            const set = this.syncSubscribers.get(id);
+            set?.delete(socket);
+            if (set && set.size === 0) this.syncSubscribers.delete(id);
+        }
+    }
+
+    private publishToSyncSubscribers(shareId: number, command: string, data: unknown): void {
+        const set = this.syncSubscribers.get(shareId);
+        if (!set || set.size === 0) return;
+        const frame = JSON.stringify({ command, payload: { ok: true, data } });
+        for (const socket of set) socket.send(frame);
+    }
+
     /** Fan out a package-manager inventory to the device's subscribers. */
     publishPackageList(payload: PackageListPush): void {
         this.publishToSubscribers(payload.deviceId, PACKAGE_LIST_EVENT, payload);
@@ -325,13 +421,23 @@ export class MonitorHub {
 
     dropSubscriber(socket: WebSocket): void {
         const watched = this.socketDevices.get(socket);
-        if (!watched) return;
-        for (const id of watched) {
-            const set = this.subscribers.get(id);
-            set?.delete(socket);
-            if (set && set.size === 0) this.subscribers.delete(id);
+        if (watched) {
+            for (const id of watched) {
+                const set = this.subscribers.get(id);
+                set?.delete(socket);
+                if (set && set.size === 0) this.subscribers.delete(id);
+            }
+            this.socketDevices.delete(socket);
         }
-        this.socketDevices.delete(socket);
+        const shares = this.socketShares.get(socket);
+        if (shares) {
+            for (const id of shares) {
+                const set = this.syncSubscribers.get(id);
+                set?.delete(socket);
+                if (set && set.size === 0) this.syncSubscribers.delete(id);
+            }
+            this.socketShares.delete(socket);
+        }
     }
 
     publishMetric(deviceId: string, snapshot: MetricSnapshot): void {
@@ -440,6 +546,12 @@ export interface MonitorTransport {
     requestFilesDownload(deviceId: string, payload: AgentFilesDownloadPayload): boolean;
     /** Send one upload chunk to the device's agent; false if offline. */
     requestFilesUpload(deviceId: string, payload: AgentFilesUploadPayload): boolean;
+    /** Subscribe this socket to CloudSync events of the given shares. */
+    subscribeSync(shareIds: number[]): void;
+    /** Unsubscribe this socket from CloudSync events of the given shares. */
+    unsubscribeSync(shareIds: number[]): void;
+    /** Send one CloudSync download chunk to this socket; returns the send-buffer size. */
+    sendSyncChunk(payload: CloudSyncChunkPush): number;
 }
 
 export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): MonitorTransport {
@@ -467,6 +579,9 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         requestFilesSearch: (deviceId, payload) => hub.requestFilesSearch(deviceId, payload),
         requestFilesMutate: (deviceId, payload) => hub.requestFilesMutate(deviceId, payload),
         requestFilesDownload: (deviceId, payload) => hub.requestFilesDownload(deviceId, payload),
-        requestFilesUpload: (deviceId, payload) => hub.requestFilesUpload(deviceId, payload)
+        requestFilesUpload: (deviceId, payload) => hub.requestFilesUpload(deviceId, payload),
+        subscribeSync: (shareIds) => hub.subscribeSync(socket, shareIds),
+        unsubscribeSync: (shareIds) => hub.unsubscribeSync(socket, shareIds),
+        sendSyncChunk: (payload) => hub.sendSyncChunk(socket, payload)
     };
 }

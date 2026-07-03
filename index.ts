@@ -1,5 +1,6 @@
 import { env } from '@/Utils/Env';
 import { buildApp } from '@/app';
+import { pruneCloudSync } from '@/cloudSync/prune';
 import { logger } from '@/logger';
 import { agentDistDir, startAgentReconcile } from '@/agent/sync';
 
@@ -27,7 +28,8 @@ async function main() {
     const db = createDatabase(getQueryable(pool));
     const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
 
-    const app = await buildApp({ db, crypt });
+    const { app, cloudSync } = await buildApp({ db, crypt });
+    const audit = createAuditLog(db);
 
     const shutdown = async (signal: string) => {
         logger.info({ signal }, 'Shutting down');
@@ -56,6 +58,8 @@ async function main() {
             if (metrics + presence + processes > 0) {
                 logger.info({ metrics, presence, processes }, 'Pruned old monitoring history');
             }
+            // CloudSync : purge des versions par budget + sessions abandonnées.
+            await pruneCloudSync(db, cloudSync, audit, logger);
         } catch (e) {
             logger.error({ err: (e as Error).message }, 'Retention sweep failed');
         }
@@ -72,7 +76,7 @@ async function main() {
     await app.listen({ port: env.LISTEN_PORT, host: '0.0.0.0' });
     logger.info({ port: env.LISTEN_PORT }, 'DevEye server ready');
 
-    createAuditLog(db).record({
+    audit.record({
         source: 'system',
         category: 'system',
         action: 'server.start',

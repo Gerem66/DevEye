@@ -1,3 +1,4 @@
+import type { CloudSyncEngine } from '@/cloudSync/engine';
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import type { SecureStore } from '@/Services/SecureStore';
@@ -53,6 +54,8 @@ export interface FeatureContext {
     audit: (entry: FeatureAuditEntry) => void;
     /** Present only on the live WS connection; enables metric subscriptions. */
     monitor?: MonitorTransport;
+    /** CloudSync orchestrator (sessions, versions, blob store). Absent in tests. */
+    cloudSync?: CloudSyncEngine;
 }
 
 /**

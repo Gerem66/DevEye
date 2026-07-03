@@ -14,6 +14,7 @@ import { agentRoutes } from '@/agent/routes';
 import { registerAgentWS } from '@/agent/ws';
 import { MonitorHub } from '@/agent/hub';
 import { authRoutes } from '@/auth/routes';
+import { CloudSyncEngine } from '@/cloudSync/engine';
 import { logger } from '@/logger';
 import { env, isDev } from '@/Utils/Env';
 import { registerWS } from '@/ws/handler';
@@ -28,7 +29,13 @@ export interface AppDeps {
     crypt: Encryption;
 }
 
-export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
+export interface BuiltApp {
+    app: FastifyInstance;
+    /** Moteur CloudSync — exposé pour le prune horaire de index.ts. */
+    cloudSync: CloudSyncEngine;
+}
+
+export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     const app = Fastify({
         loggerInstance: logger as FastifyBaseLogger,
         trustProxy: !isDev
@@ -87,11 +94,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
     const hub = new MonitorHub();
     const audit = createAuditLog(deps.db);
+    const cloudSync = new CloudSyncEngine({ db: deps.db, hub, crypt: deps.crypt, audit, logger });
+    await cloudSync.start();
 
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await agentRoutes(app, { db: deps.db, hub, audit });
-    await registerWS(app, { db: deps.db, crypt: deps.crypt, hub, audit });
-    await registerAgentWS(app, { db: deps.db, hub, audit });
+    await registerWS(app, { db: deps.db, crypt: deps.crypt, hub, cloudSync, audit });
+    await registerAgentWS(app, { db: deps.db, hub, cloudSync, audit });
 
     // Serve the built web client from the same origin as the API whenever a
     // build is present (production, or the dockerised dev stack). On the host
@@ -120,5 +129,5 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         app.log.debug({ clientDir }, 'No client build found; static serving disabled (host dev uses Vite)');
     }
 
-    return app;
+    return { app, cloudSync };
 }

@@ -20,6 +20,11 @@ import {
     AGENT_PROCESSES,
     AGENT_REPORT,
     AGENT_SERVICE_RESULT,
+    AGENT_SYNC_ACK,
+    AGENT_SYNC_CHANGED,
+    AGENT_SYNC_CHUNK,
+    AGENT_SYNC_INDEX,
+    AGENT_SYNC_OP_RESULT,
     AGENT_TERM_EXIT,
     AGENT_TERM_OUTPUT,
     AGENT_UPDATED,
@@ -50,6 +55,11 @@ import {
     handleProcesses,
     handleReport,
     handleServiceResult,
+    handleSyncAck,
+    handleSyncChanged,
+    handleSyncChunk,
+    handleSyncIndex,
+    handleSyncOpResult,
     handleTermExit,
     handleTermOutput,
     handleUpdated,
@@ -58,12 +68,14 @@ import {
 import { deviceAgentConfig } from './mappers';
 import type { MonitorHub } from './hub';
 
+import type { CloudSyncEngine } from '@/cloudSync/engine';
 import type { Database } from '@/db';
 import type { AuditLog } from '@/Services/AuditLog';
 
 interface AgentWSDeps {
     db: Database;
     hub: MonitorHub;
+    cloudSync: CloudSyncEngine;
     audit: AuditLog;
 }
 
@@ -111,6 +123,16 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
             return handleFilesOpResult(session, msg.payload);
         case AGENT_FILES_CHUNK:
             return handleFilesChunk(session, msg.payload);
+        case AGENT_SYNC_CHANGED:
+            return handleSyncChanged(session, msg.payload);
+        case AGENT_SYNC_INDEX:
+            return handleSyncIndex(session, msg.payload);
+        case AGENT_SYNC_CHUNK:
+            return handleSyncChunk(session, msg.payload);
+        case AGENT_SYNC_ACK:
+            return handleSyncAck(session, msg.payload);
+        case AGENT_SYNC_OP_RESULT:
+            return handleSyncOpResult(session, msg.payload);
         case AGENT_PKG_LIST_RESULT:
             return handlePkgListResult(session, msg.payload);
         case AGENT_PKG_PROGRESS:
@@ -132,7 +154,7 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
  * module owns the socket *lifecycle* (auth, connect, dispatch); the per-message
  * handling lives in `handlers/`.
  */
-export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: AgentWSDeps): Promise<void> {
+export async function registerAgentWS(app: FastifyInstance, { db, hub, cloudSync, audit }: AgentWSDeps): Promise<void> {
     app.get('/agent', { websocket: true }, async (socket, req) => {
         // Stealth: every authentication/authorization failure ends the connection
         // the exact same way, with no distinguishing code or reason. An outsider
@@ -177,6 +199,10 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: 
             hub.agentOnline(deviceId, socket);
             // Tell the agent its collection cadences + capture mode straight away.
             send(socket, { command: AGENT_CONFIG, payload: deviceAgentConfig(device) });
+            // CloudSync : pousse ses assignations puis rattrape le retard éventuel.
+            void cloudSync.onAgentConnect(deviceId).catch((err) => {
+                reqLogger.warn({ err }, 'CloudSync onAgentConnect failed');
+            });
             await db.devices.touchSeen(deviceId, Math.floor(Date.now() / 1000));
             await db.presence.record(deviceId, Date.now(), true);
             audit.record({
@@ -195,6 +221,7 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: 
             socket,
             db,
             hub,
+            cloudSync,
             audit,
             logger: reqLogger,
             ownerId: claims.oid,
@@ -228,6 +255,9 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, audit }: 
 
         socket.on('close', () => {
             hub.agentOffline(deviceId, socket);
+            // Une fermeture tardive d'un VIEUX socket (reconnexion rapide) ne doit
+            // pas interrompre les sessions du nouveau : le hub reste l'autorité.
+            if (!hub.isOnline(deviceId)) cloudSync.onAgentOffline(deviceId);
             void db.presence.record(deviceId, Date.now(), false).catch(() => {});
             reqLogger.info('Agent disconnected');
         });

@@ -68,6 +68,12 @@ impl Config {
         Self::sibling("agent.state")
     }
 
+    /// CloudSync per-share scan cache (relPath → size/mtime/hash), so unchanged
+    /// files aren't rehashed on every scan. Alongside config.
+    pub fn sync_index_path(share_id: i64) -> PathBuf {
+        Self::sibling(&format!("sync-{share_id}.index.json"))
+    }
+
     fn sibling(name: &str) -> PathBuf {
         Self::path()
             .parent()

@@ -8,6 +8,12 @@ import { noteFoldersRepo, type NoteFoldersRepo } from './repos/noteFolders';
 import { notesRepo, type NotesRepo } from './repos/notes';
 import { passwordsRepo, type PasswordsRepo } from './repos/passwords';
 import { refreshTokensRepo, type RefreshTokensRepo } from './repos/refreshTokens';
+import { syncEventsRepo, type SyncEventsRepo } from './repos/syncEvents';
+import { syncFilesRepo, type SyncFilesRepo } from './repos/syncFiles';
+import { syncMetaRepo, type SyncMetaRepo } from './repos/syncMeta';
+import { syncSessionsRepo, type SyncSessionsRepo } from './repos/syncSessions';
+import { syncSharesRepo, type SyncSharesRepo } from './repos/syncShares';
+import { syncVersionsRepo, type SyncVersionsRepo } from './repos/syncVersions';
 import { twoFactorRepo, type TwoFactorRepo } from './repos/twoFactor';
 import { userSecretKeysRepo, type UserSecretKeysRepo } from './repos/userSecretKeys';
 import { usersRepo, type UsersRepo } from './repos/users';
@@ -36,6 +42,12 @@ export interface Database {
     twoFactor: TwoFactorRepo;
     userSecretKeys: UserSecretKeysRepo;
     weather: WeatherRepo;
+    syncMeta: SyncMetaRepo;
+    syncShares: SyncSharesRepo;
+    syncFiles: SyncFilesRepo;
+    syncVersions: SyncVersionsRepo;
+    syncSessions: SyncSessionsRepo;
+    syncEvents: SyncEventsRepo;
 }
 
 export function createDatabase(q: Queryable): Database {
@@ -55,6 +67,12 @@ export function createDatabase(q: Queryable): Database {
         processSamples: processSamplesRepo(q),
         twoFactor: twoFactorRepo(q),
         userSecretKeys: userSecretKeysRepo(q),
-        weather: weatherRepo(q)
+        weather: weatherRepo(q),
+        syncMeta: syncMetaRepo(q),
+        syncShares: syncSharesRepo(q),
+        syncFiles: syncFilesRepo(q),
+        syncVersions: syncVersionsRepo(q),
+        syncSessions: syncSessionsRepo(q),
+        syncEvents: syncEventsRepo(q)
     };
 }

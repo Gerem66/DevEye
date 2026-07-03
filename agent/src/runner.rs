@@ -243,6 +243,10 @@ async fn stream_session(
     let mut terminals = crate::terminal::TermManager::new(term_tx);
     // File explorer tasks (list/analyze/search/mutate) stream their results here.
     let (files_tx, mut files_rx) = tokio::sync::mpsc::channel::<crate::files::FilesEvent>(256);
+    // CloudSync: scans, uploads and the debounced watchers stream through here;
+    // the manager owns assignments + watchers and is dropped with the session.
+    let (sync_tx, mut sync_rx) = tokio::sync::mpsc::channel::<crate::sync::SyncEvent>(256);
+    let mut sync_mgr = crate::sync::SyncManager::new(sync_tx);
 
     loop {
         tokio::select! {
@@ -254,6 +258,9 @@ async fn stream_session(
             }
             Some(ev) = files_rx.recv() => {
                 commands::send_files_event(&mut sink, device_id, ev).await;
+            }
+            Some(ev) = sync_rx.recv() => {
+                commands::send_sync_event(&mut sink, device_id, ev).await;
             }
             Some(ev) = term_rx.recv() => {
                 // A session that ended is also dropped from the manager (the reader
@@ -433,6 +440,38 @@ async fn stream_session(
                                     )
                                     .await;
                                 }
+                            }
+                            // CloudSync: full assignment list (watchers started/stopped here).
+                            Ok(ServerMessage::SyncConfig { shares }) => {
+                                sync_mgr.apply_config(shares);
+                            }
+                            // CloudSync: scan the share's folder (off-loop; streams via sync_rx).
+                            Ok(ServerMessage::SyncScan { session_id, share_id }) => {
+                                sync_mgr.start_scan(session_id, share_id);
+                            }
+                            // CloudSync: upload one file (off-loop; streams via sync_rx).
+                            Ok(ServerMessage::SyncPush { op_id, share_id, rel_path }) => {
+                                sync_mgr.start_push(op_id, share_id, rel_path);
+                            }
+                            // CloudSync: install one download chunk. Applied inline
+                            // (sequentially) like FilesUpload, so chunks of one op never race.
+                            Ok(ServerMessage::SyncApplyChunk { op_id, share_id, rel_path, seq, data, done, hash, size, mtime }) => {
+                                let bytes = base64::engine::general_purpose::STANDARD
+                                    .decode(data.as_bytes())
+                                    .unwrap_or_default();
+                                let events = tokio::task::block_in_place(|| {
+                                    sync_mgr.apply_chunk(&op_id, share_id, &rel_path, seq, &bytes, done, &hash, size, mtime)
+                                });
+                                for ev in events {
+                                    commands::send_sync_event(&mut sink, device_id, ev).await;
+                                }
+                            }
+                            // CloudSync: propagate a deletion (local trash, never unlink).
+                            Ok(ServerMessage::SyncDelete { op_id, share_id, rel_path }) => {
+                                let ev = tokio::task::block_in_place(|| {
+                                    sync_mgr.delete(&op_id, share_id, &rel_path)
+                                });
+                                commands::send_sync_event(&mut sink, device_id, ev).await;
                             }
                             // Enumerate package managers (off-loop; replies via pkg_rx).
                             Ok(ServerMessage::PkgList {}) => {

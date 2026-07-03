@@ -49,6 +49,11 @@ regex = "1"
 # Cross-platform pseudo-terminal for the remote terminal feature (openpty on Unix,
 # ConPTY on Windows).
 portable-pty = "0.8"
+# CloudSync: cross-platform filesystem watcher (inotify/FSEvents/ReadDirectoryChangesW),
+# mtime application on installed files, and NFC path normalisation (macOS emits NFD).
+notify = "8"
+filetime = "0.2"
+unicode-normalization = "0.1"
 
 # Used by build.rs to read the version out of the root package.json.
 [build-dependencies]

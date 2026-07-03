@@ -2,6 +2,7 @@ import type { WebSocket } from '@fastify/websocket';
 import { AGENT_ACK, type AgentClientMessage, type AgentServerMessage, type DeviceRow } from 'deveye-types';
 import type { Logger } from 'pino';
 
+import type { CloudSyncEngine } from '@/cloudSync/engine';
 import type { Database } from '@/db';
 import type { AuditLog } from '@/Services/AuditLog';
 import type { MonitorHub } from '../hub';
@@ -16,6 +17,7 @@ export interface AgentSession {
     socket: WebSocket;
     db: Database;
     hub: MonitorHub;
+    cloudSync: CloudSyncEngine;
     audit: AuditLog;
     logger: Logger;
     /** Owner user id (from the device-token claims); the audit actor. */

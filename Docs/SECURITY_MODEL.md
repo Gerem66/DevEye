@@ -98,3 +98,27 @@ déchiffré côté serveur.
   monde HTTP (login) et le monde WS (features). C'est cette `sessionId` qui relie
   le pré-cache de la DEK au login à la session WS qui l'utilisera.
 - 2FA TOTP optionnel avec codes de secours à usage unique.
+
+## CloudSync — exception assumée au zero-knowledge
+
+Les contenus synchronisés (feature CloudSync) ne passent **pas** par le
+chiffrement par enveloppe utilisateur : la synchro tourne en tâche de fond,
+que la session soit verrouillée ou non, et des fichiers de plusieurs Go ne
+peuvent pas vivre en base. À la place :
+
+- les contenus vivent dans un **blob store disque** par partage
+  (`<storage_path>/blobs/…`), adressés par le SHA-256 de leur clair ;
+- chaque blob est chiffré **AES-256-GCM en flux** par une **BMK** (Blob Master
+  Key, 32 octets) générée au premier boot, wrappée par la clé serveur
+  (`Encryption.encryptWithKey(crypt.serverKey(), bmk)`, même schéma que le
+  wrap des DEK) et rangée dans `sync_meta` — la rotation de `CRYPT_KEY_A/B` ne
+  demande que de re-wrapper 32 octets, jamais de re-chiffrer les blobs ;
+- l'index (chemins relatifs, hashes, tailles, mtimes, appareil source) est en
+  clair dans MySQL — nécessaire au merge, à la navigation et à la volumétrie.
+
+Ce que ça protège : le disque au repos (vol, snapshot hors-ligne). Ce que ça
+ne protège pas : une compromission du serveur vivant (qui détient la clé).
+C'est le même niveau de garantie que les secrets liés à l'auth (2FA), et un
+cran en dessous des données « mot de passe »/notes — documenté ici pour que le
+choix reste explicite. Détails d'implémentation : `src/cloudSync/blobCrypto.ts`
+et `Docs/CLOUDSYNC.md`.

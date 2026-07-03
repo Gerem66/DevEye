@@ -5,11 +5,13 @@ import { MonitoringWidget } from '@/Features/Monitoring';
 import { WeatherWidget } from '@/Features/Weather';
 import { NotesWidget } from '@/Features/Notes/NotesWidget';
 import { PasswordWidget } from '@/Features/Password/PasswordWidget';
+import { CloudSyncWidget } from '@/Features/CloudSync';
 
 import Monitoring from '@/Features/Monitoring';
 import Weather from '@/Features/Weather';
 import FeaturePassword from '@/Features/Password';
 import FeatureNotes from '@/Features/Notes';
+import CloudSync from '@/Features/CloudSync';
 
 import type { FeatureProps } from '@/Features/types';
 
@@ -75,6 +77,14 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         FullComponent: FeatureNotes,
         cacheDurationMinutes: 0,
         holdSecrecy: true
+    },
+    {
+        id: 'cloudsync',
+        title: 'CloudSync',
+        icon: 'cloud',
+        WidgetContent: CloudSyncWidget,
+        FullComponent: CloudSync,
+        cacheDurationMinutes: 5
     }
 ];
 

@@ -17,6 +17,7 @@ use crate::files::FilesEvent;
 use crate::logs::LogEvent;
 use crate::packages::PkgEvent;
 use crate::protocol::ClientMessage;
+use crate::sync::SyncEvent;
 use crate::terminal::TermEvent;
 
 /// Self-destruct on the server's request. On success the agent wipes its local
@@ -499,6 +500,72 @@ where
             query_id,
             lines,
             done,
+            error,
+        },
+    };
+    if let Ok(text) = serde_json::to_string(&msg) {
+        let _ = sink.send(Message::Text(text)).await;
+    }
+}
+
+/// Forward one CloudSync task event to the server, stamping it with the device id.
+pub(crate) async fn send_sync_event<S>(sink: &mut S, device_id: &str, ev: SyncEvent)
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let msg = match ev {
+        SyncEvent::Changed { share_id } => ClientMessage::SyncChanged {
+            device_id: device_id.to_string(),
+            share_id,
+        },
+        SyncEvent::Index {
+            session_id,
+            share_id,
+            entries,
+            done,
+            error,
+        } => ClientMessage::SyncIndex {
+            device_id: device_id.to_string(),
+            session_id,
+            share_id,
+            entries,
+            done,
+            error,
+        },
+        SyncEvent::Chunk {
+            op_id,
+            data,
+            done,
+            hash,
+            size,
+            mtime,
+            error,
+        } => ClientMessage::SyncChunk {
+            device_id: device_id.to_string(),
+            op_id,
+            data: base64::engine::general_purpose::STANDARD.encode(&data),
+            done,
+            hash,
+            size,
+            mtime,
+            error,
+        },
+        SyncEvent::Ack { op_id, seq } => ClientMessage::SyncAck {
+            device_id: device_id.to_string(),
+            op_id,
+            seq,
+        },
+        SyncEvent::OpResult {
+            op_id,
+            op,
+            ok,
+            error,
+        } => ClientMessage::SyncOpResult {
+            device_id: device_id.to_string(),
+            op_id,
+            op: op.to_string(),
+            ok,
             error,
         },
     };

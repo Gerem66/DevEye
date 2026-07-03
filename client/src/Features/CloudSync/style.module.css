@@ -1,0 +1,654 @@
+/* CloudSync — héros minimaliste + panneaux, uniquement des variables du thème. */
+
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+    padding: var(--space-md);
+    height: 100%;
+    overflow-y: auto;
+}
+
+.centered {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+    color: var(--text-secondary);
+    text-align: center;
+    padding: var(--space-xl);
+}
+
+/* Double sélecteur : bat le `.icon { width: 18px }` global d'icons.css
+   quel que soit l'ordre d'injection des feuilles (spécificité 0,2,0). */
+.centered .emptyIcon {
+    width: 72px;
+    height: 72px;
+    color: var(--text-muted);
+}
+
+/* ─── Carte d'un partage ─── */
+
+.card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-xl) var(--space-lg);
+    background: var(--surface-widget);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+}
+
+.cardHeader {
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.cardTitle {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.cardStats {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+/* ─── Héros d'état ─── */
+
+.hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-lg) 0;
+}
+
+/*
+ * Héros minimaliste : une icône massive dans un halo lumineux de sa couleur
+ * d'état, cerclée d'un anneau fin. TOUS les états partagent exactement la
+ * même géométrie (icône 112 px) — aucun saut de layout entre spinner et check.
+ * `color` est posée par la classe d'état et tout en hérite.
+ *
+ * C'est aussi un BOUTON : au survol, l'icône d'état s'estompe et l'action
+ * pause/reprise se révèle en son centre ; le clic bascule la synchro.
+ */
+.heroBadge {
+    position: relative;
+    width: 176px;
+    height: 176px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: color var(--transition-slow);
+}
+
+.heroBadge:focus-visible {
+    outline: none;
+}
+
+.heroBadge:focus-visible::after {
+    opacity: 0.6;
+}
+
+/* Halo doux derrière l'icône. */
+.heroBadge::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle, currentColor 0%, transparent 62%);
+    opacity: 0.13;
+    filter: blur(12px);
+    transition: opacity var(--transition-slow);
+}
+
+/* Anneau fin — la touche « finie » sans cercle plein qui écrase l'icône. */
+.heroBadge::after {
+    content: '';
+    position: absolute;
+    inset: 10px;
+    border-radius: 50%;
+    border: 1.5px solid currentColor;
+    opacity: 0.25;
+    transition:
+        opacity var(--transition-normal),
+        transform var(--transition-normal);
+}
+
+/* Icône d'état en SVG inline (cf. HeroIcon.tsx) : dimensionnée par la classe de
+   l'appelant (`.heroSvg` / `.widgetSvg`), teintée par le `currentColor` de
+   l'état, avec halo lumineux. `overflow: visible` laisse le drop-shadow déborder
+   du viewBox 24×24. */
+.stateSvg {
+    overflow: visible;
+    filter: drop-shadow(0 0 20px currentColor);
+    transition:
+        opacity var(--transition-normal),
+        transform var(--transition-normal);
+}
+
+.heroSvg {
+    width: 112px;
+    height: 112px;
+}
+
+/* Chaque tracé se « dessine » au montage. `forwards` seul : pendant l'éventuel
+   délai d'un tracé, il reste masqué (dashoffset de base = 1), puis se remplit. */
+.draw {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: cloudsync-draw 0.6s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+
+@keyframes cloudsync-draw {
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+/* Spinner : anneau témoin discret + arc qui tourne sans fin (le survol ne
+   l'interrompt pas — voir la règle `:hover` dédiée plus bas). */
+.spinRing {
+    opacity: 0.16;
+}
+
+.spinArc {
+    stroke-dasharray: 0.28 0.72;
+    transform-origin: 50% 50%;
+    animation: cloudsync-spin 0.9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .draw {
+        animation: none;
+        stroke-dashoffset: 0;
+    }
+}
+
+/* L'action pause/reprise, cachée au centre, révélée au survol. */
+.heroBadge .heroHoverIcon {
+    position: absolute;
+    width: 56px;
+    height: 56px;
+    opacity: 0;
+    transform: scale(0.7);
+    transition:
+        opacity var(--transition-normal),
+        transform var(--transition-normal);
+    pointer-events: none;
+}
+
+.heroBadge:hover .stateSvg {
+    opacity: 0.1;
+    transform: scale(0.94);
+}
+
+/* Exception : le spinner ne s'estompe qu'à peine et ne rétrécit pas — sinon il
+   paraît figé. Son arc garde sa propre rotation. Spécificité supérieure à la
+   règle générique ci-dessus. */
+.heroBadge:hover .stateSvg.stateSvgSpinning {
+    opacity: 0.5;
+    transform: none;
+}
+
+.heroBadge:hover .heroHoverIcon {
+    opacity: 0.95;
+    transform: scale(1);
+}
+
+.heroBadge:hover::after {
+    opacity: 0.5;
+    transform: scale(1.03);
+}
+
+.heroBadge:hover::before {
+    opacity: 0.2;
+}
+
+.heroBadge:active .heroHoverIcon {
+    transform: scale(0.88);
+}
+
+.heroSynced {
+    color: var(--success);
+}
+
+.heroSyncing {
+    color: var(--accent);
+}
+
+.heroPaused {
+    color: var(--warning);
+}
+
+.heroPaused::before,
+.heroOffline::before {
+    opacity: 0.08;
+}
+
+.heroOffline {
+    color: var(--text-muted);
+}
+
+.heroError {
+    color: var(--danger);
+}
+
+.heroLabel {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Zone variable sous le label (progression OU détail) : hauteur réservée,
+   pour que la carte ne « respire » pas quand la synchro démarre/finit. */
+.heroMeta {
+    min-height: 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xs);
+    width: 100%;
+}
+
+.heroDetail {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    max-width: 420px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Rotation d'un masque d'icône (spinner de chargement plein écran). */
+.spinning {
+    display: inline-block;
+    animation: cloudsync-spin 0.9s linear infinite;
+}
+
+@keyframes cloudsync-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ─── Barre de progression (pattern DeploymentStatus, 4 px pilule) ─── */
+
+.progress {
+    width: min(420px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    align-items: center;
+}
+
+.bar {
+    width: 100%;
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background: var(--glass-border);
+    overflow: hidden;
+}
+
+.barFill {
+    display: block;
+    height: 100%;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    transition: width var(--transition-fast);
+}
+
+/* ─── Actions ─── */
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    justify-content: center;
+}
+
+/* ─── Listes (appareils, exclusions, versions) ─── */
+
+.rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+}
+
+.rowMain {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.rowTitle {
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rowSub {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rowActions {
+    display: flex;
+    gap: var(--space-xs);
+    flex-shrink: 0;
+}
+
+.mutedNote {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    flex: 1;
+}
+
+.formRow {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-sm);
+}
+
+.formCol {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+/* Ligne case-à-cocher + libellé (réglages). */
+.checkRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    cursor: pointer;
+}
+
+/* Pied des popups de confirmation (Annuler / action danger). */
+.confirmActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+}
+
+.dangerZone {
+    margin-top: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--glass-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+/* ─── Champ numérique (steppers maison, spinners natifs masqués) ─── */
+
+.numberField {
+    display: inline-flex;
+    align-items: stretch;
+    width: 100%;
+    max-width: 220px;
+    height: calc(2.25rem + 2px);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+    overflow: hidden;
+    transition: border-color var(--transition-fast);
+}
+
+.numberField:focus-within {
+    border-color: var(--input-focus);
+    background: var(--glass-bg-light);
+}
+
+.numberInput {
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+    outline: none;
+    /* Masque les flèches natives ±. */
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.numberInput::-webkit-outer-spin-button,
+.numberInput::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.numberStep {
+    width: 40px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+    user-select: none;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.numberStep:hover {
+    background: var(--glass-border);
+    color: var(--text-primary);
+}
+
+.numberStep:active {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+/* ─── Navigateurs de listes (Sauvegardes, Logs) en dialogue « tall » ───
+   Colonne pleine hauteur : barre d'outils et pagination épinglées, la LISTE
+   seule défile. */
+
+.browserCol {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.scrollRows {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 2px; /* La scrollbar ne colle pas aux boutons de ligne. */
+}
+
+/* ─── Barre d'actions groupées des sauvegardes (tri + sélection) ───
+   Une seule ligne, toujours : le libellé de la case peut s'ellipser, le select
+   peut se resserrer, le bouton garde une largeur FIXE dans ses deux états
+   (« Tout supprimer » / « Supprimer la sélection (n) ») — rien ne saute. */
+
+.selectBar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: nowrap;
+}
+
+.selectBar .checkRow {
+    min-width: 0;
+    flex-shrink: 1;
+}
+
+.selectBarSpacer {
+    flex: 1;
+}
+
+/* Le SelectInput de tri, compact (sa base fait 100% de large). */
+.sortSelect {
+    width: auto;
+    min-width: 0;
+    flex-shrink: 1;
+}
+
+/* Largeur du plus long des deux libellés, pour que le passage de l'un à
+   l'autre ne déplace jamais la barre (le contenu du bouton est centré). */
+.bulkDelete {
+    min-width: 240px;
+    flex-shrink: 0;
+}
+
+/* Cases à cocher aux couleurs du thème (natives sinon). */
+.checkbox {
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+/* Icône d'une ligne du journal d'erreurs. */
+.logIcon {
+    color: var(--danger);
+}
+
+/* Message d'une popup de confirmation : les longs chemins passent à la ligne
+   au lieu de pousser la popup en défilement horizontal. */
+.confirmMessage {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    margin: 0;
+}
+
+/* ─── Explorateur de dossier appareil ─── */
+
+.pickerPath {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    word-break: break-all;
+    padding: var(--space-xs) 0;
+}
+
+.pickerList {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.pickerEntry {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.pickerEntry:hover {
+    background: var(--surface-subtle);
+}
+
+/* ─── Widget compact (grille) ─── */
+
+.widget {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    height: 100%;
+    color: var(--text-secondary);
+}
+
+/* Même langage visuel que le héros, en compact : icône + halo, sans cercle. */
+.widgetBadge {
+    position: relative;
+    width: 76px;
+    height: 76px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.widgetBadge::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle, currentColor 0%, transparent 62%);
+    opacity: 0.14;
+    filter: blur(6px);
+}
+
+/* Masque d'icône du widget « muet » (aucun partage / chargement). */
+.widgetBadge .widgetIcon {
+    width: 52px;
+    height: 52px;
+    filter: drop-shadow(0 0 12px currentColor);
+}
+
+/* SVG d'état du widget (cf. HeroIcon.tsx), au halo un peu plus resserré. */
+.widgetSvg {
+    width: 52px;
+    height: 52px;
+    filter: drop-shadow(0 0 12px currentColor);
+}
+
+/* Widget sans partage configuré / en chargement : même badge, en retrait. */
+.widgetMuted {
+    color: var(--text-muted);
+}
+
+.widgetLabel {
+    font-size: 0.85rem;
+}

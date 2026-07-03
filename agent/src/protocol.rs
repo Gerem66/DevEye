@@ -321,6 +321,37 @@ pub struct ProcessInfo {
     pub mem_bytes: u64,
 }
 
+/// One CloudSync exclusion rule (`path` = exact rel path or dir prefix,
+/// `name` = exact path component, `regex` = linear-time regex on the rel path).
+#[derive(Debug, Clone, Deserialize)]
+pub struct SyncExclusion {
+    pub kind: String,
+    pub pattern: String,
+}
+
+/// One CloudSync share assigned to this device (pushed via `sync.config`).
+#[derive(Debug, Clone, Deserialize)]
+pub struct SyncShareAssignment {
+    #[serde(rename = "shareId")]
+    pub share_id: i64,
+    #[serde(rename = "localPath")]
+    pub local_path: String,
+    /// `active` | `paused` (share-level OR device-level pause, pre-merged).
+    pub status: String,
+    pub exclusions: Vec<SyncExclusion>,
+}
+
+/// One entry of a CloudSync scan (mirrors `syncIndexEntrySchema`). `mtime` is
+/// unix milliseconds; `hash` is the SHA-256 (hex) of the file content.
+#[derive(Debug, Clone, Serialize)]
+pub struct SyncIndexEntry {
+    #[serde(rename = "relPath")]
+    pub rel_path: String,
+    pub hash: String,
+    pub size: u64,
+    pub mtime: i64,
+}
+
 /// Messages the agent sends to the server over the `/agent` WebSocket.
 #[derive(Debug, Serialize)]
 #[serde(tag = "command", content = "payload")]
@@ -494,6 +525,69 @@ pub enum ClientMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
+    /// CloudSync: the local watcher saw the share's folder change (debounced).
+    #[serde(rename = "sync.changed")]
+    SyncChanged {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "shareId")]
+        share_id: i64,
+    },
+    /// CloudSync: one batch of scanned index entries (last carries `done`).
+    #[serde(rename = "sync.index")]
+    SyncIndex {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        #[serde(rename = "shareId")]
+        share_id: i64,
+        entries: Vec<SyncIndexEntry>,
+        done: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    /// CloudSync: one upload chunk (reply to `sync.push`); the final frame
+    /// carries the observed hash/size/mtime so the server can detect a file
+    /// that changed mid-read (it then discards the transfer).
+    #[serde(rename = "sync.chunk")]
+    SyncChunk {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "opId")]
+        op_id: String,
+        data: String,
+        done: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        hash: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        size: Option<u64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        mtime: Option<i64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    /// CloudSync: flow-control credit — chunk `seq` of a `sync.applyChunk` landed.
+    #[serde(rename = "sync.ack")]
+    SyncAck {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "opId")]
+        op_id: String,
+        seq: u64,
+    },
+    /// CloudSync: outcome of a local op (`apply` install, `delete` to trash, `push`).
+    #[serde(rename = "sync.opResult")]
+    SyncOpResult {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "opId")]
+        op_id: String,
+        op: String,
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
     /// Reply to `pkg.list`: the package managers present + their pending counts.
     #[serde(rename = "pkg.listResult")]
     PkgListResult {
@@ -655,6 +749,56 @@ pub enum ServerMessage {
         offset: u64,
         data: String,
         done: bool,
+    },
+    /// CloudSync: full assignment list (on connect + on any change). Replaces
+    /// the previous set: shares absent from the list stop being watched.
+    #[serde(rename = "sync.config")]
+    SyncConfig { shares: Vec<SyncShareAssignment> },
+    /// CloudSync: scan the share's local folder (streams `sync.index` batches).
+    #[serde(rename = "sync.scan")]
+    SyncScan {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        #[serde(rename = "shareId")]
+        share_id: i64,
+    },
+    /// CloudSync: upload one local file (streams `sync.chunk`).
+    #[serde(rename = "sync.push")]
+    SyncPush {
+        #[serde(rename = "opId")]
+        op_id: String,
+        #[serde(rename = "shareId")]
+        share_id: i64,
+        #[serde(rename = "relPath")]
+        rel_path: String,
+    },
+    /// CloudSync: one download chunk to install (hash/size/mtime repeated on
+    /// every frame; ack each chunk; on `done` verify then rename atomically).
+    #[serde(rename = "sync.applyChunk")]
+    SyncApplyChunk {
+        #[serde(rename = "opId")]
+        op_id: String,
+        #[serde(rename = "shareId")]
+        share_id: i64,
+        #[serde(rename = "relPath")]
+        rel_path: String,
+        seq: u64,
+        data: String,
+        done: bool,
+        hash: String,
+        size: u64,
+        mtime: i64,
+    },
+    /// CloudSync: move a local file to the share's trash (`.deveye-trash/`).
+    /// Only ever sent once a hash-verified server-side version exists.
+    #[serde(rename = "sync.delete")]
+    SyncDelete {
+        #[serde(rename = "opId")]
+        op_id: String,
+        #[serde(rename = "shareId")]
+        share_id: i64,
+        #[serde(rename = "relPath")]
+        rel_path: String,
     },
     /// Enumerate package managers + pending updates (replies `pkg.listResult`).
     #[serde(rename = "pkg.list")]

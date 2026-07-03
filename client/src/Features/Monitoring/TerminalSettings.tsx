@@ -29,8 +29,8 @@ export function TerminalSettings({ onRelaunch }: { onRelaunch: () => void }) {
                     error={userValid ? undefined : 'Nom d’utilisateur invalide'}
                 />
                 <span className={styles.terminalFieldHint}>
-                    Vide → l’utilisateur de l’agent. Sinon, la session démarre sous ce compte (su -l).
-                    Pris en compte à la prochaine session.
+                    Vide → l’utilisateur de l’agent. Sinon, la session démarre sous ce compte (su -l). Pris en compte à
+                    la prochaine session.
                 </span>
             </label>
 

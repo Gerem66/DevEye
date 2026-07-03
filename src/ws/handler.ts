@@ -12,6 +12,7 @@ import { featureHandlerMap } from '@/features/registry';
 import { createSecureStore, enterSessionCommand, exitSessionCommand, forgetSessionDek } from '@/Services/SecureStore';
 import { logger } from '@/logger';
 
+import type { CloudSyncEngine } from '@/cloudSync/engine';
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import type { AuditLog } from '@/Services/AuditLog';
@@ -21,6 +22,7 @@ interface WSDeps {
     db: Database;
     crypt: Encryption;
     hub: MonitorHub;
+    cloudSync: CloudSyncEngine;
     audit: AuditLog;
 }
 
@@ -33,7 +35,7 @@ function send(socket: WebSocket, msg: ServerMessage): void {
     socket.send(JSON.stringify(msg));
 }
 
-export async function registerWS(app: FastifyInstance, { db, crypt, hub, audit }: WSDeps): Promise<void> {
+export async function registerWS(app: FastifyInstance, { db, crypt, hub, cloudSync, audit }: WSDeps): Promise<void> {
     app.get('/ws', { websocket: true }, async (socket, req) => {
         const accessToken = req.cookies[ACCESS_COOKIE];
         const ip = req.ip;
@@ -144,7 +146,8 @@ export async function registerWS(app: FastifyInstance, { db, crypt, hub, audit }
                         logger: reqLogger.child({ command, requestId: replyId }),
                         requestId: replyId,
                         audit: recordAudit,
-                        monitor
+                        monitor,
+                        cloudSync
                     },
                     inputParse.data
                 );

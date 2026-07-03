@@ -278,3 +278,22 @@
     -webkit-mask-image: url(/icons/file.svg);
     mask-image: url(/icons/file.svg);
 }
+.icon.icon-pause {
+    -webkit-mask-image: url(/icons/pause.svg);
+    mask-image: url(/icons/pause.svg);
+}
+
+.icon.icon-play {
+    -webkit-mask-image: url(/icons/play.svg);
+    mask-image: url(/icons/play.svg);
+}
+
+.icon.icon-pause-thin {
+    -webkit-mask-image: url(/icons/pause-thin.svg);
+    mask-image: url(/icons/pause-thin.svg);
+}
+
+.icon.icon-play-thin {
+    -webkit-mask-image: url(/icons/play-thin.svg);
+    mask-image: url(/icons/play-thin.svg);
+}

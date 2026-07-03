@@ -7,8 +7,8 @@ import styles from './CountWidget.module.css';
 
 /** Commands that return a plain `{ count }` for a workspace. Each doubles as
  *  its own invalidation key (see `invalidate`), so the card refreshes when the
- *  matching data changes. */
-type CountCommand = ResourceKey;
+ *  matching data changes. Only the `.count`-shaped resources qualify. */
+type CountCommand = Extract<ResourceKey, `${string}.count`>;
 
 export type CountState = { kind: 'loading' } | { kind: 'ready'; count: number };
 

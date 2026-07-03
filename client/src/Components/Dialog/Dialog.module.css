@@ -21,6 +21,9 @@
     width: 100%;
     max-height: calc(100vh - 2 * var(--space-lg));
     overflow-y: auto;
+    /* Jamais de défilement horizontal : un contenu trop large (long chemin…)
+       doit passer à la ligne, pas déborder. */
+    overflow-x: hidden;
     background: var(--surface-popup);
     backdrop-filter: blur(var(--glass-blur));
     -webkit-backdrop-filter: blur(var(--glass-blur));
@@ -44,6 +47,10 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+    /* Le corps est LA zone de défilement du mode tall (un contenu qui gère son
+       propre scroll interne ne débordera simplement pas). */
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 /* The panel is focusable (tabIndex -1) so fieldless dialogs still catch Enter;
