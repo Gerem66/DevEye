@@ -7,9 +7,10 @@ health/security report over a single WebSocket.
 Supported platforms: **Linux**, **macOS** and **Windows** (same codebase;
 OS-specific probes are `#[cfg(target_os)]`-gated).
 
-> Scope, on purpose: the agent only handles **pairing, run, stop** and a few
-> base commands. It does **not** install itself or configure start-on-boot.
-> Run it in the foreground, or detached, and stop it yourself.
+> Scope, on purpose: the agent handles **pairing, run, stop**, optional
+> **start-on-boot** (`service install`, also driven from the UI's « Démarrage
+> auto » toggle) and **self-update**. It never installs anything without being
+> asked: by default, run it in the foreground or detached and stop it yourself.
 
 ## Build
 
@@ -28,11 +29,11 @@ Requires a stable Rust toolchain (`rust-toolchain.toml` pins `stable`).
 web UI offers under **Appareils → Télécharger l'agent**, and the canonical list
 in `deveye-types` `AGENT_TARGETS`):
 
-| OS | Cibles |
-| --- | --- |
+| OS                    | Cibles                                      |
+| --------------------- | ------------------------------------------- |
 | Linux (musl statique) | `x86_64`, `aarch64`, `armv7` (Raspberry Pi) |
-| macOS | `x86_64` (Intel), `arm64` (Silicon) |
-| Windows (MSVC) | `x86_64`, `x86`, `arm64` |
+| macOS                 | `x86_64` (Intel), `arm64` (Silicon)         |
+| Windows (MSVC)        | `x86_64`, `x86`, `arm64`                    |
 
 Two ways to produce them:
 
@@ -42,7 +43,7 @@ Two ways to produce them:
 - **Locally** — `./build-all.sh` cross-compiles the matrix into `dist/` (handy to
   smoke-test). It needs `rustup` + `zig` + `cargo-zigbuild` (Homebrew Rust can't
   cross-compile); the script preflights and prints the exact install commands if
-  anything is missing. It is *best-effort*: Linux is built as static musl and
+  anything is missing. It is _best-effort_: Linux is built as static musl and
   Windows via MinGW so it cross-builds from a Mac, while the shipped Windows
   binaries are MSVC (native CI).
 
@@ -55,18 +56,18 @@ and exercise the same flow (no token needed; the sync is skipped).
 
 ### Scripts
 
-| Script | What it does |
-| --- | --- |
-| `./build-all.sh` | Cross-compile **all three** OSes into `dist/` (needs rustup + zig + cargo-zigbuild). |
-| `./clean.sh` | Remove `target/` (cargo cache, all targets) + `dist/`. Both regenerate on the next build. |
+| Script           | What it does                                                                              |
+| ---------------- | ----------------------------------------------------------------------------------------- |
+| `./build-all.sh` | Cross-compile **all three** OSes into `dist/` (needs rustup + zig + cargo-zigbuild).      |
+| `./clean.sh`     | Remove `target/` (cargo cache, all targets) + `dist/`. Both regenerate on the next build. |
 
 ### CI (GitHub Actions, `DevEye` repo)
 
 Two workflows:
 
-| Workflow | Trigger | Does |
-| --- | --- | --- |
-| `ci.yml` | every push / PR | server + client + agent: lint, typecheck, build |
+| Workflow      | Trigger                                                | Does                                                                                  |
+| ------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `ci.yml`      | every push / PR                                        | server + client + agent: lint, typecheck, build                                       |
 | `release.yml` | push to `main` touching `agent/**` (or a version bump) | build the 8-target matrix natively → rolling `agent-latest` release + `manifest.json` |
 
 So every push is checked (the agent on Linux); the full matrix is rebuilt and
@@ -77,36 +78,75 @@ published whenever the agent (or the DevEye version) changes.
 1. In the DevEye web UI, open **Appareils** (top-right menu) → **Ajouter un
    appareil** to generate a one-time link code.
 2. Enroll this machine:
-   ```sh
-   deveye-agent link ABCD-EFGH --server https://deveye.example.com
-   ```
+    ```sh
+    deveye-agent link ABCD-EFGH --server https://deveye.example.com
+    ```
 3. Back in **Appareils**, **approve** the device (it starts as “En attente”).
    Until approved, the server drops its metrics — this is the gate that makes a
    device trusted. You can revoke or delete it later there too.
 4. Start streaming:
-   ```sh
-   deveye-agent run            # foreground
-   deveye-agent run --detach   # background (writes a PID file)
-   ```
+    ```sh
+    deveye-agent run            # foreground
+    deveye-agent run --detach   # background (writes a PID file)
+    ```
 
 The first sample and a health/security report are sent **immediately** on
 connect, so the dashboard shows data without waiting a full interval.
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `link <code> --server <url> [--name <name>]` | Enroll using a one-time code. Platform is auto-detected; name defaults to the hostname. Re-linking keeps the machine identity. |
-| `run [--once] [--interval <secs>] [--detach]` | Run the monitoring loop. `--once`: collect+send a single cycle then exit (handy to test). `--interval`: seconds between samples (default 30). `--detach`: background + PID file. |
-| `stop` | Stop a backgrounded agent (reads the PID file, sends SIGTERM). |
-| `status` | Print platform, server, enrollment and running state. |
-| `unlink` | Forget the local enrollment (deletes the config + token). |
+| Command                                                                     | Description                                                                                                                                                                                                                                                                                                                            |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `link <code> --server <url> [--name <name>]`                                | Enroll using a one-time code. Platform is auto-detected; name defaults to the hostname. Re-linking keeps the machine identity.                                                                                                                                                                                                         |
+| `run [--once] [--interval <secs>] [--detach] [--managed] [--config <path>]` | Run the monitoring loop. `--once`: collect+send a single cycle then exit (handy to test). `--interval`: seconds between samples (default 30). `--detach`: background + PID file. `--managed` / `--config`: **internal**, injected by the installed service — see [Supervision](#supervision---managed) below; never pass them by hand. |
+| `stop`                                                                      | Stop a backgrounded agent (reads the PID file, sends SIGTERM).                                                                                                                                                                                                                                                                         |
+| `status`                                                                    | Print platform, server, enrollment and running state.                                                                                                                                                                                                                                                                                  |
+| `service install [--system] \| uninstall \| status`                         | Manage the autostart service (launchd / systemd / Task Scheduler). Per-user by default, `--system` needs root. Also driven from the UI (« Démarrage auto »).                                                                                                                                                                           |
+| `unlink`                                                                    | Forget the local enrollment (deletes the config + token).                                                                                                                                                                                                                                                                              |
 
 Test a freshly approved device end-to-end:
 
 ```sh
 deveye-agent run --once     # one snapshot + report, then exits
 ```
+
+## Supervision (`--managed`)
+
+`run --managed` declares to the process: _“I am supervised by a service manager
+— it will relaunch me if I exit.”_ You never pass it by hand: the service
+definitions generated by `service install` inject it themselves
+(`ExecStart={exe} run --managed --config {cfg}` in the systemd unit, and the
+same in the launchd plist and the Windows scheduled task — see
+`src/service.rs`). Setting the `DEVEYE_MANAGED` env var has the same effect.
+The value is frozen at startup (`MANAGED` `OnceLock` in `src/main.rs`) and it
+exists as an explicit flag because a process cannot reliably detect
+cross-platform that it is supervised.
+
+It has exactly three effects:
+
+1. **Restart after self-update** (`update::restart_and_exit`). After swapping
+   its binary, a _managed_ agent simply `exit(0)`s — systemd (`Restart=always`)
+   or launchd (`KeepAlive`) relaunches it at once on the new binary. An
+   unmanaged agent (or Windows, where Task Scheduler does not relaunch a task
+   that exits) must spawn a detached successor itself before exiting. We never
+   re-exec in place: macOS kills a freshly replaced binary
+   (code-signing/AMFI).
+
+2. **Hand-off when autostart is disabled** (`commands::handle_disable_autostart`).
+   If the agent _is_ the process supervised by the service being uninstalled,
+   the uninstall will SIGTERM it. So it first spawns a standalone (unmanaged)
+   copy — in its own process group, to survive the group SIGTERM — then exits.
+   This is why toggling « Démarrage auto » off restarts the agent when it runs
+   supervised. Without `--managed`, it just removes the service and keeps
+   running.
+
+3. **Reported to the server** (`managed` field of the agent report), so the
+   server/UI know whether the agent runs under supervision.
+
+**In dev: don't use it.** Nothing relaunches you on exit, so a `--managed`
+agent would die for good at its first self-update. The flag only makes sense
+when something actually guarantees the relaunch — that is precisely the
+information it encodes.
 
 ## Configuration & files
 
@@ -145,19 +185,19 @@ arrives (it arrives within ~1 s of connecting); the real cadence is UI-controlle
 
 **Health/security report** (OS name/version/arch + posture):
 
-| Signal | Linux | macOS | Windows |
-| --- | --- | --- | --- |
-| Firewall | `ufw` / `firewalld`, then `systemctl is-active` / `nft` | Application Firewall (`socketfilterfw`) | `netsh advfirewall` |
-| Disk encryption | LUKS (via `lsblk`) | FileVault (`fdesetup`) | BitLocker (`manage-bde`) |
-| SIP | — | `csrutil status` | — |
-| Pending updates | `apt-get -s upgrade` / `dnf check-update` | not collected (slow) | not collected (slow) |
-| Open ports | `ss -tuln` (TCP+UDP) | `netstat -an -p tcp` | `netstat -an` |
-| Privilege | `id -u` / `id -un` | `id -u` / `id -un` | `net session` / `%USERNAME%` |
-| GPU % | `nvidia-smi` | IOAccelerator (`ioreg`) | `nvidia-smi` |
-| Logged-in users | `who` | `who` | `query user` |
-| Active TCP conns | `ss` | `netstat` | `netstat -an` |
-| Machine id | `/etc/machine-id` | IOPlatformUUID (`ioreg`) | registry `MachineGuid` |
-| Processes | `ps` | `ps` | `sysinfo` |
+| Signal           | Linux                                                   | macOS                                   | Windows                      |
+| ---------------- | ------------------------------------------------------- | --------------------------------------- | ---------------------------- |
+| Firewall         | `ufw` / `firewalld`, then `systemctl is-active` / `nft` | Application Firewall (`socketfilterfw`) | `netsh advfirewall`          |
+| Disk encryption  | LUKS (via `lsblk`)                                      | FileVault (`fdesetup`)                  | BitLocker (`manage-bde`)     |
+| SIP              | —                                                       | `csrutil status`                        | —                            |
+| Pending updates  | `apt-get -s upgrade` / `dnf check-update`               | not collected (slow)                    | not collected (slow)         |
+| Open ports       | `ss -tuln` (TCP+UDP)                                    | `netstat -an -p tcp`                    | `netstat -an`                |
+| Privilege        | `id -u` / `id -un`                                      | `id -u` / `id -un`                      | `net session` / `%USERNAME%` |
+| GPU %            | `nvidia-smi`                                            | IOAccelerator (`ioreg`)                 | `nvidia-smi`                 |
+| Logged-in users  | `who`                                                   | `who`                                   | `query user`                 |
+| Active TCP conns | `ss`                                                    | `netstat`                               | `netstat -an`                |
+| Machine id       | `/etc/machine-id`                                       | IOPlatformUUID (`ioreg`)                | registry `MachineGuid`       |
+| Processes        | `ps`                                                    | `ps`                                    | `sysinfo`                    |
 
 Every probe is **best-effort and nullable**: when the underlying tool is absent
 or not permitted, the value is reported as “unknown”/empty. Notable limitations:
