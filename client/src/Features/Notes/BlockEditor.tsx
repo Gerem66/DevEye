@@ -367,8 +367,17 @@ export default function BlockEditor({
 
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', String(index));
-            // Snapshot the row as the floating ghost before it collapses.
-            e.dataTransfer.setDragImage(row, e.clientX - rect.left, e.clientY - rect.top);
+            // The row is transparent and sits on translucent popups, so
+            // snapshotting it in place bakes whatever is painted underneath
+            // (the home grid behind the popups) into the drag ghost. Overlay
+            // an opaque clone on the row for one frame and snapshot that.
+            const snapshot = row.cloneNode(true) as HTMLElement;
+            snapshot.classList.add(styles.dragSnapshot);
+            snapshot.style.top = `${rect.top}px`;
+            snapshot.style.left = `${rect.left}px`;
+            snapshot.style.width = `${rect.width}px`;
+            document.body.appendChild(snapshot);
+            e.dataTransfer.setDragImage(snapshot, e.clientX - rect.left, e.clientY - rect.top);
 
             // Boundaries between consecutive rows = midpoints of adjacent row
             // centres (see DragState.thresholds).
@@ -383,7 +392,10 @@ export default function BlockEditor({
 
             // Defer the state update: collapsing the source synchronously inside
             // dragstart would destroy the dragged element's box and abort the drag.
-            requestAnimationFrame(() => setDrag({ from: index, to: index, centerOffset, thresholds }));
+            requestAnimationFrame(() => {
+                snapshot.remove();
+                setDrag({ from: index, to: index, centerOffset, thresholds });
+            });
         },
         [blocks]
     );
@@ -446,9 +458,9 @@ export default function BlockEditor({
         >
             <button
                 type='button'
-                className={styles.blockGrip}
+                className={`${styles.blockGrip} ${blocks.length > 1 ? '' : styles.blockGripHidden}`}
                 aria-label='Réordonner la ligne'
-                draggable
+                draggable={blocks.length > 1}
                 onDragStart={(e) => onGripDragStart(e, index)}
                 onDragEnd={() => setDrag(null)}
             >

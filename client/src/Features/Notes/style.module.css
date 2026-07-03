@@ -585,6 +585,12 @@
     cursor: grabbing;
 }
 
+/* Single-block note: reordering is meaningless, so the grip is inert. It keeps
+   its slot so the text doesn't shift when a second block appears. */
+.blockGripHidden {
+    visibility: hidden;
+}
+
 .blockGrip .badge {
     width: 16px;
     height: 16px;
@@ -601,6 +607,20 @@
     opacity: 0;
     overflow: hidden;
     pointer-events: none;
+}
+
+/* Opaque clone of the grabbed row, overlaid on it for a single frame as the
+   `setDragImage` source (see onGripDragStart): an opaque backdrop keeps the
+   content painted under the translucent popups out of the drag ghost. */
+.dragSnapshot {
+    position: fixed;
+    z-index: var(--z-toast);
+    background: var(--surface-popup-solid);
+    pointer-events: none;
+}
+
+.dragSnapshot .blockGrip {
+    opacity: 1;
 }
 
 /* Landing preview: a translucent copy of the grabbed row, mirroring its layout

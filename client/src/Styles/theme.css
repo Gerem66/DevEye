@@ -10,6 +10,9 @@
   /* Surfaces */
   --surface-widget: var(--glass-bg);
   --surface-popup: rgba(14, 21, 32, 0.92);
+  /* Opaque twin of --surface-popup, for surfaces that must not let anything
+     bleed through (e.g. drag-image snapshots). */
+  --surface-popup-solid: rgb(14, 21, 32);
   --surface-navbar: rgba(9, 14, 22, 0.78);
   --surface-subtle: rgba(255, 255, 255, 0.04);
 
