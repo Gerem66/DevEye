@@ -205,8 +205,16 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, cloudSync
             void cloudSync.onAgentConnect(deviceId).catch((err) => {
                 reqLogger.warn({ err }, 'CloudSync onAgentConnect failed');
             });
-            await db.devices.touchSeen(deviceId, Math.floor(Date.now() / 1000));
-            await recordAgentOnline(db, device, wasOnlineInHub);
+            // A transient DB error here must not reject the route handler: the
+            // fresh, authenticated socket would be torn down, and an agent
+            // retrying against a briefly unhealthy DB becomes an accept-then-
+            // close reconnect storm. Log and keep the session alive instead.
+            try {
+                await db.devices.touchSeen(deviceId, Math.floor(Date.now() / 1000));
+                await recordAgentOnline(db, device, wasOnlineInHub);
+            } catch (err) {
+                reqLogger.warn({ err }, 'Connect-time presence bookkeeping failed (socket kept open)');
+            }
             audit.record({
                 source: 'agent',
                 category: 'device',
@@ -246,7 +254,16 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, cloudSync
                 });
                 return;
             }
-            await dispatch(session, parsed.data);
+            // A throwing handler must neither crash the process (the dispatch
+            // promise is fire-and-forget, so a rejection here is *unhandled* and
+            // fatal on modern Node — the restart then disconnects every agent)
+            // nor take the socket down with it.
+            try {
+                await dispatch(session, parsed.data);
+            } catch (err) {
+                reqLogger.error({ err, command: parsed.data.command }, 'Agent frame handler failed');
+                send(socket, { command: AGENT_ERROR, payload: { code: 'internal', message: 'Handler failed' } });
+            }
         };
 
         // Wire the real handler, then flush whatever arrived during auth/connect
