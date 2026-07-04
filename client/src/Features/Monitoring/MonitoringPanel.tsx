@@ -1011,6 +1011,58 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 onSpanChange={setSpanMs}
             />
 
+            {/* Snapshot footprint + keep/delete — right under the timeline: these
+                actions target the whole focused snapshot/zone, not just processes. */}
+            <div className={styles.snapshotBar}>
+                <span className={styles.snapshotUsage} title='Espace occupé en base par les snapshots de cet appareil'>
+                    <span className='icon icon-server' />
+                    {storage
+                        ? `${storage.snapshots} snapshot${storage.snapshots > 1 ? 's' : ''} · ≈ ${formatBytesFr(storage.bytes)} en base`
+                        : 'Calcul de l’espace…'}
+                </span>
+                <div className={styles.snapshotActions}>
+                    {pinTarget && pinTarget.count > 0 && (
+                        <button
+                            type='button'
+                            className={`${styles.snapshotPinBtn} ${allPinned ? styles.snapshotPinBtnActive : ''}`}
+                            onClick={() => void setPinned(!allPinned)}
+                            disabled={pinning}
+                            title={
+                                allPinned
+                                    ? 'Lever la conservation : le(s) snapshot(s) pourront de nouveau être nettoyés'
+                                    : 'Conserver indéfiniment : ce(s) snapshot(s) ignore(nt) le nettoyage automatique'
+                            }
+                        >
+                            <span className={`icon ${allPinned ? 'icon-star' : 'icon-star-outline'}`} />
+                            {pinTarget.count > 1
+                                ? allPinned
+                                    ? `Ne plus conserver (${pinTarget.count})`
+                                    : `Conserver la zone (${pinTarget.count})`
+                                : allPinned
+                                  ? 'Ne plus conserver'
+                                  : 'Conserver'}
+                        </button>
+                    )}
+                    {deleteTarget && (deleteTarget.kind === 'snapshot' || deleteTarget.count > 0) && (
+                        <button
+                            type='button'
+                            className={styles.snapshotDeleteBtn}
+                            onClick={() => setDeleteOpen(true)}
+                            title={
+                                deleteTarget.kind === 'snapshot'
+                                    ? 'Supprimer le snapshot sélectionné'
+                                    : 'Supprimer les snapshots de la zone sélectionnée'
+                            }
+                        >
+                            <span className='icon icon-trash' />
+                            {deleteTarget.kind === 'snapshot'
+                                ? 'Supprimer ce snapshot'
+                                : `Supprimer la zone (${deleteTarget.count})`}
+                        </button>
+                    )}
+                </div>
+            </div>
+
             {/* Graphs */}
             <div className={styles.graphsSpan} title='Durée couverte par les graphiques'>
                 <span className='icon icon-clock' />
@@ -1171,60 +1223,6 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                         </span>
                     )}
                 </h4>
-
-                {/* Snapshot footprint + per-snapshot / per-zone deletion */}
-                <div className={styles.snapshotBar}>
-                    <span
-                        className={styles.snapshotUsage}
-                        title='Espace occupé en base par les snapshots de cet appareil'
-                    >
-                        <span className='icon icon-server' />
-                        {storage
-                            ? `${storage.snapshots} snapshot${storage.snapshots > 1 ? 's' : ''} · ≈ ${formatBytesFr(storage.bytes)} en base`
-                            : 'Calcul de l’espace…'}
-                    </span>
-                    <div className={styles.snapshotActions}>
-                        {pinTarget && pinTarget.count > 0 && (
-                            <button
-                                type='button'
-                                className={`${styles.snapshotPinBtn} ${allPinned ? styles.snapshotPinBtnActive : ''}`}
-                                onClick={() => void setPinned(!allPinned)}
-                                disabled={pinning}
-                                title={
-                                    allPinned
-                                        ? 'Lever la conservation : le(s) snapshot(s) pourront de nouveau être nettoyés'
-                                        : 'Conserver indéfiniment : ce(s) snapshot(s) ignore(nt) le nettoyage automatique'
-                                }
-                            >
-                                <span className={`icon ${allPinned ? 'icon-star' : 'icon-star-outline'}`} />
-                                {pinTarget.count > 1
-                                    ? allPinned
-                                        ? `Ne plus conserver (${pinTarget.count})`
-                                        : `Conserver la zone (${pinTarget.count})`
-                                    : allPinned
-                                      ? 'Ne plus conserver'
-                                      : 'Conserver'}
-                            </button>
-                        )}
-                        {deleteTarget && (deleteTarget.kind === 'snapshot' || deleteTarget.count > 0) && (
-                            <button
-                                type='button'
-                                className={styles.snapshotDeleteBtn}
-                                onClick={() => setDeleteOpen(true)}
-                                title={
-                                    deleteTarget.kind === 'snapshot'
-                                        ? 'Supprimer le snapshot sélectionné'
-                                        : 'Supprimer les snapshots de la zone sélectionnée'
-                                }
-                            >
-                                <span className='icon icon-trash' />
-                                {deleteTarget.kind === 'snapshot'
-                                    ? 'Supprimer ce snapshot'
-                                    : `Supprimer la zone (${deleteTarget.count})`}
-                            </button>
-                        )}
-                    </div>
-                </div>
 
                 {procSample && procSample.processes.length > 0 ? (
                     <>
