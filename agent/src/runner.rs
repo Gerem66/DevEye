@@ -33,6 +33,15 @@ const MAX_BATCH: usize = 100;
 const QUEUE_CAPACITY: usize = 2880;
 const MIN_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(60);
+/// Pause after a *clean* close (server restart, network blip) before dialing
+/// again. Without it a server that accepts-then-closes puts the agent in a
+/// tight connect loop, and each connect used to fire a full snapshot +
+/// process sample — flooding the server with one snapshot per second.
+const RECONNECT_DELAY: Duration = Duration::from_secs(2);
+/// Connect-time full snapshot + process sample are skipped when the previous
+/// ones are fresher than this: reconnect loops must not multiply snapshots.
+/// The server can still force one at any time via `agent.collect`.
+const MIN_CONNECT_SNAPSHOT_GAP: Duration = Duration::from_secs(60);
 /// Retry delay after the server *rejects* us at the handshake (revoked, unknown
 /// or not-yet-approved device). Much slower than a normal reconnect: a rejection
 /// won't clear on its own, so we back off to roughly hourly to avoid hammering
@@ -74,6 +83,9 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
     let mut collector = Collector::new();
     let mut queue: VecDeque<MetricSnapshot> = VecDeque::with_capacity(QUEUE_CAPACITY);
     let mut backoff = MIN_BACKOFF;
+    // When the last connect-time full snapshot + processes were sent, kept across
+    // sessions so reconnect loops can't multiply snapshots (see the gap constant).
+    let mut last_full_snapshot: Option<Instant> = None;
 
     info!(device_id = %device_id, metric_interval_secs = opts.interval.as_secs(), "DevEye agent starting");
 
@@ -85,12 +97,17 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
             opts.interval,
             &mut collector,
             &mut queue,
+            &mut last_full_snapshot,
         )
         .await
         {
             Ok(SessionOutcome::Established) => {
-                info!("connection closed by server, reconnecting");
+                info!(
+                    delay_secs = RECONNECT_DELAY.as_secs(),
+                    "connection closed by server, reconnecting"
+                );
                 backoff = MIN_BACKOFF;
+                tokio::time::sleep(RECONNECT_DELAY).await;
             }
             Ok(SessionOutcome::Rejected) => {
                 warn!(
@@ -160,6 +177,7 @@ async fn stream_session(
     initial_metric_interval: Duration,
     collector: &mut Collector,
     queue: &mut VecDeque<MetricSnapshot>,
+    last_full_snapshot: &mut Option<Instant>,
 ) -> Result<SessionOutcome> {
     let (ws_stream, _) = tokio_tungstenite::connect_async(ws_url)
         .await
@@ -220,11 +238,20 @@ async fn stream_session(
         }
     }
 
-    // On connect: slow-moving report + an immediate full snapshot + processes.
+    // On connect: slow-moving report, then flush anything buffered while offline.
+    // The immediate full snapshot + processes (so a fresh dashboard isn't blank)
+    // is skipped when the last one is recent — a reconnect loop must not mint a
+    // snapshot per connection.
     send_report(&mut sink, device_id).await?;
-    push_bounded(queue, collector.collect_full());
+    let snapshot_due = last_full_snapshot.is_none_or(|t| t.elapsed() >= MIN_CONNECT_SNAPSHOT_GAP);
+    if snapshot_due {
+        push_bounded(queue, collector.collect_full());
+        *last_full_snapshot = Some(Instant::now());
+    }
     flush_queue(&mut sink, device_id, queue).await?;
-    send_processes(&mut sink, device_id, &capture).await?;
+    if snapshot_due {
+        send_processes(&mut sink, device_id, &capture).await?;
+    }
 
     let mut metric_ticker = new_ticker(metric_interval);
     let mut snapshot_ticker = new_ticker(snapshot_interval);
@@ -276,6 +303,7 @@ async fn stream_session(
             }
             _ = snapshot_ticker.tick() => {
                 push_bounded(queue, collector.collect_full());
+                *last_full_snapshot = Some(Instant::now());
                 flush_queue(&mut sink, device_id, queue).await?;
                 send_processes(&mut sink, device_id, &capture).await?;
             }
@@ -289,6 +317,7 @@ async fn stream_session(
                             // "Collect now" (user refresh): full snapshot + processes + report.
                             Ok(ServerMessage::Collect {}) => {
                                 push_bounded(queue, collector.collect_full());
+                                *last_full_snapshot = Some(Instant::now());
                                 flush_queue(&mut sink, device_id, queue).await?;
                                 send_processes(&mut sink, device_id, &capture).await?;
                                 send_report(&mut sink, device_id).await?;

@@ -16,6 +16,18 @@ function gated(s: AgentSession): boolean {
     return true;
 }
 
+/**
+ * Floor between two *persisted* process samples of one device. Defense in depth
+ * against a misbehaving or looping agent (each snapshot can carry up to 2000
+ * process rows, so an uncapped stream balloons the DB and drowns the timeline
+ * in marks). Well under the smallest configurable snapshot cadence (60 s), so
+ * legitimate samples — including a manual refresh — are never affected.
+ */
+const MIN_PROCESS_SAMPLE_GAP_MS = 30_000;
+
+/** Last persisted process-sample `ts` per device (process-local; reset on boot). */
+const lastProcessSampleTs = new Map<string, number>();
+
 function persistFailed(s: AgentSession, e: unknown, what: string): void {
     s.logger.error({ err: (e as Error).message }, what);
     reply(s, { command: AGENT_ERROR, payload: { code: 'internal', message: 'Persist failed' } });
@@ -35,8 +47,15 @@ export async function handleReport(s: AgentSession, payload: PayloadOf<typeof AG
 
 export async function handleProcesses(s: AgentSession, payload: PayloadOf<typeof AGENT_PROCESSES>): Promise<void> {
     if (gated(s)) return;
+    const last = lastProcessSampleTs.get(s.device.id);
+    if (last !== undefined && payload.sample.ts - last < MIN_PROCESS_SAMPLE_GAP_MS) {
+        s.logger.warn({ lastTs: last, ts: payload.sample.ts }, 'Process sample throttled (too soon after previous)');
+        ack(s, 0);
+        return;
+    }
     try {
         await s.db.processSamples.insertSample(s.device.id, payload.sample);
+        lastProcessSampleTs.set(s.device.id, payload.sample.ts);
         ack(s, payload.sample.processes.length);
     } catch (e) {
         persistFailed(s, e, 'Failed to persist process sample');
