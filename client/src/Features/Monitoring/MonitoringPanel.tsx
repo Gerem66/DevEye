@@ -1,7 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ws } from '@/api/ws';
+import { useAuth } from '@/auth/AuthProvider';
 import { useDevices } from '@/stores/devices';
 import { acquireMetrics } from '@/stores/metricsSubscription';
+import { requestOpenView } from '@/stores/viewRequest';
 import { openInfo } from '@/Components/InfoPopup';
 import { Dialog } from '@/Components/Dialog';
 import Button from '@/Components/Button';
@@ -224,6 +226,7 @@ export interface MonitoringPanelProps {
  * its metric subscription, scoped to `deviceId`.
  */
 export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
+    const { user } = useAuth();
     const { devices: baseDevices, loading, refresh } = useDevices();
     const [override, setOverride] = useState<{ online?: boolean; report?: DeviceReport | null }>({});
     const [configOpen, setConfigOpen] = useState(false);
@@ -880,6 +883,11 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                   { icon: 'icon-logs', label: 'Logs de l’appareil', onClick: () => setLogsOpen(true) },
                   { icon: 'icon-power', label: 'Commandes système', onClick: () => setPowerOpen(true) }
               ]
+            : []),
+        // Jump to the fleet-management page (revoke, agent stop/restart, autostart…)
+        // without hunting for it in the navbar. Admin-only, like the page itself.
+        ...(user?.role === 'admin'
+            ? [{ icon: 'icon-server', label: 'Gérer les appareils', onClick: () => requestOpenView('clients') }]
             : [])
     ];
 

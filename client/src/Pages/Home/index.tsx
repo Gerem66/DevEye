@@ -5,6 +5,7 @@ import { ws } from '@/api/ws';
 import { isHomeReady, onHomeReady } from '@/stores/homeReady';
 import { useDevices } from '@/stores/devices';
 import { useHomeLayout, getHomeLayout, findCategory, pruneMissingDevices } from '@/stores/homeLayout';
+import { onOpenViewRequest } from '@/stores/viewRequest';
 import { TopNavbar } from '@/Components/TopNavbar';
 import { Widget } from '@/Components/Widget';
 import { WidgetGrid } from '@/Components/WidgetGrid';
@@ -179,6 +180,10 @@ export default function HomePage() {
     // Mirror of expandedWidget for stable callbacks that must read it at call time.
     const expandedWidgetRef = useRef(expandedWidget);
     expandedWidgetRef.current = expandedWidget;
+
+    // Cross-feature navigation: a feature can ask to open another view (e.g.
+    // Monitoring's "Gérer les appareils" → the Appareils page).
+    useEffect(() => onOpenViewRequest((viewId) => handleExpand(viewId)), [handleExpand]);
 
     /**
      * Close the popup on a feature's own request. Guarded so only the feature
