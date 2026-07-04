@@ -41,24 +41,46 @@ interface Segment {
 const CLICK_SLOP_PX = 5;
 
 /**
- * Largest number of snapshots a dragged selection may span. Beyond it the graphs
- * downsample and points get lost, so the moving edge is clamped to this many
- * snapshots from the anchor (the drag simply stops growing).
+ * Hard cap on the number of snapshots a selection may span — enforced *here*,
+ * at the only place a selection is created (the drag), so every downstream
+ * consumer (queries, averages, delete/pin counts) can assume a bounded range
+ * and nothing else has to handle oversized selections. The moving edge simply
+ * stops growing at the cap-th snapshot from the anchor.
  */
 const MAX_SELECTION_SNAPSHOTS = 200;
 
+/** Index of the first element of ascending `sorted` that is ≥ `x`. */
+function lowerBound(sorted: number[], x: number): number {
+    let lo = 0;
+    let hi = sorted.length;
+    while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (sorted[mid] < x) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo;
+}
+
+/** Number of elements of ascending `sorted` inside `[from, to]` (inclusive). */
+function countInRange(sorted: number[], from: number, to: number): number {
+    return lowerBound(sorted, to + 1) - lowerBound(sorted, from);
+}
+
 /**
  * Clamp the moving edge `candidate` so the selection `[anchor, candidate]` holds
- * at most `max` of `snaps` — the edge sticks at the max-th snapshot from `anchor`.
+ * at most `max` of `sortedSnaps` — the edge sticks at the max-th snapshot from
+ * `anchor`. O(log n): runs on every pointer move.
  */
-function clampToMaxSnapshots(anchor: number, candidate: number, snaps: number[], max: number): number {
-    if (snaps.length === 0 || max <= 0) return candidate;
+function clampToMaxSnapshots(anchor: number, candidate: number, sortedSnaps: number[], max: number): number {
+    if (sortedSnaps.length === 0 || max <= 0) return candidate;
     if (candidate >= anchor) {
-        const right = snaps.filter((t) => t >= anchor && t <= candidate).sort((a, b) => a - b);
-        return right.length > max ? right[max - 1] : candidate;
+        const first = lowerBound(sortedSnaps, anchor);
+        const count = lowerBound(sortedSnaps, candidate + 1) - first;
+        return count > max ? sortedSnaps[first + max - 1] : candidate;
     }
-    const left = snaps.filter((t) => t <= anchor && t >= candidate).sort((a, b) => b - a);
-    return left.length > max ? left[max - 1] : candidate;
+    const last = lowerBound(sortedSnaps, anchor + 1) - 1;
+    const count = last - lowerBound(sortedSnaps, candidate) + 1;
+    return count > max ? sortedSnaps[last - max + 1] : candidate;
 }
 
 function startOfDay(ts: number): number {
@@ -128,6 +150,10 @@ export function Timeline({
     const [drag, setDrag] = useState<{ a: number; b: number; downX: number } | null>(null);
     const [calOpen, setCalOpen] = useState(false);
 
+    // The server sends the marks ascending; re-sorting once per fetch keeps the
+    // binary-search helpers (clamp, stepping, counts) safe against any caller.
+    const sortedSnaps = useMemo(() => [...snapshotTimes].sort((a, b) => a - b), [snapshotTimes]);
+
     const span = Math.max(1, windowEnd - windowStart);
     const segments = buildSegments(windowStart, windowEnd, onlineAtStart, events);
     const onlineMs = segments.reduce((acc, s) => acc + (s.online ? s.to - s.from : 0), 0);
@@ -169,7 +195,7 @@ export function Timeline({
     };
     const onPointerMove = (e: React.PointerEvent) => {
         if (!drag) return;
-        const b = clampToMaxSnapshots(drag.a, timeAt(e.clientX), snapshotTimes, MAX_SELECTION_SNAPSHOTS);
+        const b = clampToMaxSnapshots(drag.a, timeAt(e.clientX), sortedSnaps, MAX_SELECTION_SNAPSHOTS);
         setDrag({ ...drag, b });
     };
     const onPointerUp = (e: React.PointerEvent) => {
@@ -189,6 +215,8 @@ export function Timeline({
 
     const dragSel = drag ? { start: Math.min(drag.a, drag.b), end: Math.max(drag.a, drag.b) } : null;
     const sel = dragSel ?? selection;
+    // Snapshots inside the shown selection (bounded by MAX_SELECTION_SNAPSHOTS).
+    const selCount = sel ? countInRange(sortedSnaps, sel.start, sel.end) : 0;
 
     const pinnedSet = useMemo(() => new Set(pinnedTimes), [pinnedTimes]);
     // Adjacent snapshots around the focused instant, to step through with arrows.
@@ -295,7 +323,8 @@ export function Timeline({
                 <span>{fmtTime(windowStart)}</span>
                 {selection ? (
                     <button className={styles.resetSel} onClick={onLive}>
-                        Sélection : {fmtTime(selection.start)} – {fmtTime(selection.end)} ✕
+                        Sélection : {fmtTime(selection.start)} – {fmtTime(selection.end)}
+                        {selCount > 0 && ` · ${selCount} snapshot${selCount > 1 ? 's' : ''}`} ✕
                     </button>
                 ) : pointAt !== null ? (
                     <span className={styles.instantNav}>
