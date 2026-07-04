@@ -14,7 +14,9 @@ const SNAP_PRESETS = [1, 2, 5, 10, 15, 30, 60]; // minutes
 const RET_PRESETS = [7, 30, 90, 365]; // days
 const PROC_PRESETS = [1, 3, 7, 30]; // days
 
-const DEFAULTS = { metricSec: 10, snapMin: 5, retentionDays: 30, procRetentionDays: 1 };
+// Mirrors the server defaults (see `src/agent/mappers.ts` + `Env`): 30 s
+// metrics, 10 min full snapshots, everything kept 30 days.
+const DEFAULTS = { metricSec: 30, snapMin: 10, retentionDays: 30, procRetentionDays: 30 };
 
 function clamp(v: number, lo: number, hi: number): number {
     return Math.min(Math.max(v, lo), hi);

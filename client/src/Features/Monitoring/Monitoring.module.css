@@ -161,20 +161,42 @@
 .grid {
     display: grid;
     grid-template-columns: 260px 1fr;
+    /* One row filling the view height, so each column scrolls on its own. */
+    grid-template-rows: minmax(0, 1fr);
     gap: var(--space-lg);
     flex: 1;
-}
-
-@media (max-width: 768px) {
-    .grid {
-        grid-template-columns: 1fr;
-    }
+    min-height: 0;
 }
 
 .deviceListFull {
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* Right column: the per-device panel scrolls independently of the sidebar. */
+.panelScroll {
+    min-height: 0;
+    overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+    /* Single column: back to one natural flow, the popup scrolls everything. */
+    .container {
+        height: auto;
+    }
+
+    .grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: none;
+    }
+
+    .deviceListFull,
+    .panelScroll {
+        overflow-y: visible;
+    }
 }
 
 .deviceCard {
@@ -1225,6 +1247,85 @@
     color: var(--danger);
 }
 
+/* ── "Fonctions" dropdown (device features: matériel, terminal, logs…) ── */
+
+.actionsMenuWrap {
+    position: relative;
+}
+
+/* The trigger reuses the header-button look but carries a label + chevron. */
+.actionsMenuBtn {
+    width: auto;
+    gap: 6px;
+    padding: 0 10px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.actionsMenuBtnOpen {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.actionsMenuChevron {
+    font-size: 0.7em;
+    opacity: 0.8;
+    transition: transform var(--transition-fast);
+}
+
+.actionsMenuBtnOpen .actionsMenuChevron {
+    transform: rotate(180deg);
+}
+
+.actionsMenu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 20;
+    min-width: 230px;
+    padding: var(--space-xs);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--surface-popup);
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    backdrop-filter: blur(12px);
+}
+
+.actionsMenuItem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-xs) var(--space-sm);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.actionsMenuItem:hover {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.actionsMenuItemIcon {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+
+.actionsMenuItem:hover .actionsMenuItemIcon {
+    color: var(--accent);
+}
+
 /* Update-available button: accent by default so it stands out among the header icons. */
 .iconHeaderUpdate {
     border-color: var(--accent);
@@ -2081,6 +2182,9 @@
     background: var(--accent);
     opacity: 0.8;
     transition: width 0.25s ease;
+    /* Same radius as the track: below 100% the fill's right edge used to be a
+       raw vertical cut (the track's overflow only rounds it at full width). */
+    border-radius: inherit;
 }
 /* Indeterminate sweep shown while the recursive usage is still being computed —
    kept very subtle so it reads as "loading", not as a real bar. */

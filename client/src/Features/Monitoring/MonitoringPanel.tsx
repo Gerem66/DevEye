@@ -1,7 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ws } from '@/api/ws';
+import { useAuth } from '@/auth/AuthProvider';
 import { useDevices } from '@/stores/devices';
 import { acquireMetrics } from '@/stores/metricsSubscription';
+import { requestOpenView } from '@/stores/viewRequest';
 import { openInfo } from '@/Components/InfoPopup';
 import { Dialog } from '@/Components/Dialog';
 import Button from '@/Components/Button';
@@ -20,6 +22,7 @@ import {
 } from 'deveye-types';
 import { HardwareInfo } from './HardwareInfo';
 import { Connections } from './Connections';
+import { DeviceActionsMenu, type DeviceAction } from './DeviceActionsMenu';
 import { PrivilegeInfo } from './PrivilegeInfo';
 import { OpenPorts } from './OpenPorts';
 import { ConfigDialog } from './ConfigDialog';
@@ -51,7 +54,8 @@ import {
 import styles from './Monitoring.module.css';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_SNAPSHOT_INTERVAL_S = 300;
+/** Mirrors the server's default snapshot cadence (10 min). */
+const DEFAULT_SNAPSHOT_INTERVAL_S = 600;
 /** Graphs shown before "Afficher plus" (≈ 2 rows at 3 columns on a wide panel). */
 const COLLAPSED_GRAPHS = 6;
 
@@ -222,6 +226,7 @@ export interface MonitoringPanelProps {
  * its metric subscription, scoped to `deviceId`.
  */
 export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
+    const { user } = useAuth();
     const { devices: baseDevices, loading, refresh } = useDevices();
     const [override, setOverride] = useState<{ online?: boolean; report?: DeviceReport | null }>({});
     const [configOpen, setConfigOpen] = useState(false);
@@ -862,6 +867,30 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         );
     }
 
+    // Device features gathered in one labelled dropdown (icon + text) instead of
+    // a row of bare icon buttons. Online-only features simply don't appear when
+    // the agent is offline; only refresh/update stay as direct header buttons.
+    const deviceActions: DeviceAction[] = [
+        { icon: 'icon-cpu', label: 'Matériel & agent', onClick: showHardwareInfo },
+        ...(!archived
+            ? [{ icon: 'icon-settings', label: 'Configurer la collecte', onClick: () => setConfigOpen(true) }]
+            : []),
+        ...(online && !archived
+            ? [
+                  { icon: 'icon-database', label: 'Mises à jour système', onClick: () => setPackagesOpen(true) },
+                  { icon: 'icon-folder', label: 'Explorateur de fichiers', onClick: () => setFilesOpen(true) },
+                  { icon: 'icon-terminal', label: 'Terminal distant', onClick: () => setTerminalOpen(true) },
+                  { icon: 'icon-logs', label: 'Logs de l’appareil', onClick: () => setLogsOpen(true) },
+                  { icon: 'icon-power', label: 'Commandes système', onClick: () => setPowerOpen(true) }
+              ]
+            : []),
+        // Jump to the fleet-management page (revoke, agent stop/restart, autostart…)
+        // without hunting for it in the navbar. Admin-only, like the page itself.
+        ...(user?.role === 'admin'
+            ? [{ icon: 'icon-server', label: 'Gérer les appareils', onClick: () => requestOpenView('clients') }]
+            : [])
+    ];
+
     return (
         <div className={styles.metricsPanel}>
             <div className={styles.metricsPanelHeader}>
@@ -883,63 +912,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                             />
                         </button>
                     )}
-                    <button className={styles.iconHeaderBtn} onClick={showHardwareInfo} title='Matériel & agent'>
-                        <span className='icon icon-cpu' />
-                    </button>
-                    {!archived && (
-                        <button
-                            className={styles.iconHeaderBtn}
-                            onClick={() => setConfigOpen(true)}
-                            title='Configurer la collecte'
-                        >
-                            <span className='icon icon-settings' />
-                        </button>
-                    )}
-                    {online && !archived && (
-                        <button
-                            className={styles.iconHeaderBtn}
-                            onClick={() => setPackagesOpen(true)}
-                            title='Mises à jour système'
-                        >
-                            <span className='icon icon-database' />
-                        </button>
-                    )}
-                    {online && !archived && (
-                        <button
-                            className={styles.iconHeaderBtn}
-                            onClick={() => setFilesOpen(true)}
-                            title='Explorateur de fichiers'
-                        >
-                            <span className='icon icon-folder' />
-                        </button>
-                    )}
-                    {online && !archived && (
-                        <button
-                            className={styles.iconHeaderBtn}
-                            onClick={() => setTerminalOpen(true)}
-                            title='Terminal distant'
-                        >
-                            <span className='icon icon-terminal' />
-                        </button>
-                    )}
-                    {online && !archived && (
-                        <button
-                            className={styles.iconHeaderBtn}
-                            onClick={() => setLogsOpen(true)}
-                            title='Logs de l’appareil'
-                        >
-                            <span className='icon icon-logs' />
-                        </button>
-                    )}
-                    {online && !archived && (
-                        <button
-                            className={styles.iconHeaderBtn}
-                            onClick={() => setPowerOpen(true)}
-                            title='Commandes système'
-                        >
-                            <span className='icon icon-power' />
-                        </button>
-                    )}
+                    <DeviceActionsMenu actions={deviceActions} />
                     {online && !archived && (
                         <button
                             className={styles.iconHeaderBtn}
@@ -1009,6 +982,58 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 zoomPresets={ZOOM_PRESETS}
                 onSpanChange={setSpanMs}
             />
+
+            {/* Snapshot footprint + keep/delete — right under the timeline: these
+                actions target the whole focused snapshot/zone, not just processes. */}
+            <div className={styles.snapshotBar}>
+                <span className={styles.snapshotUsage} title='Espace occupé en base par les snapshots de cet appareil'>
+                    <span className='icon icon-server' />
+                    {storage
+                        ? `${storage.snapshots} snapshot${storage.snapshots > 1 ? 's' : ''} · ≈ ${formatBytesFr(storage.bytes)} en base`
+                        : 'Calcul de l’espace…'}
+                </span>
+                <div className={styles.snapshotActions}>
+                    {pinTarget && pinTarget.count > 0 && (
+                        <button
+                            type='button'
+                            className={`${styles.snapshotPinBtn} ${allPinned ? styles.snapshotPinBtnActive : ''}`}
+                            onClick={() => void setPinned(!allPinned)}
+                            disabled={pinning}
+                            title={
+                                allPinned
+                                    ? 'Lever la conservation : le(s) snapshot(s) pourront de nouveau être nettoyés'
+                                    : 'Conserver indéfiniment : ce(s) snapshot(s) ignore(nt) le nettoyage automatique'
+                            }
+                        >
+                            <span className={`icon ${allPinned ? 'icon-star' : 'icon-star-outline'}`} />
+                            {pinTarget.count > 1
+                                ? allPinned
+                                    ? `Ne plus conserver (${pinTarget.count})`
+                                    : `Conserver la zone (${pinTarget.count})`
+                                : allPinned
+                                  ? 'Ne plus conserver'
+                                  : 'Conserver'}
+                        </button>
+                    )}
+                    {deleteTarget && (deleteTarget.kind === 'snapshot' || deleteTarget.count > 0) && (
+                        <button
+                            type='button'
+                            className={styles.snapshotDeleteBtn}
+                            onClick={() => setDeleteOpen(true)}
+                            title={
+                                deleteTarget.kind === 'snapshot'
+                                    ? 'Supprimer le snapshot sélectionné'
+                                    : 'Supprimer les snapshots de la zone sélectionnée'
+                            }
+                        >
+                            <span className='icon icon-trash' />
+                            {deleteTarget.kind === 'snapshot'
+                                ? 'Supprimer ce snapshot'
+                                : `Supprimer la zone (${deleteTarget.count})`}
+                        </button>
+                    )}
+                </div>
+            </div>
 
             {/* Graphs */}
             <div className={styles.graphsSpan} title='Durée couverte par les graphiques'>
@@ -1170,60 +1195,6 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                         </span>
                     )}
                 </h4>
-
-                {/* Snapshot footprint + per-snapshot / per-zone deletion */}
-                <div className={styles.snapshotBar}>
-                    <span
-                        className={styles.snapshotUsage}
-                        title='Espace occupé en base par les snapshots de cet appareil'
-                    >
-                        <span className='icon icon-server' />
-                        {storage
-                            ? `${storage.snapshots} snapshot${storage.snapshots > 1 ? 's' : ''} · ≈ ${formatBytesFr(storage.bytes)} en base`
-                            : 'Calcul de l’espace…'}
-                    </span>
-                    <div className={styles.snapshotActions}>
-                        {pinTarget && pinTarget.count > 0 && (
-                            <button
-                                type='button'
-                                className={`${styles.snapshotPinBtn} ${allPinned ? styles.snapshotPinBtnActive : ''}`}
-                                onClick={() => void setPinned(!allPinned)}
-                                disabled={pinning}
-                                title={
-                                    allPinned
-                                        ? 'Lever la conservation : le(s) snapshot(s) pourront de nouveau être nettoyés'
-                                        : 'Conserver indéfiniment : ce(s) snapshot(s) ignore(nt) le nettoyage automatique'
-                                }
-                            >
-                                <span className={`icon ${allPinned ? 'icon-star' : 'icon-star-outline'}`} />
-                                {pinTarget.count > 1
-                                    ? allPinned
-                                        ? `Ne plus conserver (${pinTarget.count})`
-                                        : `Conserver la zone (${pinTarget.count})`
-                                    : allPinned
-                                      ? 'Ne plus conserver'
-                                      : 'Conserver'}
-                            </button>
-                        )}
-                        {deleteTarget && (deleteTarget.kind === 'snapshot' || deleteTarget.count > 0) && (
-                            <button
-                                type='button'
-                                className={styles.snapshotDeleteBtn}
-                                onClick={() => setDeleteOpen(true)}
-                                title={
-                                    deleteTarget.kind === 'snapshot'
-                                        ? 'Supprimer le snapshot sélectionné'
-                                        : 'Supprimer les snapshots de la zone sélectionnée'
-                                }
-                            >
-                                <span className='icon icon-trash' />
-                                {deleteTarget.kind === 'snapshot'
-                                    ? 'Supprimer ce snapshot'
-                                    : `Supprimer la zone (${deleteTarget.count})`}
-                            </button>
-                        )}
-                    </div>
-                </div>
 
                 {procSample && procSample.processes.length > 0 ? (
                     <>

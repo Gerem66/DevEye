@@ -42,6 +42,11 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
     const [renameTarget, setRenameTarget] = useState<Target>(null);
     const [renameValue, setRenameValue] = useState('');
     const [renaming, setRenaming] = useState(false);
+    // Agent process lifecycle: stopping goes through a confirmation dialog (the
+    // consequences depend on autostart); restarting runs directly with a spinner.
+    const [stopTarget, setStopTarget] = useState<Target>(null);
+    const [stopping, setStopping] = useState(false);
+    const [restartingId, setRestartingId] = useState<string | null>(null);
 
     const confirmDevice = async (id: string) => {
         setActionError(null);
@@ -170,6 +175,38 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
             'Rétrogradation impossible.'
         );
 
+    /** Stop the agent process (confirmed via the explanatory dialog). */
+    const confirmStopAgent = async () => {
+        if (!stopTarget) return;
+        setActionError(null);
+        setStopping(true);
+        try {
+            await ws.send('device.agentLifecycle', { deviceId: stopTarget.id, action: 'stop' });
+            setStopTarget(null);
+            // Presence pushes flip the card, but refresh anyway for the rest.
+            await settle(2000);
+        } catch (e) {
+            setActionError(e instanceof Error ? e.message : 'Interruption impossible.');
+        } finally {
+            setStopping(false);
+        }
+    };
+
+    /** Cleanly restart the agent process (offline for a few seconds, then back). */
+    const restartAgent = async (id: string) => {
+        setActionError(null);
+        setRestartingId(id);
+        try {
+            await ws.send('device.agentLifecycle', { deviceId: id, action: 'restart' });
+            // Keep the spinner through the offline→online round trip.
+            await settle(4000);
+        } catch (e) {
+            setActionError(e instanceof Error ? e.message : 'Redémarrage impossible.');
+        } finally {
+            setRestartingId(null);
+        }
+    };
+
     const openRename = (id: string, current: string) => {
         setActionError(null);
         setRenameValue(current);
@@ -255,6 +292,12 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
         renameValue,
         setRenameValue,
         renaming,
+        stopTarget,
+        setStopTarget,
+        stopping,
+        confirmStopAgent,
+        restartAgent,
+        restartingId,
         confirmDevice,
         revokeDevice,
         reactivateDevice,

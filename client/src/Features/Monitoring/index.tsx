@@ -185,8 +185,13 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                         })}
                     </div>
 
-                    {/* Right: per-device panel (shared with the home device popup) */}
-                    {selectedId && <MonitoringPanel deviceId={selectedId} />}
+                    {/* Right: per-device panel (shared with the home device popup),
+                        wrapped so it scrolls independently of the device list. */}
+                    {selectedId && (
+                        <div className={styles.panelScroll}>
+                            <MonitoringPanel deviceId={selectedId} />
+                        </div>
+                    )}
                 </div>
             )}
         </div>

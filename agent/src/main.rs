@@ -78,7 +78,7 @@ enum Command {
         once: bool,
         /// Initial seconds between metric samples (bootstrap only; the real
         /// cadence is set per-device from the DevEye UI and pushed on connect).
-        #[arg(long, default_value_t = 300)]
+        #[arg(long, default_value_t = 30)]
         interval: u64,
         /// Run in the background and write a PID file.
         #[arg(long)]
@@ -247,6 +247,23 @@ async fn run(
     update::cleanup_after_update();
 
     let config = Config::load().context("loading config (run `link` first)")?;
+
+    // Single-instance guard: this enrollment already has a live monitoring loop
+    // (terminal run + installed service, stale --detach, a second manual start…).
+    // Duplicate instances share one device token and each streams its own
+    // snapshots — the server sees doubled data with *no error anywhere*, so the
+    // only safe answer is to refuse to start. (`--once` stays allowed: it's a
+    // one-shot connectivity probe, and the server throttles duplicates anyway.)
+    if !once {
+        if let Some(existing) = state::read_running() {
+            anyhow::bail!(
+                "un agent tourne déjà pour cet enrôlement (pid {}, utilisateur {}) ; \
+                 arrêtez-le d'abord (`deveye-agent stop`, ou le service installé) avant d'en lancer un autre",
+                existing.pid,
+                existing.user
+            );
+        }
+    }
 
     if detach {
         if once {

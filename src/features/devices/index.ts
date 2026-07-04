@@ -1,4 +1,5 @@
 import type { FeatureDefinition } from '../_define';
+import { deviceAgentLifecycleFeature } from './agentLifecycle';
 import { deviceUpdateAgentFeature } from './agentUpdate';
 import {
     deviceCancelDeleteFeature,
@@ -35,6 +36,7 @@ import { deviceDropPrivilegesFeature, deviceElevateFeature, deviceSetAutostartFe
  * The device (Appareils + Monitoring) feature handlers, grouped by concern:
  * - `lifecycle`  — enrollment/status (list, confirm, revoke, rename, delete…)
  * - `agentUpdate` — signed self-update push
+ * - `agentLifecycle` — stop / clean restart of the agent process
  * - `service`    — persistence/privileges (autostart, elevate, drop)
  * - `packages`   — update-manager detection + live upgrades
  * - `power`      — system power actions (shutdown, reboot, suspend, lock…)
@@ -57,6 +59,7 @@ export const deviceFeatures: FeatureDefinition<string, any, any>[] = [
     deviceListPackagesFeature,
     deviceUpgradePackagesFeature,
     devicePowerFeature,
+    deviceAgentLifecycleFeature,
     deviceLogSourcesFeature,
     deviceLogQueryFeature,
     deviceTermOpenFeature,

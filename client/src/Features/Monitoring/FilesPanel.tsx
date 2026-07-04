@@ -79,6 +79,12 @@ interface SearchForm {
 }
 const EMPTY_SEARCH: SearchForm = { query: '', field: 'name', regex: false, since: '', until: '', minMb: '', maxMb: '' };
 
+/** Persisted "show hidden files" preference (shared across devices/sessions). */
+const SHOW_HIDDEN_KEY = 'deveye.files.showHidden';
+
+/** Dotfile convention; Windows hidden attributes aren't reported by the agent. */
+const isHidden = (name: string) => name.startsWith('.');
+
 /**
  * Graphical file explorer for one device, in the spirit of ncdu: browse the
  * filesystem, visualise recursive disk usage as bars to find what to clean, run
@@ -104,6 +110,7 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
     const [confirmDelete, setConfirmDelete] = useState<FileEntry | null>(null);
     const [nameDialog, setNameDialog] = useState<{ mode: 'mkdir' | 'rename'; entry?: FileEntry } | null>(null);
     const [nameValue, setNameValue] = useState('');
+    const [showHidden, setShowHidden] = useState(() => localStorage.getItem(SHOW_HIDDEN_KEY) === '1');
 
     const [downloading, setDownloading] = useState<string | null>(null);
     const [uploading, setUploading] = useState<{ name: string; pct: number } | null>(null);
@@ -116,6 +123,8 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
     const usageCache = useRef<Map<string, Map<string, FileUsageEntry>>>(new Map());
     const searchOp = useRef('');
     const mutateOp = useRef('');
+    // Path of the folder the in-flight mkdir creates (opened once confirmed).
+    const mkdirTarget = useRef<string | null>(null);
     const downloadOp = useRef('');
     const uploadOp = useRef('');
     const dlBuf = useRef<Uint8Array[]>([]);
@@ -215,7 +224,12 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                 setAnalyzing(false);
                 if (!d.error) {
                     const map = new Map(d.entries.map((e) => [e.name, e]));
-                    usageCache.current.set(usagePath.current, map);
+                    // Cache only complete passes: a partial one (walk budget hit)
+                    // holds truncated sizes and must be recomputed on the next visit
+                    // instead of being served as truth forever.
+                    if (!d.entries.some((e) => e.partial)) {
+                        usageCache.current.set(usagePath.current, map);
+                    }
                     setUsage(map);
                 }
             } else if (msg.command === DEVICE_FILES_MATCHES_EVENT && msg.payload.ok) {
@@ -231,7 +245,9 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                 if (d.opId === mutateOp.current) {
                     if (d.ok) {
                         invalidateUsage(path); // sizes changed → drop this dir + ancestors
-                        navigate(path);
+                        // A successful mkdir opens the new folder directly.
+                        navigate(mkdirTarget.current ?? path);
+                        mkdirTarget.current = null;
                     } else setError(d.error ?? 'Opération échouée');
                 } else if (d.opId === uploadOp.current) {
                     setUploading(null);
@@ -323,6 +339,8 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
         (op: 'delete' | 'mkdir' | 'rename', target: string, dest?: string) => {
             const opId = crypto.randomUUID();
             mutateOp.current = opId;
+            // A created folder is opened straight away when the op succeeds.
+            mkdirTarget.current = op === 'mkdir' ? target : null;
             setError(null);
             void ws
                 .send('device.filesMutate', { deviceId, opId, op, path: target, dest })
@@ -330,6 +348,13 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
         },
         [deviceId]
     );
+
+    const toggleHidden = useCallback(() => {
+        setShowHidden((v) => {
+            localStorage.setItem(SHOW_HIDDEN_KEY, v ? '0' : '1');
+            return !v;
+        });
+    }, []);
 
     const runSearch = useCallback(() => {
         const filter: FileSearchFilter = {};
@@ -351,17 +376,19 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
         });
     }, [deviceId, path, form]);
 
-    // Entries with their display size (recursive when analysed) + the max for bars.
+    // Visible entries (dotfiles per the toggle) with their display size
+    // (recursive when analysed) + the max for bars and the hidden count.
     const rows = useMemo(() => {
         const entries = listing?.entries ?? [];
-        const withSize = entries.map((e) => {
+        const visible = showHidden ? entries : entries.filter((e) => !isHidden(e.name));
+        const withSize = visible.map((e) => {
             const u = usage?.get(e.name);
             return { entry: e, size: u ? u.totalSize : e.size, partial: u?.partial ?? false };
         });
         if (usage) withSize.sort((a, b) => b.size - a.size);
         const max = withSize.reduce((m, r) => Math.max(m, r.size), 0) || 1;
-        return { withSize, max };
-    }, [listing, usage]);
+        return { withSize, max, hiddenCount: entries.length - visible.length };
+    }, [listing, usage, showHidden]);
 
     // True while the recursive-usage pass for the current directory is still running
     // (drives the indeterminate bars). Cleared once the usage result lands.
@@ -443,6 +470,18 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                 </button>
                 <button
                     type='button'
+                    className={`${styles.logToggle} ${showHidden ? styles.logToggleOn : ''}`}
+                    onClick={toggleHidden}
+                    title={
+                        showHidden
+                            ? 'Masquer les fichiers cachés (noms commençant par un point)'
+                            : `Afficher les fichiers cachés${rows.hiddenCount > 0 ? ` (${rows.hiddenCount} ici)` : ''}`
+                    }
+                >
+                    <span className={`icon ${showHidden ? 'icon-eye-open' : 'icon-eye-close'}`} /> Cachés
+                </button>
+                <button
+                    type='button'
                     className={styles.logToggle}
                     onClick={() => {
                         setNameValue('');
@@ -518,7 +557,11 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                         </div>
                     )}
                     {rows.withSize.length === 0 && !loading ? (
-                        <p className={styles.logHint}>Dossier vide.</p>
+                        <p className={styles.logHint}>
+                            {rows.hiddenCount > 0
+                                ? `${rows.hiddenCount} élément${rows.hiddenCount > 1 ? 's' : ''} caché${rows.hiddenCount > 1 ? 's' : ''} — activez « Cachés » pour les afficher.`
+                                : 'Dossier vide.'}
+                        </p>
                     ) : (
                         rows.withSize.map(({ entry, size, partial }) => {
                             const isDir = entry.kind === 'dir';

@@ -166,6 +166,11 @@ pub fn cleanup_after_update() {
 /// - **Unsupervised** (foreground/detached) **or Windows** (Task Scheduler won't
 ///   relaunch a task that exits): spawn a detached successor ourselves, then exit.
 pub fn restart_and_exit(exe: &Path) -> ! {
+    // Hand off the single-instance lock: the successor (spawned below, or
+    // relaunched by the service manager) checks the runtime-state file on
+    // startup and must not find one still pointing at this exiting process.
+    crate::state::clear();
+    let _ = std::fs::remove_file(Config::pid_path());
     // On Windows nothing relaunches us on exit; on Unix a service manager does
     // (when we're managed). Otherwise we respawn ourselves.
     let respawn_ourselves = cfg!(windows) || !crate::managed();
@@ -183,6 +188,12 @@ pub fn restart_and_exit(exe: &Path) -> ! {
 /// handoff (where a supervised agent hands off to a standalone copy before the
 /// service that supervises it is removed).
 pub(crate) fn relaunch_detached(exe: &Path) -> Result<()> {
+    // Hand off the single-instance lock before spawning (see restart_and_exit;
+    // also called directly for the autostart-disable handoff, where *we* keep
+    // running until the service teardown kills us — the successor must not see
+    // our runtime-state file and refuse to start).
+    crate::state::clear();
+    let _ = std::fs::remove_file(Config::pid_path());
     let log = std::fs::File::create(Config::log_path()).context("creating log file")?;
     let log_err = log.try_clone()?;
 

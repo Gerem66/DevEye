@@ -10,11 +10,11 @@ export function MonitoringInfo() {
             <h4>Deux cadences de collecte</h4>
             <ul>
                 <li>
-                    <b>Métriques (~10 s)</b> : un relevé léger (CPU, RAM, disque, réseau, charge, température, GPU,
+                    <b>Métriques (~30 s)</b> : un relevé léger (CPU, RAM, disque, réseau, charge, température, GPU,
                     utilisateurs, connexions) qui alimente les graphes en haute résolution.
                 </li>
                 <li>
-                    <b>Snapshots (~5 min)</b> : la liste des processus (selon le mode choisi) ainsi que le nombre de
+                    <b>Snapshots (~10 min)</b> : la liste des processus (selon le mode choisi) ainsi que le nombre de
                     processus et les E/S disque. Ce sont les repères cliquables de la frise.
                 </li>
                 <li>

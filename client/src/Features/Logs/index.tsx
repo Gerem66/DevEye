@@ -118,6 +118,9 @@ function FeatureLogs() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [expanded, setExpanded] = useState<number | null>(null);
+    // The filter panel eats a lot of vertical space — folded by default so the
+    // log table gets the room; filters stay applied while it's closed.
+    const [searchOpen, setSearchOpen] = useState(false);
 
     // Identifies the active query; a stale in-flight load (older token) is
     // discarded when its response arrives so fast filter changes never race.
@@ -211,6 +214,15 @@ function FeatureLogs() {
                 </div>
                 <div className={styles.headerActions}>
                     <Button
+                        icon='details'
+                        variant='secondary'
+                        aria-expanded={searchOpen}
+                        className={searchOpen ? styles.searchToggleOn : undefined}
+                        onClick={() => setSearchOpen((v) => !v)}
+                    >
+                        Recherche{activeCount > 0 ? ` (${activeCount})` : ''}
+                    </Button>
+                    <Button
                         icon='refresh'
                         variant='secondary'
                         onClick={() => {
@@ -228,102 +240,113 @@ function FeatureLogs() {
                 </div>
             </header>
 
-            <div className={styles.filters}>
-                <div className={`${styles.filterField} ${styles.searchField}`}>
-                    <label className={styles.filterLabel}>Recherche</label>
-                    <TextInput
-                        placeholder='Description, action, IP…'
-                        value={filter.search}
-                        onChange={(e) => set('search', e.target.value)}
-                    />
-                </div>
+            <div
+                className={`${styles.filtersWrap} ${searchOpen ? styles.filtersWrapOpen : ''}`}
+                aria-hidden={!searchOpen}
+            >
+                <div className={styles.filtersInner}>
+                    <div className={styles.filters}>
+                        <div className={`${styles.filterField} ${styles.searchField}`}>
+                            <label className={styles.filterLabel}>Recherche</label>
+                            <TextInput
+                                placeholder='Description, action, IP…'
+                                value={filter.search}
+                                onChange={(e) => set('search', e.target.value)}
+                            />
+                        </div>
 
-                <div className={styles.filterField}>
-                    <label className={styles.filterLabel}>Utilisateur</label>
-                    <SelectInput value={filter.uid} onChange={(e) => set('uid', e.target.value)}>
-                        <option value=''>Tous</option>
-                        {facets?.users.map((u) => (
-                            <option key={u.uid} value={String(u.uid)}>
-                                {userLabel(u.uid, u.username)} ({u.count})
-                            </option>
-                        ))}
-                    </SelectInput>
-                </div>
+                        <div className={styles.filterField}>
+                            <label className={styles.filterLabel}>Utilisateur</label>
+                            <SelectInput value={filter.uid} onChange={(e) => set('uid', e.target.value)}>
+                                <option value=''>Tous</option>
+                                {facets?.users.map((u) => (
+                                    <option key={u.uid} value={String(u.uid)}>
+                                        {userLabel(u.uid, u.username)} ({u.count})
+                                    </option>
+                                ))}
+                            </SelectInput>
+                        </div>
 
-                <div className={styles.filterField}>
-                    <label className={styles.filterLabel}>Canal</label>
-                    <SelectInput value={filter.source} onChange={(e) => set('source', e.target.value)}>
-                        <option value=''>Tous</option>
-                        {facets?.sources.map((s) => (
-                            <option key={s.value} value={s.value}>
-                                {SOURCE_LABELS[s.value as LogSource] ?? s.value} ({s.count})
-                            </option>
-                        ))}
-                    </SelectInput>
-                </div>
+                        <div className={styles.filterField}>
+                            <label className={styles.filterLabel}>Canal</label>
+                            <SelectInput value={filter.source} onChange={(e) => set('source', e.target.value)}>
+                                <option value=''>Tous</option>
+                                {facets?.sources.map((s) => (
+                                    <option key={s.value} value={s.value}>
+                                        {SOURCE_LABELS[s.value as LogSource] ?? s.value} ({s.count})
+                                    </option>
+                                ))}
+                            </SelectInput>
+                        </div>
 
-                <div className={styles.filterField}>
-                    <label className={styles.filterLabel}>Fonctionnalité</label>
-                    <SelectInput value={filter.category} onChange={(e) => set('category', e.target.value)}>
-                        <option value=''>Toutes</option>
-                        {facets?.categories.map((c) => (
-                            <option key={c.value} value={c.value}>
-                                {c.value} ({c.count})
-                            </option>
-                        ))}
-                    </SelectInput>
-                </div>
+                        <div className={styles.filterField}>
+                            <label className={styles.filterLabel}>Fonctionnalité</label>
+                            <SelectInput value={filter.category} onChange={(e) => set('category', e.target.value)}>
+                                <option value=''>Toutes</option>
+                                {facets?.categories.map((c) => (
+                                    <option key={c.value} value={c.value}>
+                                        {c.value} ({c.count})
+                                    </option>
+                                ))}
+                            </SelectInput>
+                        </div>
 
-                <div className={styles.filterField}>
-                    <label className={styles.filterLabel}>Action</label>
-                    <SelectInput value={filter.action} onChange={(e) => set('action', e.target.value)}>
-                        <option value=''>Toutes</option>
-                        {facets?.actions.map((a) => (
-                            <option key={a.value} value={a.value}>
-                                {a.value} ({a.count})
-                            </option>
-                        ))}
-                    </SelectInput>
-                </div>
+                        <div className={styles.filterField}>
+                            <label className={styles.filterLabel}>Action</label>
+                            <SelectInput value={filter.action} onChange={(e) => set('action', e.target.value)}>
+                                <option value=''>Toutes</option>
+                                {facets?.actions.map((a) => (
+                                    <option key={a.value} value={a.value}>
+                                        {a.value} ({a.count})
+                                    </option>
+                                ))}
+                            </SelectInput>
+                        </div>
 
-                <div className={styles.filterField}>
-                    <label className={styles.filterLabel}>Importance min.</label>
-                    <SelectInput
-                        value={filter.levelMin}
-                        onChange={(e) => set('levelMin', e.target.value as LogLevelName | '')}
-                    >
-                        <option value=''>Toutes</option>
-                        {LOG_LEVEL_NAMES.map((lvl) => (
-                            <option key={lvl} value={lvl}>
-                                {LEVEL_LABELS[lvl]}
-                            </option>
-                        ))}
-                    </SelectInput>
-                </div>
+                        <div className={styles.filterField}>
+                            <label className={styles.filterLabel}>Importance min.</label>
+                            <SelectInput
+                                value={filter.levelMin}
+                                onChange={(e) => set('levelMin', e.target.value as LogLevelName | '')}
+                            >
+                                <option value=''>Toutes</option>
+                                {LOG_LEVEL_NAMES.map((lvl) => (
+                                    <option key={lvl} value={lvl}>
+                                        {LEVEL_LABELS[lvl]}
+                                    </option>
+                                ))}
+                            </SelectInput>
+                        </div>
 
-                <div className={styles.filterField}>
-                    <label className={styles.filterLabel}>IP</label>
-                    <TextInput placeholder='Adresse IP' value={filter.ip} onChange={(e) => set('ip', e.target.value)} />
-                </div>
+                        <div className={styles.filterField}>
+                            <label className={styles.filterLabel}>IP</label>
+                            <TextInput
+                                placeholder='Adresse IP'
+                                value={filter.ip}
+                                onChange={(e) => set('ip', e.target.value)}
+                            />
+                        </div>
 
-                <div className={styles.filterField}>
-                    <label className={styles.filterLabel}>Du</label>
-                    <input
-                        type='datetime-local'
-                        className={styles.dateInput}
-                        value={filter.dateFrom}
-                        onChange={(e) => set('dateFrom', e.target.value)}
-                    />
-                </div>
+                        <div className={styles.filterField}>
+                            <label className={styles.filterLabel}>Du</label>
+                            <input
+                                type='datetime-local'
+                                className={styles.dateInput}
+                                value={filter.dateFrom}
+                                onChange={(e) => set('dateFrom', e.target.value)}
+                            />
+                        </div>
 
-                <div className={styles.filterField}>
-                    <label className={styles.filterLabel}>Au</label>
-                    <input
-                        type='datetime-local'
-                        className={styles.dateInput}
-                        value={filter.dateTo}
-                        onChange={(e) => set('dateTo', e.target.value)}
-                    />
+                        <div className={styles.filterField}>
+                            <label className={styles.filterLabel}>Au</label>
+                            <input
+                                type='datetime-local'
+                                className={styles.dateInput}
+                                value={filter.dateTo}
+                                onChange={(e) => set('dateTo', e.target.value)}
+                            />
+                        </div>
+                    </div>
                 </div>
             </div>
 

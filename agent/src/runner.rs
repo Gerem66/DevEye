@@ -33,6 +33,15 @@ const MAX_BATCH: usize = 100;
 const QUEUE_CAPACITY: usize = 2880;
 const MIN_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(60);
+/// Pause after a *clean* close (server restart, network blip) before dialing
+/// again. Without it a server that accepts-then-closes puts the agent in a
+/// tight connect loop, and each connect used to fire a full snapshot +
+/// process sample — flooding the server with one snapshot per second.
+const RECONNECT_DELAY: Duration = Duration::from_secs(2);
+/// Connect-time full snapshot + process sample are skipped when the previous
+/// ones are fresher than this: reconnect loops must not multiply snapshots.
+/// The server can still force one at any time via `agent.collect`.
+const MIN_CONNECT_SNAPSHOT_GAP: Duration = Duration::from_secs(60);
 /// Retry delay after the server *rejects* us at the handshake (revoked, unknown
 /// or not-yet-approved device). Much slower than a normal reconnect: a rejection
 /// won't clear on its own, so we back off to roughly hourly to avoid hammering
@@ -40,8 +49,9 @@ const MAX_BACKOFF: Duration = Duration::from_secs(60);
 const REJECTED_RETRY: Duration = Duration::from_secs(60 * 60);
 /// How often to send the OS/security report.
 const REPORT_INTERVAL: Duration = Duration::from_secs(60 * 60);
-/// Defaults used until the server pushes `agent.config` (≈immediately on connect).
-const DEFAULT_SNAPSHOT_INTERVAL: Duration = Duration::from_secs(300);
+/// Defaults used until the server pushes `agent.config` (≈immediately on
+/// connect). Mirror the server defaults: 30 s metrics / 10 min snapshots.
+const DEFAULT_SNAPSHOT_INTERVAL: Duration = Duration::from_secs(600);
 const DEFAULT_CAPTURE: &str = "all";
 
 /// Tunables for a run, set from the CLI.
@@ -74,6 +84,9 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
     let mut collector = Collector::new();
     let mut queue: VecDeque<MetricSnapshot> = VecDeque::with_capacity(QUEUE_CAPACITY);
     let mut backoff = MIN_BACKOFF;
+    // When the last connect-time full snapshot + processes were sent, kept across
+    // sessions so reconnect loops can't multiply snapshots (see the gap constant).
+    let mut last_full_snapshot: Option<Instant> = None;
 
     info!(device_id = %device_id, metric_interval_secs = opts.interval.as_secs(), "DevEye agent starting");
 
@@ -85,12 +98,17 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
             opts.interval,
             &mut collector,
             &mut queue,
+            &mut last_full_snapshot,
         )
         .await
         {
             Ok(SessionOutcome::Established) => {
-                info!("connection closed by server, reconnecting");
+                info!(
+                    delay_secs = RECONNECT_DELAY.as_secs(),
+                    "connection closed by server, reconnecting"
+                );
                 backoff = MIN_BACKOFF;
+                tokio::time::sleep(RECONNECT_DELAY).await;
             }
             Ok(SessionOutcome::Rejected) => {
                 warn!(
@@ -98,6 +116,15 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
                     "server rejected this agent (revoked, removed or not yet approved); retrying later"
                 );
                 tokio::time::sleep(REJECTED_RETRY).await;
+            }
+            Ok(SessionOutcome::Stop) => {
+                info!("stop ordered by server; exiting (the service manager relaunches a supervised install)");
+                return Ok(());
+            }
+            Ok(SessionOutcome::Restart) => {
+                info!("restart ordered by server; relaunching");
+                let exe = std::env::current_exe().context("locating agent executable")?;
+                crate::update::restart_and_exit(&exe);
             }
             Err(e) => {
                 warn!(error = %e, backoff_secs = backoff.as_secs(), "session error, retrying");
@@ -115,6 +142,12 @@ enum SessionOutcome {
     /// The server closed us at the handshake (auth/authorization refused) before
     /// we ever received config → back off hard (`REJECTED_RETRY`).
     Rejected,
+    /// The server ordered `agent.lifecycle stop` → exit the process. A supervised
+    /// install comes back through its service manager; standalone stays down.
+    Stop,
+    /// The server ordered `agent.lifecycle restart` → exit and come back
+    /// (manager relaunch when managed, self-respawn otherwise).
+    Restart,
 }
 
 /// Connect once, push a report + one full snapshot + processes, then exit.
@@ -160,6 +193,7 @@ async fn stream_session(
     initial_metric_interval: Duration,
     collector: &mut Collector,
     queue: &mut VecDeque<MetricSnapshot>,
+    last_full_snapshot: &mut Option<Instant>,
 ) -> Result<SessionOutcome> {
     let (ws_stream, _) = tokio_tungstenite::connect_async(ws_url)
         .await
@@ -220,11 +254,20 @@ async fn stream_session(
         }
     }
 
-    // On connect: slow-moving report + an immediate full snapshot + processes.
+    // On connect: slow-moving report, then flush anything buffered while offline.
+    // The immediate full snapshot + processes (so a fresh dashboard isn't blank)
+    // is skipped when the last one is recent — a reconnect loop must not mint a
+    // snapshot per connection.
     send_report(&mut sink, device_id).await?;
-    push_bounded(queue, collector.collect_full());
+    let snapshot_due = last_full_snapshot.is_none_or(|t| t.elapsed() >= MIN_CONNECT_SNAPSHOT_GAP);
+    if snapshot_due {
+        push_bounded(queue, collector.collect_full());
+        *last_full_snapshot = Some(Instant::now());
+    }
     flush_queue(&mut sink, device_id, queue).await?;
-    send_processes(&mut sink, device_id, &capture).await?;
+    if snapshot_due {
+        send_processes(&mut sink, device_id, &capture).await?;
+    }
 
     let mut metric_ticker = new_ticker(metric_interval);
     let mut snapshot_ticker = new_ticker(snapshot_interval);
@@ -276,6 +319,7 @@ async fn stream_session(
             }
             _ = snapshot_ticker.tick() => {
                 push_bounded(queue, collector.collect_full());
+                *last_full_snapshot = Some(Instant::now());
                 flush_queue(&mut sink, device_id, queue).await?;
                 send_processes(&mut sink, device_id, &capture).await?;
             }
@@ -289,6 +333,7 @@ async fn stream_session(
                             // "Collect now" (user refresh): full snapshot + processes + report.
                             Ok(ServerMessage::Collect {}) => {
                                 push_bounded(queue, collector.collect_full());
+                                *last_full_snapshot = Some(Instant::now());
                                 flush_queue(&mut sink, device_id, queue).await?;
                                 send_processes(&mut sink, device_id, &capture).await?;
                                 send_report(&mut sink, device_id).await?;
@@ -336,6 +381,18 @@ async fn stream_session(
                                 // Only reached if the update was refused/failed → keep
                                 // running on the current binary.
                             }
+                            // Stop / clean restart of this process (from the UI).
+                            Ok(ServerMessage::Lifecycle { action }) => match action.as_str() {
+                                "stop" => {
+                                    info!("lifecycle: stop ordered by server");
+                                    return Ok(SessionOutcome::Stop);
+                                }
+                                "restart" => {
+                                    info!("lifecycle: restart ordered by server");
+                                    return Ok(SessionOutcome::Restart);
+                                }
+                                other => warn!(action = %other, "unknown lifecycle action ignored"),
+                            },
                             // Persistence/privilege change (install autostart, elevate…).
                             Ok(ServerMessage::Service { action }) => {
                                 commands::handle_service(&mut sink, device_id, &action).await;
