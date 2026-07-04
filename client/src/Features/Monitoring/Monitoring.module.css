@@ -2182,6 +2182,9 @@
     background: var(--accent);
     opacity: 0.8;
     transition: width 0.25s ease;
+    /* Same radius as the track: below 100% the fill's right edge used to be a
+       raw vertical cut (the track's overflow only rounds it at full width). */
+    border-radius: inherit;
 }
 /* Indeterminate sweep shown while the recursive usage is still being computed —
    kept very subtle so it reads as "loading", not as a real bar. */
