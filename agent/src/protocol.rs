@@ -806,6 +806,10 @@ pub enum ServerMessage {
     /// Apply all updates of one manager, streaming `pkg.progress` then `pkg.done`.
     #[serde(rename = "pkg.upgrade")]
     PkgUpgrade { manager: String },
+    /// Stop (`stop`) or cleanly restart (`restart`) this agent *process* — not
+    /// the machine. No reply frame: the process exits (and possibly comes back).
+    #[serde(rename = "agent.lifecycle")]
+    Lifecycle { action: String },
     /// Per-device collection config (cadences + capture mode), pushed by the
     /// server on connect and whenever the user changes it in the UI.
     #[serde(rename = "agent.config")]

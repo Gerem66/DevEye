@@ -117,6 +117,15 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
                 );
                 tokio::time::sleep(REJECTED_RETRY).await;
             }
+            Ok(SessionOutcome::Stop) => {
+                info!("stop ordered by server; exiting (the service manager relaunches a supervised install)");
+                return Ok(());
+            }
+            Ok(SessionOutcome::Restart) => {
+                info!("restart ordered by server; relaunching");
+                let exe = std::env::current_exe().context("locating agent executable")?;
+                crate::update::restart_and_exit(&exe);
+            }
             Err(e) => {
                 warn!(error = %e, backoff_secs = backoff.as_secs(), "session error, retrying");
                 tokio::time::sleep(backoff).await;
@@ -133,6 +142,12 @@ enum SessionOutcome {
     /// The server closed us at the handshake (auth/authorization refused) before
     /// we ever received config → back off hard (`REJECTED_RETRY`).
     Rejected,
+    /// The server ordered `agent.lifecycle stop` → exit the process. A supervised
+    /// install comes back through its service manager; standalone stays down.
+    Stop,
+    /// The server ordered `agent.lifecycle restart` → exit and come back
+    /// (manager relaunch when managed, self-respawn otherwise).
+    Restart,
 }
 
 /// Connect once, push a report + one full snapshot + processes, then exit.
@@ -366,6 +381,18 @@ async fn stream_session(
                                 // Only reached if the update was refused/failed → keep
                                 // running on the current binary.
                             }
+                            // Stop / clean restart of this process (from the UI).
+                            Ok(ServerMessage::Lifecycle { action }) => match action.as_str() {
+                                "stop" => {
+                                    info!("lifecycle: stop ordered by server");
+                                    return Ok(SessionOutcome::Stop);
+                                }
+                                "restart" => {
+                                    info!("lifecycle: restart ordered by server");
+                                    return Ok(SessionOutcome::Restart);
+                                }
+                                other => warn!(action = %other, "unknown lifecycle action ignored"),
+                            },
                             // Persistence/privilege change (install autostart, elevate…).
                             Ok(ServerMessage::Service { action }) => {
                                 commands::handle_service(&mut sink, device_id, &action).await;

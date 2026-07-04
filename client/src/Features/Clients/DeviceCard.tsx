@@ -201,6 +201,30 @@ export function DeviceCard({ device, actions }: { device: Device; actions: Devic
                             <span className={`icon ${updating ? `icon-spinner ${styles.spinning}` : 'icon-cloud'}`} />
                         </button>
                     )}
+                    {/* Agent process lifecycle — online only. Restart is offered only
+                        without autostart: supervised, an interrupt already comes back
+                        by itself, so a dedicated restart would be redundant. */}
+                    {device.online && device.status === 'active' && scope === 'none' && (
+                        <button
+                            className={styles.actionBtn}
+                            onClick={() => actions.restartAgent(device.id)}
+                            disabled={actions.restartingId === device.id}
+                            title='Redémarrer l’agent (hors ligne quelques secondes, puis relancé proprement)'
+                        >
+                            <span
+                                className={`icon ${actions.restartingId === device.id ? `icon-spinner ${styles.spinning}` : 'icon-restart'}`}
+                            />
+                        </button>
+                    )}
+                    {device.online && device.status === 'active' && (
+                        <button
+                            className={styles.actionBtn}
+                            onClick={() => actions.setStopTarget({ id: device.id, name: device.name })}
+                            title='Interrompre l’agent'
+                        >
+                            <span className='icon icon-pause' />
+                        </button>
+                    )}
                     {device.status === 'active' && (
                         <button
                             className={`${styles.actionBtn} ${styles.actionDanger}`}

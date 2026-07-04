@@ -36,6 +36,10 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
     );
     const anyUpdating = updatableDevices.some((d) => actions.isUpdating(d.id));
 
+    // The stop-agent dialog's consequences depend on the target's autostart.
+    const stopDevice = actions.stopTarget ? devices.find((d) => d.id === actions.stopTarget?.id) : undefined;
+    const stopSupervised = (stopDevice?.report?.agent?.serviceScope ?? 'none') !== 'none';
+
     return (
         <div className={styles.container}>
             <div className={styles.header}>
@@ -202,6 +206,34 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                 <p className={styles.deleteExplainNote}>
                     L’agent ne sera pas auto-détruit. À utiliser s’il n’existe plus, ou si peu importe qu’il se nettoie.
                     Ses données restent consultables dans Monitoring.
+                </p>
+            </Dialog>
+
+            <Dialog
+                open={actions.stopTarget !== null}
+                onClose={() => actions.setStopTarget(null)}
+                title={actions.stopTarget ? `Interrompre l’agent de « ${actions.stopTarget.name} » ?` : 'Interrompre'}
+                description='L’agent se ferme proprement et l’appareil passe hors ligne.'
+                onSubmit={() => void actions.confirmStopAgent()}
+                footer={
+                    <>
+                        <Button
+                            variant='secondary'
+                            onClick={() => actions.setStopTarget(null)}
+                            disabled={actions.stopping}
+                        >
+                            Annuler
+                        </Button>
+                        <Button variant='danger' onClick={actions.confirmStopAgent} disabled={actions.stopping}>
+                            {actions.stopping ? 'Interruption…' : 'Interrompre l’agent'}
+                        </Button>
+                    </>
+                }
+            >
+                <p className={styles.deleteExplainNote}>
+                    {stopSupervised
+                        ? 'Démarrage auto actif : l’agent sera relancé automatiquement dans quelques secondes, et à chaque démarrage de l’appareil.'
+                        : 'Démarrage auto inactif : l’appareil restera hors ligne et ne pourra plus être administré à distance (configuration, mises à jour, terminal, fichiers…) jusqu’à un relancement manuel de l’agent sur la machine.'}
                 </p>
             </Dialog>
 

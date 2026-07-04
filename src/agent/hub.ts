@@ -9,6 +9,7 @@ import {
     AGENT_FILES_MUTATE,
     AGENT_FILES_SEARCH,
     AGENT_FILES_UPLOAD,
+    AGENT_LIFECYCLE,
     AGENT_LOG_QUERY,
     AGENT_LOG_SOURCES,
     AGENT_PKG_LIST,
@@ -51,6 +52,7 @@ import {
     type AgentFilesMutatePayload,
     type AgentFilesSearchPayload,
     type AgentFilesUploadPayload,
+    type AgentLifecyclePayload,
     type AgentLogQueryPayload,
     type AgentPkgUpgradePayload,
     type AgentPowerPayload,
@@ -183,6 +185,11 @@ export class MonitorHub {
     /** Ask a connected agent to run a system power action (shutdown/reboot…). No-op if offline. */
     requestPower(deviceId: string, payload: AgentPowerPayload): boolean {
         return this.sendToAgent(deviceId, AGENT_POWER, payload);
+    }
+
+    /** Ask a connected agent to stop/restart its own process. No-op if offline. */
+    requestLifecycle(deviceId: string, payload: AgentLifecyclePayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_LIFECYCLE, payload);
     }
 
     /** Fan out a system power-action outcome to the device's subscribers. */
@@ -529,6 +536,8 @@ export interface MonitorTransport {
     requestPkgUpgrade(deviceId: string, payload: AgentPkgUpgradePayload): boolean;
     /** Ask the device's agent to run a system power action; false if offline. */
     requestPower(deviceId: string, payload: AgentPowerPayload): boolean;
+    /** Ask the device's agent to stop/restart its own process; false if offline. */
+    requestLifecycle(deviceId: string, payload: AgentLifecyclePayload): boolean;
     /** Ask the device's agent to enumerate its log sources; false if offline. */
     requestLogSources(deviceId: string): boolean;
     /** Ask the device's agent to run one log query; false if offline. */
@@ -575,6 +584,7 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         requestPkgList: (deviceId) => hub.requestPkgList(deviceId),
         requestPkgUpgrade: (deviceId, payload) => hub.requestPkgUpgrade(deviceId, payload),
         requestPower: (deviceId, payload) => hub.requestPower(deviceId, payload),
+        requestLifecycle: (deviceId, payload) => hub.requestLifecycle(deviceId, payload),
         requestLogSources: (deviceId) => hub.requestLogSources(deviceId),
         requestLogQuery: (deviceId, payload) => hub.requestLogQuery(deviceId, payload),
         requestTermOpen: (deviceId, payload) => hub.requestTermOpen(deviceId, payload),
