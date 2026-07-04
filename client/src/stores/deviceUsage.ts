@@ -15,8 +15,12 @@ import type { MetricSnapshot } from 'deveye-types';
  * seconds, so polling stays fully decoupled and conflict-free.
  */
 const POLL_MS = 10_000;
-/** Window we ask for; we only keep the last point (≈ current value). */
-const WINDOW_MS = 2 * 60 * 1000;
+/**
+ * Window we ask for; we only keep the last point (≈ current value). Wide enough
+ * that even a slow snapshot cadence (up to ~10 min) still yields a point, so the
+ * tile populates instead of showing "Mesure en cours" forever.
+ */
+const WINDOW_MS = 15 * 60 * 1000;
 
 const latest = new Map<string, MetricSnapshot | null>();
 const refCounts = new Map<string, number>();
@@ -38,7 +42,13 @@ async function poll(deviceId: string): Promise<void> {
             to: now,
             resolution: 'raw'
         });
-        const last = res.points.length ? res.points[res.points.length - 1] : null;
+        // A poll that finds no point in the window must NOT wipe the last known
+        // usage: doing so made the tile flip back to "Mesure en cours" on any
+        // transient gap even though real measurements exist. Keep the last value
+        // (the tile only shows it while the device is online); only a newer point
+        // replaces it. First load with genuinely no data stays null (correct).
+        if (res.points.length === 0) return;
+        const last = res.points[res.points.length - 1];
         if (last !== latest.get(deviceId)) {
             latest.set(deviceId, last);
             emit();
