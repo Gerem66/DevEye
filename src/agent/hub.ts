@@ -108,6 +108,13 @@ export class MonitorHub {
     private readonly socketShares = new Map<WebSocket, Set<number>>();
 
     agentOnline(deviceId: string, socket: WebSocket): void {
+        // One live session per device. Without this, a superseded socket (fast
+        // reconnect, or a *duplicate agent instance* sharing the enrollment)
+        // kept streaming its own snapshots alongside the new one — doubled
+        // telemetry with no error anywhere. 1012 = "service restart": the old
+        // agent treats it as a clean close and backs off before redialing.
+        const prev = this.agents.get(deviceId);
+        if (prev && prev !== socket) prev.close(1012, 'Session replaced by a newer agent connection');
         this.agents.set(deviceId, socket);
         this.publishPresence(deviceId, true);
     }

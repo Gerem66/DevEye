@@ -143,7 +143,9 @@ mod imp {
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
-  <key>ThrottleInterval</key><integer>1</integer>
+  <!-- 10 s between respawns: plenty for a self-update relaunch, but a broken
+       binary or an instance-lock conflict can't hammer restarts every second. -->
+  <key>ThrottleInterval</key><integer>10</integer>
   <key>StandardOutPath</key><string>{log}</string>
   <key>StandardErrorPath</key><string>{log}</string>
 </dict>
