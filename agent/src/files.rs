@@ -146,42 +146,36 @@ fn is_virtual_fs(_path: &Path) -> bool {
 }
 
 /// Recursive size of each immediate child of `path`, biggest first (the ncdu view).
+///
+/// A single shared walk budget across all children (kept large enough that only
+/// pathological trees ever hit it): the ordering is fine for the intended use,
+/// and — crucially — it keeps most results *complete* so the client can cache
+/// them. A per-child fair split was tried and backfired: each child got a small
+/// slice, far more results came back `partial`, and the client (which won't
+/// cache partial results) then recomputed on every navigation.
 pub fn analyze(path: &str) -> Result<Vec<FileUsageEntry>> {
     let canon = std::fs::canonicalize(path).with_context(|| format!("résolution de {path}"))?;
-    let entries: Vec<_> = std::fs::read_dir(&canon)
-        .with_context(|| format!("lecture de {}", canon.display()))?
-        .flatten()
-        .filter_map(|e| e.file_type().ok().map(|ft| (e, ft)))
-        .collect();
-
-    // The walk budget is split *fairly* between the child directories (unused
-    // shares flow to the later siblings) instead of first-come-first-served:
-    // with one shared pool, whichever children were listed first ate the whole
-    // budget and the rest came back as 0/partial — sizes looked random.
-    let walkable = |entry: &std::fs::DirEntry, ft: &std::fs::FileType| {
-        ft.is_dir() && !ft.is_symlink() && !is_virtual_fs(&entry.path())
-    };
-    let mut dirs_left = entries.iter().filter(|(e, ft)| walkable(e, ft)).count() as u64;
-    let mut remaining = ANALYZE_BUDGET;
-
+    let mut budget = ANALYZE_BUDGET;
     let mut out = Vec::new();
-    for (entry, ft) in &entries {
-        let (total_size, partial) = if walkable(entry, ft) {
-            let share = remaining / dirs_left.max(1);
-            let mut budget = share;
-            let res = dir_size(&entry.path(), &mut budget);
-            remaining -= share - budget;
-            dirs_left -= 1;
-            res
-        } else if ft.is_dir() {
-            // Virtual fs (or dir symlink): no meaningful recursive size.
-            (0, false)
+    for entry in
+        std::fs::read_dir(&canon).with_context(|| format!("lecture de {}", canon.display()))?
+    {
+        let Ok(entry) = entry else { continue };
+        let Ok(ft) = entry.file_type() else { continue };
+        let path = entry.path();
+        let (total_size, partial) = if ft.is_dir() && !ft.is_symlink() {
+            // Kernel filesystems have meaningless (sometimes absurd) sizes.
+            if is_virtual_fs(&path) {
+                (0, false)
+            } else {
+                dir_size(&path, &mut budget)
+            }
         } else {
             (entry.metadata().map(|m| m.len()).unwrap_or(0), false)
         };
         out.push(FileUsageEntry {
             name: entry.file_name().to_string_lossy().into_owned(),
-            kind: kind_of(ft),
+            kind: kind_of(&ft),
             total_size,
             partial,
         });
