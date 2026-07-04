@@ -11,7 +11,9 @@ const TextInput = React.forwardRef<HTMLInputElement, TextInputProps>((props, ref
     const [hidden, setHidden] = React.useState(true);
 
     const { enableShowHideButton, className, type, value, error, ...rest } = props;
-    const classes = `${styles.input} ${className || ''} ${error ? styles['input-error'] : ''}`;
+    const classes = `${styles.input} ${enableShowHideButton ? styles['input-with-btn'] : ''} ${
+        className || ''
+    } ${error ? styles['input-error'] : ''}`;
 
     React.useEffect(() => {
         if (type === 'password' && value === '' && !hidden) {

@@ -7,7 +7,6 @@
     width: 100%;
     height: calc(2.25rem + 2px);
     padding: 0.5rem 0.75rem;
-    padding-right: 48px;
     font-size: 1em;
     font-weight: 400;
     font-family: var(--font-sans);
@@ -34,6 +33,13 @@
 .input:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+}
+
+/* Reserve room for the show/hide eye button — only when it's actually present,
+   so plain inputs (e.g. the config's narrow "Personnalisé" field) don't waste
+   ~48px of right padding that hides their value. */
+.input-with-btn {
+    padding-right: 48px;
 }
 
 .input-show-hide-btn {
