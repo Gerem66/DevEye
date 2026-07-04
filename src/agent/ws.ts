@@ -66,6 +66,7 @@ import {
     type AgentSession
 } from './handlers';
 import { deviceAgentConfig } from './mappers';
+import { recordAgentOffline, recordAgentOnline } from './presence';
 import type { MonitorHub } from './hub';
 
 import type { CloudSyncEngine } from '@/cloudSync/engine';
@@ -196,6 +197,7 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, cloudSync
             send(socket, { command: AGENT_DESTROY, payload: {} });
         } else {
             reqLogger.info('Agent connected');
+            const wasOnlineInHub = hub.isOnline(deviceId);
             hub.agentOnline(deviceId, socket);
             // Tell the agent its collection cadences + capture mode straight away.
             send(socket, { command: AGENT_CONFIG, payload: deviceAgentConfig(device) });
@@ -204,7 +206,7 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, cloudSync
                 reqLogger.warn({ err }, 'CloudSync onAgentConnect failed');
             });
             await db.devices.touchSeen(deviceId, Math.floor(Date.now() / 1000));
-            await db.presence.record(deviceId, Date.now(), true);
+            await recordAgentOnline(db, device, wasOnlineInHub);
             audit.record({
                 source: 'agent',
                 category: 'device',
@@ -256,9 +258,14 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, cloudSync
         socket.on('close', () => {
             hub.agentOffline(deviceId, socket);
             // Une fermeture tardive d'un VIEUX socket (reconnexion rapide) ne doit
-            // pas interrompre les sessions du nouveau : le hub reste l'autorité.
-            if (!hub.isOnline(deviceId)) cloudSync.onAgentOffline(deviceId);
-            void db.presence.record(deviceId, Date.now(), false).catch(() => {});
+            // pas interrompre les sessions du nouveau — ni écrire une transition
+            // « offline » fantôme dans la présence : le hub reste l'autorité.
+            if (!hub.isOnline(deviceId)) {
+                cloudSync.onAgentOffline(deviceId);
+                if (device.status !== 'pending_deletion') {
+                    void recordAgentOffline(db, deviceId).catch(() => {});
+                }
+            }
             reqLogger.info('Agent disconnected');
         });
     });
