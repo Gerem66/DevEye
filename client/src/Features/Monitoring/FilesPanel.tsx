@@ -215,7 +215,12 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                 setAnalyzing(false);
                 if (!d.error) {
                     const map = new Map(d.entries.map((e) => [e.name, e]));
-                    usageCache.current.set(usagePath.current, map);
+                    // Cache only complete passes: a partial one (walk budget hit)
+                    // holds truncated sizes and must be recomputed on the next visit
+                    // instead of being served as truth forever.
+                    if (!d.entries.some((e) => e.partial)) {
+                        usageCache.current.set(usagePath.current, map);
+                    }
                     setUsage(map);
                 }
             } else if (msg.command === DEVICE_FILES_MATCHES_EVENT && msg.payload.ok) {
