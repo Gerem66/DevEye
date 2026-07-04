@@ -37,6 +37,49 @@
     gap: var(--space-sm);
 }
 
+/* Collapsible shell around the filter panel: folded by default (the panel is
+   tall and steals the log area). The 0fr→1fr grid row animates the height to
+   the panel's natural size — smooth, no max-height magic number to maintain. */
+.filtersWrap {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition:
+        grid-template-rows 0.25s ease,
+        opacity 0.2s ease;
+}
+
+.filtersWrapOpen {
+    grid-template-rows: 1fr;
+    opacity: 1;
+}
+
+.filtersInner {
+    overflow: hidden;
+    min-height: 0;
+    /* Unfocusable while folded; flips instantly on open, after the fold on close. */
+    visibility: hidden;
+    transition: visibility 0s linear 0.25s;
+}
+
+.filtersWrapOpen .filtersInner {
+    visibility: visible;
+    transition: visibility 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .filtersWrap,
+    .filtersInner {
+        transition: none;
+    }
+}
+
+/* Active-state accent of the « Recherche » toggle button. */
+.searchToggleOn {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
 /* Filter bar */
 .filters {
     display: grid;
