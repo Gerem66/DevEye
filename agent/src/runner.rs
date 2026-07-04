@@ -49,8 +49,9 @@ const MIN_CONNECT_SNAPSHOT_GAP: Duration = Duration::from_secs(60);
 const REJECTED_RETRY: Duration = Duration::from_secs(60 * 60);
 /// How often to send the OS/security report.
 const REPORT_INTERVAL: Duration = Duration::from_secs(60 * 60);
-/// Defaults used until the server pushes `agent.config` (≈immediately on connect).
-const DEFAULT_SNAPSHOT_INTERVAL: Duration = Duration::from_secs(300);
+/// Defaults used until the server pushes `agent.config` (≈immediately on
+/// connect). Mirror the server defaults: 30 s metrics / 10 min snapshots.
+const DEFAULT_SNAPSHOT_INTERVAL: Duration = Duration::from_secs(600);
 const DEFAULT_CAPTURE: &str = "all";
 
 /// Tunables for a run, set from the CLI.

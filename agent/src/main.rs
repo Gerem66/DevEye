@@ -78,7 +78,7 @@ enum Command {
         once: bool,
         /// Initial seconds between metric samples (bootstrap only; the real
         /// cadence is set per-device from the DevEye UI and pushed on connect).
-        #[arg(long, default_value_t = 300)]
+        #[arg(long, default_value_t = 30)]
         interval: u64,
         /// Run in the background and write a PID file.
         #[arg(long)]

@@ -56,9 +56,10 @@ export const env = {
 
     // Metrics/presence retention (days). A periodic job prunes older samples.
     METRICS_RETENTION_DAYS: getEnvVar('METRICS_RETENTION_DAYS', 'number', false) || 30,
-    // Process-history retention (days). Separate (and shorter) default: process
-    // samples are the bulkiest data.
-    PROCESS_RETENTION_DAYS: getEnvVar('PROCESS_RETENTION_DAYS', 'number', false) || 1,
+    // Process-history retention (days). Kept separate from the metrics retention
+    // (process samples are the bulkiest data) but aligned on the same 30-day
+    // default: losing the process lists after a day made past snapshots empty.
+    PROCESS_RETENTION_DAYS: getEnvVar('PROCESS_RETENTION_DAYS', 'number', false) || 30,
 
     COOKIE_DOMAIN: getEnvVar('COOKIE_DOMAIN', 'string', false),
 

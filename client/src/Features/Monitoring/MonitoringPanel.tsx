@@ -51,7 +51,8 @@ import {
 import styles from './Monitoring.module.css';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_SNAPSHOT_INTERVAL_S = 300;
+/** Mirrors the server's default snapshot cadence (10 min). */
+const DEFAULT_SNAPSHOT_INTERVAL_S = 600;
 /** Graphs shown before "Afficher plus" (≈ 2 rows at 3 columns on a wide panel). */
 const COLLAPSED_GRAPHS = 6;
 

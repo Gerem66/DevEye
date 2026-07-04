@@ -11,9 +11,14 @@ import {
     type ProcessCapture
 } from 'deveye-types';
 
-/** Server-side defaults applied when a device hasn't overridden a setting. */
-export const DEFAULT_METRIC_INTERVAL_SECONDS = 10;
-export const DEFAULT_SNAPSHOT_INTERVAL_SECONDS = 300;
+/**
+ * Server-side defaults applied when a device hasn't overridden a setting:
+ * metrics every 30 s, a full snapshot (all processes) every 10 min, everything
+ * kept 30 days (see `Env` for the retention defaults). Mirror any change in the
+ * client's `ConfigDialog` DEFAULTS and the agent's bootstrap constants.
+ */
+export const DEFAULT_METRIC_INTERVAL_SECONDS = 30;
+export const DEFAULT_SNAPSHOT_INTERVAL_SECONDS = 600;
 export const DEFAULT_PROCESS_CAPTURE: ProcessCapture = 'all';
 
 /** Build the collection config the server pushes to an agent (defaults applied). */
