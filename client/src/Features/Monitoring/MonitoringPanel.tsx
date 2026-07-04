@@ -20,6 +20,7 @@ import {
 } from 'deveye-types';
 import { HardwareInfo } from './HardwareInfo';
 import { Connections } from './Connections';
+import { DeviceActionsMenu, type DeviceAction } from './DeviceActionsMenu';
 import { PrivilegeInfo } from './PrivilegeInfo';
 import { OpenPorts } from './OpenPorts';
 import { ConfigDialog } from './ConfigDialog';
@@ -863,6 +864,25 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         );
     }
 
+    // Device features gathered in one labelled dropdown (icon + text) instead of
+    // a row of bare icon buttons. Online-only features simply don't appear when
+    // the agent is offline; only refresh/update stay as direct header buttons.
+    const deviceActions: DeviceAction[] = [
+        { icon: 'icon-cpu', label: 'Matériel & agent', onClick: showHardwareInfo },
+        ...(!archived
+            ? [{ icon: 'icon-settings', label: 'Configurer la collecte', onClick: () => setConfigOpen(true) }]
+            : []),
+        ...(online && !archived
+            ? [
+                  { icon: 'icon-database', label: 'Mises à jour système', onClick: () => setPackagesOpen(true) },
+                  { icon: 'icon-folder', label: 'Explorateur de fichiers', onClick: () => setFilesOpen(true) },
+                  { icon: 'icon-terminal', label: 'Terminal distant', onClick: () => setTerminalOpen(true) },
+                  { icon: 'icon-logs', label: 'Logs de l’appareil', onClick: () => setLogsOpen(true) },
+                  { icon: 'icon-power', label: 'Commandes système', onClick: () => setPowerOpen(true) }
+              ]
+            : [])
+    ];
+
     return (
         <div className={styles.metricsPanel}>
             <div className={styles.metricsPanelHeader}>
@@ -884,63 +904,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                             />
                         </button>
                     )}
-                    <button className={styles.iconHeaderBtn} onClick={showHardwareInfo} title='Matériel & agent'>
-                        <span className='icon icon-cpu' />
-                    </button>
-                    {!archived && (
-                        <button
-                            className={styles.iconHeaderBtn}
-                            onClick={() => setConfigOpen(true)}
-                            title='Configurer la collecte'
-                        >
-                            <span className='icon icon-settings' />
-                        </button>
-                    )}
-                    {online && !archived && (
-                        <button
-                            className={styles.iconHeaderBtn}
-                            onClick={() => setPackagesOpen(true)}
-                            title='Mises à jour système'
-                        >
-                            <span className='icon icon-database' />
-                        </button>
-                    )}
-                    {online && !archived && (
-                        <button
-                            className={styles.iconHeaderBtn}
-                            onClick={() => setFilesOpen(true)}
-                            title='Explorateur de fichiers'
-                        >
-                            <span className='icon icon-folder' />
-                        </button>
-                    )}
-                    {online && !archived && (
-                        <button
-                            className={styles.iconHeaderBtn}
-                            onClick={() => setTerminalOpen(true)}
-                            title='Terminal distant'
-                        >
-                            <span className='icon icon-terminal' />
-                        </button>
-                    )}
-                    {online && !archived && (
-                        <button
-                            className={styles.iconHeaderBtn}
-                            onClick={() => setLogsOpen(true)}
-                            title='Logs de l’appareil'
-                        >
-                            <span className='icon icon-logs' />
-                        </button>
-                    )}
-                    {online && !archived && (
-                        <button
-                            className={styles.iconHeaderBtn}
-                            onClick={() => setPowerOpen(true)}
-                            title='Commandes système'
-                        >
-                            <span className='icon icon-power' />
-                        </button>
-                    )}
+                    <DeviceActionsMenu actions={deviceActions} />
                     {online && !archived && (
                         <button
                             className={styles.iconHeaderBtn}

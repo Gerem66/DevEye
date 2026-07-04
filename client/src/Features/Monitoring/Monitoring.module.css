@@ -1247,6 +1247,85 @@
     color: var(--danger);
 }
 
+/* ── "Fonctions" dropdown (device features: matériel, terminal, logs…) ── */
+
+.actionsMenuWrap {
+    position: relative;
+}
+
+/* The trigger reuses the header-button look but carries a label + chevron. */
+.actionsMenuBtn {
+    width: auto;
+    gap: 6px;
+    padding: 0 10px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.actionsMenuBtnOpen {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.actionsMenuChevron {
+    font-size: 0.7em;
+    opacity: 0.8;
+    transition: transform var(--transition-fast);
+}
+
+.actionsMenuBtnOpen .actionsMenuChevron {
+    transform: rotate(180deg);
+}
+
+.actionsMenu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 20;
+    min-width: 230px;
+    padding: var(--space-xs);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--surface-popup);
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    backdrop-filter: blur(12px);
+}
+
+.actionsMenuItem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-xs) var(--space-sm);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.actionsMenuItem:hover {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.actionsMenuItemIcon {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+
+.actionsMenuItem:hover .actionsMenuItemIcon {
+    color: var(--accent);
+}
+
 /* Update-available button: accent by default so it stands out among the header icons. */
 .iconHeaderUpdate {
     border-color: var(--accent);
