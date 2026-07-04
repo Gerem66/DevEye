@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PresenceEvent } from 'deveye-types';
 import { MonthPicker } from './MonthPicker';
 import styles from './Monitoring.module.css';
@@ -219,9 +219,36 @@ export function Timeline({
     const selCount = sel ? countInRange(sortedSnaps, sel.start, sel.end) : 0;
 
     const pinnedSet = useMemo(() => new Set(pinnedTimes), [pinnedTimes]);
-    // Adjacent snapshots around the focused instant, to step through with arrows.
-    const prevSnap = pointAt === null ? null : (snapshotTimes.filter((t) => t < pointAt).at(-1) ?? null);
-    const nextSnap = pointAt === null ? null : (snapshotTimes.find((t) => t > pointAt) ?? null);
+    // Adjacent snapshots around the focused instant, to step through with the
+    // ‹ › buttons or the keyboard arrows (binary search on the sorted marks).
+    const prevSnap = pointAt === null ? null : (sortedSnaps[lowerBound(sortedSnaps, pointAt) - 1] ?? null);
+    const nextSnap = pointAt === null ? null : (sortedSnaps[lowerBound(sortedSnaps, pointAt + 1)] ?? null);
+
+    // Keyboard stepping (← previous / → next) while an instant is focused. A
+    // window listener (not a focus-bound onKeyDown) because the timeline is never
+    // focused in normal use; scoped to the arrow keys and skipped when the user is
+    // typing in a field, so it can't hijack inputs or other shortcuts.
+    useEffect(() => {
+        if (pointAt === null) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+            if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+            const el = e.target as HTMLElement | null;
+            if (
+                el &&
+                (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)
+            ) {
+                return;
+            }
+            const step = e.key === 'ArrowLeft' ? prevSnap : nextSnap;
+            if (step !== null) {
+                e.preventDefault();
+                onPickSnapshot(step);
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [pointAt, prevSnap, nextSnap, onPickSnapshot]);
 
     const fmtTime = (t: number) => new Date(t).toLocaleString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     const showLive = dayStart !== null || selection !== null || pointAt !== null;
@@ -332,7 +359,7 @@ export function Timeline({
                             className={styles.instantArrow}
                             onClick={() => prevSnap !== null && onPickSnapshot(prevSnap)}
                             disabled={prevSnap === null}
-                            title='Snapshot précédent'
+                            title='Snapshot précédent (flèche gauche)'
                         >
                             <span className='icon icon-arrow-left' />
                         </button>
@@ -343,7 +370,7 @@ export function Timeline({
                             className={styles.instantArrow}
                             onClick={() => nextSnap !== null && onPickSnapshot(nextSnap)}
                             disabled={nextSnap === null}
-                            title='Snapshot suivant'
+                            title='Snapshot suivant (flèche droite)'
                         >
                             <span className='icon icon-arrow-left' style={{ transform: 'rotate(180deg)' }} />
                         </button>
