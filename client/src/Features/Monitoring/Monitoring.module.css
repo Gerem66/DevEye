@@ -161,20 +161,42 @@
 .grid {
     display: grid;
     grid-template-columns: 260px 1fr;
+    /* One row filling the view height, so each column scrolls on its own. */
+    grid-template-rows: minmax(0, 1fr);
     gap: var(--space-lg);
     flex: 1;
-}
-
-@media (max-width: 768px) {
-    .grid {
-        grid-template-columns: 1fr;
-    }
+    min-height: 0;
 }
 
 .deviceListFull {
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* Right column: the per-device panel scrolls independently of the sidebar. */
+.panelScroll {
+    min-height: 0;
+    overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+    /* Single column: back to one natural flow, the popup scrolls everything. */
+    .container {
+        height: auto;
+    }
+
+    .grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: none;
+    }
+
+    .deviceListFull,
+    .panelScroll {
+        overflow-y: visible;
+    }
 }
 
 .deviceCard {
