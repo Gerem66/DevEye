@@ -1,11 +1,18 @@
 name: Agent build
 
-# Build the agent on every push to main that touches it (or bumps the DevEye
-# version), and publish the 8-target matrix + a manifest.json to the rolling
-# `agent-latest` prerelease. The DevEye server reconciles against this release
-# once at boot (see src/agent/sync.ts) — there is no tag/deploy ordering to
+# Build the agent and publish the 8-target matrix + a manifest.json to the
+# rolling `agent-latest` prerelease. The DevEye server reconciles against this
+# release once at boot (see src/agent/sync.ts) — no tag/deploy ordering to
 # manage: a push to main builds the agents while Dokploy deploys in parallel,
 # and the server picks up the new build on its next boot.
+#
+# Trigger vs. actual build: the `paths` below keep the workflow off unrelated
+# pushes, but `package.json` is noisy (a dependency bump — e.g. deveye-types —
+# edits it without changing anything the agents care about). So the `gate` job
+# is the real filter: it only lets the matrix build run when agent/** changed,
+# this workflow changed, or package.json's `.version` actually changed — the
+# version being what the manifest carries and what installed agents self-update
+# on. A dep-only bump therefore no longer burns a full 8-target build.
 on:
   push:
     branches: [main]
@@ -23,8 +30,67 @@ permissions:
   contents: read
 
 jobs:
+  # Cheap guard: decide whether the (expensive) matrix build should actually
+  # run, so a push that only touched package.json for a dependency bump doesn't
+  # rebuild the agents. Builds when: manual dispatch, agent/** or this workflow
+  # changed, or package.json's `.version` changed. Defaults to building on any
+  # ambiguity (missing parent ref, force-push) so we never silently skip.
+  gate:
+    name: should build?
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # need the push's parent to diff files + read old version
+
+      - id: decide
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # Emit the decision and stop (explicit `if` blocks below, not `&&`
+          # chains, so `set -e` never mis-fires on a non-matching grep).
+          decide() { echo "build=$1" >> "$GITHUB_OUTPUT"; echo "→ $2"; exit 0; }
+
+          # Manual runs always build.
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            decide true "manual dispatch"
+          fi
+
+          # No usable parent (new branch / force-push): build to stay safe.
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            decide true "no parent ref — building"
+          fi
+          if ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            decide true "parent ref unavailable — building"
+          fi
+
+          changed="$(git diff --name-only "$BEFORE" "$SHA")"
+          echo "Changed files:"; echo "$changed"
+
+          # Agent source or this workflow → always build.
+          if echo "$changed" | grep -qE '^agent/|^\.github/workflows/release\.yml$'; then
+            decide true "agent/ or workflow changed"
+          fi
+
+          # Otherwise only a real version bump counts (a dep-only package.json
+          # edit leaves .version identical → skip).
+          now="$(jq -r '.version // ""' package.json)"
+          was="$(git show "$BEFORE:package.json" 2>/dev/null | jq -r '.version // ""' || echo '')"
+          if [ -n "$now" ] && [ "$now" != "$was" ]; then
+            decide true "version ${was:-none} → $now"
+          fi
+          decide false "no agent change and version unchanged (${now:-none}) — skipping"
+
   build:
     name: agent (${{ matrix.os_label }})
+    needs: gate
+    if: needs.gate.outputs.build == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
