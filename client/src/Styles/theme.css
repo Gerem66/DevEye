@@ -37,6 +37,16 @@
   --danger: #ff5370;
   --danger-bg: rgba(255, 83, 112, 0.13);
 
+  /* Note colours — the named palette for text/marker colouring in the Notes
+     feature (`--note-<name>`, mirrored by noteColorSchema in deveye-types).
+     Tuned to read well on the dark glass surfaces. */
+  --note-red: #ff6b81;
+  --note-orange: #ffa64d;
+  --note-yellow: #ffd54a;
+  --note-green: #38d9a9;
+  --note-blue: #4da8ff;
+  --note-purple: #b088ff;
+
   /* Inputs */
   --input-bg: rgba(255, 255, 255, 0.04);
   --input-border: var(--glass-border);

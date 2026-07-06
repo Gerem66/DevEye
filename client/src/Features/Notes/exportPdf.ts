@@ -1,6 +1,7 @@
 import { inlineToHtml } from './markdown';
+import { NOTE_COLOR_OPTIONS } from './noteColors';
 
-import type { NoteBlock } from 'deveye-types';
+import type { NoteBlock, NoteColor } from 'deveye-types';
 
 /**
  * Export a note to PDF, client-side, with its inline markdown fully rendered.
@@ -20,6 +21,25 @@ function lineHtml(text: string): string {
     return inlineToHtml(text).replace(/\n/g, '<br/>');
 }
 
+/** Inline style tinting a list item's marker (`::marker` reads `--li-marker`). */
+function markerStyle(color?: NoteColor): string {
+    return color ? ` style="--li-marker: var(--note-${color})"` : '';
+}
+
+/**
+ * `:root` block re-declaring the note colour tokens with their live computed
+ * values, so `var(--note-<name>)` resolves inside the isolated print document
+ * (which doesn't inherit the app's theme). Keeps theme.css the single source.
+ */
+function noteColorVarsCss(): string {
+    const root = getComputedStyle(document.documentElement);
+    const vars = NOTE_COLOR_OPTIONS.map((o) => {
+        const value = root.getPropertyValue(`--note-${o.value}`).trim() || 'inherit';
+        return `--note-${o.value}: ${value};`;
+    }).join('');
+    return `:root{${vars}}`;
+}
+
 /** Turn the typed blocks into the document body, grouping consecutive lists. */
 function blocksToHtml(blocks: NoteBlock[]): string {
     let html = '';
@@ -31,7 +51,7 @@ function blocksToHtml(blocks: NoteBlock[]): string {
             while (i < blocks.length) {
                 const b = blocks[i];
                 if (b.type !== 'bullet') break;
-                items += `<li>${lineHtml(b.text)}</li>`;
+                items += `<li${markerStyle(b.color)}>${lineHtml(b.text)}</li>`;
                 i++;
             }
             html += `<ul>${items}</ul>`;
@@ -42,7 +62,7 @@ function blocksToHtml(blocks: NoteBlock[]): string {
             while (i < blocks.length) {
                 const b = blocks[i];
                 if (b.type !== 'number') break;
-                items += `<li>${lineHtml(b.text)}</li>`;
+                items += `<li${markerStyle(b.color)}>${lineHtml(b.text)}</li>`;
                 i++;
             }
             html += `<ol>${items}</ol>`;
@@ -53,7 +73,8 @@ function blocksToHtml(blocks: NoteBlock[]): string {
             while (i < blocks.length) {
                 const b = blocks[i];
                 if (b.type !== 'check') break;
-                items += `<li class="check${b.done ? ' done' : ''}"><span class="box">${
+                const box = b.color ? ` style="color: var(--note-${b.color})"` : '';
+                items += `<li class="check${b.done ? ' done' : ''}"><span class="box"${box}>${
                     b.done ? '☑' : '☐'
                 }</span><span>${lineHtml(b.text)}</span></li>`;
                 i++;
@@ -67,7 +88,7 @@ function blocksToHtml(blocks: NoteBlock[]): string {
             continue;
         }
         if (block.type === 'divider') {
-            html += '<hr/>';
+            html += `<hr${block.color ? ` style="border-color: var(--note-${block.color})"` : ''}/>`;
             i++;
             continue;
         }
@@ -121,6 +142,7 @@ const STYLE = `
     p { margin: 0 0 9pt; }
     ul, ol { margin: 0 0 9pt; padding-left: 1.4em; }
     li { margin: 3pt 0; padding-left: 2px; }
+    li::marker { color: var(--li-marker, currentColor); }
     ul.checks { list-style: none; padding-left: 0; }
     ul.checks li { display: flex; gap: 9px; align-items: baseline; }
     ul.checks .box { font-size: 12pt; line-height: 1; color: #6a6a70; }
@@ -135,7 +157,7 @@ const STYLE = `
 export function exportNotePdf(title: string, blocks: NoteBlock[], meta?: string): void {
     const safeTitle = escapeHtml(title.trim() || 'Sans titre');
     const doc = `<!DOCTYPE html>
-<html lang="fr"><head><meta charset="utf-8"><title>${safeTitle}</title><style>${STYLE}</style></head>
+<html lang="fr"><head><meta charset="utf-8"><title>${safeTitle}</title><style>${noteColorVarsCss()}${STYLE}</style></head>
 <body>
     <div class="title">${safeTitle}</div>
     ${meta ? `<div class="meta">${escapeHtml(meta)}</div>` : ''}

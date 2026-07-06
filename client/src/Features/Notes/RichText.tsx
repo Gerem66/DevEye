@@ -27,7 +27,8 @@ const MARK_CLASSES: MarkClasses = {
     bold: styles.mdBold,
     italic: styles.mdItalic,
     underline: styles.mdUnderline,
-    strike: styles.mdStrike
+    strike: styles.mdStrike,
+    color: styles.mdColor
 };
 
 /** Total text length of the caret position `node`/`offset` relative to `root`. */

@@ -2,9 +2,51 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 
 import styles from './style.module.css';
 import RichText, { type RichTextHandle } from './RichText';
-import { stripInline, MARK_DELIMITERS, type InlineMark } from './markdown';
+import {
+    stripInline,
+    MARK_DELIMITERS,
+    colorOpen,
+    COLOR_CLOSE,
+    stripColorMarkers,
+    removeEnclosingColor,
+    type InlineMark
+} from './markdown';
+import { NOTE_COLOR_OPTIONS, colorVar } from './noteColors';
 
-import type { NoteBlock } from 'deveye-types';
+import type {
+    NoteBlock,
+    NoteBulletBlock,
+    NoteCheckBlock,
+    NoteColor,
+    NoteDividerBlock,
+    NoteNumberBlock
+} from 'deveye-types';
+
+/** A block whose marker (dot / ordinal / box / rule) can be tinted. */
+type MarkerBlock = NoteBulletBlock | NoteNumberBlock | NoteCheckBlock | NoteDividerBlock;
+
+const MARKER_TYPES = new Set<NoteBlock['type']>(['bullet', 'number', 'check', 'divider']);
+
+/** Narrowing guard so the format menu can read a marker block's `color`. */
+function isMarkerBlock(block: NoteBlock): block is MarkerBlock {
+    return MARKER_TYPES.has(block.type);
+}
+
+/** The format menu's contextual label for a marker block's colour picker. */
+function markerColorLabel(type: NoteBlock['type']): string {
+    switch (type) {
+        case 'bullet':
+            return 'Couleur de la puce';
+        case 'number':
+            return 'Couleur du numéro';
+        case 'check':
+            return 'Couleur de la case';
+        case 'divider':
+            return 'Couleur du trait';
+        default:
+            return 'Couleur du marqueur';
+    }
+}
 
 interface BlockEditorProps {
     blocks: NoteBlock[];
@@ -112,8 +154,9 @@ export default function BlockEditor({
     const focusIndex = useRef<number | null>(null);
     /** Where to drop the caret in the focused block; null = end of its value. */
     const caretPos = useRef<number | null>(null);
-    /** The block whose RichText currently holds focus (target of the Aa menu). */
-    const activeIndex = useRef<number | null>(null);
+    /** The block currently targeted by the format menu — the RichText that holds
+     *  focus, or a divider the user clicked. Drives the contextual colour picker. */
+    const [active, setActive] = useState<number | null>(null);
     const [drag, setDrag] = useState<DragState | null>(null);
     const [addMenuOpen, setAddMenuOpen] = useState(false);
     const [formatMenuOpen, setFormatMenuOpen] = useState(false);
@@ -329,7 +372,7 @@ export default function BlockEditor({
     const applyMark = useCallback(
         (mark: InlineMark) => {
             setFormatMenuOpen(false);
-            const index = activeIndex.current;
+            const index = active;
             if (index === null) return;
             const handle = refs.current[index];
             const b = blocks[index];
@@ -345,7 +388,68 @@ export default function BlockEditor({
                 replaceBlock(index, { ...b, text: next }, end + 2 * delim.length);
             }
         },
-        [blocks, replaceBlock]
+        [active, blocks, replaceBlock]
+    );
+
+    /** Colour the active block's selection with `color` (wrap in `{c:…}{/c}`). An
+     *  empty selection inserts the pair and drops the caret inside it, so what's
+     *  typed next is coloured — mirroring {@link applyMark}. */
+    const applyColor = useCallback(
+        (color: NoteColor) => {
+            setFormatMenuOpen(false);
+            const index = active;
+            if (index === null) return;
+            const handle = refs.current[index];
+            const b = blocks[index];
+            if (!handle || !b || b.type === 'divider') return;
+            const { start, end } = handle.getCaret();
+            const open = colorOpen(color);
+            const text = b.text;
+            if (start === end) {
+                const next = text.slice(0, start) + open + COLOR_CLOSE + text.slice(start);
+                replaceBlock(index, { ...b, text: next }, start + open.length);
+            } else {
+                const inner = text.slice(start, end);
+                const next = text.slice(0, start) + open + inner + COLOR_CLOSE + text.slice(end);
+                replaceBlock(index, { ...b, text: next }, end + open.length);
+            }
+        },
+        [active, blocks, replaceBlock]
+    );
+
+    /** Clear text colour: strip colour markers within the selection, or — with a
+     *  collapsed caret — from the coloured run under it. */
+    const clearColor = useCallback(() => {
+        setFormatMenuOpen(false);
+        const index = active;
+        if (index === null) return;
+        const handle = refs.current[index];
+        const b = blocks[index];
+        if (!handle || !b || b.type === 'divider') return;
+        const { start, end } = handle.getCaret();
+        const text = b.text;
+        if (start !== end) {
+            const inner = stripColorMarkers(text.slice(start, end));
+            const next = text.slice(0, start) + inner + text.slice(end);
+            replaceBlock(index, { ...b, text: next }, start + inner.length);
+            return;
+        }
+        const cleared = removeEnclosingColor(text, start);
+        if (cleared) replaceBlock(index, { ...b, text: cleared.text }, cleared.caret);
+    }, [active, blocks, replaceBlock]);
+
+    /** Set (or clear, with `undefined`) the marker colour of the active marker
+     *  block — the bullet dot, ordinal, checkbox or divider rule. */
+    const setBlockColor = useCallback(
+        (color: NoteColor | undefined) => {
+            setFormatMenuOpen(false);
+            const index = active;
+            if (index === null) return;
+            const b = blocks[index];
+            if (!b || !MARKER_TYPES.has(b.type)) return;
+            onChange(blocks.map((bb, i) => (i === index ? ({ ...bb, color } as NoteBlock) : bb)));
+        },
+        [active, blocks, onChange]
     );
 
     const addBlock = useCallback(
@@ -470,20 +574,42 @@ export default function BlockEditor({
                 <button
                     type='button'
                     className={`${styles.checkButton} ${block.done ? styles.checkButtonDone : ''}`}
+                    style={block.color ? { color: colorVar(block.color) } : undefined}
                     aria-label={block.done ? 'Décocher' : 'Cocher'}
                     onClick={() => toggleDone(index)}
                 >
                     <span className={`icon ${styles.badge} icon-${block.done ? 'square-check' : 'square-empty'}`} />
                 </button>
             )}
-            {block.type === 'bullet' && <span className={styles.blockBullet} aria-hidden='true' />}
+            {block.type === 'bullet' && (
+                <span
+                    className={styles.blockBullet}
+                    style={block.color ? { background: colorVar(block.color) } : undefined}
+                    aria-hidden='true'
+                />
+            )}
             {block.type === 'number' && (
-                <span className={styles.blockNumber} aria-hidden='true'>
+                <span
+                    className={styles.blockNumber}
+                    style={block.color ? { color: colorVar(block.color) } : undefined}
+                    aria-hidden='true'
+                >
                     {numbering[index]}.
                 </span>
             )}
             {block.type === 'divider' ? (
-                <div className={styles.dividerLine} role='separator' />
+                <div
+                    className={`${styles.dividerHit} ${active === index ? styles.dividerSelected : ''}`}
+                    role='separator'
+                    tabIndex={-1}
+                    title='Cliquer pour le sélectionner, puis choisir sa couleur dans le menu de mise en forme'
+                    onMouseDown={() => setActive(index)}
+                >
+                    <div
+                        className={styles.dividerLine}
+                        style={block.color ? { borderTopColor: colorVar(block.color) } : undefined}
+                    />
+                </div>
             ) : (
                 <RichText
                     ref={(handle) => {
@@ -496,9 +622,7 @@ export default function BlockEditor({
                     placeholder={block.type === 'text' ? 'Écrivez quelque chose…' : 'Élément…'}
                     onChange={(v) => handleBlockChange(index, v)}
                     onKeyDown={(e) => onKeyDown(e, index)}
-                    onFocus={() => {
-                        activeIndex.current = index;
-                    }}
+                    onFocus={() => setActive(index)}
                 />
             )}
             {blocks.length > 1 && (
@@ -529,12 +653,27 @@ export default function BlockEditor({
                             className={`icon ${styles.badge} ${styles.ghostCheck} icon-${
                                 b.done ? 'square-check' : 'square-empty'
                             }`}
+                            style={b.color ? { color: colorVar(b.color) } : undefined}
                         />
                     )}
-                    {b.type === 'bullet' && <span className={styles.blockBullet} />}
-                    {b.type === 'number' && <span className={styles.blockNumber}>{numbering[drag.from]}.</span>}
+                    {b.type === 'bullet' && (
+                        <span
+                            className={styles.blockBullet}
+                            style={b.color ? { background: colorVar(b.color) } : undefined}
+                        />
+                    )}
+                    {b.type === 'number' && (
+                        <span className={styles.blockNumber} style={b.color ? { color: colorVar(b.color) } : undefined}>
+                            {numbering[drag.from]}.
+                        </span>
+                    )}
                     {b.type === 'divider' ? (
-                        <div className={styles.dividerLine} />
+                        <div className={styles.dividerHit}>
+                            <div
+                                className={styles.dividerLine}
+                                style={b.color ? { borderTopColor: colorVar(b.color) } : undefined}
+                            />
+                        </div>
                     ) : (
                         <span
                             className={`${styles.ghostText} ${b.type === 'check' && b.done ? styles.blockTextDone : ''}`}
@@ -545,6 +684,40 @@ export default function BlockEditor({
                 </div>
             );
         })();
+
+    // The block currently targeted by the format menu, and — when it carries a
+    // colourable marker — that block, so the menu can offer its marker picker.
+    const activeBlock = active !== null ? (blocks[active] ?? null) : null;
+    const activeMarkerBlock = activeBlock && isMarkerBlock(activeBlock) ? activeBlock : null;
+
+    // A row of colour swatches (+ a "Défaut" reset), reused by the text-colour
+    // and marker-colour pickers. `selected` marks the current choice: a colour
+    // highlights its swatch, `null` highlights "Défaut", `undefined` (text
+    // colour, where a selection has no single colour) highlights nothing.
+    const swatchRow = (onPick: (c: NoteColor) => void, onClear: () => void, selected?: NoteColor | null) => (
+        <div className={styles.swatches}>
+            {NOTE_COLOR_OPTIONS.map((o) => (
+                <button
+                    key={o.value}
+                    type='button'
+                    className={`${styles.swatch} ${selected === o.value ? styles.swatchActive : ''}`}
+                    style={{ background: colorVar(o.value) }}
+                    title={o.label}
+                    aria-label={o.label}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => onPick(o.value)}
+                />
+            ))}
+            <button
+                type='button'
+                className={`${styles.swatch} ${styles.swatchClear} ${selected === null ? styles.swatchActive : ''}`}
+                title='Défaut'
+                aria-label='Couleur par défaut'
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={onClear}
+            />
+        </div>
+    );
 
     // The "+" (add block) and "Aa" (format) tools — placed in the footer when the
     // editor is large, or on their own row above it when compact.
@@ -656,6 +829,24 @@ export default function BlockEditor({
                         >
                             <span className={styles.mdStrike}>Barré</span>
                         </button>
+
+                        {activeBlock?.type !== 'divider' && (
+                            <>
+                                <div className={styles.menuLabel}>Couleur du texte</div>
+                                {swatchRow(applyColor, clearColor)}
+                            </>
+                        )}
+
+                        {activeMarkerBlock && (
+                            <>
+                                <div className={styles.menuLabel}>{markerColorLabel(activeMarkerBlock.type)}</div>
+                                {swatchRow(
+                                    setBlockColor,
+                                    () => setBlockColor(undefined),
+                                    activeMarkerBlock.color ?? null
+                                )}
+                            </>
+                        )}
                     </div>
                 )}
             </div>
