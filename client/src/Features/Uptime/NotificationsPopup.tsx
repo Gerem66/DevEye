@@ -117,8 +117,9 @@ export function NotificationsPopup() {
                         onChange={(e) => setWebhookUrl(e.target.value)}
                     />
                     <span className={styles.fieldHint}>
-                        Corps JSON : {'{ event, service, url, at, message }'} — compatible Discord, Slack ou n’importe
-                        quel endpoint maison.
+                        Corps JSON : {'{ content, text, event, service, url, at }'}. Le message lisible est répété dans{' '}
+                        <code>content</code> (Discord) et <code>text</code> (Slack), les autres champs servent aux
+                        endpoints maison.
                     </span>
                 </label>
 

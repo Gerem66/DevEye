@@ -97,6 +97,52 @@ async function probeService(target: ServicePayload, row: UptimeServiceRow): Prom
     }
 }
 
+/**
+ * Discord truncates hard at 2000 characters and rejects anything longer; an
+ * error string from an odd endpoint can be arbitrarily long.
+ */
+const WEBHOOK_TEXT_MAX = 1900;
+
+/** Payload accepted by Discord, Slack and a homegrown endpoint alike. */
+interface WebhookAlert {
+    event: 'down' | 'recovered' | 'test';
+    /** Null on a test alert, which is about no service in particular. */
+    service: string | null;
+    url: string | null;
+    at: number;
+    body: string;
+}
+
+/**
+ * Build that one body.
+ *
+ * Discord refuses a payload carrying none of `content` / `embeds` / `file`
+ * ("Cannot send an empty message", HTTP 400) and Slack reads `text`; both
+ * ignore the keys they don't know. Carrying the message under both names — plus
+ * the structured fields a custom endpoint wants — covers every target without
+ * asking the user which service they pasted the URL from.
+ */
+function webhookPayload(alert: WebhookAlert): Record<string, unknown> {
+    const text = alert.body.slice(0, WEBHOOK_TEXT_MAX);
+    return {
+        content: text,
+        text,
+        event: alert.event,
+        service: alert.service,
+        url: alert.url,
+        at: alert.at
+    };
+}
+
+/** A rejected webhook, explained: the provider's own words beat "HTTP 400". */
+async function webhookRejection(response: Response): Promise<string> {
+    const detail = await response
+        .text()
+        .then((body) => body.slice(0, 200).trim())
+        .catch(() => '');
+    return detail ? `Le webhook a répondu ${response.status} : ${detail}` : `Le webhook a répondu ${response.status}`;
+}
+
 /** Short French date+time used in alert bodies. */
 function formatMoment(epochSeconds: number): string {
     return new Date(epochSeconds * 1000).toLocaleString('fr-FR', {
@@ -362,20 +408,22 @@ export class UptimeMonitor {
                     method: 'POST',
                     headers: { 'content-type': 'application/json' },
                     signal: AbortSignal.timeout(10_000),
-                    body: JSON.stringify({
-                        event: alert.event,
-                        service: target.name,
-                        url: target.url,
-                        at: alert.at,
-                        message: alert.body
-                    })
+                    body: JSON.stringify(
+                        webhookPayload({
+                            event: alert.event,
+                            service: target.name,
+                            url: target.url,
+                            at: alert.at,
+                            body: alert.body
+                        })
+                    )
                 });
                 // A rejected POST is not a delivery: counting it would mark the
                 // incident notified and later send a lone recovery message.
                 if (response.ok) delivered = true;
                 else {
                     this.deps.logger.warn(
-                        { serviceId: row.id, status: response.status },
+                        { serviceId: row.id, reason: await webhookRejection(response) },
                         'Uptime alert webhook rejected'
                     );
                 }
@@ -449,10 +497,10 @@ export class UptimeMonitor {
                     method: 'POST',
                     headers: { 'content-type': 'application/json' },
                     signal: AbortSignal.timeout(10_000),
-                    body: JSON.stringify({ event: 'test', at, message: body })
+                    body: JSON.stringify(webhookPayload({ event: 'test', service: null, url: null, at, body }))
                 });
                 if (response.ok) sent = true;
-                else error ??= `Le webhook a répondu ${response.status}`;
+                else error ??= await webhookRejection(response);
             } catch (e) {
                 error ??= e instanceof Error ? e.message : String(e);
             }

@@ -67,8 +67,15 @@ Canaux (`uptime_settings`, un par utilisateur) :
 - **e-mail** — destinataire libre, vide = l'adresse du compte. Nécessite les
   variables `SMTP_*` (voir `.env.template`) ; sans elles la popup le dit au lieu
   de laisser croire que les alertes partent.
-- **webhook** — POST JSON `{ event, service, url, at, message }`, où `event` vaut
-  `down`, `recovered` ou `test`.
+- **webhook** — POST JSON `{ content, text, event, service, url, at }`, où
+  `event` vaut `down`, `recovered` ou `test`.
+
+  Le message lisible est porté **deux fois**, et c'est voulu : Discord rejette
+  tout corps sans `content` / `embeds` / `file` (400, « Cannot send an empty
+  message ») et Slack lit `text`. Chacun ignore les clés qu'il ne connaît pas,
+  donc un seul corps convient à Discord, à Slack et à un endpoint maison sans
+  demander à l'utilisateur d'où vient son URL. Le texte est tronqué à 1900
+  caractères, en dessous de la limite stricte de 2000 de Discord.
 
 Le bouton « Tester » enregistre d'abord, puis envoie une alerte d'exemple sur
 tous les canaux activés — sinon le test porterait sur l'ancienne configuration.
@@ -133,8 +140,8 @@ de création.
 
 `uptime.list` · `uptime.count` · `uptime.add` · `uptime.update` ·
 `uptime.setEnabled` · `uptime.remove` · `uptime.checkNow` · `uptime.history` ·
-`uptime.checks` · `uptime.incidents` · `uptime.getSettings` ·
-`uptime.setSettings` · `uptime.testNotification`
+`uptime.checks` · `uptime.checkStats` · `uptime.incidents` ·
+`uptime.getSettings` · `uptime.setSettings` · `uptime.testNotification`
 
 Aucune n'est verrouillée par le chiffrement par mot de passe : la feature s'ouvre
 et se lit sans prompt.
