@@ -157,3 +157,24 @@ C'est le même niveau de garantie que les secrets liés à l'auth (2FA), et un
 cran en dessous des données « mot de passe »/notes — documenté ici pour que le
 choix reste explicite. Détails d'implémentation : `src/cloudSync/blobCrypto.ts`
 et `Docs/CLOUDSYNC.md`.
+
+## Uptime — l'étage ouvert appliqué à une tâche de fond
+
+La feature Uptime (`src/Services/UptimeMonitor.ts`, `src/features/uptime/`)
+sonde des services HTTP **en continu, sans session ni mot de passe** : c'est le
+serveur seul qui travaille, souvent alors que personne n'est connecté. Elle
+utilise donc systématiquement l'**étage ouvert** :
+
+- chiffrés (`ctx.secure.open`, ou `createOpenCipher()` côté ordonnanceur, qui
+  n'expose *que* cet étage — l'étage gardé n'a aucun sens sans session) : le nom
+  du service, son URL, le mot-clé attendu, les messages d'erreur (ligne du
+  service, ligne de chaque ping, ligne d'incident) et les canaux de notification
+  (adresse mail, URL de webhook) ;
+- en clair : ce qui pilote la planification (`interval_seconds`,
+  `timeout_seconds`, `enabled`, `last_checked_at`) et ce qu'agrègent les
+  graphiques (`status`, `response_ms`, `http_status`, horodatages, agrégat
+  journalier). Aucune de ces colonnes ne dit *quoi* est surveillé.
+
+Même garantie que la BMK CloudSync : protégé au repos, lisible par un serveur
+vivant compromis. Le choix est ici structurel — un moniteur qui exigerait le mot
+de passe ne pourrait tout simplement pas sonder.
