@@ -510,3 +510,14 @@ export function createSecureStore(
     const keys = new SecretKeyService(db, crypt);
     return { store: new SecureStore(keys, userId, sessionId, crypt), keys };
 }
+
+/**
+ * A user's **open** tier alone, with no session behind it — for background jobs
+ * that must read or write feature data while nobody is connected (the uptime
+ * scheduler). Only the open tier is reachable this way, by construction: the
+ * guarded tier needs a live session unlock and has no meaning here.
+ */
+export function createOpenCipher(db: Database, crypt: Encryption, userId: number): Cipher {
+    const keys = new SecretKeyService(db, crypt);
+    return new DekCipher(() => keys.resolveOpenDek(userId));
+}

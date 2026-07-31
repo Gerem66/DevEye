@@ -4,6 +4,7 @@ import type Encryption from '@/Services/Encryption';
 import type { SecureStore } from '@/Services/SecureStore';
 import type { SecretKeyService } from '@/Services/SecretKeyService';
 import type { MonitorTransport } from '@/agent/hub';
+import type { UptimeMonitor } from '@/Services/UptimeMonitor';
 import type { ErrorCode, LogLevelName } from 'deveye-types';
 import type { Logger } from 'pino';
 import type { z } from 'zod';
@@ -56,6 +57,8 @@ export interface FeatureContext {
     monitor?: MonitorTransport;
     /** CloudSync orchestrator (sessions, versions, blob store). Absent in tests. */
     cloudSync?: CloudSyncEngine;
+    /** Uptime scheduler — backs the "check now" and "test notification" commands. */
+    uptime?: UptimeMonitor;
 }
 
 /**

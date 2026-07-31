@@ -19,6 +19,7 @@ import { logger } from '@/logger';
 import { env, isDev } from '@/Utils/Env';
 import { registerWS } from '@/ws/handler';
 import { createAuditLog } from '@/Services/AuditLog';
+import { UptimeMonitor } from '@/Services/UptimeMonitor';
 import { status } from '@/status';
 
 import type { Database } from '@/db';
@@ -33,6 +34,8 @@ export interface BuiltApp {
     app: FastifyInstance;
     /** Moteur CloudSync — exposé pour le prune horaire de index.ts. */
     cloudSync: CloudSyncEngine;
+    /** Ordonnanceur Uptime — démarré/arrêté par index.ts. */
+    uptime: UptimeMonitor;
 }
 
 export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
@@ -97,9 +100,11 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     const cloudSync = new CloudSyncEngine({ db: deps.db, hub, crypt: deps.crypt, audit, logger });
     await cloudSync.start();
 
+    const uptime = new UptimeMonitor({ db: deps.db, crypt: deps.crypt, audit, logger });
+
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await agentRoutes(app, { db: deps.db, hub, audit });
-    await registerWS(app, { db: deps.db, crypt: deps.crypt, hub, cloudSync, audit });
+    await registerWS(app, { db: deps.db, crypt: deps.crypt, hub, cloudSync, uptime, audit });
     await registerAgentWS(app, { db: deps.db, hub, cloudSync, audit });
 
     // Serve the built web client from the same origin as the API whenever a
@@ -129,5 +134,5 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         app.log.debug({ clientDir }, 'No client build found; static serving disabled (host dev uses Vite)');
     }
 
-    return { app, cloudSync };
+    return { app, cloudSync, uptime };
 }

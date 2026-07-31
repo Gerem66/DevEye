@@ -15,6 +15,14 @@ import { syncSessionsRepo, type SyncSessionsRepo } from './repos/syncSessions';
 import { syncSharesRepo, type SyncSharesRepo } from './repos/syncShares';
 import { syncVersionsRepo, type SyncVersionsRepo } from './repos/syncVersions';
 import { twoFactorRepo, type TwoFactorRepo } from './repos/twoFactor';
+import {
+    uptimeHistoryRepo,
+    uptimeServicesRepo,
+    uptimeSettingsRepo,
+    type UptimeHistoryRepo,
+    type UptimeServicesRepo,
+    type UptimeSettingsRepo
+} from './repos/uptime';
 import { userSecretKeysRepo, type UserSecretKeysRepo } from './repos/userSecretKeys';
 import { usersRepo, type UsersRepo } from './repos/users';
 import { weatherRepo, type WeatherRepo } from './repos/weather';
@@ -42,6 +50,9 @@ export interface Database {
     twoFactor: TwoFactorRepo;
     userSecretKeys: UserSecretKeysRepo;
     weather: WeatherRepo;
+    uptimeServices: UptimeServicesRepo;
+    uptimeHistory: UptimeHistoryRepo;
+    uptimeSettings: UptimeSettingsRepo;
     syncMeta: SyncMetaRepo;
     syncShares: SyncSharesRepo;
     syncFiles: SyncFilesRepo;
@@ -68,6 +79,9 @@ export function createDatabase(q: Queryable): Database {
         twoFactor: twoFactorRepo(q),
         userSecretKeys: userSecretKeysRepo(q),
         weather: weatherRepo(q),
+        uptimeServices: uptimeServicesRepo(q),
+        uptimeHistory: uptimeHistoryRepo(q),
+        uptimeSettings: uptimeSettingsRepo(q),
         syncMeta: syncMetaRepo(q),
         syncShares: syncSharesRepo(q),
         syncFiles: syncFilesRepo(q),

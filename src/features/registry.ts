@@ -16,6 +16,7 @@ import {
 } from './password';
 import { secrecyFeatures } from './secrecy';
 import { twoFactorFeatures } from './twofa';
+import { uptimeFeatures } from './uptime';
 import { userSetAvatarFeature } from './user/setAvatar';
 import { userSetThemeFeature } from './user/setTheme';
 import { weatherFeatures } from './weather';
@@ -42,6 +43,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...twoFactorFeatures,
     ...secrecyFeatures,
     ...weatherFeatures,
+    ...uptimeFeatures,
     ...logsFeatures,
     ...homeFeatures
 ];
