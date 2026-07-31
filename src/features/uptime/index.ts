@@ -9,6 +9,7 @@ import {
     uptimeIncidents,
     uptimeList,
     uptimeRemove,
+    uptimeReorder,
     uptimeSetEnabled,
     uptimeSetSettings,
     uptimeTestNotification,
@@ -252,6 +253,19 @@ export const uptimeRemoveFeature: FeatureDefinition<
     }
 });
 
+export const uptimeReorderFeature: FeatureDefinition<
+    typeof uptimeReorder.command,
+    typeof uptimeReorder.input,
+    typeof uptimeReorder.output
+> = defineFeature({
+    ...uptimeReorder,
+    handler: async (ctx, input) => {
+        await assertWorkspaceMember(ctx, input.workspaceId);
+        await ctx.db.uptimeServices.reorder(ctx.userId, input.ids);
+        return { ids: input.ids };
+    }
+});
+
 export const uptimeCheckNowFeature: FeatureDefinition<
     typeof uptimeCheckNow.command,
     typeof uptimeCheckNow.input,
@@ -431,6 +445,7 @@ export const uptimeFeatures: FeatureDefinition<string, any, any>[] = [
     uptimeUpdateFeature,
     uptimeSetEnabledFeature,
     uptimeRemoveFeature,
+    uptimeReorderFeature,
     uptimeCheckNowFeature,
     uptimeHistoryFeature,
     uptimeChecksFeature,

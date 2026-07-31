@@ -131,15 +131,30 @@ donc à jour indépendamment.
 
 ## Ordre d'affichage
 
-Il n'y a **pas** d'ordre manuel : la liste remonte ce qui demande une action —
-services en panne d'abord, jamais testés ensuite, puis les sains ; les services
-en pause tombent en fin de liste. C'est un tri client, le serveur renvoie l'ordre
-de création.
+L'ordre est **entièrement défini par l'utilisateur**, par glisser-déposer, comme
+pour les notes. Rien ne repositionne un service automatiquement : seuls
+`uptime.reorder` et l'ajout d'un service (qui prend le rang suivant, donc la fin
+de la liste) touchent à `sort_order`.
+
+Ça remplace le tri automatique par urgence (pannes en tête) des premières
+versions : les deux ne peuvent pas coexister, et un ordre qui se réarrange tout
+seul sous le curseur n'est pas un ordre.
+
+Le glisser-déposer suit le même modèle que `Features/Notes/NoteGrid` : toute la
+liste est la cible de dépôt, et la barre d'insertion est **pilotée par le DOM,
+jamais par un état React**. `dragover` se déclenche en continu ; re-rendre les
+lignes sous le curseur fait re-émettre des événements de drag sur les nœuds
+remplacés, ce qui reboucle et fige l'onglet (le bug rencontré sur les notes). La
+barre se place au milieu réel du créneau, mesuré sur les deux lignes qui le
+bordent — centrée par construction, sans correction. Le rafraîchissement
+périodique est suspendu pendant un drag, sinon la liste se réordonnerait sous le
+curseur.
 
 ## Commandes
 
 `uptime.list` · `uptime.count` · `uptime.add` · `uptime.update` ·
-`uptime.setEnabled` · `uptime.remove` · `uptime.checkNow` · `uptime.history` ·
+`uptime.setEnabled` · `uptime.remove` · `uptime.reorder` · `uptime.checkNow` ·
+`uptime.history` ·
 `uptime.checks` · `uptime.checkStats` · `uptime.incidents` ·
 `uptime.getSettings` · `uptime.setSettings` · `uptime.testNotification`
 

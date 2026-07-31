@@ -13,6 +13,8 @@ interface ServiceCardProps {
     onCheckNow: () => void;
     /** A probe or a toggle is in flight for this service. */
     busy: boolean;
+    onDragStart: () => void;
+    onDragEnd: () => void;
 }
 
 /** Badge tone + label for a service's live state. */
@@ -31,8 +33,20 @@ function statusBadge(service: UptimeService): { tone: 'online' | 'danger' | 'neu
  * One service in the list: state, target, availability over the three usual
  * windows and its latest latency. Clicking anywhere opens the detail view; the
  * corner actions stop the click so they don't also navigate.
+ *
+ * The whole row is a drag handle, like a note card. A click still opens the
+ * detail: the browser only starts a drag past a movement threshold.
  */
-export function ServiceCard({ service, onOpen, onEdit, onToggle, onCheckNow, busy }: ServiceCardProps) {
+export function ServiceCard({
+    service,
+    onOpen,
+    onEdit,
+    onToggle,
+    onCheckNow,
+    busy,
+    onDragStart,
+    onDragEnd
+}: ServiceCardProps) {
     const badge = statusBadge(service);
     const action = (run: () => void) => (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -44,6 +58,16 @@ export function ServiceCard({ service, onOpen, onEdit, onToggle, onCheckNow, bus
             className={`${styles.card} ${service.enabled ? '' : styles.cardPaused}`}
             role='button'
             tabIndex={0}
+            // Drag source only — the surrounding list owns the drop side, so a row
+            // is never restyled or displaced while a drag is in flight.
+            draggable
+            data-service-card=''
+            onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', String(service.id));
+                onDragStart();
+            }}
+            onDragEnd={onDragEnd}
             onClick={onOpen}
             onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {

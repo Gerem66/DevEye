@@ -60,6 +60,11 @@ export interface UptimeServicesRepo {
     setEnabled(id: number, userId: number, enabled: boolean): Promise<UptimeServiceRow | null>;
     delete(id: number, userId: number): Promise<boolean>;
     /**
+     * File the user's services in the given order, ranking each by its index.
+     * The caller passes the workspace's complete list, so ranks stay dense.
+     */
+    reorder(userId: number, ids: number[]): Promise<void>;
+    /**
      * Enabled services whose next probe is due at `now`, most overdue first.
      * Not scoped to a user — this is what the background scheduler polls.
      */
@@ -217,20 +222,26 @@ export function uptimeServicesRepo(pool: Q): UptimeServicesRepo {
 
     return {
         async listByUser(userId) {
+            // The user's own order; id only breaks ties.
             const r = await pool.query<UptimeServiceRow>(
-                'SELECT * FROM uptime_services WHERE user_id = ? ORDER BY id ASC',
+                'SELECT * FROM uptime_services WHERE user_id = ? ORDER BY sort_order ASC, id ASC',
                 [userId]
             );
             return r.rows;
         },
         findById: reload,
         async create({ userId, workspaceId, ...config }) {
+            // New services land at the end of the list, never in the middle.
+            const posRow = await pool.query<{ next: number }>(
+                'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next FROM uptime_services WHERE user_id = ?',
+                [userId]
+            );
             const res = await pool.query(
                 `INSERT INTO uptime_services
                      (user_id, workspace_id, content, method, expected_status, interval_seconds,
-                      timeout_seconds, failure_threshold, retention_days, notify, enabled)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [userId, workspaceId, ...configParams(config)]
+                      timeout_seconds, failure_threshold, retention_days, notify, enabled, sort_order)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [userId, workspaceId, ...configParams(config), Number(posRow.rows[0]?.next ?? 0)]
             );
             const r = await pool.query<UptimeServiceRow>('SELECT * FROM uptime_services WHERE id = ?', [res.insertId]);
             return r.rows[0];
@@ -258,6 +269,17 @@ export function uptimeServicesRepo(pool: Q): UptimeServicesRepo {
         async delete(id, userId) {
             const r = await pool.query('DELETE FROM uptime_services WHERE id = ? AND user_id = ?', [id, userId]);
             return r.rowCount > 0;
+        },
+        async reorder(userId, ids) {
+            // Rank by index; rows the user doesn't own are silently ignored.
+            // Probe state is untouched — repositioning is not a configuration change.
+            for (let i = 0; i < ids.length; i++) {
+                await pool.query('UPDATE uptime_services SET sort_order = ? WHERE id = ? AND user_id = ?', [
+                    i,
+                    ids[i],
+                    userId
+                ]);
+            }
         },
         async listDue(now, limit) {
             const r = await pool.query<UptimeServiceRow>(

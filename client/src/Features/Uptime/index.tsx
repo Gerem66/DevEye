@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
@@ -6,8 +6,8 @@ import { OpenPopup } from '@/Components/Popup';
 import { refreshUptime } from '@/stores/uptime';
 
 import NotificationsPopup, { NOTIFICATIONS_POPUP } from './NotificationsPopup';
-import ServiceCard from './ServiceCard';
 import ServiceDetail from './ServiceDetail';
+import ServiceList from './ServiceList';
 import ServicePopup, { SERVICE_POPUP, type ServicePopupResult } from './ServicePopup';
 import styles from './style.module.css';
 
@@ -17,17 +17,6 @@ import type { FeatureProps } from '../types';
 /** Cadence the open list re-reads the server at — probes happen without us. */
 const REFRESH_MS = 20_000;
 
-/** Failing services first, then the never-tested, then the healthy ones. */
-const STATUS_RANK: Record<UptimeService['status'], number> = { down: 0, unknown: 1, up: 2 };
-
-function byUrgency(a: UptimeService, b: UptimeService): number {
-    // A paused service can't be "down" in any actionable sense — sink it below
-    // the live ones whatever its last known status was.
-    if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
-    const rank = STATUS_RANK[a.status] - STATUS_RANK[b.status];
-    return rank !== 0 ? rank : a.id - b.id;
-}
-
 export default function Uptime({ workspace }: FeatureProps) {
     const [services, setServices] = useState<UptimeService[]>([]);
     const [loading, setLoading] = useState(true);
@@ -35,6 +24,8 @@ export default function Uptime({ workspace }: FeatureProps) {
     const [selectedId, setSelectedId] = useState<number | null>(null);
     /** Ids with a probe or a pause/resume in flight (their buttons are disabled). */
     const [busy, setBusy] = useState<ReadonlySet<number>>(new Set());
+    /** A row is in flight: the periodic reload must not reshuffle under it. */
+    const dragging = useRef(false);
 
     const workspaceId = workspace.id;
 
@@ -54,7 +45,9 @@ export default function Uptime({ workspace }: FeatureProps) {
     // server probes in the background, so the list ages on its own.
     useEffect(() => {
         void reload();
-        const timer = setInterval(() => void reload(), REFRESH_MS);
+        const timer = setInterval(() => {
+            if (!dragging.current) void reload();
+        }, REFRESH_MS);
         const off = ws.onStateChange((s) => {
             if (s === 'open') void reload();
         });
@@ -108,9 +101,27 @@ export default function Uptime({ workspace }: FeatureProps) {
         [workspaceId, reload]
     );
 
-    const sorted = useMemo(() => [...services].sort(byUrgency), [services]);
     const selected = selectedId === null ? null : (services.find((s) => s.id === selectedId) ?? null);
     const downCount = services.filter((s) => s.enabled && s.status === 'down').length;
+
+    /**
+     * Apply a drop: reorder locally first so the row lands where it was dropped
+     * with no round trip, then persist. A failure rolls back by re-reading the
+     * server, which is the only order that is actually true.
+     */
+    const handleReorder = useCallback(
+        (ids: number[]) => {
+            setServices((prev) => {
+                const byId = new Map(prev.map((s) => [s.id, s]));
+                return ids.flatMap((id) => byId.get(id) ?? []);
+            });
+            ws.send('uptime.reorder', { workspaceId, ids }).catch(() => {
+                setError('Réorganisation impossible.');
+                void reload();
+            });
+        },
+        [workspaceId, reload]
+    );
 
     return (
         <div className={styles.feature}>
@@ -160,31 +171,30 @@ export default function Uptime({ workspace }: FeatureProps) {
                             vous prévient dès qu’elle tombe.
                         </p>
                     ) : (
-                        <div className={styles.list}>
-                            {sorted.map((service) => (
-                                <ServiceCard
-                                    key={service.id}
-                                    service={service}
-                                    busy={busy.has(service.id)}
-                                    onOpen={() => setSelectedId(service.id)}
-                                    onEdit={() => void openForm(service)}
-                                    onCheckNow={() =>
-                                        void withBusy(service.id, async () => {
-                                            await ws.send('uptime.checkNow', { workspaceId, id: service.id });
-                                        })
-                                    }
-                                    onToggle={() =>
-                                        void withBusy(service.id, async () => {
-                                            await ws.send('uptime.setEnabled', {
-                                                workspaceId,
-                                                id: service.id,
-                                                enabled: !service.enabled
-                                            });
-                                        })
-                                    }
-                                />
-                            ))}
-                        </div>
+                        <ServiceList
+                            services={services}
+                            busy={busy}
+                            onOpen={(service) => setSelectedId(service.id)}
+                            onEdit={(service) => void openForm(service)}
+                            onCheckNow={(service) =>
+                                void withBusy(service.id, async () => {
+                                    await ws.send('uptime.checkNow', { workspaceId, id: service.id });
+                                })
+                            }
+                            onToggle={(service) =>
+                                void withBusy(service.id, async () => {
+                                    await ws.send('uptime.setEnabled', {
+                                        workspaceId,
+                                        id: service.id,
+                                        enabled: !service.enabled
+                                    });
+                                })
+                            }
+                            onReorder={handleReorder}
+                            onDragStateChange={(active) => {
+                                dragging.current = active;
+                            }}
+                        />
                     )}
                 </>
             )}

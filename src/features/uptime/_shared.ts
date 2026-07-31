@@ -77,6 +77,7 @@ export async function toService(
         retentionDays: row.retention_days,
         notify: row.notify === 1,
         enabled: row.enabled === 1,
+        sortOrder: row.sort_order,
         status: row.status,
         lastCheckedAt: row.last_checked_at,
         lastResponseMs: row.last_response_ms,

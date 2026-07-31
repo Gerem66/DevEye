@@ -97,6 +97,27 @@
     margin: 0;
     padding: 0;
     list-style: none;
+    /* Anchors the insertion bar, which is positioned against the list box. */
+    position: relative;
+}
+
+/*
+ * Where a dragged row would land. Spans the list and sits in the gap itself, so
+ * the rows are never moved or restyled to show the target — what you see is
+ * exactly the position you get. Driven through the DOM (see ServiceList), never
+ * by React state.
+ */
+.dropBar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent-glow);
+    opacity: 0;
+    pointer-events: none;
 }
 
 .card {
