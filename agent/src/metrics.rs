@@ -323,7 +323,7 @@ fn better_mount(candidate: &str, current: &str) -> bool {
 fn read_network(networks: &Networks) -> (u64, u64) {
     let mut rx = 0u64;
     let mut tx = 0u64;
-    for (_name, data) in networks.iter() {
+    for data in networks.values() {
         rx += data.total_received();
         tx += data.total_transmitted();
     }
