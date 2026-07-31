@@ -150,6 +150,7 @@
 
 /* Notes grid */
 .grid {
+    position: relative; /* anchors the drop bar */
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: var(--space-md);
@@ -181,14 +182,19 @@
     background: var(--glass-bg);
 }
 
-/* Insertion marker while dragging: a bar down the leading edge of the card the
-   note would land *before*, so the drop spot is unambiguous instead of
-   "somewhere in that folder". Drawn as an inset shadow rather than a pseudo
-   element, which the cards' `overflow: hidden` would clip. */
-.cardDropBefore,
-.addCardDrop {
-    border-color: var(--accent, var(--text-secondary));
-    box-shadow: inset 3px 0 0 0 var(--accent, var(--text-secondary));
+/* Insertion marker: a bar standing in the gap the dragged note would fall into,
+   so the landing spot is literal. Positioned by NoteGrid straight through the
+   DOM (transform + height), which is why it carries no layout of its own. */
+.dropBar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 3px;
+    border-radius: 2px;
+    background: var(--accent, var(--text-secondary));
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.1s ease;
 }
 
 /* Trailing "add a note" card: same footprint as a real card but dashed and

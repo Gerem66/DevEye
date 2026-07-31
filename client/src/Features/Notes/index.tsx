@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import styles from './style.module.css';
 
-import NoteCard from './NoteCard';
+import NoteGrid from './NoteGrid';
 import NoteEditor, {
     NOTE_EDITOR_POPUP,
     type NoteDraft,
@@ -24,12 +24,6 @@ import { invalidate } from '@/stores/invalidation';
 import type { FeatureProps } from '@/Features/types';
 import type { Note, NoteFolder, NoteSummary } from 'deveye-types';
 
-/** Where a dragged note would land: gap `index` inside `folderId`'s bucket. */
-interface DropTarget {
-    folderId: number | null;
-    index: number;
-}
-
 /** The user's manual order; the id only breaks ties. */
 function byOrder(a: NoteSummary, b: NoteSummary): number {
     return a.sortOrder - b.sortOrder || a.id - b.id;
@@ -41,8 +35,6 @@ function FeatureNotes({ workspace }: FeatureProps) {
     const [notes, setNotes] = useState<NoteSummary[]>([]);
     const [folders, setFolders] = useState<NoteFolder[]>([]);
     const [actionError, setActionError] = useState<string | null>(null);
-    /** Gap the dragged note would land in: `index` within `folderId`'s bucket. */
-    const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
     const reloadRef = useRef<Promise<void> | null>(null);
     const draggingRef = useRef<NoteSummary | null>(null);
     // Session lock state, from the store the topbar widget and the unlock prompt
@@ -383,76 +375,33 @@ function FeatureNotes({ workspace }: FeatureProps) {
         [folders, workspace.id]
     );
 
-    /** Remember the hovered gap, without re-rendering on every dragover tick. */
-    const hoverGap = useCallback((folderId: number | null, index: number) => {
-        setDropTarget((prev) =>
-            prev && prev.folderId === folderId && prev.index === index ? prev : { folderId, index }
-        );
-    }, []);
-
-    const endDrag = useCallback(() => {
-        draggingRef.current = null;
-        setDropTarget(null);
-    }, []);
-
+    /** A card was released over a gap: the grid tells us which, we know what. */
     const dropAt = useCallback(
         (folderId: number | null, index: number) => {
             const dragged = draggingRef.current;
-            endDrag();
+            draggingRef.current = null;
             if (dragged) void dropInto(dragged, folderId, index);
         },
-        [dropInto, endDrag]
-    );
-
-    /**
-     * One folder's cards, trailed by the dashed "add" card. That card is the only
-     * way to create a note: it sits exactly where the new note will land, which
-     * reads better than a "+" tucked into the folder header. Hidden while
-     * searching, where the list is a filtered view rather than the real order.
-     */
-    const renderGrid = (items: NoteSummary[], folderId: number | null) => (
-        <div className={styles.grid}>
-            {items.map((note, index) => (
-                <NoteCard
-                    key={note.id}
-                    note={note}
-                    folders={sortedFolders}
-                    draggable={!searching}
-                    dropBefore={dropTarget?.folderId === folderId && dropTarget.index === index}
-                    onOpen={(n) => void openCard(n)}
-                    onMove={moveNote}
-                    onDragStart={(n) => (draggingRef.current = n)}
-                    onDragEnd={endDrag}
-                    onDragOver={() => hoverGap(folderId, index)}
-                    onDrop={() => dropAt(folderId, index)}
-                />
-            ))}
-            {!searching && (
-                <button
-                    type='button'
-                    className={`${styles.addCard} ${
-                        dropTarget?.folderId === folderId && dropTarget.index === items.length ? styles.addCardDrop : ''
-                    }`}
-                    aria-label='Ajouter une note'
-                    title='Ajouter une note'
-                    onClick={() => void openEditor(null, folderId)}
-                    onDragOver={(e) => {
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = 'move';
-                        hoverGap(folderId, items.length);
-                    }}
-                    onDrop={(e) => {
-                        e.preventDefault();
-                        dropAt(folderId, items.length);
-                    }}
-                >
-                    <span className={`icon ${styles.addCardIcon} icon-add`} />
-                </button>
-            )}
-        </div>
+        [dropInto]
     );
 
     const searching = search.trim() !== '';
+
+    /** One folder's grid: its cards, the trailing add card and the drop logic. */
+    const renderGrid = (items: NoteSummary[], folderId: number | null) => (
+        <NoteGrid
+            notes={items}
+            folders={sortedFolders}
+            folderId={folderId}
+            reorderable={!searching}
+            onOpen={(n) => void openCard(n)}
+            onMove={moveNote}
+            onAdd={() => void openEditor(null, folderId)}
+            onDragStart={(n) => (draggingRef.current = n)}
+            onDragEnd={() => (draggingRef.current = null)}
+            onDropAt={dropAt}
+        />
+    );
 
     return (
         <div className={styles.container}>

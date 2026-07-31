@@ -23,16 +23,10 @@ interface NoteCardProps {
     folders: NoteFolder[];
     /** Off while searching, where the filtered grid isn't the real order. */
     draggable: boolean;
-    /** Draw the insertion marker: a drop here lands just before this card. */
-    dropBefore: boolean;
     onOpen: (note: NoteSummary) => void;
     onMove: (note: NoteSummary, folderId: number | null) => void;
     onDragStart: (note: NoteSummary) => void;
     onDragEnd: () => void;
-    /** This card is hovered as a drop target. */
-    onDragOver: () => void;
-    /** A note was dropped on this card. */
-    onDrop: () => void;
 }
 
 /**
@@ -40,24 +34,13 @@ interface NoteCardProps {
  * only a large padlock — no title or body ever reached the client; clicking it
  * opens the master-password prompt.
  *
- * Every card is both a drag source and a drop target: dropping onto one inserts
- * the dragged note just before it, which is what makes the order fully manual.
- * Masked cards take part too — positioning never touches the body. The discreet
- * folder menu stays for long-distance moves (it appends to the target folder);
- * at rest its button is collapsed so the badges sit flush against the right edge.
+ * Cards are drag sources only — the surrounding {@link NoteGrid} owns the drop
+ * side, so a card is never restyled or displaced while a drag is in flight.
+ * Masked cards drag too: positioning never touches the body. The discreet folder
+ * menu stays for long-distance moves (it appends to the target folder); at rest
+ * its button is collapsed so the badges sit flush against the right edge.
  */
-export default function NoteCard({
-    note,
-    folders,
-    draggable,
-    dropBefore,
-    onOpen,
-    onMove,
-    onDragStart,
-    onDragEnd,
-    onDragOver,
-    onDrop
-}: NoteCardProps) {
+export default function NoteCard({ note, folders, draggable, onOpen, onMove, onDragStart, onDragEnd }: NoteCardProps) {
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -70,33 +53,24 @@ export default function NoteCard({
         return () => document.removeEventListener('mousedown', onDocClick);
     }, [menuOpen]);
 
-    // Shared by both renderings so a masked card drags and accepts drops exactly
-    // like a readable one.
+    // Shared by both renderings so a masked card drags exactly like a readable
+    // one; `data-note-card` is how the grid locates the cards to measure.
     const dnd = {
         draggable,
+        'data-note-card': '',
         onDragStart: (e: React.DragEvent) => {
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', String(note.id));
             onDragStart(note);
         },
-        onDragEnd,
-        onDragOver: (e: React.DragEvent) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            onDragOver();
-        },
-        onDrop: (e: React.DragEvent) => {
-            e.preventDefault();
-            onDrop();
-        }
+        onDragEnd
     };
-    const dropClass = dropBefore ? styles.cardDropBefore : '';
 
     if (note.masked) {
         return (
             <button
                 type='button'
-                className={`${styles.card} ${styles.cardMasked} ${dropClass}`}
+                className={`${styles.card} ${styles.cardMasked}`}
                 onClick={() => onOpen(note)}
                 aria-label='Note privée — déchiffrer'
                 {...dnd}
@@ -117,7 +91,7 @@ export default function NoteCard({
 
     return (
         <div
-            className={`${styles.card} ${dropClass}`}
+            className={styles.card}
             role='button'
             tabIndex={0}
             {...dnd}
