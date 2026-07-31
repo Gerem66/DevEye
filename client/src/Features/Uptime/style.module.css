@@ -1,0 +1,694 @@
+/* ------------------------------------------------------------------ *
+ * Home grid card
+ * ------------------------------------------------------------------ */
+
+.widget {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    height: 100%;
+}
+
+.widgetStat {
+    margin-top: var(--space-sm);
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+}
+
+.widgetValue {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+}
+
+/* One service down is the whole point of the card — say it in colour. */
+.widgetDown {
+    color: var(--danger);
+}
+
+.widgetLabel {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.widgetFoot {
+    margin-top: auto;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------ *
+ * Feature panel — service list
+ * ------------------------------------------------------------------ */
+
+.feature {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    height: 100%;
+}
+
+.toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    padding-bottom: var(--space-md);
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.headline {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.toolbarActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.error {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    background: var(--danger-bg);
+    color: var(--danger);
+    font-size: 0.875rem;
+}
+
+.empty {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    max-width: 60ch;
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.card:hover,
+.card:focus-visible {
+    border-color: var(--glass-border-strong);
+    background: var(--glass-bg-light);
+    outline: none;
+}
+
+/* A paused service still belongs in the list, just visibly out of the loop. */
+.cardPaused {
+    opacity: 0.55;
+}
+
+.cardMain {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.cardHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.cardName {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cardUrl {
+    margin: var(--space-xs) 0 0 0;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cardMeta {
+    margin: var(--space-xs) 0 0 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cardRatios {
+    display: flex;
+    gap: var(--space-md);
+    flex-shrink: 0;
+}
+
+.ratio {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    min-width: 62px;
+}
+
+.ratioValue {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.ratioLabel {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.cardActions {
+    display: flex;
+    gap: var(--space-xs);
+    flex-shrink: 0;
+}
+
+.iconBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.iconBtn:hover:not(:disabled) {
+    color: var(--text-primary);
+    background: var(--surface-subtle);
+}
+
+.iconBtn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+/* Small state dot, shared by the ping journal. */
+.dot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-pill);
+    background: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.dotUp {
+    background: var(--success);
+}
+
+.dotDown {
+    background: var(--danger);
+}
+
+/* ------------------------------------------------------------------ *
+ * Detail view
+ * ------------------------------------------------------------------ */
+
+.detail {
+    display: flex;
+    flex-direction: column;
+    /* Tight by default: the blocks that genuinely start a new section carry a
+       hairline rule instead (see `.section`), which separates far better than
+       a wide empty band. */
+    gap: var(--space-sm);
+}
+
+.detailHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.detailTitle {
+    flex: 1 1 240px;
+    min-width: 0;
+}
+
+.detailName {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.detailUrl {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    word-break: break-all;
+}
+
+.detailUrl:hover {
+    color: var(--accent);
+}
+
+.detailActions {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.detailFoot {
+    margin: 0;
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--glass-border);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.ranges {
+    display: flex;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+}
+
+.rangeBtn {
+    padding: var(--space-xs) var(--space-sm);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        background var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.rangeBtn:hover {
+    color: var(--text-primary);
+    border-color: var(--glass-border-strong);
+}
+
+.rangeActive {
+    color: var(--on-accent);
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+/* ------------------------------------------------------------------ *
+ * In-place refresh (see Pane)
+ * ------------------------------------------------------------------ */
+
+.pane {
+    position: relative;
+}
+
+/* Keeps the spacing its children had as siblings of the surrounding column. */
+.paneBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+/* The content keeps its exact geometry while reloading — only its opacity
+   moves, so a refresh never shifts anything on the page. */
+.paneDim {
+    opacity: 0.4;
+    transition: opacity var(--transition-fast);
+    pointer-events: none;
+}
+
+.paneSpinner {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 20px;
+    height: 20px;
+    color: var(--text-secondary);
+    animation: uptime-spin 0.7s linear infinite;
+}
+
+@keyframes uptime-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ------------------------------------------------------------------ *
+ * Status strip (one bar per slice of the window)
+ * ------------------------------------------------------------------ */
+
+.bars {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+/* Always the same fixed number of slots (see StatusBars), so a bar is a slice of
+   time and stays a slender vertical tick whatever the container's width. */
+.barsRow {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    height: 42px;
+}
+
+.bar {
+    flex: 1 1 0;
+    min-width: 1px;
+    border-radius: 1px;
+    transition: opacity var(--transition-fast);
+}
+
+.bar:hover {
+    opacity: 0.6;
+}
+
+.barUp {
+    background: var(--success);
+}
+
+.barSlow {
+    background: var(--warning);
+}
+
+.barDown {
+    background: var(--danger);
+}
+
+/* No probe recorded in that slice — before the service existed, while it was
+   paused, or while the server was down. */
+.barEmpty {
+    background: var(--glass-border-strong);
+}
+
+.barsLegend {
+    display: flex;
+    gap: var(--space-md);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.legendItem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.legendSwatch {
+    width: 4px;
+    height: 12px;
+    border-radius: 1px;
+}
+
+/* ------------------------------------------------------------------ *
+ * Chart
+ * ------------------------------------------------------------------ */
+
+.chart {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.chartBody {
+    height: 140px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+    overflow: hidden;
+}
+
+.chartSvg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.chartLine {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    /* The viewBox is stretched to the container, so let the stroke keep its
+       nominal width instead of being scaled with it. */
+    vector-effect: non-scaling-stroke;
+}
+
+.chartFail {
+    fill: var(--danger);
+}
+
+.chartCursor {
+    stroke: var(--text-muted);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+}
+
+.chartEmpty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 140px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.chartFoot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.chartHover {
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.chartScale {
+    font-variant-numeric: tabular-nums;
+}
+
+.summary {
+    display: flex;
+    gap: var(--space-lg);
+    flex-wrap: wrap;
+    margin-top: var(--space-xs);
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+}
+
+.summaryItem {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.summaryValue {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.summaryLabel {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    align-items: flex-start;
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--glass-border);
+}
+
+.sectionTitle {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.incident,
+.checkRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xs) 0;
+    border-bottom: 1px solid var(--glass-border);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.incidentWhen,
+.checkWhen {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.incidentError,
+.checkError {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.checkStatus,
+.checkMs {
+    font-variant-numeric: tabular-nums;
+    min-width: 64px;
+    text-align: right;
+}
+
+/* The list must not push the panel wider than the popup on long error strings. */
+.section .list {
+    width: 100%;
+}
+
+/* The browser fills the popup exactly, so the journal — not the page — owns the
+   overflow. `min-height: 0` is what lets a flex child actually shrink to the
+   space left, instead of being floored at its content height. */
+.browser {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.journal {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: var(--space-xs);
+}
+
+/* ------------------------------------------------------------------ *
+ * Popups (service form + notifications)
+ * ------------------------------------------------------------------ */
+
+.popupHint {
+    margin: 0 0 var(--space-md) 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.formRow {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    flex: 1 1 140px;
+    min-width: 0;
+}
+
+.fieldLabel {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.fieldHint {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.check {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.check input {
+    accent-color: var(--accent);
+}
+
+.warning {
+    margin: 0;
+    padding: var(--space-sm);
+    border-radius: var(--radius-sm);
+    background: var(--warning-bg);
+    color: var(--warning);
+    font-size: 0.8rem;
+}
+
+.status {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.popupActions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--glass-border);
+}
+
+.popupActionsLeft {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}

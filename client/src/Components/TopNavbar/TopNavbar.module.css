@@ -219,16 +219,14 @@
     color: var(--accent);
 }
 
-.statusDot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--text-muted);
+/* State tints for a widget's identifying icon. Accent (the default above) means
+   "nothing to report"; these two mark a healthy or a failing subject. */
+.statusItem .statusOk {
+    color: var(--success);
 }
 
-.statusDot.live {
-    background: var(--success);
-    box-shadow: 0 0 7px var(--success);
+.statusItem .statusAlert {
+    color: var(--danger);
 }
 
 .statusTemp {

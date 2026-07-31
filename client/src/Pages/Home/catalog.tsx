@@ -6,12 +6,14 @@ import { WeatherWidget } from '@/Features/Weather';
 import { NotesWidget } from '@/Features/Notes/NotesWidget';
 import { PasswordWidget } from '@/Features/Password/PasswordWidget';
 import { CloudSyncWidget } from '@/Features/CloudSync';
+import { UptimeWidget } from '@/Features/Uptime/UptimeWidget';
 
 import Monitoring from '@/Features/Monitoring';
 import Weather from '@/Features/Weather';
 import FeaturePassword from '@/Features/Password';
 import FeatureNotes from '@/Features/Notes';
 import CloudSync from '@/Features/CloudSync';
+import Uptime from '@/Features/Uptime';
 
 import type { FeatureProps } from '@/Features/types';
 
@@ -77,6 +79,17 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         FullComponent: FeatureNotes,
         cacheDurationMinutes: 0,
         holdSecrecy: true
+    },
+    {
+        id: 'uptime',
+        title: 'Uptime',
+        icon: 'uptime',
+        WidgetContent: UptimeWidget,
+        FullComponent: Uptime,
+        // Unmounted as soon as it closes: the panel polls while it lives, and a
+        // cached (or preloaded) instance would keep querying unseen. The home
+        // card and navbar widget stay live through the shared count store.
+        cacheDurationMinutes: 0
     },
     {
         id: 'cloudsync',

@@ -2,6 +2,7 @@ import { type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { HomeTopbarWidgetId } from 'deveye-types';
 
 import { useDevices } from '@/stores/devices';
+import { useUptimeCount } from '@/stores/uptime';
 import { useWeather } from '@/stores/weather';
 import { findCategory, useHomeLayout } from '@/stores/homeLayout';
 import { wmoIcon } from '@/Features/Weather/wmoIcon';
@@ -24,7 +25,8 @@ export interface TopbarWidgetMeta {
 export const TOPBAR_WIDGETS: TopbarWidgetMeta[] = [
     { id: 'weather', title: 'Météo', icon: 'cloud', description: 'Température de la ville principale' },
     { id: 'devices', title: 'Appareils connectés', icon: 'server', description: "Nombre d'appareils en ligne" },
-    { id: 'secrecy', title: 'Chiffrement', icon: 'lock', description: 'Minuteur du chiffrement par mot de passe' }
+    { id: 'secrecy', title: 'Chiffrement', icon: 'lock', description: 'Minuteur du chiffrement par mot de passe' },
+    { id: 'uptime', title: 'Uptime', icon: 'uptime', description: 'Services en ligne sur les services surveillés' }
 ];
 
 /** Weather mini-widget: current temperature of the primary city. */
@@ -47,8 +49,22 @@ export function DevicesStatus() {
     const onlineCount = devices.filter((d) => d.online).length;
     return (
         <span className={styles.statusItem} title='Appareils en ligne'>
-            <span className={`${styles.statusDot} ${onlineCount > 0 ? styles.live : ''}`} />
+            <span className={`icon icon-server ${onlineCount > 0 ? styles.statusOk : ''}`} />
             {onlineCount}/{devices.length}
+        </span>
+    );
+}
+
+/** Uptime mini-widget: services confirmed healthy / total monitored. */
+export function UptimeStatus() {
+    const { total, up, down, loading } = useUptimeCount();
+    // The icon carries both the identity (which widget is this?) and the state,
+    // so the two count widgets can't be mistaken for one another at a glance.
+    const tone = down > 0 ? styles.statusAlert : total > 0 && up === total ? styles.statusOk : '';
+    return (
+        <span className={styles.statusItem} title='Services surveillés en ligne'>
+            <span className={`icon icon-uptime ${tone}`} />
+            {loading ? '—' : `${up}/${total}`}
         </span>
     );
 }
@@ -62,6 +78,8 @@ export function renderTopbarWidget(id: HomeTopbarWidgetId, onOpenSecurity?: (e: 
             return <DevicesStatus />;
         case 'secrecy':
             return <SecrecyTimer onOpenSecurity={onOpenSecurity} />;
+        case 'uptime':
+            return <UptimeStatus />;
         default:
             return null;
     }

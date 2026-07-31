@@ -222,6 +222,10 @@
     -webkit-mask-image: url(/icons/activity.svg);
     mask-image: url(/icons/activity.svg);
 }
+.icon.icon-uptime {
+    -webkit-mask-image: url(/icons/uptime.svg);
+    mask-image: url(/icons/uptime.svg);
+}
 .icon.icon-cloud {
     -webkit-mask-image: url(/icons/cloud.svg);
     mask-image: url(/icons/cloud.svg);
