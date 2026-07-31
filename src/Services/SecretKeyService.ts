@@ -60,6 +60,29 @@ export class SecretKeyService {
         return row;
     }
 
+    /**
+     * Fetch the user's **open DEK**, creating it on first use. Unlike the main
+     * DEK this one is always server-wrapped, whatever the user's `wrap_mode`:
+     * it backs the data a feature must be able to read without any password
+     * prompt (see {@link SecureStore.open}). Never re-wrapped by the secrecy
+     * handlers — enabling password encryption must not lock this tier.
+     */
+    async resolveOpenDek(userId: number): Promise<Buffer> {
+        const row = await this.ensureRow(userId);
+        if (!row.open_dek_wrapped) {
+            const wrapped = Encryption.encryptWithKey(this.crypt.serverKey(), crypto.randomBytes(DEK_BYTES));
+            await this.db.userSecretKeys.setOpenDek(userId, wrapped);
+            // Re-read rather than trust `wrapped`: a concurrent first write may
+            // have landed first, and its key is the one the content will use.
+            const stored = (await this.db.userSecretKeys.get(userId))?.open_dek_wrapped;
+            if (!stored) throw new Error('Failed to create user open DEK');
+            row.open_dek_wrapped = stored;
+        }
+        const dek = Encryption.decryptWithKeyRaw(this.crypt.serverKey(), row.open_dek_wrapped);
+        if (!dek) throw new Error('Open DEK failed to decrypt (server key changed?)');
+        return dek;
+    }
+
     /** True when the user's DEK is currently wrapped by their password. */
     isPasswordWrapped(row: UserSecretKeyRow): boolean {
         return row.wrap_mode === 'password';

@@ -60,7 +60,7 @@ interface BlockEditorProps {
     footerDates?: React.ReactNode;
     /** The cancel / save buttons. */
     footerButtons?: React.ReactNode;
-    /** Rendered between the block list and the footer (e.g. pending-lock notices). */
+    /** Rendered between the block list and the footer (e.g. a pending privacy change). */
     notice?: React.ReactNode;
 }
 

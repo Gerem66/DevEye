@@ -341,16 +341,68 @@ export function discardPendingDeksForUser(userId: number): void {
 }
 
 /**
+ * Read/write codec for one encryption tier. Features hold a `Cipher` and never
+ * see the DEK behind it.
+ */
+export interface Cipher {
+    /** Encrypt a plaintext payload for storage. */
+    encrypt(plaintext: string): Promise<string>;
+    /** Decrypt a stored blob. Throws `internal` if the blob is corrupt. */
+    decrypt(blob: string): Promise<string>;
+    /** Non-throwing variant for tolerant list paths. */
+    tryDecrypt(blob: string): Promise<string | null>;
+}
+
+/** A {@link Cipher} bound to a lazily-resolved DEK. */
+class DekCipher implements Cipher {
+    constructor(private readonly dek: () => Promise<Buffer>) {}
+
+    async encrypt(plaintext: string): Promise<string> {
+        return SecretKeyService.encrypt(await this.dek(), plaintext);
+    }
+
+    async decrypt(blob: string): Promise<string> {
+        const plain = SecretKeyService.decrypt(await this.dek(), blob);
+        if (plain === null) throw new FeatureError('internal', 'Failed to decrypt content');
+        return plain;
+    }
+
+    async tryDecrypt(blob: string): Promise<string | null> {
+        try {
+            return await this.decrypt(blob);
+        } catch {
+            return null;
+        }
+    }
+}
+
+/**
  * The unified storage-encryption gateway handed to feature handlers as
  * `ctx.secure`. Features call `encrypt`/`decrypt` and never see the DEK, the
  * server key, the password or the storage of the wrapped key — this is the
  * single place that turns plaintext into a stored blob and back.
  *
- * Scoped to one (user, session): it resolves the right DEK based on whether the
- * feature is on (password-wrapped) or off (server-wrapped).
+ * Scoped to one (user, session), it exposes two tiers:
+ *  - the store itself — the **guarded** tier, keyed by the user's main DEK. When
+ *    password encryption is on, reading or writing it requires a live session
+ *    unlock (`locked` otherwise). Default for feature data.
+ *  - {@link open} — the **open** tier, keyed by a per-user DEK the server can
+ *    always unwrap. For data a feature must serve with no prompt at all, while
+ *    still being encrypted at rest.
  */
-export class SecureStore {
+export class SecureStore implements Cipher {
     private cachedRow: UserSecretKeyRow | null = null;
+    private cachedOpenDek: Promise<Buffer> | null = null;
+
+    /**
+     * Always-available tier. Deliberately not gated: anything written here is
+     * readable by the live server, so only put data whose exposure the user has
+     * accepted (e.g. a note not marked private).
+     */
+    readonly open: Cipher = new DekCipher(() => this.resolveOpenDek());
+
+    /** Password-gated tier backing this store's own encrypt/decrypt. */
+    private readonly guarded: Cipher = new DekCipher(() => this.resolveDek());
 
     constructor(
         private readonly keys: SecretKeyService,
@@ -367,6 +419,20 @@ export class SecureStore {
     /** Invalidate the cached row after a wrap-mode change within the session. */
     invalidate(): void {
         this.cachedRow = null;
+    }
+
+    /**
+     * The open DEK, resolved once per connection: it is neither password-gated
+     * nor affected by a wrap-mode change, so unlike {@link cachedRow} it never
+     * needs invalidating. Caching the promise also collapses the concurrent
+     * first uses of a listing into a single lookup. A failure is not cached.
+     */
+    private resolveOpenDek(): Promise<Buffer> {
+        this.cachedOpenDek ??= this.keys.resolveOpenDek(this.userId).catch((e: unknown) => {
+            this.cachedOpenDek = null;
+            throw e;
+        });
+        return this.cachedOpenDek;
     }
 
     /**
@@ -411,16 +477,12 @@ export class SecureStore {
 
     /** Encrypt a plaintext payload for storage. */
     async encrypt(plaintext: string): Promise<string> {
-        const dek = await this.resolveDek();
-        return SecretKeyService.encrypt(dek, plaintext);
+        return this.guarded.encrypt(plaintext);
     }
 
     /** Decrypt a stored blob. Throws `internal` if the blob is corrupt. */
     async decrypt(blob: string): Promise<string> {
-        const dek = await this.resolveDek();
-        const plain = SecretKeyService.decrypt(dek, blob);
-        if (plain === null) throw new FeatureError('internal', 'Failed to decrypt content');
-        return plain;
+        return this.guarded.decrypt(blob);
     }
 
     /**
@@ -430,7 +492,7 @@ export class SecureStore {
      */
     async tryDecrypt(blob: string): Promise<string | null> {
         try {
-            return await this.decrypt(blob);
+            return await this.guarded.decrypt(blob);
         } catch {
             // Legacy fallback: data written with the old Encryption.Encrypt scheme.
             return this.crypt.Decrypt(blob);

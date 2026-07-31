@@ -8,21 +8,11 @@ import { openInfo } from '@/Components/InfoPopup';
 import Button from '@/Components/Button';
 import BlockEditor from './BlockEditor';
 import { exportNotePdf } from './exportPdf';
-import { NOTE_LOCK_SET_POPUP, type NoteLockSetInput } from './LockSetPopup';
-import { NOTE_LOCK_MANAGE_POPUP, type LockManageResult } from './LockManagePopup';
 import { NOTE_CONFIRM_POPUP, type ConfirmInput } from './ConfirmPopup';
 
 import { NOTE_TITLE_MAX_LENGTH, type Note, type NoteBlock } from 'deveye-types';
 
 export const NOTE_EDITOR_POPUP = 'popup-note-editor';
-
-/**
- * How the editor's save should affect the note's lock:
- *  - undefined        → leave the lock unchanged (content-only edit).
- *  - `{ set: pwd }`   → (re)lock the note with this dedicated password.
- *  - `{ remove: true }` → remove the lock (note becomes open).
- */
-export type LockChange = { set: string } | { remove: true } | undefined;
 
 /** The editable subset of a note returned by the editor on save. */
 export interface NoteDraft {
@@ -30,7 +20,8 @@ export interface NoteDraft {
     folderId: number | null;
     blocks: NoteBlock[];
     pinned: boolean;
-    lock: LockChange;
+    /** Encrypt with the password-protected key instead of the open one. */
+    private: boolean;
 }
 
 export type NoteEditorResult = NoteDraft | 'delete' | null;
@@ -71,21 +62,22 @@ function normalizeBlocks(blocks: NoteBlock[]): NoteBlock[] {
     return blocks.filter((b) => b.type === 'divider' || b.text.trim() !== '');
 }
 
-/** Open the shared, root-level explainer about locked notes. */
-function showLockInfo() {
+/** Open the shared, root-level explainer about private notes. */
+function showPrivateInfo() {
     void openInfo({
-        title: 'Notes verrouillées',
+        title: 'Notes privées',
         body: (
             <>
                 <p>
-                    Une note <strong>verrouillée</strong> possède son propre mot de passe, distinct de celui de votre
-                    compte. Elle apparaît avec un cadenas et son titre comme son contenu restent masqués tant que ce mot
-                    de passe n’est pas saisi.
+                    Une note ordinaire est chiffrée avec une clé que le serveur sait déballer seul : elle s’ouvre sans
+                    aucune saisie. Une note <strong>privée</strong> est chiffrée avec la clé dérivée de votre mot de
+                    passe — tant que la session n’est pas déverrouillée, son titre comme son contenu restent illisibles,
+                    y compris pour le serveur.
                 </p>
                 <p>
-                    Le verrou est un contrôle d’<strong>accès</strong> : il faut le mot de passe pour ouvrir, modifier
-                    ou supprimer la note. Le déplacer d’un dossier à l’autre reste libre. Le chiffrement des données en
-                    base n’est pas affecté.
+                    Dans la liste, une note privée verrouillée s’affiche avec un cadenas ; « Déchiffrer » demande votre
+                    mot de passe et les révèle toutes d’un coup. Basculer ce réglage re-chiffre la note à
+                    l’enregistrement.
                 </p>
             </>
         )
@@ -94,14 +86,10 @@ function showLockInfo() {
 
 /**
  * The single note editor surface, driven imperatively via OpenPopup. Handles
- * both create and edit: a prominent title, the modular block body, and an
- * understated pin toggle. The note's folder is set from the main screen.
- *
- * "Verrouiller" gives the note its own dedicated password — an access gate
- * checked server-side on every open/delete (the body's encryption is unchanged).
- * Setting / changing / removing the lock is done through dedicated popups opened
- * over the editor, so the surface stays uncluttered. Deletion is confirmed via a
- * popup over the editor too; the editor only closes once confirmed.
+ * both create and edit: a prominent title, the modular block body, and two
+ * understated toggles (pin, private). The note's folder is set from the main
+ * screen. Deletion is confirmed via a popup over the editor; the editor only
+ * closes once confirmed.
  */
 export default function NoteEditor() {
     const [mode, setMode] = useState<'add' | 'edit'>('add');
@@ -109,29 +97,26 @@ export default function NoteEditor() {
     const [folderId, setFolderId] = useState<number | null>(null);
     const [blocks, setBlocks] = useState<NoteBlock[]>(emptyBlocks);
     const [pinned, setPinned] = useState(false);
-    /** Whether the note is currently locked (was opened with its password). */
-    const [wasLocked, setWasLocked] = useState(false);
-    /** Pending lock change applied on save; null = leave the lock unchanged. */
-    const [lockChange, setLockChange] = useState<LockChange>(undefined);
+    /** Whether the note will be encrypted with the password-protected key. */
+    const [isPrivate, setIsPrivate] = useState(false);
     const [created, setCreated] = useState<number | null>(null);
     const [updated, setUpdated] = useState<number | null>(null);
     // Snapshot of the editable state the editor opened with, to detect unsaved
     // edits (blocks compared structurally).
-    const initial = useRef({ title: '', pinned: false, blocks: '' });
+    const initial = useRef({ title: '', pinned: false, private: false, blocks: '' });
 
     function handleOpen(input: NoteEditorInput) {
         const note = input?.note ?? null;
-        setLockChange(undefined);
         if (!note) {
             setMode('add');
             setTitle('');
             setFolderId(input?.folderId ?? null);
             setBlocks(emptyBlocks());
             setPinned(false);
-            setWasLocked(false);
+            setIsPrivate(false);
             setCreated(null);
             setUpdated(null);
-            initial.current = { title: '', pinned: false, blocks: JSON.stringify(emptyBlocks()) };
+            initial.current = { title: '', pinned: false, private: false, blocks: JSON.stringify(emptyBlocks()) };
             return;
         }
         setMode('edit');
@@ -140,17 +125,21 @@ export default function NoteEditor() {
         const openBlocks = note.blocks.length > 0 ? note.blocks : emptyBlocks();
         setBlocks(openBlocks);
         setPinned(note.pinned);
-        setWasLocked(note.locked);
+        setIsPrivate(note.private);
         setCreated(note.created);
         setUpdated(note.updated);
-        initial.current = { title: note.title, pinned: note.pinned, blocks: JSON.stringify(openBlocks) };
+        initial.current = {
+            title: note.title,
+            pinned: note.pinned,
+            private: note.private,
+            blocks: JSON.stringify(openBlocks)
+        };
     }
 
-    // Dirty when content/pin changed or a lock change is pending.
     const dirty =
-        lockChange !== undefined ||
         title !== initial.current.title ||
         pinned !== initial.current.pinned ||
+        isPrivate !== initial.current.private ||
         JSON.stringify(blocks) !== initial.current.blocks;
 
     function close(result: NoteEditorResult = null) {
@@ -163,7 +152,7 @@ export default function NoteEditor() {
             folderId,
             blocks: normalizeBlocks(blocks),
             pinned,
-            lock: lockChange
+            private: isPrivate
         };
         // An entirely empty note (no title and no content) is a no-op cancel
         // rather than persisting a blank row.
@@ -195,31 +184,6 @@ export default function NoteEditor() {
     const expanded = lineCount > 10;
     const editorWidth = expanded ? 960 : 560;
 
-    /** Whether the note will be locked after saving (existing lock + pending change). */
-    const lockedAfterSave =
-        lockChange && 'set' in lockChange ? true : lockChange && 'remove' in lockChange ? false : wasLocked;
-
-    /**
-     * Padlock toggle. On a note that will be locked, open the manage popup
-     * (Annuler / Changer le mot de passe / Retirer le verrou); otherwise open the
-     * set popup to define a password. Opening the editor already proved
-     * authorization, so removing the lock needs no password re-check.
-     */
-    async function toggleLock() {
-        if (lockedAfterSave) {
-            const action = await OpenPopup<LockManageResult>(NOTE_LOCK_MANAGE_POPUP);
-            if (action === 'remove') {
-                setLockChange(wasLocked ? { remove: true } : undefined);
-            } else if (action === 'change') {
-                const pwd = await OpenPopup<string>(NOTE_LOCK_SET_POPUP, { changing: true } as NoteLockSetInput);
-                if (pwd !== null) setLockChange({ set: pwd });
-            }
-            return;
-        }
-        const pwd = await OpenPopup<string>(NOTE_LOCK_SET_POPUP, { changing: false } as NoteLockSetInput);
-        if (pwd !== null) setLockChange({ set: pwd });
-    }
-
     return (
         <Popup<NoteEditorInput>
             id={NOTE_EDITOR_POPUP}
@@ -235,9 +199,9 @@ export default function NoteEditor() {
                 <button
                     type='button'
                     className={styles.editorInfoBtn}
-                    aria-label='À propos des notes verrouillées'
-                    title='Comment fonctionnent les notes verrouillées ?'
-                    onClick={showLockInfo}
+                    aria-label='À propos des notes privées'
+                    title='Comment fonctionnent les notes privées ?'
+                    onClick={showPrivateInfo}
                 >
                     <span className='icon icon-info' />
                 </button>
@@ -259,22 +223,14 @@ export default function NoteEditor() {
                     onChange={setBlocks}
                     fill={expanded}
                     notice={
-                        <>
-                            {lockChange && 'set' in lockChange && (
-                                <p className={styles.lockNotice}>
-                                    <span className={`icon ${styles.toggleIcon} icon-lock`} />
-                                    {wasLocked
-                                        ? 'Nouveau mot de passe appliqué à l’enregistrement.'
-                                        : 'La note sera verrouillée à l’enregistrement.'}
-                                </p>
-                            )}
-                            {lockChange && 'remove' in lockChange && (
-                                <p className={styles.lockNotice}>
-                                    <span className={`icon ${styles.toggleIcon} icon-unlock`} />
-                                    Le verrou sera retiré à l’enregistrement.
-                                </p>
-                            )}
-                        </>
+                        isPrivate !== initial.current.private ? (
+                            <p className={styles.privateNotice}>
+                                <span className={`icon ${styles.toggleIcon} icon-${isPrivate ? 'lock' : 'unlock'}`} />
+                                {isPrivate
+                                    ? 'La note sera re-chiffrée avec votre mot de passe à l’enregistrement.'
+                                    : 'La note sera lisible sans mot de passe après l’enregistrement.'}
+                            </p>
+                        ) : undefined
                     }
                     footerActions={
                         <>
@@ -302,14 +258,12 @@ export default function NoteEditor() {
                             </button>
                             <button
                                 type='button'
-                                className={`${styles.iconToggle} ${lockedAfterSave ? styles.iconToggleActive : ''}`}
-                                aria-pressed={lockedAfterSave}
-                                title={lockedAfterSave ? 'Gérer le verrou' : 'Verrouiller cette note'}
-                                onClick={() => void toggleLock()}
+                                className={`${styles.iconToggle} ${isPrivate ? styles.iconToggleActive : ''}`}
+                                aria-pressed={isPrivate}
+                                title={isPrivate ? 'Rendre la note lisible sans mot de passe' : 'Rendre la note privée'}
+                                onClick={() => setIsPrivate((v) => !v)}
                             >
-                                <span
-                                    className={`icon ${styles.toggleIcon} icon-${lockedAfterSave ? 'lock' : 'unlock'}`}
-                                />
+                                <span className={`icon ${styles.toggleIcon} icon-${isPrivate ? 'lock' : 'unlock'}`} />
                             </button>
                             <button
                                 type='button'

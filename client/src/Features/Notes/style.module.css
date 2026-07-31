@@ -17,6 +17,14 @@
     min-width: 0;
 }
 
+/* Header buttons: "Déchiffrer" only appears while private notes stay masked. */
+.headerActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
 .title {
     font-size: 1.5rem;
     font-weight: 700;
@@ -182,12 +190,19 @@
     background: var(--glass-bg);
 }
 
-/* Locked note: centered column — a large padlock with a small label beneath. */
-.cardLocked {
+/* Masked (private + locked) note: centered column — a large padlock with a
+   small label beneath, and nothing else to give the content away. */
+.cardMasked {
     cursor: pointer;
     align-items: center;
     justify-content: center;
+    gap: var(--space-sm);
     text-align: center;
+    color: var(--text-muted);
+}
+
+.cardMasked:hover {
+    color: var(--text-secondary);
 }
 
 .cardHead {
@@ -351,20 +366,12 @@
     white-space: nowrap;
 }
 
-.lockedHint {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-sm);
-    color: var(--text-muted);
+.maskedIcon {
+    width: 42px;
+    height: 42px;
 }
 
-.lockedIcon {
-    width: 34px;
-    height: 34px;
-}
-
-.lockedLabel {
+.maskedLabel {
     font-size: 0.85rem;
 }
 
@@ -995,9 +1002,9 @@
     line-height: 1.5;
 }
 
-/* Pending-lock notice shown in the note editor before saving (temporary, so
-   kept noticeable rather than blending into the metadata line). */
-.lockNotice {
+/* Pending privacy-change notice shown in the editor before saving (temporary,
+   so kept noticeable rather than blending into the metadata line). */
+.privateNotice {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -1006,21 +1013,9 @@
     color: var(--text-secondary);
 }
 
-.lockNotice .toggleIcon {
+.privateNotice .toggleIcon {
     width: 13px;
     height: 13px;
-}
-
-/* Lock-management popup: stacked full-width choices. */
-.lockManageActions {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
-    margin-top: var(--space-md);
-}
-
-.lockManageActions > * {
-    width: 100%;
 }
 
 /* Loading skeleton */

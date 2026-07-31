@@ -1,4 +1,3 @@
-import { hashPassword, verifyPassword } from '@/auth/argon';
 import {
     folderAdd,
     folderDelete,
@@ -14,15 +13,17 @@ import {
     noteMove
 } from 'deveye-types';
 import type { NoteRow } from 'deveye-types';
+import type { Cipher } from '@/Services/SecureStore';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import {
+    decryptFolder,
+    decryptPayload,
     encryptFolder,
     encryptPayload,
     toFolder,
-    toLockedSummary,
+    toMaskedSummary,
     toNote,
     toSummary,
-    tryDecryptFolder,
     tryDecryptPayload,
     type StoredPayload
 } from './_shared';
@@ -67,54 +68,30 @@ async function resolveFolderId(
 }
 
 /**
- * Verify a locked note's dedicated password against its stored hash. Open notes
- * (`lock_hash` null) never require one. Throws `auth_required` when a password is
- * needed but absent, `auth_invalid` when it doesn't match. The lock is purely an
- * access gate — checked on every operation that exposes or destroys the note.
+ * The tier a note's body lives in: private notes use the password-protected DEK,
+ * everything else the open one. Picking the cipher IS the access control — a
+ * private note simply can't be read or written while the session is locked.
  */
-async function assertNoteUnlocked(row: NoteRow, password: string | undefined): Promise<void> {
-    if (row.lock_hash === null) return;
-    if (!password) throw new FeatureError('auth_required', 'Note verrouillée; saisissez son mot de passe');
-    if (!(await verifyPassword(row.lock_hash, password))) {
-        throw new FeatureError('auth_invalid', 'Mot de passe incorrect');
-    }
+function cipherFor(ctx: FeatureContext, isPrivate: boolean): Cipher {
+    return isPrivate ? ctx.secure : ctx.secure.open;
 }
 
 /**
- * Resolve the new `lock_hash` for a save from the draft's optional `lock` change:
- *  - omitted        → keep the existing hash (content-only edit).
- *  - `{ set }`      → hash the new dedicated password (lock / re-lock).
- *  - `{ remove }`   → null (unlock the note).
+ * Guard the destructive/rewriting paths on an existing private note. Encryption
+ * alone protects reads, but an edit or a delete never needs to *read* the body —
+ * without this, a locked session could overwrite or destroy a note it can't see.
+ * Throws `locked`, which the client turns into the usual unlock prompt.
  */
-async function resolveLockHash(
-    lock: { set: string } | { remove: true } | undefined,
-    existing: string | null
-): Promise<string | null> {
-    if (!lock) return existing;
-    if ('remove' in lock) return null;
-    return hashPassword(lock.set);
+async function assertPrivateUnlocked(ctx: FeatureContext, row: NoteRow): Promise<void> {
+    if (row.is_private !== 1) return;
+    if (!(await ctx.secure.isUnlocked())) {
+        throw new FeatureError('locked', 'Password encryption is locked; unlock with your password');
+    }
 }
 
-/** Normalize a draft into the encrypted payload (folder lives in a clear column). */
+/** Normalize a draft into the encrypted payload (the rest lives in clear columns). */
 function toPayload(draft: { title: string; blocks: StoredPayload['blocks'] }): StoredPayload {
     return { title: draft.title, blocks: draft.blocks };
-}
-
-/**
- * Ensure the password-based encryption DEK is available this session. No-op when
- * the feature is off; throws `locked` (the client prompts for the password) when
- * it's on but the session hasn't been unlocked yet. Mirrors the Password feature
- * so a locked store surfaces an unlock prompt instead of an empty list.
- */
-async function assertSecureUnlocked(ctx: FeatureContext): Promise<void> {
-    try {
-        if (!(await ctx.secure.isUnlocked())) {
-            throw new FeatureError('locked', 'Password encryption is locked; unlock with your password');
-        }
-    } catch (e) {
-        if (e instanceof FeatureError) throw e;
-        ctx.logger.warn({ err: e }, 'assertSecureUnlocked: failed to check lock state, assuming unlocked');
-    }
 }
 
 export const noteListFeature: FeatureDefinition<
@@ -125,22 +102,25 @@ export const noteListFeature: FeatureDefinition<
     ...noteList,
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
-        await assertSecureUnlocked(ctx);
         const rows = (await ctx.db.notes.listByUser(ctx.userId)).filter((r) =>
             rowInWorkspace(r.workspace_id, input.workspaceId)
         );
+
+        // Never gated: the list always renders. Private notes are only revealed
+        // if the DEK happens to be live — and we only ask (which slides the grace
+        // window) when there is actually a private note to reveal.
+        const canReadPrivate = rows.some((r) => r.is_private === 1) ? await ctx.secure.isUnlocked() : false;
 
         let skipped = 0;
         const notes = (
             await Promise.all(
                 rows.map(async (r) => {
-                    // Locked notes are always masked in the list: title + body stay
-                    // hidden until the per-note password is entered on open.
-                    if (r.lock_hash !== null) return toLockedSummary(r);
-                    const payload = await tryDecryptPayload(ctx.secure, r.content);
+                    const isPrivate = r.is_private === 1;
+                    if (isPrivate && !canReadPrivate) return toMaskedSummary(r);
+                    const payload = await tryDecryptPayload(cipherFor(ctx, isPrivate), r.content);
                     if (!payload) {
-                        // A locked SecureStore (password encryption on, session not
-                        // unlocked) surfaces here as an undecryptable body — drop it.
+                        // Corrupt row (or a key that no longer matches): drop it
+                        // rather than fail the whole list.
                         skipped += 1;
                         return null;
                     }
@@ -164,9 +144,8 @@ export const noteCountFeature: FeatureDefinition<
     ...noteCount,
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
-        // Pure row count from clear metadata: no DEK, no unlock gate, and locked
-        // notes are counted like any other (no special case). This lets the
-        // dashboard widget show a number even when the store is locked.
+        // Pure row count from clear metadata: no DEK, no unlock gate, and private
+        // notes are counted like any other (no special case).
         const rows = await ctx.db.notes.listByUser(ctx.userId);
         const count = rows.filter((r) => rowInWorkspace(r.workspace_id, input.workspaceId)).length;
         return { count };
@@ -178,13 +157,13 @@ export const noteGetFeature: FeatureDefinition<typeof noteGet.command, typeof no
         ...noteGet,
         handler: async (ctx, input) => {
             await assertWorkspaceMember(ctx, input.workspaceId);
-            await assertSecureUnlocked(ctx);
             const row = await ctx.db.notes.findById(input.noteId, ctx.userId);
             if (!row || !rowInWorkspace(row.workspace_id, input.workspaceId)) {
                 throw new FeatureError('not_found', 'Note not found');
             }
-            await assertNoteUnlocked(row, input.password);
-            const payload = await tryDecryptPayload(ctx.secure, row.content);
+            // A private note resolves the guarded DEK here, which throws `locked`
+            // on its own when the session isn't unlocked.
+            const payload = await decryptPayload(cipherFor(ctx, row.is_private === 1), row.content);
             if (!payload) throw new FeatureError('internal', 'Failed to decrypt note content');
             return { note: toNote(row, payload) };
         }
@@ -195,22 +174,20 @@ export const noteAddFeature: FeatureDefinition<typeof noteAdd.command, typeof no
         ...noteAdd,
         handler: async (ctx, input) => {
             await assertWorkspaceMember(ctx, input.workspaceId);
-            await assertSecureUnlocked(ctx);
             const folderId = await resolveFolderId(ctx, input.workspaceId, input.note.folderId);
-            const content = await encryptPayload(ctx.secure, toPayload(input.note));
-            const lockHash = await resolveLockHash(input.note.lock, null);
+            const content = await encryptPayload(cipherFor(ctx, input.note.private), toPayload(input.note));
             const row = await ctx.db.notes.create({
                 userId: ctx.userId,
                 workspaceId: toDbWorkspaceId(input.workspaceId),
                 folderId,
                 content,
                 pinned: input.note.pinned,
-                lockHash
+                isPrivate: input.note.private
             });
             ctx.audit({
                 action: 'note.create',
                 description: 'Note créée',
-                metadata: { noteId: row.id, workspaceId: input.workspaceId, locked: lockHash !== null }
+                metadata: { noteId: row.id, workspaceId: input.workspaceId, private: input.note.private }
             });
             return { note: toNote(row, toPayload(input.note)) };
         }
@@ -224,28 +201,26 @@ export const noteEditFeature: FeatureDefinition<
     ...noteEdit,
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
-        await assertSecureUnlocked(ctx);
         const existing = await ctx.db.notes.findById(input.noteId, ctx.userId);
         if (!existing || !rowInWorkspace(existing.workspace_id, input.workspaceId)) {
             throw new FeatureError('not_found', 'Note not found');
         }
-        // Editing a locked note's content requires its existing password (proof
-        // the note was legitimately opened before saving over it).
-        await assertNoteUnlocked(existing, input.password);
+        await assertPrivateUnlocked(ctx, existing);
         const folderId = await resolveFolderId(ctx, input.workspaceId, input.note.folderId);
-        const content = await encryptPayload(ctx.secure, toPayload(input.note));
-        const lockHash = await resolveLockHash(input.note.lock, existing.lock_hash);
+        // Re-encrypting with the draft's tier is what moves a note between
+        // public and private; the old ciphertext is replaced wholesale.
+        const content = await encryptPayload(cipherFor(ctx, input.note.private), toPayload(input.note));
         const updated = await ctx.db.notes.update(input.noteId, ctx.userId, {
             folderId,
             content,
             pinned: input.note.pinned,
-            lockHash
+            isPrivate: input.note.private
         });
         if (!updated) throw new FeatureError('not_found', 'Note not found');
         ctx.audit({
             action: 'note.edit',
             description: 'Note modifiée',
-            metadata: { noteId: input.noteId, workspaceId: input.workspaceId }
+            metadata: { noteId: input.noteId, workspaceId: input.workspaceId, private: input.note.private }
         });
         return { note: toNote(updated, toPayload(input.note)) };
     }
@@ -263,8 +238,8 @@ export const noteMoveFeature: FeatureDefinition<
         if (!existing || !rowInWorkspace(existing.workspace_id, input.workspaceId)) {
             throw new FeatureError('not_found', 'Note not found');
         }
-        // Moving is a benign reorganization that never exposes the body, so it is
-        // not gated by the lock — even a locked note can be re-filed freely.
+        // Moving is a benign reorganization that never exposes nor rewrites the
+        // body, so even a masked private note can be re-filed freely.
         const folderId = await resolveFolderId(ctx, input.workspaceId, input.folderId);
         const updated = await ctx.db.notes.move(input.noteId, ctx.userId, folderId);
         if (!updated) throw new FeatureError('not_found', 'Note not found');
@@ -284,9 +259,7 @@ export const noteDeleteFeature: FeatureDefinition<
         if (!existing || !rowInWorkspace(existing.workspace_id, input.workspaceId)) {
             throw new FeatureError('not_found', 'Note not found');
         }
-        // Deleting is destructive, so a locked note requires its password — one
-        // can't destroy a note it couldn't open. Moving (above) stays free.
-        await assertNoteUnlocked(existing, input.password);
+        await assertPrivateUnlocked(ctx, existing);
         await ctx.db.notes.delete(input.noteId, ctx.userId);
         ctx.audit({
             action: 'note.delete',
@@ -306,18 +279,12 @@ export const folderListFeature: FeatureDefinition<
     ...folderList,
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
-        await assertSecureUnlocked(ctx);
         const rows = (await ctx.db.noteFolders.listByUser(ctx.userId)).filter((r) =>
             rowInWorkspace(r.workspace_id, input.workspaceId)
         );
-        const folders = (
-            await Promise.all(
-                rows.map(async (r) => {
-                    const payload = await tryDecryptFolder(ctx.secure, r.content);
-                    return payload ? toFolder(r, payload) : null;
-                })
-            )
-        ).filter((f): f is NonNullable<typeof f> => f !== null);
+        const folders = await Promise.all(
+            rows.map(async (r) => toFolder(r, await decryptFolder(ctx.secure.open, r.content)))
+        );
         return { folders };
     }
 });
@@ -330,9 +297,8 @@ export const folderAddFeature: FeatureDefinition<
     ...folderAdd,
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
-        await assertSecureUnlocked(ctx);
         const name = input.name.trim();
-        const content = await encryptFolder(ctx.secure, { name });
+        const content = await encryptFolder(ctx.secure.open, { name });
         const row = await ctx.db.noteFolders.create({
             userId: ctx.userId,
             workspaceId: toDbWorkspaceId(input.workspaceId),
@@ -356,13 +322,12 @@ export const folderRenameFeature: FeatureDefinition<
     ...folderRename,
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
-        await assertSecureUnlocked(ctx);
         const existing = await ctx.db.noteFolders.findById(input.folderId, ctx.userId);
         if (!existing || !rowInWorkspace(existing.workspace_id, input.workspaceId)) {
             throw new FeatureError('not_found', 'Folder not found');
         }
         const name = input.name.trim();
-        const content = await encryptFolder(ctx.secure, { name });
+        const content = await encryptFolder(ctx.secure.open, { name });
         const updated = await ctx.db.noteFolders.update(input.folderId, ctx.userId, content);
         if (!updated) throw new FeatureError('not_found', 'Folder not found');
         ctx.audit({
@@ -383,7 +348,6 @@ export const folderReorderFeature: FeatureDefinition<
     ...folderReorder,
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
-        await assertSecureUnlocked(ctx);
         // Reorder only the rows that are the caller's and in this workspace; any
         // foreign or out-of-workspace id in `folderIds` is dropped silently.
         const owned = (await ctx.db.noteFolders.listByUser(ctx.userId)).filter((r) =>
@@ -394,14 +358,9 @@ export const folderReorderFeature: FeatureDefinition<
         const rows = (await ctx.db.noteFolders.reorder(ctx.userId, orderedIds)).filter((r) =>
             rowInWorkspace(r.workspace_id, input.workspaceId)
         );
-        const folders = (
-            await Promise.all(
-                rows.map(async (r) => {
-                    const payload = await tryDecryptFolder(ctx.secure, r.content);
-                    return payload ? toFolder(r, payload) : null;
-                })
-            )
-        ).filter((f): f is NonNullable<typeof f> => f !== null);
+        const folders = await Promise.all(
+            rows.map(async (r) => toFolder(r, await decryptFolder(ctx.secure.open, r.content)))
+        );
         return { folders };
     }
 });

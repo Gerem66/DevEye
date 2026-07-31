@@ -20,6 +20,12 @@ export interface UserSecretKeysRepo {
     create(userId: number, dekWrapped: string): Promise<void>;
     /** Replace the wrapping (and recovery material) in one statement. */
     setWrap(userId: number, state: WrapState): Promise<void>;
+    /**
+     * Store the user's open DEK on first use. Only ever writes when the column
+     * is still NULL, so two concurrent first writes can't orphan each other's
+     * ciphertext; the caller re-reads the row to learn which one won.
+     */
+    setOpenDek(userId: number, openDekWrapped: string): Promise<void>;
 }
 
 export function userSecretKeysRepo(pool: Q): UserSecretKeysRepo {
@@ -54,6 +60,13 @@ export function userSecretKeysRepo(pool: Q): UserSecretKeysRepo {
                     now,
                     userId
                 ]
+            );
+        },
+        async setOpenDek(userId, openDekWrapped) {
+            await pool.query(
+                `UPDATE user_secret_keys SET open_dek_wrapped = ?, updated = ?
+                 WHERE user_id = ? AND open_dek_wrapped IS NULL`,
+                [openDekWrapped, Math.floor(Date.now() / 1000), userId]
             );
         }
     };

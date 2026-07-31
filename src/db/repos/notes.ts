@@ -12,12 +12,12 @@ export interface NotesRepo {
         folderId: number | null;
         content: string;
         pinned: boolean;
-        lockHash: string | null;
+        isPrivate: boolean;
     }): Promise<NoteRow>;
     update(
         id: number,
         userId: number,
-        input: { folderId: number | null; content: string; pinned: boolean; lockHash: string | null }
+        input: { folderId: number | null; content: string; pinned: boolean; isPrivate: boolean }
     ): Promise<NoteRow | null>;
     move(id: number, userId: number, folderId: number | null): Promise<NoteRow | null>;
     delete(id: number, userId: number): Promise<boolean>;
@@ -37,20 +37,20 @@ export function notesRepo(pool: Q): NotesRepo {
             const r = await pool.query<NoteRow>('SELECT * FROM notes WHERE id = ? AND user_id = ?', [id, userId]);
             return r.rows[0] ?? null;
         },
-        async create({ userId, workspaceId, folderId, content, pinned, lockHash }) {
+        async create({ userId, workspaceId, folderId, content, pinned, isPrivate }) {
             const res = await pool.query(
-                `INSERT INTO notes (user_id, workspace_id, folder_id, content, pinned, lock_hash)
+                `INSERT INTO notes (user_id, workspace_id, folder_id, content, pinned, is_private)
                  VALUES (?, ?, ?, ?, ?, ?)`,
-                [userId, workspaceId, folderId, content, pinned ? 1 : 0, lockHash]
+                [userId, workspaceId, folderId, content, pinned ? 1 : 0, isPrivate ? 1 : 0]
             );
             const r = await pool.query<NoteRow>('SELECT * FROM notes WHERE id = ?', [res.insertId]);
             return r.rows[0];
         },
-        async update(id, userId, { folderId, content, pinned, lockHash }) {
+        async update(id, userId, { folderId, content, pinned, isPrivate }) {
             const res = await pool.query(
-                `UPDATE notes SET folder_id = ?, content = ?, pinned = ?, lock_hash = ?, updated = UNIX_TIMESTAMP()
+                `UPDATE notes SET folder_id = ?, content = ?, pinned = ?, is_private = ?, updated = UNIX_TIMESTAMP()
                  WHERE id = ? AND user_id = ?`,
-                [folderId, content, pinned ? 1 : 0, lockHash, id, userId]
+                [folderId, content, pinned ? 1 : 0, isPrivate ? 1 : 0, id, userId]
             );
             if (res.rowCount === 0) return null;
             const r = await pool.query<NoteRow>('SELECT * FROM notes WHERE id = ? AND user_id = ?', [id, userId]);

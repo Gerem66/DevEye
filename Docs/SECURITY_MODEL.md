@@ -29,6 +29,25 @@ décrit côté types dans `DevEye-Types/src/domain/secrecy.ts`.
 feature OFF, les données sont chiffrées (DEK distincte par user) ; seul le niveau
 d'emballage de la DEK change.
 
+### Les deux étages : DEK « gardée » et DEK « ouverte »
+
+`ctx.secure` expose **deux** codecs (`Cipher`), chacun adossé à une clé
+différente — c'est le choix du codec qui fait le contrôle d'accès :
+
+| Étage | Clé | Emballage | Lisible sans mot de passe ? |
+| --- | --- | --- | --- |
+| `ctx.secure` (gardé) | `dek_wrapped` | `server` **ou** `password` | non quand la feature est ON |
+| `ctx.secure.open` | `open_dek_wrapped` | **toujours** `server` | oui, toujours |
+
+La DEK ouverte est une seconde clé aléatoire par utilisateur, créée
+paresseusement à la première écriture ouverte et **jamais** ré-emballée par les
+handlers `secrecy` : activer le chiffrement par mot de passe ne doit pas
+verrouiller cet étage. Elle sert aux données qu'une feature doit pouvoir servir
+sans le moindre prompt tout en restant chiffrées au repos — au prix assumé que
+le serveur vivant peut les lire (même garantie que la BMK CloudSync).
+
+Par défaut une feature écrit dans l'étage gardé ; `open` est un choix explicite.
+
 ## "Chiffrement par mot de passe" (la feature UI)
 
 Nom côté interface du fait de passer `wrap_mode` de `server` à `password`.
@@ -80,15 +99,30 @@ mot de passe est disponible en clair) et cachée sous la `sessionId` émise, via
       efface le cookie de challenge et `discardPendingDek` (libération immédiate) ;
     - une 2FA désactivée entre les deux étapes libère aussi la DEK.
 
-## Notes masquées ("hidden") — root auth
+## Notes privées
 
-Indépendant du chiffrement ci-dessus. Une note avec le flag `hidden` exige une
-autorisation de session ("root auth") via la commande **`note.reveal`**
-(`src/features/note/index.ts`), qui vérifie le mot de passe du compte. Quand le
-chiffrement par mot de passe est ON et la session déverrouillée, la DEK vivante
-vaut elle-même preuve (pas de re-prompt). Une note hidden non autorisée est
-renvoyée en **summary masqué** (`locked`) : métadonnées seules, body jamais
-déchiffré côté serveur.
+Application directe des deux étages ci-dessus (`src/features/note/index.ts`) :
+
+- la feature Notes **s'ouvre sans mot de passe**. Corps des notes ordinaires et
+  noms de dossiers vivent dans l'étage **ouvert** ;
+- une note avec le drapeau clair `notes.is_private` a son corps chiffré par la
+  DEK **gardée**. Il n'y a aucun contrôle d'accès par-dessus : c'est le
+  chiffrement lui-même qui protège, et le serveur ne peut pas la déchiffrer sans
+  mot de passe vivant ;
+- `note.list` n'est jamais bloquée : une note privée sortie session verrouillée
+  est renvoyée en **summary masqué** (`masked: true`) — métadonnées claires
+  seules (id, dossier, épinglage, dates), jamais de titre ni de corps. Le client
+  affiche un cadenas et propose « Déchiffrer », qui n'est que le prompt de
+  déverrouillage global suivi d'un re-listage ;
+- basculer le drapeau depuis l'éditeur **re-chiffre** la note dans l'autre étage
+  à l'enregistrement ;
+- `note.edit` / `note.delete` sur une note privée exigent en plus une session
+  déverrouillée : ces chemins n'ont pas besoin de *lire* le corps, sans ce garde
+  une session verrouillée pourrait écraser ou détruire ce qu'elle ne voit pas.
+  Déplacer une note (bénin, n'expose ni ne réécrit le corps) reste libre.
+
+Remplace l'ancien système de verrou par note (mot de passe dédié par note,
+`notes.lock_hash`), supprimé — un mot de passe par note n'était pas retenable.
 
 ## Authentification
 

@@ -28,12 +28,12 @@ interface NoteCardProps {
 }
 
 /**
- * A single note preview. A `locked` note shows only a padlock placeholder (no
- * title or body ever reached the client); clicking it prompts for the note's
- * dedicated password. Readable cards are draggable (to a folder header) and
- * expose a discreet folder menu to move the note between folders without opening
- * the editor — at rest the menu button is collapsed so any badges sit flush
- * against the right edge, and it expands on hover.
+ * A single note preview. A `masked` note (private, session still locked) shows
+ * only a large padlock — no title or body ever reached the client; clicking it
+ * opens the master-password prompt. Readable cards are draggable (to a folder
+ * header) and expose a discreet folder menu to move the note between folders
+ * without opening the editor — at rest the menu button is collapsed so any badges
+ * sit flush against the right edge, and it expands on hover.
  */
 export default function NoteCard({ note, folders, onOpen, onMove, onDragStart, onDragEnd }: NoteCardProps) {
     const [menuOpen, setMenuOpen] = useState(false);
@@ -48,18 +48,16 @@ export default function NoteCard({ note, folders, onOpen, onMove, onDragStart, o
         return () => document.removeEventListener('mousedown', onDocClick);
     }, [menuOpen]);
 
-    if (note.locked) {
+    if (note.masked) {
         return (
             <button
                 type='button'
-                className={`${styles.card} ${styles.cardLocked}`}
+                className={`${styles.card} ${styles.cardMasked}`}
                 onClick={() => onOpen(note)}
-                aria-label='Note verrouillée — déverrouiller'
+                aria-label='Note privée — déchiffrer'
             >
-                <span className={styles.lockedHint}>
-                    <span className={`icon ${styles.lockedIcon} icon-lock`} />
-                    <span className={styles.lockedLabel}>Note verrouillée</span>
-                </span>
+                <span className={`icon ${styles.maskedIcon} icon-lock`} />
+                <span className={styles.maskedLabel}>Note privée</span>
             </button>
         );
     }
@@ -95,6 +93,7 @@ export default function NoteCard({ note, folders, onOpen, onMove, onDragStart, o
             <div className={styles.cardHead}>
                 <h4 className={styles.cardTitle}>{note.title || 'Sans titre'}</h4>
                 <span className={styles.cardBadges}>
+                    {note.private && <span className={`icon ${styles.badge} icon-lock`} aria-label='Privée' />}
                     {note.pinned && <span className={`icon ${styles.badge} icon-star`} aria-label='Épinglée' />}
                     <div className={`${styles.cardMenu} ${menuOpen ? styles.menuOpen : ''}`} ref={menuRef}>
                         <button
