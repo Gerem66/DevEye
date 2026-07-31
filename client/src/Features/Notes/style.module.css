@@ -150,13 +150,6 @@
     transform: rotate(180deg);
 }
 
-.folderEmpty {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    margin: 0;
-    padding: var(--space-sm) 6px;
-}
-
 .count {
     font-size: 0.72rem;
     font-weight: 600;
@@ -197,6 +190,36 @@
     transform: translateY(-2px);
     border-color: var(--accent, var(--text-secondary));
     background: var(--glass-bg);
+}
+
+/* Trailing "add a note" card: same footprint as a real card but dashed and
+   empty, so the grid reads as "…and one more slot here". */
+.addCard {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+    padding: var(--space-md);
+    background: transparent;
+    border: 1px dashed var(--glass-border);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition:
+        border-color 0.12s ease,
+        color 0.12s ease,
+        background 0.12s ease;
+}
+
+.addCard:hover {
+    border-color: var(--accent, var(--text-secondary));
+    color: var(--text-primary);
+    background: var(--glass-bg-light);
+}
+
+.addCardIcon {
+    width: 30px;
+    height: 30px;
 }
 
 /* Masked (private + locked) note: centered column — a large padlock with a

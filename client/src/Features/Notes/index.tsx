@@ -356,7 +356,13 @@ function FeatureNotes({ workspace }: FeatureProps) {
         [moveNote]
     );
 
-    const renderGrid = (items: NoteSummary[]) => (
+    /**
+     * One folder's cards, trailed by the dashed "add" card. That card is the only
+     * way to create a note: it sits exactly where the new note will land, which
+     * reads better than a "+" tucked into the folder header. Hidden while
+     * searching, where the list is a filtered view rather than the real order.
+     */
+    const renderGrid = (items: NoteSummary[], folderId: number | null) => (
         <div className={styles.grid}>
             {items.map((note) => (
                 <NoteCard
@@ -372,6 +378,17 @@ function FeatureNotes({ workspace }: FeatureProps) {
                     }}
                 />
             ))}
+            {!searching && (
+                <button
+                    type='button'
+                    className={styles.addCard}
+                    aria-label='Ajouter une note'
+                    title='Ajouter une note'
+                    onClick={() => void openEditor(null, folderId)}
+                >
+                    <span className={`icon ${styles.addCardIcon} icon-add`} />
+                </button>
+            )}
         </div>
     );
 
@@ -485,15 +502,6 @@ function FeatureNotes({ workspace }: FeatureProps) {
                                     <button
                                         type='button'
                                         className={styles.iconAction}
-                                        aria-label='Ajouter une note'
-                                        title='Ajouter une note ici'
-                                        onClick={() => void openEditor(null, folder.id)}
-                                    >
-                                        <span className={`icon ${styles.toggleIcon} icon-add`} />
-                                    </button>
-                                    <button
-                                        type='button'
-                                        className={styles.iconAction}
                                         aria-label='Renommer le dossier'
                                         title='Renommer'
                                         onClick={() => void renameFolder(folder)}
@@ -511,45 +519,25 @@ function FeatureNotes({ workspace }: FeatureProps) {
                                     </button>
                                 </span>
                             </div>
-                            {items.length > 0 ? (
-                                renderGrid(items)
-                            ) : (
-                                <p className={styles.folderEmpty}>Dossier vide — ajoutez une note avec « + ».</p>
-                            )}
+                            {renderGrid(items, folder.id)}
                         </section>
                     );
                 })}
 
-            {loaded && unfiled.length > 0 && (
+            {loaded && (!searching || unfiled.length > 0) && (
                 <section className={styles.folderSection}>
                     <div {...dropProps(UNFILED, null)}>
                         <span className={styles.folderName}>Sans dossier</span>
                         <span className={styles.count}>{unfiled.length}</span>
-                        <span className={styles.folderActions}>
-                            <button
-                                type='button'
-                                className={styles.iconAction}
-                                aria-label='Ajouter une note'
-                                title='Ajouter une note'
-                                onClick={() => void openEditor(null, null)}
-                            >
-                                <span className={`icon ${styles.toggleIcon} icon-add`} />
-                            </button>
-                        </span>
                     </div>
-                    {renderGrid(unfiled)}
+                    {renderGrid(unfiled, null)}
                 </section>
             )}
 
-            {loaded && total === 0 && (
+            {loaded && searching && total === 0 && (
                 <div className={styles.empty}>
                     <span className={styles.emptyIcon}>📝</span>
-                    <p>{searching ? 'Aucun résultat' : 'Aucune note pour le moment'}</p>
-                    {!searching && (
-                        <Button icon='add' variant='secondary' onClick={() => void openEditor(null, null)}>
-                            Créer une note
-                        </Button>
-                    )}
+                    <p>Aucun résultat</p>
                 </div>
             )}
 
