@@ -43,8 +43,18 @@ Tout passe par des schémas zod partagés. Le serveur **et** le client importent
    réutilisé). DDL pure. **Politique projet : migration de schéma franche, pas de
    shim de rétro-compat** — on peut renommer/supprimer des colonnes. Les
    migrations tournent automatiquement au démarrage (`db/migrate.ts`), une seule
-   fois (table `_migrations`). MySQL : un fichier = exécuté en une requête
-   (multi-statements activés).
+   fois (table `_migrations`, clé = nom de fichier). MySQL : un fichier = exécuté
+   en une requête (multi-statements activés).
+
+   ⚠️ **Ne jamais modifier un fichier de migration déjà commité** dès l'instant où
+   il a pu tourner quelque part (prod, une autre machine de dev) : `_migrations`
+   ne rejoue jamais un nom déjà vu, donc l'édition est un no-op silencieux là où
+   le fichier est déjà passé — la base et le fichier divergent sans erreur ni
+   avertissement. Un besoin de schéma supplémentaire sur une table existante
+   est **toujours** une nouvelle migration numérotée, jamais une retouche de
+   l'ancienne (même si ça semble anodin en dev, où `tsx watch` peut avoir déjà
+   appliqué une version intermédiaire du fichier avant qu'elle ne soit stabilisée
+   — ce qui masque le problème en local tout en le laissant intact en prod).
 2. **Repo** — `src/db/repos/<feature>.ts` : `export interface XRepo { … }` +
    `export function xRepo(pool: Queryable): XRepo`. Requêtes paramétrées
    uniquement (`?`). Le `content` sensible est **chiffré** (voir section E).

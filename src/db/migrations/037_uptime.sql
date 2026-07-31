@@ -31,11 +31,6 @@ CREATE TABLE IF NOT EXISTS uptime_services (
     retention_days       INT         NULL,
     notify               TINYINT     NOT NULL DEFAULT 1,
     enabled              TINYINT     NOT NULL DEFAULT 1,
-    -- Rang dans la liste, entièrement défini par l'utilisateur (glisser-déposer),
-    -- comme pour les notes. Rien ne le change automatiquement : seuls
-    -- `uptime.reorder` et l'ajout d'un service (qui prend le rang suivant, donc
-    -- la fin) y touchent.
-    sort_order           INT         NOT NULL DEFAULT 0,
     status               VARCHAR(8)  NOT NULL DEFAULT 'unknown',
     consecutive_failures INT         NOT NULL DEFAULT 0,
     last_checked_at      BIGINT      NULL,
