@@ -81,6 +81,7 @@ export function toSummary(row: NoteRow, payload: StoredPayload): NoteSummary {
         checkDone: checks.filter((b) => b.type === 'check' && b.done).length,
         private: row.is_private === 1,
         masked: false,
+        archivedAt: row.archived_at,
         updated: row.updated,
         created: row.created
     };
@@ -102,6 +103,7 @@ export function toMaskedSummary(row: NoteRow): NoteSummary {
         checkDone: 0,
         private: true,
         masked: true,
+        archivedAt: row.archived_at,
         updated: row.updated,
         created: row.created
     };

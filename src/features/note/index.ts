@@ -5,12 +5,14 @@ import {
     folderRename,
     folderReorder,
     noteAdd,
+    noteArchive,
     noteCount,
     noteDelete,
     noteEdit,
     noteGet,
     noteList,
-    noteMove
+    noteMove,
+    noteRestore
 } from 'deveye-types';
 import type { NoteRow } from 'deveye-types';
 import type { Cipher } from '@/Services/SecureStore';
@@ -67,6 +69,15 @@ async function resolveFolderId(
     return folderId;
 }
 
+/** Load one of the caller's notes in this workspace, or throw `not_found`. */
+async function loadNote(ctx: FeatureContext, workspaceId: number, noteId: number): Promise<NoteRow> {
+    const row = await ctx.db.notes.findById(noteId, ctx.userId);
+    if (!row || !rowInWorkspace(row.workspace_id, workspaceId)) {
+        throw new FeatureError('not_found', 'Note not found');
+    }
+    return row;
+}
+
 /**
  * The tier a note's body lives in: private notes use the password-protected DEK,
  * everything else the open one. Picking the cipher IS the access control — a
@@ -102,9 +113,13 @@ export const noteListFeature: FeatureDefinition<
     ...noteList,
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
-        const rows = (await ctx.db.notes.listByUser(ctx.userId)).filter((r) =>
-            rowInWorkspace(r.workspace_id, input.workspaceId)
+        const wantArchived = input.archived === true;
+        const rows = (await ctx.db.notes.listByUser(ctx.userId)).filter(
+            (r) => rowInWorkspace(r.workspace_id, input.workspaceId) && (r.archived_at !== null) === wantArchived
         );
+        // The archive reads as a history: most recently archived first, rather
+        // than in the user-defined order of the main list.
+        if (wantArchived) rows.sort((a, b) => (b.archived_at ?? 0) - (a.archived_at ?? 0));
 
         // Never gated: the list always renders. Private notes are only revealed
         // if the DEK happens to be live — and we only ask (which slides the grace
@@ -147,7 +162,9 @@ export const noteCountFeature: FeatureDefinition<
         // Pure row count from clear metadata: no DEK, no unlock gate, and private
         // notes are counted like any other (no special case).
         const rows = await ctx.db.notes.listByUser(ctx.userId);
-        const count = rows.filter((r) => rowInWorkspace(r.workspace_id, input.workspaceId)).length;
+        const count = rows.filter(
+            (r) => rowInWorkspace(r.workspace_id, input.workspaceId) && r.archived_at === null
+        ).length;
         return { count };
     }
 });
@@ -157,10 +174,7 @@ export const noteGetFeature: FeatureDefinition<typeof noteGet.command, typeof no
         ...noteGet,
         handler: async (ctx, input) => {
             await assertWorkspaceMember(ctx, input.workspaceId);
-            const row = await ctx.db.notes.findById(input.noteId, ctx.userId);
-            if (!row || !rowInWorkspace(row.workspace_id, input.workspaceId)) {
-                throw new FeatureError('not_found', 'Note not found');
-            }
+            const row = await loadNote(ctx, input.workspaceId, input.noteId);
             // A private note resolves the guarded DEK here, which throws `locked`
             // on its own when the session isn't unlocked.
             const payload = await decryptPayload(cipherFor(ctx, row.is_private === 1), row.content);
@@ -201,10 +215,7 @@ export const noteEditFeature: FeatureDefinition<
     ...noteEdit,
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
-        const existing = await ctx.db.notes.findById(input.noteId, ctx.userId);
-        if (!existing || !rowInWorkspace(existing.workspace_id, input.workspaceId)) {
-            throw new FeatureError('not_found', 'Note not found');
-        }
+        const existing = await loadNote(ctx, input.workspaceId, input.noteId);
         await assertPrivateUnlocked(ctx, existing);
         const folderId = await resolveFolderId(ctx, input.workspaceId, input.note.folderId);
         // Re-encrypting with the draft's tier is what moves a note between
@@ -234,16 +245,54 @@ export const noteMoveFeature: FeatureDefinition<
     ...noteMove,
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
-        const existing = await ctx.db.notes.findById(input.noteId, ctx.userId);
-        if (!existing || !rowInWorkspace(existing.workspace_id, input.workspaceId)) {
-            throw new FeatureError('not_found', 'Note not found');
-        }
         // Moving is a benign reorganization that never exposes nor rewrites the
-        // body, so even a masked private note can be re-filed freely.
+        // body, so even a masked private note can be re-filed freely — the lookup
+        // is only there to reject an id that isn't the caller's.
+        await loadNote(ctx, input.workspaceId, input.noteId);
         const folderId = await resolveFolderId(ctx, input.workspaceId, input.folderId);
         const updated = await ctx.db.notes.move(input.noteId, ctx.userId, folderId);
         if (!updated) throw new FeatureError('not_found', 'Note not found');
         return { noteId: input.noteId, folderId };
+    }
+});
+
+export const noteArchiveFeature: FeatureDefinition<
+    typeof noteArchive.command,
+    typeof noteArchive.input,
+    typeof noteArchive.output
+> = defineFeature({
+    ...noteArchive,
+    handler: async (ctx, input) => {
+        await assertWorkspaceMember(ctx, input.workspaceId);
+        const existing = await loadNote(ctx, input.workspaceId, input.noteId);
+        await assertPrivateUnlocked(ctx, existing);
+        await ctx.db.notes.setArchived(input.noteId, ctx.userId, Math.floor(Date.now() / 1000));
+        ctx.audit({
+            action: 'note.archive',
+            description: 'Note archivée',
+            metadata: { noteId: input.noteId, workspaceId: input.workspaceId }
+        });
+        return { noteId: input.noteId };
+    }
+});
+
+export const noteRestoreFeature: FeatureDefinition<
+    typeof noteRestore.command,
+    typeof noteRestore.input,
+    typeof noteRestore.output
+> = defineFeature({
+    ...noteRestore,
+    handler: async (ctx, input) => {
+        await assertWorkspaceMember(ctx, input.workspaceId);
+        const existing = await loadNote(ctx, input.workspaceId, input.noteId);
+        await assertPrivateUnlocked(ctx, existing);
+        await ctx.db.notes.setArchived(input.noteId, ctx.userId, null);
+        ctx.audit({
+            action: 'note.restore',
+            description: 'Note restaurée depuis les archives',
+            metadata: { noteId: input.noteId, workspaceId: input.workspaceId }
+        });
+        return { noteId: input.noteId };
     }
 });
 
@@ -255,16 +304,18 @@ export const noteDeleteFeature: FeatureDefinition<
     ...noteDelete,
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
-        const existing = await ctx.db.notes.findById(input.noteId, ctx.userId);
-        if (!existing || !rowInWorkspace(existing.workspace_id, input.workspaceId)) {
-            throw new FeatureError('not_found', 'Note not found');
+        const existing = await loadNote(ctx, input.workspaceId, input.noteId);
+        // Two-step by construction: an active note is archived first, never
+        // destroyed outright. Enforced here so no caller can shortcut it.
+        if (existing.archived_at === null) {
+            throw new FeatureError('conflict', 'Archive the note before deleting it permanently');
         }
         await assertPrivateUnlocked(ctx, existing);
         await ctx.db.notes.delete(input.noteId, ctx.userId);
         ctx.audit({
             action: 'note.delete',
             level: 'warning',
-            description: 'Note supprimée',
+            description: 'Note supprimée définitivement',
             metadata: { noteId: input.noteId, workspaceId: input.workspaceId }
         });
         return { noteId: input.noteId };
@@ -397,6 +448,8 @@ export const noteFeatures: FeatureDefinition<string, any, any>[] = [
     noteAddFeature,
     noteEditFeature,
     noteMoveFeature,
+    noteArchiveFeature,
+    noteRestoreFeature,
     noteDeleteFeature,
     folderListFeature,
     folderAddFeature,

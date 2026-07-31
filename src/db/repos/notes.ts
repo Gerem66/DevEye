@@ -20,6 +20,9 @@ export interface NotesRepo {
         input: { folderId: number | null; content: string; pinned: boolean; isPrivate: boolean }
     ): Promise<NoteRow | null>;
     move(id: number, userId: number, folderId: number | null): Promise<NoteRow | null>;
+    /** Archive (`at` = epoch seconds) or restore (`null`) a note. */
+    setArchived(id: number, userId: number, at: number | null): Promise<boolean>;
+    /** Destroy the row for good — reserved for already-archived notes. */
     delete(id: number, userId: number): Promise<boolean>;
 }
 
@@ -64,6 +67,15 @@ export function notesRepo(pool: Q): NotesRepo {
             if (res.rowCount === 0) return null;
             const r = await pool.query<NoteRow>('SELECT * FROM notes WHERE id = ? AND user_id = ?', [id, userId]);
             return r.rows[0] ?? null;
+        },
+        async setArchived(id, userId, at) {
+            // `updated` is left alone: archiving isn't an edit of the note.
+            const r = await pool.query('UPDATE notes SET archived_at = ? WHERE id = ? AND user_id = ?', [
+                at,
+                id,
+                userId
+            ]);
+            return r.rowCount > 0;
         },
         async delete(id, userId) {
             const r = await pool.query('DELETE FROM notes WHERE id = ? AND user_id = ?', [id, userId]);

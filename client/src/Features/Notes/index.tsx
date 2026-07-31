@@ -11,12 +11,14 @@ import NoteEditor, {
 } from './NoteEditor';
 import FolderNamePopup, { FOLDER_NAME_POPUP, type FolderNameInput, type FolderNameResult } from './FolderNamePopup';
 import ConfirmPopup, { NOTE_CONFIRM_POPUP, type ConfirmInput } from './ConfirmPopup';
+import ArchivePopup, { NOTE_ARCHIVE_POPUP, type ArchiveInput } from './ArchivePopup';
+import { humanizeError, withSecrecy } from './api';
 
 import { OpenPopup } from '@/Components/Popup';
-import { ws, WsError } from '@/api/ws';
+import { ws } from '@/api/ws';
 import TextInput from '@/Components/TextInput';
 import Button from '@/Components/Button';
-import { ensureUnlocked as ensureSecrecyUnlocked, touchSecrecy, useSecrecy } from '@/stores/secrecy';
+import { ensureUnlocked as ensureSecrecyUnlocked, useSecrecy } from '@/stores/secrecy';
 import { invalidate } from '@/stores/invalidation';
 
 import type { FeatureProps } from '@/Features/types';
@@ -24,36 +26,6 @@ import type { Note, NoteFolder, NoteSummary } from 'deveye-types';
 
 /** Sentinel section keys for buckets without a real folder id. */
 const UNFILED = '__unfiled__';
-
-/**
- * Run a request that touches a private note and, if the password-encryption
- * layer reports `locked`, open the global unlock prompt and retry once. Mirrors
- * the Password feature. Listing and folder management never need this: they only
- * use the open key, which is why the feature opens without any prompt.
- */
-async function withSecrecy<T>(run: () => Promise<T>): Promise<T> {
-    try {
-        const out = await run();
-        touchSecrecy();
-        return out;
-    } catch (e) {
-        if (e instanceof WsError && e.code === 'locked') {
-            await ensureSecrecyUnlocked();
-            const out = await run();
-            touchSecrecy();
-            return out;
-        }
-        throw e;
-    }
-}
-
-function humanizeError(e: unknown, fallback: string): string {
-    if (e instanceof WsError) {
-        if (e.code === 'locked') return 'Déverrouillage requis.';
-        if (e.code === 'forbidden') return 'Accès refusé.';
-    }
-    return fallback;
-}
 
 function FeatureNotes({ workspace }: FeatureProps) {
     const [loaded, setLoaded] = useState(false);
@@ -169,16 +141,17 @@ function FeatureNotes({ workspace }: FeatureProps) {
             if (result === null) return;
 
             // Deletion is already confirmed inside the editor (popup over it), so
-            // 'delete' here means "go ahead".
+            // 'delete' here means "go ahead" — and it archives rather than
+            // destroys; the archive popup owns the irreversible step.
             if (result === 'delete' && existing) {
                 try {
                     await withSecrecy(() =>
-                        ws.send('note.delete', { workspaceId: workspace.id, noteId: existing!.id })
+                        ws.send('note.archive', { workspaceId: workspace.id, noteId: existing!.id })
                     );
                     setNotes((prev) => prev.filter((n) => n.id !== existing!.id));
                     invalidate('note.count');
                 } catch (e) {
-                    setActionError(humanizeError(e, 'Suppression impossible.'));
+                    setActionError(humanizeError(e, 'Archivage impossible.'));
                 }
                 return;
             }
@@ -223,6 +196,16 @@ function FeatureNotes({ workspace }: FeatureProps) {
         },
         [revealPrivate, openEditor]
     );
+
+    /** Open the archive; re-list only if something was restored or destroyed. */
+    const openArchives = useCallback(async () => {
+        setActionError(null);
+        const changed = await OpenPopup<boolean>(NOTE_ARCHIVE_POPUP, { workspaceId: workspace.id } as ArchiveInput);
+        if (changed === true) {
+            invalidate('note.count');
+            await reload();
+        }
+    }, [workspace.id, reload]);
 
     /** Relocate a note to another folder (menu or drag & drop). */
     const moveNote = useCallback(
@@ -438,6 +421,15 @@ function FeatureNotes({ workspace }: FeatureProps) {
                         onChange={(e) => setSearch(e.target.value)}
                     />
                 </div>
+                <button
+                    type='button'
+                    className={`${styles.iconAction} ${styles.archiveBtn}`}
+                    title='Archives'
+                    aria-label='Ouvrir les archives'
+                    onClick={() => void openArchives()}
+                >
+                    <span className={`icon ${styles.toggleIcon} icon-archive`} />
+                </button>
             </div>
 
             {actionError && <div className={styles.errorBanner}>{actionError}</div>}
@@ -562,6 +554,7 @@ function FeatureNotes({ workspace }: FeatureProps) {
             )}
 
             <NoteEditor />
+            <ArchivePopup />
             <FolderNamePopup />
             <ConfirmPopup />
         </div>
@@ -591,6 +584,8 @@ function toSummary(note: Note): NoteSummary {
         checkDone: checks.filter((b) => b.type === 'check' && b.done).length,
         private: note.private,
         masked: false,
+        // The editor only ever round-trips active notes.
+        archivedAt: null,
         updated: note.updated,
         created: note.created
     };

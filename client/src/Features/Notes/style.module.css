@@ -51,6 +51,11 @@
     max-width: 460px;
 }
 
+/* Discreet entry point to the archive, pushed to the trailing edge of the row. */
+.archiveBtn {
+    margin-left: auto;
+}
+
 .errorBanner {
     background: var(--danger-bg);
     border: 1px solid var(--danger);
@@ -134,6 +139,10 @@
 .iconAction:disabled {
     opacity: 0.35;
     cursor: default;
+}
+
+.iconActionDanger:hover:not(:disabled) {
+    color: var(--danger);
 }
 
 /* "Monter" reuses the chevron-down glyph flipped upward. */
@@ -448,7 +457,11 @@
 }
 
 .editorTitleInput {
-    flex: 1 1 auto;
+    /* Its natural line height, never more: the editor is a flex *column*, so a
+       growing title would split the tall layout's free space with .blocksFill
+       and leave a mostly-empty band above the content. All slack goes to the
+       block list; never shrink either, so the title can't be crushed. */
+    flex: 0 0 auto;
     border: none;
     background: transparent;
     color: var(--text-primary);
@@ -1016,6 +1029,77 @@
 .privateNotice .toggleIcon {
     width: 13px;
     height: 13px;
+}
+
+/* --- Archive popup --- */
+.archiveList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    max-height: 50vh;
+    overflow-y: auto;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.archiveRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg-light);
+}
+
+.archiveText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.archiveTitle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.archivePreview {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.archiveDate {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.archiveActions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.archiveEmpty {
+    margin: 0;
+    padding: var(--space-lg) 0;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--text-muted);
 }
 
 /* Loading skeleton */

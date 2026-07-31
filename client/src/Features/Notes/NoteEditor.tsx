@@ -167,7 +167,7 @@ export default function NoteEditor() {
     async function requestDelete() {
         const confirmed = await OpenPopup<boolean>(NOTE_CONFIRM_POPUP, {
             title: 'Supprimer la note',
-            message: `Supprimer « ${title.trim() || 'Sans titre'} » ? Cette action est irréversible.`,
+            message: `Supprimer « ${title.trim() || 'Sans titre'} » ? Elle part dans les archives, d’où vous pourrez la restaurer ou la supprimer définitivement.`,
             confirmLabel: 'Supprimer'
         } as ConfirmInput);
         if (confirmed === true) close('delete');
