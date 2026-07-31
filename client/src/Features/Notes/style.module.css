@@ -182,6 +182,12 @@
     background: var(--glass-bg);
 }
 
+/* While a note is in flight the hover lift is frozen: it would shift the very
+   card the insertion bar measures itself against, jittering it by 2px. */
+.dragging .card:hover {
+    transform: none;
+}
+
 /* Insertion marker: a bar standing in the gap the dragged note would fall into,
    so the landing spot is literal. Positioned by NoteGrid straight through the
    DOM (transform + height), which is why it carries no layout of its own. */

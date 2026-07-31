@@ -66,6 +66,7 @@ export default function NoteGrid({
 
     const hideBar = useCallback(() => {
         gapRef.current = null;
+        gridRef.current?.classList.remove(styles.dragging);
         if (barRef.current) barRef.current.style.opacity = '0';
     }, []);
 
@@ -76,22 +77,23 @@ export default function NoteGrid({
             const bar = barRef.current;
             if (!grid || !bar || gapRef.current === index) return;
 
-            // Anchor on the card the note would land before, or on the trailing
-            // edge of the last one when it lands at the end. An empty folder only
-            // has the add card to go by.
-            const cards = cardEls();
-            const before = cards[index];
-            const last = cards[cards.length - 1];
-            const anchor = before ?? last ?? grid.querySelector<HTMLElement>('[data-add-card]');
+            // Every gap is "just ahead of" something: the card the note would land
+            // before, or the add card when it lands at the end. Anchoring on a
+            // single, always-leading edge is what keeps the bar centred — measuring
+            // the last card's *trailing* edge instead would offset it by a gap.
+            const anchor = cardEls()[index] ?? grid.querySelector<HTMLElement>('[data-add-card]');
             if (!anchor) return;
 
             gapRef.current = index;
+            // Card hovers lift the card 2px; freeze that while a note is in flight
+            // or the bar rides along with whatever the pointer passes over.
+            grid.classList.add(styles.dragging);
             const gridBox = grid.getBoundingClientRect();
             const box = anchor.getBoundingClientRect();
-            const edge = before || !last ? box.left : box.right;
-            // Clamped so the very first gap stays inside the grid rather than
-            // hanging in the section's padding.
-            const x = Math.max(edge - gridBox.left - halfGap(grid), 0);
+            // Middle of the gap ahead of the anchor, less half the bar's own width
+            // (read from the DOM so the width stays defined only in the CSS).
+            // Clamped so the very first gap stays inside the grid.
+            const x = Math.max(box.left - gridBox.left - halfGap(grid) - bar.offsetWidth / 2, 0);
             bar.style.transform = `translate(${x}px, ${box.top - gridBox.top}px)`;
             bar.style.height = `${box.height}px`;
             bar.style.opacity = '1';
