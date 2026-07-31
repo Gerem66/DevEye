@@ -111,15 +111,16 @@ Application directe des deux étages ci-dessus (`src/features/note/index.ts`) :
   mot de passe vivant ;
 - `note.list` n'est jamais bloquée : une note privée sortie session verrouillée
   est renvoyée en **summary masqué** (`masked: true`) — métadonnées claires
-  seules (id, dossier, épinglage, dates), jamais de titre ni de corps. Le client
+  seules (id, dossier, rang, dates), jamais de titre ni de corps. Le client
   affiche un cadenas et propose « Déchiffrer », qui n'est que le prompt de
   déverrouillage global suivi d'un re-listage ;
 - basculer le drapeau depuis l'éditeur **re-chiffre** la note dans l'autre étage
   à l'enregistrement ;
-- `note.edit` / `note.delete` sur une note privée exigent en plus une session
-  déverrouillée : ces chemins n'ont pas besoin de *lire* le corps, sans ce garde
-  une session verrouillée pourrait écraser ou détruire ce qu'elle ne voit pas.
-  Déplacer une note (bénin, n'expose ni ne réécrit le corps) reste libre.
+- `note.edit` / `note.archive` / `note.restore` / `note.delete` sur une note
+  privée exigent en plus une session déverrouillée : ces chemins n'ont pas besoin
+  de *lire* le corps, sans ce garde une session verrouillée pourrait écraser,
+  escamoter ou détruire ce qu'elle ne voit pas. `note.reorder` (positionnement
+  pur, n'expose ni ne réécrit le corps) reste libre, même sur une note masquée.
 
 Remplace l'ancien système de verrou par note (mot de passe dédié par note,
 `notes.lock_hash`), supprimé — un mot de passe par note n'était pas retenable.

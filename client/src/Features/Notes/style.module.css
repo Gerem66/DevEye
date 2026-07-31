@@ -81,21 +81,11 @@
     margin: 0 0 var(--space-sm) 0;
     padding: 4px 6px;
     border-radius: var(--radius-sm);
-    border: 1px dashed transparent;
-    transition:
-        border-color 0.12s ease,
-        background 0.12s ease;
 }
 
 .folderName {
     text-transform: uppercase;
     letter-spacing: 0.04em;
-}
-
-/* Highlighted while a note is dragged over this folder header. */
-.folderTitleDrop {
-    border-color: var(--accent, var(--text-secondary));
-    background: var(--surface-subtle);
 }
 
 /* Per-folder actions: hidden until the section is hovered, to stay sober. */
@@ -109,8 +99,7 @@
 }
 
 .folderSection:hover .folderActions,
-.folderTitle:focus-within .folderActions,
-.folderTitleDrop .folderActions {
+.folderTitle:focus-within .folderActions {
     opacity: 1;
 }
 
@@ -190,6 +179,16 @@
     transform: translateY(-2px);
     border-color: var(--accent, var(--text-secondary));
     background: var(--glass-bg);
+}
+
+/* Insertion marker while dragging: a bar down the leading edge of the card the
+   note would land *before*, so the drop spot is unambiguous instead of
+   "somewhere in that folder". Drawn as an inset shadow rather than a pseudo
+   element, which the cards' `overflow: hidden` would clip. */
+.cardDropBefore,
+.addCardDrop {
+    border-color: var(--accent, var(--text-secondary));
+    box-shadow: inset 3px 0 0 0 var(--accent, var(--text-secondary));
 }
 
 /* Trailing "add a note" card: same footprint as a real card but dashed and

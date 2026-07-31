@@ -19,7 +19,6 @@ export interface NoteDraft {
     title: string;
     folderId: number | null;
     blocks: NoteBlock[];
-    pinned: boolean;
     /** Encrypt with the password-protected key instead of the open one. */
     private: boolean;
 }
@@ -86,9 +85,9 @@ function showPrivateInfo() {
 
 /**
  * The single note editor surface, driven imperatively via OpenPopup. Handles
- * both create and edit: a prominent title, the modular block body, and two
- * understated toggles (pin, private). The note's folder is set from the main
- * screen. Deletion is confirmed via a popup over the editor; the editor only
+ * both create and edit: a prominent title, the modular block body, and an
+ * understated "private" toggle. The note's folder and position are set from the
+ * main screen. Deletion is confirmed via a popup over the editor; the editor only
  * closes once confirmed.
  */
 export default function NoteEditor() {
@@ -96,14 +95,13 @@ export default function NoteEditor() {
     const [title, setTitle] = useState('');
     const [folderId, setFolderId] = useState<number | null>(null);
     const [blocks, setBlocks] = useState<NoteBlock[]>(emptyBlocks);
-    const [pinned, setPinned] = useState(false);
     /** Whether the note will be encrypted with the password-protected key. */
     const [isPrivate, setIsPrivate] = useState(false);
     const [created, setCreated] = useState<number | null>(null);
     const [updated, setUpdated] = useState<number | null>(null);
     // Snapshot of the editable state the editor opened with, to detect unsaved
     // edits (blocks compared structurally).
-    const initial = useRef({ title: '', pinned: false, private: false, blocks: '' });
+    const initial = useRef({ title: '', private: false, blocks: '' });
 
     function handleOpen(input: NoteEditorInput) {
         const note = input?.note ?? null;
@@ -112,11 +110,10 @@ export default function NoteEditor() {
             setTitle('');
             setFolderId(input?.folderId ?? null);
             setBlocks(emptyBlocks());
-            setPinned(false);
             setIsPrivate(false);
             setCreated(null);
             setUpdated(null);
-            initial.current = { title: '', pinned: false, private: false, blocks: JSON.stringify(emptyBlocks()) };
+            initial.current = { title: '', private: false, blocks: JSON.stringify(emptyBlocks()) };
             return;
         }
         setMode('edit');
@@ -124,21 +121,14 @@ export default function NoteEditor() {
         setFolderId(note.folderId);
         const openBlocks = note.blocks.length > 0 ? note.blocks : emptyBlocks();
         setBlocks(openBlocks);
-        setPinned(note.pinned);
         setIsPrivate(note.private);
         setCreated(note.created);
         setUpdated(note.updated);
-        initial.current = {
-            title: note.title,
-            pinned: note.pinned,
-            private: note.private,
-            blocks: JSON.stringify(openBlocks)
-        };
+        initial.current = { title: note.title, private: note.private, blocks: JSON.stringify(openBlocks) };
     }
 
     const dirty =
         title !== initial.current.title ||
-        pinned !== initial.current.pinned ||
         isPrivate !== initial.current.private ||
         JSON.stringify(blocks) !== initial.current.blocks;
 
@@ -151,7 +141,6 @@ export default function NoteEditor() {
             title: title.trim(),
             folderId,
             blocks: normalizeBlocks(blocks),
-            pinned,
             private: isPrivate
         };
         // An entirely empty note (no title and no content) is a no-op cancel
@@ -245,17 +234,6 @@ export default function NoteEditor() {
                                     <span className={`icon ${styles.toggleIcon} icon-trash`} />
                                 </button>
                             )}
-                            <button
-                                type='button'
-                                className={`${styles.iconToggle} ${pinned ? styles.iconToggleActive : ''}`}
-                                aria-pressed={pinned}
-                                title={pinned ? 'Désépingler' : 'Épingler'}
-                                onClick={() => setPinned((v) => !v)}
-                            >
-                                <span
-                                    className={`icon ${styles.toggleIcon} icon-${pinned ? 'star' : 'star-outline'}`}
-                                />
-                            </button>
                             <button
                                 type='button'
                                 className={`${styles.iconToggle} ${isPrivate ? styles.iconToggleActive : ''}`}

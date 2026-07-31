@@ -21,21 +21,43 @@ function formatCardDate(time: number, full = false): string {
 interface NoteCardProps {
     note: NoteSummary;
     folders: NoteFolder[];
+    /** Off while searching, where the filtered grid isn't the real order. */
+    draggable: boolean;
+    /** Draw the insertion marker: a drop here lands just before this card. */
+    dropBefore: boolean;
     onOpen: (note: NoteSummary) => void;
     onMove: (note: NoteSummary, folderId: number | null) => void;
     onDragStart: (note: NoteSummary) => void;
     onDragEnd: () => void;
+    /** This card is hovered as a drop target. */
+    onDragOver: () => void;
+    /** A note was dropped on this card. */
+    onDrop: () => void;
 }
 
 /**
  * A single note preview. A `masked` note (private, session still locked) shows
  * only a large padlock — no title or body ever reached the client; clicking it
- * opens the master-password prompt. Readable cards are draggable (to a folder
- * header) and expose a discreet folder menu to move the note between folders
- * without opening the editor — at rest the menu button is collapsed so any badges
- * sit flush against the right edge, and it expands on hover.
+ * opens the master-password prompt.
+ *
+ * Every card is both a drag source and a drop target: dropping onto one inserts
+ * the dragged note just before it, which is what makes the order fully manual.
+ * Masked cards take part too — positioning never touches the body. The discreet
+ * folder menu stays for long-distance moves (it appends to the target folder);
+ * at rest its button is collapsed so the badges sit flush against the right edge.
  */
-export default function NoteCard({ note, folders, onOpen, onMove, onDragStart, onDragEnd }: NoteCardProps) {
+export default function NoteCard({
+    note,
+    folders,
+    draggable,
+    dropBefore,
+    onOpen,
+    onMove,
+    onDragStart,
+    onDragEnd,
+    onDragOver,
+    onDrop
+}: NoteCardProps) {
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -48,13 +70,36 @@ export default function NoteCard({ note, folders, onOpen, onMove, onDragStart, o
         return () => document.removeEventListener('mousedown', onDocClick);
     }, [menuOpen]);
 
+    // Shared by both renderings so a masked card drags and accepts drops exactly
+    // like a readable one.
+    const dnd = {
+        draggable,
+        onDragStart: (e: React.DragEvent) => {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', String(note.id));
+            onDragStart(note);
+        },
+        onDragEnd,
+        onDragOver: (e: React.DragEvent) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            onDragOver();
+        },
+        onDrop: (e: React.DragEvent) => {
+            e.preventDefault();
+            onDrop();
+        }
+    };
+    const dropClass = dropBefore ? styles.cardDropBefore : '';
+
     if (note.masked) {
         return (
             <button
                 type='button'
-                className={`${styles.card} ${styles.cardMasked}`}
+                className={`${styles.card} ${styles.cardMasked} ${dropClass}`}
                 onClick={() => onOpen(note)}
                 aria-label='Note privée — déchiffrer'
+                {...dnd}
             >
                 <span className={`icon ${styles.maskedIcon} icon-lock`} />
                 <span className={styles.maskedLabel}>Note privée</span>
@@ -72,16 +117,10 @@ export default function NoteCard({ note, folders, onOpen, onMove, onDragStart, o
 
     return (
         <div
-            className={styles.card}
+            className={`${styles.card} ${dropClass}`}
             role='button'
             tabIndex={0}
-            draggable
-            onDragStart={(e) => {
-                e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('text/plain', String(note.id));
-                onDragStart(note);
-            }}
-            onDragEnd={onDragEnd}
+            {...dnd}
             onClick={() => onOpen(note)}
             onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -94,7 +133,6 @@ export default function NoteCard({ note, folders, onOpen, onMove, onDragStart, o
                 <h4 className={styles.cardTitle}>{note.title || 'Sans titre'}</h4>
                 <span className={styles.cardBadges}>
                     {note.private && <span className={`icon ${styles.badge} icon-lock`} aria-label='Privée' />}
-                    {note.pinned && <span className={`icon ${styles.badge} icon-star`} aria-label='Épinglée' />}
                     <div className={`${styles.cardMenu} ${menuOpen ? styles.menuOpen : ''}`} ref={menuRef}>
                         <button
                             type='button'

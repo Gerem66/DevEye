@@ -4,8 +4,8 @@ import { noteFolderSchema, noteSchema } from 'deveye-types';
 
 /**
  * Stored payload (encrypted as `notes.content`). Holds only the sensitive parts
- * of a note; `folder_id`/`pinned`/`is_private`/`updated`/`id` live on the SQL row
- * in clear so the server can list, group and route without decrypting the body.
+ * of a note; `folder_id`/`sort_order`/`is_private`/`updated`/`id` live on the SQL
+ * row in clear so the server can list, group and route without decrypting it.
  */
 export interface StoredPayload {
     title: string;
@@ -50,7 +50,7 @@ export function toNote(row: NoteRow, payload: StoredPayload): Note {
         title: payload.title,
         folderId: row.folder_id,
         blocks: payload.blocks,
-        pinned: row.pinned === 1,
+        sortOrder: row.sort_order,
         private: row.is_private === 1,
         updated: row.updated,
         created: row.created
@@ -75,7 +75,7 @@ export function toSummary(row: NoteRow, payload: StoredPayload): NoteSummary {
         id: row.id,
         title: payload.title,
         folderId: row.folder_id,
-        pinned: row.pinned === 1,
+        sortOrder: row.sort_order,
         preview: buildPreview(payload.blocks),
         checkTotal: checks.length,
         checkDone: checks.filter((b) => b.type === 'check' && b.done).length,
@@ -98,7 +98,7 @@ export function toMaskedSummary(row: NoteRow): NoteSummary {
         id: row.id,
         title: '',
         folderId: row.folder_id,
-        pinned: row.pinned === 1,
+        sortOrder: row.sort_order,
         checkTotal: 0,
         checkDone: 0,
         private: true,

@@ -24,8 +24,16 @@ import { invalidate } from '@/stores/invalidation';
 import type { FeatureProps } from '@/Features/types';
 import type { Note, NoteFolder, NoteSummary } from 'deveye-types';
 
-/** Sentinel section keys for buckets without a real folder id. */
-const UNFILED = '__unfiled__';
+/** Where a dragged note would land: gap `index` inside `folderId`'s bucket. */
+interface DropTarget {
+    folderId: number | null;
+    index: number;
+}
+
+/** The user's manual order; the id only breaks ties. */
+function byOrder(a: NoteSummary, b: NoteSummary): number {
+    return a.sortOrder - b.sortOrder || a.id - b.id;
+}
 
 function FeatureNotes({ workspace }: FeatureProps) {
     const [loaded, setLoaded] = useState(false);
@@ -33,7 +41,8 @@ function FeatureNotes({ workspace }: FeatureProps) {
     const [notes, setNotes] = useState<NoteSummary[]>([]);
     const [folders, setFolders] = useState<NoteFolder[]>([]);
     const [actionError, setActionError] = useState<string | null>(null);
-    const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+    /** Gap the dragged note would land in: `index` within `folderId`'s bucket. */
+    const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
     const reloadRef = useRef<Promise<void> | null>(null);
     const draggingRef = useRef<NoteSummary | null>(null);
     // Session lock state, from the store the topbar widget and the unlock prompt
@@ -207,23 +216,52 @@ function FeatureNotes({ workspace }: FeatureProps) {
         }
     }, [workspace.id, reload]);
 
-    /** Relocate a note to another folder (menu or drag & drop). */
-    const moveNote = useCallback(
-        async (summary: NoteSummary, folderId: number | null) => {
+    /**
+     * Drop `dragged` into `folderId` at `index` — the single primitive behind
+     * both drag & drop and the card's "Déplacer vers" menu (which appends).
+     * Positions are entirely manual, so this is the only thing that reorders.
+     *
+     * The server takes the destination folder's full new order; the note simply
+     * leaves a gap behind in its previous folder, whose relative order is
+     * untouched. Optimistic, with a rollback to the previous list on failure.
+     */
+    const dropInto = useCallback(
+        async (dragged: NoteSummary, folderId: number | null, index: number) => {
             setActionError(null);
-            if (folderId === summary.folderId) return;
-            // Moving never exposes nor rewrites the body, so even a masked note
-            // can be re-filed without unlocking (matches the server gate).
-            // Optimistic: re-bucket immediately, roll back on failure.
-            setNotes((prev) => prev.map((n) => (n.id === summary.id ? { ...n, folderId } : n)));
+            const bucket = notes.filter((n) => n.folderId === folderId).sort(byOrder);
+            const from = bucket.findIndex((n) => n.id === dragged.id);
+            const noteIds = bucket.map((n) => n.id);
+            if (from !== -1) noteIds.splice(from, 1);
+            // Pulling the note out of its own bucket shifts every later gap down.
+            const at = Math.min(from !== -1 && from < index ? index - 1 : index, noteIds.length);
+            noteIds.splice(at, 0, dragged.id);
+            const unchanged = from !== -1 && noteIds.every((id, i) => id === bucket[i].id);
+            if (unchanged) return;
+
+            const previous = notes;
+            setNotes((prev) =>
+                prev.map((n) => {
+                    const rank = noteIds.indexOf(n.id);
+                    return rank === -1 ? n : { ...n, folderId, sortOrder: rank };
+                })
+            );
             try {
-                await ws.send('note.move', { workspaceId: workspace.id, noteId: summary.id, folderId });
+                await ws.send('note.reorder', { workspaceId: workspace.id, folderId, noteIds });
             } catch (e) {
-                setNotes((prev) => prev.map((n) => (n.id === summary.id ? { ...n, folderId: summary.folderId } : n)));
+                setNotes(previous);
                 setActionError(humanizeError(e, 'Déplacement impossible.'));
             }
         },
-        [workspace.id]
+        [notes, workspace.id]
+    );
+
+    /** Menu shortcut: send a note to the end of another folder. */
+    const moveNote = useCallback(
+        (summary: NoteSummary, folderId: number | null) => {
+            if (folderId === summary.folderId) return;
+            void dropInto(summary, folderId, Number.MAX_SAFE_INTEGER);
+        },
+        [dropInto]
     );
 
     const createFolder = useCallback(async () => {
@@ -305,9 +343,8 @@ function FeatureNotes({ workspace }: FeatureProps) {
                 else byFolder.set(n.folderId, [n]);
             }
         }
-        const sortPinned = (a: NoteSummary, b: NoteSummary) => Number(b.pinned) - Number(a.pinned);
-        byFolder.forEach((arr) => arr.sort(sortPinned));
-        unfiled.sort(sortPinned);
+        byFolder.forEach((arr) => arr.sort(byOrder));
+        unfiled.sort(byOrder);
         return { byFolder, unfiled, total: filtered.length };
     }, [notes, folders, search]);
 
@@ -346,14 +383,25 @@ function FeatureNotes({ workspace }: FeatureProps) {
         [folders, workspace.id]
     );
 
-    const onDropTo = useCallback(
-        (folderId: number | null) => {
+    /** Remember the hovered gap, without re-rendering on every dragover tick. */
+    const hoverGap = useCallback((folderId: number | null, index: number) => {
+        setDropTarget((prev) =>
+            prev && prev.folderId === folderId && prev.index === index ? prev : { folderId, index }
+        );
+    }, []);
+
+    const endDrag = useCallback(() => {
+        draggingRef.current = null;
+        setDropTarget(null);
+    }, []);
+
+    const dropAt = useCallback(
+        (folderId: number | null, index: number) => {
             const dragged = draggingRef.current;
-            draggingRef.current = null;
-            setDragOverKey(null);
-            if (dragged) void moveNote(dragged, folderId);
+            endDrag();
+            if (dragged) void dropInto(dragged, folderId, index);
         },
-        [moveNote]
+        [dropInto, endDrag]
     );
 
     /**
@@ -364,48 +412,45 @@ function FeatureNotes({ workspace }: FeatureProps) {
      */
     const renderGrid = (items: NoteSummary[], folderId: number | null) => (
         <div className={styles.grid}>
-            {items.map((note) => (
+            {items.map((note, index) => (
                 <NoteCard
                     key={note.id}
                     note={note}
                     folders={sortedFolders}
+                    draggable={!searching}
+                    dropBefore={dropTarget?.folderId === folderId && dropTarget.index === index}
                     onOpen={(n) => void openCard(n)}
-                    onMove={(n, fid) => void moveNote(n, fid)}
+                    onMove={moveNote}
                     onDragStart={(n) => (draggingRef.current = n)}
-                    onDragEnd={() => {
-                        draggingRef.current = null;
-                        setDragOverKey(null);
-                    }}
+                    onDragEnd={endDrag}
+                    onDragOver={() => hoverGap(folderId, index)}
+                    onDrop={() => dropAt(folderId, index)}
                 />
             ))}
             {!searching && (
                 <button
                     type='button'
-                    className={styles.addCard}
+                    className={`${styles.addCard} ${
+                        dropTarget?.folderId === folderId && dropTarget.index === items.length ? styles.addCardDrop : ''
+                    }`}
                     aria-label='Ajouter une note'
                     title='Ajouter une note'
                     onClick={() => void openEditor(null, folderId)}
+                    onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        hoverGap(folderId, items.length);
+                    }}
+                    onDrop={(e) => {
+                        e.preventDefault();
+                        dropAt(folderId, items.length);
+                    }}
                 >
                     <span className={`icon ${styles.addCardIcon} icon-add`} />
                 </button>
             )}
         </div>
     );
-
-    /** Drop-target props shared by folder / unfiled headers. */
-    const dropProps = (key: string, folderId: number | null) => ({
-        className: `${styles.folderTitle} ${dragOverKey === key ? styles.folderTitleDrop : ''}`,
-        onDragOver: (e: React.DragEvent) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            setDragOverKey(key);
-        },
-        onDragLeave: () => setDragOverKey((k) => (k === key ? null : k)),
-        onDrop: (e: React.DragEvent) => {
-            e.preventDefault();
-            onDropTo(folderId);
-        }
-    });
 
     const searching = search.trim() !== '';
 
@@ -468,7 +513,7 @@ function FeatureNotes({ workspace }: FeatureProps) {
                     const canReorder = !searching;
                     return (
                         <section key={folder.id} className={styles.folderSection}>
-                            <div {...dropProps(String(folder.id), folder.id)}>
+                            <div className={styles.folderTitle}>
                                 <span className={`icon ${styles.badge} icon-folder`} />
                                 <span className={styles.folderName}>{folderLabel(folder)}</span>
                                 <span className={styles.count}>{items.length}</span>
@@ -526,7 +571,7 @@ function FeatureNotes({ workspace }: FeatureProps) {
 
             {loaded && (!searching || unfiled.length > 0) && (
                 <section className={styles.folderSection}>
-                    <div {...dropProps(UNFILED, null)}>
+                    <div className={styles.folderTitle}>
                         <span className={styles.folderName}>Sans dossier</span>
                         <span className={styles.count}>{unfiled.length}</span>
                     </div>
@@ -566,7 +611,7 @@ function toSummary(note: Note): NoteSummary {
         id: note.id,
         title: note.title,
         folderId: note.folderId,
-        pinned: note.pinned,
+        sortOrder: note.sortOrder,
         preview: previewText.slice(0, 140),
         checkTotal: checks.length,
         checkDone: checks.filter((b) => b.type === 'check' && b.done).length,

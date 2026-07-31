@@ -11,7 +11,7 @@ import {
     noteEdit,
     noteGet,
     noteList,
-    noteMove,
+    noteReorder,
     noteRestore
 } from 'deveye-types';
 import type { NoteRow } from 'deveye-types';
@@ -195,7 +195,6 @@ export const noteAddFeature: FeatureDefinition<typeof noteAdd.command, typeof no
                 workspaceId: toDbWorkspaceId(input.workspaceId),
                 folderId,
                 content,
-                pinned: input.note.pinned,
                 isPrivate: input.note.private
             });
             ctx.audit({
@@ -224,7 +223,6 @@ export const noteEditFeature: FeatureDefinition<
         const updated = await ctx.db.notes.update(input.noteId, ctx.userId, {
             folderId,
             content,
-            pinned: input.note.pinned,
             isPrivate: input.note.private
         });
         if (!updated) throw new FeatureError('not_found', 'Note not found');
@@ -237,22 +235,28 @@ export const noteEditFeature: FeatureDefinition<
     }
 });
 
-export const noteMoveFeature: FeatureDefinition<
-    typeof noteMove.command,
-    typeof noteMove.input,
-    typeof noteMove.output
+export const noteReorderFeature: FeatureDefinition<
+    typeof noteReorder.command,
+    typeof noteReorder.input,
+    typeof noteReorder.output
 > = defineFeature({
-    ...noteMove,
+    ...noteReorder,
     handler: async (ctx, input) => {
         await assertWorkspaceMember(ctx, input.workspaceId);
-        // Moving is a benign reorganization that never exposes nor rewrites the
-        // body, so even a masked private note can be re-filed freely — the lookup
-        // is only there to reject an id that isn't the caller's.
-        await loadNote(ctx, input.workspaceId, input.noteId);
         const folderId = await resolveFolderId(ctx, input.workspaceId, input.folderId);
-        const updated = await ctx.db.notes.move(input.noteId, ctx.userId, folderId);
-        if (!updated) throw new FeatureError('not_found', 'Note not found');
-        return { noteId: input.noteId, folderId };
+        // Reorder only the caller's own active notes in this workspace; any
+        // foreign, archived or out-of-workspace id is dropped silently — the
+        // same tolerance as folder.reorder.
+        const eligible = new Set(
+            (await ctx.db.notes.listByUser(ctx.userId))
+                .filter((r) => rowInWorkspace(r.workspace_id, input.workspaceId) && r.archived_at === null)
+                .map((r) => r.id)
+        );
+        const noteIds = input.noteIds.filter((id) => eligible.has(id));
+        // Positioning never exposes nor rewrites a body, so a masked private
+        // note can be re-filed and re-ranked without unlocking.
+        await ctx.db.notes.reorder(ctx.userId, folderId, noteIds);
+        return { folderId, noteIds };
     }
 });
 
@@ -266,7 +270,7 @@ export const noteArchiveFeature: FeatureDefinition<
         await assertWorkspaceMember(ctx, input.workspaceId);
         const existing = await loadNote(ctx, input.workspaceId, input.noteId);
         await assertPrivateUnlocked(ctx, existing);
-        await ctx.db.notes.setArchived(input.noteId, ctx.userId, Math.floor(Date.now() / 1000));
+        await ctx.db.notes.archive(input.noteId, ctx.userId, Math.floor(Date.now() / 1000));
         ctx.audit({
             action: 'note.archive',
             description: 'Note archivée',
@@ -286,7 +290,7 @@ export const noteRestoreFeature: FeatureDefinition<
         await assertWorkspaceMember(ctx, input.workspaceId);
         const existing = await loadNote(ctx, input.workspaceId, input.noteId);
         await assertPrivateUnlocked(ctx, existing);
-        await ctx.db.notes.setArchived(input.noteId, ctx.userId, null);
+        await ctx.db.notes.restore(input.noteId, ctx.userId);
         ctx.audit({
             action: 'note.restore',
             description: 'Note restaurée depuis les archives',
@@ -428,7 +432,17 @@ export const folderDeleteFeature: FeatureDefinition<
         if (!existing || !rowInWorkspace(existing.workspace_id, input.workspaceId)) {
             throw new FeatureError('not_found', 'Folder not found');
         }
+        // The notes it holds are un-filed by the FK (ON DELETE SET NULL) with the
+        // ranks they had inside the folder, which would interleave them into the
+        // unfiled list. Append them at its end instead, so the user's order stays
+        // meaningful and every rank stays unique within its bucket.
+        const active = (await ctx.db.notes.listByUser(ctx.userId)).filter(
+            (r) => rowInWorkspace(r.workspace_id, input.workspaceId) && r.archived_at === null
+        );
+        const unfiled = active.filter((r) => r.folder_id === null).map((r) => r.id);
+        const orphans = active.filter((r) => r.folder_id === input.folderId).map((r) => r.id);
         await ctx.db.noteFolders.delete(input.folderId, ctx.userId);
+        if (orphans.length > 0) await ctx.db.notes.reorder(ctx.userId, null, [...unfiled, ...orphans]);
         ctx.audit({
             category: 'note',
             action: 'folder.delete',
@@ -447,7 +461,7 @@ export const noteFeatures: FeatureDefinition<string, any, any>[] = [
     noteGetFeature,
     noteAddFeature,
     noteEditFeature,
-    noteMoveFeature,
+    noteReorderFeature,
     noteArchiveFeature,
     noteRestoreFeature,
     noteDeleteFeature,

@@ -133,7 +133,7 @@ Voir [SECURITY_MODEL.md](./SECURITY_MODEL.md). Règles clés :
   (`encrypt`/`tryDecrypt`), **jamais** par `ctx.crypt` directement (réservé aux
   secrets liés à l'auth, ex. 2FA).
 - Stocker en clair seulement les métadonnées non sensibles nécessaires au
-  serveur pour lister/trier/gater sans déchiffrer (`pinned`, `folder_id`, `level`,
+  serveur pour lister/trier/gater sans déchiffrer (`sort_order`, `folder_id`, `level`,
   `workspace_id`…).
 - Le serveur ne doit jamais voir le contenu en clair.
 
