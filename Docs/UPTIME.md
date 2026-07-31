@@ -140,15 +140,26 @@ de la liste) touchent à `sort_order`.
 versions : les deux ne peuvent pas coexister, et un ordre qui se réarrange tout
 seul sous le curseur n'est pas un ordre.
 
-Le glisser-déposer suit le même modèle que `Features/Notes/NoteGrid` : toute la
-liste est la cible de dépôt, et la barre d'insertion est **pilotée par le DOM,
-jamais par un état React**. `dragover` se déclenche en continu ; re-rendre les
-lignes sous le curseur fait re-émettre des événements de drag sur les nœuds
-remplacés, ce qui reboucle et fige l'onglet (le bug rencontré sur les notes). La
-barre se place au milieu réel du créneau, mesuré sur les deux lignes qui le
-bordent — centrée par construction, sans correction. Le rafraîchissement
-périodique est suspendu pendant un drag, sinon la liste se réordonnerait sous le
-curseur.
+Comme pour les notes, la barre d'insertion (`ServiceList`) est **pilotée par le
+DOM, jamais par un état React** : elle se place au milieu réel du créneau,
+mesuré sur les deux lignes qui le bordent — centrée par construction, sans
+correction. Le rafraîchissement périodique est suspendu pendant un drag, sinon
+la liste se réordonnerait sous le curseur.
+
+**Contrairement aux notes, le glisser-déposer n'utilise pas l'API HTML5
+`draggable`** (`Features/Notes/NoteGrid`) mais les **Pointer Events**
+(`pointerdown`/`pointermove`/`pointerup` sur `window`, avec un seuil de 6 px
+avant qu'une pression ne devienne un drag plutôt qu'un clic). L'API native
+confie la géométrie du geste au navigateur, et sur Chromium/Linux une session
+interrompue peut laisser toute la page croire qu'un drag est encore en cours :
+le curseur reste en mode « attraper », plus aucun clic ne répond nulle part
+(pas même le menu contextuel natif), jusqu'à ce que quelque chose d'extérieur à
+la page (Echap, alt-tab) débloque le navigateur. C'est une panne de plateforme,
+pas un bug atteignable depuis le code de l'app — impossible à corriger en
+soignant `dragend`, seulement en ne confiant jamais le geste au navigateur.
+L'implémentation maison garde 100 % de son état dans des refs du composant,
+jamais dans la machine à états DnD du navigateur, et gagne le support tactile
+au passage. Une pression Echap pendant un drag l'annule aussi, par sécurité.
 
 ## Commandes
 

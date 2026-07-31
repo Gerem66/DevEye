@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import ServiceCard from './ServiceCard';
 import styles from './style.module.css';
@@ -20,6 +20,9 @@ interface ServiceListProps {
     onDragStateChange: (dragging: boolean) => void;
 }
 
+/** Pointer movement, in px, before a press commits to a drag rather than a click. */
+const DRAG_THRESHOLD = 6;
+
 /** Half the list's row gap, where the insertion bar is centred. */
 function halfGap(list: HTMLElement): number {
     return (parseFloat(getComputedStyle(list).rowGap) || 0) / 2;
@@ -39,16 +42,23 @@ function reordered(services: UptimeService[], draggedId: number, gap: number): n
 /**
  * The service list, with drag & drop ordering.
  *
- * The whole list is the drop target (events bubble up from the cards), and the
- * landing spot is shown as a bar standing in the gap the row would fall into —
- * the rows themselves are never restyled or displaced, so what you see is
- * exactly where it lands.
+ * The whole list is the drop target, and the landing spot is shown as a bar
+ * standing in the gap the row would fall into — the rows themselves are never
+ * restyled or displaced, so what you see is exactly where it lands.
  *
- * **The bar is driven straight through the DOM, never React state.** `dragover`
- * fires continuously while the pointer moves; re-rendering the rows under it
- * makes the browser re-fire drag events on the replaced nodes, which feeds back
- * into another render and locks the tab up (the bug this pattern was written
- * for, in {@link ../Notes/NoteGrid}). Refs keep the drag render-free.
+ * **Driven by Pointer Events, not HTML5 `draggable`.** {@link ../Notes/NoteGrid}
+ * uses the native `draggable` API; this list deliberately doesn't, because that
+ * API hands control of the gesture to the browser's own drag session — and on
+ * this platform (Chromium on Linux) an interrupted native session can leave the
+ * whole page believing a drag is still in progress: the pointer stays a grab
+ * cursor and nothing responds to clicks, not even the browser's own context
+ * menu, until something outside the page (Escape, alt-tab) breaks it. That is
+ * a platform failure mode, not a bug reachable from application code, so it
+ * can't be fixed by being more careful with `dragend` — only by never handing
+ * the gesture to the browser at all. A hand-rolled pointer-capture drag keeps
+ * 100% of the state in this component's own refs (see below, same render-free
+ * discipline as NoteGrid), never touches the browser's DnD state machine, and
+ * gets touch support as a side effect.
  */
 export function ServiceList({
     services,
@@ -64,8 +74,16 @@ export function ServiceList({
     const barRef = useRef<HTMLSpanElement>(null);
     /** Gap the bar currently marks, or null while it is hidden. */
     const gapRef = useRef<number | null>(null);
-    /** The service being dragged; a ref so starting a drag renders nothing. */
+    /** Id + pointer id of the press being tracked, before the threshold is crossed. */
+    const pressRef = useRef<{ id: number; pointerId: number; x: number; y: number } | null>(null);
+    /** Id actually being dragged (threshold crossed), or null. Logic reads this. */
     const draggedRef = useRef<number | null>(null);
+    /** Same id, mirrored into state only to dim the dragged card — set at most
+     *  twice per drag (start/end), never on every pointer move. */
+    const [draggedId, setDraggedId] = useState<number | null>(null);
+    /** A real drag just ended: the click the browser still fires afterwards
+     *  must not also open the detail view. */
+    const suppressClickRef = useRef(false);
 
     /** The rendered service rows, in order. */
     const rowEls = useCallback(
@@ -128,65 +146,114 @@ export function ServiceList({
         [rowEls]
     );
 
+    // Refs so the global listeners below can always call the latest handlers
+    // without re-subscribing on every render (they're only (un)installed once,
+    // per drag, from handlePointerDown/endDrag — see effect further down).
+    const showBarRef = useRef(showBar);
+    showBarRef.current = showBar;
+    const gapAtRef = useRef(gapAt);
+    gapAtRef.current = gapAt;
+    const servicesRef = useRef(services);
+    servicesRef.current = services;
+    const onReorderRef = useRef(onReorder);
+    onReorderRef.current = onReorder;
+
     const endDrag = useCallback(() => {
+        window.removeEventListener('pointermove', handleWindowPointerMove);
+        window.removeEventListener('pointerup', handleWindowPointerUp);
+        window.removeEventListener('pointercancel', handleWindowPointerCancel);
+        window.removeEventListener('blur', handleWindowBlur);
+        window.removeEventListener('keydown', handleWindowKeyDown);
         hideBar();
+        document.body.style.removeProperty('cursor');
+        document.body.style.removeProperty('user-select');
+        pressRef.current = null;
         if (draggedRef.current !== null) {
             draggedRef.current = null;
+            setDraggedId(null);
             onDragStateChange(false);
         }
     }, [hideBar, onDragStateChange]);
 
-    // A drop outside the list (or nowhere) never reaches its handlers, so the
-    // bar is also cleared whenever any drag ends.
-    useEffect(() => {
-        document.addEventListener('dragend', endDrag);
-        return () => document.removeEventListener('dragend', endDrag);
-    }, [endDrag]);
+    function handleWindowPointerMove(e: PointerEvent) {
+        const press = pressRef.current;
+        if (!press || e.pointerId !== press.pointerId) return;
 
-    function handleDragOver(e: React.DragEvent) {
-        if (draggedRef.current === null) return;
-        e.preventDefault(); // required for the drop to be allowed at all
-        e.dataTransfer.dropEffect = 'move';
-        showBar(gapAt(e.clientY));
+        if (draggedRef.current === null) {
+            // Below threshold: this may still turn out to be a plain click.
+            if (Math.hypot(e.clientX - press.x, e.clientY - press.y) < DRAG_THRESHOLD) return;
+            draggedRef.current = press.id;
+            setDraggedId(press.id);
+            onDragStateChange(true);
+            document.body.style.cursor = 'grabbing';
+            document.body.style.userSelect = 'none';
+        }
+        showBarRef.current(gapAtRef.current(e.clientY));
     }
 
-    function handleDrop(e: React.DragEvent) {
-        e.preventDefault();
-        const gap = gapRef.current;
+    function handleWindowPointerUp(e: PointerEvent) {
+        const press = pressRef.current;
+        if (!press || e.pointerId !== press.pointerId) return;
         const dragged = draggedRef.current;
+        const gap = gapRef.current;
+        if (dragged !== null) suppressClickRef.current = true;
         endDrag();
-        if (gap === null || dragged === null) return;
-        const ids = reordered(services, dragged, gap);
-        if (ids) onReorder(ids);
+        if (dragged !== null && gap !== null) {
+            const ids = reordered(servicesRef.current, dragged, gap);
+            if (ids) onReorderRef.current(ids);
+        }
     }
 
-    function handleDragLeave(e: React.DragEvent) {
-        // Moving between rows fires dragleave too; only a real exit hides the bar.
-        if (!listRef.current?.contains(e.relatedTarget as Node | null)) hideBar();
+    function handleWindowPointerCancel(e: PointerEvent) {
+        if (pressRef.current?.pointerId !== e.pointerId) return;
+        endDrag();
+    }
+
+    function handleWindowBlur() {
+        // A drag left mid-gesture (alt-tab, a native dialog) must not linger.
+        endDrag();
+    }
+
+    function handleWindowKeyDown(e: KeyboardEvent) {
+        if (e.key === 'Escape') endDrag();
+    }
+
+    // Belt-and-braces: release everything if the component itself goes away
+    // mid-drag (e.g. the feature popup closes).
+    useEffect(() => endDrag, [endDrag]);
+
+    function handlePointerDown(e: React.PointerEvent, serviceId: number) {
+        // Primary button/contact only; the action buttons stop their own clicks
+        // from reaching here, but a stray pointerdown on one must not start a
+        // drag either.
+        if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return;
+        pressRef.current = { id: serviceId, pointerId: e.pointerId, x: e.clientX, y: e.clientY };
+        window.addEventListener('pointermove', handleWindowPointerMove);
+        window.addEventListener('pointerup', handleWindowPointerUp);
+        window.addEventListener('pointercancel', handleWindowPointerCancel);
+        window.addEventListener('blur', handleWindowBlur);
+        window.addEventListener('keydown', handleWindowKeyDown);
     }
 
     return (
-        <div
-            ref={listRef}
-            className={styles.list}
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-            onDragLeave={handleDragLeave}
-        >
+        <div ref={listRef} className={styles.list}>
             {services.map((service) => (
                 <ServiceCard
                     key={service.id}
                     service={service}
                     busy={busy.has(service.id)}
-                    onOpen={() => onOpen(service)}
+                    dragging={draggedId === service.id}
+                    onOpen={() => {
+                        if (suppressClickRef.current) {
+                            suppressClickRef.current = false;
+                            return;
+                        }
+                        onOpen(service);
+                    }}
                     onEdit={() => onEdit(service)}
                     onToggle={() => onToggle(service)}
                     onCheckNow={() => onCheckNow(service)}
-                    onDragStart={() => {
-                        draggedRef.current = service.id;
-                        onDragStateChange(true);
-                    }}
-                    onDragEnd={endDrag}
+                    onDragPointerDown={(e) => handlePointerDown(e, service.id)}
                 />
             ))}
             <span ref={barRef} className={styles.dropBar} aria-hidden='true' />

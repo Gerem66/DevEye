@@ -13,8 +13,9 @@ interface ServiceCardProps {
     onCheckNow: () => void;
     /** A probe or a toggle is in flight for this service. */
     busy: boolean;
-    onDragStart: () => void;
-    onDragEnd: () => void;
+    /** Card being dragged right now — dimmed, never restyled otherwise. */
+    dragging: boolean;
+    onDragPointerDown: (e: React.PointerEvent) => void;
 }
 
 /** Badge tone + label for a service's live state. */
@@ -34,8 +35,9 @@ function statusBadge(service: UptimeService): { tone: 'online' | 'danger' | 'neu
  * windows and its latest latency. Clicking anywhere opens the detail view; the
  * corner actions stop the click so they don't also navigate.
  *
- * The whole row is a drag handle, like a note card. A click still opens the
- * detail: the browser only starts a drag past a movement threshold.
+ * The whole row is a drag handle, like a note card — but via `pointerdown`, not
+ * HTML5 `draggable` (see {@link ../Notes/NoteGrid} for that approach, and
+ * {@link ./ServiceList} for why this feature uses pointer events instead).
  */
 export function ServiceCard({
     service,
@@ -44,8 +46,8 @@ export function ServiceCard({
     onToggle,
     onCheckNow,
     busy,
-    onDragStart,
-    onDragEnd
+    dragging,
+    onDragPointerDown
 }: ServiceCardProps) {
     const badge = statusBadge(service);
     const action = (run: () => void) => (e: React.MouseEvent) => {
@@ -55,19 +57,11 @@ export function ServiceCard({
 
     return (
         <div
-            className={`${styles.card} ${service.enabled ? '' : styles.cardPaused}`}
+            className={`${styles.card} ${service.enabled ? '' : styles.cardPaused} ${dragging ? styles.cardDragging : ''}`}
             role='button'
             tabIndex={0}
-            // Drag source only — the surrounding list owns the drop side, so a row
-            // is never restyled or displaced while a drag is in flight.
-            draggable
             data-service-card=''
-            onDragStart={(e) => {
-                e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('text/plain', String(service.id));
-                onDragStart();
-            }}
-            onDragEnd={onDragEnd}
+            onPointerDown={onDragPointerDown}
             onClick={onOpen}
             onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
