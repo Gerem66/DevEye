@@ -1,11 +1,13 @@
 import { type MouseEvent as ReactMouseEvent, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Button from '@/Components/Button';
+import { openInfo } from '@/Components/InfoPopup';
 import { useAuth } from '@/auth/AuthProvider';
 import { DeploymentStatus } from './DeploymentStatus';
 import { ConnectionStatus } from './ConnectionStatus';
 import { TopbarWidgets } from './topbarWidgets';
 import { EditableTopbarWidgets } from './EditableTopbarWidgets';
+import AboutContent from './AboutContent';
 import styles from './TopNavbar.module.css';
 
 const ENV = import.meta.env.VITE_ENV;
@@ -131,16 +133,25 @@ export default function TopNavbar({
                                 <span className={styles.viewTitle}>{viewTitle}</span>
                             </motion.span>
                         ) : (
-                            <motion.span
+                            <motion.button
                                 key='version'
+                                type='button'
                                 className={styles.version}
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 exit={{ opacity: 0 }}
                                 transition={FADE}
+                                onClick={() =>
+                                    void openInfo({
+                                        title: `À propos de DevEye · ${version}`,
+                                        body: <AboutContent />,
+                                        width: 560
+                                    })
+                                }
+                                title='À propos de DevEye'
                             >
                                 {version}
-                            </motion.span>
+                            </motion.button>
                         )}
                     </AnimatePresence>
                 </div>

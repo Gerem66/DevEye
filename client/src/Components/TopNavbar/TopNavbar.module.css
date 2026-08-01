@@ -98,11 +98,22 @@
 .version {
     font-size: 0.65rem;
     font-weight: 600;
+    font-family: inherit;
     color: var(--text-muted);
     background: var(--surface-subtle);
+    border: none;
     padding: 2px 6px;
     border-radius: var(--radius-pill);
     flex-shrink: 0;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.version:hover {
+    background: var(--glass-bg-light);
+    color: var(--accent);
 }
 
 /* Positioning context for the in-place version/title crossfade. */
