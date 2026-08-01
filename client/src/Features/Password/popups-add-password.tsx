@@ -7,6 +7,7 @@ import { DialogCancelButton } from '@/Components/Dialog';
 import Button from '@/Components/Button';
 import TextInput from '@/Components/TextInput';
 import SelectInput from '@/Components/SelectInput';
+import PasswordGeneratorMenu from './PasswordGeneratorMenu';
 
 import type { PasswordEntry, PasswordStatus } from 'deveye-types';
 
@@ -147,13 +148,16 @@ function PasswordPopupAdd({ passwordCategories }: PasswordPopupAddProps) {
                     onChange={(e) => setEmail(e.target.value)}
                 />
 
-                <TextInput
-                    type='password'
-                    placeholder='Mot de passe'
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    enableShowHideButton
-                />
+                <div className={styles.passwordField}>
+                    <TextInput
+                        type='password'
+                        placeholder='Mot de passe'
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        enableShowHideButton
+                    />
+                    <PasswordGeneratorMenu onGenerate={setPassword} />
+                </div>
 
                 <SelectInput value={status} onChange={handleStatusPassword}>
                     <option value='active'>Actif</option>

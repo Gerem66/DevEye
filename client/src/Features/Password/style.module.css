@@ -221,3 +221,148 @@
     display: flex;
     gap: var(--space-sm);
 }
+
+/* Password field + generator trigger */
+.passwordField {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+}
+
+.passwordField > *:first-child {
+    flex: 1;
+    min-width: 0;
+}
+
+.generatorWrap {
+    flex-shrink: 0;
+}
+
+.generatorTrigger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(2.25rem + 2px);
+    height: calc(2.25rem + 2px);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.generatorTrigger:hover,
+.generatorTrigger.active {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+.generatorTrigger .icon {
+    width: 16px;
+}
+
+.generatorMenu {
+    /* Portaled to <body> (see PasswordGeneratorMenu) and anchored to the
+       trigger button via inline top/right — escapes the dialog's own scroll
+       container so it floats above everything instead of being clipped. */
+    position: fixed;
+    width: 250px;
+    background: var(--surface-popup);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: var(--space-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    /* Above --z-modal (the add/edit dialog it's anchored to) — a nested
+       popover must never end up rendered underneath its own dialog. */
+    z-index: var(--z-toast);
+}
+
+.generatorLengthRow {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.generatorLengthLabel {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.generatorLengthValue {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.generatorSlider {
+    width: 100%;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.generatorOptions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.generatorOption {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+
+.generatorOption input {
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.generatorWarning {
+    font-size: 0.75rem;
+    color: var(--danger);
+}
+
+.generatorGenerateBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--accent);
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--on-accent);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.generatorGenerateBtn:hover:not(:disabled) {
+    background: var(--accent-hover);
+}
+
+.generatorGenerateBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.generatorGenerateBtn .icon {
+    width: 14px;
+}
