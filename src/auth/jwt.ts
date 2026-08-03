@@ -1,6 +1,7 @@
 import { env } from '@/Utils/Env';
 import { randomUUID } from 'crypto';
 import { SignJWT, errors as joseErrors, jwtVerify } from 'jose';
+import type { MailOAuthProvider, MailSecurityTier } from 'deveye-types';
 
 const issuer = 'deveye';
 const audience = 'deveye-client';
@@ -122,6 +123,95 @@ export async function verifyTwoFactorChallenge(
         if (typeof payload.sub !== 'string' || payload.purpose !== '2fa') return null;
         const pdk = typeof payload.pdk === 'string' ? payload.pdk : undefined;
         return { sub: payload.sub, pendingDekToken: pdk };
+    } catch {
+        return null;
+    }
+}
+
+export interface MailOAuthStateClaims {
+    userId: number;
+    /** WS session id, so the callback route can reach the same live DEK for a "guarded" account. */
+    sessionId: string;
+    provider: MailOAuthProvider;
+    securityTier: MailSecurityTier;
+}
+
+/**
+ * Short-lived state carried through the Google/Microsoft consent redirect —
+ * the callback route is a plain HTTP GET with no WS context of its own, so
+ * everything it needs to finish the flow (which user, which live session's
+ * DEK to use if "guarded", which provider/tier) travels signed in `state`
+ * rather than being guessed from cookies alone.
+ */
+export async function signMailOAuthState(claims: MailOAuthStateClaims): Promise<string> {
+    return new SignJWT({ ...claims, purpose: 'mail-oauth' })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setIssuer(issuer)
+        .setAudience('deveye-mail-oauth')
+        .setIssuedAt()
+        .setExpirationTime('10m')
+        .sign(accessSecret);
+}
+
+export interface MailAttachmentClaims {
+    messageId: number;
+    attachmentId: string;
+    userId: number;
+    sessionId: string;
+}
+
+/** Short-lived token backing `mail.attachmentDownload`'s signed URL — minted just before the client fetches it. */
+export async function signMailAttachmentToken(claims: MailAttachmentClaims): Promise<string> {
+    return new SignJWT({ ...claims, purpose: 'mail-attachment' })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setIssuer(issuer)
+        .setAudience('deveye-mail-attachment')
+        .setIssuedAt()
+        .setExpirationTime('2m')
+        .sign(accessSecret);
+}
+
+export async function verifyMailAttachmentToken(token: string): Promise<MailAttachmentClaims | null> {
+    try {
+        const { payload } = await jwtVerify(token, accessSecret, { issuer, audience: 'deveye-mail-attachment' });
+        if (
+            payload.purpose !== 'mail-attachment' ||
+            typeof payload.messageId !== 'number' ||
+            typeof payload.attachmentId !== 'string' ||
+            typeof payload.userId !== 'number' ||
+            typeof payload.sessionId !== 'string'
+        ) {
+            return null;
+        }
+        return {
+            messageId: payload.messageId,
+            attachmentId: payload.attachmentId,
+            userId: payload.userId,
+            sessionId: payload.sessionId
+        };
+    } catch {
+        return null;
+    }
+}
+
+export async function verifyMailOAuthState(token: string): Promise<MailOAuthStateClaims | null> {
+    try {
+        const { payload } = await jwtVerify(token, accessSecret, { issuer, audience: 'deveye-mail-oauth' });
+        if (
+            payload.purpose !== 'mail-oauth' ||
+            typeof payload.userId !== 'number' ||
+            typeof payload.sessionId !== 'string' ||
+            (payload.provider !== 'google' && payload.provider !== 'microsoft') ||
+            (payload.securityTier !== 'open' && payload.securityTier !== 'guarded')
+        ) {
+            return null;
+        }
+        return {
+            userId: payload.userId,
+            sessionId: payload.sessionId,
+            provider: payload.provider,
+            securityTier: payload.securityTier
+        };
     } catch {
         return null;
     }

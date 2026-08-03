@@ -40,14 +40,14 @@
     flex: 1;
     min-height: 0;
     display: flex;
-    padding: var(--space-xl) 0 var(--space-xl) var(--space-xl);
+    padding: var(--space-md) 0 var(--space-md) var(--space-md);
     color: var(--text-secondary);
 }
 
 .scroll {
     flex: 1;
     min-height: 0;
-    padding-right: var(--space-xl);
+    padding-right: var(--space-md);
     overflow-y: auto;
 }
 
@@ -61,10 +61,10 @@
     }
 
     .body {
-        padding: var(--space-lg) 0 var(--space-lg) var(--space-lg);
+        padding: var(--space-sm) 0 var(--space-sm) var(--space-sm);
     }
 
     .scroll {
-        padding-right: var(--space-lg);
+        padding-right: var(--space-sm);
     }
 }

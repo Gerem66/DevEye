@@ -4,11 +4,12 @@ import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
 import { DialogCancelButton } from '@/Components/Dialog';
 import Popup, { ClosePopup } from '@/Components/Popup';
+import SelectInput from '@/Components/SelectInput';
 import TextInput from '@/Components/TextInput';
 
 import styles from './style.module.css';
 
-import type { UptimeSettings } from 'deveye-types';
+import type { MailAccount, UptimeSettings } from 'deveye-types';
 
 export const NOTIFICATIONS_POPUP = 'popup-uptime-notifications';
 
@@ -18,6 +19,8 @@ export const NOTIFICATIONS_POPUP = 'popup-uptime-notifications';
  */
 export function NotificationsPopup() {
     const [settings, setSettings] = useState<UptimeSettings | null>(null);
+    const [mailAccounts, setMailAccounts] = useState<MailAccount[]>([]);
+    const [mailAccountId, setMailAccountId] = useState<number | null>(null);
     const [email, setEmail] = useState('');
     const [webhookUrl, setWebhookUrl] = useState('');
     const [emailEnabled, setEmailEnabled] = useState(true);
@@ -30,14 +33,15 @@ export function NotificationsPopup() {
         if (!opening) return;
         setStatus(null);
         setSettings(null);
-        void ws
-            .send('uptime.getSettings', {})
-            .then((res) => {
-                setSettings(res.settings);
-                setEmail(res.settings.email ?? '');
-                setWebhookUrl(res.settings.webhookUrl ?? '');
-                setEmailEnabled(res.settings.emailEnabled);
-                setWebhookEnabled(res.settings.webhookEnabled);
+        void Promise.all([ws.send('uptime.getSettings', {}), ws.send('mail.accountList', {})])
+            .then(([settingsRes, accountsRes]) => {
+                setSettings(settingsRes.settings);
+                setEmail(settingsRes.settings.email ?? '');
+                setWebhookUrl(settingsRes.settings.webhookUrl ?? '');
+                setEmailEnabled(settingsRes.settings.emailEnabled);
+                setWebhookEnabled(settingsRes.settings.webhookEnabled);
+                setMailAccountId(settingsRes.settings.mailAccountId);
+                setMailAccounts(accountsRes.accounts);
             })
             .catch(() => setStatus('Chargement impossible.'));
     }
@@ -45,7 +49,7 @@ export function NotificationsPopup() {
     async function save(): Promise<void> {
         setBusy(true);
         try {
-            await ws.send('uptime.setSettings', { emailEnabled, email, webhookEnabled, webhookUrl });
+            await ws.send('uptime.setSettings', { emailEnabled, email, mailAccountId, webhookEnabled, webhookUrl });
             ClosePopup(NOTIFICATIONS_POPUP, true);
         } catch {
             setStatus('Enregistrement impossible.');
@@ -59,7 +63,7 @@ export function NotificationsPopup() {
         setBusy(true);
         setStatus(null);
         try {
-            await ws.send('uptime.setSettings', { emailEnabled, email, webhookEnabled, webhookUrl });
+            await ws.send('uptime.setSettings', { emailEnabled, email, mailAccountId, webhookEnabled, webhookUrl });
             const res = await ws.send('uptime.testNotification', {});
             setStatus(res.sent ? 'Notification de test envoyée.' : (res.error ?? 'Envoi impossible.'));
         } catch {
@@ -68,6 +72,10 @@ export function NotificationsPopup() {
             setBusy(false);
         }
     }
+
+    // Only "open" tier accounts can send unattended alerts — a "guarded" one
+    // needs a live session unlock, which the background scheduler never has.
+    const openAccounts = mailAccounts.filter((a) => a.securityTier === 'open' && a.enabled);
 
     return (
         <Popup
@@ -89,15 +97,35 @@ export function NotificationsPopup() {
                     <span>Par e-mail</span>
                 </label>
                 <label className={styles.field}>
+                    <span className={styles.fieldLabel}>Compte expéditeur</span>
+                    <SelectInput
+                        value={mailAccountId ?? ''}
+                        disabled={!emailEnabled}
+                        onChange={(e) => setMailAccountId(e.target.value ? Number(e.target.value) : null)}
+                    >
+                        <option value=''>Aucun</option>
+                        {openAccounts.map((a) => (
+                            <option key={a.id} value={a.id}>
+                                {a.displayName} ({a.emailAddress})
+                            </option>
+                        ))}
+                    </SelectInput>
+                    <span className={styles.fieldHint}>
+                        {openAccounts.length === 0
+                            ? 'Aucun compte mail « open » configuré — ajoutez-en un dans la feature Mail.'
+                            : 'Seuls les comptes « open » peuvent envoyer sans intervention manuelle.'}
+                    </span>
+                </label>
+                <label className={styles.field}>
                     <span className={styles.fieldLabel}>Destinataire</span>
                     <TextInput
                         type='email'
-                        placeholder='Adresse du compte'
+                        placeholder='Adresse du compte expéditeur'
                         value={email}
                         disabled={!emailEnabled}
                         onChange={(e) => setEmail(e.target.value)}
                     />
-                    <span className={styles.fieldHint}>Laissez vide pour utiliser l’adresse de votre compte.</span>
+                    <span className={styles.fieldHint}>Laissez vide pour utiliser l’adresse du compte expéditeur.</span>
                 </label>
 
                 <label className={styles.check}>
@@ -123,10 +151,10 @@ export function NotificationsPopup() {
                     </span>
                 </label>
 
-                {settings && !settings.mailerReady && (
+                {settings && emailEnabled && !settings.mailAccountReady && (
                     <p className={styles.warning}>
-                        Aucun serveur SMTP n’est configuré côté serveur : les e-mails ne partiront pas tant que les
-                        variables SMTP_* ne sont pas renseignées.
+                        Aucun compte mail « open » sélectionné : les e-mails ne partiront pas tant qu’un compte
+                        expéditeur valide n’est pas choisi ci-dessus.
                     </p>
                 )}
                 {status && <p className={styles.status}>{status}</p>}

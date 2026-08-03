@@ -61,21 +61,25 @@ export const env = {
     // default: losing the process lists after a day made past snapshots empty.
     PROCESS_RETENTION_DAYS: getEnvVar('PROCESS_RETENTION_DAYS', 'number', false) || 30,
 
-    // Outgoing mail (uptime alerts). Optional: with no SMTP_HOST the mailer stays
-    // off and the UI says so rather than pretending alerts are delivered.
-    SMTP_HOST: getEnvVar('SMTP_HOST', 'string', false),
-    SMTP_PORT: getEnvVar('SMTP_PORT', 'number', false) || 587,
-    // Implicit TLS (port 465). Leave false for STARTTLS on 587.
-    SMTP_SECURE: getEnvVar('SMTP_SECURE', 'boolean', false) ?? false,
-    SMTP_USERNAME: getEnvVar('SMTP_USERNAME', 'string', false),
-    SMTP_PASSWORD: getEnvVar('SMTP_PASSWORD', 'string', false),
-    // Envelope sender; falls back to SMTP_USERNAME when unset.
-    SMTP_FROM: getEnvVar('SMTP_FROM', 'string', false),
-
     // Uptime scheduler: how often the server looks for services due for a probe,
     // and how many it may probe at once.
     UPTIME_TICK_SECONDS: getEnvVar('UPTIME_TICK_SECONDS', 'number', false) || 10,
     UPTIME_CONCURRENCY: getEnvVar('UPTIME_CONCURRENCY', 'number', false) || 8,
+
+    // Mail background sync: same shape as Uptime, but only ever touches "open"
+    // tier accounts (guarded accounts sync on demand during a live session).
+    MAIL_SYNC_TICK_SECONDS: getEnvVar('MAIL_SYNC_TICK_SECONDS', 'number', false) || 120,
+    MAIL_SYNC_CONCURRENCY: getEnvVar('MAIL_SYNC_CONCURRENCY', 'number', false) || 4,
+
+    // Mail OAuth (Gmail/Microsoft 365). Entirely optional per provider: with no
+    // client id/secret configured, that provider's "Connect with..." option is
+    // simply hidden — password/app-password auth still works regardless. The
+    // self-hosting admin registers their own OAuth app (Google Cloud Console /
+    // Azure Portal) with a redirect URI of `${PUBLIC_ORIGIN}/api/mail/oauth/callback`.
+    OAUTH_GOOGLE_CLIENT_ID: getEnvVar('OAUTH_GOOGLE_CLIENT_ID', 'string', false),
+    OAUTH_GOOGLE_CLIENT_SECRET: getEnvVar('OAUTH_GOOGLE_CLIENT_SECRET', 'string', false),
+    OAUTH_MICROSOFT_CLIENT_ID: getEnvVar('OAUTH_MICROSOFT_CLIENT_ID', 'string', false),
+    OAUTH_MICROSOFT_CLIENT_SECRET: getEnvVar('OAUTH_MICROSOFT_CLIENT_SECRET', 'string', false),
 
     COOKIE_DOMAIN: getEnvVar('COOKIE_DOMAIN', 'string', false),
 

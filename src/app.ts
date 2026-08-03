@@ -19,7 +19,10 @@ import { logger } from '@/logger';
 import { env, isDev } from '@/Utils/Env';
 import { registerWS } from '@/ws/handler';
 import { createAuditLog } from '@/Services/AuditLog';
+import { MailSyncService } from '@/Services/MailSyncService';
 import { UptimeMonitor } from '@/Services/UptimeMonitor';
+import { mailAttachmentRoutes } from '@/mail/attachmentRoutes';
+import { mailOAuthRoutes } from '@/mail/oauthRoutes';
 import { status } from '@/status';
 
 import type { Database } from '@/db';
@@ -36,6 +39,8 @@ export interface BuiltApp {
     cloudSync: CloudSyncEngine;
     /** Ordonnanceur Uptime — démarré/arrêté par index.ts. */
     uptime: UptimeMonitor;
+    /** Synchro Mail en tâche de fond (comptes « open » uniquement) — démarrée/arrêtée par index.ts. */
+    mailSync: MailSyncService;
 }
 
 export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
@@ -101,9 +106,12 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     await cloudSync.start();
 
     const uptime = new UptimeMonitor({ db: deps.db, crypt: deps.crypt, audit, logger });
+    const mailSync = new MailSyncService({ db: deps.db, crypt: deps.crypt, logger });
 
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await agentRoutes(app, { db: deps.db, hub, audit });
+    await mailOAuthRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
+    await mailAttachmentRoutes(app, { db: deps.db, crypt: deps.crypt });
     await registerWS(app, { db: deps.db, crypt: deps.crypt, hub, cloudSync, uptime, audit });
     await registerAgentWS(app, { db: deps.db, hub, cloudSync, audit });
 
@@ -134,5 +142,5 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         app.log.debug({ clientDir }, 'No client build found; static serving disabled (host dev uses Vite)');
     }
 
-    return { app, cloudSync, uptime };
+    return { app, cloudSync, uptime, mailSync };
 }

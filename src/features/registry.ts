@@ -3,6 +3,7 @@ import { cloudSyncFeatures } from './cloudSync';
 import { deviceFeatures } from './devices';
 import { homeFeatures } from './home';
 import { logsFeatures } from './logs';
+import { mailFeatures } from './mail';
 import { metricsFeatures } from './metrics';
 import { noteFeatures } from './note';
 import {
@@ -45,7 +46,8 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...weatherFeatures,
     ...uptimeFeatures,
     ...logsFeatures,
-    ...homeFeatures
+    ...homeFeatures,
+    ...mailFeatures
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

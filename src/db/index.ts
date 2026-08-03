@@ -1,6 +1,16 @@
 import type { Queryable } from './pool';
 import { devicesRepo, linkCodesRepo, type DevicesRepo, type LinkCodesRepo } from './repos/devices';
 import { logsRepo, type LogsRepo } from './repos/logs';
+import {
+    mailAccountsRepo,
+    mailFoldersRepo,
+    mailMessagesRepo,
+    mailSettingsRepo,
+    type MailAccountsRepo,
+    type MailFoldersRepo,
+    type MailMessagesRepo,
+    type MailSettingsRepo
+} from './repos/mail';
 import { metricsRepo, type MetricsRepo } from './repos/metrics';
 import { presenceRepo, type PresenceRepo } from './repos/presence';
 import { processSamplesRepo, type ProcessSamplesRepo } from './repos/processSamples';
@@ -53,6 +63,10 @@ export interface Database {
     uptimeServices: UptimeServicesRepo;
     uptimeHistory: UptimeHistoryRepo;
     uptimeSettings: UptimeSettingsRepo;
+    mailAccounts: MailAccountsRepo;
+    mailFolders: MailFoldersRepo;
+    mailMessages: MailMessagesRepo;
+    mailSettings: MailSettingsRepo;
     syncMeta: SyncMetaRepo;
     syncShares: SyncSharesRepo;
     syncFiles: SyncFilesRepo;
@@ -82,6 +96,10 @@ export function createDatabase(q: Queryable): Database {
         uptimeServices: uptimeServicesRepo(q),
         uptimeHistory: uptimeHistoryRepo(q),
         uptimeSettings: uptimeSettingsRepo(q),
+        mailAccounts: mailAccountsRepo(q),
+        mailFolders: mailFoldersRepo(q),
+        mailMessages: mailMessagesRepo(q),
+        mailSettings: mailSettingsRepo(q),
         syncMeta: syncMetaRepo(q),
         syncShares: syncSharesRepo(q),
         syncFiles: syncFilesRepo(q),

@@ -2,7 +2,8 @@ import type { UptimeServiceRow, UptimeStatus } from 'deveye-types';
 import type { Logger } from 'pino';
 
 import { decryptError, decryptService, encryptError, type ServicePayload } from '@/features/uptime/_shared';
-import { isMailerReady, sendMail } from '@/Services/Mailer';
+import { decryptCredentials } from '@/features/mail/_shared';
+import * as mailClient from '@/Services/MailAccountClient';
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
 import { env } from '@/Utils/Env';
 
@@ -186,10 +187,7 @@ export class UptimeMonitor {
         this.timer = setInterval(() => void this.tick(), env.UPTIME_TICK_SECONDS * 1000);
         this.timer.unref();
         void this.tick();
-        this.deps.logger.info(
-            { tickSeconds: env.UPTIME_TICK_SECONDS, mailer: isMailerReady() },
-            'Uptime monitor started'
-        );
+        this.deps.logger.info({ tickSeconds: env.UPTIME_TICK_SECONDS }, 'Uptime monitor started');
     }
 
     stop(): void {
@@ -390,9 +388,14 @@ export class UptimeMonitor {
         const channels = await this.resolveChannels(row.user_id);
         let delivered = false;
 
-        if (channels.email) {
+        if (channels.email && channels.sendAccount) {
             try {
-                await sendMail({ to: channels.email, subject: alert.subject, text: alert.body });
+                await mailClient.sendMail(channels.sendAccount.credentials, {
+                    from: channels.sendAccount.fromEmail,
+                    to: [{ name: null, address: channels.email }],
+                    subject: alert.subject,
+                    text: alert.body
+                });
                 delivered = true;
             } catch (e) {
                 this.deps.logger.error(
@@ -440,18 +443,39 @@ export class UptimeMonitor {
 
     /**
      * The user's enabled alert channels. The mail recipient defaults to the
-     * account address, so notifications work out of the box once SMTP is set up.
+     * sending account's own address. `sendAccount` is null whenever no usable
+     * "open"-tier account is configured — the caller must skip mail delivery
+     * (never a hard failure: the webhook channel is independent).
      */
-    async resolveChannels(userId: number): Promise<{ email: string | null; webhook: string | null }> {
+    async resolveChannels(userId: number): Promise<{
+        email: string | null;
+        sendAccount: { credentials: mailClient.MailCredentials; fromEmail: string } | null;
+        webhook: string | null;
+    }> {
         const { db } = this.deps;
         const settings = await db.uptimeSettings.get(userId);
         const emailEnabled = settings ? settings.email_enabled === 1 : true;
         const cipher = this.cipherFor(userId);
 
         let email: string | null = null;
-        if (emailEnabled && isMailerReady()) {
-            const custom = settings?.email_enc ? await cipher.tryDecrypt(settings.email_enc) : null;
-            email = custom || (await db.users.findById(userId))?.email || null;
+        let sendAccount: { credentials: mailClient.MailCredentials; fromEmail: string } | null = null;
+        if (emailEnabled && settings?.mail_account_id) {
+            const account = await db.mailAccounts.findById(settings.mail_account_id, userId);
+            if (account && account.enabled === 1 && account.security_tier === 'open') {
+                const accountEmail = await cipher.tryDecrypt(account.email_address_enc);
+                const custom = settings.email_enc ? await cipher.tryDecrypt(settings.email_enc) : null;
+                email = custom || accountEmail;
+                if (email && accountEmail) {
+                    try {
+                        sendAccount = {
+                            credentials: await decryptCredentials(cipher, account.credentials_enc),
+                            fromEmail: accountEmail
+                        };
+                    } catch {
+                        // Undecryptable credentials — leave sendAccount null, no sender available.
+                    }
+                }
+            }
         }
 
         const webhook =
@@ -459,18 +483,16 @@ export class UptimeMonitor {
                 ? await cipher.tryDecrypt(settings.webhook_enc)
                 : null;
 
-        return { email, webhook };
+        return { email, sendAccount, webhook };
     }
 
     /** Send a sample alert on every configured channel (settings "Tester"). */
     async sendTestAlert(userId: number): Promise<{ sent: boolean; error: string | null }> {
         const channels = await this.resolveChannels(userId);
-        if (!channels.email && !channels.webhook) {
+        if (!channels.sendAccount && !channels.webhook) {
             return {
                 sent: false,
-                error: isMailerReady()
-                    ? 'Aucun canal de notification activé.'
-                    : "Aucun serveur SMTP n'est configuré sur le serveur."
+                error: 'Aucun canal de notification activé (choisissez un compte mail « open » ou un webhook).'
             };
         }
         const at = Math.floor(Date.now() / 1000);
@@ -483,9 +505,14 @@ export class UptimeMonitor {
 
         let error: string | null = null;
         let sent = false;
-        if (channels.email) {
+        if (channels.email && channels.sendAccount) {
             try {
-                await sendMail({ to: channels.email, subject: 'DevEye — test de notification', text: body });
+                await mailClient.sendMail(channels.sendAccount.credentials, {
+                    from: channels.sendAccount.fromEmail,
+                    to: [{ name: null, address: channels.email }],
+                    subject: 'DevEye — test de notification',
+                    text: body
+                });
                 sent = true;
             } catch (e) {
                 error = e instanceof Error ? e.message : String(e);

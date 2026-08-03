@@ -7,6 +7,7 @@ import { NotesWidget } from '@/Features/Notes/NotesWidget';
 import { PasswordWidget } from '@/Features/Password/PasswordWidget';
 import { CloudSyncWidget } from '@/Features/CloudSync';
 import { UptimeWidget } from '@/Features/Uptime/UptimeWidget';
+import { MailWidget } from '@/Features/Mail/MailWidget';
 
 import Monitoring from '@/Features/Monitoring';
 import Weather from '@/Features/Weather';
@@ -14,6 +15,7 @@ import FeaturePassword from '@/Features/Password';
 import FeatureNotes from '@/Features/Notes';
 import CloudSync from '@/Features/CloudSync';
 import Uptime from '@/Features/Uptime';
+import Mail from '@/Features/Mail';
 
 import type { FeatureProps } from '@/Features/types';
 
@@ -98,6 +100,17 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         WidgetContent: CloudSyncWidget,
         FullComponent: CloudSync,
         cacheDurationMinutes: 5
+    },
+    {
+        id: 'mail',
+        title: 'Mail',
+        icon: 'mail',
+        WidgetContent: MailWidget,
+        FullComponent: Mail,
+        // Unmounted as soon as it closes, like Uptime: folders/messages are
+        // fetched live and would go stale sitting in a cached instance.
+        cacheDurationMinutes: 0,
+        holdSecrecy: true
     }
 ];
 

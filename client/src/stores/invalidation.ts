@@ -14,7 +14,7 @@ import { useCallback, useSyncExternalStore } from 'react';
  * invalidatable resources stays visible and typo-proof. By convention a key is
  * the WS command whose result it caches.
  */
-export type ResourceKey = 'note.count' | 'password.count' | 'cloudSync.listShares';
+export type ResourceKey = 'note.count' | 'password.count' | 'cloudSync.listShares' | 'mail.accountCount';
 
 const versions = new Map<ResourceKey, number>();
 const listeners = new Map<ResourceKey, Set<() => void>>();

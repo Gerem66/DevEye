@@ -144,8 +144,10 @@ export interface UptimeSettingsRepo {
         userId: number,
         input: {
             emailEnabled: boolean;
-            /** Encrypted recipient, or null to fall back to the account address. */
+            /** Encrypted recipient, or null to fall back to the sending mail account's own address. */
             emailEnc: string | null;
+            /** FK to `mail_accounts.id` (must be "open" tier, enforced by the feature handler, not here). */
+            mailAccountId: number | null;
             webhookEnabled: boolean;
             /** Encrypted webhook URL, or null. */
             webhookEnc: string | null;
@@ -553,16 +555,17 @@ export function uptimeSettingsRepo(pool: Q): UptimeSettingsRepo {
             const r = await pool.query<UptimeSettingsRow>('SELECT * FROM uptime_settings WHERE user_id = ?', [userId]);
             return r.rows[0] ?? null;
         },
-        async set(userId, { emailEnabled, emailEnc, webhookEnabled, webhookEnc }) {
+        async set(userId, { emailEnabled, emailEnc, mailAccountId, webhookEnabled, webhookEnc }) {
             await pool.query(
-                `INSERT INTO uptime_settings (user_id, email_enabled, email_enc, webhook_enabled, webhook_enc)
-                 VALUES (?, ?, ?, ?, ?)
+                `INSERT INTO uptime_settings (user_id, email_enabled, email_enc, mail_account_id, webhook_enabled, webhook_enc)
+                 VALUES (?, ?, ?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE
                      email_enabled   = VALUES(email_enabled),
                      email_enc       = VALUES(email_enc),
+                     mail_account_id = VALUES(mail_account_id),
                      webhook_enabled = VALUES(webhook_enabled),
                      webhook_enc     = VALUES(webhook_enc)`,
-                [userId, emailEnabled ? 1 : 0, emailEnc, webhookEnabled ? 1 : 0, webhookEnc]
+                [userId, emailEnabled ? 1 : 0, emailEnc, mailAccountId, webhookEnabled ? 1 : 0, webhookEnc]
             );
             const row = await this.get(userId);
             if (!row) throw new Error('Failed to persist uptime settings');

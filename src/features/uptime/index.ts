@@ -17,7 +17,6 @@ import {
 } from 'deveye-types';
 import type { UptimePoint, UptimeRange, UptimeResolution, UptimeService, UptimeServiceRow } from 'deveye-types';
 
-import { isMailerReady } from '@/Services/Mailer';
 import type { UptimeWindowStat } from '@/db/repos/uptime';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { decryptError, encryptService, toIncident, toService, EMPTY_STATS, type ServiceStats } from './_shared';
@@ -374,6 +373,13 @@ export const uptimeIncidentsFeature: FeatureDefinition<
     }
 });
 
+/** True when `mailAccountId` points at a caller-owned, enabled, "open"-tier mail account. */
+async function isMailAccountReady(ctx: FeatureContext, mailAccountId: number | null): Promise<boolean> {
+    if (mailAccountId === null) return false;
+    const account = await ctx.db.mailAccounts.findById(mailAccountId, ctx.userId);
+    return account !== null && account.enabled === 1 && account.security_tier === 'open';
+}
+
 export const uptimeGetSettingsFeature: FeatureDefinition<
     typeof uptimeGetSettings.command,
     typeof uptimeGetSettings.input,
@@ -382,15 +388,17 @@ export const uptimeGetSettingsFeature: FeatureDefinition<
     ...uptimeGetSettings,
     handler: async (ctx) => {
         const row = await ctx.db.uptimeSettings.get(ctx.userId);
+        const mailAccountId = row?.mail_account_id ?? null;
         return {
             settings: {
                 // No row yet = the defaults the monitor itself applies: mail on,
-                // sent to the account address.
+                // sent to the account address (once a sending account is picked).
                 emailEnabled: row ? row.email_enabled === 1 : true,
                 email: row?.email_enc ? await ctx.secure.open.tryDecrypt(row.email_enc) : null,
+                mailAccountId,
+                mailAccountReady: await isMailAccountReady(ctx, mailAccountId),
                 webhookEnabled: row?.webhook_enabled === 1,
-                webhookUrl: row?.webhook_enc ? await ctx.secure.open.tryDecrypt(row.webhook_enc) : null,
-                mailerReady: isMailerReady()
+                webhookUrl: row?.webhook_enc ? await ctx.secure.open.tryDecrypt(row.webhook_enc) : null
             }
         };
     }
@@ -403,11 +411,22 @@ export const uptimeSetSettingsFeature: FeatureDefinition<
 > = defineFeature({
     ...uptimeSetSettings,
     handler: async (ctx, input) => {
+        if (input.mailAccountId !== null) {
+            const account = await ctx.db.mailAccounts.findById(input.mailAccountId, ctx.userId);
+            if (!account) throw new FeatureError('not_found', 'Compte mail introuvable');
+            if (account.security_tier !== 'open') {
+                throw new FeatureError(
+                    'validation',
+                    'Un compte « guarded » ne peut pas envoyer d’alertes automatiques : choisissez un compte « open »'
+                );
+            }
+        }
         const email = input.email.trim();
         const webhookUrl = input.webhookUrl.trim();
         const row = await ctx.db.uptimeSettings.set(ctx.userId, {
             emailEnabled: input.emailEnabled,
             emailEnc: email ? await ctx.secure.open.encrypt(email) : null,
+            mailAccountId: input.mailAccountId,
             webhookEnabled: input.webhookEnabled,
             webhookEnc: webhookUrl ? await ctx.secure.open.encrypt(webhookUrl) : null
         });
@@ -420,9 +439,10 @@ export const uptimeSetSettingsFeature: FeatureDefinition<
             settings: {
                 emailEnabled: row.email_enabled === 1,
                 email: email || null,
+                mailAccountId: row.mail_account_id,
+                mailAccountReady: await isMailAccountReady(ctx, row.mail_account_id),
                 webhookEnabled: row.webhook_enabled === 1,
-                webhookUrl: webhookUrl || null,
-                mailerReady: isMailerReady()
+                webhookUrl: webhookUrl || null
             }
         };
     }
