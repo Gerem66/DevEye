@@ -128,10 +128,46 @@
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
     background: var(--surface-subtle);
-    cursor: grab;
+    /* The row opens the service; only `.grip` drags it. */
+    cursor: pointer;
     transition:
         border-color var(--transition-fast),
         background var(--transition-fast);
+}
+
+/* Drag-to-reorder handle, mirroring a note's block grip: hidden until the row is
+   hovered, à la native editors. `touch-action: none` is what makes reordering
+   possible under a finger — it stops the scroller from claiming the gesture — and
+   it is scoped to these 18px so the rest of the card still scrolls the list. */
+.grip {
+    flex-shrink: 0;
+    align-self: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: grab;
+    touch-action: none;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+}
+
+.card:hover .grip,
+.card:focus-within .grip {
+    opacity: 1;
+}
+
+.grip:active {
+    cursor: grabbing;
+}
+
+/* No hover to reveal it with, so it has to be there from the start. */
+@media (pointer: coarse) {
+    .grip {
+        opacity: 1;
+    }
 }
 
 .card:hover,

@@ -35,9 +35,12 @@ function statusBadge(service: UptimeService): { tone: 'online' | 'danger' | 'neu
  * windows and its latest latency. Clicking anywhere opens the detail view; the
  * corner actions stop the click so they don't also navigate.
  *
- * The whole row is a drag handle, like a note card — but via `pointerdown`, not
- * HTML5 `draggable` (see {@link ../Notes/NoteGrid} for that approach, and
- * {@link ./ServiceList} for why this feature uses pointer events instead).
+ * Reordering hangs off the leading grip alone, like a note's block rows (see
+ * {@link ../Notes/BlockEditor}) — not off the whole row. That keeps the card a
+ * plain click target, and it is what makes reordering work under a finger: only
+ * the grip opts out of touch scrolling (`touch-action: none`), so a drag started
+ * anywhere else still scrolls the list. The gesture itself is `pointerdown`
+ * rather than HTML5 `draggable` — see {@link ./ServiceList} for why.
  */
 export function ServiceCard({
     service,
@@ -61,7 +64,6 @@ export function ServiceCard({
             role='button'
             tabIndex={0}
             data-service-card=''
-            onPointerDown={onDragPointerDown}
             onClick={onOpen}
             onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -70,6 +72,18 @@ export function ServiceCard({
                 }
             }}
         >
+            <button
+                type='button'
+                className={styles.grip}
+                aria-label='Réordonner le service'
+                onPointerDown={onDragPointerDown}
+                // A press that never passed the drag threshold is still a click:
+                // swallow it here so grabbing the grip can't open the service.
+                onClick={(e) => e.stopPropagation()}
+            >
+                <span className='icon icon-drag' />
+            </button>
+
             <div className={styles.cardMain}>
                 <div className={styles.cardHead}>
                     <h4 className={styles.cardName}>{service.name}</h4>

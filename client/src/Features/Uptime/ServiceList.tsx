@@ -57,8 +57,12 @@ function reordered(services: UptimeService[], draggedId: number, gap: number): n
  * can't be fixed by being more careful with `dragend` — only by never handing
  * the gesture to the browser at all. A hand-rolled pointer-capture drag keeps
  * 100% of the state in this component's own refs (see below, same render-free
- * discipline as NoteGrid), never touches the browser's DnD state machine, and
- * gets touch support as a side effect.
+ * discipline as NoteGrid) and never touches the browser's DnD state machine.
+ *
+ * It also reaches touch devices, which native `draggable` never does — but only
+ * because the gesture starts on the card's grip, the one element that opts out
+ * of touch scrolling (`touch-action: none`, see ServiceCard). Pressing anywhere
+ * else still scrolls the list, and the scroller then cancels the press.
  */
 export function ServiceList({
     services,
@@ -223,10 +227,10 @@ export function ServiceList({
     useEffect(() => endDrag, [endDrag]);
 
     function handlePointerDown(e: React.PointerEvent, serviceId: number) {
-        // Primary button/contact only; the action buttons stop their own clicks
-        // from reaching here, but a stray pointerdown on one must not start a
-        // drag either.
-        if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return;
+        // Primary button/contact only. Nothing else to filter: this is wired to
+        // the card's grip alone (see ServiceCard), so a press on one of the row
+        // actions never reaches here in the first place.
+        if (e.button !== 0) return;
         pressRef.current = { id: serviceId, pointerId: e.pointerId, x: e.clientX, y: e.clientY };
         window.addEventListener('pointermove', handleWindowPointerMove);
         window.addEventListener('pointerup', handleWindowPointerUp);
