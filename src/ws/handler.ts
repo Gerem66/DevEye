@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import { ACCESS_COOKIE } from '@/auth/cookies';
 import { verifyAccessToken } from '@/auth/jwt';
 import { createMonitorTransport, type MonitorHub } from '@/agent/hub';
+import { createAccessResolver } from '@/features/_access';
 import { FeatureError } from '@/features/_define';
 import { forgetSession } from '@/features/password/_shared';
 import { featureHandlerMap } from '@/features/registry';
@@ -66,6 +67,10 @@ export async function registerWS(
         reqLogger.info('WS connected');
 
         const { store: secure, keys: secretKeys } = createSecureStore(db, crypt, session.userId, session.sessionId);
+
+        // Single authority on what this caller may do, memoized for the life of
+        // the connection and rebuilt on demand when access is revoked.
+        const access = createAccessResolver(db, session.userId);
 
         const monitor = createMonitorTransport(hub, socket);
 
@@ -139,6 +144,14 @@ export async function registerWS(
             // any concurrent siblings unlocked alongside it — finish.
             const dekTicket = enterSessionCommand(session!.sessionId);
             try {
+                const { isAdmin } = await access.resolve();
+                const assertAdmin = (): void => {
+                    if (!isAdmin) throw new FeatureError('forbidden', 'Réservé aux administrateurs');
+                };
+                // Declared authorization (see `FeatureAccessSpec`), enforced here
+                // so a command can never ship without its guard.
+                if (def.access?.admin) assertAdmin();
+
                 const result = await def.handler(
                     {
                         db,
@@ -147,6 +160,8 @@ export async function registerWS(
                         secretKeys,
                         userId: session!.userId,
                         sessionId: session!.sessionId,
+                        isAdmin,
+                        assertAdmin,
                         ip,
                         logger: reqLogger.child({ command, requestId: replyId }),
                         requestId: replyId,

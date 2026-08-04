@@ -14,7 +14,7 @@ import {
 import { computeAgentUpdate, deviceAgentConfig, deviceRowToDevice } from '@/agent/mappers';
 import { agentDistDir, readServedManifestCached } from '@/agent/sync';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
-import { assertAdmin, authorizeDevice, isAdmin, online, toDevice } from './shared';
+import { authorizeDevice, online, toDevice } from './shared';
 
 /** Enrollment + status lifecycle of a device (the Appareils page actions). */
 
@@ -25,9 +25,7 @@ export const deviceListFeature: FeatureDefinition<
 > = defineFeature({
     ...deviceList,
     handler: async (ctx) => {
-        const rows = (await isAdmin(ctx))
-            ? await ctx.db.devices.listAll()
-            : await ctx.db.devices.listByOwner(ctx.userId);
+        const rows = ctx.isAdmin ? await ctx.db.devices.listAll() : await ctx.db.devices.listByOwner(ctx.userId);
         const presence = online(
             ctx,
             rows.map((r) => r.id)
@@ -45,8 +43,8 @@ export const deviceConfirmFeature: FeatureDefinition<
     typeof deviceConfirm.output
 > = defineFeature({
     ...deviceConfirm,
+    access: { admin: true },
     handler: async (ctx, input) => {
-        await assertAdmin(ctx);
         const row = await authorizeDevice(ctx, input.deviceId);
         if (row.status === 'revoked') throw new FeatureError('conflict', 'Device is revoked');
         await ctx.db.devices.setStatus(row.id, 'active');
@@ -67,8 +65,8 @@ export const deviceRevokeFeature: FeatureDefinition<
     typeof deviceRevoke.output
 > = defineFeature({
     ...deviceRevoke,
+    access: { admin: true },
     handler: async (ctx, input) => {
-        await assertAdmin(ctx);
         const row = await authorizeDevice(ctx, input.deviceId);
         await ctx.db.devices.setStatus(row.id, 'revoked');
         const updated = await ctx.db.devices.findById(row.id);
@@ -88,8 +86,8 @@ export const deviceReactivateFeature: FeatureDefinition<
     typeof deviceReactivate.output
 > = defineFeature({
     ...deviceReactivate,
+    access: { admin: true },
     handler: async (ctx, input) => {
-        await assertAdmin(ctx);
         const row = await authorizeDevice(ctx, input.deviceId);
         if (row.status !== 'revoked') {
             throw new FeatureError('conflict', 'Only a revoked device can be reactivated');
@@ -111,8 +109,8 @@ export const deviceRenameFeature: FeatureDefinition<
     typeof deviceRename.output
 > = defineFeature({
     ...deviceRename,
+    access: { admin: true },
     handler: async (ctx, input) => {
-        await assertAdmin(ctx);
         const row = await authorizeDevice(ctx, input.deviceId);
         await ctx.db.devices.rename(row.id, input.name);
         const updated = await ctx.db.devices.findById(row.id);
@@ -155,8 +153,8 @@ export const deviceRequestDeleteFeature: FeatureDefinition<
     typeof deviceRequestDelete.output
 > = defineFeature({
     ...deviceRequestDelete,
+    access: { admin: true },
     handler: async (ctx, input) => {
-        await assertAdmin(ctx);
         const row = await authorizeDevice(ctx, input.deviceId);
         if (row.status === 'archived' || row.status === 'pending_deletion') {
             throw new FeatureError('conflict', 'Device is already being deleted');
@@ -183,8 +181,8 @@ export const deviceCancelDeleteFeature: FeatureDefinition<
     typeof deviceCancelDelete.output
 > = defineFeature({
     ...deviceCancelDelete,
+    access: { admin: true },
     handler: async (ctx, input) => {
-        await assertAdmin(ctx);
         const row = await authorizeDevice(ctx, input.deviceId);
         await ctx.db.devices.cancelDeletion(row.id);
         const updated = (await ctx.db.devices.findById(row.id)) ?? row;
@@ -203,8 +201,8 @@ export const deviceForceDeleteFeature: FeatureDefinition<
     typeof deviceForceDelete.output
 > = defineFeature({
     ...deviceForceDelete,
+    access: { admin: true },
     handler: async (ctx, input) => {
-        await assertAdmin(ctx);
         const row = await authorizeDevice(ctx, input.deviceId);
         if (row.status === 'archived') {
             throw new FeatureError('conflict', 'Device is already archived');

@@ -1,29 +1,21 @@
 import { LOGS_PAGE_DEFAULT, logsFacets, logsList } from 'deveye-types';
 
-import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
+import { defineFeature, type FeatureDefinition } from '../_define';
 import type { LogQueryFilter } from '@/db/repos/logs';
 
 /**
  * The logs are a cross-account, system-wide audit trail, so they are strictly
- * admin-only — a regular user must never see another user's activity. Throws
- * `forbidden` for anyone who isn't an admin.
+ * admin-only — a regular user must never see another user's activity. Enforced
+ * by the dispatcher through `access: { admin: true }`.
  */
-async function assertAdmin(ctx: FeatureContext): Promise<void> {
-    const user = await ctx.db.users.findById(ctx.userId);
-    if (!user || user.role !== 'admin') {
-        throw new FeatureError('forbidden', 'Réservé aux administrateurs');
-    }
-}
-
 export const logsListFeature: FeatureDefinition<
     typeof logsList.command,
     typeof logsList.input,
     typeof logsList.output
 > = defineFeature({
     ...logsList,
+    access: { admin: true },
     handler: async (ctx, input) => {
-        await assertAdmin(ctx);
-
         const { limit, offset, ...rest } = input;
         // Only forward the fields that are actually set, so an absent filter
         // never narrows the query (and `exactOptionalPropertyTypes` is happy).
@@ -52,10 +44,8 @@ export const logsFacetsFeature: FeatureDefinition<
     typeof logsFacets.output
 > = defineFeature({
     ...logsFacets,
-    handler: async (ctx) => {
-        await assertAdmin(ctx);
-        return ctx.db.logs.facets();
-    }
+    access: { admin: true },
+    handler: async (ctx) => ctx.db.logs.facets()
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

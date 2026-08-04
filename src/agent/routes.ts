@@ -21,6 +21,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { ACCESS_COOKIE } from '@/auth/cookies';
 import { signDeviceToken, verifyAccessToken, verifyDeviceToken } from '@/auth/jwt';
+import { isAdminUser } from '@/features/_access';
 import { sha256hex } from '@/Utils/hash';
 import { env } from '@/Utils/Env';
 import type { AuditLog } from '@/Services/AuditLog';
@@ -87,8 +88,7 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, audit }: Agen
             void reply.code(401).send(err('auth_expired', 'Access token expired'));
             return null;
         }
-        const user = await db.users.findById(Number(claims.sub));
-        if (!user || user.role !== 'admin') {
+        if (!(await isAdminUser(db, Number(claims.sub)))) {
             void reply.code(403).send(err('forbidden', 'Réservé aux administrateurs'));
             return null;
         }

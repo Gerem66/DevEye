@@ -2,7 +2,7 @@ import { deviceUpdateAgent, isNewerVersion } from 'deveye-types';
 
 import { agentDistDir, readServedManifestCached } from '@/agent/sync';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
-import { assertAdmin, authorizeDevice, online, toDevice } from './shared';
+import { authorizeDevice, online, toDevice } from './shared';
 
 /**
  * Push a signed self-update to a connected agent. The server resolves the newer
@@ -14,8 +14,8 @@ export const deviceUpdateAgentFeature: FeatureDefinition<
     typeof deviceUpdateAgent.output
 > = defineFeature({
     ...deviceUpdateAgent,
+    access: { admin: true },
     handler: async (ctx, input) => {
-        await assertAdmin(ctx);
         const row = await authorizeDevice(ctx, input.deviceId);
         // Pre-flight: the agent must be reachable, must have told us its build
         // target, and we must hold a NEWER, SIGNED binary for it. Each gate maps

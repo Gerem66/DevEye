@@ -43,6 +43,14 @@ export interface FeatureContext {
     secretKeys: SecretKeyService;
     userId: number;
     sessionId: string;
+    /**
+     * Caller holds the global `admin` role. Resolved by the dispatcher before the
+     * handler runs, so guards read it synchronously and never query the role.
+     * Gates the device fleet and the system pages — never other users' data.
+     */
+    isAdmin: boolean;
+    /** Throw `forbidden` unless the caller is a global admin. */
+    assertAdmin: () => void;
     /** Client IP of the connection (proxy-aware), recorded on audit events. */
     ip: string;
     logger: Logger;
@@ -77,10 +85,29 @@ export class FeatureError extends Error {
     }
 }
 
+/**
+ * Authorization a command requires, declared beside its schemas and enforced by
+ * the WS dispatcher **before** the handler runs — exactly like the zod input
+ * validation already is.
+ *
+ * Declaring it here rather than as the first line of each handler makes the whole
+ * authorization surface greppable from the feature registry, and makes "I forgot
+ * the guard" a visible omission instead of an invisible one.
+ *
+ * Commands whose check depends on the *row* being touched (owner-or-admin, e.g.
+ * `device.setConfig`) keep their guard in the handler and read `ctx.isAdmin`.
+ */
+export interface FeatureAccessSpec {
+    /** Global account admin: the device fleet and the system pages. */
+    admin?: true;
+}
+
 export interface FeatureDefinition<Cmd extends string, I extends z.ZodTypeAny, O extends z.ZodTypeAny> {
     command: Cmd;
     input: I;
     output: O;
+    /** Enforced by the dispatcher before `handler` is called. */
+    access?: FeatureAccessSpec;
     handler: (ctx: FeatureContext, input: z.infer<I>) => Promise<z.infer<O>>;
 }
 

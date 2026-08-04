@@ -12,7 +12,6 @@ import type {
 import type { CloudSyncEngine } from '@/cloudSync/engine';
 import type { SyncEventNamedRow } from '@/db/repos/syncEvents';
 import type { SyncVersionNamedRow } from '@/db/repos/syncVersions';
-import { isAdmin } from '../devices/shared';
 import { FeatureError, type FeatureContext } from '../_define';
 
 /** Le moteur est absent uniquement hors WS (tests) — toute commande l'exige. */
@@ -25,7 +24,7 @@ export function requireEngine(ctx: FeatureContext): CloudSyncEngine {
 export async function authorizeShare(ctx: FeatureContext, shareId: number): Promise<SyncShareRow> {
     const row = await ctx.db.syncShares.findById(shareId);
     if (!row) throw new FeatureError('not_found', 'Partage introuvable');
-    if (row.user_id !== ctx.userId && !(await isAdmin(ctx))) {
+    if (row.user_id !== ctx.userId && !ctx.isAdmin) {
         throw new FeatureError('forbidden', 'Accès refusé à ce partage');
     }
     return row;
