@@ -16,10 +16,12 @@ export function MonitoringWidget() {
     // count them among the live fleet.
     const devices = allDevices.filter((d) => d.status !== 'archived');
     const onlineCount = devices.filter((d) => d.online).length;
-    // Show as many devices as comfortably fit, anchored to the bottom; the rest
-    // collapse into a "+N autres" marker sitting just above them.
-    const MAX_VISIBLE = 3;
-    const visible = devices.slice(0, MAX_VISIBLE);
+    // The list is a fixed 2×2 grid anchored to the bottom of the card: two rows
+    // is all the widget's height budget allows, and two columns use the width
+    // that a single column wasted. Past four devices the last slot becomes a
+    // "+N autres" marker, so the block's height never varies with the fleet.
+    const SLOTS = 4;
+    const visible = devices.slice(0, devices.length > SLOTS ? SLOTS - 1 : SLOTS);
     const hidden = devices.length - visible.length;
     return (
         <div className={styles.widgetContent}>
@@ -31,13 +33,13 @@ export function MonitoringWidget() {
                 <span className={styles.widgetFoot}>Aucun appareil connecté</span>
             ) : (
                 <div className={styles.deviceList}>
-                    {hidden > 0 && <span className={styles.moreDevices}>+{hidden} autres</span>}
                     {visible.map((d) => (
                         <div key={d.id} className={`${styles.deviceItem} ${d.online ? styles.online : styles.offline}`}>
                             <div className={`${styles.miniDot} ${d.online ? styles.online : styles.offline}`} />
                             <span className={styles.deviceName}>{d.name}</span>
                         </div>
                     ))}
+                    {hidden > 0 && <span className={styles.moreDevices}>+{hidden} autres</span>}
                 </div>
             )}
         </div>

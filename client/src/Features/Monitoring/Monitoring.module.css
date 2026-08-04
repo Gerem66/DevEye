@@ -30,10 +30,14 @@
     color: var(--text-secondary);
 }
 
+/* Two columns rather than one: the card's height only affords two rows, and a
+   single column left half the width unused while pushing the fourth line out of
+   the card. `minmax(0, 1fr)` is what lets a cell shrink below its content so the
+   names below can actually ellipsize. Pinned to the bottom of the card. */
 .deviceList {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-xs);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-xs) var(--space-sm);
     margin-top: auto;
 }
 
@@ -41,6 +45,9 @@
     display: flex;
     align-items: center;
     gap: var(--space-sm);
+    /* Grid items default to `min-width: auto` — without this a long hostname
+       widens its track and spills past the card edge. */
+    min-width: 0;
     font-size: 0.8rem;
     color: var(--text-secondary);
 }
@@ -62,9 +69,16 @@
 
 .deviceName {
     color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
+/* Occupies the last slot of the grid when the fleet outgrows it, so it reads as
+   one more entry in the block rather than as a caption above it. */
 .moreDevices {
+    display: flex;
+    align-items: center;
     font-size: 0.75rem;
     color: var(--text-muted);
     font-style: italic;
