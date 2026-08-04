@@ -87,7 +87,11 @@ impl Collector {
     /// The socket map is supplied by the caller (which probes it off the async
     /// runtime) and handed back, so the periodic report can reuse it instead of
     /// re-enumerating every socket.
-    pub fn collect(&mut self, capture: &str, mut sockets: SocketMap) -> (MetricSnapshot, SocketMap) {
+    pub fn collect(
+        &mut self,
+        capture: &str,
+        mut sockets: SocketMap,
+    ) -> (MetricSnapshot, SocketMap) {
         self.sys.refresh_cpu_all();
         self.sys.refresh_memory();
         self.networks.refresh();

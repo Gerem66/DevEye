@@ -784,7 +784,11 @@ fn parse_etime(s: &str) -> Option<u64> {
         Some((d, rest)) => (d.parse::<u64>().ok()?, rest),
         None => (0, s),
     };
-    let mut units: Vec<u64> = rest.split(':').rev().filter_map(|p| p.parse().ok()).collect();
+    let mut units: Vec<u64> = rest
+        .split(':')
+        .rev()
+        .filter_map(|p| p.parse().ok())
+        .collect();
     units.resize(3, 0); // seconds, minutes, hours
     Some(days * 86400 + units[2] * 3600 + units[1] * 60 + units[0])
 }
@@ -1021,7 +1025,8 @@ mod tests {
     fn parse_ps_line_rejects_malformed_rows() {
         assert!(parse_ps_line("").is_none());
         assert!(parse_ps_line("header garbage").is_none());
-        assert!(parse_ps_line("1234 12.5 3.2 524288 86400 14 gerem").is_none()); // no name
+        // Every column present but the command name.
+        assert!(parse_ps_line("1234 12.5 3.2 524288 86400 14 gerem").is_none());
     }
 
     #[cfg(target_os = "macos")]

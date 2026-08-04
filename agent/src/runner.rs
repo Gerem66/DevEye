@@ -600,9 +600,10 @@ where
     // handed in (a tick already probed it), so no socket tool runs here.
     let listening = sockets.listening.clone();
     let established = sockets.established.clone();
-    let report: DeviceReport = tokio::task::spawn_blocking(move || report::collect(listening, established))
-        .await
-        .context("collecting device report")?;
+    let report: DeviceReport =
+        tokio::task::spawn_blocking(move || report::collect(listening, established))
+            .await
+            .context("collecting device report")?;
     let msg = serde_json::to_string(&ClientMessage::Report {
         device_id: device_id.to_string(),
         report: Box::new(report),

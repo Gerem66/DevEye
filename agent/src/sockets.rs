@@ -102,7 +102,11 @@ fn build(raw: Vec<RawSocket>) -> SocketMap {
     let mut by_pid: HashMap<u32, ProcSockets> = HashMap::new();
     for s in raw.iter().filter(|s| s.listening) {
         if let Some(pid) = s.pid {
-            by_pid.entry(pid).or_default().listen_ports.push(s.local_port);
+            by_pid
+                .entry(pid)
+                .or_default()
+                .listen_ports
+                .push(s.local_port);
         }
     }
     for entry in by_pid.values_mut() {
@@ -160,7 +164,11 @@ fn build(raw: Vec<RawSocket>) -> SocketMap {
             .then_with(|| a.pid.cmp(&b.pid))
     });
     listening.dedup_by(|a, b| {
-        a.port == b.port && a.proto == b.proto && a.address == b.address && a.zone == b.zone && a.pid == b.pid
+        a.port == b.port
+            && a.proto == b.proto
+            && a.address == b.address
+            && a.zone == b.zone
+            && a.pid == b.pid
     });
     listening.truncate(OPEN_PORTS_LIMIT);
 
@@ -353,7 +361,13 @@ fn attach_macos_owners(sockets: &mut [RawSocket]) {
         match tag {
             b'p' => pid = value.parse().ok(),
             b'c' => name = Some(value.to_string()),
-            b'P' => proto = if value.eq_ignore_ascii_case("UDP") { "udp" } else { "tcp" },
+            b'P' => {
+                proto = if value.eq_ignore_ascii_case("UDP") {
+                    "udp"
+                } else {
+                    "tcp"
+                }
+            }
             b'n' => {
                 // `n` holds `host:port` (lsof uses a colon even on BSD).
                 if let (Some(pid), Some(name), Some((_, _, port))) =
@@ -399,7 +413,11 @@ fn collect_raw(_deep: bool) -> Vec<RawSocket> {
         } else {
             ("", cols.get(3))
         };
-        let listening = if proto == "tcp" { state == "LISTENING" } else { true };
+        let listening = if proto == "tcp" {
+            state == "LISTENING"
+        } else {
+            true
+        };
         let established = state == "ESTABLISHED";
         if !listening && !established {
             continue;
@@ -460,12 +478,16 @@ mod tests {
     #[test]
     fn parse_ss_users_reads_first_owner() {
         assert_eq!(
-            parse_ss_users(r#"tcp LISTEN 0 4096 0.0.0.0:22 0.0.0.0:* users:(("sshd",pid=1234,fd=3))"#),
+            parse_ss_users(
+                r#"tcp LISTEN 0 4096 0.0.0.0:22 0.0.0.0:* users:(("sshd",pid=1234,fd=3))"#
+            ),
             Some(("sshd".to_string(), 1234))
         );
         // A forking server shares one socket across PIDs; the first is representative.
         assert_eq!(
-            parse_ss_users(r#"tcp LISTEN 0 511 *:80 *:* users:(("nginx",pid=900,fd=6),("nginx",pid=901,fd=6))"#),
+            parse_ss_users(
+                r#"tcp LISTEN 0 511 *:80 *:* users:(("nginx",pid=900,fd=6),("nginx",pid=901,fd=6))"#
+            ),
             Some(("nginx".to_string(), 900))
         );
         // Unprivileged agents get no owner column at all.
@@ -488,7 +510,11 @@ mod tests {
             mk("udp", true, false, "0.0.0.0", 5353, Some(2)),
         ];
         let map = build(raw);
-        assert_eq!(map.listening.len(), 3, "distinct binds kept, exact dupes dropped");
+        assert_eq!(
+            map.listening.len(),
+            3,
+            "distinct binds kept, exact dupes dropped"
+        );
         assert_eq!(map.listening[0].port, 22);
         assert_eq!(map.listening[0].address, "0.0.0.0");
         assert_eq!(map.listening[1].address, "::");
