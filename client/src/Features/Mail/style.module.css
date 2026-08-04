@@ -89,6 +89,7 @@
     flex-direction: column;
     gap: var(--space-sm);
     min-height: 0;
+    min-width: 0;
 }
 
 /* The selected-account card stays pinned above it; only the folder list itself scrolls. */
@@ -116,15 +117,16 @@
     letter-spacing: 0.04em;
 }
 
-/* Grid item for panel B. Splits into a fixed head (search box + its status
-   line) and the one part that actually scrolls, so the search box can't slide
-   away under the results — `.messageColumn` is both the scroll container and
-   the IntersectionObserver root the infinite scroll measures against. */
+/* Fixed head (search box + status) above the one part that scrolls, so the box
+   can't slide away under the results. */
 .messageColumnWrap {
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
     min-height: 0;
+    /* Grid items default to `min-width: auto`: without this a long subject
+       widens the `1fr` column past the popup. */
+    min-width: 0;
     border-left: 1px solid var(--glass-border);
     padding-left: var(--space-md);
 }
@@ -134,10 +136,8 @@
     flex-shrink: 0;
 }
 
-/* The UA's own search-cancel widget is unstylable in any useful way — wrong
-   colour, no pointer cursor, a different glyph per browser — so it's suppressed
-   and replaced by `.searchClear` below, which is just a normal `.iconBtn` and
-   therefore behaves like every other icon button in the feature. */
+/* The UA's search-cancel widget can't be styled (no pointer cursor, wrong
+   colour); `.searchClear` replaces it. */
 .searchBar input::-webkit-search-cancel-button,
 .searchBar input::-webkit-search-decoration {
     -webkit-appearance: none;
@@ -170,6 +170,8 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
+    /* Not redundant: one axis set to `auto` computes the other to `auto` too. */
+    overflow-x: hidden;
 }
 
 .messageColumnEmpty {
@@ -665,10 +667,11 @@
  * Message list
  * ------------------------------------------------------------------ */
 
+/* No `gap`: it belongs to neither neighbour, so it stayed unlit on hover.
+   `.messageRow`'s border separates the rows instead. */
 .messageList {
     display: flex;
     flex-direction: column;
-    gap: 2px;
 }
 
 /* Zero-height IntersectionObserver target — invisible unless actually
@@ -812,6 +815,9 @@
 }
 
 .messageSubject {
+    /* `min-width: 0` is what lets the ellipsis below actually trigger. */
+    flex: 1 1 auto;
+    min-width: 0;
     font-size: 0.82rem;
     color: var(--text-secondary);
     overflow: hidden;
@@ -940,7 +946,10 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
-    width: 320px;
+    /* Fits both action buttons on one line. Clamped: portaled to <body> and
+       positioned from its anchor, with no flipping if it runs off-screen. */
+    width: 380px;
+    max-width: calc(100vw - 2 * var(--space-md));
     padding: var(--space-sm);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
@@ -985,9 +994,13 @@
 
 .imageSourcesActions {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: flex-end;
     gap: var(--space-xs);
+}
+
+.imageSourcesActions > * {
+    white-space: nowrap;
 }
 
 .attachments {
