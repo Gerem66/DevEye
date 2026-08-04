@@ -756,3 +756,91 @@
     align-items: center;
     gap: var(--space-sm);
 }
+
+/* ------------------------------------------------------------------ *
+ * Phones (the client's usual breakpoint — see WidgetPopup, WidgetGrid)
+ *
+ * The service row is the one that genuinely breaks rather than merely
+ * tightens: its ratios and actions refuse to shrink (~386px of them), so
+ * on a ~358px viewport `.cardMain` was laid out at zero width — and since
+ * all three of its lines ellipsize, the card rendered with no name, no URL
+ * and no last check at all. Everything below is about giving those lines a
+ * full row of their own.
+ * ------------------------------------------------------------------ */
+
+@media (max-width: 640px) {
+    .card {
+        flex-wrap: wrap;
+        gap: var(--space-sm);
+        padding: var(--space-sm);
+    }
+
+    /* Claims the whole of row 1 beside the grip, which pushes the ratios and
+       the actions onto row 2 instead of squeezing this block out of existence. */
+    .cardMain {
+        flex: 1 1 calc(100% - 18px - var(--space-sm));
+    }
+
+    .cardRatios {
+        flex: 1 1 auto;
+        gap: var(--space-sm);
+    }
+
+    .ratio {
+        min-width: 0;
+        align-items: flex-start;
+    }
+
+    .cardActions {
+        margin-left: auto;
+    }
+
+    /* 89 gaps at 2px ate half the width; at 1px the 90 slots fit comfortably. */
+    .barsRow {
+        gap: 1px;
+        height: 36px;
+    }
+
+    .barsLegend {
+        flex-wrap: wrap;
+        gap: var(--space-sm);
+    }
+
+    .chartBody,
+    .chartEmpty {
+        height: 120px;
+    }
+
+    .chartFoot {
+        flex-wrap: wrap;
+    }
+
+    .summary {
+        gap: var(--space-md);
+    }
+
+    /* A full row of its own, rather than competing with the title for width. */
+    .detailActions {
+        flex: 1 1 100%;
+        flex-wrap: wrap;
+    }
+
+    .incident,
+    .checkRow {
+        flex-wrap: wrap;
+    }
+
+    .checkStatus,
+    .checkMs {
+        min-width: 0;
+    }
+
+    /* Wraps onto its own line below the timestamp instead of being ellipsized
+       down to a few characters between the fixed columns. */
+    .incidentError,
+    .checkError {
+        flex-basis: 100%;
+        white-space: normal;
+        overflow: visible;
+    }
+}
