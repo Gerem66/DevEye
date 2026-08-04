@@ -225,6 +225,11 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    /* Keeps whatever is pinned at the bottom (the "add" button) off `.panelA`'s
+       `overflow: hidden` edge. Flush against it, a fractional layout height —
+       which is the norm once flex and percentages are involved — is enough to
+       shave the bottom border, and the button reads as cut off. */
+    padding-bottom: var(--space-xs);
 }
 
 .accountListScroll {
@@ -362,6 +367,13 @@
    nothing visually: same width, same centring, same position as the flex version
    it replaces, and still fully responsive — no height is pinned anywhere. */
 .accountList {
+    /* Never compressed to fit the column. As a flex item it shrinks by default,
+       and `grid-auto-rows: 1fr` obediently squeezes the rows below their content
+       — cards lose their last line to `overflow: hidden`, and the scroll height
+       stops matching what's actually laid out, which is what pushed the "add"
+       button past the bottom edge. The list keeps its natural height; the column
+       around it scrolls, which is its job. */
+    flex-shrink: 0;
     display: grid;
     /* Single full-width column; the cards cap themselves at 92% of it and
        `justify-items` centers them on that axis, as `align-items: center` did. */
