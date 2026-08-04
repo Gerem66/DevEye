@@ -109,7 +109,7 @@ export function activityLevel(s: MetricSeriesPoint | null, cores: number): Activ
     return 'normal';
 }
 
-export const ACTIVITY_META: Record<Activity, { label: string; cls: string }> = {
+export const ACTIVITY_META: Record<Activity, { label: string; cls: 'actIdle' | 'actNormal' | 'actIntense' }> = {
     idle: { label: 'Au repos', cls: 'actIdle' },
     normal: { label: 'Usage normal', cls: 'actNormal' },
     intensive: { label: 'Usage intensif', cls: 'actIntense' }

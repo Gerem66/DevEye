@@ -85,6 +85,15 @@ const HEADING_TRIGGER = /^(#{1,5}) /;
 const DIVIDER_TRIGGER = '---';
 
 /** Whether a block kind carries editable text (i.e. renders a RichText surface). */
+/**
+ * Heading size class for a block. `level` is 1–5 per the note schema but typed
+ * as a plain `number`, so it can't index the stylesheet directly.
+ */
+function headingClass(level: number): string {
+    const classes = [styles.heading1, styles.heading2, styles.heading3, styles.heading4, styles.heading5];
+    return classes[level - 1] ?? styles.heading1;
+}
+
 function isEditable(block: NoteBlock): boolean {
     return block.type !== 'divider';
 }
@@ -615,7 +624,7 @@ export default function BlockEditor({
                     ref={(handle) => {
                         refs.current[index] = handle;
                     }}
-                    className={`${styles.blockText} ${block.type === 'heading' ? styles[`heading${block.level}`] : ''} ${
+                    className={`${styles.blockText} ${block.type === 'heading' ? headingClass(block.level) : ''} ${
                         block.type === 'check' && block.done ? styles.blockTextDone : ''
                     }`}
                     value={block.text}
