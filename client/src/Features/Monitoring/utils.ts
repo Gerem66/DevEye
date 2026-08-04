@@ -1,4 +1,4 @@
-import type { MetricSnapshot } from 'deveye-types';
+import type { MetricSeriesPoint } from 'deveye-types';
 
 /**
  * Shared formatting + activity helpers for the monitoring views. Kept here so
@@ -99,7 +99,7 @@ export function pct(used: number, total: number): number {
 /** Coarse activity level derived from a snapshot. */
 export type Activity = 'idle' | 'normal' | 'intensive';
 
-export function activityLevel(s: MetricSnapshot | null, cores: number): Activity {
+export function activityLevel(s: MetricSeriesPoint | null, cores: number): Activity {
     if (!s) return 'idle';
     const ram = pct(s.memUsedBytes, s.memTotalBytes);
     const gpu = s.gpuPercent ?? 0;

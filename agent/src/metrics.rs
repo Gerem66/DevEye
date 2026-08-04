@@ -1,12 +1,18 @@
 //! Cross-cycle metric collection via `sysinfo`, plus logged-in user count and a
-//! few best-effort host signals (load, uptime, temperature, connections).
+//! few best-effort host signals (load, uptime, temperature, GPU, battery).
+//!
+//! One [`Collector::collect`] call produces one *instant*: the graph signals and
+//! the process list together, under a single timestamp. Holding `sysinfo` state
+//! across calls is what makes CPU and network deltas meaningful.
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use sysinfo::{Components, Disks, Networks, ProcessesToUpdate, System};
+use sysinfo::{Components, Disks, Networks, System};
 
 use crate::protocol::{MetricSnapshot, ReportDisk};
+use crate::report;
+use crate::sockets::SocketMap;
 
 /// Slow-moving signals (disk capacity, battery, logged-in users) refreshed at
 /// most every [`SLOW_TTL`]. They barely change between 10-s metric ticks yet are
@@ -68,14 +74,27 @@ impl Collector {
         s
     }
 
-    /// Light metric sample for the graphs (every ~10 s). In-process reads plus a
-    /// few cheap single-shot subprocess probes; **no full process scan**, so
-    /// `process_count` and disk I/O are left `None` (filled by `collect_full`).
-    pub fn collect_fine(&mut self) -> MetricSnapshot {
+    /// Collect one **instant**: every graph signal plus the process list that
+    /// explains it, under a single timestamp.
+    ///
+    /// There is deliberately no light/heavy split any more. The socket probe and
+    /// the process scan feed each other (per-process connections come from the
+    /// sockets; the socket owners' names come from the scan) and between them
+    /// they also yield `process_count`, aggregate disk I/O and the established
+    /// connection count — figures that used to cost a *second* full process
+    /// enumeration. The result measured cheaper than the old heavy cycle.
+    ///
+    /// The socket map is supplied by the caller (which probes it off the async
+    /// runtime) and handed back, so the periodic report can reuse it instead of
+    /// re-enumerating every socket.
+    pub fn collect(&mut self, capture: &str, mut sockets: SocketMap) -> (MetricSnapshot, SocketMap) {
         self.sys.refresh_cpu_all();
         self.sys.refresh_memory();
         self.networks.refresh();
         self.components.refresh();
+
+        let scan = report::collect_processes(capture, &sockets, &mut self.sys);
+        sockets.resolve_names(&scan.pid_names);
 
         // Disk/battery/user signals: cached for SLOW_TTL (cheap on most ticks).
         let slow = self.slow_signals();
@@ -97,7 +116,7 @@ impl Collector {
             }
         };
 
-        MetricSnapshot {
+        let snapshot = MetricSnapshot {
             timestamp: now_millis(),
             cpu_percent,
             mem_used_bytes: mem_used,
@@ -110,44 +129,22 @@ impl Collector {
             load_avg_1,
             cpu_temp_c: read_cpu_temp(&self.components),
             uptime_seconds: Some(System::uptime()),
-            process_count: None,
-            active_connections: active_connections(),
+            process_count: scan.totals.count,
+            active_connections: sockets.established_count,
             gpu_percent: read_gpu_percent(),
-            disk_read_bytes: None,
-            disk_write_bytes: None,
+            disk_read_bytes: scan.totals.disk_read,
+            disk_write_bytes: scan.totals.disk_write,
             battery_percent: slow.battery.0,
             battery_charging: slow.battery.1,
-        }
+            processes: (capture != "off").then_some(scan.processes),
+            process_kind: match capture {
+                "top" => Some("top"),
+                "all" => Some("all"),
+                _ => None,
+            },
+        };
+        (snapshot, sockets)
     }
-
-    /// Heavy snapshot sample (every ~5 min): `collect_fine` plus the full process
-    /// scan, which yields the process count and aggregate disk I/O. The process
-    /// list itself is collected separately (see `report::collect_processes`).
-    pub fn collect_full(&mut self) -> MetricSnapshot {
-        let mut snap = self.collect_fine();
-        self.sys.refresh_processes(ProcessesToUpdate::All, true);
-        snap.process_count = Some(self.sys.processes().len() as u32);
-        let (read, write) = read_disk_io(&self.sys);
-        snap.disk_read_bytes = read;
-        snap.disk_write_bytes = write;
-        snap
-    }
-}
-
-/// Aggregate cumulative disk bytes read/written across all processes. Best-effort
-/// (works on Linux; may report 0 on macOS) — 0 is reported as `None` so the UI
-/// hides the graph rather than drawing a flat line.
-fn read_disk_io(sys: &System) -> (Option<u64>, Option<u64>) {
-    let mut read = 0u64;
-    let mut write = 0u64;
-    for proc in sys.processes().values() {
-        let usage = proc.disk_usage();
-        read = read.saturating_add(usage.total_read_bytes);
-        write = write.saturating_add(usage.total_written_bytes);
-    }
-    let r = if read == 0 { None } else { Some(read) };
-    let w = if write == 0 { None } else { Some(write) };
-    (r, w)
 }
 
 /// Best-effort GPU utilization (%). macOS reads the IOAccelerator performance
@@ -377,55 +374,5 @@ fn logged_in_users() -> u32 {
             .filter_map(|line| line.split_whitespace().next())
             .collect();
         users.len() as u32
-    }
-}
-
-/// Count established TCP connections, best-effort via `ss` (Linux) or `netstat`
-/// (macOS & Windows). Returns `None` when the tool is unusable.
-fn active_connections() -> Option<u32> {
-    #[cfg(target_os = "macos")]
-    {
-        let out = std::process::Command::new("netstat")
-            .args(["-an", "-p", "tcp"])
-            .output()
-            .ok()?;
-        if !out.status.success() {
-            return None;
-        }
-        let text = String::from_utf8_lossy(&out.stdout);
-        let n = text.lines().filter(|l| l.contains("ESTABLISHED")).count();
-        Some(n as u32)
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let out = std::process::Command::new("netstat")
-            .args(["-an"])
-            .output()
-            .ok()?;
-        if !out.status.success() {
-            return None;
-        }
-        let text = String::from_utf8_lossy(&out.stdout);
-        let n = text.lines().filter(|l| l.contains("ESTABLISHED")).count();
-        Some(n as u32)
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    {
-        if let Ok(out) = std::process::Command::new("ss")
-            .args(["-tn", "state", "established"])
-            .output()
-        {
-            if out.status.success() {
-                let text = String::from_utf8_lossy(&out.stdout);
-                // First line is the header.
-                let n = text
-                    .lines()
-                    .skip(1)
-                    .filter(|l| !l.trim().is_empty())
-                    .count();
-                return Some(n as u32);
-            }
-        }
-        None
     }
 }

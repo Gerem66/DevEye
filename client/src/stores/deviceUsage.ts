@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { ws } from '@/api/ws';
-import type { MetricSnapshot } from 'deveye-types';
+import type { MetricSeriesPoint } from 'deveye-types';
 
 /**
  * Latest-usage store for device tiles on the home grid. Each mounted tile
@@ -22,7 +22,7 @@ const POLL_MS = 10_000;
  */
 const WINDOW_MS = 15 * 60 * 1000;
 
-const latest = new Map<string, MetricSnapshot | null>();
+const latest = new Map<string, MetricSeriesPoint | null>();
 const refCounts = new Map<string, number>();
 const timers = new Map<string, ReturnType<typeof setInterval>>();
 const listeners = new Set<() => void>();
@@ -102,7 +102,7 @@ function subscribe(cb: () => void): () => void {
 }
 
 /** Latest known usage snapshot for a device tile (null until first poll lands). */
-export function useDeviceUsage(deviceId: string): MetricSnapshot | null {
+export function useDeviceUsage(deviceId: string): MetricSeriesPoint | null {
     const snap = useSyncExternalStore(
         subscribe,
         () => latest.get(deviceId) ?? null,

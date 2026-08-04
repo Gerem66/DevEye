@@ -1,9 +1,12 @@
-//! Latest-known health/security report + process collection.
+//! Latest-known health/security report + the per-tick process scan.
 //!
-//! The report carries slow-moving signals (OS info, security posture); processes
-//! are collected here too (`top_processes`) but historised separately. Every
-//! security probe shells out to an OS tool and is best-effort: a `None` result
-//! simply means "unknown" in the UI.
+//! The report carries slow-moving signals (OS info, security posture, hardware);
+//! its socket picture is handed in by the caller, since [`crate::sockets`] probes
+//! it once per collection tick anyway. Processes are scanned here too and travel
+//! with the metric snapshot, under its timestamp.
+//!
+//! Every OS probe here is best-effort: a `None` result simply means "unknown" in
+//! the UI — never a fabricated zero.
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -16,18 +19,23 @@ use crate::protocol::{
     AgentInfo, CpuInfo, DeviceHardware, DeviceReport, NetInterface, OpenPort, OsInfo, ProcessInfo,
     Security, TcpConnection,
 };
+use crate::sockets::{ProcSockets, SocketMap};
 
-/// OS + security posture (latest known). Processes are collected separately
-/// (see `top_processes`) so they can be historised.
-pub fn collect() -> DeviceReport {
+/// OS + security posture (latest known), plus the socket picture.
+///
+/// The ports and connections are handed in by the caller, taken from the very
+/// same `SocketMap` the collection tick already produced — so a report costs no
+/// extra socket enumeration. On macOS the caller supplies a `deep` map (owners
+/// resolved via `lsof`), affordable at the report's hourly cadence.
+pub fn collect(open_ports: Vec<OpenPort>, connections: Vec<TcpConnection>) -> DeviceReport {
     DeviceReport {
         collected_at: now_millis(),
         os: os_info(),
         security: security(),
         disks: crate::metrics::read_disks(),
         agent: agent_info(),
-        open_ports: read_open_ports(),
-        connections: read_connections(),
+        open_ports,
+        connections,
         hardware: hardware(),
     }
 }
@@ -114,6 +122,12 @@ fn read_network_interfaces() -> Vec<NetInterface> {
                 } else {
                     Some(mac.to_string())
                 },
+                // Lets the ports view attribute a bind address to its interface.
+                addresses: data
+                    .ip_networks()
+                    .iter()
+                    .map(|n| n.addr.to_string())
+                    .collect(),
             }
         })
         .collect();
@@ -412,43 +426,98 @@ fn os_info() -> OsInfo {
 const ALL_PROCESS_LIMIT: usize = 2000;
 const TOP_PROCESS_LIMIT: usize = 20;
 
-/// Collect processes per the capture mode, **aggregated by program name**:
-/// - `off`  → empty (no sample sent);
+/// One raw process row, before aggregation by program name.
+struct RawProcess {
+    pid: u32,
+    name: String,
+    cpu_percent: f64,
+    mem_percent: f64,
+    rss_bytes: u64,
+    threads: Option<u32>,
+    user: Option<String>,
+    uptime_seconds: Option<u64>,
+    /// Cumulative (read, written) bytes, when the scan itself provides them —
+    /// only Windows does. Linux reads `/proc/<pid>/io` separately; macOS has no
+    /// unprivileged source at all.
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    disk_io: Option<(u64, u64)>,
+}
+
+/// Aggregate figures the same scan yields for free, so the metric snapshot needs
+/// no second process enumeration.
+pub struct ProcTotals {
+    /// Number of running processes (was a separate `sysinfo` full refresh).
+    pub count: Option<u32>,
+    /// Cumulative bytes read/written across all processes; `None` when the
+    /// platform or our privileges don't expose per-process I/O.
+    pub disk_read: Option<u64>,
+    pub disk_write: Option<u64>,
+}
+
+/// Everything one process scan produces.
+pub struct ProcessScan {
+    pub processes: Vec<ProcessInfo>,
+    pub totals: ProcTotals,
+    /// pid → program name, used to name socket owners the socket probe couldn't
+    /// attribute (see `SocketMap::resolve_names`).
+    pub pid_names: HashMap<u32, String>,
+}
+
+/// Scan processes once per collection tick, **aggregated by program name**:
+/// - `off`  → no process list (totals are still reported);
 /// - `top`  → the 20 heaviest programs, scored on **CPU% + memory%**;
 /// - `all`  → every program (capped at `ALL_PROCESS_LIMIT`).
 ///
 /// We aggregate same-named processes (summing CPU% and memory) because modern
 /// apps are multi-process — e.g. a browser splits work across many helper
 /// processes, so a single PID looks idle while the app is busy. Grouping by name
-/// gives the realistic "this app is using X%".
+/// gives the realistic "this app is using X%"; `instances` keeps the multiplicity
+/// visible.
 ///
 /// On Unix we shell out to `ps` rather than use `sysinfo`: its per-process CPU
 /// reads 0 on macOS (a known limitation), whereas `ps` reports a real value on
 /// both Unixes. `%cpu` is the kernel's recent (decaying-average) utilisation and
 /// can exceed 100% across cores; `%mem` is RSS as a fraction of physical memory.
-/// Windows has no `ps`, so there we use `sysinfo` (whose per-process CPU *is*
-/// accurate on Windows) — see `aggregate_processes`.
-pub fn collect_processes(capture: &str) -> Vec<ProcessInfo> {
+/// Widening the `ps` format string costs nothing measurable, so pid, thread
+/// count, owner and start time come along for free. Windows has no `ps`, so
+/// there we use `sysinfo` (whose per-process CPU *is* accurate on Windows).
+///
+/// `sockets` supplies the per-process connection counts and listening ports —
+/// the same probe that produced the report's port list, never a second one.
+pub fn collect_processes(capture: &str, sockets: &SocketMap, sys: &mut System) -> ProcessScan {
+    let raw = scan_processes(sys);
+    let count = if raw.is_empty() {
+        None
+    } else {
+        Some(raw.len() as u32)
+    };
+    let pid_names: HashMap<u32, String> = raw.iter().map(|p| (p.pid, p.name.clone())).collect();
+    let io = per_process_io(&raw);
+
     if capture == "off" {
-        return Vec::new();
+        return ProcessScan {
+            processes: Vec::new(),
+            totals: ProcTotals {
+                count,
+                disk_read: io.as_ref().map(|i| i.total_read),
+                disk_write: io.as_ref().map(|i| i.total_write),
+            },
+            pid_names,
+        };
     }
 
-    // Per-program aggregate: (summed cpu%, summed mem%, summed rss bytes).
-    let agg = aggregate_processes();
+    let mut agg: HashMap<String, Aggregate> = HashMap::new();
+    for p in raw {
+        let owned_sockets = sockets.by_pid.get(&p.pid);
+        agg.entry(p.name.clone())
+            .or_default()
+            .absorb(&p, owned_sockets, io.as_ref());
+    }
 
-    // Score on cpu% + mem% (the two signals available everywhere).
+    // Score on cpu% + mem% (the two signals available on every platform).
     let mut scored: Vec<(f64, ProcessInfo)> = agg
         .into_iter()
-        .map(|(name, (cpu, mem_pct, rss))| {
-            (
-                cpu + mem_pct,
-                ProcessInfo {
-                    name,
-                    cpu_percent: (cpu * 10.0).round() / 10.0,
-                    mem_bytes: rss,
-                },
-            )
-        })
+        .map(|(name, a)| (a.cpu_percent + a.mem_percent, a.finish(name)))
         .collect();
 
     scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal));
@@ -457,330 +526,267 @@ pub fn collect_processes(capture: &str) -> Vec<ProcessInfo> {
     } else {
         ALL_PROCESS_LIMIT
     });
-    scored.into_iter().map(|(_, p)| p).collect()
+
+    ProcessScan {
+        processes: scored.into_iter().map(|(_, p)| p).collect(),
+        totals: ProcTotals {
+            count,
+            disk_read: io.as_ref().map(|i| i.total_read),
+            disk_write: io.as_ref().map(|i| i.total_write),
+        },
+        pid_names,
+    }
 }
 
-/// Aggregate processes by program name into `(summed cpu%, summed mem%, summed
-/// rss bytes)`. Unix parses `ps`; Windows reads `sysinfo`.
-#[cfg(not(target_os = "windows"))]
-fn aggregate_processes() -> HashMap<String, (f64, f64, u64)> {
-    // macOS uses `ucomm` (short accounting name); Linux uses `comm`.
-    #[cfg(target_os = "macos")]
-    let args: [&str; 2] = ["-Ao", "pcpu=,pmem=,rss=,ucomm="];
-    #[cfg(not(target_os = "macos"))]
-    let args: [&str; 2] = ["-eo", "pcpu=,pmem=,rss=,comm="];
+/// Running sums for one program name.
+#[derive(Default)]
+struct Aggregate {
+    instances: u32,
+    cpu_percent: f64,
+    mem_percent: f64,
+    rss_bytes: u64,
+    threads: Option<u32>,
+    uptime_seconds: Option<u64>,
+    disk_read: Option<u64>,
+    disk_write: Option<u64>,
+    conn_in: Option<u32>,
+    conn_out: Option<u32>,
+    listen_ports: Vec<u16>,
+    /// Owner counts, so the reported user is the dominant one rather than
+    /// whichever PID happened to come last.
+    users: HashMap<String, u32>,
+}
 
-    let mut agg: HashMap<String, (f64, f64, u64)> = HashMap::new();
+impl Aggregate {
+    fn absorb(&mut self, p: &RawProcess, sock: Option<&ProcSockets>, io: Option<&ProcessIo>) {
+        self.instances += 1;
+        self.cpu_percent += p.cpu_percent;
+        self.mem_percent += p.mem_percent;
+        self.rss_bytes = self.rss_bytes.saturating_add(p.rss_bytes);
+        if let Some(t) = p.threads {
+            self.threads = Some(self.threads.unwrap_or(0).saturating_add(t));
+        }
+        // The oldest instance best represents "since when has this been running".
+        if let Some(u) = p.uptime_seconds {
+            self.uptime_seconds = Some(self.uptime_seconds.map_or(u, |cur| cur.max(u)));
+        }
+        if let Some(user) = &p.user {
+            *self.users.entry(user.clone()).or_insert(0) += 1;
+        }
+        if let Some(io) = io {
+            if let Some((r, w)) = io.per_pid.get(&p.pid) {
+                self.disk_read = Some(self.disk_read.unwrap_or(0).saturating_add(*r));
+                self.disk_write = Some(self.disk_write.unwrap_or(0).saturating_add(*w));
+            }
+        }
+        if let Some(s) = sock {
+            self.conn_in = Some(self.conn_in.unwrap_or(0).saturating_add(s.conn_in));
+            self.conn_out = Some(self.conn_out.unwrap_or(0).saturating_add(s.conn_out));
+            self.listen_ports.extend_from_slice(&s.listen_ports);
+        }
+    }
+
+    fn finish(mut self, name: String) -> ProcessInfo {
+        self.listen_ports.sort_unstable();
+        self.listen_ports.dedup();
+        let user = self
+            .users
+            .into_iter()
+            .max_by_key(|(_, n)| *n)
+            .map(|(u, _)| u);
+        ProcessInfo {
+            name,
+            instances: self.instances,
+            cpu_percent: (self.cpu_percent * 10.0).round() / 10.0,
+            mem_bytes: self.rss_bytes,
+            threads: self.threads,
+            user,
+            uptime_seconds: self.uptime_seconds,
+            disk_read_bytes: self.disk_read,
+            disk_write_bytes: self.disk_write,
+            conn_in: self.conn_in,
+            conn_out: self.conn_out,
+            listen_ports: self.listen_ports,
+        }
+    }
+}
+
+/// Per-process disk I/O, plus the machine-wide totals derived from it.
+struct ProcessIo {
+    per_pid: HashMap<u32, (u64, u64)>,
+    total_read: u64,
+    total_write: u64,
+}
+
+/// Read `/proc/<pid>/io` for every scanned process. Measured at ~2 ms for 700
+/// processes, so it is affordable every tick. Reading another user's counters
+/// needs privileges: an unprivileged agent silently gets a partial map, and if
+/// *nothing* was readable we report `None` rather than a misleading near-zero.
+#[cfg(target_os = "linux")]
+fn per_process_io(raw: &[RawProcess]) -> Option<ProcessIo> {
+    let mut per_pid = HashMap::new();
+    let (mut total_read, mut total_write) = (0u64, 0u64);
+    for p in raw {
+        let Ok(text) = std::fs::read_to_string(format!("/proc/{}/io", p.pid)) else {
+            continue;
+        };
+        let (mut read, mut write) = (None, None);
+        for line in text.lines() {
+            if let Some(v) = line.strip_prefix("read_bytes: ") {
+                read = v.trim().parse::<u64>().ok();
+            } else if let Some(v) = line.strip_prefix("write_bytes: ") {
+                write = v.trim().parse::<u64>().ok();
+            }
+        }
+        if let (Some(r), Some(w)) = (read, write) {
+            total_read = total_read.saturating_add(r);
+            total_write = total_write.saturating_add(w);
+            per_pid.insert(p.pid, (r, w));
+        }
+    }
+    if per_pid.is_empty() {
+        return None;
+    }
+    Some(ProcessIo {
+        per_pid,
+        total_read,
+        total_write,
+    })
+}
+
+/// macOS exposes no `/proc`, and `proc_pid_rusage` needs root for other users'
+/// processes — so per-process I/O is simply unknown there.
+#[cfg(target_os = "macos")]
+fn per_process_io(_raw: &[RawProcess]) -> Option<ProcessIo> {
+    None
+}
+
+/// Windows I/O counters come from the same `sysinfo` refresh as the scan itself,
+/// so they are attached there rather than probed again.
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn per_process_io(raw: &[RawProcess]) -> Option<ProcessIo> {
+    let mut per_pid = HashMap::new();
+    let (mut total_read, mut total_write) = (0u64, 0u64);
+    for p in raw {
+        if let Some((r, w)) = p.disk_io {
+            total_read = total_read.saturating_add(r);
+            total_write = total_write.saturating_add(w);
+            per_pid.insert(p.pid, (r, w));
+        }
+    }
+    if per_pid.is_empty() {
+        return None;
+    }
+    Some(ProcessIo {
+        per_pid,
+        total_read,
+        total_write,
+    })
+}
+
+/// Enumerate every process, once. Unix parses `ps`; Windows reads `sysinfo`
+/// (hence the `System`, unused here but needed by the Windows arm).
+#[cfg(not(target_os = "windows"))]
+fn scan_processes(_sys: &mut System) -> Vec<RawProcess> {
+    // macOS uses `ucomm` (short accounting name) and `etime` (formatted); Linux
+    // uses `comm`, `etimes` (plain seconds) and exposes a thread count (`nlwp`).
+    #[cfg(target_os = "macos")]
+    let args: [&str; 2] = ["-Ao", "pid=,pcpu=,pmem=,rss=,etime=,user=,ucomm="];
+    #[cfg(not(target_os = "macos"))]
+    let args: [&str; 2] = ["-eo", "pid=,pcpu=,pmem=,rss=,etimes=,nlwp=,user=,comm="];
+
     let out = match run("ps", &args) {
         Some(o) => o,
-        None => return agg,
+        None => return Vec::new(),
     };
-    for line in out.lines() {
-        if let Some((name, cpu, mem_pct, rss)) = parse_ps_line(line) {
-            let e = agg.entry(name).or_insert((0.0, 0.0, 0));
-            e.0 += cpu;
-            e.1 += mem_pct;
-            e.2 = e.2.saturating_add(rss);
-        }
-    }
-    agg
+    out.lines().filter_map(parse_ps_line).collect()
 }
 
-/// Windows aggregate via `sysinfo`. Two refreshes spaced apart yield a real
-/// per-process CPU delta; memory is the working set, expressed as a % of total.
+/// Windows scan via `sysinfo`. The `System` lives across ticks, so the CPU delta
+/// is measured against the previous collection — which is exactly what a
+/// periodic collector wants, and removes the 300 ms blocking double-refresh the
+/// old one-shot scan needed.
 #[cfg(target_os = "windows")]
-fn aggregate_processes() -> HashMap<String, (f64, f64, u64)> {
-    use sysinfo::ProcessesToUpdate;
-    let mut sys = System::new();
-    sys.refresh_memory(); // `new()` leaves totals at 0 until refreshed
+fn scan_processes(sys: &mut System) -> Vec<RawProcess> {
+    use sysinfo::{ProcessesToUpdate, Users};
     sys.refresh_processes(ProcessesToUpdate::All, true);
-    std::thread::sleep(std::time::Duration::from_millis(300));
-    sys.refresh_processes(ProcessesToUpdate::All, true);
+    // `Process::user_id()` yields a SID on Windows, which is unreadable in a
+    // "user" column — resolve it to the account name. Enumerating local users is
+    // cheap and only done once per scan.
+    let users = Users::new_with_refreshed_list();
     let total_mem = sys.total_memory().max(1) as f64;
-    let mut agg: HashMap<String, (f64, f64, u64)> = HashMap::new();
-    for proc in sys.processes().values() {
-        let name = proc.name().to_string_lossy().to_string();
-        if name.is_empty() {
-            continue;
-        }
-        let cpu = proc.cpu_usage() as f64;
-        let rss = proc.memory();
-        let mem_pct = (rss as f64 / total_mem) * 100.0;
-        let e = agg.entry(name).or_insert((0.0, 0.0, 0));
-        e.0 += cpu;
-        e.1 += mem_pct;
-        e.2 = e.2.saturating_add(rss);
-    }
-    agg
+    sys.processes()
+        .iter()
+        .filter_map(|(pid, proc)| {
+            let name = proc.name().to_string_lossy().to_string();
+            if name.is_empty() {
+                return None;
+            }
+            let rss = proc.memory();
+            let usage = proc.disk_usage();
+            Some(RawProcess {
+                pid: pid.as_u32(),
+                name,
+                cpu_percent: proc.cpu_usage() as f64,
+                mem_percent: (rss as f64 / total_mem) * 100.0,
+                rss_bytes: rss,
+                threads: None,
+                user: proc
+                    .user_id()
+                    .and_then(|uid| users.get_user_by_id(uid))
+                    .map(|u| u.name().to_string()),
+                uptime_seconds: Some(proc.run_time()),
+                disk_io: Some((usage.total_read_bytes, usage.total_written_bytes)),
+            })
+        })
+        .collect()
 }
 
-/// Parse a `ps` line `<%cpu> <%mem> <rss_kb> <command…>` into
-/// `(name, cpu%, mem%, rss_bytes)`.
+/// Parse one `ps` line into a [`RawProcess`]. The command name is last so it may
+/// contain spaces; every preceding column is a fixed-position number or word.
 #[cfg(not(target_os = "windows"))]
-fn parse_ps_line(line: &str) -> Option<(String, f64, f64, u64)> {
+fn parse_ps_line(line: &str) -> Option<RawProcess> {
     let mut parts = line.split_whitespace();
-    let cpu: f64 = parts.next()?.parse().ok()?;
-    let mem_pct: f64 = parts.next()?.parse().ok()?;
+    let pid: u32 = parts.next()?.parse().ok()?;
+    let cpu_percent: f64 = parts.next()?.parse().ok()?;
+    let mem_percent: f64 = parts.next()?.parse().ok()?;
     let rss_kb: u64 = parts.next()?.parse().ok()?;
+    #[cfg(target_os = "macos")]
+    let (uptime_seconds, threads) = (parse_etime(parts.next()?), None);
+    #[cfg(not(target_os = "macos"))]
+    let (uptime_seconds, threads) = (
+        parts.next()?.parse::<u64>().ok(),
+        parts.next()?.parse::<u32>().ok(),
+    );
+    let user = parts.next()?.to_string();
     let name = parts.collect::<Vec<_>>().join(" ");
     if name.is_empty() {
         return None;
     }
-    Some((name, cpu, mem_pct, rss_kb * 1024))
+    Some(RawProcess {
+        pid,
+        name,
+        cpu_percent,
+        mem_percent,
+        rss_bytes: rss_kb * 1024,
+        threads,
+        user: (!user.is_empty()).then_some(user),
+        uptime_seconds,
+        disk_io: None,
+    })
 }
 
-/// Hard cap on reported listening ports.
-const OPEN_PORTS_LIMIT: usize = 500;
-
-/// Listening sockets, best-effort. Linux parses `ss` (TCP + UDP); macOS & Windows
-/// parse `netstat` (TCP listeners + Windows UDP). Listing *which* ports listen
-/// needs no privileges — only the owning process would. Deduped, sorted, capped.
-fn read_open_ports() -> Vec<OpenPort> {
-    let mut ports = collect_open_ports();
-    ports.sort_by(|a, b| {
-        a.port
-            .cmp(&b.port)
-            .then(a.proto.cmp(b.proto))
-            .then_with(|| a.address.cmp(&b.address))
-    });
-    ports.dedup_by(|a, b| a.port == b.port && a.proto == b.proto && a.address == b.address);
-    ports.truncate(OPEN_PORTS_LIMIT);
-    ports
-}
-
-/// Normalise a bind host: drop IPv6 brackets and any `%zone` suffix.
-#[allow(dead_code)]
-fn clean_addr(host: &str) -> String {
-    let h = host.trim_start_matches('[').trim_end_matches(']');
-    match h.split_once('%') {
-        Some((a, _)) => a.to_string(),
-        None => h.to_string(),
-    }
-}
-
-/// Split `host:port` from the right (handles `0.0.0.0:22`, `[::]:22`).
-#[allow(dead_code)]
-fn split_host_port(s: &str) -> Option<(String, u16)> {
-    let (host, port) = s.rsplit_once(':')?;
-    Some((clean_addr(host), port.parse().ok()?))
-}
-
-/// Split `host.port` from the right — BSD `netstat` uses `.` before the port
-/// (`*.22`, `127.0.0.1.631`, `::1.631`).
-#[allow(dead_code)]
-fn split_host_dot_port(s: &str) -> Option<(String, u16)> {
-    let (host, port) = s.rsplit_once('.')?;
-    Some((clean_addr(host), port.parse().ok()?))
-}
-
-#[cfg(target_os = "linux")]
-fn collect_open_ports() -> Vec<OpenPort> {
-    // -t TCP, -u UDP, -l listening, -n numeric, -H no header.
-    let out = match run("ss", &["-tulnH"]) {
-        Some(o) => o,
-        None => return Vec::new(),
-    };
-    let mut v = Vec::new();
-    for line in out.lines() {
-        // Netid State Recv-Q Send-Q Local:Port Peer:Port …
-        let cols: Vec<&str> = line.split_whitespace().collect();
-        if cols.len() < 5 {
-            continue;
-        }
-        let proto = match cols[0] {
-            "tcp" => "tcp",
-            "udp" => "udp",
-            _ => continue,
-        };
-        if let Some((address, port)) = split_host_port(cols[4]) {
-            v.push(OpenPort {
-                proto,
-                port,
-                address,
-            });
-        }
-    }
-    v
-}
-
+/// Parse BSD `ps` elapsed time — `[[dd-]hh:]mm:ss` — into seconds. Linux is
+/// spared this by asking for `etimes` (already a plain second count).
 #[cfg(target_os = "macos")]
-fn collect_open_ports() -> Vec<OpenPort> {
-    let out = match run("netstat", &["-an", "-p", "tcp"]) {
-        Some(o) => o,
-        None => return Vec::new(),
+fn parse_etime(s: &str) -> Option<u64> {
+    let (days, rest) = match s.split_once('-') {
+        Some((d, rest)) => (d.parse::<u64>().ok()?, rest),
+        None => (0, s),
     };
-    let mut v = Vec::new();
-    for line in out.lines() {
-        if !line.contains("LISTEN") {
-            continue;
-        }
-        let cols: Vec<&str> = line.split_whitespace().collect();
-        // Proto Recv-Q Send-Q Local-Address Foreign-Address (state) …
-        if cols.len() < 4 || !cols[0].starts_with("tcp") {
-            continue;
-        }
-        if let Some((address, port)) = split_host_dot_port(cols[3]) {
-            v.push(OpenPort {
-                proto: "tcp",
-                port,
-                address,
-            });
-        }
-    }
-    v
-}
-
-#[cfg(target_os = "windows")]
-fn collect_open_ports() -> Vec<OpenPort> {
-    let out = match run("netstat", &["-an"]) {
-        Some(o) => o,
-        None => return Vec::new(),
-    };
-    let mut v = Vec::new();
-    for line in out.lines() {
-        let cols: Vec<&str> = line.split_whitespace().collect();
-        if cols.len() < 2 {
-            continue;
-        }
-        let proto = match cols[0] {
-            "TCP" => "tcp",
-            "UDP" => "udp",
-            _ => continue,
-        };
-        // TCP listeners end in a LISTENING state column; UDP rows have no state.
-        if proto == "tcp" && cols.last().map(|s| *s != "LISTENING").unwrap_or(true) {
-            continue;
-        }
-        if let Some((address, port)) = split_host_port(cols[1]) {
-            v.push(OpenPort {
-                proto,
-                port,
-                address,
-            });
-        }
-    }
-    v
-}
-
-/// Fallback for any other target: no portable probe.
-#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-fn collect_open_ports() -> Vec<OpenPort> {
-    Vec::new()
-}
-
-/// Hard cap on reported connections (mirrors the listening-ports cap).
-const CONNECTIONS_LIMIT: usize = 500;
-
-/// Established TCP connections — the per-connection detail behind the
-/// `activeConnections` count. Same best-effort tools as the count (`ss` on Linux,
-/// `netstat` on macOS/Windows); each kept entry is one ESTABLISHED socket with
-/// its local and remote endpoint. Sorted by remote endpoint, then local port,
-/// and capped.
-fn read_connections() -> Vec<TcpConnection> {
-    let mut conns = collect_connections();
-    conns.sort_by(|a, b| {
-        a.remote_address
-            .cmp(&b.remote_address)
-            .then(a.remote_port.cmp(&b.remote_port))
-            .then(a.local_port.cmp(&b.local_port))
-    });
-    conns.truncate(CONNECTIONS_LIMIT);
-    conns
-}
-
-#[cfg(target_os = "linux")]
-fn collect_connections() -> Vec<TcpConnection> {
-    // -t TCP, -n numeric, filtered to established (no -l: those are listeners).
-    let out = match run("ss", &["-tn", "state", "established"]) {
-        Some(o) => o,
-        None => return Vec::new(),
-    };
-    let mut v = Vec::new();
-    for line in out.lines() {
-        // Recv-Q Send-Q Local:Port Peer:Port [Process]. A header line, if any,
-        // fails to parse as host:port and is skipped naturally.
-        let cols: Vec<&str> = line.split_whitespace().collect();
-        if cols.len() < 4 {
-            continue;
-        }
-        if let (Some((la, lp)), Some((ra, rp))) =
-            (split_host_port(cols[2]), split_host_port(cols[3]))
-        {
-            v.push(TcpConnection {
-                local_address: la,
-                local_port: lp,
-                remote_address: ra,
-                remote_port: rp,
-            });
-        }
-    }
-    v
-}
-
-#[cfg(target_os = "macos")]
-fn collect_connections() -> Vec<TcpConnection> {
-    let out = match run("netstat", &["-an", "-p", "tcp"]) {
-        Some(o) => o,
-        None => return Vec::new(),
-    };
-    let mut v = Vec::new();
-    for line in out.lines() {
-        if !line.contains("ESTABLISHED") {
-            continue;
-        }
-        // Proto Recv-Q Send-Q Local-Address Foreign-Address (state).
-        let cols: Vec<&str> = line.split_whitespace().collect();
-        if cols.len() < 5 {
-            continue;
-        }
-        if let (Some((la, lp)), Some((ra, rp))) =
-            (split_host_dot_port(cols[3]), split_host_dot_port(cols[4]))
-        {
-            v.push(TcpConnection {
-                local_address: la,
-                local_port: lp,
-                remote_address: ra,
-                remote_port: rp,
-            });
-        }
-    }
-    v
-}
-
-#[cfg(target_os = "windows")]
-fn collect_connections() -> Vec<TcpConnection> {
-    let out = match run("netstat", &["-an"]) {
-        Some(o) => o,
-        None => return Vec::new(),
-    };
-    let mut v = Vec::new();
-    for line in out.lines() {
-        if !line.contains("ESTABLISHED") {
-            continue;
-        }
-        // Proto Local-Address Foreign-Address State.
-        let cols: Vec<&str> = line.split_whitespace().collect();
-        if cols.len() < 4 || cols[0] != "TCP" {
-            continue;
-        }
-        if let (Some((la, lp)), Some((ra, rp))) =
-            (split_host_port(cols[1]), split_host_port(cols[2]))
-        {
-            v.push(TcpConnection {
-                local_address: la,
-                local_port: lp,
-                remote_address: ra,
-                remote_port: rp,
-            });
-        }
-    }
-    v
-}
-
-/// Fallback for any other target: no portable probe.
-#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-fn collect_connections() -> Vec<TcpConnection> {
-    Vec::new()
+    let mut units: Vec<u64> = rest.split(':').rev().filter_map(|p| p.parse().ok()).collect();
+    units.resize(3, 0); // seconds, minutes, hours
+    Some(days * 86400 + units[2] * 3600 + units[1] * 60 + units[0])
 }
 
 fn security() -> Security {
@@ -793,7 +799,7 @@ fn security() -> Security {
 }
 
 /// Run a command and return its stdout as a lossy string on success.
-fn run(cmd: &str, args: &[&str]) -> Option<String> {
+pub fn run(cmd: &str, args: &[&str]) -> Option<String> {
     let out = Command::new(cmd).args(args).output().ok()?;
     if !out.status.success() {
         return None;
@@ -980,4 +986,111 @@ fn sip_enabled() -> Option<bool> {
 fn pending_updates() -> Option<u32> {
     // Querying Windows Update needs WUA/PowerShell and is slow; skipped by design.
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn parse_ps_line_reads_every_column() {
+        // pid pcpu pmem rss etimes nlwp user comm
+        let p = parse_ps_line("1234 12.5 3.2 524288 86400 14 gerem firefox").unwrap();
+        assert_eq!(p.pid, 1234);
+        assert_eq!(p.cpu_percent, 12.5);
+        assert_eq!(p.mem_percent, 3.2);
+        assert_eq!(p.rss_bytes, 524288 * 1024);
+        assert_eq!(p.uptime_seconds, Some(86400));
+        assert_eq!(p.threads, Some(14));
+        assert_eq!(p.user.as_deref(), Some("gerem"));
+        assert_eq!(p.name, "firefox");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn parse_ps_line_keeps_names_containing_spaces() {
+        // `comm` is last, so anything after the user column belongs to the name.
+        let p = parse_ps_line("7 0.0 0.0 0 10 1 root kworker/0:1 -events").unwrap();
+        assert_eq!(p.name, "kworker/0:1 -events");
+        assert_eq!(p.rss_bytes, 0);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn parse_ps_line_rejects_malformed_rows() {
+        assert!(parse_ps_line("").is_none());
+        assert!(parse_ps_line("header garbage").is_none());
+        assert!(parse_ps_line("1234 12.5 3.2 524288 86400 14 gerem").is_none()); // no name
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn parse_etime_handles_every_bsd_form() {
+        assert_eq!(parse_etime("05:30"), Some(330)); // mm:ss
+        assert_eq!(parse_etime("02:05:30"), Some(7530)); // hh:mm:ss
+        assert_eq!(parse_etime("3-02:05:30"), Some(266_730)); // dd-hh:mm:ss
+        assert_eq!(parse_etime("garbage"), Some(0));
+    }
+
+    #[test]
+    fn aggregate_sums_instances_and_keeps_dominant_user() {
+        let mut agg = Aggregate::default();
+        for (pid, user) in [(1, "root"), (2, "gerem"), (3, "gerem")] {
+            agg.absorb(
+                &RawProcess {
+                    pid,
+                    name: "chrome".into(),
+                    cpu_percent: 10.0,
+                    mem_percent: 1.0,
+                    rss_bytes: 1000,
+                    threads: Some(4),
+                    user: Some(user.into()),
+                    uptime_seconds: Some(pid as u64 * 100),
+                    disk_io: None,
+                },
+                None,
+                None,
+            );
+        }
+        let info = agg.finish("chrome".into());
+        assert_eq!(info.instances, 3);
+        assert_eq!(info.cpu_percent, 30.0);
+        assert_eq!(info.mem_bytes, 3000);
+        assert_eq!(info.threads, Some(12));
+        assert_eq!(info.user.as_deref(), Some("gerem"));
+        // The oldest instance answers "since when has this been running".
+        assert_eq!(info.uptime_seconds, Some(300));
+        // Nothing was readable, so these stay unknown rather than a false zero.
+        assert_eq!(info.disk_read_bytes, None);
+        assert_eq!(info.conn_in, None);
+    }
+
+    #[test]
+    fn aggregate_attaches_socket_counts() {
+        let mut agg = Aggregate::default();
+        agg.absorb(
+            &RawProcess {
+                pid: 1,
+                name: "nginx".into(),
+                cpu_percent: 1.0,
+                mem_percent: 0.5,
+                rss_bytes: 100,
+                threads: None,
+                user: None,
+                uptime_seconds: None,
+                disk_io: None,
+            },
+            Some(&ProcSockets {
+                listen_ports: vec![443, 80],
+                conn_in: 12,
+                conn_out: 2,
+            }),
+            None,
+        );
+        let info = agg.finish("nginx".into());
+        assert_eq!(info.conn_in, Some(12));
+        assert_eq!(info.conn_out, Some(2));
+        assert_eq!(info.listen_ports, vec![80, 443], "sorted and deduped");
+    }
 }

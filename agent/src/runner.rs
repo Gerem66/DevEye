@@ -4,16 +4,17 @@
 //! Samples collected while disconnected are buffered in a bounded in-memory
 //! queue and flushed on reconnect, so transient outages don't lose data.
 //!
-//! Two cadences (both pushed by the server via `agent.config`):
-//! - **metrics** (light, ~10 s): cheap graph signals, no full process scan;
-//! - **snapshots** (heavy, ~5 min): full metric sample (process count + disk I/O)
-//!   plus the process list (`all`/`top`/`off`).
+//! One cadence (pushed by the server via `agent.config`): every tick collects a
+//! whole *instant* — graph signals, the process count, disk I/O and the process
+//! list — under a single timestamp, in one message. A graph point can therefore
+//! never exist without the processes that explain it.
 //!
-//! The OS/security report is sent on connect and hourly. The first snapshot is
-//! sent immediately on connect so the dashboard isn't blank.
+//! The OS/security report is sent on connect and hourly, reusing the socket probe
+//! the tick already ran. The first instant is collected immediately on connect so
+//! the dashboard isn't blank.
 
 use std::collections::VecDeque;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use base64::Engine as _;
@@ -25,12 +26,22 @@ use tracing::{debug, info, warn};
 use crate::commands;
 use crate::config::Config;
 use crate::metrics::Collector;
-use crate::protocol::{ClientMessage, DeviceReport, MetricSnapshot, ProcessSample, ServerMessage};
+use crate::protocol::{ClientMessage, DeviceReport, MetricSnapshot, ServerMessage};
 use crate::report;
+use crate::sockets::{self, SocketMap};
 
 const MAX_BATCH: usize = 100;
-/// ~8 hours of 10-s samples; oldest are dropped when full.
+/// Serialized ceiling for one batch frame. A snapshot now carries its process
+/// list (tens of kilobytes), so `MAX_BATCH` alone would let a reconnect flush
+/// build a multi-megabyte frame; whichever limit is hit first ends the batch.
+const MAX_BATCH_BYTES: usize = 1_000_000;
+/// ~48 hours at the default 60-s cadence; oldest are dropped when full.
 const QUEUE_CAPACITY: usize = 2880;
+/// How many of the most recent queued snapshots keep their process list. Beyond
+/// this the detail is dropped from the *older* ones, so a long outage still
+/// replays graphs at full fidelity (`QUEUE_CAPACITY`) while process detail —
+/// which is ~30x heavier — stays bounded to a few hours of memory.
+const PROCESS_QUEUE_LIMIT: usize = 240;
 const MIN_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(60);
 /// Pause after a *clean* close (server restart, network blip) before dialing
@@ -38,9 +49,9 @@ const MAX_BACKOFF: Duration = Duration::from_secs(60);
 /// tight connect loop, and each connect used to fire a full snapshot +
 /// process sample — flooding the server with one snapshot per second.
 const RECONNECT_DELAY: Duration = Duration::from_secs(2);
-/// Connect-time full snapshot + process sample are skipped when the previous
-/// ones are fresher than this: reconnect loops must not multiply snapshots.
-/// The server can still force one at any time via `agent.collect`.
+/// The connect-time instant is skipped when the previous one is fresher than
+/// this: reconnect loops must not multiply snapshots. The server can still force
+/// one at any time via `agent.collect`.
 const MIN_CONNECT_SNAPSHOT_GAP: Duration = Duration::from_secs(60);
 /// Retry delay after the server *rejects* us at the handshake (revoked, unknown
 /// or not-yet-approved device). Much slower than a normal reconnect: a rejection
@@ -49,24 +60,16 @@ const MIN_CONNECT_SNAPSHOT_GAP: Duration = Duration::from_secs(60);
 const REJECTED_RETRY: Duration = Duration::from_secs(60 * 60);
 /// How often to send the OS/security report.
 const REPORT_INTERVAL: Duration = Duration::from_secs(60 * 60);
-/// Defaults used until the server pushes `agent.config` (≈immediately on
-/// connect). Mirror the server defaults: 30 s metrics / 10 min snapshots.
-const DEFAULT_SNAPSHOT_INTERVAL: Duration = Duration::from_secs(600);
+/// Default used until the server pushes `agent.config` (≈immediately on
+/// connect). Mirrors the server default (`DEFAULT_PROCESS_CAPTURE`).
 const DEFAULT_CAPTURE: &str = "all";
 
 /// Tunables for a run, set from the CLI.
 pub struct RunOptions {
     /// Collect and send a single cycle, then exit (handy for testing).
     pub once: bool,
-    /// Initial metric (graph) sampling interval, until the server sends config.
+    /// Initial collection interval, until the server sends config.
     pub interval: Duration,
-}
-
-fn now_millis() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
 }
 
 pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
@@ -150,7 +153,7 @@ enum SessionOutcome {
     Restart,
 }
 
-/// Connect once, push a report + one full snapshot + processes, then exit.
+/// Connect once, push one full instant + the report, then exit.
 async fn run_once(ws_url: &str, device_id: &str) -> Result<()> {
     let (ws_stream, _) = tokio_tungstenite::connect_async(ws_url)
         .await
@@ -158,12 +161,11 @@ async fn run_once(ws_url: &str, device_id: &str) -> Result<()> {
     let (mut sink, mut stream) = ws_stream.split();
 
     send_hello(&mut sink).await?;
-    send_report(&mut sink, device_id).await?;
 
     let mut collector = Collector::new();
     // Warm-up so the first CPU delta is meaningful.
     tokio::time::sleep(Duration::from_millis(250)).await;
-    let snapshot = collector.collect_full();
+    let (snapshot, sockets) = collect(&mut collector, DEFAULT_CAPTURE, true).await?;
     let msg = serde_json::to_string(&ClientMessage::MetricsBatch {
         device_id: device_id.to_string(),
         snapshots: vec![snapshot],
@@ -171,8 +173,8 @@ async fn run_once(ws_url: &str, device_id: &str) -> Result<()> {
     sink.send(Message::Text(msg))
         .await
         .context("sending metrics batch")?;
-    send_processes(&mut sink, device_id, DEFAULT_CAPTURE).await?;
-    info!("snapshot + processes + report sent");
+    send_report(&mut sink, device_id, &sockets).await?;
+    info!("instant + report sent");
 
     // Give the server a moment to ack before closing.
     let _ = tokio::time::timeout(Duration::from_secs(3), async {
@@ -190,10 +192,10 @@ async fn stream_session(
     config: &Config,
     ws_url: &str,
     device_id: &str,
-    initial_metric_interval: Duration,
+    initial_interval: Duration,
     collector: &mut Collector,
     queue: &mut VecDeque<MetricSnapshot>,
-    last_full_snapshot: &mut Option<Instant>,
+    last_collect: &mut Option<Instant>,
 ) -> Result<SessionOutcome> {
     let (ws_stream, _) = tokio_tungstenite::connect_async(ws_url)
         .await
@@ -205,12 +207,11 @@ async fn stream_session(
 
     // Collection config — overwritten by the server's `agent.config` (sent on
     // connect, almost immediately) and on any later change.
-    let mut metric_interval = initial_metric_interval;
-    let mut snapshot_interval = DEFAULT_SNAPSHOT_INTERVAL;
+    let mut interval = initial_interval;
     let mut capture = DEFAULT_CAPTURE.to_string();
 
-    // Briefly wait for the server's pushed config so the very first snapshot
-    // already reflects the saved per-device settings (capture mode + cadences),
+    // Briefly wait for the server's pushed config so the very first instant
+    // already reflects the saved per-device settings (capture mode + cadence),
     // whether the agent was offline at the time of the change or not.
     let cfg_deadline = Instant::now() + Duration::from_millis(2000);
     loop {
@@ -223,12 +224,10 @@ async fn stream_session(
                 match serde_json::from_str::<ServerMessage>(&txt) {
                     Ok(ServerMessage::Config {
                         metric_interval_ms,
-                        snapshot_interval_ms,
                         process_capture,
                     }) => {
                         capture = process_capture;
-                        metric_interval = Duration::from_millis(metric_interval_ms.max(1000));
-                        snapshot_interval = Duration::from_millis(snapshot_interval_ms.max(1000));
+                        interval = Duration::from_millis(metric_interval_ms.max(1000));
                         break;
                     }
                     // The server may greet a pending-deletion device with destroy
@@ -254,24 +253,27 @@ async fn stream_session(
         }
     }
 
-    // On connect: slow-moving report, then flush anything buffered while offline.
-    // The immediate full snapshot + processes (so a fresh dashboard isn't blank)
-    // is skipped when the last one is recent — a reconnect loop must not mint a
-    // snapshot per connection.
-    send_report(&mut sink, device_id).await?;
-    let snapshot_due = last_full_snapshot.is_none_or(|t| t.elapsed() >= MIN_CONNECT_SNAPSHOT_GAP);
-    if snapshot_due {
-        push_bounded(queue, collector.collect_full());
-        *last_full_snapshot = Some(Instant::now());
-    }
+    // On connect: one immediate instant (so a fresh dashboard isn't blank),
+    // skipped when the last one is recent — a reconnect loop must not mint an
+    // instant per connection. Its socket probe then feeds the report, and the
+    // queue flush replays anything buffered while offline.
+    let due = last_collect.is_none_or(|t| t.elapsed() >= MIN_CONNECT_SNAPSHOT_GAP);
+    let sockets = if due {
+        let (snapshot, sockets) = collect(collector, &capture, true).await?;
+        push_bounded(queue, snapshot);
+        *last_collect = Some(Instant::now());
+        sockets
+    } else {
+        sockets::read_sockets(true)
+    };
+    send_report(&mut sink, device_id, &sockets).await?;
     flush_queue(&mut sink, device_id, queue).await?;
-    if snapshot_due {
-        send_processes(&mut sink, device_id, &capture).await?;
-    }
 
-    let mut metric_ticker = new_ticker(metric_interval);
-    let mut snapshot_ticker = new_ticker(snapshot_interval);
+    let mut ticker = new_ticker(interval);
     let mut report_ticker = new_ticker(REPORT_INTERVAL);
+    // The socket map of the latest tick, reused by the next report so a report
+    // never re-probes what a tick just enumerated.
+    let mut last_sockets = sockets;
 
     // Package list/upgrade tasks run off the loop (an upgrade can take minutes) and
     // stream their results back through this channel, so the loop stays responsive
@@ -313,50 +315,47 @@ async fn stream_session(
                 }
                 commands::send_term_event(&mut sink, device_id, ev).await;
             }
-            _ = metric_ticker.tick() => {
-                push_bounded(queue, collector.collect_fine());
+            _ = ticker.tick() => {
+                let (snapshot, sockets) = collect(collector, &capture, false).await?;
+                last_sockets = sockets;
+                push_bounded(queue, snapshot);
+                *last_collect = Some(Instant::now());
                 flush_queue(&mut sink, device_id, queue).await?;
-            }
-            _ = snapshot_ticker.tick() => {
-                push_bounded(queue, collector.collect_full());
-                *last_full_snapshot = Some(Instant::now());
-                flush_queue(&mut sink, device_id, queue).await?;
-                send_processes(&mut sink, device_id, &capture).await?;
             }
             _ = report_ticker.tick() => {
-                send_report(&mut sink, device_id).await?;
+                // The last tick's socket map already has everything — except on
+                // macOS, where owner attribution needs the slower `lsof` that a
+                // tick can't afford but an hourly report can.
+                if cfg!(target_os = "macos") {
+                    last_sockets = tokio::task::spawn_blocking(|| sockets::read_sockets(true)).await?;
+                }
+                send_report(&mut sink, device_id, &last_sockets).await?;
             }
             incoming = stream.next() => {
                 match incoming {
                     Some(Ok(Message::Text(txt))) => {
                         match serde_json::from_str::<ServerMessage>(&txt) {
-                            // "Collect now" (user refresh): full snapshot + processes + report.
+                            // "Collect now" (user refresh): one full instant + report.
                             Ok(ServerMessage::Collect {}) => {
-                                push_bounded(queue, collector.collect_full());
-                                *last_full_snapshot = Some(Instant::now());
+                                let (snapshot, sockets) = collect(collector, &capture, true).await?;
+                                push_bounded(queue, snapshot);
+                                *last_collect = Some(Instant::now());
                                 flush_queue(&mut sink, device_id, queue).await?;
-                                send_processes(&mut sink, device_id, &capture).await?;
-                                send_report(&mut sink, device_id).await?;
+                                send_report(&mut sink, device_id, &sockets).await?;
+                                last_sockets = sockets;
                             }
                             Ok(ServerMessage::Config {
                                 metric_interval_ms,
-                                snapshot_interval_ms,
                                 process_capture,
                             }) => {
                                 capture = process_capture;
-                                let new_metric = Duration::from_millis(metric_interval_ms.max(1000));
-                                if new_metric != metric_interval {
-                                    metric_interval = new_metric;
-                                    metric_ticker = new_ticker(metric_interval);
-                                }
-                                let new_snapshot = Duration::from_millis(snapshot_interval_ms.max(1000));
-                                if new_snapshot != snapshot_interval {
-                                    snapshot_interval = new_snapshot;
-                                    snapshot_ticker = new_ticker(snapshot_interval);
+                                let new_interval = Duration::from_millis(metric_interval_ms.max(1000));
+                                if new_interval != interval {
+                                    interval = new_interval;
+                                    ticker = new_ticker(interval);
                                 }
                                 info!(
-                                    metric_secs = metric_interval.as_secs(),
-                                    snapshot_secs = snapshot_interval.as_secs(),
+                                    interval_secs = interval.as_secs(),
                                     capture = %capture,
                                     "applied server config"
                                 );
@@ -592,13 +591,16 @@ where
     Ok(())
 }
 
-async fn send_report<S>(sink: &mut S, device_id: &str) -> Result<()>
+async fn send_report<S>(sink: &mut S, device_id: &str, sockets: &SocketMap) -> Result<()>
 where
     S: SinkExt<Message> + Unpin,
     S::Error: std::error::Error + Send + Sync + 'static,
 {
-    // Security probes shell out — run off the runtime.
-    let report: DeviceReport = tokio::task::spawn_blocking(report::collect)
+    // Security probes shell out — run off the runtime. The socket picture is
+    // handed in (a tick already probed it), so no socket tool runs here.
+    let listening = sockets.listening.clone();
+    let established = sockets.established.clone();
+    let report: DeviceReport = tokio::task::spawn_blocking(move || report::collect(listening, established))
         .await
         .context("collecting device report")?;
     let msg = serde_json::to_string(&ClientMessage::Report {
@@ -612,42 +614,37 @@ where
     Ok(())
 }
 
-/// Collect and send the process list per the capture mode. `off` sends nothing.
-async fn send_processes<S>(sink: &mut S, device_id: &str, capture: &str) -> Result<()>
-where
-    S: SinkExt<Message> + Unpin,
-    S::Error: std::error::Error + Send + Sync + 'static,
-{
-    let kind = match capture {
-        "top" => "top",
-        "all" => "all",
-        _ => return Ok(()), // "off" (or unknown): no process sample.
-    };
-    let cap = capture.to_string();
-    let processes = tokio::task::spawn_blocking(move || report::collect_processes(&cap))
+/// Collect one instant off the runtime: the scan shells out to `ps`/`ss` and
+/// reads `/proc`, so it must not block the async loop. `deep` asks for socket
+/// owner attribution even where that costs a slower tool (macOS).
+async fn collect(
+    collector: &mut Collector,
+    capture: &str,
+    deep: bool,
+) -> Result<(MetricSnapshot, SocketMap)> {
+    let sockets = tokio::task::spawn_blocking(move || sockets::read_sockets(deep))
         .await
-        .context("collecting processes")?;
-    let sample = ProcessSample {
-        ts: now_millis(),
-        kind,
-        processes,
-    };
-    let msg = serde_json::to_string(&ClientMessage::Processes {
-        device_id: device_id.to_string(),
-        sample,
-    })?;
-    sink.send(Message::Text(msg))
-        .await
-        .context("sending processes")?;
-    debug!(kind, "processes sent");
-    Ok(())
+        .context("probing sockets")?;
+    Ok(collector.collect(capture, sockets))
 }
 
+/// Queue a snapshot, dropping the oldest when full, and trim process detail off
+/// snapshots older than `PROCESS_QUEUE_LIMIT` — see the constant for why.
 fn push_bounded(queue: &mut VecDeque<MetricSnapshot>, snapshot: MetricSnapshot) {
     if queue.len() >= QUEUE_CAPACITY {
         queue.pop_front();
     }
     queue.push_back(snapshot);
+    if queue.len() > PROCESS_QUEUE_LIMIT {
+        let cutoff = queue.len() - PROCESS_QUEUE_LIMIT;
+        for snap in queue.iter_mut().take(cutoff) {
+            if snap.processes.is_none() {
+                break; // older entries were already trimmed
+            }
+            snap.processes = None;
+            snap.process_kind = None;
+        }
+    }
 }
 
 /// Send queued snapshots in batches, dropping each batch once it has been handed
@@ -663,7 +660,17 @@ where
     S::Error: std::error::Error + Send + Sync + 'static,
 {
     while !queue.is_empty() {
-        let take = queue.len().min(MAX_BATCH);
+        // Grow the batch until it hits the count *or* the byte ceiling: with
+        // process lists attached, 100 snapshots can be several megabytes.
+        let mut take = 0;
+        let mut bytes = 0;
+        for snap in queue.iter().take(MAX_BATCH) {
+            bytes += serde_json::to_string(snap).map(|s| s.len()).unwrap_or(0);
+            take += 1;
+            if bytes >= MAX_BATCH_BYTES {
+                break;
+            }
+        }
         let snapshots: Vec<MetricSnapshot> = queue.iter().take(take).cloned().collect();
         let msg = serde_json::to_string(&ClientMessage::MetricsBatch {
             device_id: device_id.to_string(),

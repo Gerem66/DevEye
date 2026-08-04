@@ -14,7 +14,8 @@ import {
     type DevicePresence,
     type DeviceReport,
     type DeviceReportPush,
-    type MetricSnapshot,
+    type MetricSeriesPoint,
+    type ReportProcess,
     type MetricsPush,
     type MetricsResolution,
     type PresenceEvent,
@@ -25,6 +26,7 @@ import { Connections } from './Connections';
 import { DeviceActionsMenu, type DeviceAction } from './DeviceActionsMenu';
 import { PrivilegeInfo } from './PrivilegeInfo';
 import { OpenPorts } from './OpenPorts';
+import { groupPorts } from './ports';
 import { ConfigDialog } from './ConfigDialog';
 import { GraphDetail, type DetailRow } from './GraphDetail';
 import { Timeline } from './Timeline';
@@ -54,8 +56,8 @@ import {
 import styles from './Monitoring.module.css';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-/** Mirrors the server's default snapshot cadence (10 min). */
-const DEFAULT_SNAPSHOT_INTERVAL_S = 600;
+/** Mirrors the server's default collection cadence (`DEFAULT_METRIC_INTERVAL_SECONDS`). */
+const DEFAULT_INTERVAL_S = 60;
 /** Graphs shown before "Afficher plus" (≈ 2 rows at 3 columns on a wide panel). */
 const COLLAPSED_GRAPHS = 6;
 
@@ -73,10 +75,20 @@ const ZOOM_PRESETS: { label: string; ms: number }[] = [
  * What the panel is currently showing:
  * - `live`: the timeline window (rolling 24h or a chosen day), latest values;
  * - `range`: a dragged zone — graphs over it, KPIs averaged, processes at its end;
- * - `snapshot`: a single instant — exact KPIs/processes, graphs over the snapshot
- *   interval around it (fine resolution).
+ * - `snapshot`: a single instant — exact KPIs/processes, graphs over the cadence
+ *   around it (fine resolution).
  */
 type Focus = { kind: 'live' } | { kind: 'range'; start: number; end: number } | { kind: 'snapshot'; at: number };
+
+/** Secondary process facts, shown on hover rather than as more columns. */
+function processTitle(p: ReportProcess): string {
+    const bits: string[] = [];
+    if (p.instances > 1) bits.push(`${p.instances} processus`);
+    if (p.user) bits.push(`utilisateur ${p.user}`);
+    if (p.threads !== null) bits.push(`${p.threads} threads`);
+    if (p.uptimeSeconds !== null) bits.push(`démarré depuis ${formatUptime(p.uptimeSeconds)}`);
+    return bits.join(' · ');
+}
 
 /** Bucketing resolution to keep the query light at wide zoom levels. */
 function spanResolution(spanMs: number): MetricsResolution {
@@ -85,17 +97,21 @@ function spanResolution(spanMs: number): MetricsResolution {
     return 'hour';
 }
 
-/** Keep last-known values for fields the light metric cycle leaves null. */
-const SPARSE_FIELDS: (keyof MetricSnapshot)[] = [
-    'processCount',
-    'diskReadBytes',
-    'diskWriteBytes',
-    'activeConnections',
+/**
+ * Keep last-known values for the genuinely optional probes — the ones that are
+ * null because the machine has no such sensor or the agent lacks privileges, not
+ * because of the collection cycle. Since every tick now carries the full picture,
+ * `processCount` / `activeConnections` / disk I/O are no longer sparse.
+ */
+const SPARSE_FIELDS: (keyof MetricSeriesPoint)[] = [
     'gpuPercent',
     'cpuTempC',
-    'loadAvg1'
+    'loadAvg1',
+    'batteryPercent',
+    'diskReadBytes',
+    'diskWriteBytes'
 ];
-function mergeSnapshot(prev: MetricSnapshot | null, next: MetricSnapshot): MetricSnapshot {
+function mergeSnapshot(prev: MetricSeriesPoint | null, next: MetricSeriesPoint): MetricSeriesPoint {
     if (!prev) return next;
     const out = { ...next };
     for (const k of SPARSE_FIELDS) {
@@ -105,8 +121,8 @@ function mergeSnapshot(prev: MetricSnapshot | null, next: MetricSnapshot): Metri
 }
 
 /** The point closest to `at` within a series. */
-function nearestPoint(points: MetricSnapshot[], at: number): MetricSnapshot | null {
-    let best: MetricSnapshot | null = null;
+function nearestPoint(points: MetricSeriesPoint[], at: number): MetricSeriesPoint | null {
+    let best: MetricSeriesPoint | null = null;
     let bestDist = Infinity;
     for (const p of points) {
         const d = Math.abs(p.timestamp - at);
@@ -119,10 +135,10 @@ function nearestPoint(points: MetricSnapshot[], at: number): MetricSnapshot | nu
 }
 
 /** A synthetic snapshot whose gauges/counters are averaged over `points`. */
-function averageSnapshot(points: MetricSnapshot[]): MetricSnapshot | null {
+function averageSnapshot(points: MetricSeriesPoint[]): MetricSeriesPoint | null {
     if (points.length === 0) return null;
     const last = points[points.length - 1];
-    const avg = (sel: (p: MetricSnapshot) => number | null): number | null => {
+    const avg = (sel: (p: MetricSeriesPoint) => number | null): number | null => {
         let sum = 0;
         let n = 0;
         for (const p of points) {
@@ -134,7 +150,7 @@ function averageSnapshot(points: MetricSnapshot[]): MetricSnapshot | null {
         }
         return n > 0 ? sum / n : null;
     };
-    const avgRound = (sel: (p: MetricSnapshot) => number | null): number | null => {
+    const avgRound = (sel: (p: MetricSeriesPoint) => number | null): number | null => {
         const v = avg(sel);
         return v == null ? null : Math.round(v);
     };
@@ -237,7 +253,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const [filesOpen, setFilesOpen] = useState(false);
     const updater = useAgentUpdate();
     // Storage footprint of the device's stored snapshots.
-    const [storage, setStorage] = useState<{ snapshots: number; rows: number; bytes: number } | null>(null);
+    const [storage, setStorage] = useState<{ snapshots: number; processes: number; bytes: number } | null>(null);
     // Snapshot-deletion confirmation (targets the current snapshot/zone focus).
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -260,11 +276,16 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     });
     const [snapshotTimes, setSnapshotTimes] = useState<number[]>([]);
     const [pinnedTimes, setPinnedTimes] = useState<number[]>([]);
-    const [points, setPoints] = useState<MetricSnapshot[]>([]);
-    const [procSample, setProcSample] = useState<ProcessSample | null>(null);
+    const [points, setPoints] = useState<MetricSeriesPoint[]>([]);
+    // Two sources, never merged: `liveProc` is the latest pushed instant,
+    // `histProc` the one fetched for a focused past instant/range. Keeping them
+    // apart is what lets "Direct" show live processes again immediately instead
+    // of the previously inspected instant lingering until the next tick.
+    const [liveProc, setLiveProc] = useState<ProcessSample | null>(null);
+    const [histProc, setHistProc] = useState<ProcessSample | null>(null);
     const [showAllProcs, setShowAllProcs] = useState(false);
     const [report, setReport] = useState<DeviceReport | null>(null);
-    const [liveSnapshot, setLiveSnapshot] = useState<MetricSnapshot | null>(null);
+    const [liveSnapshot, setLiveSnapshot] = useState<MetricSeriesPoint | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [dataDays, setDataDays] = useState<string[]>([]);
     const [graphsExpanded, setGraphsExpanded] = useState(false);
@@ -279,32 +300,21 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const idRef = useRef<string>(deviceId);
     idRef.current = deviceId;
 
-    const snapshotIntervalMs = (selected?.snapshotIntervalSeconds ?? DEFAULT_SNAPSHOT_INTERVAL_S) * 1000;
-
-    // The most recent process measurement in the loaded series: its count and when
-    // it was taken. `processCount` is captured only in the heavy (~5-min) snapshot,
-    // never in the light metric cycle, so this is the authoritative "last known".
-    // Used both for the always-visible Processus KPI and to align the process-list
-    // fetch (`processAt`) with the same snapshot — so the count and the list match.
-    const lastProc = useMemo<{ count: number; at: number } | null>(() => {
-        for (let i = points.length - 1; i >= 0; i--) {
-            const c = points[i].processCount;
-            if (c != null) return { count: c, at: points[i].timestamp };
-        }
-        return null;
-    }, [points]);
+    const intervalMs = (selected?.metricIntervalSeconds ?? DEFAULT_INTERVAL_S) * 1000;
 
     // The time window the graphs cover, derived from the focus.
     const graphWindow = useMemo(() => {
         if (focus.kind === 'range') return { start: focus.start, end: focus.end };
-        if (focus.kind === 'snapshot') return { start: Math.max(0, focus.at - snapshotIntervalMs), end: focus.at };
+        // A single instant: show the cadence around it, at raw resolution.
+        if (focus.kind === 'snapshot') {
+            return { start: Math.max(0, focus.at - intervalMs * 10), end: focus.at };
+        }
         return windowRange;
-    }, [focus, windowRange, snapshotIntervalMs]);
+    }, [focus, windowRange, intervalMs]);
     const resolution = spanResolution(graphWindow.end - graphWindow.start);
-    // In live focus, track the last full snapshot's timestamp so the process list
-    // re-fetches when a new snapshot lands and stays in lockstep with the KPI count.
-    const processAt =
-        focus.kind === 'snapshot' ? focus.at : focus.kind === 'range' ? focus.end : (lastProc?.at ?? windowRange.end);
+    // Which instant the process list describes. In live focus the pushed snapshot
+    // already carries its own processes, so no historical fetch is needed at all.
+    const processAt = focus.kind === 'snapshot' ? focus.at : focus.kind === 'range' ? focus.end : null;
 
     // Changing device: drop the previous machine's transient data so its graphs,
     // activity and KPIs never bleed into the new selection. The per-device effects
@@ -315,7 +325,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         setOverride({});
         setPoints([]);
         setLiveSnapshot(null);
-        setProcSample(null);
+        setLiveProc(null);
+        setHistProc(null);
         setSnapshotTimes([]);
         setPinnedTimes([]);
         setStorage(null);
@@ -337,7 +348,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         const id = deviceId;
         ws.send('metrics.storage', { deviceId: id })
             .then((res) => {
-                if (idRef.current === id) setStorage({ snapshots: res.snapshots, rows: res.rows, bytes: res.bytes });
+                if (idRef.current === id)
+                    setStorage({ snapshots: res.snapshots, processes: res.processes, bytes: res.bytes });
             })
             .catch(() => {});
     }, [deviceId]);
@@ -388,9 +400,12 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             .finally(() => {
                 if (idRef.current === id) setMetricsReady(true);
             });
+        // Historical focus only: in live focus the process list rides along with
+        // each pushed snapshot, so there is nothing to fetch.
+        if (processAt === null) return;
         ws.send('metrics.processesAt', { deviceId: id, at: processAt })
             .then((res) => {
-                if (idRef.current === id) setProcSample(res.sample);
+                if (idRef.current === id) setHistProc(res.sample);
             })
             .catch(() => {});
     }, [deviceId, graphWindow.start, graphWindow.end, resolution, processAt]);
@@ -403,12 +418,18 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             if (msg.command === METRICS_PUSH_EVENT && msg.payload.ok) {
                 const push = msg.payload.data as MetricsPush;
                 if (push.deviceId !== deviceId) return;
-                setLiveSnapshot((prev) => mergeSnapshot(prev, push.snapshot));
+                // Split the instant: the graph series keeps only the numbers (a
+                // window holds hundreds of points, and carrying every process list
+                // along would cost megabytes of state), the process table takes the
+                // list. Both come from the same tick, under one timestamp.
+                const { processes, processKind, ...point } = push.snapshot;
+                setLiveSnapshot((prev) => mergeSnapshot(prev, point));
+                if (processes !== null) {
+                    setLiveProc({ ts: push.snapshot.timestamp, kind: processKind ?? 'all', processes });
+                }
                 if (liveTail) {
                     setPoints((prev) =>
-                        prev.length && push.snapshot.timestamp <= prev[prev.length - 1].timestamp
-                            ? prev
-                            : [...prev, push.snapshot]
+                        prev.length && point.timestamp <= prev[prev.length - 1].timestamp ? prev : [...prev, point]
                     );
                 }
             }
@@ -478,7 +499,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         const id = idRef.current;
         ws.send('metrics.storage', { deviceId: id })
             .then((res) => {
-                if (idRef.current === id) setStorage({ snapshots: res.snapshots, rows: res.rows, bytes: res.bytes });
+                if (idRef.current === id)
+                    setStorage({ snapshots: res.snapshots, processes: res.processes, bytes: res.bytes });
             })
             .catch(() => {});
     }, []);
@@ -575,7 +597,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         .map((p) => ({ t: p.timestamp, v: p.batteryPercent as number }));
 
     // Value to show in the KPI cards, per focus.
-    const display = useMemo<MetricSnapshot | null>(() => {
+    const display = useMemo<MetricSeriesPoint | null>(() => {
         if (focus.kind === 'range') return averageSnapshot(points);
         if (focus.kind === 'snapshot') return nearestPoint(points, focus.at);
         return liveSnapshot ?? (points.length ? points[points.length - 1] : null);
@@ -588,20 +610,43 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const cores = report?.os.cores ?? 0;
     const valuesMuted = !online && focus.kind === 'live';
 
+    // The focus is the single driver here too (see Docs/MONITORING.md §10).
+    const procSample = focus.kind === 'live' ? liveProc : histProc;
+
     // Processus KPI — always rendered for stability; `procStale` marks a value that
-    // isn't the current live one (offline, or older than one snapshot cycle), so the
-    // UI prefixes "~" and the hint gives its age. The card never disappears silently.
-    const procView =
-        focus.kind === 'range'
-            ? { count: display?.processCount ?? null, at: null as number | null, averaged: true }
-            : focus.kind === 'snapshot'
-              ? { count: display?.processCount ?? null, at: focus.at, averaged: false }
-              : { count: lastProc?.count ?? null, at: lastProc?.at ?? null, averaged: false };
+    // isn't the current live one (agent offline or silent), so the UI prefixes "~"
+    // and the hint gives its age. The card never disappears silently.
+    const procView = {
+        count: display?.processCount ?? null,
+        at: focus.kind === 'snapshot' ? focus.at : focus.kind === 'live' ? (procSample?.ts ?? null) : null,
+        averaged: focus.kind === 'range'
+    };
+
+    // Show a per-process column only when at least one row has the data: these
+    // probes are privilege- and platform-gated, and a full column of "—" says
+    // nothing. Same rule as elsewhere — unknown is hidden, never faked as 0.
+    const procCols = useMemo(() => {
+        const rows = procSample?.processes ?? [];
+        return {
+            disk: rows.some((p) => p.diskReadBytes !== null || p.diskWriteBytes !== null),
+            conn: rows.some((p) => p.connIn !== null || p.connOut !== null),
+            ports: rows.some((p) => p.listenPorts.length > 0)
+        };
+    }, [procSample]);
+
+    // Grouped once here so the header count and the rendered sections can never
+    // disagree: one dual-stack service is one bubble, not two sockets.
+    const portGroups = useMemo(
+        () => (report?.openPorts ? groupPorts(report.openPorts, report.hardware?.network ?? []) : null),
+        [report]
+    );
+
+    // Every tick carries its process list, so "stale" now only means the agent
+    // stopped reporting — not that we're between two heavy snapshots.
     const procStale =
         focus.kind === 'live' &&
         procView.count != null &&
-        (!online || procView.at == null || Date.now() - procView.at > snapshotIntervalMs * 1.5);
-    const procAgeMin = Math.max(1, Math.round(snapshotIntervalMs / 60000));
+        (!online || procView.at == null || Date.now() - procView.at > intervalMs * 2.5);
     const ageLabel = (ts: number) => {
         const a = formatAgo(ts);
         return a === "à l'instant" ? a : `il y a ${a}`;
@@ -989,7 +1034,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 <span className={styles.snapshotUsage} title='Espace occupé en base par les snapshots de cet appareil'>
                     <span className='icon icon-server' />
                     {storage
-                        ? `${storage.snapshots} snapshot${storage.snapshots > 1 ? 's' : ''} · ≈ ${formatBytesFr(storage.bytes)} en base`
+                        ? `${storage.snapshots} instant${storage.snapshots > 1 ? 's' : ''} · ${storage.processes.toLocaleString('fr-FR')} processus · ≈ ${formatBytesFr(storage.bytes)} en base`
                         : 'Calcul de l’espace…'}
                 </span>
                 <div className={styles.snapshotActions}>
@@ -1096,9 +1141,9 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                             muted={valuesMuted}
                             hint={
                                 procView.count == null
-                                    ? `Aucun relevé de processus pour le moment (relevé périodique, ~${procAgeMin} min)`
+                                    ? 'Aucun relevé de processus pour le moment'
                                     : procView.at != null
-                                      ? `Nombre total de processus · relevé ${ageLabel(procView.at)} (périodique, ~${procAgeMin} min)`
+                                      ? `Nombre total de processus · relevé ${ageLabel(procView.at)}`
                                       : 'Nombre total de processus (moyenne sur la sélection)'
                             }
                         />
@@ -1163,17 +1208,21 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 )}
             </div>
 
-            {/* Open listening ports */}
+            {/* Open listening ports, grouped by reachability then interface */}
             <div className={styles.section}>
                 <h4 className={styles.sectionTitle}>
                     Ports en écoute
-                    {report?.openPorts && report.openPorts.length > 0 && (
+                    {portGroups && portGroups.length > 0 && (
                         <span className={styles.sectionMeta}>
-                            {report.openPorts.length} port{report.openPorts.length > 1 ? 's' : ''}
+                            {portGroups.length} port{portGroups.length > 1 ? 's' : ''}
                         </span>
                     )}
                 </h4>
-                {report ? <OpenPorts ports={report.openPorts} /> : <p className={styles.waitingMsg}>Aucun bilan.</p>}
+                {report ? (
+                    <OpenPorts groups={portGroups} privileged={report.agent?.privileged ?? false} />
+                ) : (
+                    <p className={styles.waitingMsg}>Aucun bilan.</p>
+                )}
             </div>
 
             {/* Processes at the selected moment */}
@@ -1183,7 +1232,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     {procSample && (
                         <span
                             className={styles.sectionMeta}
-                            title={`Relevé périodique (~${procAgeMin} min), pas en temps réel · ${new Date(procSample.ts).toLocaleString('fr-FR')}`}
+                            title={`Relevé du ${new Date(procSample.ts).toLocaleString('fr-FR')} — le même instant que les graphes`}
                         >
                             {procSample.kind === 'all' ? 'Relevé complet' : 'Top 20'} · {procSample.processes.length}{' '}
                             processus · relevé {ageLabel(procSample.ts)} (
@@ -1213,14 +1262,33 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                                         CPU{cores > 0 ? ' %' : ''}
                                     </th>
                                     <th className={styles.procNum}>Mémoire</th>
+                                    {procCols.disk && (
+                                        <th className={styles.procNum} title='Octets lus / écrits depuis le démarrage'>
+                                            Disque
+                                        </th>
+                                    )}
+                                    {procCols.conn && (
+                                        <th
+                                            className={styles.procNum}
+                                            title='Connexions établies entrantes / sortantes'
+                                        >
+                                            Conn.
+                                        </th>
+                                    )}
+                                    {procCols.ports && <th className={styles.procNum}>Ports</th>}
                                 </tr>
                             </thead>
                             <tbody>
                                 {procSample.processes.slice(0, showAllProcs ? undefined : 12).map((p, i) => {
                                     const cpuNorm = cores > 0 ? Math.min(100, p.cpuPercent / cores) : p.cpuPercent;
                                     return (
-                                        <tr key={`${p.name}-${i}`}>
-                                            <td className={styles.procName}>{p.name}</td>
+                                        <tr key={`${p.name}-${i}`} title={processTitle(p)}>
+                                            <td className={styles.procName}>
+                                                {p.name}
+                                                {p.instances > 1 && (
+                                                    <span className={styles.procInstances}>×{p.instances}</span>
+                                                )}
+                                            </td>
                                             <td
                                                 className={styles.procNum}
                                                 title={
@@ -1232,6 +1300,25 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                                                 {cpuNorm.toFixed(1)}%
                                             </td>
                                             <td className={styles.procNum}>{formatBytes(p.memBytes)}</td>
+                                            {procCols.disk && (
+                                                <td className={styles.procNum}>
+                                                    {p.diskReadBytes === null || p.diskWriteBytes === null
+                                                        ? '—'
+                                                        : `${formatBytes(p.diskReadBytes)} / ${formatBytes(p.diskWriteBytes)}`}
+                                                </td>
+                                            )}
+                                            {procCols.conn && (
+                                                <td className={styles.procNum}>
+                                                    {p.connIn === null && p.connOut === null
+                                                        ? '—'
+                                                        : `${p.connIn ?? 0} ↓ / ${p.connOut ?? 0} ↑`}
+                                                </td>
+                                            )}
+                                            {procCols.ports && (
+                                                <td className={styles.procNum}>
+                                                    {p.listenPorts.length > 0 ? p.listenPorts.join(', ') : '—'}
+                                                </td>
+                                            )}
                                         </tr>
                                     );
                                 })}
@@ -1248,7 +1335,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 ) : (
                     <p className={styles.waitingMsg}>
                         {focus.kind === 'live'
-                            ? `Pas encore de relevé de processus (relevé périodique, ~${procAgeMin} min).`
+                            ? 'Pas encore de relevé de processus.'
                             : 'Aucun relevé de processus sur cette période.'}
                     </p>
                 )}

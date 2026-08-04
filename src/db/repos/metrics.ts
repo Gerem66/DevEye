@@ -1,4 +1,4 @@
-import type { MetricRow, MetricSnapshot, MetricsResolution } from 'deveye-types';
+import type { MetricRow, MetricSeriesPoint, MetricSnapshot, MetricsResolution } from 'deveye-types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
@@ -10,8 +10,8 @@ export interface MetricsRepo {
         from: number;
         to: number;
         resolution: MetricsResolution;
-    }): Promise<MetricSnapshot[]>;
-    latest(deviceId: string): Promise<MetricSnapshot | null>;
+    }): Promise<MetricSeriesPoint[]>;
+    latest(deviceId: string): Promise<MetricSeriesPoint | null>;
     /**
      * Distinct local days (YYYY-MM-DD) that have samples, ascending, bucketed in
      * the client's timezone (`tzOffsetMinutes` = `Date.getTimezoneOffset()`).
@@ -49,7 +49,7 @@ function intNum(v: number | null): number | null {
     return v === null || v === undefined ? null : Math.round(Number(v));
 }
 
-function rowToSnapshot(r: MetricRow): MetricSnapshot {
+function rowToSnapshot(r: MetricRow): MetricSeriesPoint {
     return {
         timestamp: Math.round(Number(r.ts)),
         cpuPercent: Number(r.cpu_percent),

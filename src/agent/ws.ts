@@ -17,7 +17,6 @@ import {
     AGENT_PKG_LIST_RESULT,
     AGENT_PKG_PROGRESS,
     AGENT_POWER_RESULT,
-    AGENT_PROCESSES,
     AGENT_REPORT,
     AGENT_SERVICE_RESULT,
     AGENT_SYNC_ACK,
@@ -52,7 +51,6 @@ import {
     handlePkgListResult,
     handlePkgProgress,
     handlePowerResult,
-    handleProcesses,
     handleReport,
     handleServiceResult,
     handleSyncAck,
@@ -142,8 +140,6 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
             return handlePkgDone(session, msg.payload);
         case AGENT_REPORT:
             return handleReport(session, msg.payload);
-        case AGENT_PROCESSES:
-            return handleProcesses(session, msg.payload);
         case AGENT_METRICS_BATCH:
             return handleMetricsBatch(session, msg.payload);
     }

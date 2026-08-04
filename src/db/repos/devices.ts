@@ -7,7 +7,6 @@ type Q = Queryable;
 /** Partial collection config; only provided fields are updated (`null` resets). */
 export interface DeviceConfigPatch {
     metricIntervalSeconds?: number | null;
-    snapshotIntervalSeconds?: number | null;
     processCapture?: ProcessCapture | null;
     retentionDays?: number | null;
     processRetentionDays?: number | null;
@@ -113,7 +112,6 @@ export function devicesRepo(pool: Q): DevicesRepo {
             // Map each provided field to its column; only update what's present.
             const columns: Record<keyof DeviceConfigPatch, string> = {
                 metricIntervalSeconds: 'metric_interval_seconds',
-                snapshotIntervalSeconds: 'snapshot_interval_seconds',
                 processCapture: 'process_capture',
                 retentionDays: 'retention_days',
                 processRetentionDays: 'process_retention_days'

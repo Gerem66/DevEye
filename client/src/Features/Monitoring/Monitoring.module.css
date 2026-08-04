@@ -1129,7 +1129,28 @@
     color: var(--text-muted);
 }
 
-/* World-exposed (0.0.0.0 / ::) ports stand out; loopback is muted. */
+/* Owning program, when the agent could attribute the socket. */
+.portProc {
+    font-size: 0.68rem;
+    color: var(--text-secondary);
+    max-width: 12ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Badge marking one bubble that merged an IPv4 and an IPv6 listener. */
+.portFamily {
+    font-size: 0.58rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 4px;
+    border-radius: var(--radius-xs, 3px);
+    background: var(--glass-border);
+    color: var(--text-muted);
+}
+
+/* Externally reachable ports stand out; loopback is muted. */
 .portWorld {
     border-color: var(--warning);
 }
@@ -1144,6 +1165,50 @@
 
 .portBound .portNum {
     color: var(--text-secondary);
+}
+
+/* Reachability sections: exposed first, then LAN, then loopback. */
+.portSection + .portSection {
+    margin-top: var(--space-sm);
+}
+
+.portSectionTitle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin: 0 0 var(--space-xs);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    cursor: help;
+}
+
+.portSectionCount {
+    font-size: 0.68rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Per-interface split, shown only when a section spans several interfaces. */
+.portIfaceBlock + .portIfaceBlock {
+    margin-top: var(--space-xs);
+}
+
+.portIfaceLabel {
+    display: block;
+    margin-bottom: 2px;
+    font-size: 0.66rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono, monospace);
+}
+
+.portsNote {
+    margin-top: var(--space-sm);
+    font-size: 0.7rem;
+    color: var(--text-muted);
 }
 
 /* ─── Top processes table ─────────────────────────────────────────────────── */
@@ -1486,6 +1551,18 @@
     width: 1px;
     background: var(--text-muted);
     opacity: 0.35;
+    pointer-events: none;
+}
+
+/* Continuous "data available" run, drawn instead of individual ticks once the
+   window holds more marks than are legible (see MAX_INDIVIDUAL_MARKS). */
+.snapshotBand {
+    position: absolute;
+    bottom: 0;
+    height: 3px;
+    background: var(--text-muted);
+    opacity: 0.3;
+    border-radius: 2px;
     pointer-events: none;
 }
 
@@ -2342,4 +2419,20 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Inline hint under a config field (e.g. projected storage cost). */
+.configHint {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+}
+
+/* "×3" marker: a program aggregating several PIDs (browsers, editors). */
+.procInstances {
+    margin-left: 4px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
 }

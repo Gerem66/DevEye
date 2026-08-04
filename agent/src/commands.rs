@@ -278,8 +278,15 @@ where
     S: SinkExt<Message> + Unpin,
     S::Error: std::error::Error + Send + Sync + 'static,
 {
-    // Security probes shell out — run them off the runtime.
-    let Ok(report) = tokio::task::spawn_blocking(crate::report::collect).await else {
+    // Security probes shell out — run them off the runtime. This is a one-off
+    // out-of-band report (a service scope just changed), so it probes sockets
+    // itself rather than reusing a tick's map like the periodic report does.
+    let Ok(report) = tokio::task::spawn_blocking(|| {
+        let sockets = crate::sockets::read_sockets(true);
+        crate::report::collect(sockets.listening, sockets.established)
+    })
+    .await
+    else {
         return;
     };
     if let Ok(msg) = serde_json::to_string(&ClientMessage::Report {

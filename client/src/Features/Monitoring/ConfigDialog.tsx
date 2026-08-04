@@ -9,14 +9,28 @@ import styles from './Monitoring.module.css';
 
 const CUSTOM = '__custom__';
 
-const METRIC_PRESETS = [5, 10, 30, 60]; // seconds
-const SNAP_PRESETS = [1, 2, 5, 10, 15, 30, 60]; // minutes
+const METRIC_PRESETS = [10, 30, 60, 300]; // seconds
 const RET_PRESETS = [7, 30, 90, 365]; // days
 const PROC_PRESETS = [1, 3, 7, 30]; // days
 
-// Mirrors the server defaults (see `src/agent/mappers.ts` + `Env`): 30 s
-// metrics, 10 min full snapshots, everything kept 30 days.
-const DEFAULTS = { metricSec: 30, snapMin: 10, retentionDays: 30, procRetentionDays: 30 };
+// Mirrors the server defaults (see `src/agent/mappers.ts` + `Env`): one
+// collection every 60 s, everything kept 30 days.
+const DEFAULTS = { metricSec: 60, retentionDays: 30, procRetentionDays: 30 };
+
+/**
+ * Rough daily storage per device at a given cadence, so the cost of a fast
+ * cadence is visible *before* saving. Based on the measured size of a gzipped
+ * process list (~4.8 KB for ~580 programs); `top` carries ~20 entries instead.
+ */
+function estimateDailyBytes(intervalSec: number, capture: ProcessCapture): number {
+    if (capture === 'off') return 0;
+    const perSample = capture === 'top' ? 900 : 4800;
+    return (86400 / intervalSec) * perSample;
+}
+
+function formatMb(bytes: number): string {
+    return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} Mo` : `${Math.round(bytes / 1024)} Ko`;
+}
 
 function clamp(v: number, lo: number, hi: number): number {
     return Math.min(Math.max(v, lo), hi);
@@ -37,10 +51,8 @@ interface ConfigDialogProps {
  */
 export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogProps) {
     // Each numeric field = a select value (preset string or CUSTOM) + custom text.
-    const [metricSel, setMetricSel] = useState('10');
-    const [metricCustom, setMetricCustom] = useState('10');
-    const [snapSel, setSnapSel] = useState('5');
-    const [snapCustom, setSnapCustom] = useState('5');
+    const [metricSel, setMetricSel] = useState('60');
+    const [metricCustom, setMetricCustom] = useState('60');
     const [capture, setCapture] = useState<ProcessCapture>('all');
     const [retSel, setRetSel] = useState('30');
     const [retCustom, setRetCustom] = useState('30');
@@ -57,9 +69,7 @@ export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogPro
             setCustom(String(v));
         };
         const metricSec = device.metricIntervalSeconds ?? DEFAULTS.metricSec;
-        const snapMin = device.snapshotIntervalSeconds != null ? device.snapshotIntervalSeconds / 60 : DEFAULTS.snapMin;
         init(METRIC_PRESETS, metricSec, setMetricSel, setMetricCustom);
-        init(SNAP_PRESETS, snapMin, setSnapSel, setSnapCustom);
         init(RET_PRESETS, device.retentionDays ?? DEFAULTS.retentionDays, setRetSel, setRetCustom);
         init(PROC_PRESETS, device.processRetentionDays ?? DEFAULTS.procRetentionDays, setProcSel, setProcCustom);
         setCapture(device.processCapture ?? 'all');
@@ -69,6 +79,9 @@ export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogPro
         // would wipe an in-progress "Personnalisé…" entry).
     }, [open, device?.id]);
 
+    // Cadence currently selected, for the live storage estimate below.
+    const estimateSec = Number(metricSel === CUSTOM ? metricCustom : metricSel) || DEFAULTS.metricSec;
+
     const resolve = (sel: string, custom: string): number | null => {
         const raw = sel === CUSTOM ? Number(custom) : Number(sel);
         return Number.isFinite(raw) && raw > 0 ? raw : null;
@@ -77,10 +90,9 @@ export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogPro
     const save = async () => {
         if (!device) return;
         const metricSec = resolve(metricSel, metricCustom);
-        const snapMin = resolve(snapSel, snapCustom);
         const retentionDays = resolve(retSel, retCustom);
         const procRetentionDays = resolve(procSel, procCustom);
-        if (metricSec === null || snapMin === null || retentionDays === null || procRetentionDays === null) {
+        if (metricSec === null || retentionDays === null || procRetentionDays === null) {
             setError('Une valeur personnalisée est invalide.');
             return;
         }
@@ -90,7 +102,6 @@ export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogPro
             await ws.send('device.setConfig', {
                 deviceId: device.id,
                 metricIntervalSeconds: clamp(Math.round(metricSec), 5, 3600),
-                snapshotIntervalSeconds: clamp(Math.round(snapMin * 60), 60, 86400),
                 processCapture: capture,
                 retentionDays: clamp(Math.round(retentionDays), 1, 3650),
                 processRetentionDays: clamp(Math.round(procRetentionDays), 1, 3650)
@@ -110,7 +121,7 @@ export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogPro
             open={open}
             onClose={onClose}
             title={device ? `Configuration — ${device.name}` : 'Configuration'}
-            description='Cadences de collecte et durées de conservation. Appliqué dès le prochain relevé, que l’agent soit connecté ou non.'
+            description='Cadence de collecte et durées de conservation. Chaque relevé enregistre les métriques et les processus au même instant. Appliqué dès le prochain relevé, que l’agent soit connecté ou non.'
             onSubmit={() => void save()}
             footer={
                 <>
@@ -125,22 +136,16 @@ export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogPro
         >
             <div className={styles.configGrid}>
                 <ConfigChoice
-                    label='Intervalle des métriques (graphes)'
+                    label='Intervalle de collecte'
                     unit='s'
-                    presets={METRIC_PRESETS.map((v) => ({ value: v, label: `${v} s` }))}
+                    presets={METRIC_PRESETS.map((v) => ({
+                        value: v,
+                        label: v >= 60 ? `${v / 60} min` : `${v} s`
+                    }))}
                     sel={metricSel}
                     custom={metricCustom}
                     onSel={setMetricSel}
                     onCustom={setMetricCustom}
-                />
-                <ConfigChoice
-                    label='Intervalle des snapshots (processus)'
-                    unit='min'
-                    presets={SNAP_PRESETS.map((v) => ({ value: v, label: `${v} min` }))}
-                    sel={snapSel}
-                    custom={snapCustom}
-                    onSel={setSnapSel}
-                    onCustom={setSnapCustom}
                 />
                 <label className={styles.configRow}>
                     <span className={styles.configLabel}>Processus capturés</span>
@@ -154,6 +159,11 @@ export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogPro
                             <option value='top'>Top 20 (CPU + mémoire)</option>
                             <option value='off'>Désactivé</option>
                         </SelectInput>
+                        <span className={styles.configHint}>
+                            {capture === 'off'
+                                ? 'Aucun historique de processus enregistré.'
+                                : `≈ ${formatMb(estimateDailyBytes(estimateSec, capture))} par jour et par appareil.`}
+                        </span>
                     </div>
                 </label>
                 <ConfigChoice

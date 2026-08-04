@@ -37,7 +37,8 @@ pub struct MetricSnapshot {
     pub active_connections: Option<u32>,
     #[serde(rename = "gpuPercent")]
     pub gpu_percent: Option<f64>,
-    /// Cumulative disk bytes read; only the snapshot (heavy) cycle fills it.
+    /// Cumulative disk bytes read, summed over every process. `None` when the
+    /// platform doesn't expose per-process I/O or we lack the privileges.
     #[serde(rename = "diskReadBytes")]
     pub disk_read_bytes: Option<u64>,
     #[serde(rename = "diskWriteBytes")]
@@ -48,6 +49,15 @@ pub struct MetricSnapshot {
     /// Whether the battery is charging / on AC; None when unknown.
     #[serde(rename = "batteryCharging")]
     pub battery_charging: Option<bool>,
+    /// Programs running at this instant, heaviest first. `None` when capture is
+    /// `off`, or when the detail was trimmed off an old queued snapshot (graphs
+    /// keep full fidelity, process detail is bounded — see `runner::push_bounded`).
+    pub processes: Option<Vec<ProcessInfo>>,
+    /// Capture mode in effect when `processes` was taken, so history stays
+    /// labelled correctly even after the setting later changes. `None` with
+    /// `processes`.
+    #[serde(rename = "processKind")]
+    pub process_kind: Option<&'static str>,
 }
 
 /// Latest-known health/security report (sent on connect, then periodically).
@@ -126,6 +136,9 @@ pub struct NetInterface {
     /// One of: wifi, ethernet, bluetooth, loopback, virtual, other.
     pub kind: &'static str,
     pub mac: Option<String>,
+    /// IP addresses assigned to the interface, so the ports view can attribute a
+    /// bind address to the interface it belongs to. Empty when unknown.
+    pub addresses: Vec<String>,
 }
 
 /// The agent's own runtime identity, used by the UI to flag privilege-gated gaps.
@@ -156,12 +169,21 @@ pub struct PackageManagerInfo {
 }
 
 /// One listening socket. `address` is the bind address (e.g. `0.0.0.0`, `::`,
-/// `127.0.0.1`) so the UI can tell world-exposed ports from loopback-only ones.
+/// `127.0.0.1`) so the UI can tell world-exposed ports from loopback-only ones
+/// and group them per interface. One entry per bind address: a dual-stack
+/// service legitimately yields two (`0.0.0.0:22` and `:::22`), which the UI
+/// merges into one bubble.
 #[derive(Debug, Clone, Serialize)]
 pub struct OpenPort {
     pub proto: &'static str,
     pub port: u16,
     pub address: String,
+    /// IPv6 scope id — the interface a link-local socket is bound to
+    /// (`fe80::1%eth0`). `None` for a plain address.
+    pub zone: Option<String>,
+    /// Owning process; `None` when the mapping needs privileges we don't have.
+    pub pid: Option<u32>,
+    pub process: Option<String>,
 }
 
 /// One mounted disk/volume (per-disk breakdown for multi-disk machines).
@@ -286,14 +308,6 @@ pub struct FileSearchFilter {
     pub max_size: Option<u64>,
 }
 
-/// A point-in-time process list. `kind` is "top" (heaviest ~20) or "all".
-#[derive(Debug, Clone, Serialize)]
-pub struct ProcessSample {
-    pub ts: i64,
-    pub kind: &'static str,
-    pub processes: Vec<ProcessInfo>,
-}
-
 #[derive(Debug, Clone, Serialize)]
 pub struct OsInfo {
     pub name: String,
@@ -312,13 +326,41 @@ pub struct Security {
     pub pending_updates: Option<u32>,
 }
 
+/// One *program* at sample time, aggregated across every PID sharing its name.
+/// Fields beyond CPU/memory are best-effort: `None` means "couldn't be read"
+/// (platform gap or missing privileges), never a misleading zero.
 #[derive(Debug, Clone, Serialize)]
 pub struct ProcessInfo {
     pub name: String,
+    /// Number of PIDs aggregated under this name.
+    pub instances: u32,
     #[serde(rename = "cpuPercent")]
     pub cpu_percent: f64,
     #[serde(rename = "memBytes")]
     pub mem_bytes: u64,
+    /// Summed thread count; `None` on macOS (`ps` exposes no thread column).
+    pub threads: Option<u32>,
+    /// Owning OS account (the most frequent one among the aggregated PIDs).
+    pub user: Option<String>,
+    /// Age of the oldest instance, in seconds.
+    #[serde(rename = "uptimeSeconds")]
+    pub uptime_seconds: Option<u64>,
+    /// Cumulative bytes read/written; `None` when unreadable (privileges) or
+    /// unsupported (macOS has no `/proc`).
+    #[serde(rename = "diskReadBytes")]
+    pub disk_read_bytes: Option<u64>,
+    #[serde(rename = "diskWriteBytes")]
+    pub disk_write_bytes: Option<u64>,
+    /// Established connections to one of this program's listening ports
+    /// (inbound) and away from it (outbound). Byte counters per process are not
+    /// collected: no OS exposes them without eBPF/packet capture.
+    #[serde(rename = "connIn")]
+    pub conn_in: Option<u32>,
+    #[serde(rename = "connOut")]
+    pub conn_out: Option<u32>,
+    /// Ports this program listens on (ascending, deduped).
+    #[serde(rename = "listenPorts")]
+    pub listen_ports: Vec<u16>,
 }
 
 /// One CloudSync exclusion rule (`path` = exact rel path or dir prefix,
@@ -378,12 +420,6 @@ pub enum ClientMessage {
         // Boxed: the report is by far the largest variant; boxing keeps the enum
         // small (clippy::large_enum_variant) without changing the wire shape.
         report: Box<DeviceReport>,
-    },
-    #[serde(rename = "agent.processes")]
-    Processes {
-        #[serde(rename = "deviceId")]
-        device_id: String,
-        sample: ProcessSample,
     },
     /// Outcome of an `agent.destroy`: whether the agent wiped itself successfully.
     #[serde(rename = "agent.destroyed")]
@@ -810,14 +846,13 @@ pub enum ServerMessage {
     /// the machine. No reply frame: the process exits (and possibly comes back).
     #[serde(rename = "agent.lifecycle")]
     Lifecycle { action: String },
-    /// Per-device collection config (cadences + capture mode), pushed by the
+    /// Per-device collection config (one cadence + capture mode), pushed by the
     /// server on connect and whenever the user changes it in the UI.
     #[serde(rename = "agent.config")]
     Config {
+        /// The single collection interval: one tick = metrics + processes.
         #[serde(rename = "metricIntervalMs")]
         metric_interval_ms: u64,
-        #[serde(rename = "snapshotIntervalMs")]
-        snapshot_interval_ms: u64,
         #[serde(rename = "processCapture")]
         process_capture: String,
     },

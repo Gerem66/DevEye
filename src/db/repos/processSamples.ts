@@ -1,45 +1,35 @@
-import type { ProcessKind, ProcessSample, ProcessSampleRow, ReportProcess } from 'deveye-types';
+import { gunzip, gzip } from 'node:zlib';
+import { promisify } from 'node:util';
+
+import { reportProcessSchema, type ProcessKind, type ProcessSample, type ReportProcess } from 'deveye-types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
 
-/** Don't return a process sample further than this from the requested instant. */
-const NEAREST_TOLERANCE_MS = 2 * 60 * 60 * 1000;
+const gzipAsync = promisify(gzip);
+const gunzipAsync = promisify(gunzip);
 
 /**
- * Byte cost of each fixed-width column of `device_process_samples`, used to
- * estimate a device's snapshot footprint without per-row inspection. Keep this
- * map in sync with the table schema: adding/removing/resizing a column here makes
- * the estimate adapt on its own — no magic total to recompute by hand. The
- * variable-length `name` column is NOT listed; it's added from its real
- * `LENGTH(name)` at query time.
+ * Don't return a process sample further than this from the requested instant.
+ * Metric rows and process samples now share the exact same `ts` (both come from
+ * one agent tick), so this only absorbs the case where the requested instant
+ * falls between two stored ones — a couple of cadences is plenty.
  */
-const PROCESS_ROW_COLUMN_BYTES = {
-    id: 8, // BIGINT
-    device_id: 36, // CHAR(36)
-    ts: 8, // BIGINT
-    kind: 1, // ENUM('top','full')
-    cpu_percent: 4, // FLOAT
-    mem_bytes: 8, // BIGINT
-    pinned: 1 // TINYINT
-} as const;
+const NEAREST_TOLERANCE_MS = 5 * 60 * 1000;
 
-/**
- * Non-column per-row cost: InnoDB record header + the `(device_id, ts)` secondary
- * index entry + page fill slack. Roughly stable regardless of the columns.
- */
-const PROCESS_ROW_OVERHEAD_BYTES = 70;
-
-/** Estimated fixed bytes per stored row (columns + overhead); `name` added on top. */
-const EST_FIXED_BYTES_PER_PROCESS_ROW =
-    Object.values(PROCESS_ROW_COLUMN_BYTES).reduce((sum, b) => sum + b, 0) + PROCESS_ROW_OVERHEAD_BYTES;
+/** One stored instant: the process list lives in `payload` as gzipped JSON. */
+interface ProcessSampleRow {
+    ts: number;
+    kind: ProcessKind;
+    payload: Buffer;
+}
 
 export interface SnapshotStorage {
-    /** Distinct snapshot instants. */
+    /** Snapshot instants stored (one row each). */
     snapshots: number;
-    /** Total process rows across those snapshots. */
-    rows: number;
-    /** Estimated bytes occupied in the database (data + index). */
+    /** Total process entries recorded across those instants. */
+    processes: number;
+    /** Bytes the compressed blobs occupy — measured, not estimated. */
     bytes: number;
 }
 
@@ -50,30 +40,32 @@ export interface SnapshotTimes {
 }
 
 export interface ProcessSamplesRepo {
-    insertSample(deviceId: string, sample: ProcessSample): Promise<void>;
+    /**
+     * Store the process list captured at `ts`. The timestamp comes from the
+     * metric snapshot it travelled with, so a graph point and its processes are
+     * always keyed identically. Re-sending an instant overwrites it.
+     */
+    insertSample(deviceId: string, ts: number, kind: ProcessKind, processes: ReportProcess[]): Promise<void>;
     /** The process list captured nearest `at` (within tolerance), else null. */
     nearest(deviceId: string, at: number): Promise<ProcessSample | null>;
-    /** Distinct snapshot timestamps within [from, to], ascending (timeline marks). */
+    /** Snapshot timestamps within [from, to], ascending (timeline marks). */
     snapshotTimes(deviceId: string, from: number, to: number): Promise<SnapshotTimes>;
-    /** Estimated storage taken by a device's stored snapshots. */
+    /** Storage taken by a device's stored snapshots. */
     storage(deviceId: string): Promise<SnapshotStorage>;
-    /**
-     * Delete snapshots whose `ts` falls in [from, to] (inclusive). Returns the
-     * number of distinct instants and process rows removed.
-     */
-    deleteRange(deviceId: string, from: number, to: number): Promise<{ snapshots: number; rows: number }>;
-    /** Set the pinned flag on every row in [from, to]; returns distinct instants touched. */
+    /** Delete snapshots whose `ts` falls in [from, to] (inclusive). */
+    deleteRange(deviceId: string, from: number, to: number): Promise<{ snapshots: number }>;
+    /** Set the pinned flag on every instant in [from, to]; returns instants touched. */
     setPinnedRange(deviceId: string, from: number, to: number, pinned: boolean): Promise<{ snapshots: number }>;
     /**
-     * Delete unpinned rows in [from, to] already past the device's process
-     * retention (used right after unpinning). Returns instants and rows removed.
+     * Delete unpinned instants in [from, to] already past the device's process
+     * retention (used right after unpinning). Returns instants removed.
      */
     deleteExpiredInRange(
         deviceId: string,
         from: number,
         to: number,
         defaultDays: number
-    ): Promise<{ snapshots: number; rows: number }>;
+    ): Promise<{ snapshots: number }>;
     /** Delete samples past each device's process retention (NULL → default); skips pinned. */
     pruneByRetention(defaultDays: number): Promise<number>;
 }
@@ -97,45 +89,51 @@ export function processSamplesRepo(pool: Q): ProcessSamplesRepo {
         return at - b <= a - at ? b : a;
     }
 
+    /** Count instants in [from, to] — a pin/unpin reports how many it touched. */
+    async function countRange(deviceId: string, from: number, to: number): Promise<number> {
+        const r = await pool.query<{ snapshots: number }>(
+            `SELECT COUNT(*) AS snapshots FROM device_process_samples
+             WHERE device_id = ? AND ts BETWEEN ? AND ?`,
+            [deviceId, from, to]
+        );
+        return Number(r.rows[0]?.snapshots ?? 0);
+    }
+
     return {
-        async insertSample(deviceId, sample) {
-            if (sample.processes.length === 0) return;
-            const values = sample.processes.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
-            const params: unknown[] = [];
-            for (const p of sample.processes) {
-                params.push(deviceId, sample.ts, sample.kind, p.name, p.cpuPercent, p.memBytes);
-            }
+        async insertSample(deviceId, ts, kind, processes) {
+            if (processes.length === 0) return;
+            const payload = await gzipAsync(Buffer.from(JSON.stringify(processes), 'utf8'));
             await pool.query(
-                `INSERT INTO device_process_samples (device_id, ts, kind, name, cpu_percent, mem_bytes)
-                 VALUES ${values}`,
-                params
+                `INSERT INTO device_process_samples (device_id, ts, kind, proc_count, payload)
+                 VALUES (?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE kind = VALUES(kind), proc_count = VALUES(proc_count), payload = VALUES(payload)`,
+                [deviceId, ts, kind, processes.length, payload]
             );
         },
         async nearest(deviceId, at) {
             const ts = await nearestTs(deviceId, at);
             if (ts === null || Math.abs(ts - at) > NEAREST_TOLERANCE_MS) return null;
             const r = await pool.query<ProcessSampleRow>(
-                `SELECT kind, name, cpu_percent, mem_bytes FROM device_process_samples
-                 WHERE device_id = ? AND ts = ?
-                 ORDER BY cpu_percent DESC`,
+                'SELECT ts, kind, payload FROM device_process_samples WHERE device_id = ? AND ts = ?',
                 [deviceId, ts]
             );
-            if (r.rows.length === 0) return null;
-            const kind = r.rows[0].kind as ProcessKind;
-            const processes: ReportProcess[] = r.rows.map((row) => ({
-                name: row.name,
-                cpuPercent: Number(row.cpu_percent),
-                memBytes: Number(row.mem_bytes)
-            }));
-            return { ts, kind, processes };
+            const row = r.rows[0];
+            if (!row) return null;
+            // A blob that fails to inflate or parse is corrupt storage, not a
+            // client error: report "no sample" rather than breaking the panel.
+            let processes: ReportProcess[];
+            try {
+                const json = (await gunzipAsync(row.payload)).toString('utf8');
+                processes = reportProcessSchema.array().parse(JSON.parse(json));
+            } catch {
+                return null;
+            }
+            return { ts, kind: row.kind, processes };
         },
         async snapshotTimes(deviceId, from, to) {
-            // MAX(pinned): a snapshot instant counts as pinned as soon as any of
-            // its process rows is pinned (pin/unpin always sets the whole instant).
             const r = await pool.query<{ ts: number; pinned: number }>(
-                `SELECT ts, MAX(pinned) AS pinned FROM device_process_samples
+                `SELECT ts, pinned FROM device_process_samples
                  WHERE device_id = ? AND ts BETWEEN ? AND ?
-                 GROUP BY ts
                  ORDER BY ts ASC
                  LIMIT 5000`,
                 [deviceId, from, to]
@@ -150,56 +148,37 @@ export function processSamplesRepo(pool: Q): ProcessSamplesRepo {
             return { timestamps, pinned };
         },
         async storage(deviceId) {
-            const r = await pool.query<{ total: number; snapshots: number; name_bytes: number }>(
-                `SELECT COUNT(*)                       AS total,
-                        COUNT(DISTINCT ts)             AS snapshots,
-                        COALESCE(SUM(LENGTH(name)), 0) AS name_bytes
+            const r = await pool.query<{ snapshots: number; processes: number; bytes: number }>(
+                `SELECT COUNT(*)                          AS snapshots,
+                        COALESCE(SUM(proc_count), 0)      AS processes,
+                        COALESCE(SUM(LENGTH(payload)), 0) AS bytes
                  FROM device_process_samples WHERE device_id = ?`,
                 [deviceId]
             );
             const row = r.rows[0];
-            const rows = Number(row?.total ?? 0);
-            const nameBytes = Number(row?.name_bytes ?? 0);
             return {
                 snapshots: Number(row?.snapshots ?? 0),
-                rows,
-                bytes: rows * EST_FIXED_BYTES_PER_PROCESS_ROW + nameBytes
+                processes: Number(row?.processes ?? 0),
+                bytes: Number(row?.bytes ?? 0)
             };
         },
         async deleteRange(deviceId, from, to) {
-            const counted = await pool.query<{ snapshots: number }>(
-                `SELECT COUNT(DISTINCT ts) AS snapshots FROM device_process_samples
-                 WHERE device_id = ? AND ts BETWEEN ? AND ?`,
-                [deviceId, from, to]
-            );
             const del = await pool.query(
-                `DELETE FROM device_process_samples WHERE device_id = ? AND ts BETWEEN ? AND ?`,
+                'DELETE FROM device_process_samples WHERE device_id = ? AND ts BETWEEN ? AND ?',
                 [deviceId, from, to]
             );
-            return { snapshots: Number(counted.rows[0]?.snapshots ?? 0), rows: del.rowCount };
+            return { snapshots: del.rowCount };
         },
         async setPinnedRange(deviceId, from, to, pinned) {
-            const counted = await pool.query<{ snapshots: number }>(
-                `SELECT COUNT(DISTINCT ts) AS snapshots FROM device_process_samples
-                 WHERE device_id = ? AND ts BETWEEN ? AND ?`,
-                [deviceId, from, to]
-            );
+            const snapshots = await countRange(deviceId, from, to);
             await pool.query(
                 `UPDATE device_process_samples SET pinned = ?
                  WHERE device_id = ? AND ts BETWEEN ? AND ?`,
                 [pinned ? 1 : 0, deviceId, from, to]
             );
-            return { snapshots: Number(counted.rows[0]?.snapshots ?? 0) };
+            return { snapshots };
         },
         async deleteExpiredInRange(deviceId, from, to, defaultDays) {
-            const counted = await pool.query<{ snapshots: number }>(
-                `SELECT COUNT(DISTINCT s.ts) AS snapshots FROM device_process_samples s
-                 JOIN devices d ON d.id = s.device_id
-                 WHERE s.device_id = ? AND s.ts BETWEEN ? AND ?
-                   AND s.pinned = 0 AND d.status <> 'archived'
-                   AND s.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.process_retention_days, ?) * 86400000`,
-                [deviceId, from, to, defaultDays]
-            );
             const del = await pool.query(
                 `DELETE s FROM device_process_samples s
                  JOIN devices d ON d.id = s.device_id
@@ -208,7 +187,7 @@ export function processSamplesRepo(pool: Q): ProcessSamplesRepo {
                    AND s.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.process_retention_days, ?) * 86400000`,
                 [deviceId, from, to, defaultDays]
             );
-            return { snapshots: Number(counted.rows[0]?.snapshots ?? 0), rows: del.rowCount };
+            return { snapshots: del.rowCount };
         },
         async pruneByRetention(defaultDays) {
             // Process history has its own (shorter) retention; it's the bulkiest data.

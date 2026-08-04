@@ -82,6 +82,8 @@ import {
     type DeviceReport,
     type DeviceTermExitPush,
     type DeviceTermOutputPush,
+    type MetricSeriesPoint,
+    type ProcessSample,
     type MetricSnapshot,
     type PackageDonePush,
     type PackageListPush,
@@ -476,10 +478,22 @@ export class MonitorHub {
     sendInitial(
         socket: WebSocket,
         deviceId: string,
-        snapshot: MetricSnapshot | null,
+        point: MetricSeriesPoint | null,
+        sample: ProcessSample | null,
         report: DeviceReport | null
     ): void {
-        if (snapshot) socket.send(metricFrame(deviceId, snapshot));
+        // The point comes from `device_metrics` and the process list from its own
+        // table; they are recombined here into the one instant the client expects.
+        if (point) {
+            const processes = sample && sample.ts === point.timestamp ? sample : null;
+            socket.send(
+                metricFrame(deviceId, {
+                    ...point,
+                    processes: processes?.processes ?? null,
+                    processKind: processes?.kind ?? null
+                })
+            );
+        }
         if (report) socket.send(reportFrame(deviceId, report));
     }
 
@@ -519,7 +533,12 @@ export interface MonitorTransport {
     unsubscribe(deviceIds: string[]): void;
     isOnline(deviceIds: string[]): Record<string, boolean>;
     /** Push the latest snapshot/report for one device straight to this socket. */
-    sendInitial(deviceId: string, snapshot: MetricSnapshot | null, report: DeviceReport | null): void;
+    sendInitial(
+        deviceId: string,
+        point: MetricSeriesPoint | null,
+        sample: ProcessSample | null,
+        report: DeviceReport | null
+    ): void;
     /** Ask the device's agent to push fresh data now; false if it's offline. */
     requestCollect(deviceId: string): boolean;
     /** Push updated collection config to the device's agent; false if offline. */
@@ -575,7 +594,7 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         subscribe: (deviceIds) => hub.subscribe(socket, deviceIds),
         unsubscribe: (deviceIds) => hub.unsubscribe(socket, deviceIds),
         isOnline: (deviceIds) => hub.onlineDevices(deviceIds),
-        sendInitial: (deviceId, snapshot, report) => hub.sendInitial(socket, deviceId, snapshot, report),
+        sendInitial: (deviceId, point, sample, report) => hub.sendInitial(socket, deviceId, point, sample, report),
         requestCollect: (deviceId) => hub.requestCollect(deviceId),
         pushConfig: (deviceId, config) => hub.pushConfig(deviceId, config),
         requestDestroy: (deviceId) => hub.requestDestroy(deviceId),

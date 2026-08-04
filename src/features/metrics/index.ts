@@ -65,11 +65,15 @@ export const metricsSubscribeFeature: FeatureDefinition<
         const ids = allowed.map((a) => a.id);
         ctx.monitor?.subscribe(ids);
 
-        // Push the latest stored snapshot + report straight away so the UI shows
-        // data immediately rather than waiting for the next live sample.
+        // Push the latest stored instant + report straight away so the UI shows
+        // data immediately rather than waiting for the next live sample. The
+        // instant's process list is seeded too: it now travels with the metric
+        // stream, so without it the process table would stay empty for a whole
+        // collection cadence.
         for (const { id, row } of allowed) {
-            const snapshot = await ctx.db.metrics.latest(id);
-            ctx.monitor?.sendInitial(id, snapshot, parseDeviceReport(row.report_json));
+            const point = await ctx.db.metrics.latest(id);
+            const sample = point ? await ctx.db.processSamples.nearest(id, point.timestamp) : null;
+            ctx.monitor?.sendInitial(id, point, sample, parseDeviceReport(row.report_json));
         }
         return { deviceIds: ids };
     }
@@ -176,7 +180,7 @@ export const metricsDeleteSnapshotsFeature: FeatureDefinition<
     ...metricsDeleteSnapshots,
     handler: async (ctx, input) => {
         const row = await authorizeRead(ctx, input.deviceId);
-        const { snapshots, rows } = await ctx.db.processSamples.deleteRange(input.deviceId, input.from, input.to);
+        const { snapshots } = await ctx.db.processSamples.deleteRange(input.deviceId, input.from, input.to);
         if (snapshots > 0) {
             const single = input.from === input.to;
             ctx.audit({
@@ -185,10 +189,10 @@ export const metricsDeleteSnapshotsFeature: FeatureDefinition<
                 description: single
                     ? `Snapshot supprimé : « ${row.name} »`
                     : `${snapshots} snapshots supprimés : « ${row.name} »`,
-                metadata: { deviceId: row.id, from: input.from, to: input.to, snapshots, rows }
+                metadata: { deviceId: row.id, from: input.from, to: input.to, snapshots }
             });
         }
-        return { deviceId: input.deviceId, deletedSnapshots: snapshots, deletedRows: rows };
+        return { deviceId: input.deviceId, deletedSnapshots: snapshots };
     }
 });
 
@@ -212,14 +216,12 @@ export const metricsSetSnapshotsPinnedFeature: FeatureDefinition<
         // On unpin, the rows revert to normal retention: drop those already past
         // their deadline right now; the rest expire at the next hourly sweep.
         let deletedSnapshots = 0;
-        let deletedRows = 0;
         if (!pinned) {
             const [proc] = await Promise.all([
                 ctx.db.processSamples.deleteExpiredInRange(deviceId, from, to, env.PROCESS_RETENTION_DAYS),
                 ctx.db.metrics.deleteExpiredInRange(deviceId, from, to, env.METRICS_RETENTION_DAYS)
             ]);
             deletedSnapshots = proc.snapshots;
-            deletedRows = proc.rows;
         }
 
         if (snapshots > 0) {
@@ -228,11 +230,11 @@ export const metricsSetSnapshotsPinnedFeature: FeatureDefinition<
                 description: pinned
                     ? `${snapshots} snapshot(s) épinglé(s) : « ${row.name} »`
                     : `${snapshots} snapshot(s) désépinglé(s) : « ${row.name} »`,
-                metadata: { deviceId, from, to, pinned, snapshots, deletedSnapshots, deletedRows }
+                metadata: { deviceId, from, to, pinned, snapshots, deletedSnapshots }
             });
         }
 
-        return { deviceId, affected: snapshots, deletedSnapshots, deletedRows };
+        return { deviceId, affected: snapshots, deletedSnapshots };
     }
 });
 

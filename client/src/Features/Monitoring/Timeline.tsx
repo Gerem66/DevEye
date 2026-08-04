@@ -46,8 +46,30 @@ const CLICK_SLOP_PX = 5;
  * consumer (queries, averages, delete/pin counts) can assume a bounded range
  * and nothing else has to handle oversized selections. The moving edge simply
  * stops growing at the cap-th snapshot from the anchor.
+ *
+ * Sized for the unified cadence: every collection tick is a snapshot now (~1440
+ * a day at 60 s), so the old 200 would have capped a drag at roughly three hours.
  */
-const MAX_SELECTION_SNAPSHOTS = 200;
+const MAX_SELECTION_SNAPSHOTS = 2000;
+
+/**
+ * Above this many marks in the visible window, individual ticks stop being
+ * legible (they merge into a solid bar) and cost a DOM node each. Past it the
+ * timeline draws continuous "data available" bands instead — the click target is
+ * unchanged, since a click snaps to the nearest mark either way.
+ */
+const MAX_INDIVIDUAL_MARKS = 200;
+
+/** Merge marks into contiguous runs, breaking wherever a gap exceeds `maxGap`. */
+function toBands(sorted: number[], maxGap: number): { from: number; to: number }[] {
+    const bands: { from: number; to: number }[] = [];
+    for (const ts of sorted) {
+        const last = bands[bands.length - 1];
+        if (last && ts - last.to <= maxGap) last.to = ts;
+        else bands.push({ from: ts, to: ts });
+    }
+    return bands;
+}
 
 /** Index of the first element of ascending `sorted` that is ≥ `x`. */
 function lowerBound(sorted: number[], x: number): number {
@@ -219,6 +241,17 @@ export function Timeline({
     const selCount = sel ? countInRange(sortedSnaps, sel.start, sel.end) : 0;
 
     const pinnedSet = useMemo(() => new Set(pinnedTimes), [pinnedTimes]);
+    // Dense windows collapse to bands; a run breaks when a gap exceeds twice the
+    // median spacing, so a real agent outage still reads as a hole.
+    const dense = sortedSnaps.length > MAX_INDIVIDUAL_MARKS;
+    const bands = useMemo(() => {
+        if (!dense) return [];
+        const gaps: number[] = [];
+        for (let i = 1; i < sortedSnaps.length; i++) gaps.push(sortedSnaps[i] - sortedSnaps[i - 1]);
+        gaps.sort((a, b) => a - b);
+        const median = gaps[Math.floor(gaps.length / 2)] || 60_000;
+        return toBands(sortedSnaps, median * 2);
+    }, [dense, sortedSnaps]);
     // Adjacent snapshots around the focused instant, to step through with the
     // ‹ › buttons or the keyboard arrows (binary search on the sorted marks).
     const prevSnap = pointAt === null ? null : (sortedSnaps[lowerBound(sortedSnaps, pointAt) - 1] ?? null);
@@ -325,13 +358,34 @@ export function Timeline({
                         style={{ left: `${pctOf(s.from)}%`, width: `${pctOf(s.to) - pctOf(s.from)}%` }}
                     />
                 ))}
-                {snapshotTimes.map((t) => (
-                    <div
-                        key={`m${t}`}
-                        className={`${styles.snapshotMark} ${pinnedSet.has(t) ? styles.snapshotMarkPinned : ''}`}
-                        style={{ left: `${pctOf(t)}%` }}
-                    />
-                ))}
+                {dense
+                    ? bands.map((b) => (
+                          <div
+                              key={`b${b.from}`}
+                              className={styles.snapshotBand}
+                              style={{
+                                  left: `${pctOf(b.from)}%`,
+                                  width: `${Math.max(0.4, pctOf(b.to) - pctOf(b.from))}%`
+                              }}
+                          />
+                      ))
+                    : snapshotTimes.map((t) => (
+                          <div
+                              key={`m${t}`}
+                              className={`${styles.snapshotMark} ${pinnedSet.has(t) ? styles.snapshotMarkPinned : ''}`}
+                              style={{ left: `${pctOf(t)}%` }}
+                          />
+                      ))}
+                {/* Pinned instants stay individually visible whatever the density:
+                    they are rare and deliberately kept, so they must be findable. */}
+                {dense &&
+                    pinnedTimes.map((t) => (
+                        <div
+                            key={`p${t}`}
+                            className={`${styles.snapshotMark} ${styles.snapshotMarkPinned}`}
+                            style={{ left: `${pctOf(t)}%` }}
+                        />
+                    ))}
                 {sel && (
                     <div
                         className={styles.selectionBox}

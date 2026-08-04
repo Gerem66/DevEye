@@ -107,7 +107,7 @@ connect, so the dashboard shows data without waiting a full interval.
 Test a freshly approved device end-to-end:
 
 ```sh
-deveye-agent run --once     # one snapshot + report, then exits
+deveye-agent run --once     # one instant + report, then exits
 ```
 
 ## Supervision (`--managed`)
@@ -162,25 +162,34 @@ Alongside it, when running: `agent.pid` (for `stop`/`status`) and, when detached
 
 ## What is collected & cadence
 
-Designed to stay light, with **two cadences pushed by the server** (`agent.config`,
-sent on connect and whenever you change them in the **Appareils** page):
+Designed to stay light, with **one cadence pushed by the server** (`agent.config`,
+sent on connect and whenever you change it in the **Appareils** page):
 
-- **Metrics — every ~10 s** (configurable): a light sample for the graphs (CPU %,
-  RAM, disk usage, network counters, load, CPU temperature, GPU %, uptime,
-  logged-in users, active TCP connections). No full process scan, so it stays
-  cheap at this rate.
-- **Snapshots — every ~5 min** (configurable): the **process list** (mode below)
-  plus the heavier signals that need a process scan — **process count** and
-  **disk I/O** (read/write). These are the clickable marks on the timeline.
+- **Collection — every ~60 s** (configurable): one *instant*, sent as one message
+  under one timestamp — the graph signals (CPU %, RAM, disk usage, network
+  counters, load, CPU temperature, GPU %, uptime, logged-in users, active TCP
+  connections), the **process count**, **disk I/O**, and the **process list**
+  itself. Every point is therefore a clickable mark on the timeline.
 - **Hourly** (and on connect): the **health/security report**.
-- **On connect**: an immediate first snapshot so the dashboard isn't blank.
-- **Manual refresh** (UI button): an immediate snapshot + processes + report.
+- **On connect**: an immediate first instant so the dashboard isn't blank.
+- **Manual refresh** (UI button): an immediate instant + report.
 
-**Process capture mode** (per device): `all` (every process), `top` (the 20
-heaviest, scored on **CPU % + memory %**), or `off` (no process history). Per-process
-GPU/network usage aren't portably available, so they're not part of the score.
+It stays cheap because one tick runs exactly **two probes**, shared by everything:
+an extended `ps` (list, count, and on Linux per-process disk I/O from
+`/proc/<pid>/io`) and a single `ss -tuanpH` (listening ports, established
+connections, the connection count, and per-process connection counts). That one
+socket call replaces the three the agent used to make. Measured at ~40 ms per
+tick on a 700-process machine — less than the old heavy cycle cost.
 
-`--interval` only sets the initial metric interval used before the server's config
+**Process capture mode** (per device): `all` (every program), `top` (the 20
+heaviest, scored on **CPU % + memory %**), or `off` (no process history).
+Processes are aggregated **by program name** (a browser spreads work over many
+helpers), carrying instance count, threads, owner, uptime, disk I/O and
+established connections in/out. Per-process network *bytes* are not collected: no
+OS exposes them without eBPF or packet capture. Fields needing privileges we
+don't have are reported as `null`, never as zero.
+
+`--interval` only sets the initial cadence used before the server's config
 arrives (it arrives within ~1 s of connecting); the real cadence is UI-controlled.
 
 **Health/security report** (OS name/version/arch + posture):
@@ -191,11 +200,11 @@ arrives (it arrives within ~1 s of connecting); the real cadence is UI-controlle
 | Disk encryption  | LUKS (via `lsblk`)                                      | FileVault (`fdesetup`)                  | BitLocker (`manage-bde`)     |
 | SIP              | —                                                       | `csrutil status`                        | —                            |
 | Pending updates  | `apt-get -s upgrade` / `dnf check-update`               | not collected (slow)                    | not collected (slow)         |
-| Open ports       | `ss -tuln` (TCP+UDP)                                    | `netstat -an -p tcp`                    | `netstat -an`                |
+| Open ports       | `ss -tuanp` (TCP+UDP, +owner)                           | `netstat -an` + `lsof` (owner)          | `netstat -ano` (+pid)        |
 | Privilege        | `id -u` / `id -un`                                      | `id -u` / `id -un`                      | `net session` / `%USERNAME%` |
 | GPU %            | `nvidia-smi`                                            | IOAccelerator (`ioreg`)                 | `nvidia-smi`                 |
 | Logged-in users  | `who`                                                   | `who`                                   | `query user`                 |
-| Active TCP conns | `ss`                                                    | `netstat`                               | `netstat -an`                |
+| Active TCP conns | `ss -tuanp` (same call)                                 | `netstat -an`                           | `netstat -ano`               |
 | Machine id       | `/etc/machine-id`                                       | IOPlatformUUID (`ioreg`)                | registry `MachineGuid`       |
 | Processes        | `ps`                                                    | `ps`                                    | `sysinfo`                    |
 

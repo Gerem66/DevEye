@@ -6,23 +6,50 @@ document décrit le **modèle de collecte** et liste les **décisions de concept
 (`domain/metrics.ts`, `domain/report.ts`, `domain/device.ts`, `domain/presence.ts`,
 `protocol/agent.ts`, `features/metrics.ts`, `features/device.ts`).
 
-## Modèle à deux cadences (+ report + presence)
+## Modèle à cadence unique (+ report + presence)
 
 Toute la collecte est **réglable par appareil** et **poussée par le serveur** à
 l'agent (`agent.config`) à la connexion **et** à chaque changement.
 
+Un tick = **un instant** : métriques *et* processus, sous un seul `ts`, dans un
+seul message (`metrics.batch`). Un point de graphe ne peut donc jamais exister
+sans les processus qui l'expliquent.
+
 | Flux | Cadence (défaut) | Contenu | Stockage |
 |---|---|---|---|
-| **Métriques** (léger) | ~10 s | CPU/RAM/disque/réseau/charge/temp/GPU/batterie/users/connexions. **Pas de scan process.** | `device_metrics` |
-| **Snapshots** (lourd) | ~5 min | `collect_full` = métriques + `process_count` + E/S disque ; **+ liste des processus** (`all`/`top`/`off`). Points cliquables de la frise. | `device_metrics` + `device_process_samples` |
-| **Report** | 1 h (+ connexion) | OS + posture sécurité + par-disque (`disks[]`). Dernier état seulement. | `devices.report_json` |
+| **Collecte** | 60 s | CPU/RAM/disque/réseau/charge/temp/GPU/batterie/users/connexions + `process_count` + E/S disque + **liste des processus** (`all`/`top`/`off`). Chaque point est cliquable sur la frise. | `device_metrics` + `device_process_samples` |
+| **Report** | 1 h (+ connexion) | OS + posture sécurité + par-disque (`disks[]`) + ports en écoute + connexions. Dernier état seulement. | `devices.report_json` |
 | **Presence** | sur transition | online/offline de l'agent (frise de disponibilité). | `device_presence` |
 
 Défauts serveur dans [`src/agent/mappers.ts`](../src/agent/mappers.ts)
-(`DEFAULT_METRIC_INTERVAL_SECONDS`/`…SNAPSHOT…`/`…CAPTURE`). Rétentions :
-`METRICS_RETENTION_DAYS` (métriques + presence, déf. 30 j) et
-`PROCESS_RETENTION_DAYS` (processus, déf. **1 j** — la donnée la plus volumineuse),
+(`DEFAULT_METRIC_INTERVAL_SECONDS` = 60, `DEFAULT_PROCESS_CAPTURE` = `all`).
+Rétentions : `METRICS_RETENTION_DAYS` (métriques + presence, déf. 30 j) et
+`PROCESS_RETENTION_DAYS` (processus, déf. 30 j — la donnée la plus volumineuse),
 balayées chaque heure depuis [`index.ts`](../index.ts).
+
+### Une seule énumération par tick
+
+Le coût du tick vient de deux sondes, partagées par tous les signaux :
+
+- **`ps` étendu** (`report::scan_processes`) → liste des processus, `process_count`,
+  et sur Linux les E/S par process via `/proc/<pid>/io`. Élargir le format de `ps`
+  ne coûte rien de mesurable, d'où pid/threads/user/uptime « gratuits ».
+- **`ss -tuanpH`** (`sockets::read_sockets`) → ports en écoute, connexions
+  établies, `activeConnections` **et** connexions entrantes/sortantes par process.
+  Cette sonde unique remplace les trois d'avant (`ss -tulnH` + `ss -tn state
+  established` ×2) et coûte moins cher au total.
+
+Mesuré sur une machine à 700 processus : **~40 ms par tick**, soit moins que
+l'ancien cycle lourd, pour 10× plus d'instants historisés.
+
+### Stockage des processus
+
+Une ligne par instant, la liste étant un **blob JSON gzip** (`payload`), et non
+une ligne par processus. À 60 s, le modèle ligne-par-process coûterait
+~120 Mo/jour/appareil ; le blob coûte ~7 Mo. C'est sûr parce qu'**aucune requête
+n'agrège les processus par nom à travers le temps** : `nearest`, `snapshotTimes`,
+`storage`, `deleteRange`, `setPinnedRange`, `pruneByRetention` travaillent toutes
+sur `ts`.
 
 ## Invariants / points forts à préserver
 
@@ -37,11 +64,18 @@ maintenable**.
    → Ne pas dupliquer la config côté agent ; ne pas l'appliquer uniquement « à
    chaud ».
 
-2. **Lignes métriques à deux formes.** Les champs remplis seulement au snapshot
-   (`processCount`, `diskReadBytes`, `diskWriteBytes`) sont `null` sur les lignes
-   fines. Les séries filtrent les `null` ; le live merge garde la dernière valeur
-   non-nulle (`SPARSE_FIELDS` dans `Monitoring/index.tsx`). → Tout nouveau champ
-   « lourd » doit être `nullable` et ajouté à `SPARSE_FIELDS`.
+2. **`null` = inconnu, jamais « pas encore mesuré ».** Toutes les lignes
+   métriques ont désormais la même forme : un champ `null` signifie que la sonde
+   est indisponible (pas de capteur, pas les droits, plateforme sans l'API), pas
+   qu'on est entre deux cycles. `SPARSE_FIELDS` (dans `MonitoringPanel.tsx`) ne
+   garde donc plus que les sondes réellement optionnelles (GPU, température,
+   charge, batterie, E/S disque). → Un nouveau champ best-effort doit être
+   `nullable` ; ne l'ajouter à `SPARSE_FIELDS` que s'il est *intermittent*.
+
+   Corollaire côté types : `metricSnapshotSchema` (ce que l'agent envoie) porte
+   `processes`, `metricSeriesPointSchema` (ce que `metrics.query` relit) ne les
+   porte pas — une fenêtre de graphe contient des centaines de points et
+   trimballer chaque liste coûterait des mégaoctets pour rien.
 
 3. **Downsample : moyenne pour les jauges, max pour les compteurs.** Le `SELECT`
    bucketisé (`(FLOOR(ts/?)*?) AS ts`) et le `GROUP BY` utilisent **la même
@@ -80,10 +114,23 @@ maintenable**.
    Passer par ces helpers.
 
 10. **Frise : clic = instant, glissé = plage.** Distinction par seuil
-    (`CLICK_SLOP_PX`) ; le clic s'aligne sur le repère de snapshot le plus proche.
-    Le `focus` (`live`/`range`/`snapshot`) pilote **fenêtre des graphes,
-    résolution, KPI et processus** de façon unifiée. → Garder le `focus` comme
-    pilote unique (pas d'états parallèles).
+    (`CLICK_SLOP_PX`) ; le clic s'aligne sur le repère le plus proche. Le `focus`
+    (`live`/`range`/`snapshot`) pilote **fenêtre des graphes, résolution, KPI et
+    processus** de façon unifiée. → Garder le `focus` comme pilote unique (pas
+    d'états parallèles).
+
+    Chaque point étant un instant complet, les repères sont ~1440/jour : au-delà
+    de `MAX_INDIVIDUAL_MARKS` la frise dessine des **bandes continues** au lieu de
+    traits (les instants épinglés restent visibles individuellement). → Ne pas
+    revenir à un rendu un-div-par-repère.
+
+11. **Ports : une bulle = un port joignable de la même façon.** L'agent renvoie
+    une entrée **par adresse de bind** (correct : un service dual-stack écoute
+    vraiment sur `0.0.0.0` *et* `::`). C'est l'UI qui fusionne, par
+    `(port, joignabilité, interface)`, en unissant protocoles et familles IP
+    (`client/src/Features/Monitoring/ports.ts`). → Ne pas dédupliquer côté agent
+    sur autre chose que des lignes strictement identiques : l'adresse porte
+    l'information d'exposition.
 
 ## Cycle de vie d'un appareil & suppression
 
@@ -132,3 +179,6 @@ Statuts (`devices.status`) : `pending` → `active`, `revoked` (réversible via
   (fait par `sync-types.sh`).
 - **`.sql` lus au runtime** : ajouter une migration ne redéclenche pas
   `tsx watch` ; elles s'appliquent au boot.
+- **Types CSS générés** : après ajout d'une classe dans un `*.module.css`,
+  lancer `npm run gen:css-types` dans `client/` (sinon `styles.maClasse` ne
+  compile pas), puis `npx prettier --write "src/**/*.css.d.ts"`.

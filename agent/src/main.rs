@@ -22,6 +22,7 @@ mod protocol;
 mod report;
 mod runner;
 mod service;
+mod sockets;
 mod state;
 mod sync;
 mod terminal;

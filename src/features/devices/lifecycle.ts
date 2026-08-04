@@ -142,11 +142,7 @@ export const deviceSetConfigFeature: FeatureDefinition<
             metadata: { deviceId: row.id, ...patch }
         });
         // If a cadence or the capture mode changed, push it to a live agent.
-        if (
-            input.metricIntervalSeconds !== undefined ||
-            input.snapshotIntervalSeconds !== undefined ||
-            input.processCapture !== undefined
-        ) {
+        if (input.metricIntervalSeconds !== undefined || input.processCapture !== undefined) {
             ctx.monitor?.pushConfig(row.id, deviceAgentConfig(updated));
         }
         return { device: await toDevice(ctx, updated) };
