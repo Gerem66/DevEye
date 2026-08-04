@@ -1202,6 +1202,42 @@
     border-radius: var(--radius-sm);
 }
 
+/* Replaces the whole server-configuration area once a provider is connected. */
+.providerCard {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border: 1px solid var(--success);
+    border-radius: var(--radius-sm);
+    background: var(--success-bg);
+}
+
+.providerCardCheck {
+    flex-shrink: 0;
+    color: var(--success);
+    font-size: 1.25rem;
+    line-height: 1.2;
+}
+
+.providerCardBody {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.providerCardTitle {
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.providerCardAddress {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    overflow-wrap: anywhere;
+}
+
 .tabBar {
     display: flex;
     gap: 2px;

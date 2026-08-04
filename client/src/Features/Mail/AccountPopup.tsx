@@ -63,6 +63,13 @@ export function AccountPopup() {
     const [testResult, setTestResult] = useState<string | null>(null);
     const [testing, setTesting] = useState(false);
     const [oauthBusy, setOauthBusy] = useState<MailOAuthProvider | null>(null);
+    /**
+     * A mailbox was connected during *this* opening of the form. The account
+     * already exists server-side at that point, so even a plain "Fermer" has to
+     * tell the caller to reload — otherwise a freshly connected mailbox stays
+     * missing from the list until the next background poll.
+     */
+    const [connected, setConnected] = useState(false);
     const initial = useRef<MailAccountDraft>(DEFAULT_DRAFT);
     /**
      * An OAuth mailbox: its servers and secrets belong to the provider, so the
@@ -77,10 +84,37 @@ export function AccountPopup() {
         setDraft((prev) => ({ ...prev, [key]: value }));
     }
 
+    /** An account as this form's draft. Secrets are never echoed back, so they start blank. */
+    function draftFromAccount(account: MailAccount): MailAccountDraft {
+        return {
+            displayName: account.displayName,
+            emailAddress: account.emailAddress,
+            securityTier: account.securityTier,
+            imap: { host: account.imapHost, port: account.imapPort, username: '', password: '' },
+            smtp: { host: account.smtpHost, port: account.smtpPort, username: '', password: '' },
+            proxy: null
+        };
+    }
+
+    /** Point the form at an existing account, with nothing counted as unsaved yet. */
+    function adopt(account: MailAccount): void {
+        setAccountId(account.id);
+        setMode('edit');
+        setAuthMethod(account.authMethod);
+        setSyncIntervalMinutes(account.syncIntervalMinutes);
+        const next = draftFromAccount(account);
+        setDraft(next);
+        initial.current = next;
+        setProxyEnabled(account.proxyConfigured);
+        setProxyPreconfigured(account.proxyConfigured);
+        setProxyTouched(false);
+    }
+
     function handleOpen(input: MailAccount | null): void {
         setTestResult(null);
         setErrorName('');
         setErrorEmail('');
+        setConnected(false);
         setAccountId(input?.id ?? null);
         setMode(input ? 'edit' : 'add');
         setAuthMethod(input?.authMethod ?? 'password');
@@ -88,16 +122,7 @@ export function AccountPopup() {
         // Land straight on the tab that has something to show: the manual form
         // for a password account, the provider notice for an OAuth one.
         setTab(input && input.authMethod === 'password' ? 'manual' : 'providers');
-        const next: MailAccountDraft = input
-            ? {
-                  displayName: input.displayName,
-                  emailAddress: input.emailAddress,
-                  securityTier: input.securityTier,
-                  imap: { host: input.imapHost, port: input.imapPort, username: '', password: '' },
-                  smtp: { host: input.smtpHost, port: input.smtpPort, username: '', password: '' },
-                  proxy: null
-              }
-            : DEFAULT_DRAFT;
+        const next: MailAccountDraft = input ? draftFromAccount(input) : DEFAULT_DRAFT;
         setDraft(next);
         setProxyEnabled(input?.proxyConfigured ?? false);
         setProxyPreconfigured(input?.proxyConfigured ?? false);
@@ -107,7 +132,7 @@ export function AccountPopup() {
 
     const dirty = JSON.stringify(draft) !== JSON.stringify(initial.current);
 
-    function close(result: AccountPopupResult = null): void {
+    function close(result: AccountPopupResult = connected ? 'oauth-connected' : null): void {
         ClosePopup(ACCOUNT_POPUP, result);
     }
 
@@ -195,34 +220,53 @@ export function AccountPopup() {
         }
     }
 
+    /**
+     * Waits for the consent window to finish, by message or by closing.
+     *
+     * Never rejects on close, and never trusts the message as the verdict. The
+     * callback page is served from `PUBLIC_ORIGIN`, which is not necessarily the
+     * origin the app itself was loaded from — in dev it is the API port while
+     * the SPA is on Vite's — and `postMessage` to a mismatched target origin is
+     * dropped without a word. Treating that silence as failure reported a
+     * connection error for a mailbox the server had just created. The message
+     * is now only a way to stop waiting early; the account list decides.
+     */
+    function awaitConsentWindow(popup: Window): Promise<{ error: string | null }> {
+        return new Promise((resolve) => {
+            const finish = (result: { error: string | null }) => {
+                window.removeEventListener('message', onMessage);
+                clearInterval(poll);
+                resolve(result);
+            };
+            function onMessage(e: MessageEvent) {
+                const data = e.data as { source?: string; ok?: boolean; error?: string } | undefined;
+                if (data?.source !== 'deveye-mail-oauth') return;
+                finish({ error: data.ok ? null : (data.error ?? 'Échec de connexion') });
+            }
+            const poll = window.setInterval(() => {
+                if (popup.closed) finish({ error: null });
+            }, 500);
+            window.addEventListener('message', onMessage);
+        });
+    }
+
     async function connectOAuth(provider: MailOAuthProvider): Promise<void> {
         setOauthBusy(provider);
         setTestResult(null);
         try {
+            const before = new Set((await ws.send('mail.accountList', {})).accounts.map((a) => a.id));
             const res = await ws.send('mail.oauthStart', { provider, securityTier: draft.securityTier });
             const popup = window.open(res.authUrl, 'deveye-mail-oauth', 'width=520,height=680');
             if (!popup) throw new Error('Fenêtre bloquée par le navigateur — autorisez les popups pour DevEye.');
-            await new Promise<void>((resolve, reject) => {
-                let settled = false;
-                function onMessage(e: MessageEvent) {
-                    const data = e.data as { source?: string; ok?: boolean; error?: string } | undefined;
-                    if (data?.source !== 'deveye-mail-oauth') return;
-                    settled = true;
-                    window.removeEventListener('message', onMessage);
-                    clearInterval(poll);
-                    if (data.ok) resolve();
-                    else reject(new Error(data.error || 'Échec de connexion'));
-                }
-                const poll = window.setInterval(() => {
-                    if (popup.closed && !settled) {
-                        clearInterval(poll);
-                        window.removeEventListener('message', onMessage);
-                        reject(new Error('Fenêtre fermée avant la fin de la connexion.'));
-                    }
-                }, 500);
-                window.addEventListener('message', onMessage);
-            });
-            close('oauth-connected');
+
+            const { error } = await awaitConsentWindow(popup);
+            // The server is the only thing that knows whether the account got
+            // created, so ask it rather than inferring from the window.
+            const created = (await ws.send('mail.accountList', {})).accounts.find((a) => !before.has(a.id));
+            if (!created) throw new Error(error ?? 'La connexion n’a pas abouti.');
+
+            adopt(created);
+            setConnected(true);
         } catch (e) {
             setTestResult(e instanceof Error ? e.message : 'Échec de connexion.');
         } finally {
@@ -248,14 +292,18 @@ export function AccountPopup() {
                     error={errorName}
                     onChange={(e) => set('displayName', e.target.value)}
                 />
-                <TextInput
-                    type='email'
-                    placeholder='adresse@exemple.com'
-                    value={draft.emailAddress}
-                    error={errorEmail}
-                    disabled={providerManaged}
-                    onChange={(e) => set('emailAddress', e.target.value)}
-                />
+                {/* A provider-managed mailbox has its address shown on the card
+                    below, where it belongs — a disabled copy of it here was just
+                    a dead field taking up the form. */}
+                {!providerManaged && (
+                    <TextInput
+                        type='email'
+                        placeholder='adresse@exemple.com'
+                        value={draft.emailAddress}
+                        error={errorEmail}
+                        onChange={(e) => set('emailAddress', e.target.value)}
+                    />
+                )}
 
                 <div className={styles.tierChoice}>
                     {(['open', 'guarded'] as MailSecurityTier[]).map((tier) => (
@@ -303,15 +351,25 @@ export function AccountPopup() {
                     </div>
                 )}
 
-                {(providerManaged || tab === 'providers') && (
-                    <div className={styles.oauthButtons}>
-                        {providerManaged ? (
+                {providerManaged && (
+                    <div className={styles.providerCard}>
+                        <span className={`icon icon-check-circle ${styles.providerCardCheck}`} aria-hidden='true' />
+                        <span className={styles.providerCardBody}>
+                            <strong className={styles.providerCardTitle}>
+                                Connecté via {authMethod === 'oauth_google' ? 'Google' : 'Microsoft'}
+                            </strong>
+                            <span className={styles.providerCardAddress}>{draft.emailAddress}</span>
                             <span className={styles.fieldHint}>
-                                Ce compte est connecté via {authMethod === 'oauth_google' ? 'Google' : 'Microsoft'} :
-                                ses identifiants et ses serveurs sont gérés par le fournisseur, il n’y a rien à modifier
-                                ici. Pour repartir de zéro, supprimez-le puis reconnectez-le.
+                                Les identifiants et les serveurs sont gérés par le fournisseur — il n’y a rien à
+                                configurer ici. Pour repartir de zéro, supprimez cette boîte puis reconnectez-la.
                             </span>
-                        ) : mode === 'add' ? (
+                        </span>
+                    </div>
+                )}
+
+                {!providerManaged && tab === 'providers' && (
+                    <div className={styles.oauthButtons}>
+                        {mode === 'add' ? (
                             <>
                                 <Button
                                     variant='secondary'
