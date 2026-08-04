@@ -55,8 +55,12 @@
     gap: var(--space-sm);
 }
 
+/* Takes the space between the (mobile-only) back arrow and the actions, rather
+   than being centred between them by the toolbar's `space-between`. */
 .headline {
     margin: 0;
+    flex: 1 1 auto;
+    min-width: 0;
     font-size: 0.9rem;
     font-weight: 600;
     color: var(--text-primary);
@@ -72,12 +76,28 @@
     flex-shrink: 0;
 }
 
+/* Steps back from the message list to the folders, on the one layout where the
+   two can't be shown side by side. Revealed by the media query at the bottom of
+   this file — never visible on a wide screen, where both columns are present
+   and stepping back would mean nothing.
+
+   Qualified with `.iconBtn` (which the button also carries) rather than written
+   alone: `.iconBtn` sets `display: inline-flex` further down the file and would
+   otherwise win on source order. The media query below is qualified for the same
+   reason. */
+.iconBtn.mobileBack {
+    display: none;
+    flex-shrink: 0;
+}
+
 .feature {
     display: grid;
-    /* Actual value set inline per-render (wider while panel A shows the
+    /* The width itself is set inline per-render (wider while panel A shows the
        account list, narrower once it shows the compact selected-account +
-       folders — see index.tsx); this is just the initial/fallback value. */
-    grid-template-columns: 300px 1fr;
+       folders — see index.tsx), but through a custom property rather than this
+       shorthand: an inline `grid-template-columns` would beat the media query
+       below, which is what collapses the two columns into one. */
+    grid-template-columns: var(--mail-sidebar-width, 300px) 1fr;
     gap: var(--space-md);
     flex: 1 1 auto;
     min-height: 0;
@@ -1062,7 +1082,9 @@
 .messageBodyFrame {
     width: 100%;
     height: 70vh;
-    min-height: 400px;
+    /* The floor has to stay under the viewport it sits in, or on a short screen
+       it pushes the frame taller than the dialog containing it. */
+    min-height: min(400px, 55vh);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
 }
@@ -1427,4 +1449,61 @@
     align-items: center;
     gap: var(--space-sm);
     flex-wrap: wrap;
+}
+
+/* ------------------------------------------------------------------ *
+ * Touch input
+ *
+ * The row actions live on hover, which a finger never produces — they
+ * were simply unreachable. Here they come back into the flow beside the
+ * date, permanently visible, which costs the sender and subject a little
+ * width (both already ellipsize) and nothing else: the absolute
+ * positioning and the fade exist purely to serve the hover reveal.
+ * ------------------------------------------------------------------ */
+
+@media (hover: none) {
+    .messageMeta {
+        gap: var(--space-xs);
+    }
+
+    .messageRowActions {
+        position: static;
+        transform: none;
+        margin-right: 0;
+        opacity: 1;
+        pointer-events: auto;
+        transition: none;
+    }
+}
+
+/* ------------------------------------------------------------------ *
+ * Phones (the client's usual breakpoint — see WidgetPopup, WidgetGrid)
+ *
+ * The sidebar alone is wider than the whole viewport, so the two columns
+ * become two steps of one journey instead: accounts → folders (panel A's
+ * own slide track, unchanged) → messages. Only one column is mounted at a
+ * time; `data-mobile-view` says which, and the toolbar's back arrow steps
+ * out of the messages — the same ← already used on the account card, so
+ * the gesture reads the same at every depth.
+ * ------------------------------------------------------------------ */
+
+@media (max-width: 640px) {
+    .feature {
+        grid-template-columns: 1fr;
+    }
+
+    .feature[data-mobile-view='messages'] .sidebar,
+    .feature[data-mobile-view='panel'] .messageColumnWrap {
+        display: none;
+    }
+
+    /* The divider separated two columns; with one there is nothing to divide. */
+    .messageColumnWrap {
+        border-left: none;
+        padding-left: 0;
+    }
+
+    .iconBtn.mobileBack {
+        display: inline-flex;
+    }
 }

@@ -55,6 +55,13 @@ export default function Mail(_props: FeatureProps) {
     // independent of the selection (see AccountPanel), also used here to
     // widen the column while the (more space-hungry) account list shows.
     const [showAccountList, setShowAccountList] = useState(true);
+    /**
+     * Which of the two columns is on screen once there is only room for one.
+     * Inert on desktop — nothing reads it there — because the switch itself is
+     * pure CSS (see `.feature[data-mobile-view]` in the stylesheet), which keeps
+     * the wide layout free of any width detection.
+     */
+    const [mobileView, setMobileView] = useState<'panel' | 'messages'>('panel');
 
     const [folders, setFolders] = useState<MailFolder[]>([]);
     const [foldersLoading, setFoldersLoading] = useState(false);
@@ -596,9 +603,25 @@ export default function Mail(_props: FeatureProps) {
             ? `${selectedFolder.name}${selectedFolder.unreadCount > 0 ? ` · ${selectedFolder.unreadCount} non lu${selectedFolder.unreadCount > 1 ? 's' : ''}` : ''}`
             : (selectedAccount?.displayName ?? 'Sélectionnez une boîte mail');
 
+    // The messages step only exists once a folder is picked; anything else (no
+    // account yet, a deleted one) falls back to the panel rather than to an
+    // empty column with no way back.
+    const mobileStep = selectedFolderId !== null ? mobileView : 'panel';
+
     return (
         <div className={styles.root}>
             <div className={styles.toolbar}>
+                {mobileStep === 'messages' && (
+                    <button
+                        type='button'
+                        className={`${styles.iconBtn} ${styles.mobileBack}`}
+                        title='Retour aux dossiers'
+                        aria-label='Retour aux dossiers'
+                        onClick={() => setMobileView('panel')}
+                    >
+                        <span className='icon icon-arrow-left' />
+                    </button>
+                )}
                 <p className={styles.headline}>{headline}</p>
                 <div className={styles.toolbarActions}>
                     <button
@@ -623,7 +646,14 @@ export default function Mail(_props: FeatureProps) {
 
             {error && <p className={styles.error}>{error}</p>}
 
-            <div className={styles.feature} style={{ gridTemplateColumns: `${showAccountList ? 300 : 230}px 1fr` }}>
+            {/* The sidebar width goes through a custom property rather than
+                `grid-template-columns` directly: an inline shorthand would
+                outrank the media query that collapses this to one column. */}
+            <div
+                className={styles.feature}
+                data-mobile-view={mobileStep}
+                style={{ '--mail-sidebar-width': showAccountList ? '300px' : '230px' } as React.CSSProperties}
+            >
                 <div className={styles.sidebar}>
                     {accountsLoading ? (
                         <p className={styles.empty}>Chargement…</p>
@@ -653,7 +683,10 @@ export default function Mail(_props: FeatureProps) {
                             folders={folders}
                             foldersLoading={foldersLoading}
                             selectedFolderId={selectedFolderId}
-                            onSelectFolder={(f) => setSelectedFolderId(f.id)}
+                            onSelectFolder={(f) => {
+                                setSelectedFolderId(f.id);
+                                setMobileView('messages');
+                            }}
                             showList={showAccountList}
                             onShowList={() => setShowAccountList(true)}
                             onDeleteAccount={(a) => void deleteAccount(a)}
