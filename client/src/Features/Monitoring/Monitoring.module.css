@@ -662,6 +662,10 @@
     border: 1px solid var(--border);
     background: linear-gradient(120deg, color-mix(in srgb, var(--activity-color) 14%, transparent), transparent 70%);
     --activity-color: var(--text-muted);
+    /* Transitioning the tint (registered as a `<color>` in Styles/theme.css)
+       rather than any one property that uses it: it inherits, so the label, the
+       icon and the dot's halo below all cross-fade from this single line. */
+    transition: --activity-color var(--transition-slow);
 }
 .activityHero.muted {
     opacity: 0.6;

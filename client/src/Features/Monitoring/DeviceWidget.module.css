@@ -11,14 +11,19 @@
 
 /* Full-bleed activity background. Negative inset reaches past the Widget's own
    padding to the card edges; the Widget's `overflow: hidden` clips it to the
-   rounded card. Tinted by `--activity-color`, set per level below. */
+   rounded card. Tinted by `--activity-color`, set per level below.
+
+   The transition is on the tint itself, not on `background`: the gradient only
+   ever changes by `var()` substitution, which no engine interpolates. The
+   property is registered as a `<color>` in Styles/theme.css, which is what makes
+   this animate — the gradient then just recomputes each frame. */
 .bg {
     position: absolute;
     inset: calc(-1 * var(--space-md));
     z-index: 0;
     --activity-color: transparent;
     background: linear-gradient(135deg, color-mix(in srgb, var(--activity-color) 22%, transparent), transparent 72%);
-    transition: background var(--transition-slow, 0.4s);
+    transition: --activity-color var(--transition-slow, 0.4s);
 }
 
 .lvlIdle {
