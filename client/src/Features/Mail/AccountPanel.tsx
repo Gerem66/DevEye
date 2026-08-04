@@ -86,10 +86,12 @@ export function AccountPanel({
                             onReorder={onReorder}
                             onDragStateChange={onDragStateChange}
                         />
-                        <button type='button' className={styles.accountAddBtn} onClick={onAdd}>
-                            <span className='icon icon-plus' /> Ajouter une boîte mail
-                        </button>
                     </div>
+                    {/* Sibling of the scroll area, not a child of it: inside, its
+                        `margin-top: auto` left it clipped once the list overflowed. */}
+                    <button type='button' className={styles.accountAddBtn} onClick={onAdd}>
+                        <span className='icon icon-plus' /> Ajouter une boîte mail
+                    </button>
                 </div>
 
                 <div className={styles.panelASlide}>

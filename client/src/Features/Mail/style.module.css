@@ -230,7 +230,6 @@
 .accountListScroll {
     display: flex;
     flex-direction: column;
-    gap: var(--space-xs);
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
@@ -241,9 +240,9 @@
     align-items: center;
     justify-content: center;
     gap: var(--space-xs);
-    /* Pinned to the bottom of the column when the list doesn't fill it;
-       scrolls to right after the last card once it does. */
-    margin-top: auto;
+    /* Sits below the scroll area rather than inside it, so it stays whole and
+       reachable however long the account list gets. */
+    margin-top: var(--space-xs);
     flex-shrink: 0;
     padding: var(--space-sm);
     border: 1px dashed var(--glass-border);
