@@ -395,6 +395,27 @@ export class SecureStore implements Cipher {
     private cachedOpenDek: Promise<Buffer> | null = null;
 
     /**
+     * Le compte dont les clés chiffrent cet espace : son **propriétaire**.
+     *
+     * Pour un espace personnel c'est l'appelant lui-même — comportement
+     * strictement identique à avant l'introduction des espaces. Pour un espace
+     * partagé, c'est le propriétaire, ce qui garantit qu'aucune donnée déjà
+     * écrite n'a besoin d'être re-chiffrée : elle l'a été sous cette même clé.
+     *
+     * Conséquence assumée en l'état : si le propriétaire a activé le chiffrement
+     * par mot de passe, lui seul peut lire l'espace partagé (les autres membres
+     * voient les lignes mais aucun contenu). L'ouverture réelle du partage passe
+     * par une clé d'espace dédiée, wrappée par la clé serveur — elle ne peut pas
+     * être introduite par une migration SQL, puisque déballer l'existant exige le
+     * mot de passe vivant du propriétaire. Ce sera une action explicite du
+     * propriétaire, session déverrouillée.
+     */
+    private readonly ownerUserId: number;
+
+    /** L'appelant est le propriétaire : son déverrouillage de session s'applique. */
+    private readonly sessionOwnsKeys: boolean;
+
+    /**
      * Always-available tier. Deliberately not gated: anything written here is
      * readable by the live server, so only put data whose exposure the user has
      * accepted (e.g. a note not marked private).
@@ -406,13 +427,16 @@ export class SecureStore implements Cipher {
 
     constructor(
         private readonly keys: SecretKeyService,
-        private readonly userId: number,
+        scope: { ownerUserId: number; callerUserId: number },
         private readonly sessionId: string,
         private readonly crypt: Encryption
-    ) {}
+    ) {
+        this.ownerUserId = scope.ownerUserId;
+        this.sessionOwnsKeys = scope.ownerUserId === scope.callerUserId;
+    }
 
     private async row(): Promise<UserSecretKeyRow> {
-        if (!this.cachedRow) this.cachedRow = await this.keys.ensureRow(this.userId);
+        if (!this.cachedRow) this.cachedRow = await this.keys.ensureRow(this.ownerUserId);
         return this.cachedRow;
     }
 
@@ -428,7 +452,7 @@ export class SecureStore implements Cipher {
      * first uses of a listing into a single lookup. A failure is not cached.
      */
     private resolveOpenDek(): Promise<Buffer> {
-        this.cachedOpenDek ??= this.keys.resolveOpenDek(this.userId).catch((e: unknown) => {
+        this.cachedOpenDek ??= this.keys.resolveOpenDek(this.ownerUserId).catch((e: unknown) => {
             this.cachedOpenDek = null;
             throw e;
         });
@@ -447,6 +471,16 @@ export class SecureStore implements Cipher {
         if (!this.keys.isPasswordWrapped(row)) {
             return this.keys.resolveServerDek(row);
         }
+        // La clé est emballée par le mot de passe de son propriétaire. Seule la
+        // session de ce dernier peut la déballer : un autre membre n'a aucun
+        // moyen de l'obtenir, et son propre déverrouillage ne vaut pas pour
+        // cette clé. On échoue fermé plutôt que de servir du contenu illisible.
+        if (!this.sessionOwnsKeys) {
+            throw new FeatureError(
+                'forbidden',
+                'Le propriétaire de cet espace a activé le chiffrement par mot de passe : son contenu ne peut être lu que par lui'
+            );
+        }
         const dek = liveDek(this.sessionId);
         if (!dek) {
             throw new FeatureError('locked', 'Password encryption is locked; unlock with your password');
@@ -462,6 +496,7 @@ export class SecureStore implements Cipher {
     async isUnlocked(): Promise<boolean> {
         const row = await this.row();
         if (!this.keys.isPasswordWrapped(row)) return true;
+        if (!this.sessionOwnsKeys) return false;
         return liveDek(this.sessionId) !== null;
     }
 
@@ -472,6 +507,7 @@ export class SecureStore implements Cipher {
     async isUnlockedPassive(): Promise<boolean> {
         const row = await this.row();
         if (!this.keys.isPasswordWrapped(row)) return true;
+        if (!this.sessionOwnsKeys) return false;
         return hasLiveDek(this.sessionId);
     }
 
@@ -500,22 +536,32 @@ export class SecureStore implements Cipher {
     }
 }
 
-/** Factory wiring used by the WS dispatcher to build `ctx.secure` per session. */
+/**
+ * Fabrique utilisée par le dispatcheur WS pour bâtir `ctx.secure`, scopé à
+ * `(espace, session)` : les clés sont celles du propriétaire de l'espace, et le
+ * déverrouillage de session ne s'applique que si l'appelant est ce propriétaire.
+ */
 export function createSecureStore(
     db: Database,
     crypt: Encryption,
-    userId: number,
+    scope: { ownerUserId: number; callerUserId: number },
     sessionId: string
 ): { store: SecureStore; keys: SecretKeyService } {
     const keys = new SecretKeyService(db, crypt);
-    return { store: new SecureStore(keys, userId, sessionId, crypt), keys };
+    return { store: new SecureStore(keys, scope, sessionId, crypt), keys };
 }
 
 /**
- * A user's **open** tier alone, with no session behind it — for background jobs
- * that must read or write feature data while nobody is connected (the uptime
- * scheduler). Only the open tier is reachable this way, by construction: the
- * guarded tier needs a live session unlock and has no meaning here.
+ * L'étage **ouvert** d'un utilisateur, sans session derrière — pour les tâches
+ * de fond qui lisent ou écrivent des données alors que personne n'est connecté
+ * (ordonnanceur uptime, synchro mail). Seul cet étage est atteignable ainsi, par
+ * construction : l'étage gardé exige un déverrouillage de session et n'aurait
+ * ici aucun sens.
+ *
+ * Toujours indexé par utilisateur : les features qui l'utilisent (Uptime, Mail)
+ * ne sont pas encore rattachées à un espace. Il prendra un id d'espace en même
+ * temps qu'elles, sans changer de corps — l'espace résout la clé de son
+ * propriétaire, qui est exactement ce qu'on passe ici aujourd'hui.
  */
 export function createOpenCipher(db: Database, crypt: Encryption, userId: number): Cipher {
     const keys = new SecretKeyService(db, crypt);

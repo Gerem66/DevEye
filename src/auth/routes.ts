@@ -136,6 +136,12 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit }: Aut
         const passwordHash = await hashPassword(password);
         const row = await db.users.create({ email, username, passwordHash, role: 'user' });
 
+        // Tout compte possede un espace personnel, cree ici et nulle part
+        // ailleurs. Il ne peut pas exister avant le compte (sa FK proprietaire
+        // le reference), d'ou l'ordre : compte -> espace -> rattachement.
+        const personal = await db.workspaces.createPersonal(row.id, username);
+        await db.users.setPersonalWorkspace(row.id, personal.id);
+
         await issueSession(reply, db, row.id);
         const bundle = await loadUserBundle(db, row.id);
         if (!bundle) {

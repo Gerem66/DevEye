@@ -1,11 +1,16 @@
 import type { Database } from '@/db';
-import type { HomeLayout, MinimalUser, ThemeStateDTO, User, UserRole, Workspace } from 'deveye-types';
+import type { HomeLayout, MinimalUser, SessionBundle, ThemeStateDTO, UserRole, Workspace } from 'deveye-types';
 import { homeLayoutSchema, themeStateSchema } from 'deveye-types';
 
-export async function loadUserBundle(
-    db: Database,
-    userId: number
-): Promise<{ user: User; workspaces: Workspace[] } | null> {
+/**
+ * Charge tout ce qu'une session a besoin de connaître : le compte, ses espaces,
+ * et **le seul espace actif** avec son thème et sa disposition d'accueil.
+ *
+ * Le thème des autres espaces n'est délibérément pas embarqué (`bgImages` peut
+ * contenir plusieurs data URLs de fond d'écran) : basculer d'espace va chercher
+ * les siens.
+ */
+export async function loadUserBundle(db: Database, userId: number): Promise<SessionBundle | null> {
     const row = await db.users.findById(userId);
     if (!row) return null;
 
@@ -23,14 +28,13 @@ export async function loadUserBundle(
 
     const wsRows = await db.workspaces.findAccessibleByUser(userId);
     const memberRows = wsRows.length ? await db.workspaceMembers.listByWorkspaceIds(wsRows.map((w) => w.id)) : [];
-
     const memberIds = Array.from(new Set(memberRows.map((m) => m.user_id)));
     const memberUserRows = memberIds.length ? await db.users.findByIds(memberIds) : [];
 
     const workspaces: Workspace[] = wsRows.map((w) => {
-        const userIds = memberRows.filter((m) => m.workspace_id === w.id).map((m) => m.user_id);
+        const userIds = new Set(memberRows.filter((m) => m.workspace_id === w.id).map((m) => m.user_id));
         const users: MinimalUser[] = memberUserRows
-            .filter((u) => userIds.includes(u.id))
+            .filter((u) => userIds.has(u.id))
             .map((u) => ({
                 id: u.id,
                 email: u.email,
@@ -40,52 +44,46 @@ export async function loadUserBundle(
             }));
         return {
             id: w.id,
+            kind: w.kind,
             name: w.name,
             logo: w.logo,
+            ownerUserId: w.owner_user_id,
             users,
             features: parseStringArray(w.features),
-            reAuthInterval: w.re_auth_interval,
             created: Number(w.created)
         };
     });
 
-    // Personal/private workspace (id 0). Not a row in `workspaces`: it belongs to
-    // the user alone, its features live on `users.features`, and its items use
-    // `workspace_id = NULL`. Always surfaced first.
-    const personalWorkspace: Workspace = {
-        id: 0,
-        name: row.username,
-        logo: 'default-workspace.png',
-        users: [
-            {
-                id: row.id,
-                email: row.email,
-                username: row.username,
-                avatar: row.avatar,
-                created: Number(row.created)
-            }
-        ],
-        features: parseStringArray(row.features),
-        reAuthInterval: null,
-        created: Number(row.created)
-    };
+    // L'espace favori s'il est encore accessible, sinon le personnel. Un favori
+    // dont l'accès a été révoqué ne doit pas bloquer la connexion : on retombe
+    // silencieusement sur l'espace personnel, qui est toujours là.
+    const accessible = new Set(workspaces.map((w) => w.id));
+    const activeWorkspaceId =
+        row.default_workspace_id !== null && accessible.has(row.default_workspace_id)
+            ? row.default_workspace_id
+            : row.personal_workspace_id;
 
-    const user: User = {
-        id: row.id,
-        email: row.email,
-        username: row.username,
-        avatar: row.avatar,
-        role: (row.role === 'admin' ? 'admin' : 'user') as UserRole,
-        settings: parseStringArray(row.settings),
-        security,
-        defaultWorkspace: row.default_workspace,
-        lastLogin: Number(row.last_login),
-        created: Number(row.created),
-        theme: parseTheme(row.theme),
-        homeLayout: parseHomeLayout(row.home_layout)
-    };
+    const activeRow = await db.workspaces.findById(activeWorkspaceId);
 
-    return { user, workspaces: [personalWorkspace, ...workspaces] };
+    return {
+        user: {
+            id: row.id,
+            email: row.email,
+            username: row.username,
+            avatar: row.avatar,
+            role: (row.role === 'admin' ? 'admin' : 'user') as UserRole,
+            settings: parseStringArray(row.settings),
+            security,
+            personalWorkspaceId: row.personal_workspace_id,
+            defaultWorkspaceId: row.default_workspace_id,
+            lastLogin: Number(row.last_login),
+            created: Number(row.created)
+        },
+        workspaces,
+        activeWorkspaceId,
+        theme: parseTheme(activeRow?.theme),
+        homeLayout: parseHomeLayout(activeRow?.home_layout)
+    };
 }
 
 function parseTheme(raw: string | null | undefined): ThemeStateDTO | null {
@@ -112,7 +110,7 @@ function parseStringArray(raw: unknown): string[] {
     if (Array.isArray(raw)) return raw.map(String);
     if (typeof raw === 'string') {
         try {
-            const parsed = JSON.parse(raw);
+            const parsed: unknown = JSON.parse(raw);
             return Array.isArray(parsed) ? parsed.map(String) : [];
         } catch {
             return [];

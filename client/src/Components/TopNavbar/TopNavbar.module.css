@@ -364,6 +364,36 @@
     margin: var(--space-xs) calc(-1 * var(--space-xs));
 }
 
+/* Intitulé de la section « Espaces » du menu. */
+.menuLabel {
+    padding: var(--space-xs) var(--space-md);
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+/* La coche de l'espace courant occupe sa place même quand elle est absente, pour
+   que les noms restent alignés d'une ligne à l'autre. */
+.workspaceCheck {
+    margin-left: auto;
+    width: 14px;
+    height: 14px;
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.workspaceItem.current {
+    background: var(--accent-bg);
+}
+
+.workspaceName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Drop the hint first when the centre gets tight, so the title can stay centred
    without colliding with the left/right clusters. */
 @media (max-width: 860px) {

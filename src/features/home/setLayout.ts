@@ -8,7 +8,7 @@ export const homeSetLayoutFeature: FeatureDefinition<
 > = defineFeature({
     ...homeSetLayout,
     handler: async (ctx, input) => {
-        await ctx.db.users.setHomeLayout(ctx.userId, JSON.stringify(input));
+        await ctx.db.workspaces.setHomeLayout(ctx.workspaceId, JSON.stringify(input));
         ctx.audit({ action: 'home.setLayout', level: 'debug', description: "Disposition d'accueil modifiée" });
         return { ok: true };
     }

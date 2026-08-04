@@ -1,23 +1,30 @@
+import type { WorkspaceRow } from 'deveye-types';
+
+import type Encryption from '@/Services/Encryption';
+import { createSecureStore, type SecureStore } from '@/Services/SecureStore';
+import type { SecretKeyService } from '@/Services/SecretKeyService';
 import type { Database } from '@/db';
+import { FeatureError } from './_define';
 
 /**
- * Authorization resolution for feature commands.
+ * Résolution d'autorisation des commandes de feature.
  *
- * This is the single place that answers "what is this caller allowed to do?".
- * The WS dispatcher resolves an {@link AccessRecord} once per command and hands
- * the result to the handler through the feature context, so no handler ever
- * queries the role itself.
+ * C'est le seul endroit qui répond à « que le droit l'appelant a-t-il ? ». Le
+ * dispatcheur WS résout un {@link ResolvedScope} par commande et le passe au
+ * handler via son contexte : aucun handler n'interroge jamais le rôle ni
+ * l'appartenance lui-même.
  */
 
 /**
- * Bumped whenever something that grants or revokes access changes (today: an
- * account's global role). Every cached record carries the epoch it was built
- * under, so a mismatch forces a rebuild on the next command — a revocation takes
- * effect immediately, with no per-command database round-trip and no timer.
+ * Incrémenté dès que quelque chose qui accorde ou révoque un accès change (rôle
+ * global, adhésion à un espace). Chaque entrée en cache retient l'époque sous
+ * laquelle elle a été bâtie ; une divergence force sa reconstruction à la
+ * commande suivante — la révocation prend donc effet immédiatement, sans
+ * requête par commande ni minuteur.
  */
 let accessEpoch = 0;
 
-/** Invalidate every cached access record, across all live connections. */
+/** Invalide toutes les résolutions en cache, sur toutes les connexions vivantes. */
 export function invalidateAccess(): void {
     accessEpoch += 1;
 }
@@ -33,47 +40,131 @@ export async function isAdminUser(db: Database, userId: number): Promise<boolean
     return user?.role === 'admin';
 }
 
-/** Everything the dispatcher needs to authorize a command. */
-export interface AccessRecord {
-    /**
-     * Caller holds the global `admin` role — the gate for the device fleet and
-     * the system pages (Logs). Deliberately *not* a key to other users' data.
-     */
+/** L'espace visé par une commande, tel que le voit un handler. */
+export interface WorkspaceContext {
+    id: number;
+    kind: 'personal' | 'shared';
+    ownerUserId: number;
+    name: string;
+    /** Features activées sur l'espace (`workspaces.features`). */
+    features: readonly string[];
+}
+
+/** Tout ce dont le dispatcheur a besoin pour autoriser puis servir une commande. */
+export interface ResolvedScope {
+    workspace: WorkspaceContext;
+    /** Rôle global du compte : flotte d'appareils et pages système. */
     isAdmin: boolean;
+    /** L'appelant possède cet espace. */
+    isOwner: boolean;
+    /** Coffre chiffré de cet espace, lié à cette session. */
+    secure: SecureStore;
+    secretKeys: SecretKeyService;
 }
 
 export interface AccessResolver {
-    resolve(): Promise<AccessRecord>;
+    /**
+     * Résout l'espace visé. `undefined` → l'espace personnel de l'appelant.
+     * Lève `forbidden` si l'appelant n'en est pas membre, `not_found` s'il
+     * n'existe pas.
+     */
+    forWorkspace(workspaceId: number | undefined): Promise<ResolvedScope>;
+    /**
+     * L'espace personnel de l'appelant, quelle que soit l'enveloppe. Sert les
+     * commandes de compte (`secrecy`, `twofa`, avatar…) : elles doivent toujours
+     * viser le coffre de l'utilisateur, jamais celui d'un espace partagé.
+     */
+    forAccount(): Promise<ResolvedScope>;
+}
+
+function toContext(row: WorkspaceRow): WorkspaceContext {
+    return {
+        id: row.id,
+        kind: row.kind,
+        ownerUserId: row.owner_user_id,
+        name: row.name,
+        features: parseFeatures(row.features)
+    };
+}
+
+function parseFeatures(raw: unknown): string[] {
+    if (Array.isArray(raw)) return raw.map(String);
+    if (typeof raw === 'string') {
+        try {
+            const parsed: unknown = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed.map(String) : [];
+        } catch {
+            return [];
+        }
+    }
+    return [];
 }
 
 /**
- * Build the per-connection access resolver.
+ * Bâtit le résolveur d'accès d'une connexion.
  *
- * Costs one query on the first command of a connection and nothing afterwards:
- * the record is reused until {@link invalidateAccess} bumps the epoch. Resolving
- * per command instead would put an extra `users` lookup in front of every hot
- * path (live metric polling, note listing…) to answer a question that changes
- * approximately never.
+ * Chaque espace résolu est mémoïsé pour la durée de la connexion et réutilisé
+ * jusqu'à ce que {@link invalidateAccess} incrémente l'époque. Résoudre à chaque
+ * commande mettrait deux requêtes devant tous les chemins chauds (relevé de
+ * métriques, listage de notes) pour répondre à des questions qui ne changent
+ * quasiment jamais.
  */
-export function createAccessResolver(db: Database, userId: number): AccessResolver {
-    let cached: { epoch: number; record: Promise<AccessRecord> } | null = null;
+export function createAccessResolver(
+    db: Database,
+    crypt: Encryption,
+    userId: number,
+    sessionId: string
+): AccessResolver {
+    const cache = new Map<number | 'personal', { epoch: number; scope: Promise<ResolvedScope> }>();
+
+    const build = async (workspaceId: number | undefined): Promise<ResolvedScope> => {
+        const user = await db.users.findById(userId);
+        if (!user) throw new FeatureError('auth_invalid', 'Compte introuvable');
+
+        const targetId = workspaceId ?? user.personal_workspace_id;
+        const row = await db.workspaces.findById(targetId);
+        if (!row) throw new FeatureError('not_found', 'Espace introuvable');
+
+        // L'appartenance est la frontière, sans exception : même un admin global
+        // n'entre pas dans l'espace d'autrui. Le bypass admin porte sur la flotte
+        // et les pages système, jamais sur les données d'un autre compte.
+        if (!(await db.workspaceMembers.isMember(userId, row.id))) {
+            throw new FeatureError('forbidden', 'Vous n’êtes pas membre de cet espace');
+        }
+
+        const { store, keys } = createSecureStore(
+            db,
+            crypt,
+            { ownerUserId: row.owner_user_id, callerUserId: userId },
+            sessionId
+        );
+
+        return {
+            workspace: toContext(row),
+            isAdmin: user.role === 'admin',
+            isOwner: row.owner_user_id === userId,
+            secure: store,
+            secretKeys: keys
+        };
+    };
+
+    const resolve = (key: number | 'personal', workspaceId: number | undefined): Promise<ResolvedScope> => {
+        const hit = cache.get(key);
+        if (hit && hit.epoch === accessEpoch) return hit.scope;
+
+        const epoch = accessEpoch;
+        const scope = build(workspaceId).catch((e: unknown) => {
+            // Ne jamais mettre un échec en cache : la commande suivante réessaie
+            // au lieu d'hériter d'un refus qui n'a plus lieu d'être.
+            if (cache.get(key)?.epoch === epoch) cache.delete(key);
+            throw e;
+        });
+        cache.set(key, { epoch, scope });
+        return scope;
+    };
 
     return {
-        resolve(): Promise<AccessRecord> {
-            if (cached && cached.epoch === accessEpoch) return cached.record;
-
-            const epoch = accessEpoch;
-            const record = (async (): Promise<AccessRecord> => ({
-                isAdmin: await isAdminUser(db, userId)
-            }))().catch((e: unknown) => {
-                // Never cache a failure: a transient database error must not
-                // leave the connection stuck believing it isn't an admin.
-                if (cached?.epoch === epoch) cached = null;
-                throw e;
-            });
-
-            cached = { epoch, record };
-            return record;
-        }
+        forWorkspace: (workspaceId) => resolve(workspaceId ?? 'personal', workspaceId),
+        forAccount: () => resolve('personal', undefined)
     };
 }

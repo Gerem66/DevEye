@@ -31,50 +31,29 @@ import {
 } from './_shared';
 
 /**
- * Workspace id 0 is the caller's private/personal workspace: no row, no
- * membership, items stored with `workspace_id = NULL`. Mirrors the passwords
- * feature so notes live alongside their workspace's other data.
+ * Notes et dossiers, scopés à l'espace actif.
+ *
+ * L'espace vient de l'enveloppe WS et l'appartenance est déjà vérifiée par le
+ * dispatcheur : les handlers filtrent sur `ctx.workspaceId`, sans garde ni
+ * traduction d'id.
  */
-const PERSONAL_WORKSPACE_ID = 0;
-
-async function assertWorkspaceMember(ctx: FeatureContext, workspaceId: number): Promise<void> {
-    if (workspaceId === PERSONAL_WORKSPACE_ID) return;
-    const ok = await ctx.db.workspaceMembers.isMember(ctx.userId, workspaceId);
-    if (!ok) throw new FeatureError('forbidden', 'Not a member of this workspace');
-}
-
-function toDbWorkspaceId(workspaceId: number): number | null {
-    return workspaceId === PERSONAL_WORKSPACE_ID ? null : workspaceId;
-}
-
-function rowInWorkspace(rowWorkspaceId: number | null, workspaceId: number): boolean {
-    return (rowWorkspaceId ?? PERSONAL_WORKSPACE_ID) === workspaceId;
-}
 
 /**
  * Resolve and authorize a target folder. Returns the (validated) folder id, or
- * null when unfiled. Throws `not_found` if the folder isn't the caller's or is
- * in another workspace — a note can only live in a folder of its own workspace.
+ * null when unfiled. Throws `not_found` if the folder is in another workspace —
+ * a note can only live in a folder of its own workspace.
  */
-async function resolveFolderId(
-    ctx: FeatureContext,
-    workspaceId: number,
-    folderId: number | null
-): Promise<number | null> {
+async function resolveFolderId(ctx: FeatureContext, folderId: number | null): Promise<number | null> {
     if (folderId === null) return null;
-    const folder = await ctx.db.noteFolders.findById(folderId, ctx.userId);
-    if (!folder || !rowInWorkspace(folder.workspace_id, workspaceId)) {
-        throw new FeatureError('not_found', 'Folder not found');
-    }
+    const folder = await ctx.db.noteFolders.findById(folderId, ctx.workspaceId);
+    if (!folder) throw new FeatureError('not_found', 'Folder not found');
     return folderId;
 }
 
-/** Load one of the caller's notes in this workspace, or throw `not_found`. */
-async function loadNote(ctx: FeatureContext, workspaceId: number, noteId: number): Promise<NoteRow> {
-    const row = await ctx.db.notes.findById(noteId, ctx.userId);
-    if (!row || !rowInWorkspace(row.workspace_id, workspaceId)) {
-        throw new FeatureError('not_found', 'Note not found');
-    }
+/** Load one note of the active workspace, or throw `not_found`. */
+async function loadNote(ctx: FeatureContext, noteId: number): Promise<NoteRow> {
+    const row = await ctx.db.notes.findById(noteId, ctx.workspaceId);
+    if (!row) throw new FeatureError('not_found', 'Note not found');
     return row;
 }
 
@@ -112,10 +91,9 @@ export const noteListFeature: FeatureDefinition<
 > = defineFeature({
     ...noteList,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
         const wantArchived = input.archived === true;
-        const rows = (await ctx.db.notes.listByUser(ctx.userId)).filter(
-            (r) => rowInWorkspace(r.workspace_id, input.workspaceId) && (r.archived_at !== null) === wantArchived
+        const rows = (await ctx.db.notes.listByWorkspace(ctx.workspaceId)).filter(
+            (r) => (r.archived_at !== null) === wantArchived
         );
         // The archive reads as a history: most recently archived first, rather
         // than in the user-defined order of the main list.
@@ -157,15 +135,10 @@ export const noteCountFeature: FeatureDefinition<
     typeof noteCount.output
 > = defineFeature({
     ...noteCount,
-    handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
+    handler: async (ctx) => {
         // Pure row count from clear metadata: no DEK, no unlock gate, and private
         // notes are counted like any other (no special case).
-        const rows = await ctx.db.notes.listByUser(ctx.userId);
-        const count = rows.filter(
-            (r) => rowInWorkspace(r.workspace_id, input.workspaceId) && r.archived_at === null
-        ).length;
-        return { count };
+        return { count: await ctx.db.notes.countActiveByWorkspace(ctx.workspaceId) };
     }
 });
 
@@ -173,8 +146,7 @@ export const noteGetFeature: FeatureDefinition<typeof noteGet.command, typeof no
     defineFeature({
         ...noteGet,
         handler: async (ctx, input) => {
-            await assertWorkspaceMember(ctx, input.workspaceId);
-            const row = await loadNote(ctx, input.workspaceId, input.noteId);
+            const row = await loadNote(ctx, input.noteId);
             // A private note resolves the guarded DEK here, which throws `locked`
             // on its own when the session isn't unlocked.
             const payload = await decryptPayload(cipherFor(ctx, row.is_private === 1), row.content);
@@ -187,12 +159,11 @@ export const noteAddFeature: FeatureDefinition<typeof noteAdd.command, typeof no
     defineFeature({
         ...noteAdd,
         handler: async (ctx, input) => {
-            await assertWorkspaceMember(ctx, input.workspaceId);
-            const folderId = await resolveFolderId(ctx, input.workspaceId, input.note.folderId);
+            const folderId = await resolveFolderId(ctx, input.note.folderId);
             const content = await encryptPayload(cipherFor(ctx, input.note.private), toPayload(input.note));
             const row = await ctx.db.notes.create({
                 userId: ctx.userId,
-                workspaceId: toDbWorkspaceId(input.workspaceId),
+                workspaceId: ctx.workspaceId,
                 folderId,
                 content,
                 isPrivate: input.note.private
@@ -200,7 +171,7 @@ export const noteAddFeature: FeatureDefinition<typeof noteAdd.command, typeof no
             ctx.audit({
                 action: 'note.create',
                 description: 'Note créée',
-                metadata: { noteId: row.id, workspaceId: input.workspaceId, private: input.note.private }
+                metadata: { noteId: row.id, private: input.note.private }
             });
             return { note: toNote(row, toPayload(input.note)) };
         }
@@ -213,14 +184,13 @@ export const noteEditFeature: FeatureDefinition<
 > = defineFeature({
     ...noteEdit,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        const existing = await loadNote(ctx, input.workspaceId, input.noteId);
+        const existing = await loadNote(ctx, input.noteId);
         await assertPrivateUnlocked(ctx, existing);
-        const folderId = await resolveFolderId(ctx, input.workspaceId, input.note.folderId);
+        const folderId = await resolveFolderId(ctx, input.note.folderId);
         // Re-encrypting with the draft's tier is what moves a note between
         // public and private; the old ciphertext is replaced wholesale.
         const content = await encryptPayload(cipherFor(ctx, input.note.private), toPayload(input.note));
-        const updated = await ctx.db.notes.update(input.noteId, ctx.userId, {
+        const updated = await ctx.db.notes.update(input.noteId, ctx.workspaceId, {
             folderId,
             content,
             isPrivate: input.note.private
@@ -229,7 +199,7 @@ export const noteEditFeature: FeatureDefinition<
         ctx.audit({
             action: 'note.edit',
             description: 'Note modifiée',
-            metadata: { noteId: input.noteId, workspaceId: input.workspaceId, private: input.note.private }
+            metadata: { noteId: input.noteId, private: input.note.private }
         });
         return { note: toNote(updated, toPayload(input.note)) };
     }
@@ -242,20 +212,17 @@ export const noteReorderFeature: FeatureDefinition<
 > = defineFeature({
     ...noteReorder,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        const folderId = await resolveFolderId(ctx, input.workspaceId, input.folderId);
+        const folderId = await resolveFolderId(ctx, input.folderId);
         // Reorder only the caller's own active notes in this workspace; any
         // foreign, archived or out-of-workspace id is dropped silently — the
         // same tolerance as folder.reorder.
         const eligible = new Set(
-            (await ctx.db.notes.listByUser(ctx.userId))
-                .filter((r) => rowInWorkspace(r.workspace_id, input.workspaceId) && r.archived_at === null)
-                .map((r) => r.id)
+            (await ctx.db.notes.listByWorkspace(ctx.workspaceId)).filter((r) => r.archived_at === null).map((r) => r.id)
         );
         const noteIds = input.noteIds.filter((id) => eligible.has(id));
         // Positioning never exposes nor rewrites a body, so a masked private
         // note can be re-filed and re-ranked without unlocking.
-        await ctx.db.notes.reorder(ctx.userId, folderId, noteIds);
+        await ctx.db.notes.reorder(ctx.workspaceId, folderId, noteIds);
         return { folderId, noteIds };
     }
 });
@@ -267,14 +234,13 @@ export const noteArchiveFeature: FeatureDefinition<
 > = defineFeature({
     ...noteArchive,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        const existing = await loadNote(ctx, input.workspaceId, input.noteId);
+        const existing = await loadNote(ctx, input.noteId);
         await assertPrivateUnlocked(ctx, existing);
-        await ctx.db.notes.archive(input.noteId, ctx.userId, Math.floor(Date.now() / 1000));
+        await ctx.db.notes.archive(input.noteId, ctx.workspaceId, Math.floor(Date.now() / 1000));
         ctx.audit({
             action: 'note.archive',
             description: 'Note archivée',
-            metadata: { noteId: input.noteId, workspaceId: input.workspaceId }
+            metadata: { noteId: input.noteId }
         });
         return { noteId: input.noteId };
     }
@@ -287,14 +253,13 @@ export const noteRestoreFeature: FeatureDefinition<
 > = defineFeature({
     ...noteRestore,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        const existing = await loadNote(ctx, input.workspaceId, input.noteId);
+        const existing = await loadNote(ctx, input.noteId);
         await assertPrivateUnlocked(ctx, existing);
-        await ctx.db.notes.restore(input.noteId, ctx.userId);
+        await ctx.db.notes.restore(input.noteId, ctx.workspaceId);
         ctx.audit({
             action: 'note.restore',
             description: 'Note restaurée depuis les archives',
-            metadata: { noteId: input.noteId, workspaceId: input.workspaceId }
+            metadata: { noteId: input.noteId }
         });
         return { noteId: input.noteId };
     }
@@ -307,20 +272,19 @@ export const noteDeleteFeature: FeatureDefinition<
 > = defineFeature({
     ...noteDelete,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        const existing = await loadNote(ctx, input.workspaceId, input.noteId);
+        const existing = await loadNote(ctx, input.noteId);
         // Two-step by construction: an active note is archived first, never
         // destroyed outright. Enforced here so no caller can shortcut it.
         if (existing.archived_at === null) {
             throw new FeatureError('conflict', 'Archive the note before deleting it permanently');
         }
         await assertPrivateUnlocked(ctx, existing);
-        await ctx.db.notes.delete(input.noteId, ctx.userId);
+        await ctx.db.notes.delete(input.noteId, ctx.workspaceId);
         ctx.audit({
             action: 'note.delete',
             level: 'warning',
             description: 'Note supprimée définitivement',
-            metadata: { noteId: input.noteId, workspaceId: input.workspaceId }
+            metadata: { noteId: input.noteId }
         });
         return { noteId: input.noteId };
     }
@@ -332,11 +296,8 @@ export const folderListFeature: FeatureDefinition<
     typeof folderList.output
 > = defineFeature({
     ...folderList,
-    handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        const rows = (await ctx.db.noteFolders.listByUser(ctx.userId)).filter((r) =>
-            rowInWorkspace(r.workspace_id, input.workspaceId)
-        );
+    handler: async (ctx) => {
+        const rows = await ctx.db.noteFolders.listByWorkspace(ctx.workspaceId);
         const folders = await Promise.all(
             rows.map(async (r) => toFolder(r, await decryptFolder(ctx.secure.open, r.content)))
         );
@@ -351,19 +312,18 @@ export const folderAddFeature: FeatureDefinition<
 > = defineFeature({
     ...folderAdd,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
         const name = input.name.trim();
         const content = await encryptFolder(ctx.secure.open, { name });
         const row = await ctx.db.noteFolders.create({
             userId: ctx.userId,
-            workspaceId: toDbWorkspaceId(input.workspaceId),
+            workspaceId: ctx.workspaceId,
             content
         });
         ctx.audit({
             category: 'note',
             action: 'folder.create',
             description: 'Dossier de notes créé',
-            metadata: { folderId: row.id, workspaceId: input.workspaceId }
+            metadata: { folderId: row.id }
         });
         return { folder: toFolder(row, { name }) };
     }
@@ -376,20 +336,17 @@ export const folderRenameFeature: FeatureDefinition<
 > = defineFeature({
     ...folderRename,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        const existing = await ctx.db.noteFolders.findById(input.folderId, ctx.userId);
-        if (!existing || !rowInWorkspace(existing.workspace_id, input.workspaceId)) {
-            throw new FeatureError('not_found', 'Folder not found');
-        }
+        const existing = await ctx.db.noteFolders.findById(input.folderId, ctx.workspaceId);
+        if (!existing) throw new FeatureError('not_found', 'Folder not found');
         const name = input.name.trim();
         const content = await encryptFolder(ctx.secure.open, { name });
-        const updated = await ctx.db.noteFolders.update(input.folderId, ctx.userId, content);
+        const updated = await ctx.db.noteFolders.update(input.folderId, ctx.workspaceId, content);
         if (!updated) throw new FeatureError('not_found', 'Folder not found');
         ctx.audit({
             category: 'note',
             action: 'folder.rename',
             description: 'Dossier de notes renommé',
-            metadata: { folderId: input.folderId, workspaceId: input.workspaceId }
+            metadata: { folderId: input.folderId }
         });
         return { folder: toFolder(updated, { name }) };
     }
@@ -402,17 +359,12 @@ export const folderReorderFeature: FeatureDefinition<
 > = defineFeature({
     ...folderReorder,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        // Reorder only the rows that are the caller's and in this workspace; any
-        // foreign or out-of-workspace id in `folderIds` is dropped silently.
-        const owned = (await ctx.db.noteFolders.listByUser(ctx.userId)).filter((r) =>
-            rowInWorkspace(r.workspace_id, input.workspaceId)
-        );
+        // Reorder only the rows of this workspace; any foreign id in
+        // `folderIds` is dropped silently.
+        const owned = await ctx.db.noteFolders.listByWorkspace(ctx.workspaceId);
         const ownedIds = new Set(owned.map((r) => r.id));
         const orderedIds = input.folderIds.filter((id) => ownedIds.has(id));
-        const rows = (await ctx.db.noteFolders.reorder(ctx.userId, orderedIds)).filter((r) =>
-            rowInWorkspace(r.workspace_id, input.workspaceId)
-        );
+        const rows = await ctx.db.noteFolders.reorder(ctx.workspaceId, orderedIds);
         const folders = await Promise.all(
             rows.map(async (r) => toFolder(r, await decryptFolder(ctx.secure.open, r.content)))
         );
@@ -427,28 +379,23 @@ export const folderDeleteFeature: FeatureDefinition<
 > = defineFeature({
     ...folderDelete,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        const existing = await ctx.db.noteFolders.findById(input.folderId, ctx.userId);
-        if (!existing || !rowInWorkspace(existing.workspace_id, input.workspaceId)) {
-            throw new FeatureError('not_found', 'Folder not found');
-        }
+        const existing = await ctx.db.noteFolders.findById(input.folderId, ctx.workspaceId);
+        if (!existing) throw new FeatureError('not_found', 'Folder not found');
         // The notes it holds are un-filed by the FK (ON DELETE SET NULL) with the
         // ranks they had inside the folder, which would interleave them into the
         // unfiled list. Append them at its end instead, so the user's order stays
         // meaningful and every rank stays unique within its bucket.
-        const active = (await ctx.db.notes.listByUser(ctx.userId)).filter(
-            (r) => rowInWorkspace(r.workspace_id, input.workspaceId) && r.archived_at === null
-        );
+        const active = (await ctx.db.notes.listByWorkspace(ctx.workspaceId)).filter((r) => r.archived_at === null);
         const unfiled = active.filter((r) => r.folder_id === null).map((r) => r.id);
         const orphans = active.filter((r) => r.folder_id === input.folderId).map((r) => r.id);
-        await ctx.db.noteFolders.delete(input.folderId, ctx.userId);
-        if (orphans.length > 0) await ctx.db.notes.reorder(ctx.userId, null, [...unfiled, ...orphans]);
+        await ctx.db.noteFolders.delete(input.folderId, ctx.workspaceId);
+        if (orphans.length > 0) await ctx.db.notes.reorder(ctx.workspaceId, null, [...unfiled, ...orphans]);
         ctx.audit({
             category: 'note',
             action: 'folder.delete',
             level: 'warning',
             description: 'Dossier de notes supprimé',
-            metadata: { folderId: input.folderId, workspaceId: input.workspaceId }
+            metadata: { folderId: input.folderId }
         });
         return { folderId: input.folderId };
     }

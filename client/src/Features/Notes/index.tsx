@@ -11,7 +11,7 @@ import NoteEditor, {
 } from './NoteEditor';
 import FolderNamePopup, { FOLDER_NAME_POPUP, type FolderNameInput, type FolderNameResult } from './FolderNamePopup';
 import ConfirmPopup, { NOTE_CONFIRM_POPUP, type ConfirmInput } from './ConfirmPopup';
-import ArchivePopup, { NOTE_ARCHIVE_POPUP, type ArchiveInput } from './ArchivePopup';
+import ArchivePopup, { NOTE_ARCHIVE_POPUP } from './ArchivePopup';
 import { humanizeError, withSecrecy } from './api';
 
 import { OpenPopup } from '@/Components/Popup';
@@ -47,8 +47,8 @@ function FeatureNotes({ workspace }: FeatureProps) {
         const task = (async () => {
             try {
                 const [notesRes, foldersRes] = await Promise.all([
-                    withSecrecy(() => ws.send('note.list', { workspaceId: workspace.id })),
-                    ws.send('folder.list', { workspaceId: workspace.id })
+                    withSecrecy(() => ws.send('note.list', {})),
+                    ws.send('folder.list', {})
                 ]);
                 setNotes(notesRes.notes);
                 setFolders(foldersRes.folders);
@@ -101,14 +101,10 @@ function FeatureNotes({ workspace }: FeatureProps) {
         async (existing: Note | null, draft: NoteDraft) => {
             try {
                 if (existing) {
-                    const res = await withSecrecy(() =>
-                        ws.send('note.edit', { workspaceId: workspace.id, noteId: existing.id, note: draft })
-                    );
+                    const res = await withSecrecy(() => ws.send('note.edit', { noteId: existing.id, note: draft }));
                     upsert(res.note);
                 } else {
-                    const res = await withSecrecy(() =>
-                        ws.send('note.add', { workspaceId: workspace.id, note: draft })
-                    );
+                    const res = await withSecrecy(() => ws.send('note.add', { note: draft }));
                     upsert(res.note);
                     invalidate('note.count');
                 }
@@ -127,9 +123,7 @@ function FeatureNotes({ workspace }: FeatureProps) {
             let existing: Note | null = null;
             if (summary) {
                 try {
-                    const res = await withSecrecy(() =>
-                        ws.send('note.get', { workspaceId: workspace.id, noteId: summary.id })
-                    );
+                    const res = await withSecrecy(() => ws.send('note.get', { noteId: summary.id }));
                     existing = res.note;
                 } catch (e) {
                     setActionError(humanizeError(e, 'Impossible d’ouvrir la note.'));
@@ -146,9 +140,7 @@ function FeatureNotes({ workspace }: FeatureProps) {
             // destroys; the archive popup owns the irreversible step.
             if (result === 'delete' && existing) {
                 try {
-                    await withSecrecy(() =>
-                        ws.send('note.archive', { workspaceId: workspace.id, noteId: existing!.id })
-                    );
+                    await withSecrecy(() => ws.send('note.archive', { noteId: existing!.id }));
                     setNotes((prev) => prev.filter((n) => n.id !== existing!.id));
                     invalidate('note.count');
                 } catch (e) {
@@ -201,7 +193,7 @@ function FeatureNotes({ workspace }: FeatureProps) {
     /** Open the archive; re-list only if something was restored or destroyed. */
     const openArchives = useCallback(async () => {
         setActionError(null);
-        const changed = await OpenPopup<boolean>(NOTE_ARCHIVE_POPUP, { workspaceId: workspace.id } as ArchiveInput);
+        const changed = await OpenPopup<boolean>(NOTE_ARCHIVE_POPUP);
         if (changed === true) {
             invalidate('note.count');
             await reload();
@@ -238,7 +230,7 @@ function FeatureNotes({ workspace }: FeatureProps) {
                 })
             );
             try {
-                await ws.send('note.reorder', { workspaceId: workspace.id, folderId, noteIds });
+                await ws.send('note.reorder', { folderId, noteIds });
             } catch (e) {
                 setNotes(previous);
                 setActionError(humanizeError(e, 'Déplacement impossible.'));
@@ -261,7 +253,7 @@ function FeatureNotes({ workspace }: FeatureProps) {
         const name = await OpenPopup<FolderNameResult>(FOLDER_NAME_POPUP, { name: '', mode: 'add' } as FolderNameInput);
         if (!name) return;
         try {
-            const res = await ws.send('folder.add', { workspaceId: workspace.id, name });
+            const res = await ws.send('folder.add', { name });
             setFolders((prev) => [...prev, res.folder]);
         } catch (e) {
             setActionError(humanizeError(e, 'Création du dossier impossible.'));
@@ -277,7 +269,7 @@ function FeatureNotes({ workspace }: FeatureProps) {
             } as FolderNameInput);
             if (!name || name === folder.name) return;
             try {
-                const res = await ws.send('folder.rename', { workspaceId: workspace.id, folderId: folder.id, name });
+                const res = await ws.send('folder.rename', { folderId: folder.id, name });
                 setFolders((prev) => prev.map((f) => (f.id === folder.id ? res.folder : f)));
             } catch (e) {
                 setActionError(humanizeError(e, 'Renommage impossible.'));
@@ -296,7 +288,7 @@ function FeatureNotes({ workspace }: FeatureProps) {
             } as ConfirmInput);
             if (ok !== true) return;
             try {
-                await ws.send('folder.delete', { workspaceId: workspace.id, folderId: folder.id });
+                await ws.send('folder.delete', { folderId: folder.id });
                 setFolders((prev) => prev.filter((f) => f.id !== folder.id));
                 setNotes((prev) => prev.map((n) => (n.folderId === folder.id ? { ...n, folderId: null } : n)));
             } catch (e) {
@@ -362,10 +354,7 @@ function FeatureNotes({ workspace }: FeatureProps) {
             const renumbered = ordered.map((f, idx) => ({ ...f, sortOrder: idx }));
             setFolders(renumbered);
             try {
-                const res = await ws.send('folder.reorder', {
-                    workspaceId: workspace.id,
-                    folderIds: ordered.map((f) => f.id)
-                });
+                const res = await ws.send('folder.reorder', { folderIds: ordered.map((f) => f.id) });
                 setFolders(res.folders);
             } catch (e) {
                 setFolders(previous);

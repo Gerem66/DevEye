@@ -10,7 +10,7 @@ import { createAccessResolver } from '@/features/_access';
 import { FeatureError } from '@/features/_define';
 import { forgetSession } from '@/features/password/_shared';
 import { featureHandlerMap } from '@/features/registry';
-import { createSecureStore, enterSessionCommand, exitSessionCommand, forgetSessionDek } from '@/Services/SecureStore';
+import { enterSessionCommand, exitSessionCommand, forgetSessionDek } from '@/Services/SecureStore';
 import { logger } from '@/logger';
 
 import type { CloudSyncEngine } from '@/cloudSync/engine';
@@ -66,11 +66,10 @@ export async function registerWS(
         const reqLogger = logger.child({ userId: session.userId, sid: session.sessionId });
         reqLogger.info('WS connected');
 
-        const { store: secure, keys: secretKeys } = createSecureStore(db, crypt, session.userId, session.sessionId);
-
-        // Single authority on what this caller may do, memoized for the life of
-        // the connection and rebuilt on demand when access is revoked.
-        const access = createAccessResolver(db, session.userId);
+        // Autorité unique sur ce que l'appelant peut faire et sur les clés de
+        // chaque espace, mémoïsée pour la durée de la connexion et reconstruite
+        // à la demande quand un accès est révoqué.
+        const access = createAccessResolver(db, crypt, session.userId, session.sessionId);
 
         const monitor = createMonitorTransport(hub, socket);
 
@@ -99,7 +98,7 @@ export async function registerWS(
                 return;
             }
 
-            const { command, payload, requestId: clientReqId } = parsed.data;
+            const { command, payload, requestId: clientReqId, workspaceId } = parsed.data;
             const replyId = clientReqId ?? requestId;
 
             const def = featureHandlerMap[command];
@@ -125,7 +124,13 @@ export async function registerWS(
             // Per-request audit binding: actor, IP and channel are fixed here;
             // category defaults to the command's prefix (e.g. `note` for
             // `note.add`) so handlers usually only describe the event.
+            //
+            // L'espace est estampillé ici plutôt que par chaque handler : toute
+            // ligne d'audit devient attribuable à un espace sans qu'aucune
+            // feature n'ait à y penser. Renseigné dès la résolution du scope, il
+            // reste absent des rares événements émis avant (aucun aujourd'hui).
             const defaultCategory = command.includes('.') ? command.slice(0, command.indexOf('.')) : command;
+            let auditWorkspaceId: number | undefined;
             const recordAudit = (entry: FeatureAuditEntry): void => {
                 audit.record({
                     level: entry.level,
@@ -135,7 +140,7 @@ export async function registerWS(
                     uid: session!.userId,
                     ip,
                     description: entry.description,
-                    metadata: entry.metadata ?? null
+                    metadata: { ...(entry.metadata ?? {}), workspaceId: auditWorkspaceId }
                 });
             };
 
@@ -144,9 +149,16 @@ export async function registerWS(
             // any concurrent siblings unlocked alongside it — finish.
             const dekTicket = enterSessionCommand(session!.sessionId);
             try {
-                const { isAdmin } = await access.resolve();
+                // Une commande de compte ignore l'espace annoncé par l'enveloppe
+                // et vise toujours l'espace personnel de l'appelant.
+                const scope =
+                    def.access?.scope === 'account'
+                        ? await access.forAccount()
+                        : await access.forWorkspace(workspaceId);
+                auditWorkspaceId = scope.workspace.id;
+
                 const assertAdmin = (): void => {
-                    if (!isAdmin) throw new FeatureError('forbidden', 'Réservé aux administrateurs');
+                    if (!scope.isAdmin) throw new FeatureError('forbidden', 'Réservé aux administrateurs');
                 };
                 // Declared authorization (see `FeatureAccessSpec`), enforced here
                 // so a command can never ship without its guard.
@@ -156,11 +168,14 @@ export async function registerWS(
                     {
                         db,
                         crypt,
-                        secure,
-                        secretKeys,
+                        secure: scope.secure,
+                        secretKeys: scope.secretKeys,
                         userId: session!.userId,
                         sessionId: session!.sessionId,
-                        isAdmin,
+                        workspace: scope.workspace,
+                        workspaceId: scope.workspace.id,
+                        isOwner: scope.isOwner,
+                        isAdmin: scope.isAdmin,
                         assertAdmin,
                         ip,
                         logger: reqLogger.child({ command, requestId: replyId }),

@@ -7,6 +7,7 @@ export const userSetAvatarFeature: FeatureDefinition<
     typeof userSetAvatar.output
 > = defineFeature({
     ...userSetAvatar,
+    access: { scope: 'account' },
     handler: async (ctx, input) => {
         await ctx.db.users.updateAvatar(ctx.userId, input.avatar);
         ctx.audit({ action: 'user.setAvatar', level: 'debug', description: 'Avatar modifié' });

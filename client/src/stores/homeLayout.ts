@@ -10,6 +10,7 @@ import {
     type ShortcutTemplate
 } from 'deveye-types';
 import { ws } from '@/api/ws';
+import { getActiveWorkspaceId } from './workspace';
 
 /**
  * Home grid layout: ordered **sections**, each holding ordered tiles of a single
@@ -22,7 +23,13 @@ import { ws } from '@/api/ws';
  * Holds only non-sensitive personalization metadata (feature ids, device ids,
  * pinned link objects) — never zero-knowledge payload.
  */
-const KEY = 'deveye:homeLayout';
+const KEY_PREFIX = 'deveye:homeLayout';
+
+/** Meme raisonnement que le theme : la disposition appartient a l'espace. */
+function storageKey(): string | null {
+    const id = getActiveWorkspaceId();
+    return id === null ? null : `${KEY_PREFIX}:${id}`;
+}
 
 /** A fresh home: no grid section, no navbar mini-widget. */
 const EMPTY_LAYOUT: HomeLayout = { topbar: [], sections: [] };
@@ -33,7 +40,9 @@ function uid(): string {
 
 function read(): HomeLayout {
     try {
-        const raw = localStorage.getItem(KEY);
+        const key = storageKey();
+        if (key === null) return EMPTY_LAYOUT;
+        const raw = localStorage.getItem(key);
         if (!raw) return EMPTY_LAYOUT;
         const parsed = homeLayoutSchema.safeParse(JSON.parse(raw));
         return parsed.success ? parsed.data : EMPTY_LAYOUT;
@@ -47,7 +56,9 @@ const listeners = new Set<() => void>();
 
 function persist(): void {
     try {
-        localStorage.setItem(KEY, JSON.stringify(state));
+        const key = storageKey();
+        if (key === null) return;
+        localStorage.setItem(key, JSON.stringify(state));
     } catch {
         // ignore (private mode, quota, etc.)
     }
@@ -280,9 +291,20 @@ export function pruneMissingDevices(validDeviceIds: Set<string>): void {
  * has none (fresh user) so the last local edit stands.
  */
 export function syncHomeLayoutFromServer(serverLayout: HomeLayout | null): void {
-    if (!serverLayout) return;
+    // Espace sans disposition enregistree : accueil vide, et surtout pas celui
+    // de l'espace precedent.
+    if (!serverLayout) {
+        resetHomeLayout();
+        return;
+    }
     state = serverLayout;
     persist();
+    for (const fn of listeners) fn();
+}
+
+/** Vide la disposition en memoire sans toucher aux cles des autres espaces. */
+export function resetHomeLayout(): void {
+    state = EMPTY_LAYOUT;
     for (const fn of listeners) fn();
 }
 

@@ -45,6 +45,7 @@ export const twoFactorStatusFeature: FeatureDefinition<
     typeof twoFactorGetStatus.output
 > = defineFeature({
     ...twoFactorGetStatus,
+    access: { scope: 'account' },
     handler: async (ctx) => ({ status: await buildStatus(ctx) })
 });
 
@@ -54,6 +55,7 @@ export const twoFactorSetupFeature: FeatureDefinition<
     typeof twoFactorSetup.output
 > = defineFeature({
     ...twoFactorSetup,
+    access: { scope: 'account' },
     handler: async (ctx) => {
         const existing = await ctx.db.twoFactor.get(ctx.userId);
         if (existing?.enabled) throw new FeatureError('conflict', '2FA is already enabled');
@@ -80,6 +82,7 @@ export const twoFactorEnableFeature: FeatureDefinition<
     typeof twoFactorEnable.output
 > = defineFeature({
     ...twoFactorEnable,
+    access: { scope: 'account' },
     handler: async (ctx, input) => {
         const row = await ctx.db.twoFactor.get(ctx.userId);
         if (!row) throw new FeatureError('conflict', 'Start 2FA setup first');
@@ -100,6 +103,7 @@ export const twoFactorDisableFeature: FeatureDefinition<
     typeof twoFactorDisable.output
 > = defineFeature({
     ...twoFactorDisable,
+    access: { scope: 'account' },
     handler: async (ctx, input) => {
         await assertValidCode(ctx, input.code);
         await ctx.db.twoFactor.disable(ctx.userId);
@@ -114,6 +118,7 @@ export const twoFactorRegenBackupFeature: FeatureDefinition<
     typeof twoFactorRegenBackup.output
 > = defineFeature({
     ...twoFactorRegenBackup,
+    access: { scope: 'account' },
     handler: async (ctx) => {
         const row = await ctx.db.twoFactor.get(ctx.userId);
         if (!row || !row.enabled) throw new FeatureError('conflict', '2FA is not enabled');

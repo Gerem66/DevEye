@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import { useAuth } from '@/auth/AuthProvider';
 import { ws } from '@/api/ws';
 import { useResourceVersion, type ResourceKey } from '@/stores/invalidation';
 import styles from './CountWidget.module.css';
+import { useActiveWorkspace } from '@/stores/workspace';
 
 /** Commands that return a plain `{ count }` for a workspace. Each doubles as
  *  its own invalidation key (see `invalidate`), so the card refreshes when the
@@ -22,11 +22,7 @@ export type CountState = { kind: 'loading' } | { kind: 'ready'; count: number };
  * deleted), so the card stays in sync without a reload.
  */
 export function useWorkspaceCount(command: CountCommand): CountState {
-    const { user, workspaces } = useAuth();
-    const workspace = useMemo(
-        () => workspaces.find((w) => w.id === user?.defaultWorkspace) ?? workspaces[0] ?? null,
-        [workspaces, user]
-    );
+    const workspace = useActiveWorkspace();
     const version = useResourceVersion(command);
     const [state, setState] = useState<CountState>({ kind: 'loading' });
 
@@ -35,7 +31,7 @@ export function useWorkspaceCount(command: CountCommand): CountState {
         let cancelled = false;
 
         const load = () => {
-            ws.send(command, { workspaceId: workspace.id })
+            ws.send(command, {})
                 .then((res) => {
                     if (!cancelled) setState({ kind: 'ready', count: res.count });
                 })

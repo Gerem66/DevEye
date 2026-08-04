@@ -10,6 +10,7 @@ import {
     type FeatureCommandName,
     type ServerMessage
 } from 'deveye-types';
+import { getActiveWorkspaceId } from '../stores/workspace';
 
 const BASE_URL: string = (import.meta.env.VITE_SERVER_URL as string | undefined) ?? '';
 
@@ -244,9 +245,14 @@ export class DevEyeWs {
             return Promise.reject(new WsError('closed', 'WS not open'));
         }
         const requestId = this.nextRequestId();
+        // L'espace actif voyage sur l'enveloppe, jamais dans le payload : aucun
+        // site d'appel n'a à le passer, et le serveur n'a qu'un point de
+        // resolution. Absent -> le serveur retombe sur l'espace personnel.
+        const workspaceId = getActiveWorkspaceId();
         const envelope: ClientMessage = {
             requestId,
             command,
+            ...(workspaceId !== null ? { workspaceId } : {}),
             payload: parsedInput.data
         };
         const clientParsed = clientMessageSchema.safeParse(envelope);

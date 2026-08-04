@@ -67,6 +67,7 @@ export const secrecyStatusFeature: FeatureDefinition<
     typeof secrecyStatus.output
 > = defineFeature({
     ...secrecyStatus,
+    access: { scope: 'account' },
     handler: async (ctx) => ({ status: await buildStatus(ctx) })
 });
 
@@ -76,6 +77,7 @@ export const secrecyUnlockFeature: FeatureDefinition<
     typeof secrecyUnlock.output
 > = defineFeature({
     ...secrecyUnlock,
+    access: { scope: 'account' },
     handler: async (ctx, input) => {
         const row = await ctx.secretKeys.ensureRow(ctx.userId);
         if (!ctx.secretKeys.isPasswordWrapped(row)) {
@@ -101,6 +103,7 @@ export const secrecyEnableFeature: FeatureDefinition<
     typeof secrecyEnable.output
 > = defineFeature({
     ...secrecyEnable,
+    access: { scope: 'account' },
     handler: async (ctx, input) => {
         await assertAccountPassword(ctx, input.password);
         const row = await ctx.secretKeys.ensureRow(ctx.userId);
@@ -138,6 +141,7 @@ export const secrecyDisableFeature: FeatureDefinition<
     typeof secrecyDisable.output
 > = defineFeature({
     ...secrecyDisable,
+    access: { scope: 'account' },
     handler: async (ctx, input) => {
         const row = await ctx.secretKeys.ensureRow(ctx.userId);
         if (!ctx.secretKeys.isPasswordWrapped(row)) {
@@ -170,6 +174,7 @@ export const secrecySetReauthFeature: FeatureDefinition<
     typeof secrecySetReauth.output
 > = defineFeature({
     ...secrecySetReauth,
+    access: { scope: 'account' },
     handler: async (ctx, input) => {
         // Persist the new window. We don't reset the current session's live DEK:
         // the new value takes effect on the next unlock/access, which keeps the
@@ -190,6 +195,7 @@ export const secrecyHoldFeature: FeatureDefinition<
     typeof secrecyHold.output
 > = defineFeature({
     ...secrecyHold,
+    access: { scope: 'account' },
     handler: async (ctx, input) => {
         // Heartbeat from an open action popup: pin (or release) the cached DEK so a
         // long edit can't trip the re-validation prompt mid-action. A no-op when
@@ -205,6 +211,7 @@ export const secrecyTouchFeature: FeatureDefinition<
     typeof secrecyTouch.output
 > = defineFeature({
     ...secrecyTouch,
+    access: { scope: 'account' },
     handler: async (ctx) => {
         // Manual "postpone the flush" from the topbar timer widget.
         touchSessionDek(ctx.sessionId);
@@ -218,6 +225,7 @@ export const secrecyLockFeature: FeatureDefinition<
     typeof secrecyLock.output
 > = defineFeature({
     ...secrecyLock,
+    access: { scope: 'account' },
     handler: async (ctx) => {
         // Manual re-lock from the topbar widget: drop the cached DEK now so the
         // next encrypted action re-prompts. No-op when nothing is cached.
@@ -233,6 +241,7 @@ export const secrecyRecoverFeature: FeatureDefinition<
     typeof secrecyRecover.output
 > = defineFeature({
     ...secrecyRecover,
+    access: { scope: 'account' },
     handler: async (ctx, input) => {
         const row = await ctx.secretKeys.ensureRow(ctx.userId);
         if (!ctx.secretKeys.isPasswordWrapped(row) || row.recovery_wrapped === null) {

@@ -60,7 +60,7 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
         if (reloadRef.current) return reloadRef.current;
         const task = (async () => {
             try {
-                const res = await withSecrecy(() => ws.send('password.list', { workspaceId: workspace.id }));
+                const res = await withSecrecy(() => ws.send('password.list', {}));
                 setAllPasswords(res.entries as PasswordEntryMasked[]);
             } catch (e) {
                 setAllPasswords([]);
@@ -114,9 +114,7 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
         async (id: number) => {
             setActionError(null);
             try {
-                const res = await withSecrecy(() =>
-                    ws.send('password.get', { workspaceId: workspace.id, passwordId: id })
-                );
+                const res = await withSecrecy(() => ws.send('password.get', { passwordId: id }));
                 replaceEntry(res.entry);
             } catch (e) {
                 setActionError(humanizeError(e, 'Impossible de récupérer le mot de passe.'));
@@ -134,9 +132,7 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
         async (id: number): Promise<boolean> => {
             setActionError(null);
             try {
-                const res = await withSecrecy(() =>
-                    ws.send('password.get', { workspaceId: workspace.id, passwordId: id })
-                );
+                const res = await withSecrecy(() => ws.send('password.get', { passwordId: id }));
                 await navigator.clipboard.writeText(res.entry.password);
                 return true;
             } catch (e) {
@@ -155,9 +151,7 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
             if (id !== null) {
                 // Need the real entry (clear password) before editing.
                 try {
-                    const res = await withSecrecy(() =>
-                        ws.send('password.get', { workspaceId: workspace.id, passwordId: id })
-                    );
+                    const res = await withSecrecy(() => ws.send('password.get', { passwordId: id }));
                     // Hand the clear entry to the edit popup ONLY — never write it
                     // into `allPasswords`, or the table would reveal the password.
                     initial = res.entry;
@@ -172,7 +166,7 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
 
             if (result === 'delete' && id !== null) {
                 try {
-                    await ws.send('password.delete', { workspaceId: workspace.id, passwordId: id });
+                    await ws.send('password.delete', { passwordId: id });
                     setAllPasswords((prev) => prev.filter((p) => p.id !== id));
                     invalidate('password.count');
                 } catch (e) {
@@ -186,15 +180,11 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
                     if (id === null || result.id === 0) {
                         const { id: _omit, ...entry } = result;
                         void _omit;
-                        const res = await withSecrecy(() =>
-                            ws.send('password.add', { workspaceId: workspace.id, entry })
-                        );
+                        const res = await withSecrecy(() => ws.send('password.add', { entry }));
                         upsertMasked(res.entry);
                         invalidate('password.count');
                     } else {
-                        const res = await withSecrecy(() =>
-                            ws.send('password.edit', { workspaceId: workspace.id, entry: result })
-                        );
+                        const res = await withSecrecy(() => ws.send('password.edit', { entry: result }));
                         upsertMasked(res.entry);
                     }
                 } catch (e) {

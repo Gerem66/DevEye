@@ -1,6 +1,12 @@
 import { workspaceAdd } from 'deveye-types';
-import { defineFeature, type FeatureDefinition } from '../_define';
+import { invalidateAccess } from '../_access';
+import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 
+/**
+ * Crée un espace partagé dont l'appelant devient propriétaire. Le repo l'y
+ * inscrit comme membre dans la foulée — sans quoi il ne verrait pas l'espace
+ * qu'il vient de créer.
+ */
 export const workspaceAddFeature: FeatureDefinition<
     typeof workspaceAdd.command,
     typeof workspaceAdd.input,
@@ -8,27 +14,42 @@ export const workspaceAddFeature: FeatureDefinition<
 > = defineFeature({
     ...workspaceAdd,
     handler: async (ctx, input) => {
-        const workspace = await ctx.db.workspaces.create({ name: input.name });
-        await ctx.db.workspaceMembers.add({
-            userId: ctx.userId,
-            workspaceId: workspace.id,
-            roles: ['owner']
+        const owner = await ctx.db.users.findById(ctx.userId);
+        if (!owner) throw new FeatureError('auth_invalid', 'Compte introuvable');
+
+        const workspace = await ctx.db.workspaces.create({
+            ownerUserId: ctx.userId,
+            name: input.name.trim()
         });
+
+        // L'appelant vient de gagner un accès : les scopes mémoïsés de sa
+        // connexion doivent être rebâtis pour que le nouvel espace soit
+        // immédiatement adressable.
+        invalidateAccess();
 
         ctx.audit({
             action: 'workspace.create',
-            description: `Espace de travail créé : « ${workspace.name} »`,
-            metadata: { workspaceId: workspace.id }
+            description: `Espace créé : « ${workspace.name} »`,
+            metadata: { createdWorkspaceId: workspace.id }
         });
 
         return {
             workspace: {
                 id: workspace.id,
+                kind: workspace.kind,
                 name: workspace.name,
                 logo: workspace.logo,
-                users: [],
+                ownerUserId: workspace.owner_user_id,
+                users: [
+                    {
+                        id: owner.id,
+                        email: owner.email,
+                        username: owner.username,
+                        avatar: owner.avatar,
+                        created: Number(owner.created)
+                    }
+                ],
                 features: [],
-                reAuthInterval: workspace.re_auth_interval,
                 created: Number(workspace.created)
             }
         };

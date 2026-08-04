@@ -8,6 +8,7 @@ import { ConnectionStatus } from './ConnectionStatus';
 import { TopbarWidgets } from './topbarWidgets';
 import { EditableTopbarWidgets } from './EditableTopbarWidgets';
 import AboutContent from './AboutContent';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import styles from './TopNavbar.module.css';
 
 const ENV = import.meta.env.VITE_ENV;
@@ -43,6 +44,10 @@ export interface TopNavbarProps {
     organizing?: boolean;
     /** Leave the home organization mode. */
     onDoneOrganizing?: () => void;
+    /** Basculer vers un autre espace de travail. */
+    onSelectWorkspace?: (workspaceId: number) => void;
+    /** Ouvrir la création d'un espace. */
+    onCreateWorkspace?: () => void;
 }
 
 /**
@@ -59,7 +64,9 @@ export default function TopNavbar({
     onOpenSettings,
     onOrganize,
     organizing,
-    onDoneOrganizing
+    onDoneOrganizing,
+    onSelectWorkspace,
+    onCreateWorkspace
 }: TopNavbarProps) {
     const { user, logout } = useAuth();
     const [menuOpen, setMenuOpen] = useState(false);
@@ -261,6 +268,21 @@ export default function TopNavbar({
                                     <span className='icon icon-edit' /> Organiser l’accueil
                                 </button>
                             )}
+                            {/* Section « Espaces » : le contexte de travail, entre les
+                                réglages personnels et les entrées de flotte. */}
+                            {onSelectWorkspace && onCreateWorkspace && (
+                                <WorkspaceSwitcher
+                                    onSelect={(id) => {
+                                        onSelectWorkspace(id);
+                                        setMenuOpen(false);
+                                    }}
+                                    onCreate={() => {
+                                        onCreateWorkspace();
+                                        setMenuOpen(false);
+                                    }}
+                                />
+                            )}
+
                             {/* Second separator: groups "fleet" entries (Appareils,
                                 Logs) apart from the personal settings above. */}
                             {(onOpenDevices || onOpenLogs) && <hr className={styles.divider} />}

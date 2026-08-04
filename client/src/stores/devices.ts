@@ -47,6 +47,19 @@ export async function refreshDevices(): Promise<void> {
     markHomeReady();
 }
 
+/**
+ * Vide la liste et repasse en chargement, a la deconnexion.
+ *
+ * Indispensable : sans ca, la session suivante demarre avec les appareils de la
+ * precedente et `loading: false`. La home lance alors son elagage des tuiles
+ * d'appareils (`pruneMissingDevices`) contre une liste etrangere et **supprime
+ * definitivement** de la disposition les tuiles dont les appareils n'existaient
+ * pas chez l'utilisateur d'avant.
+ */
+export function resetDevices(): void {
+    emit({ devices: [], loading: true, error: null });
+}
+
 /** Optimistic local removal after `device.delete`; the next poll reconciles. */
 export function removeDeviceLocal(id: string): void {
     emit({ devices: state.devices.filter((d) => d.id !== id) });

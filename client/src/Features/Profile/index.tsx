@@ -9,6 +9,7 @@ import type { FeatureProps } from '@/Features/types';
 import { ACCEPTED_TYPES, avatarSrc, fileToAvatarDataUrl } from './avatar';
 import { PasswordDialog } from './PasswordDialog';
 import styles from './style.module.css';
+import { useWorkspaceState } from '@/stores/workspace';
 
 const SECURITY_MAX = 3;
 
@@ -25,7 +26,8 @@ function formatDate(time: number): string {
 }
 
 export default function FeatureProfile({ user, workspace }: FeatureProps) {
-    const { workspaces, logout, updateUser } = useAuth();
+    const { logout, updateUser } = useAuth();
+    const { workspaces } = useWorkspaceState();
     const [passwordOpen, setPasswordOpen] = useState(false);
 
     const securityScore =

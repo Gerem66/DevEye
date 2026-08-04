@@ -1,7 +1,9 @@
 import { useState, useCallback, useMemo, useEffect, useRef, type ComponentType, type ReactNode } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
+import { setActiveWorkspace, upsertWorkspace, useActiveWorkspace, useWorkspaceState } from '@/stores/workspace';
 import { ws } from '@/api/ws';
+import { OpenPopup } from '@/Components/Popup';
 import { isHomeReady, onHomeReady } from '@/stores/homeReady';
 import { useDevices } from '@/stores/devices';
 import {
@@ -20,6 +22,7 @@ import { Wallpaper } from '@/Components/Wallpaper';
 import { SettingsPanel } from '@/Components/SettingsPanel';
 import { InfoPopup } from '@/Components/InfoPopup';
 import PopupUnlock from './popup-unlock';
+import CreateWorkspacePopup, { CREATE_WORKSPACE_POPUP } from './popup-create-workspace';
 
 // Structural feature views (no grid card)
 import Clients from '@/Features/Clients';
@@ -109,7 +112,9 @@ function formatDate(): string {
 }
 
 export default function HomePage() {
-    const { user, workspaces, setWorkspaces } = useAuth();
+    const { user, refresh } = useAuth();
+    const { epoch: workspaceEpoch } = useWorkspaceState();
+    const currentWorkspace = useActiveWorkspace();
     const layout = useHomeLayout();
     const { devices, loading: devicesLoading } = useDevices();
 
@@ -133,10 +138,6 @@ export default function HomePage() {
     const forceUnmountRef = useRef<Set<string>>(new Set());
     // Expand requested while another popup is still open / animating out.
     const pendingExpandRef = useRef<{ widgetId: string; forceReset: boolean } | null>(null);
-
-    const currentWorkspace = useMemo(() => {
-        return workspaces.find((w) => w.id === user?.defaultWorkspace) ?? workspaces[0] ?? null;
-    }, [workspaces, user]);
 
     const unmountFeature = useCallback((featureId: string) => {
         clearTimeout(ttlTimers.current.get(featureId));
@@ -328,20 +329,28 @@ export default function HomePage() {
 
     const popupConfig = expandedConfig ?? lastConfig;
 
-    if (!user) return null;
+    if (!user || !currentWorkspace) return null;
 
-    const defaultWorkspace = currentWorkspace ?? {
-        id: 0,
-        name: 'Default',
-        logo: '',
-        users: [],
-        features: [],
-        reAuthInterval: null,
-        created: 0
+    /**
+     * Bascule d'espace : on publie le nouvel id (les commandes suivantes le
+     * portent aussitôt), puis on recharge la session — ce qui rapatrie le thème
+     * et la disposition de la cible et corrige l'id si l'accès n'existe plus.
+     * L'incrément d'époque du store remonte au passage toutes les features.
+     */
+    const handleSelectWorkspace = (workspaceId: number) => {
+        if (expandedWidget) handleClose();
+        setActiveWorkspace(workspaceId);
+        void refresh();
     };
 
-    const handleSetWorkspace = (ws: typeof defaultWorkspace) => {
-        setWorkspaces((prev) => prev.map((w) => (w.id === ws.id ? ws : w)));
+    const handleCreateWorkspace = () => {
+        void (async () => {
+            const name = await OpenPopup<string>(CREATE_WORKSPACE_POPUP);
+            if (!name) return;
+            const res = await ws.send('workspace.add', { name });
+            upsertWorkspace(res.workspace);
+            handleSelectWorkspace(res.workspace.id);
+        })();
     };
 
     /** `autoAdd` chains straight into the "add a section" dialog — used by the
@@ -433,6 +442,8 @@ export default function HomePage() {
                 onOrganize={() => startOrganizing()}
                 organizing={editing}
                 onDoneOrganizing={() => setEditing(false)}
+                onSelectWorkspace={handleSelectWorkspace}
+                onCreateWorkspace={handleCreateWorkspace}
             />
 
             {/* The grid stays mounted under the popup so the shared-element morph
@@ -487,9 +498,9 @@ export default function HomePage() {
 
                 const featureProps: FeatureProps = {
                     user,
-                    workspace: defaultWorkspace,
+                    workspace: currentWorkspace,
                     feature: { id: config.id, name: config.title, icon: config.icon, component: () => null },
-                    setWorkspace: handleSetWorkspace,
+                    setWorkspace: upsertWorkspace,
                     setFeature: () => {},
                     closeFeature: () => requestCloseFeature(id)
                 };
@@ -503,7 +514,7 @@ export default function HomePage() {
                 );
 
                 return (
-                    <FeatureKeepAlive key={`${id}-${gen}`} target={target}>
+                    <FeatureKeepAlive key={`${workspaceEpoch}-${id}-${gen}`} target={target}>
                         {body}
                     </FeatureKeepAlive>
                 );
@@ -514,6 +525,9 @@ export default function HomePage() {
             {/* Password unlock dialog — registered globally so the Password feature
                 can request it on demand. */}
             <PopupUnlock workspace={currentWorkspace} />
+
+            {/* Création d'espace, pilotée depuis le menu de la topbar. */}
+            <CreateWorkspacePopup />
 
             {/* Shared info dialog, registered once here so any feature's "i" button
                 opens it via openInfo(). */}

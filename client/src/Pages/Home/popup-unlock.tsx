@@ -41,7 +41,7 @@ function PopupUnlock({ workspace }: PopupUnlockProps) {
         setSubmitting(true);
         setError('');
         try {
-            await ws.send('password.unlock', { workspaceId: workspace.id, password });
+            await ws.send('password.unlock', { password });
             reset();
             ClosePopup('popup-unlock', true);
         } catch (e) {

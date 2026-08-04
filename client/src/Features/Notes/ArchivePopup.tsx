@@ -13,10 +13,6 @@ import type { NoteSummary } from 'deveye-types';
 
 export const NOTE_ARCHIVE_POPUP = 'popup-note-archives';
 
-export interface ArchiveInput {
-    workspaceId: number;
-}
-
 /** Full date + time of an archiving, epoch seconds. */
 function formatArchivedAt(time: number): string {
     return new Date(time * 1000).toLocaleDateString('fr-FR', {
@@ -38,17 +34,16 @@ function formatArchivedAt(time: number): string {
  * the caller knows whether to re-list.
  */
 export default function ArchivePopup() {
-    const [workspaceId, setWorkspaceId] = useState(0);
     const [notes, setNotes] = useState<NoteSummary[]>([]);
     const [loaded, setLoaded] = useState(false);
     const [error, setError] = useState<string | null>(null);
     // Whether a restore/delete happened, so the caller re-lists on close.
     const changed = useRef(false);
 
-    const load = useCallback(async (wsId: number) => {
+    const load = useCallback(async () => {
         setLoaded(false);
         try {
-            const res = await withSecrecy(() => ws.send('note.list', { workspaceId: wsId, archived: true }));
+            const res = await withSecrecy(() => ws.send('note.list', { archived: true }));
             setNotes(res.notes);
         } catch (e) {
             setNotes([]);
@@ -58,13 +53,11 @@ export default function ArchivePopup() {
         }
     }, []);
 
-    function handleOpen(input: ArchiveInput | null) {
-        if (!input) return;
+    function handleOpen() {
         changed.current = false;
         setError(null);
         setNotes([]);
-        setWorkspaceId(input.workspaceId);
-        void load(input.workspaceId);
+        void load();
     }
 
     function close() {
@@ -80,7 +73,7 @@ export default function ArchivePopup() {
     async function restore(note: NoteSummary) {
         setError(null);
         try {
-            await withSecrecy(() => ws.send('note.restore', { workspaceId, noteId: note.id }));
+            await withSecrecy(() => ws.send('note.restore', { noteId: note.id }));
             forget(note.id);
         } catch (e) {
             setError(humanizeError(e, 'Restauration impossible.'));
@@ -96,7 +89,7 @@ export default function ArchivePopup() {
         } as ConfirmInput);
         if (ok !== true) return;
         try {
-            await withSecrecy(() => ws.send('note.delete', { workspaceId, noteId: note.id }));
+            await withSecrecy(() => ws.send('note.delete', { noteId: note.id }));
             forget(note.id);
         } catch (e) {
             setError(humanizeError(e, 'Suppression impossible.'));
@@ -104,7 +97,7 @@ export default function ArchivePopup() {
     }
 
     return (
-        <Popup<ArchiveInput | null>
+        <Popup
             id={NOTE_ARCHIVE_POPUP}
             title='Archives'
             width={560}

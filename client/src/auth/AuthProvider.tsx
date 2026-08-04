@@ -1,16 +1,17 @@
-import type { User, Workspace } from 'deveye-types';
+import type { SessionBundle, User } from 'deveye-types';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ApiError, login as apiLogin, logout as apiLogout, me as apiMe, refresh as apiRefresh } from '../api/http';
 import { ws } from '../api/ws';
 import { refreshSecrecyStatus, setUnlocked } from '../stores/secrecy';
 import { resetHomeReady } from '../stores/homeReady';
-import { syncThemeFromServer } from '../stores/theme';
-import { syncHomeLayoutFromServer } from '../stores/homeLayout';
+import { resetTheme, syncThemeFromServer } from '../stores/theme';
+import { resetHomeLayout, syncHomeLayoutFromServer } from '../stores/homeLayout';
+import { resetWorkspace, syncWorkspacesFromServer } from '../stores/workspace';
+import { resetDevices } from '../stores/devices';
 
 interface AuthState {
     status: 'unknown' | 'authenticated' | 'anonymous';
     user: User | null;
-    workspaces: Workspace[];
 }
 
 export interface LoginResult {
@@ -22,25 +23,25 @@ interface AuthContextValue extends AuthState {
     logout: () => Promise<void>;
     refresh: () => Promise<void>;
     updateUser: (patch: Partial<User>) => void;
-    setWorkspaces: (updater: (prev: Workspace[]) => Workspace[]) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-type FullBundle = { user: User; workspaces: Workspace[] };
-
-function applyBundle(bundle: FullBundle): AuthState {
-    syncThemeFromServer(bundle.user.theme);
-    syncHomeLayoutFromServer(bundle.user.homeLayout);
-    return {
-        status: 'authenticated',
-        user: bundle.user,
-        workspaces: bundle.workspaces
-    };
+/**
+ * Applique un bundle de session.
+ *
+ * L'ordre compte : l'espace actif est publie AVANT le theme et la disposition,
+ * car ces deux stores resolvent leur cle de stockage a partir de lui.
+ */
+function applyBundle(bundle: SessionBundle): AuthState {
+    syncWorkspacesFromServer(bundle.workspaces, bundle.activeWorkspaceId);
+    syncThemeFromServer(bundle.theme);
+    syncHomeLayoutFromServer(bundle.homeLayout);
+    return { status: 'authenticated', user: bundle.user };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-    const [state, setState] = useState<AuthState>({ status: 'unknown', user: null, workspaces: [] });
+    const [state, setState] = useState<AuthState>({ status: 'unknown', user: null });
     const refreshing = useRef<Promise<void> | null>(null);
     const reauthLock = useRef(false);
 
@@ -49,7 +50,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Next sign-in must wait for the home's first data again before its splash
         // fades, instead of inheriting this session's "ready" flag.
         resetHomeReady();
-        setState({ status: 'anonymous', user: null, workspaces: [] });
+        // Sans ces trois remises a zero, se reconnecter avec un autre compte sur
+        // la meme machine heriterait de l'espace, du theme et de l'accueil du
+        // precedent — et estampillerait ses commandes avec un espace interdit.
+        resetWorkspace();
+        resetTheme();
+        resetHomeLayout();
+        resetDevices();
+        setState({ status: 'anonymous', user: null });
     }, []);
 
     const refresh = useCallback(async () => {
@@ -112,10 +120,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setState((prev) => (prev.user ? { ...prev, user: { ...prev.user, ...patch } } : prev));
     }, []);
 
-    const setWorkspaces = useCallback((updater: (prev: Workspace[]) => Workspace[]) => {
-        setState((prev) => ({ ...prev, workspaces: updater(prev.workspaces) }));
-    }, []);
-
     // A WS `4401` only means the *access* token expired — typically while the tab
     // sat in the background. The refresh cookie is usually still valid, so instead
     // of dropping the user to the login screen we silently refresh the session and
@@ -149,8 +153,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, [reauthenticate]);
 
     const value = useMemo<AuthContextValue>(
-        () => ({ ...state, login, logout, refresh, updateUser, setWorkspaces }),
-        [state, login, logout, refresh, updateUser, setWorkspaces]
+        () => ({ ...state, login, logout, refresh, updateUser }),
+        [state, login, logout, refresh, updateUser]
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

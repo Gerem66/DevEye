@@ -7,6 +7,7 @@ import type { MonitorTransport } from '@/agent/hub';
 import type { UptimeMonitor } from '@/Services/UptimeMonitor';
 import type { ErrorCode, LogLevelName } from 'deveye-types';
 import type { Logger } from 'pino';
+import type { WorkspaceContext } from './_access';
 import type { z } from 'zod';
 
 /**
@@ -43,6 +44,16 @@ export interface FeatureContext {
     secretKeys: SecretKeyService;
     userId: number;
     sessionId: string;
+    /**
+     * L'espace visé par la commande, résolu depuis l'enveloppe WS (ou l'espace
+     * personnel de l'appelant à défaut). L'appartenance est déjà vérifiée : un
+     * handler peut s'y fier sans garde supplémentaire.
+     */
+    workspace: WorkspaceContext;
+    /** Raccourci vers `workspace.id` — la valeur sur laquelle filtrent les repos. */
+    workspaceId: number;
+    /** L'appelant possède cet espace (tous les droits, non révocables). */
+    isOwner: boolean;
     /**
      * Caller holds the global `admin` role. Resolved by the dispatcher before the
      * handler runs, so guards read it synchronously and never query the role.
@@ -100,6 +111,14 @@ export class FeatureError extends Error {
 export interface FeatureAccessSpec {
     /** Global account admin: the device fleet and the system pages. */
     admin?: true;
+    /**
+     * Commande de **compte** et non d'espace (secrecy, 2FA, avatar, mot de
+     * passe). Le dispatcheur force alors `ctx.workspace` sur l'espace personnel
+     * de l'appelant, quoi que dise l'enveloppe : `ctx.secure` reste son propre
+     * coffre, et une enveloppe pointant un espace partagé ne peut pas détourner
+     * une commande comme `secrecy.enable`.
+     */
+    scope?: 'account';
 }
 
 export interface FeatureDefinition<Cmd extends string, I extends z.ZodTypeAny, O extends z.ZodTypeAny> {

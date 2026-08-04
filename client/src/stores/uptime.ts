@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 
 import { ws } from '@/api/ws';
-import { useAuth } from '@/auth/AuthProvider';
+import { useActiveWorkspace } from './workspace';
 
 /**
  * Shared "services up / total" store, read by the home card and the navbar
@@ -86,11 +86,7 @@ function getSnapshot(): UptimeCountState {
 }
 
 export function useUptimeCount(): UptimeCountState {
-    const { user, workspaces } = useAuth();
-    const workspace = useMemo(
-        () => workspaces.find((w) => w.id === user?.defaultWorkspace) ?? workspaces[0] ?? null,
-        [workspaces, user]
-    );
+    const workspace = useActiveWorkspace();
     const snap = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
     useEffect(() => {

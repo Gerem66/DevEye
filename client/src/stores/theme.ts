@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import type { ThemeStateDTO } from 'deveye-types';
 import { THEME_SLOT_COUNT, THEME_SLOT_IMAGE_MAX_LENGTH } from 'deveye-types';
 import { ws } from '@/api/ws';
+import { getActiveWorkspaceId } from './workspace';
 
 export { THEME_SLOT_COUNT };
 
@@ -10,7 +11,21 @@ export { THEME_SLOT_COUNT };
  * Persisted in localStorage for instant paint on load, and synced to the
  * server so settings follow the user across devices.
  */
-const KEY = 'deveye:theme';
+const KEY_PREFIX = 'deveye:theme';
+
+/**
+ * Le theme appartient a l'espace, pas au compte : chaque espace a sa propre
+ * apparence, donc sa propre cle de stockage.
+ *
+ * `null` avant qu'un espace ne soit actif (ecran de connexion) : on ne lit ni
+ * n'ecrit rien, et le theme par defaut s'applique. C'est ce qui empeche par
+ * construction qu'un compte herite de l'apparence du precedent sur la meme
+ * machine.
+ */
+function storageKey(): string | null {
+    const id = getActiveWorkspaceId();
+    return id === null ? null : `${KEY_PREFIX}:${id}`;
+}
 
 export interface ThemeState {
     /** Accent hex, or null for the default cyan. */
@@ -100,7 +115,9 @@ export const BG_PRESETS: { key: string; label: string; css: string | null }[] = 
 
 function read(): ThemeState {
     try {
-        const raw = localStorage.getItem(KEY);
+        const key = storageKey();
+        if (key === null) return DEFAULT;
+        const raw = localStorage.getItem(key);
         if (!raw) return DEFAULT;
         const p = JSON.parse(raw) as Partial<ThemeState>;
         return ensureActiveSlotted({
@@ -184,7 +201,9 @@ applyTheme(state);
 
 function persist(): void {
     try {
-        localStorage.setItem(KEY, JSON.stringify(state));
+        const key = storageKey();
+        if (key === null) return;
+        localStorage.setItem(key, JSON.stringify(state));
     } catch {
         // ignore (private mode, etc.)
     }
@@ -246,7 +265,12 @@ export function clearBackgroundSlot(index: number): void {
  * Skips overwrite if the server has no saved theme (first login, or legacy user).
  */
 export function syncThemeFromServer(serverTheme: ThemeStateDTO | null): void {
-    if (!serverTheme) return;
+    // Aucun theme enregistre pour cet espace : repartir du defaut plutot que de
+    // laisser celui de l'espace precedent a l'ecran.
+    if (!serverTheme) {
+        resetTheme();
+        return;
+    }
     state = ensureActiveSlotted({
         accent: serverTheme.accent,
         bgPreset: serverTheme.bgPreset,
@@ -256,6 +280,17 @@ export function syncThemeFromServer(serverTheme: ThemeStateDTO | null): void {
         bgBlur: serverTheme.bgBlur
     });
     persist();
+    applyTheme(state);
+    for (const fn of listeners) fn();
+}
+
+/**
+ * Revient au theme par defaut sans rien ecrire : a la deconnexion, et quand un
+ * espace n'a pas encore de theme. Ne purge pas les cles des autres espaces, qui
+ * restent valables au prochain passage.
+ */
+export function resetTheme(): void {
+    state = DEFAULT;
     applyTheme(state);
     for (const fn of listeners) fn();
 }
