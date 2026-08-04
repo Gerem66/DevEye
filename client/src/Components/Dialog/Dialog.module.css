@@ -123,3 +123,15 @@
     gap: var(--space-sm);
     margin-top: var(--space-lg);
 }
+
+/* On a phone the resting inset costs 48px of a ~390px viewport, for every dialog
+   in the app. Tightened to match what WidgetPopup already does at this width. */
+@media (max-width: 640px) {
+    .root {
+        padding: var(--space-sm);
+    }
+
+    .dialog {
+        max-height: calc(100vh - 2 * var(--space-sm));
+    }
+}
