@@ -1,11 +1,11 @@
-/* ── Edit root + category blocks ────────────────────────────────────────── */
+/* ── Edit root + section blocks ─────────────────────────────────────────── */
 .editRoot {
     display: flex;
     flex-direction: column;
     gap: var(--space-lg);
 }
 
-.catBlock {
+.sectionBlock {
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
@@ -15,19 +15,19 @@
     background: color-mix(in srgb, var(--surface-widget) 35%, transparent);
 }
 
-.catDragging {
+.sectionDragging {
     border-color: var(--accent);
     box-shadow: var(--shadow-lg);
 }
 
-.catHeader {
+.sectionHeader {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
     padding: 0 var(--space-xs);
 }
 
-.catHandle {
+.sectionHandle {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -41,12 +41,12 @@
     touch-action: none;
 }
 
-.catHandle:hover {
+.sectionHandle:hover {
     color: var(--text-secondary);
     background: var(--glass-bg);
 }
 
-.catHandle:active {
+.sectionHandle:active {
     cursor: grabbing;
 }
 
@@ -54,21 +54,60 @@
     width: 18px;
 }
 
-.catTitle {
+/* The title is optional, so the field stays invisible until hovered/focused —
+   it reads as a heading first, an input second. */
+.sectionTitleInput {
+    flex: 1;
+    min-width: 0;
     margin: 0;
+    padding: 2px var(--space-xs);
+    font-family: inherit;
     font-size: 0.85rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    transition:
+        border-color var(--transition-fast),
+        background var(--transition-fast);
 }
 
-.catCount {
-    font-size: 0.74rem;
+.sectionTitleInput::placeholder {
     color: var(--text-muted);
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 400;
+}
+
+.sectionTitleInput:hover {
+    border-color: var(--glass-border);
+}
+
+.sectionTitleInput:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--glass-bg);
+    color: var(--text-primary);
+}
+
+.sectionKind,
+.sectionCount {
+    flex-shrink: 0;
+    font-size: 0.74rem;
     background: var(--glass-bg);
     border-radius: var(--radius-sm);
     padding: 1px 8px;
+}
+
+.sectionKind {
+    color: var(--text-secondary);
+}
+
+.sectionCount {
+    color: var(--text-muted);
 }
 
 /* ── Tile grid (mirrors the real WidgetGrid so edit == final layout) ─────── */
@@ -99,10 +138,18 @@
     cursor: grabbing;
 }
 
+/* The card itself rides in the overlay while dragging, so what's left in the grid
+   is the slot it will drop into — dimmed, so the target position stays readable. */
 .dragging {
-    opacity: 0.9;
-    box-shadow: var(--shadow-lg);
+    opacity: 0.25;
+}
+
+/* The floating copy under the cursor: same card, lifted off the page. */
+.overlayTile {
+    cursor: grabbing;
     border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    transform: scale(1.03);
 }
 
 .tileActions {
@@ -139,6 +186,13 @@
 .tileRemove:hover {
     background: var(--danger-bg, rgba(239, 68, 68, 0.16));
     color: var(--danger, #ef4444);
+}
+
+/* Same button, sitting inline in a section header instead of over a tile. */
+.sectionRemove {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
 }
 
 .tileAction .actionIconEdit {
@@ -214,6 +268,39 @@
 .addTileLabel {
     font-size: 0.85rem;
     font-weight: 600;
+}
+
+/* ── "Add a section" — full width, below every section block ─────────────── */
+.addSection {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    width: 100%;
+    min-height: 64px;
+    padding: var(--space-md);
+    border: 1px dashed var(--glass-border-strong, var(--glass-border));
+    border-radius: var(--radius-lg);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.addSection:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.confirmText {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
 }
 
 /* ── Add dialog: pickers ────────────────────────────────────────────────── */

@@ -4,7 +4,13 @@ import { useAuth } from '@/auth/AuthProvider';
 import { ws } from '@/api/ws';
 import { isHomeReady, onHomeReady } from '@/stores/homeReady';
 import { useDevices } from '@/stores/devices';
-import { useHomeLayout, getHomeLayout, findCategory, pruneMissingDevices } from '@/stores/homeLayout';
+import {
+    useHomeLayout,
+    getHomeLayout,
+    placedDeviceIds,
+    placedFeatureIds,
+    pruneMissingDevices
+} from '@/stores/homeLayout';
 import { onOpenViewRequest } from '@/stores/viewRequest';
 import { TopNavbar } from '@/Components/TopNavbar';
 import { Widget } from '@/Components/Widget';
@@ -28,7 +34,7 @@ import { isForceReload } from './forceReload';
 import { deviceTileVisual, deviceViewId, featureTileVisual, shortcutTileVisual } from './tiles/tileVisual';
 import { EditableHome } from './organize/EditableHome';
 
-import type { HomeCategory } from 'deveye-types';
+import type { HomeSection } from 'deveye-types';
 import type { FeatureProps } from '@/Features/types';
 import styles from './Dashboard.module.css';
 
@@ -110,6 +116,7 @@ export default function HomePage() {
     const [expandedWidget, setExpandedWidget] = useState<string | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [editing, setEditing] = useState(false);
+    const [autoAddSection, setAutoAddSection] = useState(false);
 
     // Set of view ids whose components are currently mounted (cached).
     const [mountedFeatures, setMountedFeatures] = useState<Set<string>>(new Set());
@@ -204,7 +211,7 @@ export default function HomePage() {
     const deviceViews = useMemo<ViewConfig[]>(() => {
         const out: ViewConfig[] = [];
         const seen = new Set<string>();
-        for (const id of findCategory(layout, 'device')?.items ?? []) {
+        for (const id of placedDeviceIds(layout)) {
             if (seen.has(id)) continue;
             const device = devices.find((d) => d.id === id);
             if (!device) continue;
@@ -264,7 +271,7 @@ export default function HomePage() {
         const mountPreloads = () => {
             if (preloadedRef.current || ws.state !== 'open') return;
             preloadedRef.current = true;
-            const gridFeatureIds = new Set<string>(findCategory(getHomeLayout(), 'feature')?.items ?? []);
+            const gridFeatureIds = new Set<string>(placedFeatureIds(getHomeLayout()));
             for (const config of viewsRef.current) {
                 const duration = config.cacheDurationMinutes;
                 if (!config.preload || duration === 0 || !gridFeatureIds.has(config.id)) continue;
@@ -337,20 +344,22 @@ export default function HomePage() {
         setWorkspaces((prev) => prev.map((w) => (w.id === ws.id ? ws : w)));
     };
 
-    const startOrganizing = () => {
+    /** `autoAdd` chains straight into the "add a section" dialog — used by the
+     *  empty-home prompt, where organizing is only a means to that end. */
+    const startOrganizing = (autoAdd = false) => {
         if (expandedWidget) handleClose();
+        setAutoAddSection(autoAdd);
         setEditing(true);
     };
 
-    /** Normal-mode rendering of one category as its own grid block. Returns null
-     *  for an empty category, so categories read as lightly-spaced groups with no
-     *  titles. Missing devices are skipped (pruned by the effect above). */
-    const renderCategory = (cat: HomeCategory): ReactNode => {
-        // The topbar widgets render in the navbar, not as a grid block.
-        if (cat.kind === 'topbar') return null;
+    /** Normal-mode rendering of one section as its own grid block. Returns null
+     *  for an empty section, so it never leaves a hole. Untitled sections read as
+     *  lightly-spaced groups; a title renders as a discreet heading above the
+     *  grid. Missing devices are skipped (pruned by the effect above). */
+    const renderSection = (section: HomeSection): ReactNode => {
         const tiles: ReactNode[] = [];
-        if (cat.kind === 'feature') {
-            for (const fid of cat.items) {
+        if (section.kind === 'feature') {
+            for (const fid of section.items) {
                 const v = featureTileVisual(fid);
                 if (!v) continue;
                 tiles.push(
@@ -368,8 +377,8 @@ export default function HomePage() {
                     </Widget>
                 );
             }
-        } else if (cat.kind === 'device') {
-            for (const id of cat.items) {
+        } else if (section.kind === 'device') {
+            for (const id of section.items) {
                 const device = devices.find((d) => d.id === id);
                 if (!device) continue;
                 const v = deviceTileVisual(device);
@@ -391,7 +400,7 @@ export default function HomePage() {
                 );
             }
         } else {
-            for (const item of cat.items) {
+            for (const item of section.items) {
                 const v = shortcutTileVisual(item);
                 tiles.push(
                     <Widget key={item.id} widgetId={v.widgetId} slim={v.slim} href={v.href}>
@@ -402,7 +411,8 @@ export default function HomePage() {
         }
         if (tiles.length === 0) return null;
         return (
-            <div key={cat.kind} className={styles.categoryGroup}>
+            <div key={section.id} className={styles.sectionGroup}>
+                {section.title && <h2 className={styles.sectionHeading}>{section.title}</h2>}
                 <WidgetGrid>{tiles}</WidgetGrid>
             </div>
         );
@@ -420,7 +430,7 @@ export default function HomePage() {
                 onOpenDevices={user.role === 'admin' ? (e) => handleExpand('clients', isForceReload(e)) : undefined}
                 onOpenLogs={user.role === 'admin' ? (e) => handleExpand('logs', isForceReload(e)) : undefined}
                 onOpenSettings={() => setSettingsOpen(true)}
-                onOrganize={startOrganizing}
+                onOrganize={() => startOrganizing()}
                 organizing={editing}
                 onDoneOrganizing={() => setEditing(false)}
             />
@@ -437,9 +447,19 @@ export default function HomePage() {
                     </header>
 
                     {editing ? (
-                        <EditableHome />
+                        <EditableHome autoOpenAdd={autoAddSection} />
+                    ) : layout.sections.length === 0 ? (
+                        // A fresh home has no section at all: point the way in
+                        // rather than showing a bare greeting.
+                        <button type='button' className={styles.emptyHome} onClick={() => startOrganizing(true)}>
+                            <span className={`icon icon-plus ${styles.emptyHomeIcon}`} />
+                            <span className={styles.emptyHomeTitle}>Votre accueil est vide</span>
+                            <span className={styles.emptyHomeHint}>
+                                Ajoutez une section d’appareils, de fonctionnalités ou de raccourcis.
+                            </span>
+                        </button>
                     ) : (
-                        <div className={styles.categories}>{layout.categories.map(renderCategory)}</div>
+                        <div className={styles.sections}>{layout.sections.map(renderSection)}</div>
                     )}
                 </div>
             </main>

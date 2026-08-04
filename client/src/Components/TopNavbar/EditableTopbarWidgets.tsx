@@ -19,7 +19,7 @@ import { CSS } from '@dnd-kit/utilities';
 import type { HomeTopbarWidgetId } from 'deveye-types';
 
 import { Dialog } from '@/Components/Dialog';
-import { addTopbarWidget, findCategory, removeTopbarWidget, setTopbarOrder, useHomeLayout } from '@/stores/homeLayout';
+import { addTopbarWidget, removeTopbarWidget, setTopbarOrder, useHomeLayout } from '@/stores/homeLayout';
 import { renderTopbarWidget, TOPBAR_WIDGETS } from './topbarWidgets';
 import styles from './EditableTopbarWidgets.module.css';
 
@@ -58,7 +58,7 @@ function SortableChip({ id }: { id: HomeTopbarWidgetId }) {
 /** Picker dialog listing widgets not yet pinned. */
 function AddDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
     const layout = useHomeLayout();
-    const used = new Set(findCategory(layout, 'topbar')?.items ?? []);
+    const used = new Set(layout.topbar);
     const available = TOPBAR_WIDGETS.filter((w) => !used.has(w.id));
     return (
         <Dialog open={open} onClose={onClose} title='Ajouter un widget' width={460}>
@@ -98,7 +98,7 @@ function AddDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
  */
 export function EditableTopbarWidgets() {
     const layout = useHomeLayout();
-    const items = findCategory(layout, 'topbar')?.items ?? [];
+    const items = layout.topbar;
     const [addOpen, setAddOpen] = useState(false);
 
     const sensors = useSensors(

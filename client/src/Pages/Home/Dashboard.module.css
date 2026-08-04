@@ -19,16 +19,68 @@
     padding: var(--space-lg) var(--space-lg) var(--space-xl);
 }
 
-/* Normal-mode category groups: each renders its own grid; the light gap between
-   them is the only thing separating categories (no titles on the home). */
-.categories {
+/* Normal-mode section groups: each renders its own grid. Untitled sections are
+   separated by the gap alone; a titled one adds a discreet heading. */
+.sections {
     display: flex;
     flex-direction: column;
     gap: var(--space-xl);
 }
 
-.categoryGroup {
+.sectionGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
     width: 100%;
+}
+
+.sectionHeading {
+    margin: 0 0 0 var(--space-xs);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+}
+
+/* Empty home: the only affordance on a fresh dashboard. */
+.emptyHome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    width: 100%;
+    padding: var(--space-xl) var(--space-lg);
+    border: 1px dashed var(--glass-border-strong, var(--glass-border));
+    border-radius: var(--radius-lg);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.emptyHome:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.emptyHomeIcon {
+    width: 26px;
+}
+
+.emptyHomeTitle {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.emptyHomeHint {
+    font-size: 0.85rem;
+    color: var(--text-muted);
 }
 
 .greeting {

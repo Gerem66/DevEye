@@ -145,6 +145,8 @@ function SupportedTemplates() {
 }
 
 export interface ShortcutFormProps {
+    /** Shortcut section the tile belongs to (created in / edited from). */
+    sectionId: string;
     /** When set, the form edits this shortcut instead of creating a new one. */
     initial?: ShortcutItem;
     /** Called after a successful add/save (the dialog closes in edit mode). */
@@ -157,7 +159,7 @@ export interface ShortcutFormProps {
  * URL is valid. A toggle forces a plain "simple link" preview, bypassing the
  * detected template.
  */
-export function ShortcutForm({ initial, onDone }: ShortcutFormProps) {
+export function ShortcutForm({ sectionId, initial, onDone }: ShortcutFormProps) {
     const editing = !!initial;
     const [url, setUrl] = useState(initial?.url ?? '');
     const [title, setTitle] = useState(initial?.title ?? '');
@@ -200,9 +202,9 @@ export function ShortcutForm({ initial, onDone }: ShortcutFormProps) {
         if (!canSave) return;
         const draft = { template, url: normUrl, title: title.trim(), description: description.trim() || undefined };
         if (editing && initial) {
-            updateShortcut(initial.id, draft);
+            updateShortcut(sectionId, initial.id, draft);
         } else {
-            addShortcut(draft);
+            addShortcut(sectionId, draft);
             setUrl('');
             setTitle('');
             setDescription('');

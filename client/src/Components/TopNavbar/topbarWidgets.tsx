@@ -4,7 +4,7 @@ import type { HomeTopbarWidgetId } from 'deveye-types';
 import { useDevices } from '@/stores/devices';
 import { useUptimeCount } from '@/stores/uptime';
 import { useWeather } from '@/stores/weather';
-import { findCategory, useHomeLayout } from '@/stores/homeLayout';
+import { useHomeLayout } from '@/stores/homeLayout';
 import { wmoIcon } from '@/Features/Weather/wmoIcon';
 import { SecrecyTimer } from './SecrecyTimer';
 import styles from './TopNavbar.module.css';
@@ -92,7 +92,7 @@ export function renderTopbarWidget(id: HomeTopbarWidgetId, onOpenSecurity?: (e: 
  */
 export function TopbarWidgets({ onOpenSecurity }: { onOpenSecurity?: (e: ReactMouseEvent) => void }) {
     const layout = useHomeLayout();
-    const items = findCategory(layout, 'topbar')?.items ?? [];
+    const items = layout.topbar;
     if (items.length === 0) return null;
     return (
         <div className={styles.status}>
