@@ -25,12 +25,14 @@ import { SettingsPanel } from '@/Components/SettingsPanel';
 import { InfoPopup } from '@/Components/InfoPopup';
 import PopupUnlock from './popup-unlock';
 import CreateWorkspacePopup, { CREATE_WORKSPACE_POPUP } from './popup-create-workspace';
+import AcceptInvitePopup, { clearInviteFromUrl, readInviteToken } from './popup-accept-invite';
 
 // Structural feature views (no grid card)
 import Clients from '@/Features/Clients';
 import Security from '@/Features/Security';
 import FeatureProfile from '@/Features/Profile';
 import FeatureLogs from '@/Features/Logs';
+import FeatureWorkspace from '@/Features/Workspace';
 // Device popup content (Monitoring panel without the sidebar)
 import MonitoringPanel from '@/Features/Monitoring/MonitoringPanel';
 
@@ -99,7 +101,22 @@ const STATIC_VIEWS: ViewConfig[] = [
         hasCard: false,
         FullComponent: Security
     },
-    { id: 'logs', title: 'Logs', icon: 'activity', cacheDurationMinutes: 5, hasCard: false, FullComponent: FeatureLogs }
+    {
+        id: 'logs',
+        title: 'Logs',
+        icon: 'activity',
+        cacheDurationMinutes: 5,
+        hasCard: false,
+        FullComponent: FeatureLogs
+    },
+    {
+        id: 'workspace',
+        title: 'Espace de travail',
+        icon: 'users',
+        cacheDurationMinutes: 0,
+        hasCard: false,
+        FullComponent: FeatureWorkspace
+    }
 ];
 
 function getGreeting(): string {
@@ -115,6 +132,8 @@ function formatDate(): string {
 
 export default function HomePage() {
     const { user, refresh } = useAuth();
+    // Lu une seule fois : l'URL est nettoyée dès que la popup se referme.
+    const [inviteToken, setInviteToken] = useState<string | null>(readInviteToken);
     const { epoch: workspaceEpoch } = useWorkspaceState();
     const currentWorkspace = useActiveWorkspace();
     const layout = useHomeLayout();
@@ -465,6 +484,7 @@ export default function HomePage() {
                 onOrganize={() => startOrganizing()}
                 organizing={editing}
                 onDoneOrganizing={() => setEditing(false)}
+                onManageWorkspace={(e) => handleExpand('workspace', isForceReload(e))}
                 onSelectWorkspace={handleSelectWorkspace}
                 onCreateWorkspace={handleCreateWorkspace}
             />
@@ -551,6 +571,19 @@ export default function HomePage() {
 
             {/* Création d'espace, pilotée depuis le menu de la topbar. */}
             <CreateWorkspacePopup />
+
+            {/* Lien d'invitation suivi depuis l'extérieur : lu une fois au
+                chargement, puis effacé de l'URL. */}
+            {inviteToken && (
+                <AcceptInvitePopup
+                    token={inviteToken}
+                    onDone={() => {
+                        setInviteToken(null);
+                        clearInviteFromUrl();
+                        void refresh();
+                    }}
+                />
+            )}
 
             {/* Shared info dialog, registered once here so any feature's "i" button
                 opens it via openInfo(). */}

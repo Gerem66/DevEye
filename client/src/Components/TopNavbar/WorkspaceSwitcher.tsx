@@ -1,3 +1,4 @@
+import type React from 'react';
 import { useWorkspaceState } from '@/stores/workspace';
 import styles from './TopNavbar.module.css';
 
@@ -6,6 +7,8 @@ export interface WorkspaceSwitcherProps {
     onSelect: (workspaceId: number) => void;
     /** Ouvre la création d'un espace. */
     onCreate: () => void;
+    /** Ouvre la page de gestion de l'espace courant. */
+    onManage: (e: React.MouseEvent) => void;
 }
 
 /**
@@ -16,8 +19,9 @@ export interface WorkspaceSwitcherProps {
  * basculer en un clic. L'espace personnel arrive toujours en tête — le serveur
  * le trie ainsi.
  */
-export function WorkspaceSwitcher({ onSelect, onCreate }: WorkspaceSwitcherProps) {
+export function WorkspaceSwitcher({ onSelect, onCreate, onManage }: WorkspaceSwitcherProps) {
     const { workspaces, activeId } = useWorkspaceState();
+    const active = workspaces.find((w) => w.id === activeId) ?? null;
 
     // Un seul espace : proposer d'en créer un suffit, lister l'unique entrée
     // n'apporterait rien.
@@ -49,6 +53,14 @@ export function WorkspaceSwitcher({ onSelect, onCreate }: WorkspaceSwitcherProps
             <button className={styles.menuItem} onClick={onCreate}>
                 <span className='icon icon-plus' /> Nouvel espace
             </button>
+
+            {/* La gestion n'a de sens que sur un espace partagé : le personnel
+                n'a ni membres, ni invitations, et ne se quitte pas. */}
+            {active?.kind === 'shared' && (
+                <button className={styles.menuItem} onClick={onManage}>
+                    <span className='icon icon-settings' /> Gérer l’espace
+                </button>
+            )}
         </>
     );
 }

@@ -48,6 +48,8 @@ export interface TopNavbarProps {
     onSelectWorkspace?: (workspaceId: number) => void;
     /** Ouvrir la création d'un espace. */
     onCreateWorkspace?: () => void;
+    /** Ouvrir la page de gestion de l'espace courant. */
+    onManageWorkspace?: (e: React.MouseEvent) => void;
 }
 
 /**
@@ -66,7 +68,8 @@ export default function TopNavbar({
     organizing,
     onDoneOrganizing,
     onSelectWorkspace,
-    onCreateWorkspace
+    onCreateWorkspace,
+    onManageWorkspace
 }: TopNavbarProps) {
     const { user, logout } = useAuth();
     const [menuOpen, setMenuOpen] = useState(false);
@@ -270,7 +273,7 @@ export default function TopNavbar({
                             )}
                             {/* Section « Espaces » : le contexte de travail, entre les
                                 réglages personnels et les entrées de flotte. */}
-                            {onSelectWorkspace && onCreateWorkspace && (
+                            {onSelectWorkspace && onCreateWorkspace && onManageWorkspace && (
                                 <WorkspaceSwitcher
                                     onSelect={(id) => {
                                         onSelectWorkspace(id);
@@ -278,6 +281,10 @@ export default function TopNavbar({
                                     }}
                                     onCreate={() => {
                                         onCreateWorkspace();
+                                        setMenuOpen(false);
+                                    }}
+                                    onManage={(e) => {
+                                        onManageWorkspace(e);
                                         setMenuOpen(false);
                                     }}
                                 />
