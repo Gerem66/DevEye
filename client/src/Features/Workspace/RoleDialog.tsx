@@ -92,7 +92,6 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
             onClose={onClose}
             title={role ? `Modifier « ${role.name} »` : 'Nouveau rôle'}
             width={520}
-            tall
             onSubmit={submit}
             footer={
                 <>
@@ -122,22 +121,27 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                 />
             </div>
 
-            <span className={styles.sectionLabel}>Administration de l’espace</span>
+            <span className={`${styles.sectionLabel} ${styles.formSection}`}>Administration de l’espace</span>
             <div className={styles.card}>
-                {WORKSPACE_CAPABILITIES.map((c) => (
-                    <label key={c} className={styles.checkRow}>
-                        <input type='checkbox' checked={capabilities.includes(c)} onChange={() => toggle(c)} />
-                        <span>{CAPABILITY_LABELS[c]}</span>
-                    </label>
-                ))}
+                {WORKSPACE_CAPABILITIES.map((c) => {
+                    const on = capabilities.includes(c);
+                    return (
+                        <label key={c} className={styles.checkRow}>
+                            <input type='checkbox' checked={on} onChange={() => toggle(c)} />
+                            <span className={`icon icon-square-${on ? 'check' : 'empty'} ${styles.checkIcon}`} />
+                            <span className={styles.checkLabel}>{CAPABILITY_LABELS[c]}</span>
+                        </label>
+                    );
+                })}
             </div>
 
-            <span className={styles.sectionLabel}>Fonctionnalités</span>
+            <span className={`${styles.sectionLabel} ${styles.formSection}`}>Fonctionnalités</span>
             <div className={styles.card}>
                 {WORKSPACE_FEATURE_IDS.map((f) => (
                     <div key={f} className={styles.grantRow}>
-                        <span className={styles.rowTitle}>{FEATURE_LABELS[f]}</span>
+                        <span className={styles.grantLabel}>{FEATURE_LABELS[f]}</span>
                         <SelectInput
+                            className={styles.grantSelect}
                             value={features[f] ?? 'none'}
                             onChange={(e) => setFeatures((prev) => ({ ...prev, [f]: e.target.value as FeatureAccess }))}
                             aria-label={`Accès à ${FEATURE_LABELS[f]}`}

@@ -207,27 +207,97 @@
     flex-shrink: 0;
 }
 
+/*
+ * Case à cocher maison : la native ignore le thème (fond blanc, coche système)
+ * et jure au milieu du reste. L'input réel est masqué mais conservé — il porte
+ * l'état, le focus clavier et l'accessibilité ; seule l'icône est peinte.
+ */
 .checkRow {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
-    padding: var(--space-xs) 0;
+    padding: var(--space-sm) 0;
     font-size: 0.875rem;
-    color: var(--text-primary);
+    color: var(--text-secondary);
     cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.checkRow + .checkRow {
+    border-top: 1px solid var(--glass-border);
+}
+
+.checkRow:hover {
+    color: var(--text-primary);
+}
+
+.checkRow input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.checkIcon {
+    color: var(--text-muted);
+    flex-shrink: 0;
+    transition: color var(--transition-fast);
+}
+
+.checkRow input:checked ~ .checkIcon {
+    color: var(--accent);
+}
+
+/* Anneau de focus visible : l'input étant masqué, le navigateur n'en dessine
+   plus aucun, et la navigation au clavier deviendrait aveugle. */
+.checkRow input:focus-visible ~ .checkIcon {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
+.checkRow input:checked ~ .checkLabel {
+    color: var(--text-primary);
 }
 
 /* Une feature et le niveau qu'un rôle y accorde. */
 .grantRow {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: var(--space-md);
     padding: var(--space-xs) 0;
 }
 
 .grantRow + .grantRow {
     border-top: 1px solid var(--glass-border);
+}
+
+/* Le libellé prend la place restante, le sélecteur garde la sienne : sans ça le
+   `width: 100%` de SelectInput écrase le texte jusqu'aux points de suspension. */
+.grantLabel {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+}
+
+.grantSelect {
+    width: auto;
+    flex-shrink: 0;
+    /* `padding-right` de SelectInput réserve 48px pour la flèche native ; on
+       resserre, la liste ici tient en un mot. */
+    padding-right: 32px;
+}
+
+/* Espace entre les blocs d'un formulaire de rôle : sans ça les intitulés
+   viennent coller la carte précédente et tout se lit comme un seul pavé. */
+.formSection {
+    display: block;
+    margin-top: var(--space-lg);
+    margin-bottom: var(--space-xs);
 }
 
 /* Pastille colorée du rôle, dans la liste des membres. */
