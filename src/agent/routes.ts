@@ -106,8 +106,19 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, audit }: Agen
         // undefined → server default; null → never expires; number → custom.
         const ttlSeconds = parsed.data.ttlSeconds === undefined ? env.LINK_CODE_TTL_SECONDS : parsed.data.ttlSeconds;
 
+        // L'espace de destination, à défaut celui de l'émetteur. L'appartenance
+        // est vérifiée : un code ne peut pas déposer une machine dans un espace
+        // que son émetteur ne fréquente pas.
+        const issuer = await db.users.findById(userId);
+        if (!issuer) return reply.code(401).send(err('auth_invalid', 'Unknown user'));
+        const workspaceId = parsed.data.workspaceId ?? issuer.personal_workspace_id;
+        if (!(await db.workspaceMembers.isMember(userId, workspaceId))) {
+            return reply.code(403).send(err('forbidden', 'Vous n’êtes pas membre de cet espace'));
+        }
+
         const created = await db.linkCodes.create({
             userId,
+            workspaceId,
             ttlSeconds,
             autoApprove: parsed.data.autoApprove
         });
@@ -244,15 +255,19 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, audit }: Agen
             return reply.code(401).send(err('auth_invalid', 'Invalid or expired link code'));
         }
         const ownerId = consumed.userId;
+        const workspaceId = consumed.workspaceId;
 
         // Re-enrolling the same machine reuses its device record (new token).
-        const existing = await db.devices.findByOwnerFingerprint(ownerId, fingerprint);
+        // L'unicité se mesure par espace : la même machine peut être appairée
+        // une fois dans chacun.
+        const existing = await db.devices.findByWorkspaceFingerprint(workspaceId, fingerprint);
         let deviceId: string;
         if (existing) {
             deviceId = existing.id;
         } else {
             const created = await db.devices.create({
                 ownerId,
+                workspaceId,
                 name,
                 fingerprint,
                 platform,

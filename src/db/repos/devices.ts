@@ -14,6 +14,7 @@ export interface DeviceConfigPatch {
 
 export interface CreateDeviceInput {
     ownerId: number;
+    workspaceId: number;
     name: string;
     fingerprint: string;
     platform: string;
@@ -23,8 +24,8 @@ export interface CreateDeviceInput {
 
 export interface DevicesRepo {
     findById(id: string): Promise<DeviceRow | null>;
-    findByOwnerFingerprint(ownerId: number, fingerprint: string): Promise<DeviceRow | null>;
-    listByOwner(ownerId: number): Promise<DeviceRow[]>;
+    findByWorkspaceFingerprint(workspaceId: number, fingerprint: string): Promise<DeviceRow | null>;
+    listByWorkspace(workspaceId: number): Promise<DeviceRow[]>;
     listAll(): Promise<DeviceRow[]>;
     create(input: CreateDeviceInput): Promise<DeviceRow>;
     setStatus(id: string, status: DeviceStatus): Promise<void>;
@@ -60,29 +61,30 @@ export function devicesRepo(pool: Q): DevicesRepo {
             const r = await pool.query<DeviceRow>('SELECT * FROM devices WHERE id = ?', [id]);
             return r.rows[0] ?? null;
         },
-        async findByOwnerFingerprint(ownerId, fingerprint) {
-            const r = await pool.query<DeviceRow>('SELECT * FROM devices WHERE owner_id = ? AND fingerprint = ?', [
-                ownerId,
+        async findByWorkspaceFingerprint(workspaceId, fingerprint) {
+            const r = await pool.query<DeviceRow>('SELECT * FROM devices WHERE workspace_id = ? AND fingerprint = ?', [
+                workspaceId,
                 fingerprint
             ]);
             return r.rows[0] ?? null;
         },
-        async listByOwner(ownerId) {
-            const r = await pool.query<DeviceRow>('SELECT * FROM devices WHERE owner_id = ? ORDER BY created DESC', [
-                ownerId
-            ]);
+        async listByWorkspace(workspaceId) {
+            const r = await pool.query<DeviceRow>(
+                'SELECT * FROM devices WHERE workspace_id = ? ORDER BY created DESC',
+                [workspaceId]
+            );
             return r.rows;
         },
         async listAll() {
             const r = await pool.query<DeviceRow>('SELECT * FROM devices ORDER BY created DESC');
             return r.rows;
         },
-        async create({ ownerId, name, fingerprint, platform, publicKey, tokenHash }) {
+        async create({ ownerId, workspaceId, name, fingerprint, platform, publicKey, tokenHash }) {
             const id = randomUUID();
             await pool.query(
-                `INSERT INTO devices (id, owner_id, name, fingerprint, platform, status, public_key, token_hash)
-                 VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`,
-                [id, ownerId, name, fingerprint, platform, publicKey, tokenHash]
+                `INSERT INTO devices (id, owner_id, workspace_id, name, fingerprint, platform, status, public_key, token_hash)
+                 VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+                [id, ownerId, workspaceId, name, fingerprint, platform, publicKey, tokenHash]
             );
             const r = await pool.query<DeviceRow>('SELECT * FROM devices WHERE id = ?', [id]);
             return r.rows[0];
@@ -184,9 +186,16 @@ export interface LinkCode {
 }
 
 export interface LinkCodesRepo {
-    /** `ttlSeconds === null` mints a code that never expires. */
-    create(input: { userId: number; ttlSeconds: number | null; autoApprove: boolean }): Promise<LinkCode>;
-    consume(code: string): Promise<{ userId: number; autoApprove: boolean } | null>;
+    create(input: {
+        /** Émetteur du code. */
+        userId: number;
+        /** Espace dans lequel la machine sera rangée à l'enrôlement. */
+        workspaceId: number;
+        /** `null` mints a code that never expires. */
+        ttlSeconds: number | null;
+        autoApprove: boolean;
+    }): Promise<LinkCode>;
+    consume(code: string): Promise<{ userId: number; workspaceId: number; autoApprove: boolean } | null>;
     listActive(userId: number): Promise<LinkCode[]>;
     /** Toggle auto-approval on one of the caller's still-active codes (else null). */
     setAutoApprove(userId: number, code: string, autoApprove: boolean): Promise<LinkCode | null>;
@@ -204,13 +213,13 @@ function randomCode(): string {
 
 export function linkCodesRepo(pool: Q): LinkCodesRepo {
     return {
-        async create({ userId, ttlSeconds, autoApprove }) {
+        async create({ userId, workspaceId, ttlSeconds, autoApprove }) {
             const now = Math.floor(Date.now() / 1000);
             const expiresAt = ttlSeconds === null ? null : now + ttlSeconds;
             const code = randomCode();
             await pool.query(
-                'INSERT INTO device_link_codes (code, user_id, expires_at, auto_approve) VALUES (?, ?, ?, ?)',
-                [code, userId, expiresAt, autoApprove ? 1 : 0]
+                'INSERT INTO device_link_codes (code, user_id, workspace_id, expires_at, auto_approve) VALUES (?, ?, ?, ?, ?)',
+                [code, userId, workspaceId, expiresAt, autoApprove ? 1 : 0]
             );
             return { code, expiresAt, autoApprove };
         },
@@ -218,15 +227,23 @@ export function linkCodesRepo(pool: Q): LinkCodesRepo {
             const now = Math.floor(Date.now() / 1000);
             const r = await pool.query<{
                 user_id: number;
+                workspace_id: number;
                 expires_at: number | null;
                 used_at: number | null;
                 auto_approve: number;
-            }>('SELECT user_id, expires_at, used_at, auto_approve FROM device_link_codes WHERE code = ?', [code]);
+            }>(
+                'SELECT user_id, workspace_id, expires_at, used_at, auto_approve FROM device_link_codes WHERE code = ?',
+                [code]
+            );
             const row = r.rows[0];
             if (!row || row.used_at !== null) return null;
             if (row.expires_at !== null && Number(row.expires_at) < now) return null;
             await pool.query('UPDATE device_link_codes SET used_at = ? WHERE code = ?', [now, code]);
-            return { userId: row.user_id, autoApprove: Number(row.auto_approve) === 1 };
+            return {
+                userId: row.user_id,
+                workspaceId: row.workspace_id,
+                autoApprove: Number(row.auto_approve) === 1
+            };
         },
         async listActive(userId) {
             const now = Math.floor(Date.now() / 1000);

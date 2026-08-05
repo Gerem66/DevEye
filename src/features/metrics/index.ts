@@ -17,11 +17,11 @@ import { parseDeviceReport } from '@/agent/mappers';
 import { env } from '@/Utils/Env';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
-/** Ensure the caller may read a device's metrics (owner or admin). */
+/** Ensure the caller may read a device's metrics: same workspace, or admin. */
 async function authorizeRead(ctx: FeatureContext, deviceId: string): Promise<DeviceRow> {
     const row = await ctx.db.devices.findById(deviceId);
     if (!row) throw new FeatureError('not_found', 'Device not found');
-    if (row.owner_id !== ctx.userId && !ctx.isAdmin) {
+    if (row.workspace_id !== ctx.workspaceId && !ctx.isAdmin) {
         throw new FeatureError('forbidden', 'Not allowed to read this device');
     }
     return row;

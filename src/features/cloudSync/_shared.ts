@@ -20,11 +20,11 @@ export function requireEngine(ctx: FeatureContext): CloudSyncEngine {
     return ctx.cloudSync;
 }
 
-/** Charge un partage que l'appelant peut gérer (propriétaire ou admin), sinon lève. */
+/** Charge un partage de l'espace actif (ou n'importe lequel pour un admin). */
 export async function authorizeShare(ctx: FeatureContext, shareId: number): Promise<SyncShareRow> {
     const row = await ctx.db.syncShares.findById(shareId);
     if (!row) throw new FeatureError('not_found', 'Partage introuvable');
-    if (row.user_id !== ctx.userId && !ctx.isAdmin) {
+    if (row.workspace_id !== ctx.workspaceId && !ctx.isAdmin) {
         throw new FeatureError('forbidden', 'Accès refusé à ce partage');
     }
     return row;

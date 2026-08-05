@@ -5,7 +5,7 @@ import { setActiveWorkspace, upsertWorkspace, useActiveWorkspace, useWorkspaceSt
 import { ws } from '@/api/ws';
 import { OpenPopup } from '@/Components/Popup';
 import { isHomeReady, onHomeReady } from '@/stores/homeReady';
-import { useDevices } from '@/stores/devices';
+import { resetDevices, useDevices } from '@/stores/devices';
 import {
     useHomeLayout,
     getHomeLayout,
@@ -339,6 +339,11 @@ export default function HomePage() {
      */
     const handleSelectWorkspace = (workspaceId: number) => {
         if (expandedWidget) handleClose();
+        // Vider la liste d'appareils AVANT de basculer : sinon l'effet d'élagage
+        // ci-dessus tourne encore contre ceux de l'espace précédent alors que la
+        // nouvelle disposition est déjà en place, et supprime définitivement ses
+        // tuiles d'appareils.
+        resetDevices();
         setActiveWorkspace(workspaceId);
         void refresh();
     };

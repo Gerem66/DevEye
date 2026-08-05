@@ -24,8 +24,20 @@ export const deviceListFeature: FeatureDefinition<
     typeof deviceList.output
 > = defineFeature({
     ...deviceList,
-    handler: async (ctx) => {
-        const rows = ctx.isAdmin ? await ctx.db.devices.listAll() : await ctx.db.devices.listByOwner(ctx.userId);
+    handler: async (ctx, input) => {
+        // Deux ensembles distincts : le plan de données (les appareils de
+        // l'espace actif, ce que voient l'accueil, la topbar et Monitoring) et la
+        // flotte entière, qui n'a de sens que pour la page d'administration.
+        // La portée est explicite plutôt que déduite du rôle : un administrateur
+        // travaille lui aussi dans un espace, et son accueil ne doit pas afficher
+        // les machines de tous les autres.
+        let rows;
+        if (input.scope === 'fleet') {
+            ctx.assertAdmin();
+            rows = await ctx.db.devices.listAll();
+        } else {
+            rows = await ctx.db.devices.listByWorkspace(ctx.workspaceId);
+        }
         const presence = online(
             ctx,
             rows.map((r) => r.id)

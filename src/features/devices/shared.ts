@@ -5,19 +5,21 @@ import { agentDistDir, readServedManifestCached } from '@/agent/sync';
 import { FeatureError, type FeatureContext } from '../_define';
 
 /**
- * Load a device the caller is allowed to manage (owner or admin), else throw.
+ * Charge un appareil que l'appelant a le droit de gérer, sinon lève.
  *
- * The fleet-management commands themselves (pairing, approve, revoke, rename,
- * delete…) are admin-only and declare `access: { admin: true }`, so the guard is
- * enforced by the dispatcher rather than repeated here. `device.list` stays open
- * (it feeds the topbar count, Monitoring and the splash gate, owner-scoped for
- * non-admins); `device.setConfig`/`device.delete` keep this owner-or-admin model
- * since they belong to Monitoring, not the Appareils page.
+ * La frontière est **l'espace** : un appareil se gère depuis l'espace où il est
+ * rangé. L'administrateur global garde son dérogation, parce que la page
+ * Appareils gère la flotte entière, y compris des machines d'espaces dont il
+ * n'est pas membre.
+ *
+ * Les commandes de gestion de flotte (appairage, approbation, révocation,
+ * renommage, suppression) déclarent en plus `access: { admin: true }` : la garde
+ * est alors appliquée par le dispatcheur, pas répétée ici.
  */
 export async function authorizeDevice(ctx: FeatureContext, deviceId: string): Promise<DeviceRow> {
     const row = await ctx.db.devices.findById(deviceId);
     if (!row) throw new FeatureError('not_found', 'Device not found');
-    if (row.owner_id !== ctx.userId && !ctx.isAdmin) {
+    if (row.workspace_id !== ctx.workspaceId && !ctx.isAdmin) {
         throw new FeatureError('forbidden', 'Not allowed to manage this device');
     }
     return row;

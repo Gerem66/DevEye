@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog } from '@/Components/Dialog';
 import Button from '@/Components/Button';
 import TextInput from '@/Components/TextInput';
-import { useDevices } from '@/stores/devices';
+import { useFleetDevices } from '@/stores/devices';
 import { DownloadAgent } from './DownloadAgent';
 import { DeviceCard } from './DeviceCard';
 import { LinkCodesDialog } from './LinkCodesDialog';
@@ -20,7 +20,9 @@ import styles from './Clients.module.css';
  * modules so this stays a thin shell.
  */
 export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
-    const { devices, loading, error, refresh } = useDevices();
+    // La page Appareils administre la flotte entière, tous espaces confondus —
+    // contrairement à l'accueil et à Monitoring, qui ne voient que l'espace actif.
+    const { devices, loading, error, refresh } = useFleetDevices();
     const [showDownloadModal, setShowDownloadModal] = useState(false);
     const links = useLinkCodes(refresh);
     const actions = useDeviceActions(devices, refresh);
