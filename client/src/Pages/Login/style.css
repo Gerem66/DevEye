@@ -241,3 +241,34 @@
         transform: rotate(360deg);
     }
 }
+
+/*
+ * Écran d'inscription sur invitation. Il réutilise toute la scène du login
+ * (fond, titre, carte, effondrement en barre) — ci-dessous uniquement ce qui
+ * lui est propre : une phrase d'accueil, et la ligne d'aide sous le mot de
+ * passe qui devient le message d'erreur.
+ */
+.login .register-intro {
+    margin: 0 0 20px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
+/* Aide et erreur partagent la même place : la carte ne change pas de hauteur
+   quand l'une remplace l'autre, donc rien ne saute sous le curseur. */
+.login .register-hint,
+.login .register-error {
+    margin: -4px 0 16px;
+    font-size: 0.8rem;
+    min-height: 1.1em;
+    text-align: left;
+}
+
+.login .register-hint {
+    color: var(--text-muted);
+}
+
+.login .register-error {
+    color: var(--danger);
+}

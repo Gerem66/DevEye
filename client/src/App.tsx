@@ -18,25 +18,31 @@ function AppRoot() {
     // qu'un rafraîchissement ne repropose pas un jeton déjà consommé.
     const [registerToken, setRegisterToken] = useState<string | null>(readRegisterToken);
 
-    // Un lien d'inscription prime sur l'écran de connexion : celui qui le suit
-    // n'a justement pas encore de compte.
-    if (registerToken && status !== 'authenticated') {
-        return (
-            <RegisterPage
-                token={registerToken}
-                onDone={() => {
-                    setRegisterToken(null);
-                    window.history.replaceState({}, '', '/');
-                }}
-            />
-        );
-    }
-
     return (
         <>
             {status === 'authenticated' && <HomePage />}
             {status === 'authenticated' && <SecrecyGate />}
-            <LoginPage />
+
+            {/* Un lien d'inscription prend l'écran : celui qui le suit n'a
+                justement pas encore de compte, l'écran de connexion ne lui sert
+                à rien.
+
+                Il reste monté même une fois le compte créé et la session
+                ouverte : c'est lui qui décide de s'effacer, à la fin de son
+                animation. Le démonter dès que le statut passe à « authentifié »
+                couperait la barre de progression en plein vol — au moment le
+                plus visible du parcours. */}
+            {registerToken ? (
+                <RegisterPage
+                    token={registerToken}
+                    onDone={() => {
+                        setRegisterToken(null);
+                        window.history.replaceState({}, '', '/');
+                    }}
+                />
+            ) : (
+                <LoginPage />
+            )}
         </>
     );
 }
