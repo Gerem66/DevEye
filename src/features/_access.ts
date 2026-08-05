@@ -3,6 +3,7 @@ import type {
     WorkspaceCapability,
     WorkspaceFeatureGrant,
     WorkspaceFeatureId,
+    WorkspacePermissions,
     WorkspaceRoleRow,
     WorkspaceRow
 } from 'deveye-types';
@@ -90,7 +91,7 @@ export interface ResolvedScope {
  * hérités, elle verrouillerait le propriétaire hors de ses propres données. Le
  * rôle est la seule frontière.
  */
-function grantsFor(
+export function grantsFor(
     isOwner: boolean,
     role: WorkspaceRoleRow | null
 ): { capabilities: Set<WorkspaceCapability>; features: Map<WorkspaceFeatureId, FeatureAccess> } {
@@ -241,5 +242,25 @@ export function createAccessResolver(
     return {
         forWorkspace: (workspaceId) => resolve(workspaceId ?? 'personal', workspaceId),
         forAccount: () => resolve('personal', undefined)
+    };
+}
+
+/**
+ * Droits effectifs sous la forme attendue par le client. Partagé entre le
+ * chargement de session et `workspace.activate`, pour que les deux annoncent
+ * exactement la même chose.
+ */
+export async function permissionsFor(
+    db: Database,
+    userId: number,
+    workspace: WorkspaceRow
+): Promise<WorkspacePermissions> {
+    const isOwner = workspace.owner_user_id === userId;
+    const role = isOwner ? null : await db.workspaceRoles.findForMember(userId, workspace.id);
+    const { capabilities, features } = grantsFor(isOwner, role);
+    return {
+        isOwner,
+        capabilities: [...capabilities],
+        features: [...features].map(([feature, access]) => ({ feature, access }))
     };
 }

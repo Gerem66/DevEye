@@ -65,6 +65,8 @@ export const workspaceRoleListFeature: FeatureDefinition<
             ctx.workspace.kind === 'personal' ? [] : await ctx.db.workspaceRoles.listByWorkspace(ctx.workspaceId);
         return {
             roles: await Promise.all(rows.map((r) => toRole(ctx, r))),
+            memberRoles:
+                ctx.workspace.kind === 'personal' ? [] : await ctx.db.workspaceRoles.memberRoles(ctx.workspaceId),
             permissions: {
                 isOwner: ctx.isOwner,
                 capabilities: WORKSPACE_CAPABILITIES.filter((c) => ctx.can(c)),

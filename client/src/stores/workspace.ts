@@ -1,3 +1,4 @@
+import type { FeatureAccess, WorkspaceCapability, WorkspaceFeatureId, WorkspacePermissions } from 'deveye-types';
 import type { Workspace } from 'deveye-types';
 import { useSyncExternalStore } from 'react';
 
@@ -21,8 +22,13 @@ const ACTIVE_KEY = 'deveye:activeWorkspace';
 interface State {
     activeId: number | null;
     workspaces: Workspace[];
+    /** Droits dans l'espace actif. L'UI s'en sert pour masquer, jamais pour autoriser. */
+    permissions: WorkspacePermissions;
     epoch: number;
 }
+
+/** Aucun droit : ce que voit une session pas encore chargée. */
+const NO_PERMISSIONS: WorkspacePermissions = { isOwner: false, capabilities: [], features: [] };
 
 function readActiveId(): number | null {
     try {
@@ -45,7 +51,7 @@ function persistActiveId(id: number | null): void {
     }
 }
 
-let state: State = { activeId: readActiveId(), workspaces: [], epoch: 0 };
+let state: State = { activeId: readActiveId(), workspaces: [], permissions: NO_PERMISSIONS, epoch: 0 };
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -83,7 +89,11 @@ export function useActiveWorkspace(): Workspace | null {
 /**
  * Applique ce que la session vient de livrer (connexion, `/me`, rafraîchissement).
  */
-export function syncWorkspacesFromServer(workspaces: Workspace[], activeWorkspaceId: number): void {
+export function syncWorkspacesFromServer(
+    workspaces: Workspace[],
+    activeWorkspaceId: number,
+    permissions: WorkspacePermissions
+): void {
     // Le choix de l'utilisateur prime tant qu'il y a accès : le serveur ne
     // *propose* une valeur (le favori, sinon l'espace personnel) que pour amorcer
     // une session neuve — après une déconnexion, `resetWorkspace` a vidé l'état —
@@ -96,7 +106,7 @@ export function syncWorkspacesFromServer(workspaces: Workspace[], activeWorkspac
     const activeId = state.activeId !== null && accessible.has(state.activeId) ? state.activeId : activeWorkspaceId;
 
     const changed = state.activeId !== activeId;
-    state = { activeId, workspaces, epoch: changed ? state.epoch + 1 : state.epoch };
+    state = { activeId, workspaces, permissions, epoch: changed ? state.epoch + 1 : state.epoch };
     persistActiveId(activeId);
     emit();
 }
@@ -110,7 +120,10 @@ export function syncWorkspacesFromServer(workspaces: Workspace[], activeWorkspac
  */
 export function setActiveWorkspace(id: number): void {
     if (state.activeId === id) return;
-    state = { ...state, activeId: id, epoch: state.epoch + 1 };
+    // Les droits de la cible ne sont pas encore connus : on repart de zéro
+    // plutôt que de laisser croire, l'espace d'un instant, que ceux de l'espace
+    // précédent s'appliquent ici.
+    state = { ...state, activeId: id, permissions: NO_PERMISSIONS, epoch: state.epoch + 1 };
     persistActiveId(id);
     emit();
 }
@@ -133,7 +146,35 @@ export function upsertWorkspace(workspace: Workspace): void {
  * estampillerait ses commandes avec un id auquel elle n'a pas accès.
  */
 export function resetWorkspace(): void {
-    state = { activeId: null, workspaces: [], epoch: state.epoch + 1 };
+    state = { activeId: null, workspaces: [], permissions: NO_PERMISSIONS, epoch: state.epoch + 1 };
     persistActiveId(null);
     emit();
+}
+
+/** Applique les droits renvoyés par `workspace.activate`. */
+export function setPermissions(permissions: WorkspacePermissions): void {
+    state = { ...state, permissions };
+    emit();
+}
+
+/**
+ * Droits de l'appelant dans l'espace actif, sous une forme directement
+ * interrogeable. Sert à masquer ce qui n'est pas accordé — le serveur vérifie
+ * de toute façon chaque commande.
+ */
+export function useWorkspacePermissions(): {
+    isOwner: boolean;
+    can: (c: WorkspaceCapability) => boolean;
+    canFeature: (f: WorkspaceFeatureId, level?: FeatureAccess) => boolean;
+} {
+    const { permissions } = useWorkspaceState();
+    return {
+        isOwner: permissions.isOwner,
+        can: (c) => permissions.capabilities.includes(c),
+        canFeature: (f, level = 'read') => {
+            const granted = permissions.features.find((g) => g.feature === f);
+            if (!granted) return false;
+            return level === 'read' || granted.access === 'write';
+        }
+    };
 }

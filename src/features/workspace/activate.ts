@@ -1,5 +1,6 @@
 import { homeLayoutSchema, themeStateSchema, workspaceActivate, workspaceSetFavorite } from 'deveye-types';
 import type { HomeLayout, ThemeStateDTO } from 'deveye-types';
+import { permissionsFor } from '../_access';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 
 /**
@@ -23,7 +24,8 @@ export const workspaceActivateFeature: FeatureDefinition<
         if (!row) throw new FeatureError('not_found', 'Espace introuvable');
         return {
             theme: parseJson(row.theme, themeStateSchema) as ThemeStateDTO | null,
-            homeLayout: parseJson(row.home_layout, homeLayoutSchema) as HomeLayout | null
+            homeLayout: parseJson(row.home_layout, homeLayoutSchema) as HomeLayout | null,
+            permissions: await permissionsFor(ctx.db, ctx.userId, row)
         };
     }
 });

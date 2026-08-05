@@ -6,6 +6,7 @@ import { ws } from '@/api/ws';
 import { OpenPopup } from '@/Components/Popup';
 import { isHomeReady, onHomeReady } from '@/stores/homeReady';
 import { refreshDevices, resetDevices, useDevices } from '@/stores/devices';
+import { setPermissions } from '@/stores/workspace';
 import { syncThemeFromServer } from '@/stores/theme';
 import { syncHomeLayoutFromServer } from '@/stores/homeLayout';
 import {
@@ -371,6 +372,7 @@ export default function HomePage() {
         void (async () => {
             try {
                 const res = await ws.send('workspace.activate', {});
+                setPermissions(res.permissions);
                 syncThemeFromServer(res.theme);
                 syncHomeLayoutFromServer(res.homeLayout);
                 // Relancer tout de suite : `resetDevices` a vidé la liste, et le

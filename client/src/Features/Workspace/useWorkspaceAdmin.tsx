@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { WorkspaceInvite } from 'deveye-types';
+import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceInvite, WorkspaceRole } from 'deveye-types';
 
 import { ws, WsError } from '@/api/ws';
 import { useAuth } from '@/auth/AuthProvider';
@@ -22,6 +22,8 @@ export function useWorkspaceAdmin() {
     const [sharedKey, setSharedKey] = useState<{ enabled: boolean; applicable: boolean; blockers: string[] } | null>(
         null
     );
+    const [roles, setRoles] = useState<WorkspaceRole[]>([]);
+    const [memberRoles, setMemberRoles] = useState<{ userId: number; roleId: number | null }[]>([]);
     const [loadingInvites, setLoadingInvites] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
@@ -52,10 +54,22 @@ export function useWorkspaceAdmin() {
         }
     }, []);
 
+    const loadRoles = useCallback(async () => {
+        try {
+            const res = await ws.send('workspace.roleList', {});
+            setRoles(res.roles);
+            setMemberRoles(res.memberRoles);
+        } catch {
+            setRoles([]);
+            setMemberRoles([]);
+        }
+    }, []);
+
     useEffect(() => {
         void loadInvites();
         void loadSharedKey();
-    }, [loadInvites, loadSharedKey]);
+        void loadRoles();
+    }, [loadInvites, loadSharedKey, loadRoles]);
 
     const run = async (fn: () => Promise<void>, fallback: string): Promise<void> => {
         setError(null);
@@ -76,6 +90,8 @@ export function useWorkspaceAdmin() {
         invites,
         loadingInvites,
         sharedKey,
+        roles,
+        memberRoles,
         error,
         busy,
         clearError: () => setError(null),
@@ -90,6 +106,49 @@ export function useWorkspaceAdmin() {
                 await ws.send('workspace.enableSharedKey', {});
                 await loadSharedKey();
             }, 'Activation de la clé d’espace impossible.'),
+
+        createRole: (draft: {
+            name: string;
+            color: string;
+            capabilities: WorkspaceCapability[];
+            features: WorkspaceFeatureGrant[];
+        }) =>
+            run(async () => {
+                await ws.send('workspace.roleCreate', draft);
+                await loadRoles();
+            }, 'Création du rôle impossible.'),
+
+        updateRole: (
+            roleId: number,
+            draft: {
+                name: string;
+                color: string;
+                capabilities: WorkspaceCapability[];
+                features: WorkspaceFeatureGrant[];
+            }
+        ) =>
+            run(async () => {
+                await ws.send('workspace.roleUpdate', { roleId, ...draft });
+                await loadRoles();
+            }, 'Modification du rôle impossible.'),
+
+        deleteRole: (roleId: number) =>
+            run(async () => {
+                await ws.send('workspace.roleDelete', { roleId });
+                await loadRoles();
+            }, 'Suppression du rôle impossible.'),
+
+        setDefaultRole: (roleId: number) =>
+            run(async () => {
+                await ws.send('workspace.roleSetDefault', { roleId });
+                await loadRoles();
+            }, 'Impossible de définir ce rôle par défaut.'),
+
+        assignRole: (userId: number, roleId: number | null) =>
+            run(async () => {
+                await ws.send('workspace.assignRole', { userId, roleId });
+                await loadRoles();
+            }, 'Attribution du rôle impossible.'),
 
         rename: (name: string) =>
             run(async () => {

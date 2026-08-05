@@ -34,7 +34,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
  * car ces deux stores resolvent leur cle de stockage a partir de lui.
  */
 function applyBundle(bundle: SessionBundle): AuthState {
-    syncWorkspacesFromServer(bundle.workspaces, bundle.activeWorkspaceId);
+    syncWorkspacesFromServer(bundle.workspaces, bundle.activeWorkspaceId, bundle.permissions);
     syncThemeFromServer(bundle.theme);
     syncHomeLayoutFromServer(bundle.homeLayout);
     return { status: 'authenticated', user: bundle.user };

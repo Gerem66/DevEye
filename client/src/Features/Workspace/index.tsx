@@ -4,7 +4,10 @@ import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
 import SelectInput from '@/Components/SelectInput';
 import TextInput from '@/Components/TextInput';
+import type { WorkspaceRole } from 'deveye-types';
 import { useAuth } from '@/auth/AuthProvider';
+import { useWorkspacePermissions } from '@/stores/workspace';
+import RoleDialog from './RoleDialog';
 import { avatarSrc } from '@/Features/Profile/avatar';
 import { formatExpiry, formatUses, useWorkspaceAdmin } from './useWorkspaceAdmin';
 import styles from './Workspace.module.css';
@@ -43,6 +46,16 @@ export default function FeatureWorkspace() {
     const [confirmLeave, setConfirmLeave] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [copied, setCopied] = useState<string | null>(null);
+    const [roleEdited, setRoleEdited] = useState<{ role: WorkspaceRole | null } | null>(null);
+
+    const { can } = useWorkspacePermissions();
+    const canManageMembers = can('workspace.members');
+    const canManageRoles = can('workspace.roles');
+    const canRename = can('workspace.manage');
+
+    /** Rôle actuellement porté par un membre. */
+    const roleOf = (userId: number): number | null =>
+        admin.memberRoles.find((m) => m.userId === userId)?.roleId ?? null;
 
     useEffect(() => {
         setName(workspace?.name ?? '');
@@ -72,7 +85,7 @@ export default function FeatureWorkspace() {
                             : 'Votre espace personnel, visible de vous seul'}
                     </p>
                 </div>
-                {isShared && isOwner && (
+                {isShared && canManageMembers && (
                     <div className={styles.headerActions}>
                         <Button icon='add' onClick={() => setInviteOpen(true)}>
                             Inviter
@@ -93,16 +106,16 @@ export default function FeatureWorkspace() {
                                 onChange={(e) => setName(e.target.value)}
                                 maxLength={120}
                                 aria-label='Nom de l’espace'
-                                disabled={!isOwner}
+                                disabled={!canRename}
                             />
                             <Button
                                 onClick={() => void admin.rename(name.trim())}
-                                disabled={!nameChanged || admin.busy || !isOwner}
+                                disabled={!nameChanged || admin.busy || !canRename}
                             >
                                 Renommer
                             </Button>
                         </div>
-                        {!isOwner && <p className={styles.hint}>Seul le propriétaire peut renommer cet espace.</p>}
+                        {!canRename && <p className={styles.hint}>Vous n’avez pas le droit de renommer cet espace.</p>}
                     </div>
                 </section>
 
@@ -119,6 +132,28 @@ export default function FeatureWorkspace() {
                                             <span className={styles.rowTitle}>{u.username}</span>
                                             <span className={styles.rowMeta}>{owner ? 'Propriétaire' : u.email}</span>
                                         </div>
+                                        {/* Le propriétaire n'a pas de rôle : il a tout par
+                                            construction, et lui en donner un laisserait croire
+                                            qu'on peut le lui retirer. */}
+                                        {!owner && canManageMembers && (
+                                            <SelectInput
+                                                value={String(roleOf(u.id) ?? '')}
+                                                onChange={(e) =>
+                                                    void admin.assignRole(
+                                                        u.id,
+                                                        e.target.value === '' ? null : Number(e.target.value)
+                                                    )
+                                                }
+                                                aria-label={`Rôle de ${u.username}`}
+                                            >
+                                                <option value=''>Aucun rôle</option>
+                                                {admin.roles.map((r) => (
+                                                    <option key={r.id} value={r.id}>
+                                                        {r.name}
+                                                    </option>
+                                                ))}
+                                            </SelectInput>
+                                        )}
                                         {isOwner && !owner && (
                                             <button
                                                 type='button'
@@ -138,7 +173,72 @@ export default function FeatureWorkspace() {
                     </section>
                 )}
 
-                {isShared && isOwner && (
+                {isShared && canManageRoles && (
+                    <section className={styles.section}>
+                        <div className={styles.sectionHeader}>
+                            <span className={styles.sectionLabel}>Rôles</span>
+                            <Button variant='secondary' icon='plus' onClick={() => setRoleEdited({ role: null })}>
+                                Nouveau rôle
+                            </Button>
+                        </div>
+                        <div className={styles.card}>
+                            {admin.roles.length === 0 ? (
+                                <p className={styles.empty}>
+                                    Aucun rôle. Sans rôle, un membre invité n’a accès à rien.
+                                </p>
+                            ) : (
+                                admin.roles.map((r) => (
+                                    <div key={r.id} className={styles.row}>
+                                        <span className={styles.roleDot} style={{ background: r.color }} />
+                                        <div className={styles.rowText}>
+                                            <span className={styles.rowTitle}>
+                                                {r.name}{' '}
+                                                {r.isDefault && <span className={styles.defaultTag}>par défaut</span>}
+                                            </span>
+                                            <span className={styles.rowMeta}>
+                                                {r.features.length} fonctionnalité(s) · {r.capabilities.length} droit(s)
+                                                d’administration · {r.memberCount} membre(s)
+                                            </span>
+                                        </div>
+                                        {!r.isDefault && (
+                                            <button
+                                                type='button'
+                                                className={styles.actionBtn}
+                                                title='Attribuer d’office aux nouveaux membres'
+                                                aria-label='Définir comme rôle par défaut'
+                                                onClick={() => void admin.setDefaultRole(r.id)}
+                                                disabled={admin.busy}
+                                            >
+                                                <span className='icon icon-star-outline' />
+                                            </button>
+                                        )}
+                                        <button
+                                            type='button'
+                                            className={styles.actionBtn}
+                                            title='Modifier'
+                                            aria-label={`Modifier ${r.name}`}
+                                            onClick={() => setRoleEdited({ role: r })}
+                                        >
+                                            <span className='icon icon-edit' />
+                                        </button>
+                                        <button
+                                            type='button'
+                                            className={`${styles.actionBtn} ${styles.actionDanger}`}
+                                            title='Supprimer'
+                                            aria-label={`Supprimer ${r.name}`}
+                                            onClick={() => void admin.deleteRole(r.id)}
+                                            disabled={admin.busy}
+                                        >
+                                            <span className='icon icon-trash' />
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </section>
+                )}
+
+                {isShared && canManageMembers && (
                     <section className={styles.section}>
                         <div className={styles.sectionHeader}>
                             <span className={styles.sectionLabel}>Liens d’invitation</span>
@@ -293,6 +393,18 @@ export default function FeatureWorkspace() {
                     ))}
                 </SelectInput>
             </Dialog>
+
+            <RoleDialog
+                open={roleEdited !== null}
+                role={roleEdited?.role ?? null}
+                busy={admin.busy}
+                onClose={() => setRoleEdited(null)}
+                onSubmit={(draft) => {
+                    const edited = roleEdited?.role;
+                    void (edited ? admin.updateRole(edited.id, draft) : admin.createRole(draft));
+                    setRoleEdited(null);
+                }}
+            />
 
             <Dialog
                 open={confirmLeave}

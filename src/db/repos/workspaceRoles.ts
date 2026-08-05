@@ -25,6 +25,8 @@ export interface WorkspaceRolesRepo {
     setDefault(workspaceId: number, roleId: number): Promise<void>;
     assign(userId: number, workspaceId: number, roleId: number | null): Promise<void>;
     reorder(workspaceId: number, ids: number[]): Promise<void>;
+    /** Quel membre porte quel rôle, pour l'écran de gestion. */
+    memberRoles(workspaceId: number): Promise<{ userId: number; roleId: number | null }[]>;
 }
 
 export function workspaceRolesRepo(pool: Q): WorkspaceRolesRepo {
@@ -121,6 +123,13 @@ export function workspaceRolesRepo(pool: Q): WorkspaceRolesRepo {
                 userId,
                 workspaceId
             ]);
+        },
+        async memberRoles(workspaceId) {
+            const r = await pool.query<{ user_id: number; role_id: number | null }>(
+                'SELECT user_id, role_id FROM workspace_members WHERE workspace_id = ?',
+                [workspaceId]
+            );
+            return r.rows.map((x) => ({ userId: x.user_id, roleId: x.role_id }));
         },
         async reorder(workspaceId, ids) {
             for (let i = 0; i < ids.length; i++) {
