@@ -1,6 +1,14 @@
 import type { WebSocket } from '@fastify/websocket';
 import { randomUUID } from 'crypto';
-import { clientMessageSchema, err, ok, type ServerMessage } from 'deveye-types';
+import {
+    clientMessageSchema,
+    err,
+    ok,
+    type FeatureAccess,
+    type ServerMessage,
+    type WorkspaceCapability,
+    type WorkspaceFeatureId
+} from 'deveye-types';
 import type { FastifyInstance } from 'fastify';
 
 import { ACCESS_COOKIE } from '@/auth/cookies';
@@ -160,9 +168,27 @@ export async function registerWS(
                 const assertAdmin = (): void => {
                     if (!scope.isAdmin) throw new FeatureError('forbidden', 'Réservé aux administrateurs');
                 };
+                const can = (c: WorkspaceCapability): boolean => scope.capabilities.has(c);
+                const assertCan = (c: WorkspaceCapability): void => {
+                    if (!can(c)) throw new FeatureError('forbidden', 'Droit insuffisant sur cet espace');
+                };
+                // `write` implique `read` : une seule comparaison suffit.
+                const canFeature = (f: WorkspaceFeatureId, level: FeatureAccess = 'read'): boolean => {
+                    const granted = scope.features.get(f);
+                    if (!granted) return false;
+                    return level === 'read' || granted === 'write';
+                };
+                const assertFeature = (f: WorkspaceFeatureId, level: FeatureAccess = 'read'): void => {
+                    if (!canFeature(f, level)) {
+                        throw new FeatureError('forbidden', 'Cette fonctionnalité ne vous est pas ouverte ici');
+                    }
+                };
+
                 // Declared authorization (see `FeatureAccessSpec`), enforced here
                 // so a command can never ship without its guard.
                 if (def.access?.admin) assertAdmin();
+                if (def.access?.feature) assertFeature(def.access.feature, def.access.level);
+                for (const c of def.access?.capabilities ?? []) assertCan(c);
 
                 const result = await def.handler(
                     {
@@ -177,6 +203,10 @@ export async function registerWS(
                         isOwner: scope.isOwner,
                         isAdmin: scope.isAdmin,
                         assertAdmin,
+                        can,
+                        assertCan,
+                        canFeature,
+                        assertFeature,
                         ip,
                         logger: reqLogger.child({ command, requestId: replyId }),
                         requestId: replyId,

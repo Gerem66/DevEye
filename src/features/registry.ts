@@ -33,6 +33,14 @@ import {
     workspaceRenameFeature
 } from './workspace/members';
 import { workspaceEnableSharedKeyFeature, workspaceSharedKeyStatusFeature } from './workspace/sharedKey';
+import {
+    workspaceAssignRoleFeature,
+    workspaceRoleCreateFeature,
+    workspaceRoleDeleteFeature,
+    workspaceRoleListFeature,
+    workspaceRoleSetDefaultFeature,
+    workspaceRoleUpdateFeature
+} from './workspace/roles';
 import { workspaceAddFeature } from './workspace/add';
 import { workspaceDeleteFeature } from './workspace/delete';
 
@@ -52,6 +60,12 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     workspaceInviteAcceptFeature,
     workspaceSharedKeyStatusFeature,
     workspaceEnableSharedKeyFeature,
+    workspaceRoleListFeature,
+    workspaceRoleCreateFeature,
+    workspaceRoleUpdateFeature,
+    workspaceRoleDeleteFeature,
+    workspaceRoleSetDefaultFeature,
+    workspaceAssignRoleFeature,
     userSetAvatarFeature,
     userSetThemeFeature,
     passwordListFeature,

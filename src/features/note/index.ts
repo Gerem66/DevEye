@@ -112,6 +112,7 @@ export const noteListFeature: FeatureDefinition<
     typeof noteList.output
 > = defineFeature({
     ...noteList,
+    access: { feature: 'notes' },
     handler: async (ctx, input) => {
         const wantArchived = input.archived === true;
         const rows = (await ctx.db.notes.listByWorkspace(ctx.workspaceId)).filter(
@@ -157,6 +158,7 @@ export const noteCountFeature: FeatureDefinition<
     typeof noteCount.output
 > = defineFeature({
     ...noteCount,
+    access: { feature: 'notes' },
     handler: async (ctx) => {
         // Pure row count from clear metadata: no DEK, no unlock gate, and private
         // notes are counted like any other (no special case).
@@ -167,6 +169,7 @@ export const noteCountFeature: FeatureDefinition<
 export const noteGetFeature: FeatureDefinition<typeof noteGet.command, typeof noteGet.input, typeof noteGet.output> =
     defineFeature({
         ...noteGet,
+        access: { feature: 'notes' },
         handler: async (ctx, input) => {
             const row = await loadNote(ctx, input.noteId);
             // A private note resolves the guarded DEK here, which throws `locked`
@@ -180,6 +183,7 @@ export const noteGetFeature: FeatureDefinition<typeof noteGet.command, typeof no
 export const noteAddFeature: FeatureDefinition<typeof noteAdd.command, typeof noteAdd.input, typeof noteAdd.output> =
     defineFeature({
         ...noteAdd,
+        access: { feature: 'notes', level: 'write' },
         handler: async (ctx, input) => {
             assertPrivateAllowed(ctx, input.note.private);
             const folderId = await resolveFolderId(ctx, input.note.folderId);
@@ -206,6 +210,7 @@ export const noteEditFeature: FeatureDefinition<
     typeof noteEdit.output
 > = defineFeature({
     ...noteEdit,
+    access: { feature: 'notes', level: 'write' },
     handler: async (ctx, input) => {
         const existing = await loadNote(ctx, input.noteId);
         assertPrivateAllowed(ctx, input.note.private);
@@ -235,6 +240,7 @@ export const noteReorderFeature: FeatureDefinition<
     typeof noteReorder.output
 > = defineFeature({
     ...noteReorder,
+    access: { feature: 'notes', level: 'write' },
     handler: async (ctx, input) => {
         const folderId = await resolveFolderId(ctx, input.folderId);
         // Reorder only the caller's own active notes in this workspace; any
@@ -257,6 +263,7 @@ export const noteArchiveFeature: FeatureDefinition<
     typeof noteArchive.output
 > = defineFeature({
     ...noteArchive,
+    access: { feature: 'notes', level: 'write' },
     handler: async (ctx, input) => {
         const existing = await loadNote(ctx, input.noteId);
         await assertPrivateUnlocked(ctx, existing);
@@ -276,6 +283,7 @@ export const noteRestoreFeature: FeatureDefinition<
     typeof noteRestore.output
 > = defineFeature({
     ...noteRestore,
+    access: { feature: 'notes', level: 'write' },
     handler: async (ctx, input) => {
         const existing = await loadNote(ctx, input.noteId);
         await assertPrivateUnlocked(ctx, existing);
@@ -295,6 +303,7 @@ export const noteDeleteFeature: FeatureDefinition<
     typeof noteDelete.output
 > = defineFeature({
     ...noteDelete,
+    access: { feature: 'notes', level: 'write' },
     handler: async (ctx, input) => {
         const existing = await loadNote(ctx, input.noteId);
         // Two-step by construction: an active note is archived first, never
@@ -320,6 +329,7 @@ export const folderListFeature: FeatureDefinition<
     typeof folderList.output
 > = defineFeature({
     ...folderList,
+    access: { feature: 'notes' },
     handler: async (ctx) => {
         const rows = await ctx.db.noteFolders.listByWorkspace(ctx.workspaceId);
         const folders = await Promise.all(
@@ -335,6 +345,7 @@ export const folderAddFeature: FeatureDefinition<
     typeof folderAdd.output
 > = defineFeature({
     ...folderAdd,
+    access: { feature: 'notes', level: 'write' },
     handler: async (ctx, input) => {
         const name = input.name.trim();
         const content = await encryptFolder(ctx.secure.open, { name });
@@ -359,6 +370,7 @@ export const folderRenameFeature: FeatureDefinition<
     typeof folderRename.output
 > = defineFeature({
     ...folderRename,
+    access: { feature: 'notes', level: 'write' },
     handler: async (ctx, input) => {
         const existing = await ctx.db.noteFolders.findById(input.folderId, ctx.workspaceId);
         if (!existing) throw new FeatureError('not_found', 'Folder not found');
@@ -382,6 +394,7 @@ export const folderReorderFeature: FeatureDefinition<
     typeof folderReorder.output
 > = defineFeature({
     ...folderReorder,
+    access: { feature: 'notes', level: 'write' },
     handler: async (ctx, input) => {
         // Reorder only the rows of this workspace; any foreign id in
         // `folderIds` is dropped silently.
@@ -402,6 +415,7 @@ export const folderDeleteFeature: FeatureDefinition<
     typeof folderDelete.output
 > = defineFeature({
     ...folderDelete,
+    access: { feature: 'notes', level: 'write' },
     handler: async (ctx, input) => {
         const existing = await ctx.db.noteFolders.findById(input.folderId, ctx.workspaceId);
         if (!existing) throw new FeatureError('not_found', 'Folder not found');

@@ -42,6 +42,7 @@ export const passwordListFeature: FeatureDefinition<
     typeof passwordList.output
 > = defineFeature({
     ...passwordList,
+    access: { feature: 'password' },
     handler: async (ctx) => {
         // When password-based encryption is on, listing needs the DEK. Surface a
         // `locked` error (don't silently skip every row) so the client prompts.
@@ -75,6 +76,7 @@ export const passwordCountFeature: FeatureDefinition<
     typeof passwordCount.output
 > = defineFeature({
     ...passwordCount,
+    access: { feature: 'password' },
     handler: async (ctx) => {
         // Pure row count from clear metadata: no DEK, no unlock gate. This lets
         // the dashboard widget show a number even when the store is locked.
@@ -88,6 +90,7 @@ export const passwordGetFeature: FeatureDefinition<
     typeof passwordGet.output
 > = defineFeature({
     ...passwordGet,
+    access: { feature: 'password' },
     handler: async (ctx, input) => {
         await assertSecureUnlocked(ctx);
         const row = await ctx.db.passwords.findById(input.passwordId, ctx.workspaceId);
@@ -104,6 +107,7 @@ export const passwordAddFeature: FeatureDefinition<
     typeof passwordAdd.output
 > = defineFeature({
     ...passwordAdd,
+    access: { feature: 'password', level: 'write' },
     handler: async (ctx, input) => {
         await assertSecureUnlocked(ctx);
         const content = await encryptPayload(ctx.secure, input.entry);
@@ -127,6 +131,7 @@ export const passwordEditFeature: FeatureDefinition<
     typeof passwordEdit.output
 > = defineFeature({
     ...passwordEdit,
+    access: { feature: 'password', level: 'write' },
     handler: async (ctx, input) => {
         await assertSecureUnlocked(ctx);
         const content = await encryptPayload(ctx.secure, input.entry);
@@ -147,6 +152,7 @@ export const passwordDeleteFeature: FeatureDefinition<
     typeof passwordDelete.output
 > = defineFeature({
     ...passwordDelete,
+    access: { feature: 'password', level: 'write' },
     handler: async (ctx, input) => {
         const deleted = await ctx.db.passwords.delete(input.passwordId, ctx.workspaceId);
         if (!deleted) throw new FeatureError('not_found', 'Password not found');
@@ -174,6 +180,7 @@ export const passwordUnlockFeature: FeatureDefinition<
     typeof passwordUnlock.output
 > = defineFeature({
     ...passwordUnlock,
+    access: { feature: 'password' },
     handler: async (ctx) => {
         markUnlocked(ctx.sessionId, ctx.workspaceId);
         return { unlocked: true as const };

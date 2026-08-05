@@ -7,6 +7,7 @@ import type { MonitorTransport } from '@/agent/hub';
 import type { UptimeMonitor } from '@/Services/UptimeMonitor';
 import type { ErrorCode, LogLevelName } from 'deveye-types';
 import type { Logger } from 'pino';
+import type { FeatureAccess, WorkspaceCapability, WorkspaceFeatureId } from 'deveye-types';
 import type { WorkspaceContext } from './_access';
 import type { z } from 'zod';
 
@@ -54,6 +55,15 @@ export interface FeatureContext {
     workspaceId: number;
     /** L'appelant possède cet espace (tous les droits, non révocables). */
     isOwner: boolean;
+    /** Une capacité de gouvernance de l'espace est-elle accordée ? Synchrone : le
+     *  jeu de droits est résolu avant l'appel du handler. */
+    can: (capability: WorkspaceCapability) => boolean;
+    /** Lève `forbidden` si la capacité manque. */
+    assertCan: (capability: WorkspaceCapability) => void;
+    /** Une feature est-elle accessible, au moins au niveau demandé (défaut `read`) ? */
+    canFeature: (feature: WorkspaceFeatureId, level?: FeatureAccess) => boolean;
+    /** Lève `forbidden` si la feature n'est pas accessible à ce niveau. */
+    assertFeature: (feature: WorkspaceFeatureId, level?: FeatureAccess) => void;
     /**
      * Caller holds the global `admin` role. Resolved by the dispatcher before the
      * handler runs, so guards read it synchronously and never query the role.
@@ -109,6 +119,15 @@ export class FeatureError extends Error {
  * `device.setConfig`) keep their guard in the handler and read `ctx.isAdmin`.
  */
 export interface FeatureAccessSpec {
+    /**
+     * Feature à laquelle la commande touche, et niveau requis (`read` par
+     * défaut). Le membre dont le rôle ne l'accorde pas reçoit `forbidden` — et
+     * l'interface ne lui montre même pas l'entrée.
+     */
+    feature?: WorkspaceFeatureId;
+    level?: FeatureAccess;
+    /** Capacités de gouvernance exigées, toutes nécessaires. */
+    capabilities?: WorkspaceCapability[];
     /** Global account admin: the device fleet and the system pages. */
     admin?: true;
     /**

@@ -45,6 +45,7 @@ import {
 import { workspaceInvitesRepo, type WorkspaceInvitesRepo } from './repos/workspaceInvites';
 import { workspaceSecretKeysRepo, type WorkspaceSecretKeysRepo } from './repos/workspaceSecretKeys';
 import { workspaceRekeyRepo, type WorkspaceRekeyRepo } from './repos/workspaceRekey';
+import { workspaceRolesRepo, type WorkspaceRolesRepo } from './repos/workspaceRoles';
 
 export interface Database {
     users: UsersRepo;
@@ -53,6 +54,7 @@ export interface Database {
     workspaceInvites: WorkspaceInvitesRepo;
     workspaceSecretKeys: WorkspaceSecretKeysRepo;
     workspaceRekey: WorkspaceRekeyRepo;
+    workspaceRoles: WorkspaceRolesRepo;
     refreshTokens: RefreshTokensRepo;
     logs: LogsRepo;
     passwords: PasswordsRepo;
@@ -89,6 +91,7 @@ export function createDatabase(q: Queryable): Database {
         workspaceInvites: workspaceInvitesRepo(q),
         workspaceSecretKeys: workspaceSecretKeysRepo(q),
         workspaceRekey: workspaceRekeyRepo(q),
+        workspaceRoles: workspaceRolesRepo(q),
         refreshTokens: refreshTokensRepo(q),
         logs: logsRepo(q),
         passwords: passwordsRepo(q),

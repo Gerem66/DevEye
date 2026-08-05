@@ -1,9 +1,17 @@
-import type { WorkspaceRow } from 'deveye-types';
+import type {
+    FeatureAccess,
+    WorkspaceCapability,
+    WorkspaceFeatureGrant,
+    WorkspaceFeatureId,
+    WorkspaceRoleRow,
+    WorkspaceRow
+} from 'deveye-types';
 
 import type Encryption from '@/Services/Encryption';
 import { createSecureStore, type SecureStore } from '@/Services/SecureStore';
 import { SecretKeyService } from '@/Services/SecretKeyService';
 import type { Database } from '@/db';
+import { WORKSPACE_CAPABILITIES, WORKSPACE_FEATURE_IDS } from 'deveye-types';
 import { FeatureError } from './_define';
 
 /**
@@ -57,9 +65,61 @@ export interface ResolvedScope {
     isAdmin: boolean;
     /** L'appelant possède cet espace. */
     isOwner: boolean;
+    /** Capacités de gouvernance accordées par son rôle. */
+    capabilities: ReadonlySet<WorkspaceCapability>;
+    /** Droits par feature accordés par son rôle, absents = aucun accès. */
+    features: ReadonlyMap<WorkspaceFeatureId, FeatureAccess>;
     /** Coffre chiffré de cet espace, lié à cette session. */
     secure: SecureStore;
     secretKeys: SecretKeyService;
+}
+
+/**
+ * Droits effectifs d'un membre, dans cet ordre :
+ *
+ *  1. **propriétaire** — tout. Non révocable : personne ne doit pouvoir
+ *     s'enfermer dehors de chez soi, et l'espace personnel tombe toujours ici.
+ *  2. **membre avec rôle** — exactement ce que son rôle accorde.
+ *  3. **membre sans rôle** — rien. Fail-closed : un oubli d'attribution retire
+ *     l'accès, il ne le donne jamais.
+ *
+ * Volontairement **sans** intersection avec `workspaces.features` : cette liste
+ * dit quels widgets figurent sur l'accueil, pas qui a le droit d'ouvrir quoi.
+ * L'intersecter reviendrait à supprimer l'accès à des données en décochant un
+ * widget — et sur les espaces existants, dont la liste contient des identifiants
+ * hérités, elle verrouillerait le propriétaire hors de ses propres données. Le
+ * rôle est la seule frontière.
+ */
+function grantsFor(
+    isOwner: boolean,
+    role: WorkspaceRoleRow | null
+): { capabilities: Set<WorkspaceCapability>; features: Map<WorkspaceFeatureId, FeatureAccess> } {
+    if (isOwner) {
+        return {
+            capabilities: new Set(WORKSPACE_CAPABILITIES),
+            features: new Map(WORKSPACE_FEATURE_IDS.map((f) => [f, 'write']))
+        };
+    }
+    if (!role) return { capabilities: new Set(), features: new Map() };
+
+    const features = new Map<WorkspaceFeatureId, FeatureAccess>();
+    for (const g of parseJsonArray<WorkspaceFeatureGrant>(role.features)) {
+        features.set(g.feature, g.access);
+    }
+    return { capabilities: new Set(parseJsonArray<WorkspaceCapability>(role.capabilities)), features };
+}
+
+function parseJsonArray<T>(raw: unknown): T[] {
+    if (Array.isArray(raw)) return raw as T[];
+    if (typeof raw === 'string') {
+        try {
+            const parsed: unknown = JSON.parse(raw);
+            return Array.isArray(parsed) ? (parsed as T[]) : [];
+        } catch {
+            return [];
+        }
+    }
+    return [];
 }
 
 export interface AccessResolver {
@@ -136,6 +196,12 @@ export function createAccessResolver(
         // deux étages, et tout membre lit alors l'espace sans dépendre du mot de
         // passe de son propriétaire. Sinon (espace personnel, ou espace partagé
         // pas encore converti) on retombe sur les clés du propriétaire.
+        const isOwner = row.owner_user_id === userId;
+        // Le propriétaire n'a pas de rôle : il passe outre, et lui en donner un
+        // laisserait croire qu'on peut le lui retirer.
+        const role = isOwner ? null : await db.workspaceRoles.findForMember(userId, row.id);
+        const { capabilities, features } = grantsFor(isOwner, role);
+
         const keyService = new SecretKeyService(db, crypt);
         const workspaceDekId = row.kind === 'shared' && (await keyService.hasWorkspaceDek(row.id)) ? row.id : null;
 
@@ -149,7 +215,9 @@ export function createAccessResolver(
         return {
             workspace: toContext(row),
             isAdmin: user.role === 'admin',
-            isOwner: row.owner_user_id === userId,
+            isOwner,
+            capabilities,
+            features,
             secure: store,
             secretKeys: keys
         };

@@ -17,17 +17,11 @@ import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinitio
 /**
  * Gestion des membres et des invitations d'un espace.
  *
- * **Qui peut administrer ?** Le propriétaire, et lui seul, tant que les rôles
- * n'existent pas. C'est délibérément restrictif : ouvrir l'invitation à tout
- * membre laisserait un espace grandir sans que son propriétaire le sache, et
- * l'inverse est trivial à assouplir une fois les rôles en place — alors que
- * reprendre un droit déjà donné ne l'est pas.
+ * Les droits ne sont plus « propriétaire ou rien » : ils passent par les
+ * capacités `workspace.members` (inviter, exclure) et `workspace.manage`
+ * (renommer, supprimer), déclarées sur chaque commande et appliquées par le
+ * dispatcheur. Le propriétaire les possède toutes d'office.
  */
-function assertOwner(ctx: FeatureContext): void {
-    if (!ctx.isOwner) {
-        throw new FeatureError('forbidden', 'Réservé au propriétaire de l’espace');
-    }
-}
 
 /** Un espace personnel n'a ni membres ni invitations : il est personnel. */
 function assertShared(ctx: FeatureContext): void {
@@ -56,8 +50,8 @@ export const workspaceRenameFeature: FeatureDefinition<
     typeof workspaceRename.output
 > = defineFeature({
     ...workspaceRename,
+    access: { capabilities: ['workspace.manage'] },
     handler: async (ctx, input) => {
-        assertOwner(ctx);
         const name = input.name.trim();
         await ctx.db.workspaces.rename(ctx.workspaceId, name);
         ctx.audit({
@@ -100,9 +94,9 @@ export const workspaceRemoveMemberFeature: FeatureDefinition<
     typeof workspaceRemoveMember.output
 > = defineFeature({
     ...workspaceRemoveMember,
+    access: { capabilities: ['workspace.members'] },
     handler: async (ctx, input) => {
         assertShared(ctx);
-        assertOwner(ctx);
         if (input.userId === ctx.workspace.ownerUserId) {
             throw new FeatureError('validation', 'Le propriétaire ne peut pas être exclu de son espace');
         }
@@ -127,9 +121,9 @@ export const workspaceInviteCreateFeature: FeatureDefinition<
     typeof workspaceInviteCreate.output
 > = defineFeature({
     ...workspaceInviteCreate,
+    access: { capabilities: ['workspace.members'] },
     handler: async (ctx, input) => {
         assertShared(ctx);
-        assertOwner(ctx);
         const row = await ctx.db.workspaceInvites.create({
             workspaceId: ctx.workspaceId,
             createdBy: ctx.userId,
@@ -153,9 +147,9 @@ export const workspaceInviteListFeature: FeatureDefinition<
     typeof workspaceInviteList.output
 > = defineFeature({
     ...workspaceInviteList,
+    access: { capabilities: ['workspace.members'] },
     handler: async (ctx) => {
         assertShared(ctx);
-        assertOwner(ctx);
         const rows = await ctx.db.workspaceInvites.listActive(ctx.workspaceId);
         const authors = await ctx.db.users.findByIds(Array.from(new Set(rows.map((r) => r.created_by))));
         const nameOf = new Map(authors.map((u) => [u.id, u.username]));
@@ -169,9 +163,9 @@ export const workspaceInviteRevokeFeature: FeatureDefinition<
     typeof workspaceInviteRevoke.output
 > = defineFeature({
     ...workspaceInviteRevoke,
+    access: { capabilities: ['workspace.members'] },
     handler: async (ctx, input) => {
         assertShared(ctx);
-        assertOwner(ctx);
         const removed = await ctx.db.workspaceInvites.revoke(ctx.workspaceId, input.token);
         if (!removed) throw new FeatureError('not_found', 'Invitation introuvable');
         ctx.audit({
@@ -228,6 +222,16 @@ export const workspaceInviteAcceptFeature: FeatureDefinition<
         if (!consumed) throw new FeatureError('not_found', 'Invitation invalide ou expirée');
 
         await ctx.db.workspaceMembers.add({ userId: ctx.userId, workspaceId: consumed.workspaceId });
+
+        // Sans rôle, un nouvel arrivant n'aurait aucun droit : la résolution est
+        // fail-closed. Le rôle par défaut de l'espace est donc attribué d'office.
+        // S'il n'y en a pas, le membre entre sans droits — visible et corrigeable
+        // depuis la page de gestion, plutôt qu'un accès accordé par défaut.
+        const fallback = await ctx.db.workspaceRoles.findDefault(consumed.workspaceId);
+        if (fallback) {
+            await ctx.db.workspaceRoles.assign(ctx.userId, consumed.workspaceId, fallback.id);
+        }
+
         invalidateAccess();
 
         const workspace = await describe(ctx, consumed.workspaceId);
