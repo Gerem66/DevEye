@@ -47,14 +47,14 @@ export function weatherRepo(pool: Q): WeatherRepo {
     return {
         async listLocations(workspaceId) {
             const r = await pool.query<WeatherLocationRow>(
-                'SELECT * FROM weather_locations WHERE user_id = ? ORDER BY position ASC, created ASC',
+                'SELECT * FROM weather_locations WHERE workspace_id = ? ORDER BY position ASC, created ASC',
                 [workspaceId]
             );
             return r.rows;
         },
         async findLocation(id, workspaceId) {
             const r = await pool.query<WeatherLocationRow>(
-                'SELECT * FROM weather_locations WHERE id = ? AND user_id = ?',
+                'SELECT * FROM weather_locations WHERE id = ? AND workspace_id = ?',
                 [id, workspaceId]
             );
             return r.rows[0] ?? null;
@@ -62,7 +62,7 @@ export function weatherRepo(pool: Q): WeatherRepo {
         async createLocation({ userId, workspaceId, label, latitude, longitude, format, days, provider, apiKeyEnc }) {
             const id = randomUUID();
             const posRow = await pool.query<{ next: number }>(
-                'SELECT COALESCE(MAX(position) + 1, 0) AS next FROM weather_locations WHERE user_id = ?',
+                'SELECT COALESCE(MAX(position) + 1, 0) AS next FROM weather_locations WHERE workspace_id = ?',
                 [workspaceId]
             );
             const position = Number(posRow.rows[0]?.next ?? 0);
@@ -115,7 +115,7 @@ export function weatherRepo(pool: Q): WeatherRepo {
             if (sets.length === 0) return this.findLocation(id, workspaceId);
             params.push(id, workspaceId);
             const res = await pool.query(
-                `UPDATE weather_locations SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`,
+                `UPDATE weather_locations SET ${sets.join(', ')} WHERE id = ? AND workspace_id = ?`,
                 params
             );
             if (res.rowCount === 0) return null;
@@ -123,13 +123,16 @@ export function weatherRepo(pool: Q): WeatherRepo {
         },
         async deleteLocation(id, workspaceId) {
             const target = await this.findLocation(id, workspaceId);
-            const r = await pool.query('DELETE FROM weather_locations WHERE id = ? AND user_id = ?', [id, workspaceId]);
+            const r = await pool.query('DELETE FROM weather_locations WHERE id = ? AND workspace_id = ?', [
+                id,
+                workspaceId
+            ]);
             if (r.rowCount === 0) return false;
             // If the primary city was removed, promote the first remaining one.
             if (target?.is_primary === 1) {
                 const next = await this.listLocations(workspaceId);
                 if (next[0]) {
-                    await pool.query('UPDATE weather_locations SET is_primary = 1 WHERE id = ? AND user_id = ?', [
+                    await pool.query('UPDATE weather_locations SET is_primary = 1 WHERE id = ? AND workspace_id = ?', [
                         next[0].id,
                         workspaceId
                     ]);
@@ -141,7 +144,7 @@ export function weatherRepo(pool: Q): WeatherRepo {
             // Assign each id its position by index; only rows owned by the user
             // are touched, so stray ids are silently ignored.
             for (let i = 0; i < ids.length; i++) {
-                await pool.query('UPDATE weather_locations SET position = ? WHERE id = ? AND user_id = ?', [
+                await pool.query('UPDATE weather_locations SET position = ? WHERE id = ? AND workspace_id = ?', [
                     i,
                     ids[i],
                     workspaceId
@@ -150,12 +153,15 @@ export function weatherRepo(pool: Q): WeatherRepo {
             return this.listLocations(workspaceId);
         },
         async setPrimaryLocation(workspaceId, id) {
-            await pool.query('UPDATE weather_locations SET is_primary = (id = ?) WHERE user_id = ?', [id, workspaceId]);
+            await pool.query('UPDATE weather_locations SET is_primary = (id = ?) WHERE workspace_id = ?', [
+                id,
+                workspaceId
+            ]);
             return this.listLocations(workspaceId);
         },
         async getKey(workspaceId, provider) {
             const r = await pool.query<WeatherProviderKeyRow>(
-                'SELECT * FROM weather_provider_keys WHERE user_id = ? AND provider = ?',
+                'SELECT * FROM weather_provider_keys WHERE workspace_id = ? AND provider = ?',
                 [workspaceId, provider]
             );
             return r.rows[0] ?? null;
@@ -169,7 +175,7 @@ export function weatherRepo(pool: Q): WeatherRepo {
             );
         },
         async deleteKey(workspaceId, provider) {
-            await pool.query('DELETE FROM weather_provider_keys WHERE user_id = ? AND provider = ?', [
+            await pool.query('DELETE FROM weather_provider_keys WHERE workspace_id = ? AND provider = ?', [
                 workspaceId,
                 provider
             ]);
