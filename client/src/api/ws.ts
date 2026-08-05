@@ -54,6 +54,15 @@ export class DevEyeWs {
     private intentionallyClosed = false;
     private _hasConnected = false;
     private readonly unauthorizedListeners = new Set<() => void>();
+    /**
+     * Commandes émises avant l'ouverture de la socket, en attente d'être postées.
+     *
+     * Un composant monté au premier rendu émet sa commande avant la fin de la
+     * poignée de main. Les rejeter aussitôt donnait un échec que l'appelant ne
+     * pouvait pas distinguer d'un refus métier : c'est ainsi qu'un lien
+     * d'invitation parfaitement valide s'affichait comme invalide.
+     */
+    private outbox: (() => void)[] = [];
 
     constructor() {
         // Auto-retry when the user comes back to the tab/window: a connection that
@@ -92,6 +101,13 @@ export class DevEyeWs {
 
     private setState(s: ConnectionState): void {
         this._state = s;
+        if (s === 'open') {
+            // Vidé avant de notifier : un écouteur d'état qui émettrait une
+            // commande doit la voir partir après celles qui attendaient déjà.
+            const queued = this.outbox;
+            this.outbox = [];
+            for (const post of queued) post();
+        }
         for (const fn of this.stateListeners) fn(s);
     }
 
@@ -220,6 +236,9 @@ export class DevEyeWs {
             p.reject(err);
         }
         this.pending.clear();
+        // Ces requêtes viennent d'être rejetées : les garder en attente n'aurait
+        // servi qu'à poster, à la reconnexion, des messages sans destinataire.
+        this.outbox = [];
     }
 
     private nextRequestId(): string {
@@ -241,24 +260,7 @@ export class DevEyeWs {
         if (!parsedInput.success) {
             return Promise.reject(new WsError('protocol', 'Invalid input', parsedInput.error.flatten()));
         }
-        if (!this.socket || this._state !== 'open') {
-            return Promise.reject(new WsError('closed', 'WS not open'));
-        }
         const requestId = this.nextRequestId();
-        // L'espace actif voyage sur l'enveloppe, jamais dans le payload : aucun
-        // site d'appel n'a à le passer, et le serveur n'a qu'un point de
-        // resolution. Absent -> le serveur retombe sur l'espace personnel.
-        const workspaceId = getActiveWorkspaceId();
-        const envelope: ClientMessage = {
-            requestId,
-            command,
-            ...(workspaceId !== null ? { workspaceId } : {}),
-            payload: parsedInput.data
-        };
-        const clientParsed = clientMessageSchema.safeParse(envelope);
-        if (!clientParsed.success) {
-            return Promise.reject(new WsError('protocol', 'Failed to encode envelope'));
-        }
         return new Promise<CommandOutput<N>>((resolve, reject) => {
             const timer = setTimeout(() => {
                 this.pending.delete(requestId);
@@ -269,7 +271,42 @@ export class DevEyeWs {
                 reject,
                 timer
             });
-            this.socket!.send(JSON.stringify(clientParsed.data));
+
+            const post = (): void => {
+                // Le délai a pu expirer, ou une fermeture avoir purgé les requêtes
+                // en vol, pendant que la socket s'ouvrait : ne pas poster un
+                // message dont plus personne n'attend la réponse.
+                if (!this.pending.has(requestId)) return;
+                if (!this.socket || this._state !== 'open') {
+                    this.pending.delete(requestId);
+                    clearTimeout(timer);
+                    reject(new WsError('closed', 'WS not open'));
+                    return;
+                }
+                // L'espace actif voyage sur l'enveloppe, jamais dans le payload :
+                // aucun site d'appel n'a à le passer, et le serveur n'a qu'un point
+                // de résolution. Absent -> le serveur retombe sur l'espace
+                // personnel. Lu ici et non à l'appel : la session peut l'avoir
+                // fixé pendant que la socket s'ouvrait.
+                const workspaceId = getActiveWorkspaceId();
+                const envelope: ClientMessage = {
+                    requestId,
+                    command,
+                    ...(workspaceId !== null ? { workspaceId } : {}),
+                    payload: parsedInput.data
+                };
+                const clientParsed = clientMessageSchema.safeParse(envelope);
+                if (!clientParsed.success) {
+                    this.pending.delete(requestId);
+                    clearTimeout(timer);
+                    reject(new WsError('protocol', 'Failed to encode envelope'));
+                    return;
+                }
+                this.socket.send(JSON.stringify(clientParsed.data));
+            };
+
+            if (this._state === 'open') post();
+            else this.outbox.push(post);
         });
     }
 }
