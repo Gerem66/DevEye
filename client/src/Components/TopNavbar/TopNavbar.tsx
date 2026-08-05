@@ -248,6 +248,26 @@ export default function TopNavbar({
                             exit={{ opacity: 0, y: 0 }}
                             transition={{ duration: 0.15 }}
                         >
+                            {/* Section « Espaces » en tête : elle dit où l'on est, et
+                                tout ce qui suit — apparence, accueil, données — en
+                                dépend. Un réglage se lit après le contexte auquel il
+                                s'applique, pas avant. */}
+                            {onSelectWorkspace && onCreateWorkspace && onManageWorkspace && (
+                                <WorkspaceSwitcher
+                                    onSelect={(id) => {
+                                        onSelectWorkspace(id);
+                                        setMenuOpen(false);
+                                    }}
+                                    onCreate={() => {
+                                        onCreateWorkspace();
+                                        setMenuOpen(false);
+                                    }}
+                                    onManage={(e) => {
+                                        onManageWorkspace(e);
+                                        setMenuOpen(false);
+                                    }}
+                                />
+                            )}
                             <button
                                 className={styles.menuItem}
                                 onClick={(e) => {
@@ -286,25 +306,6 @@ export default function TopNavbar({
                                     <span className='icon icon-edit' /> Organiser l’accueil
                                 </button>
                             )}
-                            {/* Section « Espaces » : le contexte de travail, entre les
-                                réglages personnels et les entrées de flotte. */}
-                            {onSelectWorkspace && onCreateWorkspace && onManageWorkspace && (
-                                <WorkspaceSwitcher
-                                    onSelect={(id) => {
-                                        onSelectWorkspace(id);
-                                        setMenuOpen(false);
-                                    }}
-                                    onCreate={() => {
-                                        onCreateWorkspace();
-                                        setMenuOpen(false);
-                                    }}
-                                    onManage={(e) => {
-                                        onManageWorkspace(e);
-                                        setMenuOpen(false);
-                                    }}
-                                />
-                            )}
-
                             {/* Second separator: groups "fleet" entries (Appareils,
                                 Logs) apart from the personal settings above. */}
                             {(onOpenDevices || onOpenLogs || onOpenUsers) && <hr className={styles.divider} />}

@@ -14,7 +14,7 @@ import { useWorkspaceAdmin } from './useWorkspaceAdmin';
 import styles from './Workspace.module.css';
 
 /** Les vues de la page. « general » existe toujours, les autres dépendent des droits. */
-type TabId = 'general' | 'members' | 'roles' | 'security';
+type TabId = 'general' | 'members' | 'roles';
 
 /** « il y a 3 j », ou « jamais » pour un compte qui n'est pas encore venu. */
 function lastSeen(epoch: number): string {
@@ -27,8 +27,7 @@ function lastSeen(epoch: number): string {
 }
 
 /**
- * Page « Espace de travail », découpée en onglets : Général, Membres, Rôles,
- * Chiffrement.
+ * Page « Espace de travail », découpée en onglets : Général, Membres, Rôles.
  *
  * Les onglets sont construits d'après les droits de l'appelant, si bien qu'un
  * onglet affiché mène toujours à quelque chose d'utilisable — plutôt qu'à une
@@ -69,12 +68,6 @@ export default function FeatureWorkspace() {
                 icon: 'shield',
                 badge: admin.roles.length,
                 when: isShared && canManageRoles
-            },
-            {
-                id: 'security',
-                label: 'Chiffrement',
-                icon: 'lock',
-                when: isShared && isOwner && Boolean(admin.sharedKey?.applicable)
             }
         ] satisfies (TabDef<TabId> & { when: boolean })[]
     )
@@ -128,6 +121,54 @@ export default function FeatureWorkspace() {
             {admin.error && <div className={styles.errorBanner}>{admin.error}</div>}
 
             <div className={styles.sections}>
+                {/*
+                    Un espace partagé né avant la clé d'espace résout encore les
+                    clés de son propriétaire : si celui-ci chiffre par mot de
+                    passe, lui seul lit le contenu — les autres se voient refuser
+                    l'accès malgré leur rôle. Ce n'est pas un réglage à proposer,
+                    c'est un état à réparer, donc un avertissement en tête de
+                    « Général » plutôt qu'un onglet où il faudrait penser à aller.
+                    Il disparaît une fois la conversion faite.
+                */}
+                {active === 'general' && isShared && admin.sharedKey?.applicable && !admin.sharedKey.enabled && (
+                    <section className={styles.section}>
+                        <span className={styles.sectionLabel}>Clé de chiffrement</span>
+                        <div className={`${styles.card} ${styles.warnCard}`}>
+                            <p className={styles.hint}>
+                                Le contenu de cet espace est encore chiffré avec la clé personnelle de son propriétaire.
+                                Tant que c’est le cas, les autres membres se voient refuser l’accès aux mots de passe et
+                                aux notes, même avec le rôle qui convient.
+                            </p>
+                            {isOwner ? (
+                                <>
+                                    {admin.sharedKey.blockers.map((b) => (
+                                        <p key={b} className={styles.hint}>
+                                            ⚠️ {b}
+                                        </p>
+                                    ))}
+                                    <div className={styles.dangerZone}>
+                                        <p className={styles.hint}>
+                                            À faire une seule fois, session déverrouillée. Le contenu est relu avec
+                                            votre clé puis réécrit sous celle de l’espace.
+                                        </p>
+                                        <Button
+                                            onClick={() => void admin.enableSharedKey()}
+                                            disabled={admin.busy || admin.sharedKey.blockers.length > 0}
+                                        >
+                                            {admin.busy ? 'Conversion…' : 'Donner sa clé à l’espace'}
+                                        </Button>
+                                    </div>
+                                </>
+                            ) : (
+                                <p className={styles.hint}>
+                                    Seul le propriétaire peut y remédier : lui seul détient la clé qui déchiffre le
+                                    contenu existant.
+                                </p>
+                            )}
+                        </div>
+                    </section>
+                )}
+
                 {active === 'general' && (
                     <section className={styles.section}>
                         <span className={styles.sectionLabel}>Nom</span>
@@ -284,42 +325,6 @@ export default function FeatureWorkspace() {
                                         </button>
                                     </div>
                                 ))
-                            )}
-                        </div>
-                    </section>
-                )}
-
-                {active === 'security' && isShared && isOwner && admin.sharedKey?.applicable && (
-                    <section className={styles.section}>
-                        <span className={styles.sectionLabel}>Clé de chiffrement</span>
-                        <div className={styles.card}>
-                            {admin.sharedKey.enabled ? (
-                                <p className={styles.hint}>
-                                    Cet espace possède sa propre clé de chiffrement : tous ses membres en lisent le
-                                    contenu, indépendamment de votre mot de passe.
-                                </p>
-                            ) : (
-                                <>
-                                    <p className={styles.hint}>
-                                        Le contenu de cet espace est actuellement chiffré avec <strong>votre</strong>{' '}
-                                        clé. Si vous utilisez le chiffrement par mot de passe, vous êtes donc le seul à
-                                        pouvoir le lire. Lui donner sa propre clé le rend lisible par tous ses membres.
-                                    </p>
-                                    {admin.sharedKey.blockers.map((b) => (
-                                        <p key={b} className={styles.hint}>
-                                            ⚠️ {b}
-                                        </p>
-                                    ))}
-                                    <div className={styles.dangerZone}>
-                                        <p className={styles.hint}>À faire une seule fois, session déverrouillée.</p>
-                                        <Button
-                                            onClick={() => void admin.enableSharedKey()}
-                                            disabled={admin.busy || admin.sharedKey.blockers.length > 0}
-                                        >
-                                            {admin.busy ? 'Conversion…' : 'Activer la clé d’espace'}
-                                        </Button>
-                                    </div>
-                                </>
                             )}
                         </div>
                     </section>

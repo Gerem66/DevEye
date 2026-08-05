@@ -6,7 +6,7 @@ import { ws } from '@/api/ws';
 import { OpenPopup } from '@/Components/Popup';
 import { isHomeReady, onHomeReady } from '@/stores/homeReady';
 import { refreshDevices, resetDevices, useDevices } from '@/stores/devices';
-import { setPermissions } from '@/stores/workspace';
+import { setPermissions, useWorkspacePermissions } from '@/stores/workspace';
 import { syncThemeFromServer } from '@/stores/theme';
 import { syncHomeLayoutFromServer } from '@/stores/homeLayout';
 import {
@@ -23,7 +23,7 @@ import { WidgetGrid } from '@/Components/WidgetGrid';
 import { WidgetPopup, FeatureKeepAlive } from '@/Components/WidgetPopup';
 import { Wallpaper } from '@/Components/Wallpaper';
 import { SettingsPanel } from '@/Components/SettingsPanel';
-import { InfoPopup } from '@/Components/InfoPopup';
+import { InfoPopup, openInfo } from '@/Components/InfoPopup';
 import PopupUnlock from './popup-unlock';
 import CreateWorkspacePopup, { CREATE_WORKSPACE_POPUP } from './popup-create-workspace';
 
@@ -39,10 +39,17 @@ import MonitoringPanel from '@/Features/Monitoring/MonitoringPanel';
 
 import { FEATURE_CATALOG } from './catalog';
 import { isForceReload } from './forceReload';
-import { deviceTileVisual, deviceViewId, featureTileVisual, shortcutTileVisual } from './tiles/tileVisual';
+import {
+    DEVICE_VIEW_PREFIX,
+    deviceTileVisual,
+    deviceViewId,
+    featureTileVisual,
+    shortcutTileVisual
+} from './tiles/tileVisual';
 import { EditableHome } from './organize/EditableHome';
 
-import type { HomeSection } from 'deveye-types';
+import type { HomeSection, WorkspaceFeatureId } from 'deveye-types';
+import { WORKSPACE_FEATURE_IDS } from 'deveye-types';
 import type { FeatureProps } from '@/Features/types';
 import styles from './Dashboard.module.css';
 import type { Workspace } from 'deveye-types';
@@ -129,6 +136,20 @@ const STATIC_VIEWS: ViewConfig[] = [
     }
 ];
 
+/**
+ * La feature dont une vue dépend, ou `null` si elle n'en dépend d'aucune.
+ *
+ * Les vues de compte et d'administration (profil, sécurité, logs, utilisateurs,
+ * gestion de l'espace) n'en dépendent pas : elles ont leurs propres gardes, et
+ * un rôle d'espace n'a pas à décider si l'on peut voir son propre profil.
+ */
+function featureBehind(viewId: string): WorkspaceFeatureId | null {
+    if (WORKSPACE_FEATURE_IDS.includes(viewId as WorkspaceFeatureId)) return viewId as WorkspaceFeatureId;
+    // La page Appareils et chaque vue d'appareil relèvent du même droit.
+    if (viewId === 'clients' || viewId.startsWith(DEVICE_VIEW_PREFIX)) return 'devices';
+    return null;
+}
+
 function getGreeting(): string {
     const hour = new Date().getHours();
     if (hour < 12) return 'Bonjour';
@@ -181,6 +202,7 @@ export default function HomePage() {
     const currentWorkspace = useActiveWorkspace();
     const layout = useHomeLayout();
     const { devices, loading: devicesLoading } = useDevices();
+    const { canFeature } = useWorkspacePermissions();
 
     const [expandedWidget, setExpandedWidget] = useState<string | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -231,8 +253,40 @@ export default function HomePage() {
         setExpandedWidget(widgetId);
     }, []);
 
+    /** Le rôle courant ouvre-t-il cette vue ? La lecture suffit à l'ouvrir. */
+    const allowedToOpen = useCallback(
+        (viewId: string): boolean => {
+            const feature = featureBehind(viewId);
+            return feature === null || canFeature(feature);
+        },
+        [canFeature]
+    );
+
+    const viewTitleOf = useCallback(
+        (viewId: string): string =>
+            STATIC_VIEWS.find((v) => v.id === viewId)?.title ??
+            (viewId.startsWith(DEVICE_VIEW_PREFIX) ? 'Appareils' : viewId),
+        []
+    );
+
     const handleExpand = useCallback(
         (widgetId: string, forceReset = false) => {
+            // Une seule garde, ici : la tuile de l'accueil, la navigation entre
+            // features et le menu de la topbar y aboutissent tous. La poser dans
+            // le rendu des tuiles n'aurait fermé qu'une porte sur trois.
+            if (!allowedToOpen(widgetId)) {
+                void openInfo({
+                    title: 'Accès refusé',
+                    body: (
+                        <p>
+                            Votre rôle ne donne pas accès à « {viewTitleOf(widgetId)} » dans cet espace. Demandez-le au
+                            propriétaire ou à un membre habilité à gérer les rôles.
+                        </p>
+                    ),
+                    width: 400
+                });
+                return;
+            }
             if (expandedWidget && expandedWidget !== widgetId) {
                 pendingExpandRef.current = { widgetId, forceReset };
                 closingFeatureRef.current = expandedWidget;
@@ -241,7 +295,7 @@ export default function HomePage() {
             }
             doExpand(widgetId, forceReset);
         },
-        [expandedWidget, doExpand]
+        [expandedWidget, doExpand, allowedToOpen, viewTitleOf]
     );
 
     const handleClose = useCallback(() => {
@@ -459,18 +513,27 @@ export default function HomePage() {
             for (const fid of section.items) {
                 const v = featureTileVisual(fid);
                 if (!v) continue;
+                // La tuile reste posée, en retrait : la retirer déplacerait les
+                // voisines et laisserait croire à une disposition abîmée. Elle dit
+                // qu'il y a là quelque chose auquel on n'a pas droit, ce qui est
+                // vrai et se demande.
+                const locked = !allowedToOpen(v.widgetId);
                 tiles.push(
                     <Widget
                         key={fid}
                         widgetId={v.widgetId}
                         title={v.title}
                         icon={v.icon}
+                        className={locked ? styles.lockedTile : undefined}
                         // Hidden while its popup is open so frequent re-renders can't
                         // make the source card flash behind the morphed popup.
                         style={expandedWidget === v.widgetId ? { opacity: 0 } : undefined}
                         onExpand={(e) => handleExpand(v.widgetId, isForceReload(e))}
                     >
-                        {v.body}
+                        {/* Le contenu vivant est remplacé, pas seulement grisé : il
+                            interrogerait un serveur qui refuse, et afficherait des
+                            zéros qui se lisent comme des données réelles. */}
+                        {locked ? <span className={styles.lockedBody}>Accès restreint</span> : v.body}
                     </Widget>
                 );
             }

@@ -27,6 +27,31 @@
     gap: var(--space-xl);
 }
 
+/*
+ * Tuile d'une feature que le rôle courant n'ouvre pas.
+ *
+ * Elle reste en place plutôt que de disparaître : la retirer déplacerait ses
+ * voisines et donnerait à lire une disposition abîmée. En retrait et
+ * désaturée, elle dit qu'il y a là quelque chose auquel on n'a pas droit — ce
+ * qui est vrai, et se demande. Le clic reste actif : c'est lui qui l'explique.
+ */
+.lockedTile {
+    opacity: 0.4;
+    filter: grayscale(1);
+}
+
+.lockedTile:hover {
+    opacity: 0.55;
+}
+
+.lockedBody {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
 .sectionGroup {
     display: flex;
     flex-direction: column;

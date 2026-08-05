@@ -12,7 +12,7 @@ export interface WorkspaceSwitcherProps {
 }
 
 /**
- * Section « Espaces » du menu de la topbar.
+ * Section « Espaces » du menu de la topbar, en tête.
  *
  * Volontairement plate : la liste complète est visible d'un coup, sans sous-menu
  * ni repli, parce qu'un utilisateur en a une poignée et que le but est de
@@ -29,7 +29,6 @@ export function WorkspaceSwitcher({ onSelect, onCreate, onManage }: WorkspaceSwi
 
     return (
         <>
-            <hr className={styles.divider} />
             <div className={styles.menuLabel}>Espaces</div>
 
             {showList &&
@@ -61,6 +60,10 @@ export function WorkspaceSwitcher({ onSelect, onCreate, onManage }: WorkspaceSwi
                     <span className='icon icon-settings' /> Gérer l’espace
                 </button>
             )}
+
+            {/* Le trait ferme la section au lieu de l'ouvrir : elle est en tête de
+                menu, un filet au-dessus n'y séparerait rien. */}
+            <hr className={styles.divider} />
         </>
     );
 }
