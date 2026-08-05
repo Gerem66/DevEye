@@ -89,6 +89,7 @@ export async function mailOAuthRoutes(app: FastifyInstance, { db, crypt, audit }
 
                 const account = await db.mailAccounts.create({
                     userId: claims.userId,
+                    workspaceId: claims.workspaceId,
                     displayNameEnc: await cipher.encrypt(tokens.email),
                     emailAddressEnc: await cipher.encrypt(tokens.email),
                     securityTier: claims.securityTier,

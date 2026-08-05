@@ -35,7 +35,7 @@ function toLocation(row: WeatherLocationRow): WeatherLocation {
  */
 async function resolveLocationKey(ctx: FeatureContext, row: WeatherLocationRow): Promise<string | null> {
     if (row.api_key_enc) return ctx.crypt.Decrypt(row.api_key_enc);
-    const accountKey = await ctx.db.weather.getKey(ctx.userId, row.provider);
+    const accountKey = await ctx.db.weather.getKey(ctx.workspaceId, row.provider);
     return accountKey ? ctx.crypt.Decrypt(accountKey.key_enc) : null;
 }
 
@@ -54,7 +54,7 @@ export const weatherListFeature: FeatureDefinition<
 > = defineFeature({
     ...weatherList,
     handler: async (ctx) => {
-        const rows = await ctx.db.weather.listLocations(ctx.userId);
+        const rows = await ctx.db.weather.listLocations(ctx.workspaceId);
         return { locations: rows.map(toLocation) };
     }
 });
@@ -75,6 +75,7 @@ export const weatherAddFeature: FeatureDefinition<
         }
         const row = await ctx.db.weather.createLocation({
             userId: ctx.userId,
+            workspaceId: ctx.workspaceId,
             label: geo.label,
             latitude: geo.latitude,
             longitude: geo.longitude,
@@ -105,7 +106,7 @@ export const weatherUpdateFeature: FeatureDefinition<
             const trimmed = input.apiKey.trim();
             apiKeyEnc = trimmed ? ctx.crypt.Encrypt(trimmed) : null;
         }
-        const row = await ctx.db.weather.updateLocation(input.id, ctx.userId, {
+        const row = await ctx.db.weather.updateLocation(input.id, ctx.workspaceId, {
             format: input.format,
             days: input.days,
             position: input.position,
@@ -129,7 +130,7 @@ export const weatherRemoveFeature: FeatureDefinition<
 > = defineFeature({
     ...weatherRemove,
     handler: async (ctx, input) => {
-        const deleted = await ctx.db.weather.deleteLocation(input.id, ctx.userId);
+        const deleted = await ctx.db.weather.deleteLocation(input.id, ctx.workspaceId);
         if (!deleted) throw new FeatureError('not_found', 'Weather location not found');
         ctx.audit({
             action: 'weather.remove',
@@ -148,7 +149,7 @@ export const weatherReorderFeature: FeatureDefinition<
 > = defineFeature({
     ...weatherReorder,
     handler: async (ctx, input) => {
-        const rows = await ctx.db.weather.reorderLocations(ctx.userId, input.ids);
+        const rows = await ctx.db.weather.reorderLocations(ctx.workspaceId, input.ids);
         return { locations: rows.map(toLocation) };
     }
 });
@@ -160,9 +161,9 @@ export const weatherSetPrimaryFeature: FeatureDefinition<
 > = defineFeature({
     ...weatherSetPrimary,
     handler: async (ctx, input) => {
-        const target = await ctx.db.weather.findLocation(input.id, ctx.userId);
+        const target = await ctx.db.weather.findLocation(input.id, ctx.workspaceId);
         if (!target) throw new FeatureError('not_found', 'Weather location not found');
-        const rows = await ctx.db.weather.setPrimaryLocation(ctx.userId, input.id);
+        const rows = await ctx.db.weather.setPrimaryLocation(ctx.workspaceId, input.id);
         return { locations: rows.map(toLocation) };
     }
 });
@@ -174,7 +175,7 @@ export const weatherGetFeature: FeatureDefinition<
 > = defineFeature({
     ...weatherGet,
     handler: async (ctx, input) => {
-        const row = await ctx.db.weather.findLocation(input.id, ctx.userId);
+        const row = await ctx.db.weather.findLocation(input.id, ctx.workspaceId);
         if (!row) throw new FeatureError('not_found', 'Weather location not found');
         const apiKey = await resolveLocationKey(ctx, row);
         try {
@@ -204,7 +205,7 @@ export const weatherSetKeyFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         const key = input.key.trim();
         if (key.length === 0) {
-            await ctx.db.weather.deleteKey(ctx.userId, input.provider);
+            await ctx.db.weather.deleteKey(ctx.workspaceId, input.provider);
             ctx.audit({
                 action: 'weather.setKey',
                 description: `Clé API météo supprimée (${input.provider})`,
@@ -212,7 +213,7 @@ export const weatherSetKeyFeature: FeatureDefinition<
             });
             return { provider: input.provider, hasKey: false };
         }
-        await ctx.db.weather.setKey(ctx.userId, input.provider, ctx.crypt.Encrypt(key));
+        await ctx.db.weather.setKey(ctx.workspaceId, input.provider, ctx.crypt.Encrypt(key));
         ctx.audit({
             action: 'weather.setKey',
             description: `Clé API météo enregistrée (${input.provider})`,

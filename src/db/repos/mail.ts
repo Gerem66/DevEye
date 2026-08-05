@@ -29,17 +29,17 @@ export interface MailAccountConfig {
 }
 
 export interface MailAccountsRepo {
-    listByUser(userId: number): Promise<MailAccountRow[]>;
-    findById(id: number, userId: number): Promise<MailAccountRow | null>;
+    listByWorkspace(workspaceId: number): Promise<MailAccountRow[]>;
+    findById(id: number, workspaceId: number): Promise<MailAccountRow | null>;
     /** Unscoped read for the background sync loop, which has no live user session. */
     findByIdUnscoped(id: number): Promise<MailAccountRow | null>;
-    create(input: { userId: number } & MailAccountConfig): Promise<MailAccountRow>;
-    update(id: number, userId: number, input: MailAccountConfig): Promise<MailAccountRow | null>;
-    setEnabled(id: number, userId: number, enabled: boolean): Promise<MailAccountRow | null>;
-    delete(id: number, userId: number): Promise<boolean>;
+    create(input: { userId: number; workspaceId: number } & MailAccountConfig): Promise<MailAccountRow>;
+    update(id: number, workspaceId: number, input: MailAccountConfig): Promise<MailAccountRow | null>;
+    setEnabled(id: number, workspaceId: number, enabled: boolean): Promise<MailAccountRow | null>;
+    delete(id: number, workspaceId: number): Promise<boolean>;
     /** Lay out the user's accounts in the given order — same convention as `uptime.reorder`. */
-    reorder(userId: number, ids: number[]): Promise<void>;
-    count(userId: number): Promise<number>;
+    reorder(workspaceId: number, ids: number[]): Promise<void>;
+    count(workspaceId: number): Promise<number>;
     /** Write back a sync outcome (background loop or on-demand). */
     recordSync(id: number, lastSyncAt: number, lastSyncErrorEnc: string | null): Promise<void>;
     /** Persist a refreshed OAuth token blob without touching anything else. */
@@ -138,9 +138,9 @@ export interface MailMessagesRepo {
 }
 
 export interface MailSettingsRepo {
-    get(userId: number): Promise<MailSettingsRow | null>;
+    get(workspaceId: number): Promise<MailSettingsRow | null>;
     set(
-        userId: number,
+        workspaceId: number,
         input: {
             externalScanEnabledDefault: boolean;
             trustedImageDomains: string[];
@@ -162,19 +162,19 @@ function accountConfigParams(c: MailAccountConfig): unknown[] {
 }
 
 export function mailAccountsRepo(pool: Q): MailAccountsRepo {
-    async function reload(id: number, userId: number): Promise<MailAccountRow | null> {
-        const r = await pool.query<MailAccountRow>('SELECT * FROM mail_accounts WHERE id = ? AND user_id = ?', [
+    async function reload(id: number, workspaceId: number): Promise<MailAccountRow | null> {
+        const r = await pool.query<MailAccountRow>('SELECT * FROM mail_accounts WHERE id = ? AND workspace_id = ?', [
             id,
-            userId
+            workspaceId
         ]);
         return r.rows[0] ?? null;
     }
 
     return {
-        async listByUser(userId) {
+        async listByWorkspace(workspaceId) {
             const r = await pool.query<MailAccountRow>(
-                'SELECT * FROM mail_accounts WHERE user_id = ? ORDER BY sort_order ASC, id ASC',
-                [userId]
+                'SELECT * FROM mail_accounts WHERE workspace_id = ? ORDER BY sort_order ASC, id ASC',
+                [workspaceId]
             );
             return r.rows;
         },
@@ -183,59 +183,62 @@ export function mailAccountsRepo(pool: Q): MailAccountsRepo {
             const r = await pool.query<MailAccountRow>('SELECT * FROM mail_accounts WHERE id = ?', [id]);
             return r.rows[0] ?? null;
         },
-        async create({ userId, ...config }) {
+        async create({ userId, workspaceId, ...config }) {
             // New accounts land at the end of the list, never in the middle.
             const posRow = await pool.query<{ next: number }>(
-                'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next FROM mail_accounts WHERE user_id = ?',
-                [userId]
+                'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next FROM mail_accounts WHERE workspace_id = ?',
+                [workspaceId]
             );
             const res = await pool.query(
                 `INSERT INTO mail_accounts
-                     (user_id, display_name_enc, email_address_enc, security_tier, auth_method,
+                     (user_id, workspace_id, display_name_enc, email_address_enc, security_tier, auth_method,
                       credentials_enc, enabled, sync_interval_seconds, sort_order)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [userId, ...accountConfigParams(config), Number(posRow.rows[0]?.next ?? 0)]
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [userId, workspaceId, ...accountConfigParams(config), Number(posRow.rows[0]?.next ?? 0)]
             );
             const r = await pool.query<MailAccountRow>('SELECT * FROM mail_accounts WHERE id = ?', [res.insertId]);
             return r.rows[0];
         },
-        async update(id, userId, config) {
+        async update(id, workspaceId, config) {
             const res = await pool.query(
                 `UPDATE mail_accounts
                  SET display_name_enc = ?, email_address_enc = ?, security_tier = ?, auth_method = ?,
                      credentials_enc = ?, enabled = ?, sync_interval_seconds = ?
-                 WHERE id = ? AND user_id = ?`,
-                [...accountConfigParams(config), id, userId]
+                 WHERE id = ? AND workspace_id = ?`,
+                [...accountConfigParams(config), id, workspaceId]
             );
             if (res.rowCount === 0) return null;
-            return reload(id, userId);
+            return reload(id, workspaceId);
         },
-        async setEnabled(id, userId, enabled) {
-            const res = await pool.query('UPDATE mail_accounts SET enabled = ? WHERE id = ? AND user_id = ?', [
+        async setEnabled(id, workspaceId, enabled) {
+            const res = await pool.query('UPDATE mail_accounts SET enabled = ? WHERE id = ? AND workspace_id = ?', [
                 enabled ? 1 : 0,
                 id,
-                userId
+                workspaceId
             ]);
             if (res.rowCount === 0) return null;
-            return reload(id, userId);
+            return reload(id, workspaceId);
         },
-        async delete(id, userId) {
-            const r = await pool.query('DELETE FROM mail_accounts WHERE id = ? AND user_id = ?', [id, userId]);
+        async delete(id, workspaceId) {
+            const r = await pool.query('DELETE FROM mail_accounts WHERE id = ? AND workspace_id = ?', [
+                id,
+                workspaceId
+            ]);
             return r.rowCount > 0;
         },
-        async reorder(userId, ids) {
+        async reorder(workspaceId, ids) {
             for (let i = 0; i < ids.length; i++) {
-                await pool.query('UPDATE mail_accounts SET sort_order = ? WHERE id = ? AND user_id = ?', [
+                await pool.query('UPDATE mail_accounts SET sort_order = ? WHERE id = ? AND workspace_id = ?', [
                     i,
                     ids[i],
-                    userId
+                    workspaceId
                 ]);
             }
         },
-        async count(userId) {
+        async count(workspaceId) {
             const r = await pool.query<{ total: number }>(
-                'SELECT COUNT(*) AS total FROM mail_accounts WHERE user_id = ?',
-                [userId]
+                'SELECT COUNT(*) AS total FROM mail_accounts WHERE workspace_id = ?',
+                [workspaceId]
             );
             return Number(r.rows[0]?.total ?? 0);
         },
@@ -452,27 +455,29 @@ export function mailMessagesRepo(pool: Q): MailMessagesRepo {
 
 export function mailSettingsRepo(pool: Q): MailSettingsRepo {
     return {
-        async get(userId) {
-            const r = await pool.query<MailSettingsRow>('SELECT * FROM mail_settings WHERE user_id = ?', [userId]);
+        async get(workspaceId) {
+            const r = await pool.query<MailSettingsRow>('SELECT * FROM mail_settings WHERE workspace_id = ?', [
+                workspaceId
+            ]);
             return r.rows[0] ?? null;
         },
-        async set(userId, { externalScanEnabledDefault, trustedImageDomains, bodyRenderMode }) {
+        async set(workspaceId, { externalScanEnabledDefault, trustedImageDomains, bodyRenderMode }) {
             await pool.query(
                 `INSERT INTO mail_settings
-                     (user_id, external_scan_enabled_default, trusted_image_domains, body_render_mode)
+                     (workspace_id, external_scan_enabled_default, trusted_image_domains, body_render_mode)
                  VALUES (?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE
                      external_scan_enabled_default = VALUES(external_scan_enabled_default),
                      trusted_image_domains         = VALUES(trusted_image_domains),
                      body_render_mode              = VALUES(body_render_mode)`,
                 [
-                    userId,
+                    workspaceId,
                     externalScanEnabledDefault ? 1 : 0,
                     trustedImageDomains.length > 0 ? JSON.stringify(trustedImageDomains) : null,
                     bodyRenderMode
                 ]
             );
-            const row = await this.get(userId);
+            const row = await this.get(workspaceId);
             if (!row) throw new Error('Failed to persist mail settings');
             return row;
         }

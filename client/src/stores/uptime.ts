@@ -37,7 +37,7 @@ function emit(next: Partial<UptimeCountState>): void {
 export async function refreshUptime(): Promise<void> {
     if (workspaceId === null || ws.state !== 'open') return;
     try {
-        const res = await ws.send('uptime.count', { workspaceId });
+        const res = await ws.send('uptime.count', {});
         emit({ ...res, loading: false });
     } catch {
         // A transient send failure keeps the last good counts rather than

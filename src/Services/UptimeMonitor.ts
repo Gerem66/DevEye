@@ -196,11 +196,12 @@ export class UptimeMonitor {
         this.timer = null;
     }
 
-    private cipherFor(userId: number): Cipher {
-        let cipher = this.ciphers.get(userId);
+    /** Codec de l'étage ouvert d'un espace, mémoïsé pour la durée du process. */
+    private cipherFor(workspaceId: number): Cipher {
+        let cipher = this.ciphers.get(workspaceId);
         if (!cipher) {
-            cipher = createOpenCipher(this.deps.db, this.deps.crypt, userId);
-            this.ciphers.set(userId, cipher);
+            cipher = createOpenCipher(this.deps.db, this.deps.crypt, workspaceId);
+            this.ciphers.set(workspaceId, cipher);
         }
         return cipher;
     }
@@ -237,7 +238,7 @@ export class UptimeMonitor {
 
     private async probeAndRecord(row: UptimeServiceRow): Promise<void> {
         try {
-            const cipher = this.cipherFor(row.user_id);
+            const cipher = this.cipherFor(row.workspace_id);
             const target = await decryptService(cipher, row.content);
             const outcome = target.url
                 ? await probeService(target, row)
@@ -385,7 +386,7 @@ export class UptimeMonitor {
         target: ServicePayload,
         alert: { subject: string; body: string; event: 'down' | 'recovered'; at: number }
     ): Promise<boolean> {
-        const channels = await this.resolveChannels(row.user_id);
+        const channels = await this.resolveChannels(row.workspace_id);
         let delivered = false;
 
         if (channels.email && channels.sendAccount) {
@@ -447,20 +448,24 @@ export class UptimeMonitor {
      * "open"-tier account is configured — the caller must skip mail delivery
      * (never a hard failure: the webhook channel is independent).
      */
-    async resolveChannels(userId: number): Promise<{
+    async resolveChannels(workspaceId: number): Promise<{
         email: string | null;
         sendAccount: { credentials: mailClient.MailCredentials; fromEmail: string } | null;
         webhook: string | null;
     }> {
         const { db } = this.deps;
-        const settings = await db.uptimeSettings.get(userId);
+        const settings = await db.uptimeSettings.get(workspaceId);
         const emailEnabled = settings ? settings.email_enabled === 1 : true;
-        const cipher = this.cipherFor(userId);
+        const cipher = this.cipherFor(workspaceId);
 
         let email: string | null = null;
         let sendAccount: { credentials: mailClient.MailCredentials; fromEmail: string } | null = null;
         if (emailEnabled && settings?.mail_account_id) {
-            const account = await db.mailAccounts.findById(settings.mail_account_id, userId);
+            // Scopé à l'espace : aucune FK ne peut exprimer « le compte mail doit
+            // être du même espace que ces réglages ». Un pointeur devenu
+            // inter-espaces doit donc rendre « pas de canal mail », jamais ouvrir
+            // les identifiants SMTP d'un compte étranger.
+            const account = await db.mailAccounts.findById(settings.mail_account_id, workspaceId);
             if (account && account.enabled === 1 && account.security_tier === 'open') {
                 const accountEmail = await cipher.tryDecrypt(account.email_address_enc);
                 const custom = settings.email_enc ? await cipher.tryDecrypt(settings.email_enc) : null;
@@ -487,8 +492,8 @@ export class UptimeMonitor {
     }
 
     /** Send a sample alert on every configured channel (settings "Tester"). */
-    async sendTestAlert(userId: number): Promise<{ sent: boolean; error: string | null }> {
-        const channels = await this.resolveChannels(userId);
+    async sendTestAlert(workspaceId: number): Promise<{ sent: boolean; error: string | null }> {
+        const channels = await this.resolveChannels(workspaceId);
         if (!channels.sendAccount && !channels.webhook) {
             return {
                 sent: false,

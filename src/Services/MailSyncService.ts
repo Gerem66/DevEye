@@ -47,11 +47,12 @@ export class MailSyncService {
         this.timer = null;
     }
 
-    private cipherFor(userId: number): Cipher {
-        let cipher = this.ciphers.get(userId);
+    /** Codec de l'étage ouvert d'un espace, mémoïsé pour la durée du process. */
+    private cipherFor(workspaceId: number): Cipher {
+        let cipher = this.ciphers.get(workspaceId);
         if (!cipher) {
-            cipher = createOpenCipher(this.deps.db, this.deps.crypt, userId);
-            this.ciphers.set(userId, cipher);
+            cipher = createOpenCipher(this.deps.db, this.deps.crypt, workspaceId);
+            this.ciphers.set(workspaceId, cipher);
         }
         return cipher;
     }
@@ -79,7 +80,7 @@ export class MailSyncService {
         try {
             const row = await this.deps.db.mailAccounts.findByIdUnscoped(accountId);
             if (!row || row.enabled !== 1 || row.security_tier !== 'open') return;
-            const cipher = this.cipherFor(row.user_id);
+            const cipher = this.cipherFor(row.workspace_id);
             try {
                 const credentials = await decryptCredentials(cipher, row.credentials_enc);
                 const folders = await syncAccountFolders(this.deps.db, cipher, row, credentials);

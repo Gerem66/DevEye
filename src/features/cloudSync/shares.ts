@@ -13,7 +13,7 @@ import { authorizeShare, requireEngine, toClientShare } from './_shared';
 export const cloudSyncListSharesFeature = defineFeature({
     ...cloudSyncListShares,
     handler: async (ctx) => {
-        const rows = await ctx.db.syncShares.listByUser(ctx.userId);
+        const rows = await ctx.db.syncShares.listByWorkspace(ctx.workspaceId);
         return { shares: await Promise.all(rows.map((r) => toClientShare(ctx, r))) };
     }
 });
@@ -32,6 +32,7 @@ export const cloudSyncCreateShareFeature = defineFeature({
 
         const row = await ctx.db.syncShares.create({
             userId: ctx.userId,
+            workspaceId: ctx.workspaceId,
             name: input.name.trim(),
             storagePath: canonicalStoragePath(input.storagePath)
         });

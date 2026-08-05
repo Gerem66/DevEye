@@ -69,7 +69,7 @@ import {
 
 /** Load a caller-owned account row, or throw `not_found`. */
 async function loadAccount(ctx: FeatureContext, id: number): Promise<MailAccountRow> {
-    const row = await ctx.db.mailAccounts.findById(id, ctx.userId);
+    const row = await ctx.db.mailAccounts.findById(id, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Compte mail introuvable');
     return row;
 }
@@ -153,7 +153,7 @@ export const mailAccountListFeature: FeatureDefinition<
 > = defineFeature({
     ...mailAccountList,
     handler: async (ctx) => {
-        const rows = await ctx.db.mailAccounts.listByUser(ctx.userId);
+        const rows = await ctx.db.mailAccounts.listByWorkspace(ctx.workspaceId);
         const accounts = await Promise.all(rows.map((row) => toAccountDTO(cipherFor(ctx, row.security_tier), row)));
         return { accounts };
     }
@@ -165,7 +165,7 @@ export const mailAccountCountFeature: FeatureDefinition<
     typeof mailAccountCount.output
 > = defineFeature({
     ...mailAccountCount,
-    handler: async (ctx) => ({ count: await ctx.db.mailAccounts.count(ctx.userId) })
+    handler: async (ctx) => ({ count: await ctx.db.mailAccounts.count(ctx.workspaceId) })
 });
 
 export const mailAccountAddFeature: FeatureDefinition<
@@ -185,6 +185,7 @@ export const mailAccountAddFeature: FeatureDefinition<
         };
         const row = await ctx.db.mailAccounts.create({
             userId: ctx.userId,
+            workspaceId: ctx.workspaceId,
             displayNameEnc: await cipher.encrypt(input.draft.displayName),
             emailAddressEnc: await cipher.encrypt(input.draft.emailAddress),
             securityTier: input.draft.securityTier,
@@ -239,7 +240,7 @@ export const mailAccountUpdateFeature: FeatureDefinition<
                 throw new FeatureError('validation', `Identifiant et mot de passe ${label} requis`);
             }
         }
-        const row = await ctx.db.mailAccounts.update(input.id, ctx.userId, {
+        const row = await ctx.db.mailAccounts.update(input.id, ctx.workspaceId, {
             displayNameEnc: await cipher.encrypt(input.draft.displayName),
             emailAddressEnc: await cipher.encrypt(input.draft.emailAddress),
             securityTier: input.draft.securityTier,
@@ -284,7 +285,7 @@ export const mailAccountSetProfileFeature: FeatureDefinition<
         if (input.proxy !== undefined) credentials.proxy = input.proxy;
         const emailAddress = (await from.tryDecrypt(existing.email_address_enc)) ?? '';
 
-        const row = await ctx.db.mailAccounts.update(input.id, ctx.userId, {
+        const row = await ctx.db.mailAccounts.update(input.id, ctx.workspaceId, {
             displayNameEnc: await to.encrypt(input.displayName),
             emailAddressEnc: await to.encrypt(emailAddress),
             securityTier: input.securityTier,
@@ -315,7 +316,7 @@ export const mailAccountDeleteFeature: FeatureDefinition<
     ...mailAccountDelete,
     handler: async (ctx, input) => {
         await loadAccount(ctx, input.id);
-        await ctx.db.mailAccounts.delete(input.id, ctx.userId);
+        await ctx.db.mailAccounts.delete(input.id, ctx.workspaceId);
         ctx.audit({
             action: 'mail.accountDelete',
             level: 'warning',
@@ -333,7 +334,7 @@ export const mailAccountReorderFeature: FeatureDefinition<
 > = defineFeature({
     ...mailAccountReorder,
     handler: async (ctx, input) => {
-        await ctx.db.mailAccounts.reorder(ctx.userId, input.ids);
+        await ctx.db.mailAccounts.reorder(ctx.workspaceId, input.ids);
         return { ids: input.ids };
     }
 });
@@ -345,7 +346,7 @@ export const mailAccountSetEnabledFeature: FeatureDefinition<
 > = defineFeature({
     ...mailAccountSetEnabled,
     handler: async (ctx, input) => {
-        const row = await ctx.db.mailAccounts.setEnabled(input.id, ctx.userId, input.enabled);
+        const row = await ctx.db.mailAccounts.setEnabled(input.id, ctx.workspaceId, input.enabled);
         if (!row) throw new FeatureError('not_found', 'Compte mail introuvable');
         return { account: await toAccountDTO(cipherFor(ctx, row.security_tier), row) };
     }
@@ -389,6 +390,7 @@ export const mailOAuthStartFeature: FeatureDefinition<
         }
         const state = await signMailOAuthState({
             userId: ctx.userId,
+            workspaceId: ctx.workspaceId,
             sessionId: ctx.sessionId,
             provider: input.provider,
             securityTier: input.securityTier
@@ -633,7 +635,7 @@ export const mailMessageGetFeature: FeatureDefinition<
         const refresh = refreshCallback(ctx, account, credentials, cipher);
 
         const raw = await mailClient.fetchMessageRaw(credentials, folder.imap_path, message.uid, refresh);
-        const settings = await ctx.db.mailSettings.get(ctx.userId);
+        const settings = await ctx.db.mailSettings.get(ctx.workspaceId);
         const body = await parseAndSanitize(raw, {
             allowRemoteImages: input.allowRemoteImages,
             trustedDomains: parseTrustedImageDomains(settings?.trusted_image_domains ?? null),
@@ -774,7 +776,7 @@ export const mailAttachmentScanFeature: FeatureDefinition<
     ...mailAttachmentScan,
     handler: async (ctx, input) => {
         await loadMessageChain(ctx, input.messageId);
-        const settings = await ctx.db.mailSettings.get(ctx.userId);
+        const settings = await ctx.db.mailSettings.get(ctx.workspaceId);
         if (!settings || settings.external_scan_enabled_default !== 1) {
             throw new FeatureError('forbidden', "L'analyse externe n'est pas activée pour ce compte");
         }
@@ -837,7 +839,7 @@ export const mailGetSettingsFeature: FeatureDefinition<
 > = defineFeature({
     ...mailGetSettings,
     handler: async (ctx) => {
-        const row = await ctx.db.mailSettings.get(ctx.userId);
+        const row = await ctx.db.mailSettings.get(ctx.workspaceId);
         return { settings: toSettingsDTO(row) };
     }
 });
@@ -849,7 +851,7 @@ export const mailSetSettingsFeature: FeatureDefinition<
 > = defineFeature({
     ...mailSetSettings,
     handler: async (ctx, input) => {
-        const row = await ctx.db.mailSettings.set(ctx.userId, {
+        const row = await ctx.db.mailSettings.set(ctx.workspaceId, {
             externalScanEnabledDefault: input.externalScanEnabledDefault,
             trustedImageDomains: input.trustedImageDomains,
             bodyRenderMode: input.bodyRenderMode

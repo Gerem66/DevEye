@@ -31,7 +31,6 @@ const INCIDENTS_MAX = 20;
 
 interface ServiceDetailProps {
     service: UptimeService;
-    workspaceId: number;
     onBack: () => void;
     onEdit: () => void;
     onCheckNow: () => void;
@@ -44,7 +43,7 @@ interface ServiceDetailProps {
  * The three panels load independently — a slow journal never holds the chart
  * back — and only the chart re-queries when the range changes.
  */
-export function ServiceDetail({ service, workspaceId, onBack, onEdit, onCheckNow }: ServiceDetailProps) {
+export function ServiceDetail({ service, onBack, onEdit, onCheckNow }: ServiceDetailProps) {
     const [range, setRange] = useState<UptimeRange>('24h');
     const [points, setPoints] = useState<UptimePoint[]>([]);
     const [resolution, setResolution] = useState<UptimeResolution>('raw');
@@ -70,7 +69,7 @@ export function ServiceDetail({ service, workspaceId, onBack, onEdit, onCheckNow
         setBusyChart(true);
         // Opens the refresh cycle the three blocks share.
         setStaleError(null);
-        ws.send('uptime.history', { workspaceId, id, range })
+        ws.send('uptime.history', { id, range })
             .then((res) => {
                 if (cancelled) return;
                 setPoints(res.points);
@@ -85,12 +84,12 @@ export function ServiceDetail({ service, workspaceId, onBack, onEdit, onCheckNow
         return () => {
             cancelled = true;
         };
-    }, [workspaceId, id, range, stamp]);
+    }, [id, range, stamp]);
 
     useEffect(() => {
         let cancelled = false;
         setBusyIncidents(true);
-        ws.send('uptime.incidents', { workspaceId, id, limit: INCIDENTS_MAX })
+        ws.send('uptime.incidents', { id, limit: INCIDENTS_MAX })
             .then((res) => {
                 if (!cancelled) setIncidents(res.incidents);
             })
@@ -103,17 +102,12 @@ export function ServiceDetail({ service, workspaceId, onBack, onEdit, onCheckNow
         return () => {
             cancelled = true;
         };
-    }, [workspaceId, id, stamp]);
+    }, [id, stamp]);
 
     useEffect(() => {
         let cancelled = false;
         setBusyChecks(true);
-        ws.send('uptime.checks', {
-            workspaceId,
-            id,
-            limit: CHECKS_PREVIEW,
-            filter: { since: null, failuresOnly: false }
-        })
+        ws.send('uptime.checks', { id, limit: CHECKS_PREVIEW, filter: { since: null, failuresOnly: false } })
             .then((res) => {
                 if (!cancelled) setChecks(res.checks);
             })
@@ -126,7 +120,7 @@ export function ServiceDetail({ service, workspaceId, onBack, onEdit, onCheckNow
         return () => {
             cancelled = true;
         };
-    }, [workspaceId, id, stamp]);
+    }, [id, stamp]);
 
     // The window both charts are drawn on: the selected duration, so a
     // freshly-added service shows its samples against the period it lacks.
@@ -143,7 +137,7 @@ export function ServiceDetail({ service, workspaceId, onBack, onEdit, onCheckNow
     // The full journal is a floor below this one, exactly like this view is a
     // floor below the service list.
     if (journalOpen) {
-        return <MeasuresBrowser service={service} workspaceId={workspaceId} onBack={() => setJournalOpen(false)} />;
+        return <MeasuresBrowser service={service} onBack={() => setJournalOpen(false)} />;
     }
 
     return (

@@ -21,10 +21,10 @@ export interface SyncDeviceAssignmentRow extends SyncShareDeviceRow {
 }
 
 export interface SyncSharesRepo {
-    listByUser(userId: number): Promise<SyncShareRow[]>;
+    listByWorkspace(workspaceId: number): Promise<SyncShareRow[]>;
     listAll(): Promise<SyncShareRow[]>;
     findById(id: number): Promise<SyncShareRow | null>;
-    create(input: { userId: number; name: string; storagePath: string }): Promise<SyncShareRow>;
+    create(input: { userId: number; workspaceId: number; name: string; storagePath: string }): Promise<SyncShareRow>;
     update(
         id: number,
         input: {
@@ -55,10 +55,10 @@ export interface SyncSharesRepo {
 
 export function syncSharesRepo(pool: Q): SyncSharesRepo {
     return {
-        async listByUser(userId) {
+        async listByWorkspace(workspaceId) {
             const r = await pool.query<SyncShareRow>(
-                'SELECT * FROM sync_shares WHERE user_id = ? ORDER BY created ASC, id ASC',
-                [userId]
+                'SELECT * FROM sync_shares WHERE workspace_id = ? ORDER BY created ASC, id ASC',
+                [workspaceId]
             );
             return r.rows;
         },
@@ -70,12 +70,11 @@ export function syncSharesRepo(pool: Q): SyncSharesRepo {
             const r = await pool.query<SyncShareRow>('SELECT * FROM sync_shares WHERE id = ?', [id]);
             return r.rows[0] ?? null;
         },
-        async create({ userId, name, storagePath }) {
-            const res = await pool.query('INSERT INTO sync_shares (user_id, name, storage_path) VALUES (?, ?, ?)', [
-                userId,
-                name,
-                storagePath
-            ]);
+        async create({ userId, workspaceId, name, storagePath }) {
+            const res = await pool.query(
+                'INSERT INTO sync_shares (user_id, workspace_id, name, storage_path) VALUES (?, ?, ?, ?)',
+                [userId, workspaceId, name, storagePath]
+            );
             const r = await pool.query<SyncShareRow>('SELECT * FROM sync_shares WHERE id = ?', [res.insertId]);
             return r.rows[0];
         },

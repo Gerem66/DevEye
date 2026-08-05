@@ -21,31 +21,12 @@ import type { UptimeWindowStat } from '@/db/repos/uptime';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { decryptError, encryptService, toIncident, toService, EMPTY_STATS, type ServiceStats } from './_shared';
 
-/** Workspace id 0 is the caller's personal space (rows carry `workspace_id NULL`). */
-const PERSONAL_WORKSPACE_ID = 0;
-
 const DAY = 86400;
 
-async function assertWorkspaceMember(ctx: FeatureContext, workspaceId: number): Promise<void> {
-    if (workspaceId === PERSONAL_WORKSPACE_ID) return;
-    const ok = await ctx.db.workspaceMembers.isMember(ctx.userId, workspaceId);
-    if (!ok) throw new FeatureError('forbidden', 'Not a member of this workspace');
-}
-
-function toDbWorkspaceId(workspaceId: number): number | null {
-    return workspaceId === PERSONAL_WORKSPACE_ID ? null : workspaceId;
-}
-
-function rowInWorkspace(rowWorkspaceId: number | null, workspaceId: number): boolean {
-    return (rowWorkspaceId ?? PERSONAL_WORKSPACE_ID) === workspaceId;
-}
-
-/** Load one of the caller's services in this workspace, or throw `not_found`. */
-async function loadService(ctx: FeatureContext, workspaceId: number, id: number): Promise<UptimeServiceRow> {
-    const row = await ctx.db.uptimeServices.findById(id, ctx.userId);
-    if (!row || !rowInWorkspace(row.workspace_id, workspaceId)) {
-        throw new FeatureError('not_found', 'Uptime service not found');
-    }
+/** Load one service of the active workspace, or throw `not_found`. */
+async function loadService(ctx: FeatureContext, id: number): Promise<UptimeServiceRow> {
+    const row = await ctx.db.uptimeServices.findById(id, ctx.workspaceId);
+    if (!row) throw new FeatureError('not_found', 'Uptime service not found');
     return row;
 }
 
@@ -72,9 +53,9 @@ function ratio(stat: UptimeWindowStat | undefined): number | null {
 async function loadStats(ctx: FeatureContext, now: number): Promise<Map<number, ServiceStats>> {
     const today = Math.floor(now / DAY) * DAY;
     const [day, week, month] = await Promise.all([
-        ctx.db.uptimeHistory.windowStats(ctx.userId, now - DAY),
-        ctx.db.uptimeHistory.dailyWindowStats(ctx.userId, today - 6 * DAY),
-        ctx.db.uptimeHistory.dailyWindowStats(ctx.userId, today - 29 * DAY)
+        ctx.db.uptimeHistory.windowStats(ctx.workspaceId, now - DAY),
+        ctx.db.uptimeHistory.dailyWindowStats(ctx.workspaceId, today - 6 * DAY),
+        ctx.db.uptimeHistory.dailyWindowStats(ctx.workspaceId, today - 29 * DAY)
     ]);
     const index = (rows: UptimeWindowStat[]) => new Map(rows.map((r) => [r.serviceId, r]));
     const [byDay, byWeek, byMonth] = [index(day), index(week), index(month)];
@@ -95,7 +76,10 @@ async function loadStats(ctx: FeatureContext, now: number): Promise<Map<number, 
 /** Build the DTOs for a set of rows, folding in stats and ongoing outages. */
 async function toServices(ctx: FeatureContext, rows: UptimeServiceRow[]): Promise<UptimeService[]> {
     const now = Math.floor(Date.now() / 1000);
-    const [stats, open] = await Promise.all([loadStats(ctx, now), ctx.db.uptimeHistory.listOpenIncidents(ctx.userId)]);
+    const [stats, open] = await Promise.all([
+        loadStats(ctx, now),
+        ctx.db.uptimeHistory.listOpenIncidents(ctx.workspaceId)
+    ]);
     const downSince = new Map(open.map((i) => [i.service_id, i.started_at]));
     return Promise.all(
         rows.map((row) =>
@@ -116,11 +100,8 @@ export const uptimeListFeature: FeatureDefinition<
     typeof uptimeList.output
 > = defineFeature({
     ...uptimeList,
-    handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        const rows = (await ctx.db.uptimeServices.listByUser(ctx.userId)).filter((r) =>
-            rowInWorkspace(r.workspace_id, input.workspaceId)
-        );
+    handler: async (ctx) => {
+        const rows = await ctx.db.uptimeServices.listByWorkspace(ctx.workspaceId);
         return { services: await toServices(ctx, rows) };
     }
 });
@@ -131,10 +112,7 @@ export const uptimeCountFeature: FeatureDefinition<
     typeof uptimeCount.output
 > = defineFeature({
     ...uptimeCount,
-    handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        return ctx.db.uptimeServices.countByWorkspace(ctx.userId, toDbWorkspaceId(input.workspaceId));
-    }
+    handler: async (ctx) => ctx.db.uptimeServices.countByWorkspace(ctx.workspaceId)
 });
 
 export const uptimeAddFeature: FeatureDefinition<
@@ -144,11 +122,10 @@ export const uptimeAddFeature: FeatureDefinition<
 > = defineFeature({
     ...uptimeAdd,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
         const draft = input.service;
         const row = await ctx.db.uptimeServices.create({
             userId: ctx.userId,
-            workspaceId: toDbWorkspaceId(input.workspaceId),
+            workspaceId: ctx.workspaceId,
             content: await encryptService(ctx.secure.open, {
                 name: draft.name,
                 url: draft.url,
@@ -172,7 +149,7 @@ export const uptimeAddFeature: FeatureDefinition<
         // the first tick — the user just told us the URL, show them if it works.
         // A service created already paused is left alone, as the user asked.
         if (row.enabled === 1) await monitor(ctx).runOne(row);
-        return { service: await toOneService(ctx, await loadService(ctx, input.workspaceId, row.id)) };
+        return { service: await toOneService(ctx, await loadService(ctx, row.id)) };
     }
 });
 
@@ -183,10 +160,9 @@ export const uptimeUpdateFeature: FeatureDefinition<
 > = defineFeature({
     ...uptimeUpdate,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        await loadService(ctx, input.workspaceId, input.id);
+        await loadService(ctx, input.id);
         const draft = input.service;
-        const row = await ctx.db.uptimeServices.update(input.id, ctx.userId, {
+        const row = await ctx.db.uptimeServices.update(input.id, ctx.workspaceId, {
             content: await encryptService(ctx.secure.open, {
                 name: draft.name,
                 url: draft.url,
@@ -218,9 +194,8 @@ export const uptimeSetEnabledFeature: FeatureDefinition<
 > = defineFeature({
     ...uptimeSetEnabled,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        await loadService(ctx, input.workspaceId, input.id);
-        const row = await ctx.db.uptimeServices.setEnabled(input.id, ctx.userId, input.enabled);
+        await loadService(ctx, input.id);
+        const row = await ctx.db.uptimeServices.setEnabled(input.id, ctx.workspaceId, input.enabled);
         if (!row) throw new FeatureError('not_found', 'Uptime service not found');
         if (!input.enabled) {
             // Close any ongoing outage: we stop watching, so leaving it open
@@ -239,10 +214,9 @@ export const uptimeRemoveFeature: FeatureDefinition<
 > = defineFeature({
     ...uptimeRemove,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        await loadService(ctx, input.workspaceId, input.id);
+        await loadService(ctx, input.id);
         // History, rollup and incidents go with it (ON DELETE CASCADE).
-        await ctx.db.uptimeServices.delete(input.id, ctx.userId);
+        await ctx.db.uptimeServices.delete(input.id, ctx.workspaceId);
         ctx.audit({
             action: 'uptime.remove',
             description: 'Service surveillé supprimé',
@@ -259,8 +233,7 @@ export const uptimeReorderFeature: FeatureDefinition<
 > = defineFeature({
     ...uptimeReorder,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        await ctx.db.uptimeServices.reorder(ctx.userId, input.ids);
+        await ctx.db.uptimeServices.reorder(ctx.workspaceId, input.ids);
         return { ids: input.ids };
     }
 });
@@ -272,12 +245,11 @@ export const uptimeCheckNowFeature: FeatureDefinition<
 > = defineFeature({
     ...uptimeCheckNow,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        const row = await loadService(ctx, input.workspaceId, input.id);
+        const row = await loadService(ctx, input.id);
         // Same code path as the scheduler, so a manual check counts in the
         // history, the rollup and the incident log exactly like an automatic one.
         await monitor(ctx).runOne(row);
-        return { service: await toOneService(ctx, await loadService(ctx, input.workspaceId, input.id)) };
+        return { service: await toOneService(ctx, await loadService(ctx, input.id)) };
     }
 });
 
@@ -309,8 +281,7 @@ export const uptimeHistoryFeature: FeatureDefinition<
 > = defineFeature({
     ...uptimeHistory,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        await loadService(ctx, input.workspaceId, input.id);
+        await loadService(ctx, input.id);
         const now = Math.floor(Date.now() / 1000);
         const { resolution, since } = historyWindow(input.range, now);
         const history = ctx.db.uptimeHistory;
@@ -329,8 +300,7 @@ export const uptimeChecksFeature: FeatureDefinition<
 > = defineFeature({
     ...uptimeChecks,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        await loadService(ctx, input.workspaceId, input.id);
+        await loadService(ctx, input.id);
         const rows = await ctx.db.uptimeHistory.listChecks(input.id, input.filter, input.limit, input.before);
         return {
             checks: await Promise.all(
@@ -353,8 +323,7 @@ export const uptimeCheckStatsFeature: FeatureDefinition<
 > = defineFeature({
     ...uptimeCheckStats,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        await loadService(ctx, input.workspaceId, input.id);
+        await loadService(ctx, input.id);
         return { stats: await ctx.db.uptimeHistory.checkStats(input.id, input.filter) };
     }
 });
@@ -366,17 +335,23 @@ export const uptimeIncidentsFeature: FeatureDefinition<
 > = defineFeature({
     ...uptimeIncidents,
     handler: async (ctx, input) => {
-        await assertWorkspaceMember(ctx, input.workspaceId);
-        await loadService(ctx, input.workspaceId, input.id);
+        await loadService(ctx, input.id);
         const rows = await ctx.db.uptimeHistory.listIncidents(input.id, input.limit);
         return { incidents: await Promise.all(rows.map((row) => toIncident(ctx.secure.open, row))) };
     }
 });
 
-/** True when `mailAccountId` points at a caller-owned, enabled, "open"-tier mail account. */
+/**
+ * True when `mailAccountId` points at an enabled, "open"-tier mail account **of
+ * this workspace**.
+ *
+ * C'est la garde d'écriture du lien inter-features uptime → mail : aucune FK ne
+ * peut exprimer « même espace », donc le scope est vérifié ici, et de nouveau à
+ * la lecture dans `UptimeMonitor.resolveChannels`.
+ */
 async function isMailAccountReady(ctx: FeatureContext, mailAccountId: number | null): Promise<boolean> {
     if (mailAccountId === null) return false;
-    const account = await ctx.db.mailAccounts.findById(mailAccountId, ctx.userId);
+    const account = await ctx.db.mailAccounts.findById(mailAccountId, ctx.workspaceId);
     return account !== null && account.enabled === 1 && account.security_tier === 'open';
 }
 
@@ -387,7 +362,7 @@ export const uptimeGetSettingsFeature: FeatureDefinition<
 > = defineFeature({
     ...uptimeGetSettings,
     handler: async (ctx) => {
-        const row = await ctx.db.uptimeSettings.get(ctx.userId);
+        const row = await ctx.db.uptimeSettings.get(ctx.workspaceId);
         const mailAccountId = row?.mail_account_id ?? null;
         return {
             settings: {
@@ -412,7 +387,7 @@ export const uptimeSetSettingsFeature: FeatureDefinition<
     ...uptimeSetSettings,
     handler: async (ctx, input) => {
         if (input.mailAccountId !== null) {
-            const account = await ctx.db.mailAccounts.findById(input.mailAccountId, ctx.userId);
+            const account = await ctx.db.mailAccounts.findById(input.mailAccountId, ctx.workspaceId);
             if (!account) throw new FeatureError('not_found', 'Compte mail introuvable');
             if (account.security_tier !== 'open') {
                 throw new FeatureError(
@@ -423,7 +398,7 @@ export const uptimeSetSettingsFeature: FeatureDefinition<
         }
         const email = input.email.trim();
         const webhookUrl = input.webhookUrl.trim();
-        const row = await ctx.db.uptimeSettings.set(ctx.userId, {
+        const row = await ctx.db.uptimeSettings.set(ctx.workspaceId, {
             emailEnabled: input.emailEnabled,
             emailEnc: email ? await ctx.secure.open.encrypt(email) : null,
             mailAccountId: input.mailAccountId,
@@ -454,7 +429,7 @@ export const uptimeTestNotificationFeature: FeatureDefinition<
     typeof uptimeTestNotification.output
 > = defineFeature({
     ...uptimeTestNotification,
-    handler: async (ctx) => monitor(ctx).sendTestAlert(ctx.userId)
+    handler: async (ctx) => monitor(ctx).sendTestAlert(ctx.workspaceId)
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

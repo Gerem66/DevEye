@@ -34,7 +34,6 @@ const EMPTY_STATS: UptimeCheckStats = {
 
 interface MeasuresBrowserProps {
     service: UptimeService;
-    workspaceId: number;
     onBack: () => void;
 }
 
@@ -47,7 +46,7 @@ interface MeasuresBrowserProps {
  * you actually want the record — filtered, counted, and scrolling in its own box
  * so the surrounding page never grows.
  */
-export function MeasuresBrowser({ service, workspaceId, onBack }: MeasuresBrowserProps) {
+export function MeasuresBrowser({ service, onBack }: MeasuresBrowserProps) {
     const [periodSeconds, setPeriodSeconds] = useState<number | null>(null);
     const [failuresOnly, setFailuresOnly] = useState(false);
     const [checks, setChecks] = useState<UptimeCheck[]>([]);
@@ -75,8 +74,8 @@ export function MeasuresBrowser({ service, workspaceId, onBack }: MeasuresBrowse
         setBusy(true);
         setError(null);
         Promise.all([
-            ws.send('uptime.checks', { workspaceId, id, limit: PAGE, filter }),
-            ws.send('uptime.checkStats', { workspaceId, id, filter })
+            ws.send('uptime.checks', { id, limit: PAGE, filter }),
+            ws.send('uptime.checkStats', { id, filter })
         ])
             .then(([page, aggregate]) => {
                 if (cancelled) return;
@@ -93,7 +92,7 @@ export function MeasuresBrowser({ service, workspaceId, onBack }: MeasuresBrowse
         return () => {
             cancelled = true;
         };
-    }, [workspaceId, id, buildFilter]);
+    }, [id, buildFilter]);
 
     /** Append the next page. The aggregates already cover the whole selection. */
     async function loadMore(): Promise<void> {
@@ -102,13 +101,7 @@ export function MeasuresBrowser({ service, workspaceId, onBack }: MeasuresBrowse
         setBusy(true);
         setError(null);
         try {
-            const page = await ws.send('uptime.checks', {
-                workspaceId,
-                id,
-                limit: PAGE,
-                before,
-                filter: buildFilter()
-            });
+            const page = await ws.send('uptime.checks', { id, limit: PAGE, before, filter: buildFilter() });
             setChecks((prev) => [...prev, ...page.checks]);
             setMore(page.checks.length === PAGE);
         } catch {

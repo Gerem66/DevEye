@@ -130,6 +130,8 @@ export async function verifyTwoFactorChallenge(
 
 export interface MailOAuthStateClaims {
     userId: number;
+    /** Espace dans lequel le compte mail sera créé — le callback n'a pas de contexte pour le déduire. */
+    workspaceId: number;
     /** WS session id, so the callback route can reach the same live DEK for a "guarded" account. */
     sessionId: string;
     provider: MailOAuthProvider;
@@ -139,8 +141,9 @@ export interface MailOAuthStateClaims {
 /**
  * Short-lived state carried through the Google/Microsoft consent redirect —
  * the callback route is a plain HTTP GET with no WS context of its own, so
- * everything it needs to finish the flow (which user, which live session's
- * DEK to use if "guarded", which provider/tier) travels signed in `state`
+ * everything it needs to finish the flow (which user, which workspace, which
+ * live session's DEK to use if "guarded", which provider/tier) travels signed
+ * in `state`
  * rather than being guessed from cookies alone.
  */
 export async function signMailOAuthState(claims: MailOAuthStateClaims): Promise<string> {
@@ -200,6 +203,7 @@ export async function verifyMailOAuthState(token: string): Promise<MailOAuthStat
         if (
             payload.purpose !== 'mail-oauth' ||
             typeof payload.userId !== 'number' ||
+            typeof payload.workspaceId !== 'number' ||
             typeof payload.sessionId !== 'string' ||
             (payload.provider !== 'google' && payload.provider !== 'microsoft') ||
             (payload.securityTier !== 'open' && payload.securityTier !== 'guarded')
@@ -208,6 +212,7 @@ export async function verifyMailOAuthState(token: string): Promise<MailOAuthStat
         }
         return {
             userId: payload.userId,
+            workspaceId: payload.workspaceId,
             sessionId: payload.sessionId,
             provider: payload.provider,
             securityTier: payload.securityTier

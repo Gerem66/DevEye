@@ -31,7 +31,7 @@ export default function Uptime({ workspace }: FeatureProps) {
 
     const reload = useCallback(async () => {
         try {
-            const res = await ws.send('uptime.list', { workspaceId });
+            const res = await ws.send('uptime.list', {});
             setServices(res.services);
             setError(null);
         } catch {
@@ -85,12 +85,12 @@ export default function Uptime({ workspace }: FeatureProps) {
             try {
                 if (result === 'delete') {
                     if (!service) return;
-                    await ws.send('uptime.remove', { workspaceId, id: service.id });
+                    await ws.send('uptime.remove', { id: service.id });
                     setSelectedId(null);
                 } else if (service) {
-                    await ws.send('uptime.update', { workspaceId, id: service.id, service: result });
+                    await ws.send('uptime.update', { id: service.id, service: result });
                 } else {
-                    await ws.send('uptime.add', { workspaceId, service: result });
+                    await ws.send('uptime.add', { service: result });
                 }
                 await reload();
                 void refreshUptime();
@@ -115,7 +115,7 @@ export default function Uptime({ workspace }: FeatureProps) {
                 const byId = new Map(prev.map((s) => [s.id, s]));
                 return ids.flatMap((id) => byId.get(id) ?? []);
             });
-            ws.send('uptime.reorder', { workspaceId, ids }).catch(() => {
+            ws.send('uptime.reorder', { ids }).catch(() => {
                 setError('Réorganisation impossible.');
                 void reload();
             });
@@ -128,12 +128,11 @@ export default function Uptime({ workspace }: FeatureProps) {
             {selected ? (
                 <ServiceDetail
                     service={selected}
-                    workspaceId={workspaceId}
                     onBack={() => setSelectedId(null)}
                     onEdit={() => void openForm(selected)}
                     onCheckNow={() =>
                         void withBusy(selected.id, async () => {
-                            await ws.send('uptime.checkNow', { workspaceId, id: selected.id });
+                            await ws.send('uptime.checkNow', { id: selected.id });
                         })
                     }
                 />
@@ -178,16 +177,12 @@ export default function Uptime({ workspace }: FeatureProps) {
                             onEdit={(service) => void openForm(service)}
                             onCheckNow={(service) =>
                                 void withBusy(service.id, async () => {
-                                    await ws.send('uptime.checkNow', { workspaceId, id: service.id });
+                                    await ws.send('uptime.checkNow', { id: service.id });
                                 })
                             }
                             onToggle={(service) =>
                                 void withBusy(service.id, async () => {
-                                    await ws.send('uptime.setEnabled', {
-                                        workspaceId,
-                                        id: service.id,
-                                        enabled: !service.enabled
-                                    });
+                                    await ws.send('uptime.setEnabled', { id: service.id, enabled: !service.enabled });
                                 })
                             }
                             onReorder={handleReorder}

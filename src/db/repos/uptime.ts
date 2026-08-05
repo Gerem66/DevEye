@@ -53,17 +53,17 @@ export interface UptimeWindowStat {
 }
 
 export interface UptimeServicesRepo {
-    listByUser(userId: number): Promise<UptimeServiceRow[]>;
-    findById(id: number, userId: number): Promise<UptimeServiceRow | null>;
-    create(input: { userId: number; workspaceId: number | null } & UptimeServiceConfig): Promise<UptimeServiceRow>;
-    update(id: number, userId: number, input: UptimeServiceConfig): Promise<UptimeServiceRow | null>;
-    setEnabled(id: number, userId: number, enabled: boolean): Promise<UptimeServiceRow | null>;
-    delete(id: number, userId: number): Promise<boolean>;
+    listByWorkspace(workspaceId: number): Promise<UptimeServiceRow[]>;
+    findById(id: number, workspaceId: number): Promise<UptimeServiceRow | null>;
+    create(input: { userId: number; workspaceId: number } & UptimeServiceConfig): Promise<UptimeServiceRow>;
+    update(id: number, workspaceId: number, input: UptimeServiceConfig): Promise<UptimeServiceRow | null>;
+    setEnabled(id: number, workspaceId: number, enabled: boolean): Promise<UptimeServiceRow | null>;
+    delete(id: number, workspaceId: number): Promise<boolean>;
     /**
      * File the user's services in the given order, ranking each by its index.
      * The caller passes the workspace's complete list, so ranks stay dense.
      */
-    reorder(userId: number, ids: number[]): Promise<void>;
+    reorder(workspaceId: number, ids: number[]): Promise<void>;
     /**
      * Enabled services whose next probe is due at `now`, most overdue first.
      * Not scoped to a user — this is what the background scheduler polls.
@@ -76,7 +76,7 @@ export interface UptimeServicesRepo {
      * `up + down` can be below `total`: a service awaiting its first probe is
      * neither, and must not be reported as a failure.
      */
-    countByWorkspace(userId: number, workspaceId: number | null): Promise<{ total: number; up: number; down: number }>;
+    countByWorkspace(workspaceId: number): Promise<{ total: number; up: number; down: number }>;
 }
 
 export interface UptimeHistoryRepo {
@@ -108,17 +108,17 @@ export interface UptimeHistoryRepo {
      * Success ratio + mean latency per service over the **raw** pings since
      * `since`, for one user. Exact to the second, so it backs the 24 h figure.
      */
-    windowStats(userId: number, since: number): Promise<UptimeWindowStat[]>;
+    windowStats(workspaceId: number, since: number): Promise<UptimeWindowStat[]>;
     /**
      * Same, read from the daily rollup from `sinceDay` (UTC midnight) onwards.
      * What the multi-day ratios use: bounded to one row per service per day, and
      * still complete once the raw pings have been pruned.
      */
-    dailyWindowStats(userId: number, sinceDay: number): Promise<UptimeWindowStat[]>;
+    dailyWindowStats(workspaceId: number, sinceDay: number): Promise<UptimeWindowStat[]>;
     /** The service's still-open incident, if any. */
     openIncident(serviceId: number): Promise<UptimeIncidentRow | null>;
     /** Every ongoing outage across one user's services (at most one per service). */
-    listOpenIncidents(userId: number): Promise<UptimeIncidentRow[]>;
+    listOpenIncidents(workspaceId: number): Promise<UptimeIncidentRow[]>;
     /** Open an outage; `error` is already encrypted. */
     openIncidentAt(input: {
         serviceId: number;
@@ -139,9 +139,9 @@ export interface UptimeHistoryRepo {
 }
 
 export interface UptimeSettingsRepo {
-    get(userId: number): Promise<UptimeSettingsRow | null>;
+    get(workspaceId: number): Promise<UptimeSettingsRow | null>;
     set(
-        userId: number,
+        workspaceId: number,
         input: {
             emailEnabled: boolean;
             /** Encrypted recipient, or null to fall back to the sending mail account's own address. */
@@ -214,20 +214,20 @@ function bucketPoint(row: BucketRow): UptimePoint {
 }
 
 export function uptimeServicesRepo(pool: Q): UptimeServicesRepo {
-    async function reload(id: number, userId: number): Promise<UptimeServiceRow | null> {
-        const r = await pool.query<UptimeServiceRow>('SELECT * FROM uptime_services WHERE id = ? AND user_id = ?', [
-            id,
-            userId
-        ]);
+    async function reload(id: number, workspaceId: number): Promise<UptimeServiceRow | null> {
+        const r = await pool.query<UptimeServiceRow>(
+            'SELECT * FROM uptime_services WHERE id = ? AND workspace_id = ?',
+            [id, workspaceId]
+        );
         return r.rows[0] ?? null;
     }
 
     return {
-        async listByUser(userId) {
+        async listByWorkspace(workspaceId) {
             // The user's own order; id only breaks ties.
             const r = await pool.query<UptimeServiceRow>(
-                'SELECT * FROM uptime_services WHERE user_id = ? ORDER BY sort_order ASC, id ASC',
-                [userId]
+                'SELECT * FROM uptime_services WHERE workspace_id = ? ORDER BY sort_order ASC, id ASC',
+                [workspaceId]
             );
             return r.rows;
         },
@@ -235,8 +235,8 @@ export function uptimeServicesRepo(pool: Q): UptimeServicesRepo {
         async create({ userId, workspaceId, ...config }) {
             // New services land at the end of the list, never in the middle.
             const posRow = await pool.query<{ next: number }>(
-                'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next FROM uptime_services WHERE user_id = ?',
-                [userId]
+                'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next FROM uptime_services WHERE workspace_id = ?',
+                [workspaceId]
             );
             const res = await pool.query(
                 `INSERT INTO uptime_services
@@ -248,38 +248,40 @@ export function uptimeServicesRepo(pool: Q): UptimeServicesRepo {
             const r = await pool.query<UptimeServiceRow>('SELECT * FROM uptime_services WHERE id = ?', [res.insertId]);
             return r.rows[0];
         },
-        async update(id, userId, config) {
-            const res = await pool.query(`UPDATE uptime_services SET ${SERVICE_COLUMNS} WHERE id = ? AND user_id = ?`, [
-                ...configParams(config),
-                id,
-                userId
-            ]);
+        async update(id, workspaceId, config) {
+            const res = await pool.query(
+                `UPDATE uptime_services SET ${SERVICE_COLUMNS} WHERE id = ? AND workspace_id = ?`,
+                [...configParams(config), id, workspaceId]
+            );
             if (res.rowCount === 0) return null;
-            return reload(id, userId);
+            return reload(id, workspaceId);
         },
-        async setEnabled(id, userId, enabled) {
+        async setEnabled(id, workspaceId, enabled) {
             // Resuming clears the failure streak: the next probe decides afresh
             // rather than inheriting a count from before the pause.
             const res = await pool.query(
                 `UPDATE uptime_services SET enabled = ?, consecutive_failures = IF(?, 0, consecutive_failures)
-                 WHERE id = ? AND user_id = ?`,
-                [enabled ? 1 : 0, enabled ? 1 : 0, id, userId]
+                 WHERE id = ? AND workspace_id = ?`,
+                [enabled ? 1 : 0, enabled ? 1 : 0, id, workspaceId]
             );
             if (res.rowCount === 0) return null;
-            return reload(id, userId);
+            return reload(id, workspaceId);
         },
-        async delete(id, userId) {
-            const r = await pool.query('DELETE FROM uptime_services WHERE id = ? AND user_id = ?', [id, userId]);
+        async delete(id, workspaceId) {
+            const r = await pool.query('DELETE FROM uptime_services WHERE id = ? AND workspace_id = ?', [
+                id,
+                workspaceId
+            ]);
             return r.rowCount > 0;
         },
-        async reorder(userId, ids) {
+        async reorder(workspaceId, ids) {
             // Rank by index; rows the user doesn't own are silently ignored.
             // Probe state is untouched — repositioning is not a configuration change.
             for (let i = 0; i < ids.length; i++) {
-                await pool.query('UPDATE uptime_services SET sort_order = ? WHERE id = ? AND user_id = ?', [
+                await pool.query('UPDATE uptime_services SET sort_order = ? WHERE id = ? AND workspace_id = ?', [
                     i,
                     ids[i],
-                    userId
+                    workspaceId
                 ]);
             }
         },
@@ -310,14 +312,14 @@ export function uptimeServicesRepo(pool: Q): UptimeServicesRepo {
                 ]
             );
         },
-        async countByWorkspace(userId, workspaceId) {
+        async countByWorkspace(workspaceId) {
             const r = await pool.query<{ total: number; up: number; down: number }>(
                 `SELECT COUNT(*)             AS total,
                         SUM(status = 'up')   AS up,
                         SUM(status = 'down') AS down
                  FROM uptime_services
-                 WHERE user_id = ? AND workspace_id <=> ? AND enabled = 1`,
-                [userId, workspaceId]
+                 WHERE workspace_id = ? AND enabled = 1`,
+                [workspaceId]
             );
             const row = r.rows[0];
             return { total: Number(row?.total ?? 0), up: Number(row?.up ?? 0), down: Number(row?.down ?? 0) };
@@ -437,7 +439,7 @@ export function uptimeHistoryRepo(pool: Q): UptimeHistoryRepo {
             );
             return r.rows.map(bucketPoint);
         },
-        async windowStats(userId, since) {
+        async windowStats(workspaceId, since) {
             const r = await pool.query<{
                 service_id: number;
                 checks: number;
@@ -452,9 +454,9 @@ export function uptimeHistoryRepo(pool: Q): UptimeHistoryRepo {
                         COUNT(c.response_ms)            AS ms_samples
                  FROM uptime_checks c
                  JOIN uptime_services s ON s.id = c.service_id
-                 WHERE s.user_id = ? AND c.checked_at >= ?
+                 WHERE s.workspace_id = ? AND c.checked_at >= ?
                  GROUP BY c.service_id`,
-                [userId, since]
+                [workspaceId, since]
             );
             return r.rows.map((row) => {
                 const samples = Number(row.ms_samples);
@@ -466,7 +468,7 @@ export function uptimeHistoryRepo(pool: Q): UptimeHistoryRepo {
                 };
             });
         },
-        async dailyWindowStats(userId, sinceDay) {
+        async dailyWindowStats(workspaceId, sinceDay) {
             const r = await pool.query<{
                 service_id: number;
                 checks: number;
@@ -481,9 +483,9 @@ export function uptimeHistoryRepo(pool: Q): UptimeHistoryRepo {
                         SUM(d.ms_samples) AS ms_samples
                  FROM uptime_daily d
                  JOIN uptime_services s ON s.id = d.service_id
-                 WHERE s.user_id = ? AND d.day >= ?
+                 WHERE s.workspace_id = ? AND d.day >= ?
                  GROUP BY d.service_id`,
-                [userId, sinceDay]
+                [workspaceId, sinceDay]
             );
             return r.rows.map((row) => {
                 const samples = Number(row.ms_samples);
@@ -502,12 +504,12 @@ export function uptimeHistoryRepo(pool: Q): UptimeHistoryRepo {
             );
             return r.rows[0] ?? null;
         },
-        async listOpenIncidents(userId) {
+        async listOpenIncidents(workspaceId) {
             const r = await pool.query<UptimeIncidentRow>(
                 `SELECT i.* FROM uptime_incidents i
                  JOIN uptime_services s ON s.id = i.service_id
-                 WHERE s.user_id = ? AND i.ended_at IS NULL`,
-                [userId]
+                 WHERE s.workspace_id = ? AND i.ended_at IS NULL`,
+                [workspaceId]
             );
             return r.rows;
         },
@@ -551,13 +553,15 @@ export function uptimeHistoryRepo(pool: Q): UptimeHistoryRepo {
 
 export function uptimeSettingsRepo(pool: Q): UptimeSettingsRepo {
     return {
-        async get(userId) {
-            const r = await pool.query<UptimeSettingsRow>('SELECT * FROM uptime_settings WHERE user_id = ?', [userId]);
+        async get(workspaceId) {
+            const r = await pool.query<UptimeSettingsRow>('SELECT * FROM uptime_settings WHERE workspace_id = ?', [
+                workspaceId
+            ]);
             return r.rows[0] ?? null;
         },
-        async set(userId, { emailEnabled, emailEnc, mailAccountId, webhookEnabled, webhookEnc }) {
+        async set(workspaceId, { emailEnabled, emailEnc, mailAccountId, webhookEnabled, webhookEnc }) {
             await pool.query(
-                `INSERT INTO uptime_settings (user_id, email_enabled, email_enc, mail_account_id, webhook_enabled, webhook_enc)
+                `INSERT INTO uptime_settings (workspace_id, email_enabled, email_enc, mail_account_id, webhook_enabled, webhook_enc)
                  VALUES (?, ?, ?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE
                      email_enabled   = VALUES(email_enabled),
@@ -565,9 +569,9 @@ export function uptimeSettingsRepo(pool: Q): UptimeSettingsRepo {
                      mail_account_id = VALUES(mail_account_id),
                      webhook_enabled = VALUES(webhook_enabled),
                      webhook_enc     = VALUES(webhook_enc)`,
-                [userId, emailEnabled ? 1 : 0, emailEnc, mailAccountId, webhookEnabled ? 1 : 0, webhookEnc]
+                [workspaceId, emailEnabled ? 1 : 0, emailEnc, mailAccountId, webhookEnabled ? 1 : 0, webhookEnc]
             );
-            const row = await this.get(userId);
+            const row = await this.get(workspaceId);
             if (!row) throw new Error('Failed to persist uptime settings');
             return row;
         }

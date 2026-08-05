@@ -552,18 +552,21 @@ export function createSecureStore(
 }
 
 /**
- * L'étage **ouvert** d'un utilisateur, sans session derrière — pour les tâches
- * de fond qui lisent ou écrivent des données alors que personne n'est connecté
+ * L'étage **ouvert** d'un espace, sans session derrière — pour les tâches de
+ * fond qui lisent ou écrivent des données alors que personne n'est connecté
  * (ordonnanceur uptime, synchro mail). Seul cet étage est atteignable ainsi, par
  * construction : l'étage gardé exige un déverrouillage de session et n'aurait
  * ici aucun sens.
  *
- * Toujours indexé par utilisateur : les features qui l'utilisent (Uptime, Mail)
- * ne sont pas encore rattachées à un espace. Il prendra un id d'espace en même
- * temps qu'elles, sans changer de corps — l'espace résout la clé de son
- * propriétaire, qui est exactement ce qu'on passe ici aujourd'hui.
+ * Indexé par espace et non par utilisateur : c'est l'espace qui porte les
+ * données, et c'est son propriétaire qui en détient la clé — la même que celle
+ * sous laquelle ces données ont été écrites, donc rien à re-chiffrer.
  */
-export function createOpenCipher(db: Database, crypt: Encryption, userId: number): Cipher {
+export function createOpenCipher(db: Database, crypt: Encryption, workspaceId: number): Cipher {
     const keys = new SecretKeyService(db, crypt);
-    return new DekCipher(() => keys.resolveOpenDek(userId));
+    return new DekCipher(async () => {
+        const workspace = await db.workspaces.findById(workspaceId);
+        if (!workspace) throw new Error(`Unknown workspace ${workspaceId}`);
+        return keys.resolveOpenDek(workspace.owner_user_id);
+    });
 }
