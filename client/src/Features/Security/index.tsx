@@ -392,55 +392,63 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                             <h3>{reAuthTitle}</h3>
                             <p>{reAuthDescription}</p>
                         </div>
-                        <button className={styles.infoBtn} onClick={showReauthInfo} title='Comment ça fonctionne ?'>
-                            <span className='icon icon-info' />
-                        </button>
-                        <div className={styles.reAuthEditor}>
-                            <input
-                                type='number'
-                                inputMode='numeric'
-                                min={0}
-                                max={1440}
-                                step={1}
-                                className={styles.reAuthInput}
-                                value={reAuthInput}
-                                disabled={!encryptionEnabled}
-                                onChange={(e) => setReAuthInput(e.target.value.replace(/\D/g, ''))}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && reAuthDirty) void saveReAuth();
-                                }}
-                                aria-label='Délai de validation en minutes'
-                                title={
-                                    encryptionEnabled
-                                        ? undefined
-                                        : 'Activez le chiffrement par mot de passe pour configurer ce délai'
-                                }
-                            />
-                            <span className={styles.reAuthUnit}>min</span>
-                            <span className={styles.reAuthStatus} aria-live='polite'>
-                                {reAuthSaveState === 'saving' && (
-                                    <span
-                                        key='saving'
-                                        className={`icon icon-spinner ${styles.reAuthSpin}`}
-                                        title='Enregistrement…'
+                        {/* Sans chiffrement par mot de passe, ce délai ne gouverne rien :
+                            plutôt qu'un champ grisé qu'on peut croire réparable, un mot
+                            qui dit l'état. Le « pourquoi » est déjà dans la description
+                            juste au-dessus, l'aide contextuelle n'a plus rien à ajouter. */}
+                        {!encryptionEnabled ? (
+                            <span className={styles.reAuthOff}>Désactivé</span>
+                        ) : (
+                            <>
+                                <button
+                                    className={styles.infoBtn}
+                                    onClick={showReauthInfo}
+                                    title='Comment ça fonctionne ?'
+                                >
+                                    <span className='icon icon-info' />
+                                </button>
+                                <div className={styles.reAuthEditor}>
+                                    <input
+                                        type='number'
+                                        inputMode='numeric'
+                                        min={0}
+                                        max={1440}
+                                        step={1}
+                                        className={styles.reAuthInput}
+                                        value={reAuthInput}
+                                        onChange={(e) => setReAuthInput(e.target.value.replace(/\D/g, ''))}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && reAuthDirty) void saveReAuth();
+                                        }}
+                                        aria-label='Délai de validation en minutes'
                                     />
-                                )}
-                                {reAuthSaveState === 'saved' && (
-                                    <span
-                                        key='saved'
-                                        className={`icon icon-check-circle ${styles.reAuthOk}`}
-                                        title='Enregistré'
-                                    />
-                                )}
-                                {reAuthSaveState === 'error' && (
-                                    <span
-                                        key='error'
-                                        className={`icon icon-x-circle ${styles.reAuthErr}`}
-                                        title="Échec de l'enregistrement"
-                                    />
-                                )}
-                            </span>
-                        </div>
+                                    <span className={styles.reAuthUnit}>min</span>
+                                    <span className={styles.reAuthStatus} aria-live='polite'>
+                                        {reAuthSaveState === 'saving' && (
+                                            <span
+                                                key='saving'
+                                                className={`icon icon-spinner ${styles.reAuthSpin}`}
+                                                title='Enregistrement…'
+                                            />
+                                        )}
+                                        {reAuthSaveState === 'saved' && (
+                                            <span
+                                                key='saved'
+                                                className={`icon icon-check-circle ${styles.reAuthOk}`}
+                                                title='Enregistré'
+                                            />
+                                        )}
+                                        {reAuthSaveState === 'error' && (
+                                            <span
+                                                key='error'
+                                                className={`icon icon-x-circle ${styles.reAuthErr}`}
+                                                title="Échec de l'enregistrement"
+                                            />
+                                        )}
+                                    </span>
+                                </div>
+                            </>
+                        )}
                     </div>
 
                     {error && <div className={styles.error}>{error}</div>}

@@ -275,6 +275,32 @@
     color: var(--text-secondary);
 }
 
+/*
+ * Le délai, quand le chiffrement par mot de passe est coupé.
+ *
+ * Remplace le champ grisé : un nombre qu'on ne peut pas changer laisse croire
+ * qu'il gouverne encore quelque chose, alors qu'il ne veut plus rien dire tant
+ * qu'il n'y a pas de mot de passe à revalider. Un mot suffit à dire l'état.
+ *
+ * Mêmes métriques que `Button` — les deux cartes s'alignent sur leur bord droit
+ * quel que soit l'état affiché. Pas de `cursor`, pas de `:hover` : rien ici
+ * n'invite au clic.
+ */
+.reAuthOff {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg);
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
 /* Transient autosave indicator next to the re-auth input. Fixed width so the
    editor row doesn't shift when the icon appears/disappears. */
 .reAuthStatus {
