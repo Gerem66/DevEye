@@ -29,7 +29,22 @@ export function WorkspaceSwitcher({ onSelect, onCreate, onManage }: WorkspaceSwi
 
     return (
         <>
-            <div className={styles.menuLabel}>Espaces</div>
+            {/* La création vit sur l'intitulé de la section, pas dans la liste :
+                c'est une action sur l'ensemble, pas un espace de plus à choisir.
+                Une ligne « Nouvel espace » se lisait comme une entrée parmi les
+                autres et allongeait une liste qu'on parcourt pour basculer. */}
+            <div className={styles.menuLabel}>
+                <span>Espaces</span>
+                <button
+                    type='button'
+                    className={styles.menuLabelAction}
+                    onClick={onCreate}
+                    title='Nouvel espace'
+                    aria-label='Nouvel espace'
+                >
+                    <span className='icon icon-plus' />
+                </button>
+            </div>
 
             {showList &&
                 workspaces.map((w) => {
@@ -49,12 +64,8 @@ export function WorkspaceSwitcher({ onSelect, onCreate, onManage }: WorkspaceSwi
                     );
                 })}
 
-            <button className={styles.menuItem} onClick={onCreate}>
-                <span className='icon icon-plus' /> Nouvel espace
-            </button>
-
             {/* La gestion n'a de sens que sur un espace partagé : le personnel
-                n'a ni membres, ni invitations, et ne se quitte pas. */}
+                n'a ni membres, ni rôles, et ne se quitte pas. */}
             {active?.kind === 'shared' && (
                 <button className={styles.menuItem} onClick={onManage}>
                     <span className='icon icon-settings' /> Gérer l’espace

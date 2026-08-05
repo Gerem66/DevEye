@@ -399,12 +399,45 @@
 
 /* Intitulé de la section « Espaces » du menu. */
 .menuLabel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
     padding: var(--space-xs) var(--space-md);
     color: var(--text-muted);
     font-size: 0.68rem;
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+}
+
+/* Action portée par l'intitulé d'une section. Discrète au repos — elle ne doit
+   pas concurrencer les entrées du menu — et franche au survol. */
+.menuLabelAction {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin: -2px 0;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.menuLabelAction:hover {
+    background: var(--glass-bg-light);
+    color: var(--accent);
+}
+
+.menuLabelAction .icon {
+    width: 13px;
 }
 
 /* La coche de l'espace courant occupe sa place même quand elle est absente, pour
