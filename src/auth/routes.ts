@@ -133,6 +133,16 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit }: Aut
             return reply.code(409).send(err('conflict', 'Username or email already in use'));
         }
 
+        // Consommer l'invitation AVANT de créer le compte : un usage brûlé pour
+        // rien vaut mieux qu'un compte créé sur une invitation déjà épuisée.
+        // Même compromis que les codes de liaison d'appareil.
+        const invite = await db.userInvites.consume(parsed.data.inviteToken, email);
+        if (!invite) {
+            return reply
+                .code(403)
+                .send(err('forbidden', 'Invitation invalide, expirée, ou réservée à une autre adresse'));
+        }
+
         const passwordHash = await hashPassword(password);
         const row = await db.users.create({ email, username, passwordHash, role: 'user' });
 
@@ -141,6 +151,13 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit }: Aut
         // le reference), d'ou l'ordre : compte -> espace -> rattachement.
         const personal = await db.workspaces.createPersonal(row.id, username);
         await db.users.setPersonalWorkspace(row.id, personal.id);
+
+        // L'invitation peut installer directement le compte dans une équipe.
+        if (invite.workspace_id !== null) {
+            await db.workspaceMembers.add({ userId: row.id, workspaceId: invite.workspace_id });
+            const fallback = await db.workspaceRoles.findDefault(invite.workspace_id);
+            if (fallback) await db.workspaceRoles.assign(row.id, invite.workspace_id, fallback.id);
+        }
 
         await issueSession(reply, db, row.id);
         const bundle = await loadUserBundle(db, row.id);
@@ -195,6 +212,23 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit }: Aut
                 metadata: { username, reason: 'bad_password' }
             });
             return reply.code(401).send(err('auth_invalid', 'Invalid credentials'));
+        }
+
+        // Le compte est suspendu : identifiants corrects, mais pas d'accès. On le
+        // vérifie APRÈS le mot de passe, pour ne pas révéler l'existence d'un
+        // compte à qui n'en connaît pas les identifiants.
+        if (row.status === 'suspended') {
+            audit.record({
+                source: 'web',
+                category: 'auth',
+                action: 'login.suspended',
+                level: 'warning',
+                uid: row.id,
+                ip: req.ip,
+                description: `Connexion refusée : compte suspendu « ${username} »`,
+                metadata: { username }
+            });
+            return reply.code(403).send(err('forbidden', 'Ce compte est suspendu. Contactez un administrateur.'));
         }
 
         // Transparently upgrade legacy (bcrypt) hashes to argon2 after a successful login.

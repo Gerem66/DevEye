@@ -2,6 +2,7 @@ import type { FeatureDefinition } from './_define';
 import { cloudSyncFeatures } from './cloudSync';
 import { deviceFeatures } from './devices';
 import { homeFeatures } from './home';
+import { adminFeatures } from './admin';
 import { logsFeatures } from './logs';
 import { mailFeatures } from './mail';
 import { metricsFeatures } from './metrics';
@@ -84,6 +85,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...weatherFeatures,
     ...uptimeFeatures,
     ...logsFeatures,
+    ...adminFeatures,
     ...homeFeatures,
     ...mailFeatures
 ];

@@ -34,6 +34,7 @@ import Security from '@/Features/Security';
 import FeatureProfile from '@/Features/Profile';
 import FeatureLogs from '@/Features/Logs';
 import FeatureWorkspace from '@/Features/Workspace';
+import FeatureUsers from '@/Features/Users';
 // Device popup content (Monitoring panel without the sidebar)
 import MonitoringPanel from '@/Features/Monitoring/MonitoringPanel';
 
@@ -109,6 +110,14 @@ const STATIC_VIEWS: ViewConfig[] = [
         cacheDurationMinutes: 5,
         hasCard: false,
         FullComponent: FeatureLogs
+    },
+    {
+        id: 'users',
+        title: 'Utilisateurs',
+        icon: 'users',
+        cacheDurationMinutes: 0,
+        hasCard: false,
+        FullComponent: FeatureUsers
     },
     {
         id: 'workspace',
@@ -482,6 +491,7 @@ export default function HomePage() {
                 onOpenSecurity={(e) => handleExpand('security', isForceReload(e))}
                 onOpenDevices={user.role === 'admin' ? (e) => handleExpand('clients', isForceReload(e)) : undefined}
                 onOpenLogs={user.role === 'admin' ? (e) => handleExpand('logs', isForceReload(e)) : undefined}
+                onOpenUsers={user.role === 'admin' ? (e) => handleExpand('users', isForceReload(e)) : undefined}
                 onOpenSettings={() => setSettingsOpen(true)}
                 onOrganize={() => startOrganizing()}
                 organizing={editing}

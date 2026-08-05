@@ -1,4 +1,4 @@
-import type { UserRow } from 'deveye-types';
+import type { AdminUser, UserRow } from 'deveye-types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
@@ -17,6 +17,11 @@ export interface UsersRepo {
     updatePasswordHash(id: number, passwordHash: string): Promise<void>;
     updateAvatar(id: number, avatar: string): Promise<void>;
     setRole(id: number, role: 'user' | 'admin'): Promise<void>;
+    setStatus(id: number, status: 'active' | 'suspended'): Promise<void>;
+    /** Supprime le compte ; les FK CASCADE emportent ses espaces et leur contenu. */
+    delete(id: number): Promise<void>;
+    /** Vue de la page Utilisateurs : le compte, plus son nombre d'espaces. */
+    listForAdmin(): Promise<AdminUser[]>;
     /** Password re-validation window in seconds; `null` resets to the default. */
     setReAuthInterval(id: number, seconds: number | null): Promise<void>;
 }
@@ -71,6 +76,41 @@ export function usersRepo(pool: Q): UsersRepo {
         },
         async setRole(id, role) {
             await pool.query('UPDATE users SET role = ? WHERE id = ?', [role, id]);
+        },
+        async setStatus(id, status) {
+            await pool.query('UPDATE users SET status = ? WHERE id = ?', [status, id]);
+        },
+        async delete(id) {
+            await pool.query('DELETE FROM users WHERE id = ?', [id]);
+        },
+        async listForAdmin() {
+            const r = await pool.query<{
+                id: number;
+                username: string;
+                email: string;
+                avatar: string;
+                role: string;
+                status: string;
+                workspace_count: number;
+                last_login: number;
+                created: number;
+            }>(
+                `SELECT u.id, u.username, u.email, u.avatar, u.role, u.status,
+                        (SELECT COUNT(*) FROM workspace_members m WHERE m.user_id = u.id) AS workspace_count,
+                        u.last_login, u.created
+                 FROM users u ORDER BY u.created ASC`
+            );
+            return r.rows.map((x) => ({
+                id: x.id,
+                username: x.username,
+                email: x.email,
+                avatar: x.avatar,
+                role: x.role === 'admin' ? ('admin' as const) : ('user' as const),
+                status: x.status === 'suspended' ? ('suspended' as const) : ('active' as const),
+                workspaceCount: Number(x.workspace_count),
+                lastLogin: Number(x.last_login),
+                created: Number(x.created)
+            }));
         },
         async setReAuthInterval(id, seconds) {
             await pool.query('UPDATE users SET re_auth_interval = ? WHERE id = ?', [seconds, id]);

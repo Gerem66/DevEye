@@ -48,6 +48,8 @@ export interface TopNavbarProps {
     onSelectWorkspace?: (workspaceId: number) => void;
     /** Ouvrir la création d'un espace. */
     onCreateWorkspace?: () => void;
+    /** Ouvrir la page d'administration des comptes (admin). */
+    onOpenUsers?: (e: ReactMouseEvent) => void;
     /** Ouvrir la page de gestion de l'espace courant. */
     onManageWorkspace?: (e: React.MouseEvent) => void;
 }
@@ -69,7 +71,8 @@ export default function TopNavbar({
     onDoneOrganizing,
     onSelectWorkspace,
     onCreateWorkspace,
-    onManageWorkspace
+    onManageWorkspace,
+    onOpenUsers
 }: TopNavbarProps) {
     const { user, logout } = useAuth();
     const [menuOpen, setMenuOpen] = useState(false);
@@ -292,7 +295,7 @@ export default function TopNavbar({
 
                             {/* Second separator: groups "fleet" entries (Appareils,
                                 Logs) apart from the personal settings above. */}
-                            {(onOpenDevices || onOpenLogs) && <hr className={styles.divider} />}
+                            {(onOpenDevices || onOpenLogs || onOpenUsers) && <hr className={styles.divider} />}
                             {onOpenDevices && (
                                 <button
                                     className={styles.menuItem}
@@ -318,6 +321,22 @@ export default function TopNavbar({
                                     }}
                                 >
                                     <span className='icon icon-activity' /> Logs
+                                    <span
+                                        className={`icon icon-shield ${styles.adminBadge}`}
+                                        title='Réservé aux administrateurs'
+                                        aria-label='Réservé aux administrateurs'
+                                    />
+                                </button>
+                            )}
+                            {onOpenUsers && (
+                                <button
+                                    className={styles.menuItem}
+                                    onClick={(e) => {
+                                        onOpenUsers(e);
+                                        setMenuOpen(false);
+                                    }}
+                                >
+                                    <span className='icon icon-users' /> Utilisateurs
                                     <span
                                         className={`icon icon-shield ${styles.adminBadge}`}
                                         title='Réservé aux administrateurs'
