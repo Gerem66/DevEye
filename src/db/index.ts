@@ -42,11 +42,13 @@ import {
     type WorkspaceMembersRepo,
     type WorkspacesRepo
 } from './repos/workspaces';
+import { workspaceInvitesRepo, type WorkspaceInvitesRepo } from './repos/workspaceInvites';
 
 export interface Database {
     users: UsersRepo;
     workspaces: WorkspacesRepo;
     workspaceMembers: WorkspaceMembersRepo;
+    workspaceInvites: WorkspaceInvitesRepo;
     refreshTokens: RefreshTokensRepo;
     logs: LogsRepo;
     passwords: PasswordsRepo;
@@ -80,6 +82,7 @@ export function createDatabase(q: Queryable): Database {
         users: usersRepo(q),
         workspaces: workspacesRepo(q),
         workspaceMembers: workspaceMembersRepo(q),
+        workspaceInvites: workspaceInvitesRepo(q),
         refreshTokens: refreshTokensRepo(q),
         logs: logsRepo(q),
         passwords: passwordsRepo(q),

@@ -22,6 +22,16 @@ import { userSetAvatarFeature } from './user/setAvatar';
 import { userSetThemeFeature } from './user/setTheme';
 import { weatherFeatures } from './weather';
 import { workspaceActivateFeature, workspaceSetFavoriteFeature } from './workspace/activate';
+import {
+    workspaceInviteAcceptFeature,
+    workspaceInviteCreateFeature,
+    workspaceInviteListFeature,
+    workspaceInvitePreviewFeature,
+    workspaceInviteRevokeFeature,
+    workspaceLeaveFeature,
+    workspaceRemoveMemberFeature,
+    workspaceRenameFeature
+} from './workspace/members';
 import { workspaceAddFeature } from './workspace/add';
 import { workspaceDeleteFeature } from './workspace/delete';
 
@@ -31,6 +41,14 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     workspaceDeleteFeature,
     workspaceActivateFeature,
     workspaceSetFavoriteFeature,
+    workspaceRenameFeature,
+    workspaceLeaveFeature,
+    workspaceRemoveMemberFeature,
+    workspaceInviteCreateFeature,
+    workspaceInviteListFeature,
+    workspaceInviteRevokeFeature,
+    workspaceInvitePreviewFeature,
+    workspaceInviteAcceptFeature,
     userSetAvatarFeature,
     userSetThemeFeature,
     passwordListFeature,
