@@ -95,11 +95,12 @@
     letter-spacing: -0.01em;
 }
 
+/* Pas de `text-transform: capitalize` : le sous-titre est une phrase, pas une
+   date isolée. C'est `upperFirst` qui pose la majuscule initiale. */
 .dateText {
     font-size: 0.95rem;
     color: var(--text-secondary);
     margin: 0;
-    text-transform: capitalize;
 }
 
 @media (max-width: 640px) {

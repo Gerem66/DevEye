@@ -140,24 +140,40 @@ function getGreeting(): string {
 /**
  * En-tête de l'accueil.
  *
- * L'espace personnel salue son propriétaire — il est à lui seul. Un espace
- * partagé affiche son nom : l'accueil y appartient à l'espace et non à celui qui
- * le regarde, et une fois qu'on jongle entre plusieurs, savoir d'un coup d'œil
- * où l'on se trouve vaut mieux qu'un second bonjour.
+ * L'espace personnel salue son propriétaire — il est à lui seul, son nom serait
+ * une redite. Un espace partagé garde son nom en titre : une fois qu'on jongle
+ * entre plusieurs, savoir d'un coup d'œil où l'on se trouve prime sur tout le
+ * reste. La salutation ne disparaît pas pour autant, elle passe en sous-titre :
+ * l'accueil appartient au lieu, mais on continue d'y être reçu.
  */
 function homeHeading(workspace: Workspace, username: string): { title: string; subtitle: string } {
     if (workspace.kind === 'personal') {
-        return { title: `${getGreeting()}, ${username}`, subtitle: formatDate() };
+        return { title: `${getGreeting()}, ${username}`, subtitle: upperFirst(formatDate()) };
     }
     const members = workspace.users.length;
     return {
         title: workspace.name,
-        subtitle: `${formatDate()} · ${members} membre${members > 1 ? 's' : ''}`
+        subtitle: upperFirst(
+            `${getGreeting()} ${username} · ${members} membre${members > 1 ? 's' : ''} · ${formatDate()}`
+        )
     };
 }
 
 function formatDate(): string {
     return new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+/**
+ * Majuscule initiale, et elle seule : `toLocaleDateString` rend « mercredi », or
+ * le sous-titre ouvre une phrase.
+ *
+ * Remplace un `text-transform: capitalize` qui capitalisait chaque mot — correct
+ * tant que le sous-titre n'était qu'une date, faux dès qu'il en dit plus (« 1
+ * Membre », « Bonsoir Gerem »), et fautif même sur la date : en français les
+ * noms de mois ne prennent pas de majuscule.
+ */
+function upperFirst(text: string): string {
+    return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 export default function HomePage() {
