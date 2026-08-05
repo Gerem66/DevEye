@@ -5,7 +5,7 @@ import { setActiveWorkspace, upsertWorkspace, useActiveWorkspace, useWorkspaceSt
 import { ws } from '@/api/ws';
 import { OpenPopup } from '@/Components/Popup';
 import { isHomeReady, onHomeReady } from '@/stores/homeReady';
-import { resetDevices, useDevices } from '@/stores/devices';
+import { refreshDevices, resetDevices, useDevices } from '@/stores/devices';
 import { syncThemeFromServer } from '@/stores/theme';
 import { syncHomeLayoutFromServer } from '@/stores/homeLayout';
 import {
@@ -354,6 +354,10 @@ export default function HomePage() {
                 const res = await ws.send('workspace.activate', {});
                 syncThemeFromServer(res.theme);
                 syncHomeLayoutFromServer(res.homeLayout);
+                // Relancer tout de suite : `resetDevices` a vidé la liste, et le
+                // sondage périodique ne repasserait qu'au bout de plusieurs
+                // secondes — les tuiles d'appareils resteraient vides d'ici là.
+                void refreshDevices();
             } catch {
                 // Accès perdu entre-temps : recharger la session remet le client
                 // sur un espace valide.

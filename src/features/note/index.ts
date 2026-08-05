@@ -67,6 +67,28 @@ function cipherFor(ctx: FeatureContext, isPrivate: boolean): Cipher {
 }
 
 /**
+ * Le drapeau « privée » n'a de sens que dans un espace personnel.
+ *
+ * Ce qui protège une note privée n'est pas un contrôle d'accès mais le
+ * chiffrement lui-même : son corps passe par l'étage gardé, c'est-à-dire la DEK
+ * emballée par le mot de passe. Or dans un espace partagé cette clé est celle du
+ * **propriétaire** de l'espace. Accepter le drapeau y reviendrait à chiffrer une
+ * note commune sous la clé personnelle d'un seul membre : illisible pour les
+ * autres, et trompeur pour celui qui la crée en croyant la garder pour lui.
+ *
+ * Refus explicite plutôt que retombée silencieuse sur « publique » : demander
+ * une note privée et en obtenir une lisible par tous serait le pire des deux.
+ */
+function assertPrivateAllowed(ctx: FeatureContext, isPrivate: boolean): void {
+    if (!isPrivate || ctx.workspace.kind === 'personal') return;
+    throw new FeatureError(
+        'validation',
+        'Une note privée n’existe que dans votre espace personnel : dans un espace partagé, ' +
+            'elle serait chiffrée avec la clé de son propriétaire.'
+    );
+}
+
+/**
  * Guard the destructive/rewriting paths on an existing private note. Encryption
  * alone protects reads, but an edit or a delete never needs to *read* the body —
  * without this, a locked session could overwrite or destroy a note it can't see.
@@ -159,6 +181,7 @@ export const noteAddFeature: FeatureDefinition<typeof noteAdd.command, typeof no
     defineFeature({
         ...noteAdd,
         handler: async (ctx, input) => {
+            assertPrivateAllowed(ctx, input.note.private);
             const folderId = await resolveFolderId(ctx, input.note.folderId);
             const content = await encryptPayload(cipherFor(ctx, input.note.private), toPayload(input.note));
             const row = await ctx.db.notes.create({
@@ -185,6 +208,7 @@ export const noteEditFeature: FeatureDefinition<
     ...noteEdit,
     handler: async (ctx, input) => {
         const existing = await loadNote(ctx, input.noteId);
+        assertPrivateAllowed(ctx, input.note.private);
         await assertPrivateUnlocked(ctx, existing);
         const folderId = await resolveFolderId(ctx, input.note.folderId);
         // Re-encrypting with the draft's tier is what moves a note between

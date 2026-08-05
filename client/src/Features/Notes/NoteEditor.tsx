@@ -11,6 +11,7 @@ import { exportNotePdf } from './exportPdf';
 import { NOTE_CONFIRM_POPUP, type ConfirmInput } from './ConfirmPopup';
 
 import { NOTE_TITLE_MAX_LENGTH, type Note, type NoteBlock } from 'deveye-types';
+import { useActiveWorkspace } from '@/stores/workspace';
 
 export const NOTE_EDITOR_POPUP = 'popup-note-editor';
 
@@ -91,6 +92,9 @@ function showPrivateInfo() {
  * closes once confirmed.
  */
 export default function NoteEditor() {
+    // Le drapeau « privée » n'existe que dans l'espace personnel (cf. le bouton
+    // plus bas et `assertPrivateAllowed` côté serveur).
+    const isPersonalWorkspace = useActiveWorkspace()?.kind === 'personal';
     const [mode, setMode] = useState<'add' | 'edit'>('add');
     const [title, setTitle] = useState('');
     const [folderId, setFolderId] = useState<number | null>(null);
@@ -234,15 +238,27 @@ export default function NoteEditor() {
                                     <span className={`icon ${styles.toggleIcon} icon-trash`} />
                                 </button>
                             )}
-                            <button
-                                type='button'
-                                className={`${styles.iconToggle} ${isPrivate ? styles.iconToggleActive : ''}`}
-                                aria-pressed={isPrivate}
-                                title={isPrivate ? 'Rendre la note lisible sans mot de passe' : 'Rendre la note privée'}
-                                onClick={() => setIsPrivate((v) => !v)}
-                            >
-                                <span className={`icon ${styles.toggleIcon} icon-${isPrivate ? 'lock' : 'unlock'}`} />
-                            </button>
+                            {/* Une note privée est protégée par le chiffrement, pas par un
+                                contrôle d'accès : son corps passe par la clé emballée par
+                                mot de passe. Dans un espace partagé, cette clé est celle du
+                                propriétaire — la note serait donc illisible pour les autres
+                                membres, et trompeuse pour son auteur. Le serveur refuse ce
+                                cas ; on n'affiche simplement pas le bouton. */}
+                            {isPersonalWorkspace && (
+                                <button
+                                    type='button'
+                                    className={`${styles.iconToggle} ${isPrivate ? styles.iconToggleActive : ''}`}
+                                    aria-pressed={isPrivate}
+                                    title={
+                                        isPrivate ? 'Rendre la note lisible sans mot de passe' : 'Rendre la note privée'
+                                    }
+                                    onClick={() => setIsPrivate((v) => !v)}
+                                >
+                                    <span
+                                        className={`icon ${styles.toggleIcon} icon-${isPrivate ? 'lock' : 'unlock'}`}
+                                    />
+                                </button>
+                            )}
                             <button
                                 type='button'
                                 className={styles.iconToggle}
