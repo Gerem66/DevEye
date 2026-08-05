@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Button from '@/Components/Button';
 import { openInfo } from '@/Components/InfoPopup';
 import { useAuth } from '@/auth/AuthProvider';
+import { useActiveWorkspace } from '@/stores/workspace';
 import { DeploymentStatus } from './DeploymentStatus';
 import { ConnectionStatus } from './ConnectionStatus';
 import { TopbarWidgets } from './topbarWidgets';
@@ -75,6 +76,7 @@ export default function TopNavbar({
     onOpenUsers
 }: TopNavbarProps) {
     const { user, logout } = useAuth();
+    const workspace = useActiveWorkspace();
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -222,7 +224,17 @@ export default function TopNavbar({
                         ) : (
                             <span className={`icon icon-user ${styles.avatarPlaceholder}`} />
                         )}
-                        <span className={styles.username}>{user.username}</span>
+                        <span className={styles.identity}>
+                            <span className={styles.username}>{user.username}</span>
+                            {/* Seuls les espaces partagés se nomment ici : dire « chez soi »
+                                à quelqu'un qui y est déjà n'apprend rien, c'est l'ailleurs
+                                qui mérite d'être annoncé. */}
+                            {workspace?.kind === 'shared' && (
+                                <span className={styles.workspaceLabel} title={workspace.name}>
+                                    {workspace.name}
+                                </span>
+                            )}
+                        </span>
                         <span className={`icon icon-chevron-down ${styles.chevron} ${menuOpen ? styles.open : ''}`} />
                     </button>
                 )}

@@ -282,10 +282,43 @@
     font-size: 0.9rem;
 }
 
+/* Pseudo, puis espace courant. `min-width: 0` pour que la troncature du nom
+   d'espace ait lieu ici plutôt que de pousser le chevron hors de la barre. */
+.identity {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-xs);
+    min-width: 0;
+}
+
 .username {
     font-size: 0.875rem;
     font-weight: 600;
     color: var(--text-primary);
+    white-space: nowrap;
+}
+
+/* Le nom d'espace passe au second plan derrière le pseudo. Le point médian est
+   un pseudo-élément : purement décoratif, il n'a rien à faire dans le DOM ni
+   dans ce que lit un lecteur d'écran. */
+.workspaceLabel {
+    /* Un nom peut aller jusqu'à 64 caractères : sans plafond il repousse les
+       widgets de la barre. `min-width: 0` seul ne suffit pas — tant que la barre
+       a de la place, rien ne force le rétrécissement. L'attribut `title` porte le
+       nom entier. */
+    max-width: 18ch;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.workspaceLabel::before {
+    content: '·';
+    margin-right: var(--space-xs);
+    color: var(--text-muted);
 }
 
 .chevron {
@@ -410,7 +443,7 @@
 
     .brandText,
     .version,
-    .username,
+    .identity,
     .status {
         display: none;
     }
