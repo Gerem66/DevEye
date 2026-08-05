@@ -212,11 +212,26 @@
  * et jure au milieu du reste. L'input réel est masqué mais conservé — il porte
  * l'état, le focus clavier et l'accessibilité ; seule l'icône est peinte.
  */
+/*
+ * Liste de lignes séparées par un trait, dans une carte.
+ *
+ * Annule le `gap` de `.card` : combiné à la bordure de séparation, il ajoutait
+ * un espace d'un seul côté du trait, si bien que chaque ligne paraissait poussée
+ * vers le bas et son contenu désaligné. Ici les lignes se touchent, et c'est
+ * leur propre padding — symétrique — qui donne le rythme.
+ */
+.rowList {
+    gap: 0;
+    /* Les lignes portent déjà leur propre respiration : la carte se contente du
+       liseré, sinon la première et la dernière flottent plus que les autres. */
+    padding: var(--space-sm) var(--space-md);
+}
+
 .checkRow {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
-    padding: var(--space-sm) 0;
+    padding: var(--space-xs) 0;
     font-size: 0.875rem;
     color: var(--text-secondary);
     cursor: pointer;
@@ -260,7 +275,9 @@
     color: var(--text-primary);
 }
 
-/* Une feature et le niveau qu'un rôle y accorde. */
+/* Une feature et le niveau qu'un rôle y accorde. C'est le sélecteur, le plus haut
+   des deux enfants, qui donne sa hauteur à la ligne ; le padding — symétrique —
+   n'ajoute qu'une respiration égale de part et d'autre du trait. */
 .grantRow {
     display: flex;
     align-items: center;

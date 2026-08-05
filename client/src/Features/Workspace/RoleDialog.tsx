@@ -122,7 +122,7 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
             </div>
 
             <span className={`${styles.sectionLabel} ${styles.formSection}`}>Administration de l’espace</span>
-            <div className={styles.card}>
+            <div className={`${styles.card} ${styles.rowList}`}>
                 {WORKSPACE_CAPABILITIES.map((c) => {
                     const on = capabilities.includes(c);
                     return (
@@ -136,7 +136,7 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
             </div>
 
             <span className={`${styles.sectionLabel} ${styles.formSection}`}>Fonctionnalités</span>
-            <div className={styles.card}>
+            <div className={`${styles.card} ${styles.rowList}`}>
                 {WORKSPACE_FEATURE_IDS.map((f) => (
                     <div key={f} className={styles.grantRow}>
                         <span className={styles.grantLabel}>{FEATURE_LABELS[f]}</span>
