@@ -34,14 +34,18 @@
  * voisines et donnerait à lire une disposition abîmée. En retrait et
  * désaturée, elle dit qu'il y a là quelque chose auquel on n'a pas droit — ce
  * qui est vrai, et se demande. Le clic reste actif : c'est lui qui l'explique.
+ *
+ * L'atténuation passe par `filter: opacity()`, pas par la propriété `opacity` :
+ * le Widget est un motion.div (layoutId) et framer-motion écrit `opacity` en
+ * style inline à la fin de ses animations, ce qui écraserait une règle de
+ * feuille de style. `filter`, lui, n'est pas animé par framer, donc il tient.
  */
 .lockedTile {
-    opacity: 0.4;
-    filter: grayscale(1);
+    filter: opacity(0.5);
 }
 
 .lockedTile:hover {
-    opacity: 0.55;
+    filter: opacity(0.6);
 }
 
 .lockedBody {
