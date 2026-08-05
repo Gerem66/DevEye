@@ -6,6 +6,8 @@ import { ws } from '@/api/ws';
 import { OpenPopup } from '@/Components/Popup';
 import { isHomeReady, onHomeReady } from '@/stores/homeReady';
 import { resetDevices, useDevices } from '@/stores/devices';
+import { syncThemeFromServer } from '@/stores/theme';
+import { syncHomeLayoutFromServer } from '@/stores/homeLayout';
 import {
     useHomeLayout,
     getHomeLayout,
@@ -344,8 +346,20 @@ export default function HomePage() {
         // nouvelle disposition est déjà en place, et supprime définitivement ses
         // tuiles d'appareils.
         resetDevices();
+        // L'id est publié d'abord : `workspace.activate` part alors avec la
+        // bonne enveloppe, et le dispatcheur en vérifie l'appartenance.
         setActiveWorkspace(workspaceId);
-        void refresh();
+        void (async () => {
+            try {
+                const res = await ws.send('workspace.activate', {});
+                syncThemeFromServer(res.theme);
+                syncHomeLayoutFromServer(res.homeLayout);
+            } catch {
+                // Accès perdu entre-temps : recharger la session remet le client
+                // sur un espace valide.
+                void refresh();
+            }
+        })();
     };
 
     const handleCreateWorkspace = () => {

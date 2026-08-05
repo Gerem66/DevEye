@@ -82,26 +82,31 @@ export function useActiveWorkspace(): Workspace | null {
 
 /**
  * Applique ce que la session vient de livrer (connexion, `/me`, rafraîchissement).
- *
- * Le serveur a le dernier mot sur l'espace actif : il connaît le favori et les
- * accès réels. Un id local qui n'est plus accessible (espace supprimé, accès
- * révoqué) est ainsi corrigé sans que le client n'ait à le détecter.
  */
 export function syncWorkspacesFromServer(workspaces: Workspace[], activeWorkspaceId: number): void {
-    const changed = state.activeId !== activeWorkspaceId;
-    state = {
-        activeId: activeWorkspaceId,
-        workspaces,
-        epoch: changed ? state.epoch + 1 : state.epoch
-    };
-    persistActiveId(activeWorkspaceId);
+    // Le choix de l'utilisateur prime tant qu'il y a accès : le serveur ne
+    // *propose* une valeur (le favori, sinon l'espace personnel) que pour amorcer
+    // une session neuve — après une déconnexion, `resetWorkspace` a vidé l'état —
+    // ou pour corriger un espace devenu inaccessible (supprimé, accès révoqué).
+    //
+    // Sans cette règle, tout rafraîchissement de session (`/api/auth/me`, qui
+    // part aussi à la reconnexion de la socket) ramènerait l'utilisateur sur son
+    // espace favori et annulerait la bascule qu'il vient de faire.
+    const accessible = new Set(workspaces.map((w) => w.id));
+    const activeId = state.activeId !== null && accessible.has(state.activeId) ? state.activeId : activeWorkspaceId;
+
+    const changed = state.activeId !== activeId;
+    state = { activeId, workspaces, epoch: changed ? state.epoch + 1 : state.epoch };
+    persistActiveId(activeId);
     emit();
 }
 
 /**
- * Bascule vers un autre espace. Ne fait qu'annoncer l'intention : c'est
- * l'appelant qui recharge la session, ce qui rapatrie le thème et la disposition
- * de la cible et rejoue `syncWorkspacesFromServer`.
+ * Bascule vers un autre espace.
+ *
+ * Publie l'id immédiatement, pour que les commandes suivantes l'estampillent —
+ * `workspace.activate` compris, dont c'est ainsi la cible. L'appelant enchaîne
+ * sur cette commande pour récupérer l'apparence et la disposition de l'espace.
  */
 export function setActiveWorkspace(id: number): void {
     if (state.activeId === id) return;

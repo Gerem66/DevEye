@@ -21,6 +21,7 @@ import { uptimeFeatures } from './uptime';
 import { userSetAvatarFeature } from './user/setAvatar';
 import { userSetThemeFeature } from './user/setTheme';
 import { weatherFeatures } from './weather';
+import { workspaceActivateFeature, workspaceSetFavoriteFeature } from './workspace/activate';
 import { workspaceAddFeature } from './workspace/add';
 import { workspaceDeleteFeature } from './workspace/delete';
 
@@ -28,6 +29,8 @@ import { workspaceDeleteFeature } from './workspace/delete';
 export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>> = [
     workspaceAddFeature,
     workspaceDeleteFeature,
+    workspaceActivateFeature,
+    workspaceSetFavoriteFeature,
     userSetAvatarFeature,
     userSetThemeFeature,
     passwordListFeature,
