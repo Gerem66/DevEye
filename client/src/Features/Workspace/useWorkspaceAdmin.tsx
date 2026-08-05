@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceInvite, WorkspaceRole } from 'deveye-types';
+import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole } from 'deveye-types';
 
 import { ws, WsError } from '@/api/ws';
 import { useAuth } from '@/auth/AuthProvider';
@@ -18,33 +18,15 @@ export function useWorkspaceAdmin() {
     const isShared = workspace?.kind === 'shared';
     const isOwner = workspace !== null && user !== null && workspace.ownerUserId === user.id;
 
-    const [invites, setInvites] = useState<WorkspaceInvite[]>([]);
     const [sharedKey, setSharedKey] = useState<{ enabled: boolean; applicable: boolean; blockers: string[] } | null>(
         null
     );
     const [roles, setRoles] = useState<WorkspaceRole[]>([]);
     const [memberRoles, setMemberRoles] = useState<{ userId: number; roleId: number | null }[]>([]);
-    const [loadingInvites, setLoadingInvites] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
 
     const fail = (e: unknown, fallback: string): void => setError(e instanceof WsError ? e.message : fallback);
-
-    const loadInvites = useCallback(async () => {
-        if (!isShared) return;
-        setLoadingInvites(true);
-        try {
-            const res = await ws.send('workspace.inviteList', {});
-            setInvites(res.invites);
-        } catch (e) {
-            // Un membre non-propriétaire n'a pas le droit de lister : ce n'est
-            // pas une erreur à afficher, juste une section qu'il ne verra pas.
-            if (!(e instanceof WsError && e.code === 'forbidden')) fail(e, 'Impossible de charger les invitations.');
-            setInvites([]);
-        } finally {
-            setLoadingInvites(false);
-        }
-    }, [isShared]);
 
     const loadSharedKey = useCallback(async () => {
         try {
@@ -66,18 +48,26 @@ export function useWorkspaceAdmin() {
     }, []);
 
     useEffect(() => {
-        void loadInvites();
         void loadSharedKey();
         void loadRoles();
-    }, [loadInvites, loadSharedKey, loadRoles]);
+    }, [loadSharedKey, loadRoles]);
 
-    const run = async (fn: () => Promise<void>, fallback: string): Promise<void> => {
+    /**
+     * Exécute une action, en portant l'erreur et l'état occupé.
+     *
+     * Renvoie si elle a abouti : un appelant qui doit enchaîner — fermer un
+     * dialogue, vider un champ — le décide sur ce booléen plutôt qu'en relisant
+     * `error`, dont le rendu suivant n'a pas encore eu lieu.
+     */
+    const run = async (fn: () => Promise<void>, fallback: string): Promise<boolean> => {
         setError(null);
         setBusy(true);
         try {
             await fn();
+            return true;
         } catch (e) {
             fail(e, fallback);
+            return false;
         } finally {
             setBusy(false);
         }
@@ -87,8 +77,6 @@ export function useWorkspaceAdmin() {
         workspace,
         isShared,
         isOwner,
-        invites,
-        loadingInvites,
         sharedKey,
         roles,
         memberRoles,
@@ -156,17 +144,18 @@ export function useWorkspaceAdmin() {
                 upsertWorkspace(res.workspace);
             }, 'Renommage impossible.'),
 
-        createInvite: (ttlSeconds: number | null, maxUses: number | null) =>
+        /**
+         * Ajoute un membre par son adresse. Le serveur renvoie l'espace complet
+         * plutôt que le seul nouvel arrivant : la liste des membres se recompose
+         * ainsi d'une source unique, sans reconstruire un `MinimalUser` de
+         * fortune côté client.
+         */
+        addMember: (email: string) =>
             run(async () => {
-                const res = await ws.send('workspace.inviteCreate', { ttlSeconds, maxUses });
-                setInvites((prev) => [res.invite, ...prev]);
-            }, 'Création du lien impossible.'),
-
-        revokeInvite: (token: string) =>
-            run(async () => {
-                await ws.send('workspace.inviteRevoke', { token });
-                setInvites((prev) => prev.filter((i) => i.token !== token));
-            }, 'Révocation impossible.'),
+                const res = await ws.send('workspace.addMember', { email });
+                upsertWorkspace(res.workspace);
+                await loadRoles();
+            }, 'Ajout impossible.'),
 
         removeMember: (userId: number) =>
             run(async () => {
@@ -200,18 +189,3 @@ export function useWorkspaceAdmin() {
 }
 
 export type WorkspaceAdmin = ReturnType<typeof useWorkspaceAdmin>;
-
-/** Rend une échéance lisible, ou « jamais » pour un lien sans expiration. */
-export function formatExpiry(expiresAt: number | null): string {
-    if (expiresAt === null) return 'n’expire pas';
-    const remaining = expiresAt - Math.floor(Date.now() / 1000);
-    if (remaining <= 0) return 'expiré';
-    if (remaining < 3600) return `expire dans ${Math.ceil(remaining / 60)} min`;
-    if (remaining < 86400) return `expire dans ${Math.ceil(remaining / 3600)} h`;
-    return `expire dans ${Math.ceil(remaining / 86400)} j`;
-}
-
-/** « 1 / 3 utilisations », ou « illimité » quand aucun plafond n'est fixé. */
-export function formatUses(uses: number, maxUses: number | null): string {
-    return maxUses === null ? `${uses} utilisation${uses > 1 ? 's' : ''} · illimité` : `${uses} / ${maxUses}`;
-}

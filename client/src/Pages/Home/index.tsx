@@ -26,7 +26,6 @@ import { SettingsPanel } from '@/Components/SettingsPanel';
 import { InfoPopup } from '@/Components/InfoPopup';
 import PopupUnlock from './popup-unlock';
 import CreateWorkspacePopup, { CREATE_WORKSPACE_POPUP } from './popup-create-workspace';
-import AcceptInvitePopup, { clearInviteFromUrl, readInviteToken } from './popup-accept-invite';
 
 // Structural feature views (no grid card)
 import Clients from '@/Features/Clients';
@@ -178,8 +177,6 @@ function upperFirst(text: string): string {
 
 export default function HomePage() {
     const { user, refresh } = useAuth();
-    // Lu une seule fois : l'URL est nettoyée dès que la popup se referme.
-    const [inviteToken, setInviteToken] = useState<string | null>(readInviteToken);
     const { epoch: workspaceEpoch } = useWorkspaceState();
     const currentWorkspace = useActiveWorkspace();
     const layout = useHomeLayout();
@@ -619,19 +616,6 @@ export default function HomePage() {
 
             {/* Création d'espace, pilotée depuis le menu de la topbar. */}
             <CreateWorkspacePopup />
-
-            {/* Lien d'invitation suivi depuis l'extérieur : lu une fois au
-                chargement, puis effacé de l'URL. */}
-            {inviteToken && (
-                <AcceptInvitePopup
-                    token={inviteToken}
-                    onDone={() => {
-                        setInviteToken(null);
-                        clearInviteFromUrl();
-                        void refresh();
-                    }}
-                />
-            )}
 
             {/* Shared info dialog, registered once here so any feature's "i" button
                 opens it via openInfo(). */}

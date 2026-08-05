@@ -1,47 +1,29 @@
-import {
-    workspaceInviteAccept,
-    workspaceInviteCreate,
-    workspaceInviteList,
-    workspaceInvitePreview,
-    workspaceInviteRevoke,
-    workspaceLeave,
-    workspaceRemoveMember,
-    workspaceRename
-} from 'deveye-types';
-import type { Workspace, WorkspaceInvite, WorkspaceInviteRow } from 'deveye-types';
+import { workspaceLeave, workspaceAddMember, workspaceRemoveMember, workspaceRename } from 'deveye-types';
+import type { Workspace } from 'deveye-types';
 
-import { env } from '@/Utils/Env';
 import { invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
 /**
- * Gestion des membres et des invitations d'un espace.
+ * Gestion des membres d'un espace.
  *
  * Les droits ne sont plus « propriétaire ou rien » : ils passent par les
- * capacités `workspace.members` (inviter, exclure) et `workspace.manage`
+ * capacités `workspace.members` (ajouter, exclure) et `workspace.manage`
  * (renommer, supprimer), déclarées sur chaque commande et appliquées par le
  * dispatcheur. Le propriétaire les possède toutes d'office.
+ *
+ * On rejoint un espace parce qu'un membre vous y met, jamais parce qu'on
+ * détient un lien : l'inscription étant déjà sur invitation d'un
+ * administrateur, tout compte candidat existe et une adresse suffit à le
+ * désigner. Un jeton d'invitation n'aurait fait qu'ajouter un secret
+ * transmissible, à expirer et à révoquer, pour le même résultat.
  */
 
-/** Un espace personnel n'a ni membres ni invitations : il est personnel. */
+/** Un espace personnel n'a pas de membres : il est personnel. */
 function assertShared(ctx: FeatureContext): void {
     if (ctx.workspace.kind === 'personal') {
         throw new FeatureError('validation', 'L’espace personnel ne se partage pas');
     }
-}
-
-function toInvite(row: WorkspaceInviteRow, authorName: string): WorkspaceInvite {
-    return {
-        token: row.token,
-        // Le lien est construit ici : le client ne connaît pas forcément
-        // l'origine publique (proxy, nom de domaine) et ne doit pas la deviner.
-        url: `${env.PUBLIC_ORIGIN.replace(/\/+$/, '')}/invite/${row.token}`,
-        expiresAt: row.expires_at === null ? null : Number(row.expires_at),
-        maxUses: row.max_uses,
-        uses: Number(row.uses),
-        createdBy: authorName,
-        created: Number(row.created)
-    };
 }
 
 export const workspaceRenameFeature: FeatureDefinition<
@@ -115,133 +97,49 @@ export const workspaceRemoveMemberFeature: FeatureDefinition<
     }
 });
 
-export const workspaceInviteCreateFeature: FeatureDefinition<
-    typeof workspaceInviteCreate.command,
-    typeof workspaceInviteCreate.input,
-    typeof workspaceInviteCreate.output
+export const workspaceAddMemberFeature: FeatureDefinition<
+    typeof workspaceAddMember.command,
+    typeof workspaceAddMember.input,
+    typeof workspaceAddMember.output
 > = defineFeature({
-    ...workspaceInviteCreate,
+    ...workspaceAddMember,
     access: { capabilities: ['workspace.members'] },
     handler: async (ctx, input) => {
         assertShared(ctx);
-        const row = await ctx.db.workspaceInvites.create({
-            workspaceId: ctx.workspaceId,
-            createdBy: ctx.userId,
-            ttlSeconds: input.ttlSeconds,
-            maxUses: input.maxUses
-        });
-        ctx.audit({
-            action: 'workspace.invite.create',
-            level: 'warning',
-            description: `Lien d’invitation créé pour « ${ctx.workspace.name} »`,
-            metadata: { maxUses: input.maxUses, ttlSeconds: input.ttlSeconds }
-        });
-        const author = await ctx.db.users.findById(ctx.userId);
-        return { invite: toInvite(row, author?.username ?? '') };
-    }
-});
-
-export const workspaceInviteListFeature: FeatureDefinition<
-    typeof workspaceInviteList.command,
-    typeof workspaceInviteList.input,
-    typeof workspaceInviteList.output
-> = defineFeature({
-    ...workspaceInviteList,
-    access: { capabilities: ['workspace.members'] },
-    handler: async (ctx) => {
-        assertShared(ctx);
-        const rows = await ctx.db.workspaceInvites.listActive(ctx.workspaceId);
-        const authors = await ctx.db.users.findByIds(Array.from(new Set(rows.map((r) => r.created_by))));
-        const nameOf = new Map(authors.map((u) => [u.id, u.username]));
-        return { invites: rows.map((r) => toInvite(r, nameOf.get(r.created_by) ?? '')) };
-    }
-});
-
-export const workspaceInviteRevokeFeature: FeatureDefinition<
-    typeof workspaceInviteRevoke.command,
-    typeof workspaceInviteRevoke.input,
-    typeof workspaceInviteRevoke.output
-> = defineFeature({
-    ...workspaceInviteRevoke,
-    access: { capabilities: ['workspace.members'] },
-    handler: async (ctx, input) => {
-        assertShared(ctx);
-        const removed = await ctx.db.workspaceInvites.revoke(ctx.workspaceId, input.token);
-        if (!removed) throw new FeatureError('not_found', 'Invitation introuvable');
-        ctx.audit({
-            action: 'workspace.invite.revoke',
-            level: 'warning',
-            description: `Lien d’invitation révoqué pour « ${ctx.workspace.name} »`
-        });
-        return { token: input.token };
-    }
-});
-
-/**
- * Décrit une invitation sans la consommer.
- *
- * `scope: 'account'` est ici essentiel : celui qui suit le lien n'est pas encore
- * membre de l'espace visé, donc le résoudre depuis l'enveloppe échouerait avant
- * même d'atteindre le handler.
- */
-export const workspaceInvitePreviewFeature: FeatureDefinition<
-    typeof workspaceInvitePreview.command,
-    typeof workspaceInvitePreview.input,
-    typeof workspaceInvitePreview.output
-> = defineFeature({
-    ...workspaceInvitePreview,
-    access: { scope: 'account' },
-    handler: async (ctx, input) => {
-        const invite = await ctx.db.workspaceInvites.peek(input.token);
-        if (!invite) throw new FeatureError('not_found', 'Invitation invalide ou expirée');
-        const workspace = await ctx.db.workspaces.findById(invite.workspace_id);
-        if (!workspace) throw new FeatureError('not_found', 'Espace introuvable');
-        return {
-            workspaceName: workspace.name,
-            alreadyMember: await ctx.db.workspaceMembers.isMember(ctx.userId, workspace.id)
-        };
-    }
-});
-
-export const workspaceInviteAcceptFeature: FeatureDefinition<
-    typeof workspaceInviteAccept.command,
-    typeof workspaceInviteAccept.input,
-    typeof workspaceInviteAccept.output
-> = defineFeature({
-    ...workspaceInviteAccept,
-    access: { scope: 'account' },
-    handler: async (ctx, input) => {
-        // Déjà membre : ne pas brûler un usage du lien pour rien.
-        const preview = await ctx.db.workspaceInvites.peek(input.token);
-        if (!preview) throw new FeatureError('not_found', 'Invitation invalide ou expirée');
-        if (await ctx.db.workspaceMembers.isMember(ctx.userId, preview.workspace_id)) {
-            return { workspace: await describe(ctx, preview.workspace_id) };
+        const email = input.email.trim().toLowerCase();
+        const target = await ctx.db.users.findByEmail(email);
+        // L'inscription est sur invitation d'un administrateur : on ne crée pas
+        // de compte ici. Le dire explicitement vaut mieux qu'un échec muet — la
+        // personne qui ajoute saura qu'il faut d'abord faire créer le compte.
+        if (!target) {
+            throw new FeatureError('not_found', 'Aucun compte DevEye avec cette adresse');
+        }
+        if (target.status === 'suspended') {
+            throw new FeatureError('validation', 'Ce compte est suspendu');
+        }
+        if (await ctx.db.workspaceMembers.isMember(target.id, ctx.workspaceId)) {
+            throw new FeatureError('conflict', `« ${target.username} » est déjà membre de cet espace`);
         }
 
-        const consumed = await ctx.db.workspaceInvites.consume(input.token);
-        if (!consumed) throw new FeatureError('not_found', 'Invitation invalide ou expirée');
-
-        await ctx.db.workspaceMembers.add({ userId: ctx.userId, workspaceId: consumed.workspaceId });
+        await ctx.db.workspaceMembers.add({ userId: target.id, workspaceId: ctx.workspaceId });
 
         // Sans rôle, un nouvel arrivant n'aurait aucun droit : la résolution est
         // fail-closed. Le rôle par défaut de l'espace est donc attribué d'office.
         // S'il n'y en a pas, le membre entre sans droits — visible et corrigeable
-        // depuis la page de gestion, plutôt qu'un accès accordé par défaut.
-        const fallback = await ctx.db.workspaceRoles.findDefault(consumed.workspaceId);
+        // depuis l'onglet Membres, plutôt qu'un accès accordé par défaut.
+        const fallback = await ctx.db.workspaceRoles.findDefault(ctx.workspaceId);
         if (fallback) {
-            await ctx.db.workspaceRoles.assign(ctx.userId, consumed.workspaceId, fallback.id);
+            await ctx.db.workspaceRoles.assign(target.id, ctx.workspaceId, fallback.id);
         }
 
         invalidateAccess();
-
-        const workspace = await describe(ctx, consumed.workspaceId);
         ctx.audit({
-            action: 'workspace.invite.accept',
+            action: 'workspace.member.add',
             level: 'warning',
-            description: `Espace rejoint : « ${workspace.name} »`,
-            metadata: { joinedWorkspaceId: workspace.id }
+            description: `« ${target.username} » ajouté à « ${ctx.workspace.name} »`,
+            metadata: { addedUserId: target.id }
         });
-        return { workspace };
+        return { workspace: await describe(ctx, ctx.workspaceId) };
     }
 });
 
@@ -262,6 +160,7 @@ async function describe(ctx: FeatureContext, workspaceId: number): Promise<Works
             email: u.email,
             username: u.username,
             avatar: u.avatar,
+            lastLogin: Number(u.last_login),
             created: Number(u.created)
         })),
         features: parseFeatures(row.features),

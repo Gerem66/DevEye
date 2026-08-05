@@ -181,10 +181,23 @@
     margin: 0;
 }
 
+/* Un champ et son action, sur une ligne : le champ prend tout ce qui reste. */
 .nameRow {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
+}
+
+/*
+ * `TextInput` enveloppe son `<input>` dans un conteneur qui ne reçoit pas de
+ * `className` : le `width: 100%` de l'input se résout donc contre une boîte
+ * laissée à sa largeur intrinsèque — une vingtaine de caractères, quelle que
+ * soit la place disponible. C'est ce conteneur qu'il faut étirer, d'où le
+ * sélecteur d'enfant.
+ */
+.nameRow > div {
+    flex: 1;
+    min-width: 0;
 }
 
 .dangerZone {
@@ -315,6 +328,20 @@
     display: block;
     margin-top: var(--space-lg);
     margin-bottom: var(--space-xs);
+}
+
+/*
+ * Sélecteur de rôle d'un membre : garde sa largeur, le texte du compte prend le
+ * reste. Sans ça le `width: 100%` de SelectInput réclame toute la ligne et le
+ * pseudo comme l'adresse tombent à zéro — il ne reste que l'avatar.
+ */
+.memberRole {
+    width: auto;
+    max-width: 12rem;
+    flex-shrink: 0;
+    /* SelectInput réserve 48px pour la flèche native ; des noms de rôle courts
+       s'en contentent de 32. */
+    padding-right: 32px;
 }
 
 /* Pastille colorée du rôle, dans la liste des membres. */

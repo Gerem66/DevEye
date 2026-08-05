@@ -24,11 +24,7 @@ import { userSetThemeFeature } from './user/setTheme';
 import { weatherFeatures } from './weather';
 import { workspaceActivateFeature, workspaceSetFavoriteFeature } from './workspace/activate';
 import {
-    workspaceInviteAcceptFeature,
-    workspaceInviteCreateFeature,
-    workspaceInviteListFeature,
-    workspaceInvitePreviewFeature,
-    workspaceInviteRevokeFeature,
+    workspaceAddMemberFeature,
     workspaceLeaveFeature,
     workspaceRemoveMemberFeature,
     workspaceRenameFeature
@@ -54,11 +50,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     workspaceRenameFeature,
     workspaceLeaveFeature,
     workspaceRemoveMemberFeature,
-    workspaceInviteCreateFeature,
-    workspaceInviteListFeature,
-    workspaceInviteRevokeFeature,
-    workspaceInvitePreviewFeature,
-    workspaceInviteAcceptFeature,
+    workspaceAddMemberFeature,
     workspaceSharedKeyStatusFeature,
     workspaceEnableSharedKeyFeature,
     workspaceRoleListFeature,

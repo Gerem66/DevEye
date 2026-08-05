@@ -10,34 +10,30 @@ import { useWorkspacePermissions } from '@/stores/workspace';
 import RoleDialog from './RoleDialog';
 import Tabs, { type TabDef } from './Tabs';
 import { avatarSrc } from '@/Features/Profile/avatar';
-import { formatExpiry, formatUses, useWorkspaceAdmin } from './useWorkspaceAdmin';
+import { useWorkspaceAdmin } from './useWorkspaceAdmin';
 import styles from './Workspace.module.css';
 
 /** Les vues de la page. « general » existe toujours, les autres dépendent des droits. */
-type TabId = 'general' | 'members' | 'roles' | 'invites' | 'security';
+type TabId = 'general' | 'members' | 'roles' | 'security';
 
-/** Durées proposées pour un lien, comme les codes de liaison d'appareil. */
-const TTL_CHOICES: { label: string; value: number | null }[] = [
-    { label: '1 heure', value: 3600 },
-    { label: '1 jour', value: 86400 },
-    { label: '7 jours', value: 604800 },
-    { label: 'N’expire pas', value: null }
-];
-
-const USES_CHOICES: { label: string; value: number | null }[] = [
-    { label: '1 personne', value: 1 },
-    { label: '5 personnes', value: 5 },
-    { label: 'Illimité', value: null }
-];
+/** « il y a 3 j », ou « jamais » pour un compte qui n'est pas encore venu. */
+function lastSeen(epoch: number): string {
+    if (!epoch) return 'jamais connecté';
+    const days = Math.floor((Date.now() / 1000 - epoch) / 86400);
+    if (days <= 0) return 'vu aujourd’hui';
+    if (days === 1) return 'vu hier';
+    if (days < 30) return `vu il y a ${days} j`;
+    return `vu le ${new Date(epoch * 1000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+}
 
 /**
  * Page « Espace de travail », découpée en onglets : Général, Membres, Rôles,
- * Invitations, Chiffrement.
+ * Chiffrement.
  *
  * Les onglets sont construits d'après les droits de l'appelant, si bien qu'un
  * onglet affiché mène toujours à quelque chose d'utilisable — plutôt qu'à une
  * section vide ou grisée. Un espace personnel n'en garde donc qu'un : il n'a ni
- * membres, ni rôles, ni invitations, et ne se quitte pas.
+ * membres, ni rôles, et ne se quitte pas.
  */
 export default function FeatureWorkspace() {
     const admin = useWorkspaceAdmin();
@@ -45,12 +41,10 @@ export default function FeatureWorkspace() {
     const { workspace, isShared, isOwner } = admin;
 
     const [name, setName] = useState('');
-    const [inviteOpen, setInviteOpen] = useState(false);
-    const [ttl, setTtl] = useState<string>('86400');
-    const [maxUses, setMaxUses] = useState<string>('1');
+    const [addOpen, setAddOpen] = useState(false);
+    const [addEmail, setAddEmail] = useState('');
     const [confirmLeave, setConfirmLeave] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
-    const [copied, setCopied] = useState<string | null>(null);
     const [roleEdited, setRoleEdited] = useState<{ role: WorkspaceRole | null } | null>(null);
     const [tab, setTab] = useState<TabId>('general');
 
@@ -63,7 +57,7 @@ export default function FeatureWorkspace() {
      * Onglets réellement disponibles, construits d'après les droits : un onglet
      * affiché mène toujours à quelque chose d'utilisable, plutôt qu'à une section
      * vide ou grisée. L'espace personnel n'en garde qu'un — il n'a ni membres, ni
-     * rôles, ni invitations.
+     * rôles.
      */
     const tabs: TabDef<TabId>[] = (
         [
@@ -75,13 +69,6 @@ export default function FeatureWorkspace() {
                 icon: 'shield',
                 badge: admin.roles.length,
                 when: isShared && canManageRoles
-            },
-            {
-                id: 'invites',
-                label: 'Invitations',
-                icon: 'add',
-                badge: admin.invites.length,
-                when: isShared && canManageMembers
             },
             {
                 id: 'security',
@@ -110,14 +97,18 @@ export default function FeatureWorkspace() {
 
     const nameChanged = name.trim() !== '' && name.trim() !== workspace.name;
 
-    const copy = (url: string): void => {
-        void navigator.clipboard.writeText(url).then(() => {
-            setCopied(url);
-            setTimeout(() => setCopied(null), 1500);
+    const submitAdd = (): void => {
+        const email = addEmail.trim();
+        if (email === '') return;
+        // Le dialogue ne se ferme qu'en cas de succès : une adresse inconnue ou
+        // déjà membre doit rester corrigeable sans tout ressaisir.
+        void admin.addMember(email).then((ok) => {
+            if (ok) {
+                setAddEmail('');
+                setAddOpen(false);
+            }
         });
     };
-
-    const parse = (v: string): number | null => (v === 'null' ? null : Number(v));
 
     return (
         <div className={styles.container}>
@@ -129,20 +120,6 @@ export default function FeatureWorkspace() {
                             ? `Espace partagé · ${workspace.users.length} membre${workspace.users.length > 1 ? 's' : ''}`
                             : 'Votre espace personnel, visible de vous seul'}
                     </p>
-                </div>
-                {/* L'action principale suit l'onglet : chaque vue expose la sienne,
-                    plutôt qu'une barre de boutons qui grandit avec la page. */}
-                <div className={styles.headerActions}>
-                    {active === 'invites' && (
-                        <Button icon='add' onClick={() => setInviteOpen(true)}>
-                            Inviter
-                        </Button>
-                    )}
-                    {active === 'roles' && (
-                        <Button icon='plus' onClick={() => setRoleEdited({ role: null })}>
-                            Nouveau rôle
-                        </Button>
-                    )}
                 </div>
             </div>
 
@@ -179,9 +156,16 @@ export default function FeatureWorkspace() {
 
                 {active === 'members' && isShared && (
                     <section className={styles.section}>
-                        <span className={styles.sectionLabel}>
-                            {workspace.users.length} membre{workspace.users.length > 1 ? 's' : ''}
-                        </span>
+                        <div className={styles.sectionHeader}>
+                            <span className={styles.sectionLabel}>
+                                {workspace.users.length} membre{workspace.users.length > 1 ? 's' : ''}
+                            </span>
+                            {canManageMembers && (
+                                <Button icon='add' onClick={() => setAddOpen(true)}>
+                                    Ajouter un membre
+                                </Button>
+                            )}
+                        </div>
                         <div className={styles.card}>
                             {workspace.users.map((u) => {
                                 const owner = u.id === workspace.ownerUserId;
@@ -189,14 +173,20 @@ export default function FeatureWorkspace() {
                                     <div key={u.id} className={styles.row}>
                                         <img className={styles.avatar} src={avatarSrc(u.avatar)} alt='' />
                                         <div className={styles.rowText}>
-                                            <span className={styles.rowTitle}>{u.username}</span>
-                                            <span className={styles.rowMeta}>{owner ? 'Propriétaire' : u.email}</span>
+                                            <span className={styles.rowTitle}>
+                                                {u.username}{' '}
+                                                {owner && <span className={styles.defaultTag}>propriétaire</span>}
+                                            </span>
+                                            <span className={styles.rowMeta}>
+                                                {u.email} · {lastSeen(u.lastLogin)}
+                                            </span>
                                         </div>
                                         {/* Le propriétaire n'a pas de rôle : il a tout par
                                             construction, et lui en donner un laisserait croire
                                             qu'on peut le lui retirer. */}
                                         {!owner && canManageMembers && (
                                             <SelectInput
+                                                className={styles.memberRole}
                                                 value={String(roleOf(u.id) ?? '')}
                                                 onChange={(e) =>
                                                     void admin.assignRole(
@@ -235,10 +225,13 @@ export default function FeatureWorkspace() {
 
                 {active === 'roles' && isShared && canManageRoles && (
                     <section className={styles.section}>
-                        <p className={styles.hint}>
-                            Un rôle décrit ce qu’un membre peut voir et faire ici. Le propriétaire n’en porte jamais :
-                            il a tout par construction.
-                        </p>
+                        <div className={styles.sectionHeader}>
+                            <p className={styles.hint}>Un rôle décrit ce qu’un membre peut voir et faire ici.</p>
+                            <Button icon='plus' onClick={() => setRoleEdited({ role: null })}>
+                                Nouveau rôle
+                            </Button>
+                        </div>
+                        <p className={styles.hint}>Le propriétaire n’en porte jamais : il a tout par construction.</p>
                         <div className={styles.card}>
                             {admin.roles.length === 0 ? (
                                 <p className={styles.empty}>
@@ -285,53 +278,6 @@ export default function FeatureWorkspace() {
                                             title='Supprimer'
                                             aria-label={`Supprimer ${r.name}`}
                                             onClick={() => void admin.deleteRole(r.id)}
-                                            disabled={admin.busy}
-                                        >
-                                            <span className='icon icon-trash' />
-                                        </button>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </section>
-                )}
-
-                {active === 'invites' && isShared && canManageMembers && (
-                    <section className={styles.section}>
-                        <p className={styles.hint}>
-                            Toute personne disposant d’un lien actif peut rejoindre cet espace, dans la limite fixée à
-                            sa création. Elle y arrive avec le rôle par défaut.
-                        </p>
-                        <div className={styles.card}>
-                            {admin.invites.length === 0 ? (
-                                <p className={styles.empty}>
-                                    {admin.loadingInvites ? 'Chargement…' : 'Aucun lien actif.'}
-                                </p>
-                            ) : (
-                                admin.invites.map((inv) => (
-                                    <div key={inv.token} className={styles.row}>
-                                        <div className={styles.rowText}>
-                                            <span className={styles.token}>{inv.url}</span>
-                                            <span className={styles.rowMeta}>
-                                                {formatUses(inv.uses, inv.maxUses)} · {formatExpiry(inv.expiresAt)} ·
-                                                créé par {inv.createdBy}
-                                            </span>
-                                        </div>
-                                        <button
-                                            type='button'
-                                            className={styles.actionBtn}
-                                            title='Copier le lien'
-                                            aria-label='Copier le lien'
-                                            onClick={() => copy(inv.url)}
-                                        >
-                                            <span className={`icon icon-${copied === inv.url ? 'success' : 'copy'}`} />
-                                        </button>
-                                        <button
-                                            type='button'
-                                            className={`${styles.actionBtn} ${styles.actionDanger}`}
-                                            title='Révoquer ce lien'
-                                            aria-label='Révoquer ce lien'
-                                            onClick={() => void admin.revokeInvite(inv.token)}
                                             disabled={admin.busy}
                                         >
                                             <span className='icon icon-trash' />
@@ -408,52 +354,35 @@ export default function FeatureWorkspace() {
             </div>
 
             <Dialog
-                open={inviteOpen}
-                onClose={() => setInviteOpen(false)}
-                title='Nouveau lien d’invitation'
-                description='Toute personne disposant du lien pourra rejoindre cet espace, dans la limite fixée ici.'
+                open={addOpen}
+                onClose={() => setAddOpen(false)}
+                title='Ajouter un membre'
+                description='La personne rejoint l’espace immédiatement, avec le rôle par défaut. Son compte DevEye doit déjà exister.'
                 width={440}
-                onSubmit={() => {
-                    void admin.createInvite(parse(ttl), parse(maxUses));
-                    setInviteOpen(false);
-                }}
+                onSubmit={submitAdd}
                 footer={
                     <>
-                        <Button variant='secondary' onClick={() => setInviteOpen(false)}>
+                        <Button variant='secondary' onClick={() => setAddOpen(false)} disabled={admin.busy}>
                             Annuler
                         </Button>
-                        <Button
-                            onClick={() => {
-                                void admin.createInvite(parse(ttl), parse(maxUses));
-                                setInviteOpen(false);
-                            }}
-                            disabled={admin.busy}
-                        >
-                            Créer le lien
+                        <Button onClick={submitAdd} disabled={admin.busy || addEmail.trim() === ''}>
+                            {admin.busy ? 'Ajout…' : 'Ajouter'}
                         </Button>
                     </>
                 }
             >
-                <label className={styles.sectionLabel} htmlFor='invite-ttl'>
-                    Validité
+                <label className={styles.sectionLabel} htmlFor='add-member-email'>
+                    Adresse email
                 </label>
-                <SelectInput id='invite-ttl' value={ttl} onChange={(e) => setTtl(e.target.value)}>
-                    {TTL_CHOICES.map((c) => (
-                        <option key={String(c.value)} value={String(c.value)}>
-                            {c.label}
-                        </option>
-                    ))}
-                </SelectInput>
-                <label className={styles.sectionLabel} htmlFor='invite-uses'>
-                    Nombre d’utilisations
-                </label>
-                <SelectInput id='invite-uses' value={maxUses} onChange={(e) => setMaxUses(e.target.value)}>
-                    {USES_CHOICES.map((c) => (
-                        <option key={String(c.value)} value={String(c.value)}>
-                            {c.label}
-                        </option>
-                    ))}
-                </SelectInput>
+                <TextInput
+                    id='add-member-email'
+                    type='email'
+                    value={addEmail}
+                    onChange={(e) => setAddEmail(e.target.value)}
+                    maxLength={320}
+                    placeholder='personne@exemple.fr'
+                    aria-label='Adresse email du membre'
+                />
             </Dialog>
 
             <RoleDialog

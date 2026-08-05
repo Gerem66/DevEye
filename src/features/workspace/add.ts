@@ -52,6 +52,7 @@ export const workspaceAddFeature: FeatureDefinition<
                         email: owner.email,
                         username: owner.username,
                         avatar: owner.avatar,
+                        lastLogin: Number(owner.last_login),
                         created: Number(owner.created)
                     }
                 ],
