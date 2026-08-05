@@ -46,6 +46,7 @@ import { EditableHome } from './organize/EditableHome';
 import type { HomeSection } from 'deveye-types';
 import type { FeatureProps } from '@/Features/types';
 import styles from './Dashboard.module.css';
+import type { Workspace } from 'deveye-types';
 
 /** A view openable full-screen in the popup (feature, structural page or device). */
 interface ViewConfig {
@@ -134,6 +135,25 @@ function getGreeting(): string {
     if (hour < 12) return 'Bonjour';
     if (hour < 18) return 'Bon après-midi';
     return 'Bonsoir';
+}
+
+/**
+ * En-tête de l'accueil.
+ *
+ * L'espace personnel salue son propriétaire — il est à lui seul. Un espace
+ * partagé affiche son nom : l'accueil y appartient à l'espace et non à celui qui
+ * le regarde, et une fois qu'on jongle entre plusieurs, savoir d'un coup d'œil
+ * où l'on se trouve vaut mieux qu'un second bonjour.
+ */
+function homeHeading(workspace: Workspace, username: string): { title: string; subtitle: string } {
+    if (workspace.kind === 'personal') {
+        return { title: `${getGreeting()}, ${username}`, subtitle: formatDate() };
+    }
+    const members = workspace.users.length;
+    return {
+        title: workspace.name,
+        subtitle: `${formatDate()} · ${members} membre${members > 1 ? 's' : ''}`
+    };
 }
 
 function formatDate(): string {
@@ -362,6 +382,8 @@ export default function HomePage() {
 
     if (!user || !currentWorkspace) return null;
 
+    const heading = homeHeading(currentWorkspace, user.username);
+
     /**
      * Bascule d'espace : on publie le nouvel id (les commandes suivantes le
      * portent aussitôt), puis on recharge la session — ce qui rapatrie le thème
@@ -506,10 +528,8 @@ export default function HomePage() {
             <main className={styles.main}>
                 <div className={styles.content}>
                     <header className={styles.greeting}>
-                        <h1 className={styles.greetingText}>
-                            {getGreeting()}, {user.username}
-                        </h1>
-                        <p className={styles.dateText}>{formatDate()}</p>
+                        <h1 className={styles.greetingText}>{heading.title}</h1>
+                        <p className={styles.dateText}>{heading.subtitle}</p>
                     </header>
 
                     {editing ? (
