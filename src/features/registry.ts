@@ -32,6 +32,7 @@ import {
     workspaceRemoveMemberFeature,
     workspaceRenameFeature
 } from './workspace/members';
+import { workspaceEnableSharedKeyFeature, workspaceSharedKeyStatusFeature } from './workspace/sharedKey';
 import { workspaceAddFeature } from './workspace/add';
 import { workspaceDeleteFeature } from './workspace/delete';
 
@@ -49,6 +50,8 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     workspaceInviteRevokeFeature,
     workspaceInvitePreviewFeature,
     workspaceInviteAcceptFeature,
+    workspaceSharedKeyStatusFeature,
+    workspaceEnableSharedKeyFeature,
     userSetAvatarFeature,
     userSetThemeFeature,
     passwordListFeature,

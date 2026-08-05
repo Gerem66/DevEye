@@ -22,6 +22,12 @@ export const workspaceAddFeature: FeatureDefinition<
             name: input.name.trim()
         });
 
+        // L'espace naît avec sa propre clé. Il est vide, donc il n'y a rien à
+        // convertir : seuls les espaces antérieurs à cette clé doivent passer par
+        // `workspace.enableSharedKey`. C'est ce qui rend cet état transitoire —
+        // une fois les anciens convertis, tout espace partagé a sa clé.
+        await ctx.secretKeys.resolveWorkspaceDek(workspace.id);
+
         // L'appelant vient de gagner un accès : les scopes mémoïsés de sa
         // connexion doivent être rebâtis pour que le nouvel espace soit
         // immédiatement adressable.

@@ -2,7 +2,7 @@ import type { WorkspaceRow } from 'deveye-types';
 
 import type Encryption from '@/Services/Encryption';
 import { createSecureStore, type SecureStore } from '@/Services/SecureStore';
-import type { SecretKeyService } from '@/Services/SecretKeyService';
+import { SecretKeyService } from '@/Services/SecretKeyService';
 import type { Database } from '@/db';
 import { FeatureError } from './_define';
 
@@ -132,10 +132,17 @@ export function createAccessResolver(
             throw new FeatureError('forbidden', 'Vous n’êtes pas membre de cet espace');
         }
 
+        // Un espace partagé déjà converti possède sa propre clé : elle sert les
+        // deux étages, et tout membre lit alors l'espace sans dépendre du mot de
+        // passe de son propriétaire. Sinon (espace personnel, ou espace partagé
+        // pas encore converti) on retombe sur les clés du propriétaire.
+        const keyService = new SecretKeyService(db, crypt);
+        const workspaceDekId = row.kind === 'shared' && (await keyService.hasWorkspaceDek(row.id)) ? row.id : null;
+
         const { store, keys } = createSecureStore(
             db,
             crypt,
-            { ownerUserId: row.owner_user_id, callerUserId: userId },
+            { ownerUserId: row.owner_user_id, callerUserId: userId, workspaceDekId },
             sessionId
         );
 

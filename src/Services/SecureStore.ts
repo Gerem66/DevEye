@@ -354,7 +354,12 @@ export interface Cipher {
 }
 
 /** A {@link Cipher} bound to a lazily-resolved DEK. */
-class DekCipher implements Cipher {
+/**
+ * Chiffreur assis sur une DEK déjà résolue. Exporté pour les rares cas qui
+ * détiennent la clé eux-mêmes — la conversion d'un espace vers sa propre clé,
+ * qui doit écrire sous la clé neuve tout en lisant sous l'ancienne.
+ */
+export class DekCipher implements Cipher {
     constructor(private readonly dek: () => Promise<Buffer>) {}
 
     async encrypt(plaintext: string): Promise<string> {
@@ -425,14 +430,24 @@ export class SecureStore implements Cipher {
     /** Password-gated tier backing this store's own encrypt/decrypt. */
     private readonly guarded: Cipher = new DekCipher(() => this.resolveDek());
 
+    /**
+     * Id de l'espace quand celui-ci possède sa propre clé (WDK). Dans ce cas
+     * elle sert les **deux** étages : elle est emballée par la clé serveur, donc
+     * un second niveau « gardé » n'apporterait rien — il serait déballable de la
+     * même façon. `null` pour un espace personnel, et pour un espace partagé pas
+     * encore converti, qui retombe sur les clés de son propriétaire.
+     */
+    private readonly workspaceDekId: number | null;
+
     constructor(
         private readonly keys: SecretKeyService,
-        scope: { ownerUserId: number; callerUserId: number },
+        scope: { ownerUserId: number; callerUserId: number; workspaceDekId: number | null },
         private readonly sessionId: string,
         private readonly crypt: Encryption
     ) {
         this.ownerUserId = scope.ownerUserId;
         this.sessionOwnsKeys = scope.ownerUserId === scope.callerUserId;
+        this.workspaceDekId = scope.workspaceDekId;
     }
 
     private async row(): Promise<UserSecretKeyRow> {
@@ -452,6 +467,7 @@ export class SecureStore implements Cipher {
      * first uses of a listing into a single lookup. A failure is not cached.
      */
     private resolveOpenDek(): Promise<Buffer> {
+        if (this.workspaceDekId !== null) return this.keys.resolveWorkspaceDek(this.workspaceDekId);
         this.cachedOpenDek ??= this.keys.resolveOpenDek(this.ownerUserId).catch((e: unknown) => {
             this.cachedOpenDek = null;
             throw e;
@@ -467,6 +483,10 @@ export class SecureStore implements Cipher {
      *  - feature ON, locked → `FeatureError('locked')` so the client prompts.
      */
     private async resolveDek(): Promise<Buffer> {
+        // L'espace a sa propre clé : elle sert aussi l'étage gardé, et il n'y a
+        // donc rien à déverrouiller — c'est tout l'intérêt, chaque membre lit
+        // l'espace sans dépendre du mot de passe d'un autre.
+        if (this.workspaceDekId !== null) return this.keys.resolveWorkspaceDek(this.workspaceDekId);
         const row = await this.row();
         if (!this.keys.isPasswordWrapped(row)) {
             return this.keys.resolveServerDek(row);
@@ -494,6 +514,7 @@ export class SecureStore implements Cipher {
      * call it only as part of a real access check, not for passive polling.
      */
     async isUnlocked(): Promise<boolean> {
+        if (this.workspaceDekId !== null) return true;
         const row = await this.row();
         if (!this.keys.isPasswordWrapped(row)) return true;
         if (!this.sessionOwnsKeys) return false;
@@ -505,6 +526,7 @@ export class SecureStore implements Cipher {
      * polling that must not count as user activity.
      */
     async isUnlockedPassive(): Promise<boolean> {
+        if (this.workspaceDekId !== null) return true;
         const row = await this.row();
         if (!this.keys.isPasswordWrapped(row)) return true;
         if (!this.sessionOwnsKeys) return false;
@@ -544,7 +566,7 @@ export class SecureStore implements Cipher {
 export function createSecureStore(
     db: Database,
     crypt: Encryption,
-    scope: { ownerUserId: number; callerUserId: number },
+    scope: { ownerUserId: number; callerUserId: number; workspaceDekId: number | null },
     sessionId: string
 ): { store: SecureStore; keys: SecretKeyService } {
     const keys = new SecretKeyService(db, crypt);
@@ -565,6 +587,7 @@ export function createSecureStore(
 export function createOpenCipher(db: Database, crypt: Encryption, workspaceId: number): Cipher {
     const keys = new SecretKeyService(db, crypt);
     return new DekCipher(async () => {
+        if (await keys.hasWorkspaceDek(workspaceId)) return keys.resolveWorkspaceDek(workspaceId);
         const workspace = await db.workspaces.findById(workspaceId);
         if (!workspace) throw new Error(`Unknown workspace ${workspaceId}`);
         return keys.resolveOpenDek(workspace.owner_user_id);

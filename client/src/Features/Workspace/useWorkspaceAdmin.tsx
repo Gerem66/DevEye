@@ -19,6 +19,9 @@ export function useWorkspaceAdmin() {
     const isOwner = workspace !== null && user !== null && workspace.ownerUserId === user.id;
 
     const [invites, setInvites] = useState<WorkspaceInvite[]>([]);
+    const [sharedKey, setSharedKey] = useState<{ enabled: boolean; applicable: boolean; blockers: string[] } | null>(
+        null
+    );
     const [loadingInvites, setLoadingInvites] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
@@ -41,9 +44,18 @@ export function useWorkspaceAdmin() {
         }
     }, [isShared]);
 
+    const loadSharedKey = useCallback(async () => {
+        try {
+            setSharedKey(await ws.send('workspace.sharedKeyStatus', {}));
+        } catch {
+            setSharedKey(null);
+        }
+    }, []);
+
     useEffect(() => {
         void loadInvites();
-    }, [loadInvites]);
+        void loadSharedKey();
+    }, [loadInvites, loadSharedKey]);
 
     const run = async (fn: () => Promise<void>, fallback: string): Promise<void> => {
         setError(null);
@@ -63,9 +75,21 @@ export function useWorkspaceAdmin() {
         isOwner,
         invites,
         loadingInvites,
+        sharedKey,
         error,
         busy,
         clearError: () => setError(null),
+
+        /**
+         * Bascule l'espace sur sa propre clé. Le contenu existant est relu avec
+         * la clé du propriétaire puis réécrit sous celle de l'espace — d'où la
+         * session déverrouillée exigée par le serveur.
+         */
+        enableSharedKey: () =>
+            run(async () => {
+                await ws.send('workspace.enableSharedKey', {});
+                await loadSharedKey();
+            }, 'Activation de la clé d’espace impossible.'),
 
         rename: (name: string) =>
             run(async () => {

@@ -184,6 +184,42 @@ export default function FeatureWorkspace() {
                     </section>
                 )}
 
+                {isShared && isOwner && admin.sharedKey?.applicable && (
+                    <section className={styles.section}>
+                        <span className={styles.sectionLabel}>Chiffrement</span>
+                        <div className={styles.card}>
+                            {admin.sharedKey.enabled ? (
+                                <p className={styles.hint}>
+                                    Cet espace possède sa propre clé de chiffrement : tous ses membres en lisent le
+                                    contenu, indépendamment de votre mot de passe.
+                                </p>
+                            ) : (
+                                <>
+                                    <p className={styles.hint}>
+                                        Le contenu de cet espace est actuellement chiffré avec <strong>votre</strong>{' '}
+                                        clé. Si vous utilisez le chiffrement par mot de passe, vous êtes donc le seul à
+                                        pouvoir le lire. Lui donner sa propre clé le rend lisible par tous ses membres.
+                                    </p>
+                                    {admin.sharedKey.blockers.map((b) => (
+                                        <p key={b} className={styles.hint}>
+                                            ⚠️ {b}
+                                        </p>
+                                    ))}
+                                    <div className={styles.dangerZone}>
+                                        <p className={styles.hint}>À faire une seule fois, session déverrouillée.</p>
+                                        <Button
+                                            onClick={() => void admin.enableSharedKey()}
+                                            disabled={admin.busy || admin.sharedKey.blockers.length > 0}
+                                        >
+                                            {admin.busy ? 'Conversion…' : 'Activer la clé d’espace'}
+                                        </Button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </section>
+                )}
+
                 {isShared && (
                     <section className={styles.section}>
                         <span className={styles.sectionLabel}>Zone sensible</span>

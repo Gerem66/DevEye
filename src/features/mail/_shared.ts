@@ -38,7 +38,8 @@ export function cipherForTier(
     if (tier === 'open') return createOpenCipher(db, crypt, userId);
     // Mail n'est pas encore rattache a un espace : l'utilisateur est donc a la
     // fois proprietaire des cles et appelant.
-    return createSecureStore(db, crypt, { ownerUserId: userId, callerUserId: userId }, sessionId).store;
+    return createSecureStore(db, crypt, { ownerUserId: userId, callerUserId: userId, workspaceDekId: null }, sessionId)
+        .store;
 }
 
 /**
