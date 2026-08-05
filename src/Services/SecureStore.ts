@@ -509,6 +509,25 @@ export class SecureStore implements Cipher {
     }
 
     /**
+     * Pourquoi le coffre est fermé, quand il l'est.
+     *
+     *  - `open`    — lisible tout de suite, rien à demander.
+     *  - `locked`  — fermé, mais l'appelant peut l'ouvrir avec SON mot de passe.
+     *  - `foreign` — les clés appartiennent à quelqu'un d'autre : aucun mot de
+     *                passe de l'appelant n'ouvrira jamais ce contenu.
+     *
+     * La distinction compte : confondre `foreign` avec `locked` fait réclamer à
+     * un membre un mot de passe qui ne peut pas marcher, indéfiniment.
+     */
+    async lockState(): Promise<'open' | 'locked' | 'foreign'> {
+        if (this.workspaceDekId !== null) return 'open';
+        const row = await this.row();
+        if (!this.keys.isPasswordWrapped(row)) return 'open';
+        if (!this.sessionOwnsKeys) return 'foreign';
+        return liveDek(this.sessionId) !== null ? 'open' : 'locked';
+    }
+
+    /**
      * True when encrypted data can be read/written right now without a prompt.
      * Note: this also slides the grace window forward (treated as activity), so
      * call it only as part of a real access check, not for passive polling.

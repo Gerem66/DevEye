@@ -15,6 +15,7 @@ import {
     type RefreshResponse
 } from 'deveye-types';
 import { z } from 'zod';
+import { getActiveWorkspaceId } from '@/stores/workspace';
 
 const BASE_URL: string = (import.meta.env.VITE_SERVER_URL as string | undefined) ?? '';
 
@@ -59,8 +60,21 @@ export function login(payload: LoginRequest): Promise<LoginResponse> {
     return request('/api/auth/login', { method: 'POST', body: JSON.stringify(body) }, loginResponseSchema);
 }
 
+/**
+ * Espace actif transmis en query.
+ *
+ * Sans lui, le serveur recalcule l'espace actif de son côté (le favori, sinon le
+ * personnel) et renvoie le thème, la disposition **et les droits** d'un autre
+ * espace que celui affiché. Il reste juge de l'accès : un id inaccessible est
+ * ignoré et il retombe sur un espace valide.
+ */
+function workspaceQuery(): string {
+    const id = getActiveWorkspaceId();
+    return id === null ? '' : `?workspace=${id}`;
+}
+
 export function refresh(): Promise<RefreshResponse> {
-    return request('/api/auth/refresh', { method: 'POST' }, refreshResponseSchema);
+    return request(`/api/auth/refresh${workspaceQuery()}`, { method: 'POST' }, refreshResponseSchema);
 }
 
 export function logout(): Promise<{ loggedOut: true }> {
@@ -68,7 +82,7 @@ export function logout(): Promise<{ loggedOut: true }> {
 }
 
 export function me(): Promise<MeResponse> {
-    return request('/api/auth/me', { method: 'GET' }, meResponseSchema);
+    return request(`/api/auth/me${workspaceQuery()}`, { method: 'GET' }, meResponseSchema);
 }
 
 export function changePassword(payload: ChangePasswordRequest): Promise<ChangePasswordResponse> {

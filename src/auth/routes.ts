@@ -7,7 +7,7 @@ import {
     registerRequestSchema,
     twoFactorChallengeRequestSchema
 } from 'deveye-types';
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { env } from '@/Utils/Env';
 import { sha256hex } from '@/Utils/hash';
@@ -380,6 +380,20 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit }: Aut
         return reply.send(ok({ cancelled: true as const }));
     });
 
+    /**
+     * Espace où le client se trouve, transmis en `?workspace=`.
+     *
+     * Sans lui, `/me` et `/refresh` recalculeraient l'espace actif et
+     * renverraient le thème, la disposition et les droits d'un autre espace que
+     * celui affiché. Le serveur reste juge de l'accès : un id inaccessible est
+     * simplement ignoré.
+     */
+    const requestedWorkspace = (req: FastifyRequest): number | undefined => {
+        const raw = (req.query as { workspace?: string } | undefined)?.workspace;
+        const id = Number(raw);
+        return Number.isInteger(id) && id > 0 ? id : undefined;
+    };
+
     app.post('/api/auth/refresh', async (req, reply) => {
         const token = req.cookies[REFRESH_COOKIE];
         if (!token) return reply.code(401).send(err('auth_required', 'Missing refresh cookie'));
@@ -416,7 +430,7 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit }: Aut
         }
 
         const userId = Number(claims.sub);
-        const bundle = await loadUserBundle(db, userId);
+        const bundle = await loadUserBundle(db, userId, requestedWorkspace(req));
         if (!bundle) {
             clearAuthCookies(reply);
             return reply.code(401).send(err('auth_invalid', 'Unknown user'));
@@ -454,7 +468,7 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit }: Aut
         const claims = await verifyAccessToken(accessToken);
         if (!claims) return reply.code(401).send(err('auth_expired', 'Access token expired'));
 
-        const bundle = await loadUserBundle(db, Number(claims.sub));
+        const bundle = await loadUserBundle(db, Number(claims.sub), requestedWorkspace(req));
         if (!bundle) return reply.code(401).send(err('auth_invalid', 'Unknown user'));
 
         return reply.send(ok(bundle));

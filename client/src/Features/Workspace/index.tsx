@@ -8,9 +8,13 @@ import type { WorkspaceRole } from 'deveye-types';
 import { useAuth } from '@/auth/AuthProvider';
 import { useWorkspacePermissions } from '@/stores/workspace';
 import RoleDialog from './RoleDialog';
+import Tabs, { type TabDef } from './Tabs';
 import { avatarSrc } from '@/Features/Profile/avatar';
 import { formatExpiry, formatUses, useWorkspaceAdmin } from './useWorkspaceAdmin';
 import styles from './Workspace.module.css';
+
+/** Les vues de la page. « general » existe toujours, les autres dépendent des droits. */
+type TabId = 'general' | 'members' | 'roles' | 'invites' | 'security';
 
 /** Durées proposées pour un lien, comme les codes de liaison d'appareil. */
 const TTL_CHOICES: { label: string; value: number | null }[] = [
@@ -27,12 +31,13 @@ const USES_CHOICES: { label: string; value: number | null }[] = [
 ];
 
 /**
- * Page « Espace de travail » : renommer, membres, invitations, et la zone
- * destructive (quitter / supprimer).
+ * Page « Espace de travail », découpée en onglets : Général, Membres, Rôles,
+ * Invitations, Chiffrement.
  *
- * Un espace personnel n'affiche que son nom : il n'a ni membres ni invitations,
- * et ne se quitte pas. Plutôt que de griser des sections vides, on ne les rend
- * simplement pas.
+ * Les onglets sont construits d'après les droits de l'appelant, si bien qu'un
+ * onglet affiché mène toujours à quelque chose d'utilisable — plutôt qu'à une
+ * section vide ou grisée. Un espace personnel n'en garde donc qu'un : il n'a ni
+ * membres, ni rôles, ni invitations, et ne se quitte pas.
  */
 export default function FeatureWorkspace() {
     const admin = useWorkspaceAdmin();
@@ -47,11 +52,51 @@ export default function FeatureWorkspace() {
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [copied, setCopied] = useState<string | null>(null);
     const [roleEdited, setRoleEdited] = useState<{ role: WorkspaceRole | null } | null>(null);
+    const [tab, setTab] = useState<TabId>('general');
 
     const { can } = useWorkspacePermissions();
     const canManageMembers = can('workspace.members');
     const canManageRoles = can('workspace.roles');
     const canRename = can('workspace.manage');
+
+    /**
+     * Onglets réellement disponibles, construits d'après les droits : un onglet
+     * affiché mène toujours à quelque chose d'utilisable, plutôt qu'à une section
+     * vide ou grisée. L'espace personnel n'en garde qu'un — il n'a ni membres, ni
+     * rôles, ni invitations.
+     */
+    const tabs: TabDef<TabId>[] = (
+        [
+            { id: 'general', label: 'Général', icon: 'settings', when: true },
+            { id: 'members', label: 'Membres', icon: 'users', badge: workspace?.users.length, when: isShared },
+            {
+                id: 'roles',
+                label: 'Rôles',
+                icon: 'shield',
+                badge: admin.roles.length,
+                when: isShared && canManageRoles
+            },
+            {
+                id: 'invites',
+                label: 'Invitations',
+                icon: 'add',
+                badge: admin.invites.length,
+                when: isShared && canManageMembers
+            },
+            {
+                id: 'security',
+                label: 'Chiffrement',
+                icon: 'lock',
+                when: isShared && isOwner && Boolean(admin.sharedKey?.applicable)
+            }
+        ] satisfies (TabDef<TabId> & { when: boolean })[]
+    )
+        .filter((t) => t.when)
+        .map(({ when: _when, ...tab }) => tab);
+
+    // Un onglet peut disparaître sous les pieds (droit retiré, espace quitté) :
+    // on retombe alors sur « Général », qui existe toujours.
+    const active = tabs.some((t) => t.id === tab) ? tab : 'general';
 
     /** Rôle actuellement porté par un membre. */
     const roleOf = (userId: number): number | null =>
@@ -85,43 +130,58 @@ export default function FeatureWorkspace() {
                             : 'Votre espace personnel, visible de vous seul'}
                     </p>
                 </div>
-                {isShared && canManageMembers && (
-                    <div className={styles.headerActions}>
+                {/* L'action principale suit l'onglet : chaque vue expose la sienne,
+                    plutôt qu'une barre de boutons qui grandit avec la page. */}
+                <div className={styles.headerActions}>
+                    {active === 'invites' && (
                         <Button icon='add' onClick={() => setInviteOpen(true)}>
                             Inviter
                         </Button>
-                    </div>
-                )}
+                    )}
+                    {active === 'roles' && (
+                        <Button icon='plus' onClick={() => setRoleEdited({ role: null })}>
+                            Nouveau rôle
+                        </Button>
+                    )}
+                </div>
             </div>
+
+            <Tabs tabs={tabs} active={active} onSelect={setTab} />
 
             {admin.error && <div className={styles.errorBanner}>{admin.error}</div>}
 
             <div className={styles.sections}>
-                <section className={styles.section}>
-                    <span className={styles.sectionLabel}>Général</span>
-                    <div className={styles.card}>
-                        <div className={styles.nameRow}>
-                            <TextInput
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                maxLength={120}
-                                aria-label='Nom de l’espace'
-                                disabled={!canRename}
-                            />
-                            <Button
-                                onClick={() => void admin.rename(name.trim())}
-                                disabled={!nameChanged || admin.busy || !canRename}
-                            >
-                                Renommer
-                            </Button>
-                        </div>
-                        {!canRename && <p className={styles.hint}>Vous n’avez pas le droit de renommer cet espace.</p>}
-                    </div>
-                </section>
-
-                {isShared && (
+                {active === 'general' && (
                     <section className={styles.section}>
-                        <span className={styles.sectionLabel}>Membres</span>
+                        <span className={styles.sectionLabel}>Nom</span>
+                        <div className={styles.card}>
+                            <div className={styles.nameRow}>
+                                <TextInput
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    maxLength={120}
+                                    aria-label='Nom de l’espace'
+                                    disabled={!canRename}
+                                />
+                                <Button
+                                    onClick={() => void admin.rename(name.trim())}
+                                    disabled={!nameChanged || admin.busy || !canRename}
+                                >
+                                    Renommer
+                                </Button>
+                            </div>
+                            {!canRename && (
+                                <p className={styles.hint}>Vous n’avez pas le droit de renommer cet espace.</p>
+                            )}
+                        </div>
+                    </section>
+                )}
+
+                {active === 'members' && isShared && (
+                    <section className={styles.section}>
+                        <span className={styles.sectionLabel}>
+                            {workspace.users.length} membre{workspace.users.length > 1 ? 's' : ''}
+                        </span>
                         <div className={styles.card}>
                             {workspace.users.map((u) => {
                                 const owner = u.id === workspace.ownerUserId;
@@ -173,14 +233,12 @@ export default function FeatureWorkspace() {
                     </section>
                 )}
 
-                {isShared && canManageRoles && (
+                {active === 'roles' && isShared && canManageRoles && (
                     <section className={styles.section}>
-                        <div className={styles.sectionHeader}>
-                            <span className={styles.sectionLabel}>Rôles</span>
-                            <Button variant='secondary' icon='plus' onClick={() => setRoleEdited({ role: null })}>
-                                Nouveau rôle
-                            </Button>
-                        </div>
+                        <p className={styles.hint}>
+                            Un rôle décrit ce qu’un membre peut voir et faire ici. Le propriétaire n’en porte jamais :
+                            il a tout par construction.
+                        </p>
                         <div className={styles.card}>
                             {admin.roles.length === 0 ? (
                                 <p className={styles.empty}>
@@ -238,11 +296,12 @@ export default function FeatureWorkspace() {
                     </section>
                 )}
 
-                {isShared && canManageMembers && (
+                {active === 'invites' && isShared && canManageMembers && (
                     <section className={styles.section}>
-                        <div className={styles.sectionHeader}>
-                            <span className={styles.sectionLabel}>Liens d’invitation</span>
-                        </div>
+                        <p className={styles.hint}>
+                            Toute personne disposant d’un lien actif peut rejoindre cet espace, dans la limite fixée à
+                            sa création. Elle y arrive avec le rôle par défaut.
+                        </p>
                         <div className={styles.card}>
                             {admin.invites.length === 0 ? (
                                 <p className={styles.empty}>
@@ -284,9 +343,9 @@ export default function FeatureWorkspace() {
                     </section>
                 )}
 
-                {isShared && isOwner && admin.sharedKey?.applicable && (
+                {active === 'security' && isShared && isOwner && admin.sharedKey?.applicable && (
                     <section className={styles.section}>
-                        <span className={styles.sectionLabel}>Chiffrement</span>
+                        <span className={styles.sectionLabel}>Clé de chiffrement</span>
                         <div className={styles.card}>
                             {admin.sharedKey.enabled ? (
                                 <p className={styles.hint}>
@@ -320,7 +379,10 @@ export default function FeatureWorkspace() {
                     </section>
                 )}
 
-                {isShared && (
+                {/* La zone sensible reste sous « Général » : la reléguer dans un onglet
+                    à part la rendrait plus difficile à trouver que ce qu'elle mérite,
+                    et un onglet entier pour un bouton serait disproportionné. */}
+                {active === 'general' && isShared && (
                     <section className={styles.section}>
                         <span className={styles.sectionLabel}>Zone sensible</span>
                         <div className={styles.card}>

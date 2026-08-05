@@ -253,3 +253,65 @@
     text-transform: uppercase;
     color: var(--accent);
 }
+
+/* Barre d'onglets : défile horizontalement plutôt que de passer à la ligne, pour
+   que la position de l'onglet actif reste stable quand la fenêtre rétrécit. */
+.tabs {
+    display: flex;
+    gap: var(--space-xs);
+    overflow-x: auto;
+    border-bottom: 1px solid var(--glass-border);
+    scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.tab {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: transparent;
+    border: none;
+    /* Le trait actif vit sur le bouton lui-même : il recouvre la bordure du
+       conteneur, sans décaler le contenu d'un pixel au changement d'onglet. */
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.tab:hover {
+    color: var(--text-primary);
+}
+
+.tabActive {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+.tabBadge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.tabActive .tabBadge {
+    background: var(--accent-bg);
+    color: var(--accent);
+}

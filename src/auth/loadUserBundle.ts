@@ -11,7 +11,21 @@ import { permissionsFor } from '@/features/_access';
  * contenir plusieurs data URLs de fond d'écran) : basculer d'espace va chercher
  * les siens.
  */
-export async function loadUserBundle(db: Database, userId: number): Promise<SessionBundle | null> {
+export async function loadUserBundle(
+    db: Database,
+    userId: number,
+    /**
+     * Espace où le client se trouve déjà, s'il en a un. Sans lui, le serveur
+     * recalculerait l'espace actif (favori, sinon personnel) et renverrait le
+     * thème, la disposition **et les droits** d'un autre espace que celui
+     * affiché — trois incohérences d'un coup, dont une de sécurité apparente
+     * (des droits qui ne correspondent pas à l'espace ouvert).
+     *
+     * Ignoré s'il n'est pas accessible : un espace supprimé ou dont l'accès a été
+     * révoqué doit ramener sur un espace valide, pas bloquer la session.
+     */
+    preferredWorkspaceId?: number
+): Promise<SessionBundle | null> {
     const row = await db.users.findById(userId);
     if (!row) return null;
 
@@ -55,14 +69,17 @@ export async function loadUserBundle(db: Database, userId: number): Promise<Sess
         };
     });
 
-    // L'espace favori s'il est encore accessible, sinon le personnel. Un favori
-    // dont l'accès a été révoqué ne doit pas bloquer la connexion : on retombe
-    // silencieusement sur l'espace personnel, qui est toujours là.
+    // Par ordre de préséance : l'espace où le client se trouve déjà, sinon son
+    // favori, sinon le personnel. Chacun n'est retenu que s'il est encore
+    // accessible — un espace supprimé ou révoqué ramène sur le suivant plutôt
+    // que de bloquer la session.
     const accessible = new Set(workspaces.map((w) => w.id));
     const activeWorkspaceId =
-        row.default_workspace_id !== null && accessible.has(row.default_workspace_id)
-            ? row.default_workspace_id
-            : row.personal_workspace_id;
+        [preferredWorkspaceId, row.default_workspace_id].find((id): id is number => id != null && accessible.has(id)) ??
+        // L'espace personnel est censé être toujours accessible (son propriétaire
+        // en est membre par construction). On y retombe sans le vérifier : si cet
+        // invariant cassait, échouer ici serait pire qu'ouvrir un espace vide.
+        row.personal_workspace_id;
 
     const activeRow = await db.workspaces.findById(activeWorkspaceId);
 
