@@ -28,6 +28,10 @@ export async function loadUserBundle(
 ): Promise<SessionBundle | null> {
     const row = await db.users.findById(userId);
     if (!row) return null;
+    // Un compte suspendu n'a pas de session : `/me` et `/refresh` passent tous
+    // deux par ici, et le jeton d'accès déjà émis reste valide jusqu'à son
+    // expiration — sans ce garde-fou il servirait encore un bundle complet.
+    if (row.status === 'suspended') return null;
 
     // Security posture surfaced as "Sécurité → x / 3" in the profile. The
     // re-auth window counts when strict — short enough (≤ 5 min) to be a

@@ -182,6 +182,13 @@ export function createAccessResolver(
         const user = await db.users.findById(userId);
         if (!user) throw new FeatureError('auth_invalid', 'Compte introuvable');
 
+        // La socket ne s'authentifie qu'à la poignée de main : sans ce contrôle,
+        // une suspension ne toucherait qu'un compte déconnecté, et celui qui est
+        // déjà en ligne garderait tout son accès jusqu'à ce qu'il recharge. Le
+        // `invalidateAccess()` posé par `admin.setUserStatus` fait retomber ce
+        // scope, donc la suspension mord dès la commande suivante.
+        if (user.status === 'suspended') throw new FeatureError('forbidden', 'Ce compte est suspendu');
+
         const targetId = workspaceId ?? user.personal_workspace_id;
         const row = await db.workspaces.findById(targetId);
         if (!row) throw new FeatureError('not_found', 'Espace introuvable');

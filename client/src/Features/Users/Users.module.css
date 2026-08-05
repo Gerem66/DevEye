@@ -258,3 +258,33 @@
 .suspended {
     opacity: 0.55;
 }
+
+/*
+ * Le sélecteur de rôle garde sa largeur, le texte du compte prend le reste.
+ *
+ * Sans ça le `width: 100%` de SelectInput réclame toute la ligne : le nom et
+ * l'adresse se font écraser jusqu'aux points de suspension, et il ne reste que
+ * les avatars pour distinguer deux comptes.
+ */
+.roleSelect {
+    width: auto;
+    flex-shrink: 0;
+    /* SelectInput réserve 48px pour la flèche native ; deux libellés courts s'en
+       contentent de 32. */
+    padding-right: 32px;
+}
+
+/*
+ * La pastille de statut occupe une colonne à elle, à droite du texte du compte.
+ *
+ * Elle n'a jamais été décentrée — `align-items: center` la plaçait déjà au
+ * pixel près. Ce qui la faisait paraître à la dérive, c'est que la colonne de
+ * texte tombait à zéro (cf. `.roleSelect`) : la pastille flottait alors au
+ * milieu d'une ligne vide, alignée sur rien. La largeur fixe lui rend un voisin
+ * sur lequel se caler.
+ */
+.statusBadge {
+    flex-shrink: 0;
+    min-width: 92px;
+    justify-content: center;
+}

@@ -89,6 +89,18 @@ export const adminSetUserStatusFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         assertNotSelf(ctx, input.userId, 'suspendre');
         await ctx.db.users.setStatus(input.userId, input.status);
+
+        // Suspendre, c'est mettre dehors maintenant — pas la prochaine fois
+        // qu'on essaiera d'entrer. Les jetons de rafraîchissement tombent, donc
+        // plus de renouvellement ; `invalidateAccess()` fait recharger le statut
+        // aux sockets déjà ouvertes, qui se voient refuser dès la commande
+        // suivante. Sans ces deux lignes, une session en cours survivait à la
+        // suspension aussi longtemps qu'elle restait ouverte.
+        if (input.status === 'suspended') {
+            await ctx.db.refreshTokens.revokeUser(input.userId);
+        }
+        invalidateAccess();
+
         ctx.audit({
             action: 'user.setStatus',
             level: 'warning',

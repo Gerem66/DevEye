@@ -29,6 +29,8 @@ export interface RefreshTokensRepo {
     wasRecentlyRotated(jti: string, token: string, graceSeconds: number): Promise<boolean>;
     revoke(jti: string): Promise<void>;
     revokeSession(sessionId: string): Promise<void>;
+    /** Toutes les sessions d'un compte : suspension et suppression. */
+    revokeUser(userId: number): Promise<void>;
 }
 
 export function refreshTokensRepo(pool: Q): RefreshTokensRepo {
@@ -71,6 +73,12 @@ export function refreshTokensRepo(pool: Q): RefreshTokensRepo {
             await pool.query(
                 'UPDATE refresh_tokens SET revoked_at = UNIX_TIMESTAMP() WHERE session_id = ? AND revoked_at IS NULL',
                 [sessionId]
+            );
+        },
+        async revokeUser(userId) {
+            await pool.query(
+                'UPDATE refresh_tokens SET revoked_at = UNIX_TIMESTAMP() WHERE user_id = ? AND revoked_at IS NULL',
+                [userId]
             );
         }
     };

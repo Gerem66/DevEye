@@ -135,7 +135,10 @@ export default function FeatureUsers() {
                                             </span>
                                         </div>
 
-                                        <StatusBadge tone={u.status === 'suspended' ? 'danger' : 'success'}>
+                                        <StatusBadge
+                                            className={styles.statusBadge}
+                                            tone={u.status === 'suspended' ? 'danger' : 'success'}
+                                        >
                                             {u.status === 'suspended' ? 'suspendu' : 'actif'}
                                         </StatusBadge>
 
@@ -143,6 +146,7 @@ export default function FeatureUsers() {
                                             laisserait potentiellement le site sans administrateur :
                                             le serveur le refuse, l'UI ne le propose pas. */}
                                         <SelectInput
+                                            className={styles.roleSelect}
                                             value={u.role}
                                             disabled={self || busy}
                                             onChange={(e) =>
