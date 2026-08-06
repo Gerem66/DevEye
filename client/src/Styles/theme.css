@@ -94,6 +94,12 @@
 
   /* Layout */
   --navbar-height: 56px;
+  /* Hauteur commune des pastilles de la barre du haut (Présence, Chiffrement).
+     Fixée, et surtout pas déduite du texte qu'elles contiennent : déduite, elle
+     dépendait des métriques de la police — donc du navigateur — et rendait des
+     valeurs fractionnaires (28,22 px ici, autre chose ailleurs), si bien que deux
+     pastilles voisines ne s'alignaient plus tout à fait. */
+  --topbar-pill-height: 28px;
 
   /* Z-index scale */
   --z-wallpaper: -1;

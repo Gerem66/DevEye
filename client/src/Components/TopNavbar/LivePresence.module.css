@@ -2,28 +2,36 @@
    Même idiome de pastille que SecrecyTimer : bordure de verre, coins pilule,
    libellé révélé au survol par une animation de largeur. */
 
-/* Rembourrage **symétrique** : il ne l'était pas (5 à gauche, 8 à droite, hérité
-   d'une pastille icône + texte), ce qui décalait la pile de bulles d'un pixel et
-   demi vers la droite — assez pour se voir sur une forme ronde. */
+/* Hauteur **fixe** et rembourrage **horizontal seulement** : c'est ce qui rend le
+   calage vertical indépendant de la police. Avec un rembourrage vertical, la
+   hauteur découlait de la boîte de ligne du texte, qui varie d'un navigateur à
+   l'autre — le contenu paraissait alors monté ou descendu selon le poste, et la
+   pastille ne s'alignait plus sur ses voisines.
+
+   Ici tout est centré par le flex, dans les deux axes, et la hauteur est celle
+   que partagent toutes les pastilles de la barre. */
 .pill {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
-    padding: 3px 6px;
+    box-sizing: border-box;
+    height: var(--topbar-pill-height);
+    padding: 0 8px;
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-pill);
     background: var(--glass-bg-light);
     color: var(--text-secondary);
     font: inherit;
-    line-height: 1.2;
+    line-height: 1;
     white-space: nowrap;
 }
 
-/* Variante « Seul » : une icône et un mot, pas une forme ronde. Elle respire un
-   peu plus que la pile, qui porte déjà sa propre marge visuelle par la rondeur
-   des bulles. */
+/* Variante « Seul » : une icône et un mot, pas une forme ronde. Un peu plus d'air
+   de chaque côté — la pile de bulles, elle, porte déjà sa marge visuelle par la
+   rondeur des bulles. */
 .pillAlone {
-    padding: 7px 12px 5px 10px;
+    padding: 0 12px;
 }
 
 /* Les bulles se chevauchent : la pile dit « plusieurs » d'un coup d'œil, sans
@@ -38,8 +46,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    /* 22 px dans une pastille de 28 : deux pixels de dégagement en haut comme en
+       bas, une fois retirée sa bordure. Les serrer davantage collerait la
+       bordure colorée d'une bulle à celle de la pastille. */
+    width: 22px;
+    height: 22px;
     margin-left: -7px;
     padding: 0;
     border: 2px solid var(--peer);

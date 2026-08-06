@@ -6,7 +6,11 @@
 .pill {
     display: inline-flex;
     align-items: center;
-    padding: 5px 10px;
+    box-sizing: border-box;
+    /* Hauteur partagée, et rembourrage horizontal seulement : la déduire du texte
+       la faisait dépendre des métriques de police, donc du navigateur. */
+    height: var(--topbar-pill-height);
+    padding: 0 10px;
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-pill);
     background: var(--glass-bg-light);
