@@ -121,6 +121,7 @@ export const uptimeAddFeature: FeatureDefinition<
     typeof uptimeAdd.output
 > = defineFeature({
     ...uptimeAdd,
+    mutates: true,
     handler: async (ctx, input) => {
         const draft = input.service;
         const row = await ctx.db.uptimeServices.create({
@@ -159,6 +160,7 @@ export const uptimeUpdateFeature: FeatureDefinition<
     typeof uptimeUpdate.output
 > = defineFeature({
     ...uptimeUpdate,
+    mutates: true,
     handler: async (ctx, input) => {
         await loadService(ctx, input.id);
         const draft = input.service;
@@ -193,6 +195,7 @@ export const uptimeSetEnabledFeature: FeatureDefinition<
     typeof uptimeSetEnabled.output
 > = defineFeature({
     ...uptimeSetEnabled,
+    mutates: true,
     handler: async (ctx, input) => {
         await loadService(ctx, input.id);
         const row = await ctx.db.uptimeServices.setEnabled(input.id, ctx.workspaceId, input.enabled);
@@ -213,6 +216,7 @@ export const uptimeRemoveFeature: FeatureDefinition<
     typeof uptimeRemove.output
 > = defineFeature({
     ...uptimeRemove,
+    mutates: true,
     handler: async (ctx, input) => {
         await loadService(ctx, input.id);
         // History, rollup and incidents go with it (ON DELETE CASCADE).
@@ -232,6 +236,7 @@ export const uptimeReorderFeature: FeatureDefinition<
     typeof uptimeReorder.output
 > = defineFeature({
     ...uptimeReorder,
+    mutates: true,
     handler: async (ctx, input) => {
         await ctx.db.uptimeServices.reorder(ctx.workspaceId, input.ids);
         return { ids: input.ids };
@@ -244,6 +249,7 @@ export const uptimeCheckNowFeature: FeatureDefinition<
     typeof uptimeCheckNow.output
 > = defineFeature({
     ...uptimeCheckNow,
+    mutates: true,
     handler: async (ctx, input) => {
         const row = await loadService(ctx, input.id);
         // Same code path as the scheduler, so a manual check counts in the
@@ -385,6 +391,7 @@ export const uptimeSetSettingsFeature: FeatureDefinition<
     typeof uptimeSetSettings.output
 > = defineFeature({
     ...uptimeSetSettings,
+    mutates: true,
     handler: async (ctx, input) => {
         if (input.mailAccountId !== null) {
             const account = await ctx.db.mailAccounts.findById(input.mailAccountId, ctx.workspaceId);

@@ -183,6 +183,7 @@ export const noteGetFeature: FeatureDefinition<typeof noteGet.command, typeof no
 export const noteAddFeature: FeatureDefinition<typeof noteAdd.command, typeof noteAdd.input, typeof noteAdd.output> =
     defineFeature({
         ...noteAdd,
+        mutates: true,
         access: { feature: 'notes', level: 'write' },
         handler: async (ctx, input) => {
             assertPrivateAllowed(ctx, input.note.private);
@@ -210,6 +211,7 @@ export const noteEditFeature: FeatureDefinition<
     typeof noteEdit.output
 > = defineFeature({
     ...noteEdit,
+    mutates: true,
     access: { feature: 'notes', level: 'write' },
     handler: async (ctx, input) => {
         const existing = await loadNote(ctx, input.noteId);
@@ -240,6 +242,7 @@ export const noteReorderFeature: FeatureDefinition<
     typeof noteReorder.output
 > = defineFeature({
     ...noteReorder,
+    mutates: true,
     access: { feature: 'notes', level: 'write' },
     handler: async (ctx, input) => {
         const folderId = await resolveFolderId(ctx, input.folderId);
@@ -263,6 +266,7 @@ export const noteArchiveFeature: FeatureDefinition<
     typeof noteArchive.output
 > = defineFeature({
     ...noteArchive,
+    mutates: true,
     access: { feature: 'notes', level: 'write' },
     handler: async (ctx, input) => {
         const existing = await loadNote(ctx, input.noteId);
@@ -283,6 +287,7 @@ export const noteRestoreFeature: FeatureDefinition<
     typeof noteRestore.output
 > = defineFeature({
     ...noteRestore,
+    mutates: true,
     access: { feature: 'notes', level: 'write' },
     handler: async (ctx, input) => {
         const existing = await loadNote(ctx, input.noteId);
@@ -303,6 +308,7 @@ export const noteDeleteFeature: FeatureDefinition<
     typeof noteDelete.output
 > = defineFeature({
     ...noteDelete,
+    mutates: true,
     access: { feature: 'notes', level: 'write' },
     handler: async (ctx, input) => {
         const existing = await loadNote(ctx, input.noteId);
@@ -345,6 +351,7 @@ export const folderAddFeature: FeatureDefinition<
     typeof folderAdd.output
 > = defineFeature({
     ...folderAdd,
+    mutates: true,
     access: { feature: 'notes', level: 'write' },
     handler: async (ctx, input) => {
         const name = input.name.trim();
@@ -370,6 +377,7 @@ export const folderRenameFeature: FeatureDefinition<
     typeof folderRename.output
 > = defineFeature({
     ...folderRename,
+    mutates: true,
     access: { feature: 'notes', level: 'write' },
     handler: async (ctx, input) => {
         const existing = await ctx.db.noteFolders.findById(input.folderId, ctx.workspaceId);
@@ -394,6 +402,7 @@ export const folderReorderFeature: FeatureDefinition<
     typeof folderReorder.output
 > = defineFeature({
     ...folderReorder,
+    mutates: true,
     access: { feature: 'notes', level: 'write' },
     handler: async (ctx, input) => {
         // Reorder only the rows of this workspace; any foreign id in
@@ -415,6 +424,7 @@ export const folderDeleteFeature: FeatureDefinition<
     typeof folderDelete.output
 > = defineFeature({
     ...folderDelete,
+    mutates: true,
     access: { feature: 'notes', level: 'write' },
     handler: async (ctx, input) => {
         const existing = await ctx.db.noteFolders.findById(input.folderId, ctx.workspaceId);

@@ -1,0 +1,45 @@
+/* Curseurs des pairs situés exactement au même endroit que nous.
+   En portail sur <body>, en position fixe : la popup a `overflow: hidden` et
+   framer-motion déplace ses boîtes pendant le morphe — un curseur ancré dedans
+   serait rogné ou emporté. */
+
+.layer {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    pointer-events: none;
+}
+
+.cursor {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    /* La pointe de la flèche est le point exact, pas le coin de la boîte. */
+    transform-origin: top left;
+    will-change: transform;
+}
+
+.arrow {
+    width: 14px;
+    height: 20px;
+    flex-shrink: 0;
+    color: var(--peer);
+    /* Un filet sombre décolle la flèche d'un fond clair sans la rendre lourde. */
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+}
+
+.label {
+    margin-top: 12px;
+    padding: 2px 7px;
+    border-radius: var(--radius-pill);
+    background: var(--peer);
+    color: #06121a;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.35;
+    white-space: nowrap;
+    box-shadow: var(--shadow-sm);
+}

@@ -1,18 +1,19 @@
 import { useEffect, useSyncExternalStore } from 'react';
 
 import { ws } from '@/api/ws';
+import { onResourceChange } from './invalidation';
 import { useActiveWorkspace } from './workspace';
 
 /**
  * Shared "services up / total" store, read by the home card and the navbar
  * widget so both show the same number from a single query.
  *
- * Unlike the note/password counters this one changes on its own — the server
- * probes services in the background — so it polls on a timer instead of relying
- * only on the invalidation bus. The Uptime feature calls {@link refreshUptime}
- * after a mutation to reflect it immediately.
+ * Ce compteur change tout seul — le serveur sonde les services en tâche de fond
+ * — mais il ne sonde plus lui-même : `UptimeMonitor` diffuse `live.changed` à
+ * chaque **transition** d'état, et c'est ce qui déclenche la relecture. La
+ * feature Uptime appelle {@link refreshUptime} après ses propres mutations, dont
+ * le serveur ne lui renvoie pas l'écho.
  */
-const REFRESH_MS = 30_000;
 
 export interface UptimeCountState {
     total: number;
@@ -24,8 +25,8 @@ export interface UptimeCountState {
 let state: UptimeCountState = { total: 0, up: 0, down: 0, loading: true };
 const listeners = new Set<() => void>();
 let workspaceId: number | null = null;
-let timer: ReturnType<typeof setInterval> | null = null;
 let unsubState: (() => void) | null = null;
+let unsubInvalidate: (() => void) | null = null;
 let refCount = 0;
 
 function emit(next: Partial<UptimeCountState>): void {
@@ -58,7 +59,7 @@ function start(): void {
     refCount += 1;
     if (refCount > 1) return;
     void refreshUptime();
-    timer = setInterval(() => void refreshUptime(), REFRESH_MS);
+    unsubInvalidate = onResourceChange('uptime.count', () => void refreshUptime());
     unsubState = ws.onStateChange((s) => {
         if (s === 'open') void refreshUptime();
     });
@@ -68,10 +69,8 @@ function stop(): void {
     refCount -= 1;
     if (refCount > 0) return;
     refCount = 0;
-    if (timer) {
-        clearInterval(timer);
-        timer = null;
-    }
+    unsubInvalidate?.();
+    unsubInvalidate = null;
     unsubState?.();
     unsubState = null;
 }

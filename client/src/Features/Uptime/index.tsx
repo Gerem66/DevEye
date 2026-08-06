@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ws } from '@/api/ws';
+import { onResourceChange } from '@/stores/invalidation';
 import Button from '@/Components/Button';
 import { OpenPopup } from '@/Components/Popup';
 import { refreshUptime } from '@/stores/uptime';
@@ -13,9 +14,6 @@ import styles from './style.module.css';
 
 import type { UptimeService } from 'deveye-types';
 import type { FeatureProps } from '../types';
-
-/** Cadence the open list re-reads the server at — probes happen without us. */
-const REFRESH_MS = 20_000;
 
 export default function Uptime({ workspace }: FeatureProps) {
     const [services, setServices] = useState<UptimeService[]>([]);
@@ -41,18 +39,22 @@ export default function Uptime({ workspace }: FeatureProps) {
         }
     }, [workspaceId]);
 
-    // Reload on open, whenever the socket (re)connects, and on a timer: the
-    // server probes in the background, so the list ages on its own.
+    // Relecture à l'ouverture, à chaque (re)connexion, et quand le sujet
+    // `uptime` bouge — une écriture d'un autre membre, ou une transition d'état
+    // signalée par le moniteur de fond. Plus de minuteur : la liste ne vieillit
+    // plus toute seule, elle est prévenue.
     useEffect(() => {
         void reload();
-        const timer = setInterval(() => {
+        const offInvalidate = onResourceChange('uptime.list', () => {
+            // Une relecture réordonne la liste sous le pointeur : jamais pendant
+            // un glisser-déposer.
             if (!dragging.current) void reload();
-        }, REFRESH_MS);
+        });
         const off = ws.onStateChange((s) => {
             if (s === 'open') void reload();
         });
         return () => {
-            clearInterval(timer);
+            offInvalidate();
             off();
         };
     }, [reload]);

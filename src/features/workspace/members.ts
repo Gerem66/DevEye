@@ -32,6 +32,7 @@ export const workspaceRenameFeature: FeatureDefinition<
     typeof workspaceRename.output
 > = defineFeature({
     ...workspaceRename,
+    mutates: true,
     access: { capabilities: ['workspace.manage'] },
     handler: async (ctx, input) => {
         const name = input.name.trim();
@@ -50,6 +51,7 @@ export const workspaceLeaveFeature: FeatureDefinition<
     typeof workspaceLeave.output
 > = defineFeature({
     ...workspaceLeave,
+    mutates: true,
     handler: async (ctx) => {
         assertShared(ctx);
         if (ctx.isOwner) {
@@ -61,6 +63,7 @@ export const workspaceLeaveFeature: FeatureDefinition<
         await ctx.db.workspaceMembers.remove(ctx.userId, ctx.workspaceId);
         await clearFavoriteIfPointingAt(ctx, ctx.userId, ctx.workspaceId);
         invalidateAccess();
+        ctx.live?.evict(ctx.workspaceId, ctx.userId);
         ctx.audit({
             action: 'workspace.leave',
             level: 'warning',
@@ -76,6 +79,7 @@ export const workspaceRemoveMemberFeature: FeatureDefinition<
     typeof workspaceRemoveMember.output
 > = defineFeature({
     ...workspaceRemoveMember,
+    mutates: true,
     access: { capabilities: ['workspace.members'] },
     handler: async (ctx, input) => {
         assertShared(ctx);
@@ -87,6 +91,7 @@ export const workspaceRemoveMemberFeature: FeatureDefinition<
         // connexion viserait un espace auquel il n'a plus accès.
         await clearFavoriteIfPointingAt(ctx, input.userId, ctx.workspaceId);
         invalidateAccess();
+        ctx.live?.evict(ctx.workspaceId, input.userId);
         ctx.audit({
             action: 'workspace.member.remove',
             level: 'warning',
@@ -103,6 +108,7 @@ export const workspaceAddMemberFeature: FeatureDefinition<
     typeof workspaceAddMember.output
 > = defineFeature({
     ...workspaceAddMember,
+    mutates: true,
     access: { capabilities: ['workspace.members'] },
     handler: async (ctx, input) => {
         assertShared(ctx);
@@ -160,6 +166,7 @@ async function describe(ctx: FeatureContext, workspaceId: number): Promise<Works
             email: u.email,
             username: u.username,
             avatar: u.avatar,
+            color: u.color,
             lastLogin: Number(u.last_login),
             created: Number(u.created)
         })),

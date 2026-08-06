@@ -118,6 +118,7 @@ export const passwordAddFeature: FeatureDefinition<
     typeof passwordAdd.output
 > = defineFeature({
     ...passwordAdd,
+    mutates: true,
     access: { feature: 'password', level: 'write' },
     handler: async (ctx, input) => {
         await assertSecureUnlocked(ctx);
@@ -142,6 +143,7 @@ export const passwordEditFeature: FeatureDefinition<
     typeof passwordEdit.output
 > = defineFeature({
     ...passwordEdit,
+    mutates: true,
     access: { feature: 'password', level: 'write' },
     handler: async (ctx, input) => {
         await assertSecureUnlocked(ctx);
@@ -163,6 +165,7 @@ export const passwordDeleteFeature: FeatureDefinition<
     typeof passwordDelete.output
 > = defineFeature({
     ...passwordDelete,
+    mutates: true,
     access: { feature: 'password', level: 'write' },
     handler: async (ctx, input) => {
         const deleted = await ctx.db.passwords.delete(input.passwordId, ctx.workspaceId);

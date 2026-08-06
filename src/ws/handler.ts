@@ -3,6 +3,8 @@ import { randomUUID } from 'crypto';
 import {
     clientMessageSchema,
     err,
+    LIVE_CURSOR_COMMAND,
+    liveCursorFrameSchema,
     ok,
     type FeatureAccess,
     type ServerMessage,
@@ -14,10 +16,12 @@ import type { FastifyInstance } from 'fastify';
 import { ACCESS_COOKIE } from '@/auth/cookies';
 import { verifyAccessToken } from '@/auth/jwt';
 import { createMonitorTransport, type MonitorHub } from '@/agent/hub';
-import { createAccessResolver } from '@/features/_access';
+import { accessEpochNow, createAccessResolver } from '@/features/_access';
+import type { LiveHub } from '@/live/hub';
 import { FeatureError } from '@/features/_define';
 import { forgetSession } from '@/features/password/_shared';
 import { featureHandlerMap } from '@/features/registry';
+import { topicsOf } from '@/features/_topics';
 import { enterSessionCommand, exitSessionCommand, forgetSessionDek } from '@/Services/SecureStore';
 import { logger } from '@/logger';
 
@@ -32,6 +36,7 @@ interface WSDeps {
     db: Database;
     crypt: Encryption;
     hub: MonitorHub;
+    live: LiveHub;
     cloudSync: CloudSyncEngine;
     uptime: UptimeMonitor;
     audit: AuditLog;
@@ -48,7 +53,7 @@ function send(socket: WebSocket, msg: ServerMessage): void {
 
 export async function registerWS(
     app: FastifyInstance,
-    { db, crypt, hub, cloudSync, uptime, audit }: WSDeps
+    { db, crypt, hub, live: liveHub, cloudSync, uptime, audit }: WSDeps
 ): Promise<void> {
     app.get('/ws', { websocket: true }, async (socket, req) => {
         const accessToken = req.cookies[ACCESS_COOKIE];
@@ -81,6 +86,12 @@ export async function registerWS(
 
         const monitor = createMonitorTransport(hub, socket);
 
+        // Inscrite dès la poignée de main, avant tout `live.here` : sans ça le
+        // battement de cœur ne couvrirait que les utilisateurs ayant ouvert une
+        // vue instrumentée, et les sockets zombies des autres passeraient au
+        // travers. Entrer dans une *salle* reste conditionné à `live.here`.
+        const live = liveHub.register(socket, session.userId, session.sessionId);
+
         send(socket, { command: 'session', payload: ok({ userId: session.userId }) });
 
         socket.on('message', async (raw: Buffer) => {
@@ -108,6 +119,25 @@ export async function registerWS(
 
             const { command, payload, requestId: clientReqId, workspaceId } = parsed.data;
             const replyId = clientReqId ?? requestId;
+
+            // Voie rapide des curseurs, avant la recherche de commande.
+            //
+            // À ~20 Hz, ce qui suit coûterait par mouvement : la validation zod
+            // de l'entrée, l'allocation de la fermeture d'audit, un ticket DEK,
+            // la résolution asynchrone du scope, six fermetures de garde, la
+            // validation de sortie — et une trame de réponse dont personne
+            // n'attend rien.
+            //
+            // L'espace annoncé par l'enveloppe est **ignoré** ici : il n'est
+            // validé que par `access.forWorkspace()`, que cette voie
+            // court-circuite. Seule la salle posée par un `live.here` — passé,
+            // lui, par tout le pipeline — fait foi. La trame ne porte donc que
+            // des coordonnées, jamais un lieu.
+            if (command === LIVE_CURSOR_COMMAND) {
+                const frame = liveCursorFrameSchema.safeParse(payload);
+                if (frame.success) liveHub.cursor(socket, frame.data.cursor);
+                return;
+            }
 
             const def = featureHandlerMap[command];
             if (!def) {
@@ -165,6 +195,13 @@ export async function registerWS(
                         : await access.forWorkspace(workspaceId);
                 auditWorkspaceId = scope.workspace.id;
 
+                // Les droits résolus sont confiés au hub de présence, qui filtre
+                // ses diffusions dessus. Les y déposer ici plutôt que de les
+                // faire re-résoudre au moment de diffuser garde la diffusion
+                // entièrement synchrone — et fait que n'importe quelle commande
+                // répare un instantané périmé.
+                liveHub.rememberGrants(socket, scope.workspace.id, scope.features, accessEpochNow());
+
                 const assertAdmin = (): void => {
                     if (!scope.isAdmin) throw new FeatureError('forbidden', 'Réservé aux administrateurs');
                 };
@@ -212,6 +249,7 @@ export async function registerWS(
                         requestId: replyId,
                         audit: recordAudit,
                         monitor,
+                        live,
                         cloudSync,
                         uptime
                     },
@@ -228,6 +266,20 @@ export async function registerWS(
                     return;
                 }
                 send(socket, { requestId: replyId, command, payload: ok(outputParse.data) });
+
+                // La commande a écrit : l'espace en est averti, et toute vue qui
+                // lit ce sujet se remet à jour d'elle-même.
+                //
+                // Posé ici — après la réponse, dans le `try` — et non dans le
+                // `finally` : une commande qui a échoué n'invalide rien. La
+                // sortie vers `auditWorkspaceId` (et jamais vers l'espace de
+                // l'enveloppe) est ce qui rend `scope: 'account'` correct :
+                // `secrecy.enable` émis depuis un espace partagé n'avertit que
+                // l'espace **personnel** de l'appelant.
+                //
+                // L'émetteur est exclu : il tient déjà sa propre réponse.
+                const topics = topicsOf(command);
+                if (topics) liveHub.changed(auditWorkspaceId, topics, session!.userId, socket);
             } catch (e) {
                 if (e instanceof FeatureError) {
                     reqLogger.warn({ command, code: e.code, msg: e.message }, 'Feature error');
@@ -251,6 +303,7 @@ export async function registerWS(
 
         socket.on('close', () => {
             hub.dropSubscriber(socket);
+            liveHub.drop(socket);
             forgetSession(session!.sessionId);
             forgetSessionDek(session!.sessionId);
             reqLogger.info('WS closed');

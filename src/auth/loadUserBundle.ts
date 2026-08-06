@@ -59,6 +59,7 @@ export async function loadUserBundle(
                 email: u.email,
                 username: u.username,
                 avatar: u.avatar,
+                color: u.color,
                 lastLogin: Number(u.last_login),
                 created: Number(u.created)
             }));
@@ -94,6 +95,7 @@ export async function loadUserBundle(
             email: row.email,
             username: row.username,
             avatar: row.avatar,
+            color: row.color,
             role: (row.role === 'admin' ? 'admin' : 'user') as UserRole,
             settings: parseStringArray(row.settings),
             security,

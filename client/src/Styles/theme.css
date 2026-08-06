@@ -47,6 +47,21 @@
   --note-blue: #4da8ff;
   --note-purple: #b088ff;
 
+  /* User colours — l'identité visuelle d'un compte dans la présence en direct
+     (`--user-<nom>`, miroir de userColorSchema dans deveye-types) : son curseur
+     chez les autres, sa bulle, la bordure du nœud où il se trouve.
+     Palette distincte de --note-* : huit teintes bien séparées, et surtout
+     PAS de cyan — c'est celui de --accent, un curseur de cette couleur se
+     lirait comme un élément de l'interface plutôt que comme quelqu'un. */
+  --user-red: #ff6b81;
+  --user-orange: #ff9f43;
+  --user-yellow: #ffd54a;
+  --user-green: #5ed17c;
+  --user-blue: #4da8ff;
+  --user-indigo: #7c8cff;
+  --user-purple: #b088ff;
+  --user-pink: #ff7ac6;
+
   /* Inputs */
   --input-bg: rgba(255, 255, 255, 0.04);
   --input-border: var(--glass-border);

@@ -103,6 +103,7 @@ export const secrecyEnableFeature: FeatureDefinition<
     typeof secrecyEnable.output
 > = defineFeature({
     ...secrecyEnable,
+    mutates: true,
     access: { scope: 'account' },
     handler: async (ctx, input) => {
         await assertAccountPassword(ctx, input.password);
@@ -141,6 +142,7 @@ export const secrecyDisableFeature: FeatureDefinition<
     typeof secrecyDisable.output
 > = defineFeature({
     ...secrecyDisable,
+    mutates: true,
     access: { scope: 'account' },
     handler: async (ctx, input) => {
         const row = await ctx.secretKeys.ensureRow(ctx.userId);
@@ -174,6 +176,7 @@ export const secrecySetReauthFeature: FeatureDefinition<
     typeof secrecySetReauth.output
 > = defineFeature({
     ...secrecySetReauth,
+    mutates: true,
     access: { scope: 'account' },
     handler: async (ctx, input) => {
         // Persist the new window. We don't reset the current session's live DEK:
@@ -241,6 +244,7 @@ export const secrecyRecoverFeature: FeatureDefinition<
     typeof secrecyRecover.output
 > = defineFeature({
     ...secrecyRecover,
+    mutates: true,
     access: { scope: 'account' },
     handler: async (ctx, input) => {
         const row = await ctx.secretKeys.ensureRow(ctx.userId);

@@ -26,6 +26,7 @@ export const deviceSetAutostartFeature: FeatureDefinition<
     typeof deviceSetAutostart.output
 > = defineFeature({
     ...deviceSetAutostart,
+    mutates: true,
     handler: async (ctx, input) => {
         const row = await authorizeOnlineDevice(ctx, input.deviceId);
         const pushed = ctx.monitor?.requestService(row.id, {
@@ -47,6 +48,7 @@ export const deviceElevateFeature: FeatureDefinition<
     typeof deviceElevate.output
 > = defineFeature({
     ...deviceElevate,
+    mutates: true,
     handler: async (ctx, input) => {
         const row = await authorizeOnlineDevice(ctx, input.deviceId);
         const pushed = ctx.monitor?.requestService(row.id, { action: 'elevate' });
@@ -67,6 +69,7 @@ export const deviceDropPrivilegesFeature: FeatureDefinition<
     typeof deviceDropPrivileges.output
 > = defineFeature({
     ...deviceDropPrivileges,
+    mutates: true,
     handler: async (ctx, input) => {
         const row = await authorizeOnlineDevice(ctx, input.deviceId);
         const pushed = ctx.monitor?.requestService(row.id, { action: 'drop' });

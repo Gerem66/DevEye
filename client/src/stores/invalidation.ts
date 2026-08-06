@@ -1,20 +1,68 @@
+import { LIVE_CHANGED_EVENT, liveChangedPushSchema, type LiveTopic } from 'deveye-types';
 import { useCallback, useSyncExternalStore } from 'react';
 
+import { ws } from '@/api/ws';
+
 /**
- * Lightweight client-side cache-invalidation bus.
+ * Bus d'invalidation : « cette donnée a changé, re-sollicitez ».
  *
- * Some views cache server-derived data locally and otherwise only re-fetch it
- * on a socket (re)open — e.g. the dashboard count widgets. When a feature
- * mutates that data (a note created, a password deleted) it calls
- * `invalidate(key)`, and every view reading that key via `useResourceVersion`
- * re-fetches. The dependency stays explicit and local to the mutation, with no
- * coupling to popup lifecycle nor to the consumers.
+ * Deux sources, un seul mécanisme :
+ *  - **locale** — une feature qui vient d'écrire appelle `invalidate(key)` pour
+ *    rafraîchir ses propres vues sans attendre l'aller-retour du serveur ;
+ *  - **distante** — le serveur diffuse `live.changed` après toute commande
+ *    déclarant `mutates`, et après une écriture d'une tâche de fond. C'est ce
+ *    qui fait qu'une note écrite par quelqu'un d'autre apparaît sans recharger.
  *
- * Keys are listed explicitly (like the feature registries) so the set of
- * invalidatable resources stays visible and typo-proof. By convention a key is
- * the WS command whose result it caches.
+ * Les clés sont listées explicitement (comme les registres de features) pour que
+ * l'ensemble des ressources invalidables reste visible et sans faute de frappe.
+ * Par convention, une clé est la commande WS dont elle met en cache le résultat.
  */
-export type ResourceKey = 'note.count' | 'password.count' | 'cloudSync.listShares' | 'mail.accountCount';
+export type ResourceKey =
+    | 'note.count'
+    | 'note.list'
+    | 'password.count'
+    | 'password.list'
+    | 'cloudSync.listShares'
+    | 'mail.accountCount'
+    | 'mail.accountList'
+    | 'uptime.count'
+    | 'uptime.list'
+    | 'device.list'
+    | 'weather.list'
+    | 'workspace.roleList';
+
+/**
+ * Ce qu'un sujet du serveur invalide chez nous.
+ *
+ * La correspondance est explicite parce que les deux vocabulaires ne coïncident
+ * pas : le serveur raisonne par feature (`notes`), le client par commande
+ * (`note.count`, `note.list`). Un sujet sans entrée ici n'invalide rien — ce qui
+ * est le bon défaut, mais explique pourquoi une nouvelle vue en cache doit
+ * penser à s'y inscrire.
+ */
+const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
+    notes: ['note.count', 'note.list'],
+    password: ['password.count', 'password.list'],
+    cloudsync: ['cloudSync.listShares'],
+    mail: ['mail.accountCount', 'mail.accountList'],
+    uptime: ['uptime.count', 'uptime.list'],
+    devices: ['device.list'],
+    monitoring: ['device.list'],
+    weather: ['weather.list'],
+    workspace: ['workspace.roleList'],
+    home: [],
+    account: []
+};
+
+/**
+ * Anti-rebond de la réception.
+ *
+ * **Doit rester strictement supérieur au plancher du serveur** (200 ms, voir
+ * `src/live/hub.ts`) : une écriture dont la trame a été étouffée là-bas doit
+ * quand même être vue par la re-sollicitation que la trame précédente a déjà
+ * programmée. Descendre en dessous ouvrirait une fenêtre d'écritures perdues.
+ */
+const REMOTE_DEBOUNCE_MS = 250;
 
 const versions = new Map<ResourceKey, number>();
 const listeners = new Map<ResourceKey, Set<() => void>>();
@@ -28,12 +76,29 @@ export function invalidate(...keys: ResourceKey[]): void {
 }
 
 /**
+ * Version impérative de {@link useResourceVersion}, pour les stores singletons
+ * qui ne vivent pas dans un composant. C'est ce qui a remplacé leurs sondages
+ * périodiques : ils se rafraîchissent quand la donnée bouge, et jamais sinon.
+ */
+export function onResourceChange(key: ResourceKey, fn: () => void): () => void {
+    ensureWired();
+    let set = listeners.get(key);
+    if (!set) listeners.set(key, (set = new Set()));
+    set.add(fn);
+    return () => {
+        set.delete(fn);
+        if (set.size === 0) listeners.delete(key);
+    };
+}
+
+/**
  * A value that changes whenever `invalidate(key)` is called. Thread it through
  * a fetch effect's dependencies to re-run the fetch on invalidation.
  */
 export function useResourceVersion(key: ResourceKey): number {
     const subscribe = useCallback(
         (notify: () => void) => {
+            ensureWired();
             let set = listeners.get(key);
             if (!set) listeners.set(key, (set = new Set()));
             set.add(notify);
@@ -45,4 +110,40 @@ export function useResourceVersion(key: ResourceKey): number {
         [key]
     );
     return useSyncExternalStore(subscribe, () => versions.get(key) ?? 0);
+}
+
+// ------------------------------------------------------------------ distant
+
+let wired = false;
+let pending = new Set<ResourceKey>();
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Branché à la première lecture, jamais au chargement du module : sans
+ * abonné, il n'y a rien à invalider.
+ */
+export function ensureWired(): void {
+    if (wired) return;
+    wired = true;
+
+    ws.onMessage((msg) => {
+        if (msg.command !== LIVE_CHANGED_EVENT || !msg.payload.ok) return;
+        const push = liveChangedPushSchema.safeParse(msg.payload.data);
+        if (!push.success) return;
+
+        for (const topic of push.data.topics) {
+            for (const key of TOPIC_KEYS[topic]) pending.add(key);
+        }
+        if (pending.size === 0) return;
+
+        // Regroupé : une rafale d'écritures — un glisser-déposer qui réordonne
+        // dix éléments — ne doit produire qu'une seule re-sollicitation.
+        if (flushTimer) return;
+        flushTimer = setTimeout(() => {
+            flushTimer = null;
+            const keys = [...pending];
+            pending = new Set();
+            invalidate(...keys);
+        }, REMOTE_DEBOUNCE_MS);
+    });
 }

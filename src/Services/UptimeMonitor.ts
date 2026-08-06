@@ -7,6 +7,7 @@ import * as mailClient from '@/Services/MailAccountClient';
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
 import { env } from '@/Utils/Env';
 
+import type { LiveHub } from '@/live/hub';
 import type { Database } from '@/db';
 import type Encryption from './Encryption';
 import type { AuditLog } from './AuditLog';
@@ -31,6 +32,12 @@ interface MonitorDeps {
     crypt: Encryption;
     audit: AuditLog;
     logger: Logger;
+    /**
+     * Présence en direct. Cette boucle écrit sans commande utilisateur, donc
+     * sans socket pour diffuser : c'est le hub qu'elle avertit directement.
+     * Optionnel — les tests instancient le moniteur sans lui.
+     */
+    live?: LiveHub;
 }
 
 /** Outcome of a single HTTP probe. */
@@ -286,6 +293,16 @@ export class UptimeMonitor {
             httpStatus: outcome.httpStatus,
             error: encryptedError
         });
+
+        // Uniquement sur une **transition d'état**, jamais à chaque tour.
+        //
+        // La boucle tourne toutes les dix secondes sur tous les services : y
+        // diffuser sans condition ferait re-solliciter le serveur par tous les
+        // clients de tous les espaces, en permanence. Ce qui intéresse une
+        // interface, c'est le moment où un service tombe ou revient.
+        if (status !== row.status) {
+            this.deps.live?.changed(row.workspace_id, ['uptime'], null);
+        }
 
         await this.reconcileIncident(row, target, { ...outcome, at, status, encryptedError }, cipher);
     }

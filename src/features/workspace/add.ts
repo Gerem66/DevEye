@@ -13,6 +13,7 @@ export const workspaceAddFeature: FeatureDefinition<
     typeof workspaceAdd.output
 > = defineFeature({
     ...workspaceAdd,
+    mutates: true,
     handler: async (ctx, input) => {
         const owner = await ctx.db.users.findById(ctx.userId);
         if (!owner) throw new FeatureError('auth_invalid', 'Compte introuvable');
@@ -52,6 +53,7 @@ export const workspaceAddFeature: FeatureDefinition<
                         email: owner.email,
                         username: owner.username,
                         avatar: owner.avatar,
+                        color: owner.color,
                         lastLogin: Number(owner.last_login),
                         created: Number(owner.created)
                     }

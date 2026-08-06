@@ -6,6 +6,7 @@ import { beginAccountSync, endAccountSync, markFolderSynced, reportFolderProgres
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
 import { env } from '@/Utils/Env';
 
+import type { LiveHub } from '@/live/hub';
 import type { Database } from '@/db';
 import type Encryption from './Encryption';
 
@@ -23,6 +24,12 @@ interface SyncDeps {
     db: Database;
     crypt: Encryption;
     logger: Logger;
+    /**
+     * Présence en direct. Ce service écrit sans commande utilisateur, donc sans
+     * socket pour diffuser : c'est le hub qu'il avertit directement. Optionnel —
+     * les tests l'instancient sans lui.
+     */
+    live?: LiveHub;
 }
 
 export class MailSyncService {
@@ -96,6 +103,10 @@ export class MailSyncService {
                     endAccountSync(accountId);
                 }
                 await this.deps.db.mailAccounts.recordSync(row.id, Math.floor(Date.now() / 1000), null);
+                // Une synchronisation réussie a pu faire entrer de nouveaux
+                // messages : c'est le seul moment où le contenu a bougé sans
+                // qu'aucun membre n'ait rien demandé.
+                this.deps.live?.changed(row.workspace_id, ['mail'], null);
             } catch (e) {
                 const message = e instanceof Error ? e.message : String(e);
                 this.deps.logger.warn({ accountId, err: message }, 'Mail account sync failed');

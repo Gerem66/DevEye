@@ -8,8 +8,12 @@ import Button from '@/Components/Button';
 import type { FeatureProps } from '@/Features/types';
 import { ACCEPTED_TYPES, avatarSrc, fileToAvatarDataUrl } from './avatar';
 import { PasswordDialog } from './PasswordDialog';
+import { USER_COLOR_OPTIONS, userColorVar } from './userColors';
 import styles from './style.module.css';
 import { useWorkspaceState } from '@/stores/workspace';
+
+import type { CSSProperties } from 'react';
+import type { UserColor } from 'deveye-types';
 
 const SECURITY_MAX = 3;
 
@@ -37,7 +41,25 @@ export default function FeatureProfile({ user, workspace }: FeatureProps) {
     const securityFull = securityScore >= SECURITY_MAX;
     const [uploading, setUploading] = useState(false);
     const [avatarError, setAvatarError] = useState<string | null>(null);
+    const [savingColor, setSavingColor] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // La couleur est appliquée localement d'abord : c'est un réglage cosmétique
+    // dont l'effet doit se voir à l'instant du clic. En cas d'échec on la remet
+    // à sa valeur d'avant plutôt que de laisser croire au changement.
+    const onPickColor = async (color: UserColor) => {
+        if (savingColor || color === user.color) return;
+        const previous = user.color;
+        setSavingColor(true);
+        updateUser({ color });
+        try {
+            await ws.send('user.setColor', { color });
+        } catch {
+            updateUser({ color: previous });
+        } finally {
+            setSavingColor(false);
+        }
+    };
 
     const onPickAvatar = () => {
         if (uploading) return;
@@ -97,6 +119,26 @@ export default function FeatureProfile({ user, workspace }: FeatureProps) {
                     <div className={styles.row}>
                         <dt>Espaces de travail</dt>
                         <dd>{Math.max(workspaces.length - 1, 0)}</dd>
+                    </div>
+                    <div className={styles.row}>
+                        <dt>Couleur de présence</dt>
+                        <dd className={styles.swatches}>
+                            {USER_COLOR_OPTIONS.map((option) => (
+                                <button
+                                    key={option.value}
+                                    type='button'
+                                    className={`${styles.swatch} ${
+                                        user.color === option.value ? styles.swatchActive : ''
+                                    }`}
+                                    style={{ '--swatch': userColorVar(option.value) } as CSSProperties}
+                                    disabled={savingColor}
+                                    aria-label={option.label}
+                                    aria-pressed={user.color === option.value}
+                                    title={option.label}
+                                    onClick={() => void onPickColor(option.value)}
+                                />
+                            ))}
+                        </dd>
                     </div>
                     <div className={styles.row}>
                         <dt>Sécurité</dt>

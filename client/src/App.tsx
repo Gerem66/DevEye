@@ -10,6 +10,7 @@ import { AuthProvider, useAuth } from './auth/AuthProvider';
 import './Styles/theme.css';
 import './Styles/fonts.css';
 import './Styles/icons.css';
+import './Styles/live.css';
 import './Styles/input.css';
 
 function AppRoot() {

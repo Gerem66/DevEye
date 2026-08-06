@@ -39,6 +39,17 @@ export function invalidateAccess(): void {
 }
 
 /**
+ * L'époque courante, pour estampiller un instantané de droits hors de ce module.
+ *
+ * Le hub de présence en retient un par connexion et par espace, pour pouvoir
+ * filtrer ses diffusions **sans rien attendre** : une divergence d'époque y vaut
+ * « aucun droit », jamais « les droits d'avant ».
+ */
+export function accessEpochNow(): number {
+    return accessEpoch;
+}
+
+/**
  * Whether an account holds the global `admin` role — the single definition of
  * that question. The WS world reaches it through {@link createAccessResolver};
  * the fleet HTTP routes, which have no dispatcher to resolve access for them,

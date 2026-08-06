@@ -1,14 +1,19 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { ws } from '@/api/ws';
+import { onResourceChange } from '@/stores/invalidation';
 import { markHomeReady } from '@/stores/homeReady';
 import type { Device } from 'deveye-types';
 
 /**
  * Listes d'appareils partagées, interrogées tant qu'un consommateur est monté —
  * le widget, Monitoring et la topbar restent ainsi synchronisés sans se
- * re-fetcher chacun de leur côté. Sondage volontaire : l'abonnement WS aux
- * métriques est global à la socket et appartient à Monitoring, on évite d'y
- * toucher ici pour ne pas créer de conflit d'abonnement.
+ * re-fetcher chacun de leur côté.
+ *
+ * Plus de sondage : la liste se relit quand le sujet `devices` bouge — une
+ * commande d'appareil, ou un agent qui se connecte/déconnecte, que `agent/ws.ts`
+ * signale au moteur de présence. C'est plus réactif que les six secondes d'avant
+ * (une mise en ligne se voyait avec jusqu'à 6 s de retard) et strictement muet
+ * quand rien ne change.
  *
  * Deux portées, deux listes indépendantes :
  *  - **espace** — les appareils de l'espace actif. C'est le plan de données :
@@ -20,8 +25,6 @@ import type { Device } from 'deveye-types';
  * Appareils et l'accueil se marcheraient dessus en partageant un état qui ne
  * décrit pas le même ensemble.
  */
-const POLL_MS = 6000;
-
 interface DevicesState {
     devices: Device[];
     loading: boolean;
@@ -41,7 +44,7 @@ interface DeviceListStore {
 function createDeviceList(scope: Scope, { signalsHomeReady }: { signalsHomeReady: boolean }): DeviceListStore {
     let state: DevicesState = { devices: [], loading: true, error: null };
     const listeners = new Set<() => void>();
-    let timer: ReturnType<typeof setInterval> | null = null;
+    let offInvalidate: (() => void) | null = null;
     let offState: (() => void) | null = null;
     let refCount = 0;
 
@@ -79,7 +82,7 @@ function createDeviceList(scope: Scope, { signalsHomeReady }: { signalsHomeReady
         refCount += 1;
         if (refCount !== 1) return;
         void refresh();
-        timer = setInterval(() => void refresh(), POLL_MS);
+        offInvalidate = onResourceChange('device.list', () => void refresh());
         // Refresh as soon as the socket (re)opens, so the list appears without
         // waiting for the next poll and without an error flash during connect.
         offState = ws.onStateChange((s) => {
@@ -91,9 +94,9 @@ function createDeviceList(scope: Scope, { signalsHomeReady }: { signalsHomeReady
         refCount -= 1;
         if (refCount > 0) return;
         refCount = 0;
-        if (timer) {
-            clearInterval(timer);
-            timer = null;
+        if (offInvalidate) {
+            offInvalidate();
+            offInvalidate = null;
         }
         if (offState) {
             offState();

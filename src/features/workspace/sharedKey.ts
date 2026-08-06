@@ -41,6 +41,7 @@ export const workspaceEnableSharedKeyFeature: FeatureDefinition<
     typeof workspaceEnableSharedKey.output
 > = defineFeature({
     ...workspaceEnableSharedKey,
+    mutates: true,
     handler: async (ctx) => {
         if (ctx.workspace.kind === 'personal') {
             throw new FeatureError('validation', 'L’espace personnel garde votre clé personnelle');

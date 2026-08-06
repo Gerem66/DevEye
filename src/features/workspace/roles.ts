@@ -86,6 +86,7 @@ export const workspaceRoleCreateFeature: FeatureDefinition<
     typeof workspaceRoleCreate.output
 > = defineFeature({
     ...workspaceRoleCreate,
+    mutates: true,
     access: { capabilities: ['workspace.roles'] },
     handler: async (ctx, input) => {
         assertShared(ctx);
@@ -106,6 +107,7 @@ export const workspaceRoleUpdateFeature: FeatureDefinition<
     typeof workspaceRoleUpdate.output
 > = defineFeature({
     ...workspaceRoleUpdate,
+    mutates: true,
     access: { capabilities: ['workspace.roles'] },
     handler: async (ctx, input) => {
         assertShared(ctx);
@@ -119,6 +121,7 @@ export const workspaceRoleUpdateFeature: FeatureDefinition<
 
         // Les droits de tous ceux qui portent ce rôle viennent de changer.
         invalidateAccess();
+        await ctx.live?.resync(ctx.db, ctx.workspaceId);
 
         ctx.audit({
             action: 'workspace.role.update',
@@ -135,6 +138,7 @@ export const workspaceRoleDeleteFeature: FeatureDefinition<
     typeof workspaceRoleDelete.output
 > = defineFeature({
     ...workspaceRoleDelete,
+    mutates: true,
     access: { capabilities: ['workspace.roles'] },
     handler: async (ctx, input) => {
         assertShared(ctx);
@@ -169,6 +173,7 @@ export const workspaceRoleSetDefaultFeature: FeatureDefinition<
     typeof workspaceRoleSetDefault.output
 > = defineFeature({
     ...workspaceRoleSetDefault,
+    mutates: true,
     access: { capabilities: ['workspace.roles'] },
     handler: async (ctx, input) => {
         assertShared(ctx);
@@ -189,6 +194,7 @@ export const workspaceAssignRoleFeature: FeatureDefinition<
     typeof workspaceAssignRole.output
 > = defineFeature({
     ...workspaceAssignRole,
+    mutates: true,
     access: { capabilities: ['workspace.members'] },
     handler: async (ctx, input) => {
         assertShared(ctx);
@@ -207,6 +213,7 @@ export const workspaceAssignRoleFeature: FeatureDefinition<
 
         await ctx.db.workspaceRoles.assign(input.userId, ctx.workspaceId, input.roleId);
         invalidateAccess();
+        await ctx.live?.resync(ctx.db, ctx.workspaceId);
 
         ctx.audit({
             action: 'workspace.member.setRole',

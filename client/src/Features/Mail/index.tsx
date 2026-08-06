@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Button from '@/Components/Button';
 import { OpenPopup } from '@/Components/Popup';
 import TextInput from '@/Components/TextInput';
-import { invalidate } from '@/stores/invalidation';
+import { invalidate, onResourceChange } from '@/stores/invalidation';
+import { useLiveSegment } from '@/live/useLiveSegment';
 import AccountPanel from './AccountPanel';
 import AccountPopup, { ACCOUNT_POPUP, type AccountPopupResult } from './AccountPopup';
 import AccountSettingsPopup, { ACCOUNT_SETTINGS_POPUP } from './AccountSettingsPopup';
@@ -119,20 +120,26 @@ export default function Mail(_props: FeatureProps) {
         void reloadAccounts();
     }, [reloadAccounts]);
 
-    // Self-adjusting poll for the sync progress bar (see AccountCard/AccountPanel):
-    // tight while something is actually syncing, for a "live" feel, sparse
-    // otherwise — just often enough to notice the next tick starting. Keyed on
-    // the derived boolean, not on `accounts` itself, so the interval is rebuilt
-    // when the cadence actually changes rather than on every single poll.
+    // Le sondage au repos a disparu : c'est `live.changed` qui prévient d'un
+    // nouveau message, qu'il vienne d'un autre membre ou de la synchro de fond.
+    useEffect(() => {
+        return onResourceChange('mail.accountList', () => {
+            // Une relecture réordonne la liste sous le pointeur ; jamais en plein
+            // glisser-déposer.
+            if (!draggingRef.current) void reloadAccounts();
+        });
+    }, [reloadAccounts]);
+
+    // Seul minuteur conservé, et ce n'est pas un sondage de données : la barre
+    // de progression d'une synchro en cours (voir AccountCard/AccountPanel) lit
+    // un compteur qui ne vit qu'en mémoire du serveur, le temps de la synchro.
+    // Il ne tourne donc que pendant celle-ci, et s'arrête avec elle.
     const anySyncing = accounts.some((a) => a.syncing);
     useEffect(() => {
-        const id = setInterval(
-            () => {
-                // A reload reorders the list under the pointer; never mid-drag.
-                if (!draggingRef.current) void reloadAccounts();
-            },
-            anySyncing ? 1500 : 20000
-        );
+        if (!anySyncing) return;
+        const id = setInterval(() => {
+            if (!draggingRef.current) void reloadAccounts();
+        }, 1500);
         return () => clearInterval(id);
     }, [anySyncing, reloadAccounts]);
 
@@ -144,6 +151,37 @@ export default function Mail(_props: FeatureProps) {
         // though, or slide 2 would be stuck empty with no way back to it.
         setShowAccountList(selectedAccountId === null);
     }, [selectedAccountId]);
+
+    // Les deux niveaux profonds de Mail, déclarés au moteur de présence. Le
+    // composant ne sait rien de l'arbre : il annonce « compte » et « dossier »,
+    // et la racine `view:mail` vient de l'accueil.
+    const accountTarget = useLiveSegment('account', selectedAccountId === null ? null : String(selectedAccountId));
+    const folderTarget = useLiveSegment('folder', selectedFolderId === null ? null : String(selectedFolderId));
+
+    // Rejoindre quelqu'un. La cible est **redonnée à chaque rendu** tant qu'elle
+    // n'est pas atteinte : ces gardes attendent simplement que les données
+    // arrivent, sans rien avoir à acquitter ni à mémoriser.
+    useEffect(() => {
+        if (!accountTarget) return;
+        if (accountTarget.value === null) {
+            setSelectedAccountId(null);
+            return;
+        }
+        const id = Number(accountTarget.value);
+        if (!accounts.some((a) => a.id === id)) return;
+        setSelectedAccountId(id);
+        setMobileView('messages');
+    }, [accountTarget, accounts]);
+
+    useEffect(() => {
+        if (!folderTarget) return;
+        if (folderTarget.value === null) return;
+        const id = Number(folderTarget.value);
+        // `loadFolders` sélectionne d'office la boîte de réception : on ne
+        // corrige qu'une fois l'arborescence du compte visé effectivement là.
+        if (!folders.some((f) => f.id === id)) return;
+        setSelectedFolderId(id);
+    }, [folderTarget, folders]);
 
     const reloadRenderMode = useCallback(async () => {
         try {

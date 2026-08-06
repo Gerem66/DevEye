@@ -65,6 +65,7 @@ import {
 } from './handlers';
 import { deviceAgentConfig } from './mappers';
 import { recordAgentOffline, recordAgentOnline } from './presence';
+import type { LiveHub } from '@/live/hub';
 import type { MonitorHub } from './hub';
 
 import type { CloudSyncEngine } from '@/cloudSync/engine';
@@ -74,6 +75,8 @@ import type { AuditLog } from '@/Services/AuditLog';
 interface AgentWSDeps {
     db: Database;
     hub: MonitorHub;
+    /** Présence en direct : un agent qui arrive ou part change la liste d'appareils. */
+    live: LiveHub;
     cloudSync: CloudSyncEngine;
     audit: AuditLog;
 }
@@ -151,7 +154,10 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
  * module owns the socket *lifecycle* (auth, connect, dispatch); the per-message
  * handling lives in `handlers/`.
  */
-export async function registerAgentWS(app: FastifyInstance, { db, hub, cloudSync, audit }: AgentWSDeps): Promise<void> {
+export async function registerAgentWS(
+    app: FastifyInstance,
+    { db, hub, live, cloudSync, audit }: AgentWSDeps
+): Promise<void> {
     app.get('/agent', { websocket: true }, async (socket, req) => {
         // Stealth: every authentication/authorization failure ends the connection
         // the exact same way, with no distinguishing code or reason. An outsider
@@ -211,6 +217,11 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, cloudSync
             } catch (err) {
                 reqLogger.warn({ err }, 'Connect-time presence bookkeeping failed (socket kept open)');
             }
+            // Un appareil vient de passer en ligne : c'est ce qui remplace le
+            // sondage de la liste d'appareils côté client. `device.presence`
+            // existe déjà, mais ne part qu'aux abonnés d'un appareil précis —
+            // l'accueil, lui, n'est abonné à rien.
+            live.changed(device.workspace_id, ['devices'], null);
             audit.record({
                 source: 'agent',
                 category: 'device',
@@ -278,6 +289,7 @@ export async function registerAgentWS(app: FastifyInstance, { db, hub, cloudSync
                 if (device.status !== 'pending_deletion') {
                     void recordAgentOffline(db, deviceId).catch(() => {});
                 }
+                live.changed(device.workspace_id, ['devices'], null);
             }
             reqLogger.info('Agent disconnected');
         });

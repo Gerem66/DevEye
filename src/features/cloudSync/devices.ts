@@ -41,6 +41,7 @@ async function setDeviceStatus(
 
 export const cloudSyncAttachDeviceFeature = defineFeature({
     ...cloudSyncAttachDevice,
+    mutates: true,
     handler: async (ctx, input) => {
         const share = await authorizeShare(ctx, input.shareId);
         const device = await authorizeDevice(ctx, input.deviceId);
@@ -66,6 +67,7 @@ export const cloudSyncAttachDeviceFeature = defineFeature({
 
 export const cloudSyncDetachDeviceFeature = defineFeature({
     ...cloudSyncDetachDevice,
+    mutates: true,
     handler: async (ctx, input) => {
         const share = await authorizeShare(ctx, input.shareId);
         const engine = requireEngine(ctx);
@@ -87,6 +89,7 @@ export const cloudSyncDetachDeviceFeature = defineFeature({
 
 export const cloudSyncPauseDeviceFeature = defineFeature({
     ...cloudSyncPauseDevice,
+    mutates: true,
     handler: async (ctx, input) => {
         await setDeviceStatus(ctx, input.shareId, input.deviceId, 'paused');
         return { ok: true };
@@ -95,6 +98,7 @@ export const cloudSyncPauseDeviceFeature = defineFeature({
 
 export const cloudSyncResumeDeviceFeature = defineFeature({
     ...cloudSyncResumeDevice,
+    mutates: true,
     handler: async (ctx, input) => {
         await setDeviceStatus(ctx, input.shareId, input.deviceId, 'active');
         return { ok: true };

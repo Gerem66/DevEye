@@ -22,3 +22,27 @@ export function onOpenViewRequest(fn: OpenViewHandler): () => void {
 export function requestOpenView(viewId: string): void {
     handler?.(viewId);
 }
+
+/**
+ * Même mécanique pour la **bascule d'espace**, dont la téléportation a besoin :
+ * rejoindre quelqu'un peut vouloir dire changer d'espace d'abord.
+ *
+ * Passer par ici plutôt que d'appeler `setActiveWorkspace` directement est ce
+ * qui garantit qu'on emprunte la séquence complète que l'accueil applique déjà
+ * (remise à zéro des appareils, `workspace.activate`, thème, disposition) — la
+ * réécrire ailleurs, c'est en oublier une moitié.
+ */
+type SelectWorkspaceHandler = (workspaceId: number) => void;
+
+let workspaceHandler: SelectWorkspaceHandler | null = null;
+
+export function onSelectWorkspaceRequest(fn: SelectWorkspaceHandler): () => void {
+    workspaceHandler = fn;
+    return () => {
+        if (workspaceHandler === fn) workspaceHandler = null;
+    };
+}
+
+export function requestSelectWorkspace(workspaceId: number): void {
+    workspaceHandler?.(workspaceId);
+}

@@ -7,6 +7,7 @@ export const userSetThemeFeature: FeatureDefinition<
     typeof userSetTheme.output
 > = defineFeature({
     ...userSetTheme,
+    mutates: true,
     handler: async (ctx, input) => {
         await ctx.db.workspaces.setTheme(ctx.workspaceId, JSON.stringify(input));
         ctx.audit({ action: 'user.setTheme', level: 'debug', description: 'Apparence modifiée' });

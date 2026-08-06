@@ -43,6 +43,9 @@ type EventListener = (msg: ServerMessage) => void;
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
+/** Au-delà, la socket est en retard : une trame `post` n'est pas assez importante. */
+const POST_BACKPRESSURE_BYTES = 64 * 1024;
+
 export class DevEyeWs {
     private socket: WebSocket | null = null;
     private _state: ConnectionState = 'idle';
@@ -243,6 +246,34 @@ export class DevEyeWs {
 
     private nextRequestId(): string {
         return crypto.randomUUID();
+    }
+
+    /**
+     * Poste une trame sans attendre de réponse.
+     *
+     * Aucune promesse en attente, aucun minuteur, et **aucune file d'attente** —
+     * délibérément, à l'inverse de {@link send}. Une trame émise avant
+     * l'ouverture de la socket décrit un état déjà périmé (une position de
+     * curseur, typiquement) : la poster à la réouverture n'apprendrait à
+     * personne où le pointeur se trouve *maintenant*. On la laisse tomber.
+     *
+     * Le garde de contre-pression n'est pas facultatif : les métriques
+     * (`metrics.push`) partagent ce tampon d'envoi, et sous rafale une trame de
+     * curseur s'empilerait derrière elles pour arriver hors sujet.
+     */
+    post(command: string, payload: unknown): void {
+        if (this._state !== 'open' || !this.socket) return;
+        if (this.socket.bufferedAmount > POST_BACKPRESSURE_BYTES) return;
+        const workspaceId = getActiveWorkspaceId();
+        const envelope: ClientMessage = {
+            // `requestId` est obligatoire dans l'enveloppe mais n'est jamais lu
+            // pour ces trames : le serveur ne répond pas.
+            requestId: '-',
+            command,
+            ...(workspaceId !== null ? { workspaceId } : {}),
+            payload
+        };
+        this.socket.send(JSON.stringify(envelope));
     }
 
     /**

@@ -7,8 +7,12 @@ import { useActiveWorkspace } from '@/stores/workspace';
 
 /** Commands that return a plain `{ count }` for a workspace. Each doubles as
  *  its own invalidation key (see `invalidate`), so the card refreshes when the
- *  matching data changes. Only the `.count`-shaped resources qualify. */
-type CountCommand = Extract<ResourceKey, `${string}.count`>;
+ *  matching data changes. Only the `.count`-shaped resources qualify.
+ *
+ *  `uptime.count` porte le même suffixe mais rend `{ total, up, down }`, et a
+ *  son propre store partagé (`stores/uptime`) : l'exclure ici est ce qui garde
+ *  ce composant sur une seule forme de réponse. */
+type CountCommand = Exclude<Extract<ResourceKey, `${string}.count`>, 'uptime.count'>;
 
 export type CountState = { kind: 'loading' } | { kind: 'ready'; count: number };
 

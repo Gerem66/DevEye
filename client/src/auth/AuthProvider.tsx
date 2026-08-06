@@ -7,6 +7,7 @@ import { resetHomeReady } from '../stores/homeReady';
 import { resetTheme, syncThemeFromServer } from '../stores/theme';
 import { resetHomeLayout, syncHomeLayoutFromServer } from '../stores/homeLayout';
 import { resetWorkspace, syncWorkspacesFromServer } from '../stores/workspace';
+import { resetLive } from '../stores/live';
 import { resetDevices } from '../stores/devices';
 
 interface AuthState {
@@ -57,6 +58,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         resetTheme();
         resetHomeLayout();
         resetDevices();
+        // Idem pour la presence : sans ca la session suivante repartirait avec le
+        // roster et le lieu declare de la precedente.
+        resetLive();
         setState({ status: 'anonymous', user: null });
     }, []);
 

@@ -1,5 +1,6 @@
-import { forwardRef, type ElementType, type ReactNode, type MouseEvent } from 'react';
+import { forwardRef, type CSSProperties, type ElementType, type ReactNode, type MouseEvent } from 'react';
 import { motion, type HTMLMotionProps } from 'framer-motion';
+import { useLiveOutline } from '@/live/useLiveOutline';
 import styles from './Widget.module.css';
 
 export interface WidgetProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
@@ -45,6 +46,11 @@ const Widget = forwardRef<HTMLDivElement, WidgetProps>(function Widget(
     // motion props + click handler aren't constrained to the div/anchor union.
     const Tag = (href ? motion.a : motion.div) as ElementType;
     const linkProps = href ? { href, target: '_blank', rel: 'noopener noreferrer' } : undefined;
+    // Présence : la tuile s'entoure de la couleur de qui se trouve dans la
+    // feature qu'elle ouvre. Posé ici plutôt que chez chaque appelant — le
+    // `widgetId` **est** le segment de vue — ce qui donne le comportement à
+    // toutes les tuiles de l'accueil sans une ligne par feature.
+    const outline = useLiveOutline('view', widgetId);
     return (
         <Tag
             ref={ref as never}
@@ -56,6 +62,10 @@ const Widget = forwardRef<HTMLDivElement, WidgetProps>(function Widget(
             transition={{ type: 'spring', stiffness: 300, damping: 26, mass: 0.8 }}
             {...linkProps}
             {...(motionProps as object)}
+            {...outline}
+            // Fusionné plutôt qu'écrasé : l'accueil pose déjà un `style` sur la
+            // tuile en cours d'agrandissement (opacité 0 pendant le morphe).
+            style={{ ...(motionProps.style as CSSProperties | undefined), ...outline.style }}
         >
             {title && (
                 <div className={styles.header}>

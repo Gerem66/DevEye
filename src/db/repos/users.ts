@@ -1,4 +1,4 @@
-import type { AdminUser, UserRow } from 'deveye-types';
+import { defaultUserColor, type AdminUser, type UserColor, type UserRow } from 'deveye-types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
@@ -16,6 +16,8 @@ export interface UsersRepo {
     setDefaultWorkspace(id: number, workspaceId: number | null): Promise<void>;
     updatePasswordHash(id: number, passwordHash: string): Promise<void>;
     updateAvatar(id: number, avatar: string): Promise<void>;
+    /** Couleur d'identité du compte, montrée aux autres membres en direct. */
+    updateColor(id: number, color: UserColor): Promise<void>;
     setRole(id: number, role: 'user' | 'admin'): Promise<void>;
     setStatus(id: number, status: 'active' | 'suspended'): Promise<void>;
     /** Supprime le compte ; les FK CASCADE emportent ses espaces et leur contenu. */
@@ -56,6 +58,13 @@ export function usersRepo(pool: Q): UsersRepo {
                  VALUES (?, ?, ?, ?, CAST('[]' AS JSON), 0)`,
                 [email, username, passwordHash, role]
             );
+            // La migration 059 n'a colorié que les comptes déjà en base, et la
+            // colonne a un défaut vide : c'est ici qu'un compte neuf prend sa
+            // teinte, par la même formule, pour qu'aucun ne naisse sans couleur.
+            await pool.query('UPDATE users SET color = ? WHERE id = ?', [
+                defaultUserColor(Number(res.insertId)),
+                res.insertId
+            ]);
             const r = await pool.query<UserRow>('SELECT * FROM users WHERE id = ?', [res.insertId]);
             return r.rows[0];
         },
@@ -73,6 +82,9 @@ export function usersRepo(pool: Q): UsersRepo {
         },
         async updateAvatar(id, avatar) {
             await pool.query('UPDATE users SET avatar = ? WHERE id = ?', [avatar, id]);
+        },
+        async updateColor(id, color) {
+            await pool.query('UPDATE users SET color = ? WHERE id = ?', [color, id]);
         },
         async setRole(id, role) {
             await pool.query('UPDATE users SET role = ? WHERE id = ?', [role, id]);

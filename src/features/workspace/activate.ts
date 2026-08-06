@@ -43,6 +43,7 @@ export const workspaceSetFavoriteFeature: FeatureDefinition<
     typeof workspaceSetFavorite.output
 > = defineFeature({
     ...workspaceSetFavorite,
+    mutates: true,
     // Préférence de compte : viser un espace partagé dans l'enveloppe ne doit pas
     // changer la cible de l'écriture, qui est toujours la ligne `users`.
     access: { scope: 'account' },

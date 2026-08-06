@@ -3,6 +3,7 @@ import { cloudSyncFeatures } from './cloudSync';
 import { deviceFeatures } from './devices';
 import { homeFeatures } from './home';
 import { adminFeatures } from './admin';
+import { liveHereFeature } from './live/here';
 import { logsFeatures } from './logs';
 import { mailFeatures } from './mail';
 import { metricsFeatures } from './metrics';
@@ -20,6 +21,7 @@ import { secrecyFeatures } from './secrecy';
 import { twoFactorFeatures } from './twofa';
 import { uptimeFeatures } from './uptime';
 import { userSetAvatarFeature } from './user/setAvatar';
+import { userSetColorFeature } from './user/setColor';
 import { userSetThemeFeature } from './user/setTheme';
 import { weatherFeatures } from './weather';
 import { workspaceActivateFeature, workspaceSetFavoriteFeature } from './workspace/activate';
@@ -61,6 +63,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     workspaceAssignRoleFeature,
     userSetAvatarFeature,
     userSetThemeFeature,
+    userSetColorFeature,
     passwordListFeature,
     passwordCountFeature,
     passwordGetFeature,
@@ -79,7 +82,8 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...logsFeatures,
     ...adminFeatures,
     ...homeFeatures,
-    ...mailFeatures
+    ...mailFeatures,
+    liveHereFeature
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

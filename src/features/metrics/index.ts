@@ -173,6 +173,7 @@ export const metricsDeleteSnapshotsFeature: FeatureDefinition<
     typeof metricsDeleteSnapshots.output
 > = defineFeature({
     ...metricsDeleteSnapshots,
+    mutates: true,
     handler: async (ctx, input) => {
         const row = await authorizeRead(ctx, input.deviceId);
         const { snapshots } = await ctx.db.processSamples.deleteRange(input.deviceId, input.from, input.to);
@@ -197,6 +198,7 @@ export const metricsSetSnapshotsPinnedFeature: FeatureDefinition<
     typeof metricsSetSnapshotsPinned.output
 > = defineFeature({
     ...metricsSetSnapshotsPinned,
+    mutates: true,
     handler: async (ctx, input) => {
         const row = await authorizeRead(ctx, input.deviceId);
         const { deviceId, from, to, pinned } = input;

@@ -25,6 +25,7 @@ export const cloudSyncValidatePathFeature = defineFeature({
 
 export const cloudSyncCreateShareFeature = defineFeature({
     ...cloudSyncCreateShare,
+    mutates: true,
     handler: async (ctx, input) => {
         const engine = requireEngine(ctx);
         const verdict = await validateStoragePath(ctx.db, input.storagePath);
@@ -49,6 +50,7 @@ export const cloudSyncCreateShareFeature = defineFeature({
 
 export const cloudSyncUpdateShareFeature = defineFeature({
     ...cloudSyncUpdateShare,
+    mutates: true,
     handler: async (ctx, input) => {
         const row = await authorizeShare(ctx, input.shareId);
         const pruneEnabled = input.backupPruneEnabled ?? Boolean(row.backup_prune_enabled);
@@ -75,6 +77,7 @@ export const cloudSyncUpdateShareFeature = defineFeature({
 
 export const cloudSyncDeleteShareFeature = defineFeature({
     ...cloudSyncDeleteShare,
+    mutates: true,
     handler: async (ctx, input) => {
         const engine = requireEngine(ctx);
         const row = await authorizeShare(ctx, input.shareId);

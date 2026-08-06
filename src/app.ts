@@ -13,6 +13,8 @@ import { err, ok, serverStatusSchema, type ErrorCode } from 'deveye-types';
 import { agentRoutes } from '@/agent/routes';
 import { registerAgentWS } from '@/agent/ws';
 import { MonitorHub } from '@/agent/hub';
+import { LiveHub } from '@/live/hub';
+import { buildTopicIndex } from '@/features/_topics';
 import { authRoutes } from '@/auth/routes';
 import { CloudSyncEngine } from '@/cloudSync/engine';
 import { logger } from '@/logger';
@@ -101,19 +103,26 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     app.get('/api/status', { logLevel: 'silent' }, async () => ok(serverStatusSchema.parse(status.snapshot())));
 
     const hub = new MonitorHub();
+    // Construit avant les services de fond : ils lui adressent leurs changements
+    // (ils écrivent sans commande utilisateur, donc sans socket pour diffuser).
+    const live = new LiveHub();
+    live.startHeartbeat();
+    // Résout « quelle commande touche à quoi » une fois pour toutes, et signale
+    // les commandes mutantes qui auraient oublié de le déclarer.
+    buildTopicIndex();
     const audit = createAuditLog(deps.db);
     const cloudSync = new CloudSyncEngine({ db: deps.db, hub, crypt: deps.crypt, audit, logger });
     await cloudSync.start();
 
-    const uptime = new UptimeMonitor({ db: deps.db, crypt: deps.crypt, audit, logger });
-    const mailSync = new MailSyncService({ db: deps.db, crypt: deps.crypt, logger });
+    const uptime = new UptimeMonitor({ db: deps.db, crypt: deps.crypt, audit, logger, live });
+    const mailSync = new MailSyncService({ db: deps.db, crypt: deps.crypt, logger, live });
 
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
-    await agentRoutes(app, { db: deps.db, hub, audit });
+    await agentRoutes(app, { db: deps.db, hub, live, audit });
     await mailOAuthRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await mailAttachmentRoutes(app, { db: deps.db, crypt: deps.crypt });
-    await registerWS(app, { db: deps.db, crypt: deps.crypt, hub, cloudSync, uptime, audit });
-    await registerAgentWS(app, { db: deps.db, hub, cloudSync, audit });
+    await registerWS(app, { db: deps.db, crypt: deps.crypt, hub, live, cloudSync, uptime, audit });
+    await registerAgentWS(app, { db: deps.db, hub, live, cloudSync, audit });
 
     // Serve the built web client from the same origin as the API whenever a
     // build is present (production, or the dockerised dev stack). On the host

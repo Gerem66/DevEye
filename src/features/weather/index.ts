@@ -65,6 +65,7 @@ export const weatherAddFeature: FeatureDefinition<
     typeof weatherAdd.output
 > = defineFeature({
     ...weatherAdd,
+    mutates: true,
     handler: async (ctx, input) => {
         const apiKey = input.apiKey?.trim() || null;
         let geo;
@@ -99,6 +100,7 @@ export const weatherUpdateFeature: FeatureDefinition<
     typeof weatherUpdate.output
 > = defineFeature({
     ...weatherUpdate,
+    mutates: true,
     handler: async (ctx, input) => {
         // apiKey: undefined = leave; "" = clear; non-empty = encrypt + store.
         let apiKeyEnc: string | null | undefined;
@@ -129,6 +131,7 @@ export const weatherRemoveFeature: FeatureDefinition<
     typeof weatherRemove.output
 > = defineFeature({
     ...weatherRemove,
+    mutates: true,
     handler: async (ctx, input) => {
         const deleted = await ctx.db.weather.deleteLocation(input.id, ctx.workspaceId);
         if (!deleted) throw new FeatureError('not_found', 'Weather location not found');
@@ -148,6 +151,7 @@ export const weatherReorderFeature: FeatureDefinition<
     typeof weatherReorder.output
 > = defineFeature({
     ...weatherReorder,
+    mutates: true,
     handler: async (ctx, input) => {
         const rows = await ctx.db.weather.reorderLocations(ctx.workspaceId, input.ids);
         return { locations: rows.map(toLocation) };
@@ -160,6 +164,7 @@ export const weatherSetPrimaryFeature: FeatureDefinition<
     typeof weatherSetPrimary.output
 > = defineFeature({
     ...weatherSetPrimary,
+    mutates: true,
     handler: async (ctx, input) => {
         const target = await ctx.db.weather.findLocation(input.id, ctx.workspaceId);
         if (!target) throw new FeatureError('not_found', 'Weather location not found');
@@ -202,6 +207,7 @@ export const weatherSetKeyFeature: FeatureDefinition<
     typeof weatherSetKey.output
 > = defineFeature({
     ...weatherSetKey,
+    mutates: true,
     handler: async (ctx, input) => {
         const key = input.key.trim();
         if (key.length === 0) {

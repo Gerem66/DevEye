@@ -28,6 +28,7 @@ async function setShareStatus(ctx: FeatureContext, shareId: number, status: Sync
 
 export const cloudSyncPauseShareFeature = defineFeature({
     ...cloudSyncPauseShare,
+    mutates: true,
     handler: async (ctx, input) => {
         await setShareStatus(ctx, input.shareId, 'paused');
         return { ok: true };
@@ -36,6 +37,7 @@ export const cloudSyncPauseShareFeature = defineFeature({
 
 export const cloudSyncResumeShareFeature = defineFeature({
     ...cloudSyncResumeShare,
+    mutates: true,
     handler: async (ctx, input) => {
         await setShareStatus(ctx, input.shareId, 'active');
         return { ok: true };

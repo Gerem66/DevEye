@@ -42,6 +42,7 @@ export const cloudSyncListVersionsFeature = defineFeature({
 
 export const cloudSyncRestoreVersionFeature = defineFeature({
     ...cloudSyncRestoreVersion,
+    mutates: true,
     handler: async (ctx, input) => {
         const engine = requireEngine(ctx);
         const { version } = await authorizeVersion(ctx, input.versionId);
@@ -59,6 +60,7 @@ export const cloudSyncRestoreVersionFeature = defineFeature({
 
 export const cloudSyncDeleteVersionFeature = defineFeature({
     ...cloudSyncDeleteVersion,
+    mutates: true,
     handler: async (ctx, input) => {
         const engine = requireEngine(ctx);
         const { version } = await authorizeVersion(ctx, input.versionId);
@@ -77,6 +79,7 @@ export const cloudSyncDeleteVersionFeature = defineFeature({
 
 export const cloudSyncDeleteVersionsFeature = defineFeature({
     ...cloudSyncDeleteVersions,
+    mutates: true,
     handler: async (ctx, input) => {
         const engine = requireEngine(ctx);
         const share = await authorizeShare(ctx, input.shareId);
@@ -94,6 +97,7 @@ export const cloudSyncDeleteVersionsFeature = defineFeature({
 
 export const cloudSyncClearVersionsFeature = defineFeature({
     ...cloudSyncClearVersions,
+    mutates: true,
     handler: async (ctx, input) => {
         const engine = requireEngine(ctx);
         const share = await authorizeShare(ctx, input.shareId);

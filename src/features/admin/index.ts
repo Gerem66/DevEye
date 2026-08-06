@@ -61,6 +61,7 @@ export const adminSetUserRoleFeature: FeatureDefinition<
     typeof adminSetUserRole.output
 > = defineFeature({
     ...adminSetUserRole,
+    mutates: true,
     access: ADMIN,
     handler: async (ctx, input) => {
         // Se retirer l'administration laisserait potentiellement le site sans
@@ -85,6 +86,7 @@ export const adminSetUserStatusFeature: FeatureDefinition<
     typeof adminSetUserStatus.output
 > = defineFeature({
     ...adminSetUserStatus,
+    mutates: true,
     access: ADMIN,
     handler: async (ctx, input) => {
         assertNotSelf(ctx, input.userId, 'suspendre');
@@ -98,6 +100,10 @@ export const adminSetUserStatusFeature: FeatureDefinition<
         // suspension aussi longtemps qu'elle restait ouverte.
         if (input.status === 'suspended') {
             await ctx.db.refreshTokens.revokeUser(input.userId);
+            // Troisième verrou, pour la présence : sans lui le suspendu resterait
+            // visible dans le roster des autres, et continuerait de recevoir
+            // leurs curseurs, jusqu'à ce qu'il émette une commande.
+            ctx.live?.evictEverywhere(input.userId);
         }
         invalidateAccess();
 
@@ -118,6 +124,7 @@ export const adminDeleteUserFeature: FeatureDefinition<
     typeof adminDeleteUser.output
 > = defineFeature({
     ...adminDeleteUser,
+    mutates: true,
     access: ADMIN,
     handler: async (ctx, input) => {
         assertNotSelf(ctx, input.userId, 'supprimer');
@@ -128,6 +135,7 @@ export const adminDeleteUserFeature: FeatureDefinition<
         // partagés dont il est propriétaire, et tout leur contenu.
         await ctx.db.users.delete(input.userId);
         invalidateAccess();
+        ctx.live?.evictEverywhere(input.userId);
 
         ctx.audit({
             action: 'user.delete',

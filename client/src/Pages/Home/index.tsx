@@ -16,7 +16,10 @@ import {
     placedFeatureIds,
     pruneMissingDevices
 } from '@/stores/homeLayout';
-import { onOpenViewRequest } from '@/stores/viewRequest';
+import { onOpenViewRequest, onSelectWorkspaceRequest } from '@/stores/viewRequest';
+import { LiveProvider } from '@/live/LiveProvider';
+import { LiveCursors } from '@/live/LiveCursors';
+import { useLiveSegment } from '@/live/useLiveSegment';
 import { TopNavbar } from '@/Components/TopNavbar';
 import { Widget } from '@/Components/Widget';
 import { WidgetGrid } from '@/Components/WidgetGrid';
@@ -215,6 +218,10 @@ export default function HomePage() {
     const [featureGen, setFeatureGen] = useState<Map<string, number>>(new Map());
     // The open popup's body element — feature content is portaled into it.
     const [popupBodyEl, setPopupBodyEl] = useState<HTMLDivElement | null>(null);
+    // Cadre de référence des curseurs : le corps de la popup quand une feature
+    // est ouverte, la zone de contenu de l'accueil sinon. Jamais un nœud
+    // appartenant à une feature — `FeatureKeepAlive` les déplace.
+    const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
     // Timers for TTL-based auto-unmount, keyed by view id.
     const ttlTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
     // The view whose popup is currently animating out (policy applied on exit).
@@ -310,6 +317,19 @@ export default function HomePage() {
     // Cross-feature navigation: a feature can ask to open another view (e.g.
     // Monitoring's "Gérer les appareils" → the Appareils page).
     useEffect(() => onOpenViewRequest((viewId) => handleExpand(viewId)), [handleExpand]);
+
+    // Racine de l'arborescence de présence. Les niveaux plus profonds sont
+    // déclarés par les features elles-mêmes, chacune ne connaissant que le sien.
+    const liveViewTarget = useLiveSegment('view', expandedWidget);
+
+    // Rejoindre quelqu'un. Tout passe par `handleExpand`, la garde unique de la
+    // navigation : la téléportation ne peut pas ouvrir ce qu'un rôle interdit.
+    // Une cible nulle veut dire « il est à l'accueil » — on referme.
+    useEffect(() => {
+        if (!liveViewTarget) return;
+        if (liveViewTarget.value === null) handleClose();
+        else handleExpand(liveViewTarget.value);
+    }, [liveViewTarget, handleExpand, handleClose]);
 
     /**
      * Close the popup on a feature's own request. Guarded so only the feature
@@ -473,9 +493,9 @@ export default function HomePage() {
                 setPermissions(res.permissions);
                 syncThemeFromServer(res.theme);
                 syncHomeLayoutFromServer(res.homeLayout);
-                // Relancer tout de suite : `resetDevices` a vidé la liste, et le
-                // sondage périodique ne repasserait qu'au bout de plusieurs
-                // secondes — les tuiles d'appareils resteraient vides d'ici là.
+                // Relancer tout de suite : `resetDevices` a vidé la liste, et
+                // plus rien ne la re-sollicite tant que rien ne change — les
+                // tuiles d'appareils resteraient vides indéfiniment.
                 void refreshDevices();
             } catch {
                 // Accès perdu entre-temps : recharger la session remet le client
@@ -484,6 +504,12 @@ export default function HomePage() {
             }
         })();
     };
+
+    // Bascule d'espace demandée depuis ailleurs — aujourd'hui la téléportation,
+    // qui peut avoir à changer d'espace avant d'ouvrir une vue. Enregistré ici
+    // plutôt qu'appelé directement : c'est la seule façon d'emprunter la séquence
+    // complète ci-dessus, dont la réécrire une moitié serait le vrai risque.
+    useEffect(() => onSelectWorkspaceRequest(handleSelectWorkspace));
 
     const handleCreateWorkspace = () => {
         void (async () => {
@@ -579,110 +605,115 @@ export default function HomePage() {
     };
 
     return (
-        <div className={styles.dashboard}>
-            <Wallpaper />
+        <LiveProvider surface={popupBodyEl ?? contentEl}>
+            <div className={styles.dashboard}>
+                <Wallpaper />
 
-            <TopNavbar
-                viewTitle={expandedConfig?.title}
-                onBack={expandedWidget ? handleClose : undefined}
-                onOpenProfile={(e) => handleExpand('profile', isForceReload(e))}
-                onOpenSecurity={(e) => handleExpand('security', isForceReload(e))}
-                onOpenDevices={user.role === 'admin' ? (e) => handleExpand('clients', isForceReload(e)) : undefined}
-                onOpenLogs={user.role === 'admin' ? (e) => handleExpand('logs', isForceReload(e)) : undefined}
-                onOpenUsers={user.role === 'admin' ? (e) => handleExpand('users', isForceReload(e)) : undefined}
-                onOpenSettings={() => setSettingsOpen(true)}
-                onOrganize={() => startOrganizing()}
-                organizing={editing}
-                onDoneOrganizing={() => setEditing(false)}
-                onManageWorkspace={(e) => handleExpand('workspace', isForceReload(e))}
-                onSelectWorkspace={handleSelectWorkspace}
-                onCreateWorkspace={handleCreateWorkspace}
-            />
-
-            {/* The grid stays mounted under the popup so the shared-element morph
-                back into a card is smooth and never dips behind sibling cards. */}
-            <main className={styles.main}>
-                <div className={styles.content}>
-                    <header className={styles.greeting}>
-                        <h1 className={styles.greetingText}>{heading.title}</h1>
-                        <p className={styles.dateText}>{heading.subtitle}</p>
-                    </header>
-
-                    {editing ? (
-                        <EditableHome autoOpenAdd={autoAddSection} />
-                    ) : layout.sections.length === 0 ? (
-                        // A fresh home has no section at all: point the way in
-                        // rather than showing a bare greeting.
-                        <button type='button' className={styles.emptyHome} onClick={() => startOrganizing(true)}>
-                            <span className={`icon icon-plus ${styles.emptyHomeIcon}`} />
-                            <span className={styles.emptyHomeTitle}>Votre accueil est vide</span>
-                            <span className={styles.emptyHomeHint}>
-                                Ajoutez une section d’appareils, de fonctionnalités ou de raccourcis.
-                            </span>
-                        </button>
-                    ) : (
-                        <div className={styles.sections}>{layout.sections.map(renderSection)}</div>
-                    )}
-                </div>
-            </main>
-
-            {/* The animated popup shell. Feature content is portaled into its body
-                by the keep-alive layer below, so closing never unmounts the view. */}
-            {popupConfig && (
-                <WidgetPopup
-                    key={popupConfig.hasCard ? popupConfig.id : 'page'}
-                    layoutId={popupConfig.hasCard ? popupConfig.id : undefined}
-                    open={!!expandedWidget}
-                    onClose={handleClose}
-                    bodyRef={setPopupBodyEl}
-                    onExitComplete={handleExitComplete}
-                    holdSecrecy={popupConfig.holdSecrecy}
+                <TopNavbar
+                    viewTitle={expandedConfig?.title}
+                    onBack={expandedWidget ? handleClose : undefined}
+                    onOpenProfile={(e) => handleExpand('profile', isForceReload(e))}
+                    onOpenSecurity={(e) => handleExpand('security', isForceReload(e))}
+                    onOpenDevices={user.role === 'admin' ? (e) => handleExpand('clients', isForceReload(e)) : undefined}
+                    onOpenLogs={user.role === 'admin' ? (e) => handleExpand('logs', isForceReload(e)) : undefined}
+                    onOpenUsers={user.role === 'admin' ? (e) => handleExpand('users', isForceReload(e)) : undefined}
+                    onOpenSettings={() => setSettingsOpen(true)}
+                    onOrganize={() => startOrganizing()}
+                    organizing={editing}
+                    onDoneOrganizing={() => setEditing(false)}
+                    onManageWorkspace={(e) => handleExpand('workspace', isForceReload(e))}
+                    onSelectWorkspace={handleSelectWorkspace}
+                    onCreateWorkspace={handleCreateWorkspace}
                 />
-            )}
 
-            {/* Keep-alive layer: every cached view stays mounted here and is
+                {/* The grid stays mounted under the popup so the shared-element morph
+                back into a card is smooth and never dips behind sibling cards. */}
+                <main className={styles.main}>
+                    <div className={styles.content} ref={setContentEl}>
+                        <header className={styles.greeting}>
+                            <h1 className={styles.greetingText}>{heading.title}</h1>
+                            <p className={styles.dateText}>{heading.subtitle}</p>
+                        </header>
+
+                        {editing ? (
+                            <EditableHome autoOpenAdd={autoAddSection} />
+                        ) : layout.sections.length === 0 ? (
+                            // A fresh home has no section at all: point the way in
+                            // rather than showing a bare greeting.
+                            <button type='button' className={styles.emptyHome} onClick={() => startOrganizing(true)}>
+                                <span className={`icon icon-plus ${styles.emptyHomeIcon}`} />
+                                <span className={styles.emptyHomeTitle}>Votre accueil est vide</span>
+                                <span className={styles.emptyHomeHint}>
+                                    Ajoutez une section d’appareils, de fonctionnalités ou de raccourcis.
+                                </span>
+                            </button>
+                        ) : (
+                            <div className={styles.sections}>{layout.sections.map(renderSection)}</div>
+                        )}
+                    </div>
+                </main>
+
+                {/* The animated popup shell. Feature content is portaled into its body
+                by the keep-alive layer below, so closing never unmounts the view. */}
+                {popupConfig && (
+                    <WidgetPopup
+                        key={popupConfig.hasCard ? popupConfig.id : 'page'}
+                        layoutId={popupConfig.hasCard ? popupConfig.id : undefined}
+                        open={!!expandedWidget}
+                        onClose={handleClose}
+                        bodyRef={setPopupBodyEl}
+                        onExitComplete={handleExitComplete}
+                        holdSecrecy={popupConfig.holdSecrecy}
+                    />
+                )}
+
+                {/* Keep-alive layer: every cached view stays mounted here and is
                 portaled into the open popup body when active, or parked hidden
                 otherwise — preserving its state across close/reopen. */}
-            {[...mountedFeatures].map((id) => {
-                const config = views.find((v) => v.id === id);
-                if (!config) return null;
+                {[...mountedFeatures].map((id) => {
+                    const config = views.find((v) => v.id === id);
+                    if (!config) return null;
 
-                const featureProps: FeatureProps = {
-                    user,
-                    workspace: currentWorkspace,
-                    feature: { id: config.id, name: config.title, icon: config.icon, component: () => null },
-                    setWorkspace: upsertWorkspace,
-                    setFeature: () => {},
-                    closeFeature: () => requestCloseFeature(id)
-                };
+                    const featureProps: FeatureProps = {
+                        user,
+                        workspace: currentWorkspace,
+                        feature: { id: config.id, name: config.title, icon: config.icon, component: () => null },
+                        setWorkspace: upsertWorkspace,
+                        setFeature: () => {},
+                        closeFeature: () => requestCloseFeature(id)
+                    };
 
-                const gen = featureGen.get(id) ?? 0;
-                const target = popupConfig?.id === id ? popupBodyEl : null;
-                const body = config.FullComponent ? (
-                    <config.FullComponent {...featureProps} />
-                ) : (
-                    (config.renderDevice?.() ?? null)
-                );
+                    const gen = featureGen.get(id) ?? 0;
+                    const target = popupConfig?.id === id ? popupBodyEl : null;
+                    const body = config.FullComponent ? (
+                        <config.FullComponent {...featureProps} />
+                    ) : (
+                        (config.renderDevice?.() ?? null)
+                    );
 
-                return (
-                    <FeatureKeepAlive key={`${workspaceEpoch}-${id}-${gen}`} target={target}>
-                        {body}
-                    </FeatureKeepAlive>
-                );
-            })}
+                    return (
+                        <FeatureKeepAlive key={`${workspaceEpoch}-${id}-${gen}`} target={target}>
+                            {body}
+                        </FeatureKeepAlive>
+                    );
+                })}
 
-            <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+                <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
-            {/* Password unlock dialog — registered globally so the Password feature
+                {/* Password unlock dialog — registered globally so the Password feature
                 can request it on demand. */}
-            <PopupUnlock workspace={currentWorkspace} />
+                <PopupUnlock workspace={currentWorkspace} />
 
-            {/* Création d'espace, pilotée depuis le menu de la topbar. */}
-            <CreateWorkspacePopup />
+                {/* Création d'espace, pilotée depuis le menu de la topbar. */}
+                <CreateWorkspacePopup />
 
-            {/* Shared info dialog, registered once here so any feature's "i" button
+                {/* Shared info dialog, registered once here so any feature's "i" button
                 opens it via openInfo(). */}
-            <InfoPopup />
-        </div>
+                <InfoPopup />
+
+                {/* Curseurs des pairs situés exactement là où nous sommes. */}
+                <LiveCursors />
+            </div>
+        </LiveProvider>
     );
 }

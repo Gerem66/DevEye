@@ -3,6 +3,7 @@ import SyncProgressBar from './SyncProgressBar';
 import styles from './style.module.css';
 
 import type { MailAccount } from 'deveye-types';
+import { useLiveOutline } from '@/live/useLiveOutline';
 
 interface AccountCardProps {
     account: MailAccount;
@@ -55,11 +56,15 @@ export function AccountCard({
         run();
     };
 
+    // Quelqu'un travaille dans ce compte, plus bas que moi : sa couleur ici.
+    const outline = useLiveOutline('account', String(account.id));
+
     return (
         <div
             className={`${styles.accountCard} ${selected ? styles.accountCardSelected : ''} ${
                 account.enabled ? '' : styles.accountCardPaused
             } ${dragging ? styles.accountCardDragging : ''}`}
+            {...outline}
             role='button'
             tabIndex={0}
             data-account-card=''

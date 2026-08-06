@@ -1,38 +1,44 @@
+import { METRICS_PUSH_EVENT, metricsPushSchema, type MetricSeriesPoint } from 'deveye-types';
 import { useEffect, useSyncExternalStore } from 'react';
+
 import { ws } from '@/api/ws';
-import type { MetricSeriesPoint } from 'deveye-types';
+import { acquireMetrics } from './metricsSubscription';
 
 /**
- * Latest-usage store for device tiles on the home grid. Each mounted tile
- * acquires its device id; while at least one consumer watches a device we poll
- * its most recent metric point and keep it here.
+ * Dernière mesure connue de chaque tuile d'appareil de l'accueil.
  *
- * Poll-based on purpose — NOT `metrics.subscribe`. The server hub indexes live
- * subscriptions by *socket* (see `src/agent/hub.ts`): on the single client
- * socket, two consumers subscribing to the same device would unsubscribe each
- * other. Monitoring (the full view / the device popup) keeps that live
- * subscription; the lightweight tiles only need a "current value" every few
- * seconds, so polling stays fully decoupled and conflict-free.
+ * **Abonnement, plus sondage.** Ce store interrogeait le serveur toutes les dix
+ * secondes, pour une raison qui a cessé d'être vraie : le hub indexe les
+ * abonnements par *socket*, donc deux consommateurs du même appareil se
+ * désabonnaient l'un l'autre. `stores/metricsSubscription` a été écrit
+ * exactement pour ça — il compte les références et n'émet qu'un abonnement par
+ * appareil. Les tuiles peuvent donc partager le flux temps réel de Monitoring
+ * au lieu de le doubler d'un sondage.
+ *
+ * Une seule lecture ponctuelle subsiste, à l'acquisition : un appareil silencieux
+ * ne pousserait rien avant sa prochaine télémétrie, et la tuile resterait sur
+ * « Mesure en cours » alors que des mesures existent.
  */
-const POLL_MS = 10_000;
+
 /**
- * Window we ask for; we only keep the last point (≈ current value). Wide enough
- * that even a slow snapshot cadence (up to ~10 min) still yields a point, so the
- * tile populates instead of showing "Mesure en cours" forever.
+ * Fenêtre demandée à l'amorçage ; on n'en garde que le dernier point. Assez
+ * large pour qu'une cadence lente (jusqu'à ~10 min) rende quand même un point.
  */
 const WINDOW_MS = 15 * 60 * 1000;
 
 const latest = new Map<string, MetricSeriesPoint | null>();
 const refCounts = new Map<string, number>();
-const timers = new Map<string, ReturnType<typeof setInterval>>();
+const releases = new Map<string, () => void>();
 const listeners = new Set<() => void>();
+let offMessage: (() => void) | null = null;
 let offState: (() => void) | null = null;
 
 function emit(): void {
     for (const fn of listeners) fn();
 }
 
-async function poll(deviceId: string): Promise<void> {
+/** Amorçage : la dernière mesure déjà en base, en attendant la première poussée. */
+async function seed(deviceId: string): Promise<void> {
     if (ws.state !== 'open') return;
     try {
         const now = Date.now();
@@ -42,11 +48,9 @@ async function poll(deviceId: string): Promise<void> {
             to: now,
             resolution: 'raw'
         });
-        // A poll that finds no point in the window must NOT wipe the last known
-        // usage: doing so made the tile flip back to "Mesure en cours" on any
-        // transient gap even though real measurements exist. Keep the last value
-        // (the tile only shows it while the device is online); only a newer point
-        // replaces it. First load with genuinely no data stays null (correct).
+        // Une fenêtre vide ne doit PAS effacer la dernière valeur connue : la
+        // tuile repasserait sur « Mesure en cours » au moindre trou, alors que
+        // de vraies mesures existent. Seul un point plus récent remplace.
         if (res.points.length === 0) return;
         const last = res.points[res.points.length - 1];
         if (last !== latest.get(deviceId)) {
@@ -54,45 +58,50 @@ async function poll(deviceId: string): Promise<void> {
             emit();
         }
     } catch {
-        // Keep the last good value on a transient failure (socket blip).
+        /* Panne passagère : on garde la dernière bonne valeur. */
     }
 }
 
-function ensureStateSub(): void {
-    if (offState) return;
-    // Repoll every watched device as soon as the socket (re)opens.
+function ensureWired(): void {
+    if (offMessage) return;
+    offMessage = ws.onMessage((msg) => {
+        if (msg.command !== METRICS_PUSH_EVENT || !msg.payload.ok) return;
+        const push = metricsPushSchema.safeParse(msg.payload.data);
+        if (!push.success || !refCounts.has(push.data.deviceId)) return;
+        latest.set(push.data.deviceId, push.data.snapshot);
+        emit();
+    });
+    // À la réouverture, `metricsSubscription` réémet les abonnements ; on
+    // ré-amorce ici pour ne pas attendre la première télémétrie d'après-coupure.
     offState = ws.onStateChange((s) => {
-        if (s === 'open') for (const id of refCounts.keys()) void poll(id);
+        if (s === 'open') for (const id of refCounts.keys()) void seed(id);
     });
 }
 
 function acquire(deviceId: string): void {
     const next = (refCounts.get(deviceId) ?? 0) + 1;
     refCounts.set(deviceId, next);
-    if (next === 1) {
-        ensureStateSub();
-        void poll(deviceId);
-        timers.set(
-            deviceId,
-            setInterval(() => void poll(deviceId), POLL_MS)
-        );
-    }
+    if (next !== 1) return;
+    ensureWired();
+    releases.set(deviceId, acquireMetrics(deviceId));
+    void seed(deviceId);
 }
 
 function release(deviceId: string): void {
     const next = (refCounts.get(deviceId) ?? 1) - 1;
-    if (next <= 0) {
-        refCounts.delete(deviceId);
-        const timer = timers.get(deviceId);
-        if (timer) clearInterval(timer);
-        timers.delete(deviceId);
-        latest.delete(deviceId);
-        if (refCounts.size === 0 && offState) {
-            offState();
-            offState = null;
-        }
-    } else {
+    if (next > 0) {
         refCounts.set(deviceId, next);
+        return;
+    }
+    refCounts.delete(deviceId);
+    releases.get(deviceId)?.();
+    releases.delete(deviceId);
+    latest.delete(deviceId);
+    if (refCounts.size === 0) {
+        offMessage?.();
+        offMessage = null;
+        offState?.();
+        offState = null;
     }
 }
 
@@ -101,7 +110,7 @@ function subscribe(cb: () => void): () => void {
     return () => listeners.delete(cb);
 }
 
-/** Latest known usage snapshot for a device tile (null until first poll lands). */
+/** Dernière mesure connue d'une tuile (null tant que rien n'est arrivé). */
 export function useDeviceUsage(deviceId: string): MetricSeriesPoint | null {
     const snap = useSyncExternalStore(
         subscribe,

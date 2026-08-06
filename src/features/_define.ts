@@ -4,8 +4,9 @@ import type Encryption from '@/Services/Encryption';
 import type { SecureStore } from '@/Services/SecureStore';
 import type { SecretKeyService } from '@/Services/SecretKeyService';
 import type { MonitorTransport } from '@/agent/hub';
+import type { LiveTransport } from '@/live/hub';
 import type { UptimeMonitor } from '@/Services/UptimeMonitor';
-import type { ErrorCode, LogLevelName } from 'deveye-types';
+import type { ErrorCode, LiveTopic, LogLevelName } from 'deveye-types';
 import type { Logger } from 'pino';
 import type { FeatureAccess, WorkspaceCapability, WorkspaceFeatureId } from 'deveye-types';
 import type { WorkspaceContext } from './_access';
@@ -84,6 +85,12 @@ export interface FeatureContext {
     audit: (entry: FeatureAuditEntry) => void;
     /** Present only on the live WS connection; enables metric subscriptions. */
     monitor?: MonitorTransport;
+    /**
+     * Présence en direct, liée à cette connexion. Absent hors socket (tests).
+     * Ne sert qu'à *déclarer* : la diffusion des changements est faite par le
+     * dispatcheur depuis `mutates`, jamais par un handler.
+     */
+    live?: LiveTransport;
     /** CloudSync orchestrator (sessions, versions, blob store). Absent in tests. */
     cloudSync?: CloudSyncEngine;
     /** Uptime scheduler — backs the "check now" and "test notification" commands. */
@@ -146,6 +153,24 @@ export interface FeatureDefinition<Cmd extends string, I extends z.ZodTypeAny, O
     output: O;
     /** Enforced by the dispatcher before `handler` is called. */
     access?: FeatureAccessSpec;
+    /**
+     * Cette commande **écrit** : après un succès, le dispatcheur en avertit
+     * l'espace, et toute vue qui lit ce sujet se remet à jour d'elle-même.
+     *
+     * Déclaré ici pour la même raison qu'`access` : posé à côté des schémas, un
+     * oubli devient une omission visible plutôt qu'invisible. Et comme les
+     * sondages périodiques ont disparu du client, un oubli se voit — la donnée
+     * reste figée jusqu'au rechargement. Le contrôle de démarrage
+     * (`_topics.ts`) est là pour l'attraper avant.
+     *
+     * `true` déduit le sujet du préfixe de la commande via `COMMAND_PREFIX_TOPIC`
+     * (`note.add` → `notes`, `folder.add` → `notes` aussi, ce sont les dossiers
+     * de notes). Une liste explicite sert aux commandes à double effet.
+     *
+     * Absent = lecture, ou action sans écriture (`metrics.subscribe`,
+     * `secrecy.unlock`, un appel RPC vers un agent).
+     */
+    mutates?: true | readonly LiveTopic[];
     handler: (ctx: FeatureContext, input: z.infer<I>) => Promise<z.infer<O>>;
 }
 

@@ -16,6 +16,7 @@ export const workspaceDeleteFeature: FeatureDefinition<
     typeof workspaceDelete.output
 > = defineFeature({
     ...workspaceDelete,
+    mutates: true,
     handler: async (ctx, input) => {
         const target = await ctx.db.workspaces.findById(input.workspaceId);
         if (!target) throw new FeatureError('not_found', 'Espace introuvable');
@@ -31,6 +32,7 @@ export const workspaceDeleteFeature: FeatureDefinition<
 
         // L'accès de tous les membres vient de disparaître.
         invalidateAccess();
+        ctx.live?.evictRoom(target.id);
 
         ctx.audit({
             action: 'workspace.delete',

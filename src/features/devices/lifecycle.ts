@@ -55,6 +55,7 @@ export const deviceConfirmFeature: FeatureDefinition<
     typeof deviceConfirm.output
 > = defineFeature({
     ...deviceConfirm,
+    mutates: true,
     access: { admin: true },
     handler: async (ctx, input) => {
         const row = await authorizeDevice(ctx, input.deviceId);
@@ -77,6 +78,7 @@ export const deviceRevokeFeature: FeatureDefinition<
     typeof deviceRevoke.output
 > = defineFeature({
     ...deviceRevoke,
+    mutates: true,
     access: { admin: true },
     handler: async (ctx, input) => {
         const row = await authorizeDevice(ctx, input.deviceId);
@@ -98,6 +100,7 @@ export const deviceReactivateFeature: FeatureDefinition<
     typeof deviceReactivate.output
 > = defineFeature({
     ...deviceReactivate,
+    mutates: true,
     access: { admin: true },
     handler: async (ctx, input) => {
         const row = await authorizeDevice(ctx, input.deviceId);
@@ -121,6 +124,7 @@ export const deviceRenameFeature: FeatureDefinition<
     typeof deviceRename.output
 > = defineFeature({
     ...deviceRename,
+    mutates: true,
     access: { admin: true },
     handler: async (ctx, input) => {
         const row = await authorizeDevice(ctx, input.deviceId);
@@ -141,6 +145,7 @@ export const deviceSetConfigFeature: FeatureDefinition<
     typeof deviceSetConfig.output
 > = defineFeature({
     ...deviceSetConfig,
+    mutates: true,
     handler: async (ctx, input) => {
         const row = await authorizeDevice(ctx, input.deviceId);
         const { deviceId: _id, ...patch } = input;
@@ -165,6 +170,7 @@ export const deviceRequestDeleteFeature: FeatureDefinition<
     typeof deviceRequestDelete.output
 > = defineFeature({
     ...deviceRequestDelete,
+    mutates: true,
     access: { admin: true },
     handler: async (ctx, input) => {
         const row = await authorizeDevice(ctx, input.deviceId);
@@ -193,6 +199,7 @@ export const deviceCancelDeleteFeature: FeatureDefinition<
     typeof deviceCancelDelete.output
 > = defineFeature({
     ...deviceCancelDelete,
+    mutates: true,
     access: { admin: true },
     handler: async (ctx, input) => {
         const row = await authorizeDevice(ctx, input.deviceId);
@@ -213,6 +220,7 @@ export const deviceForceDeleteFeature: FeatureDefinition<
     typeof deviceForceDelete.output
 > = defineFeature({
     ...deviceForceDelete,
+    mutates: true,
     access: { admin: true },
     handler: async (ctx, input) => {
         const row = await authorizeDevice(ctx, input.deviceId);
@@ -240,6 +248,7 @@ export const deviceDeleteFeature: FeatureDefinition<
     typeof deviceDelete.output
 > = defineFeature({
     ...deviceDelete,
+    mutates: true,
     handler: async (ctx, input) => {
         const row = await authorizeDevice(ctx, input.deviceId);
         // Hard purge (used by the Monitoring page): removes the device row and,

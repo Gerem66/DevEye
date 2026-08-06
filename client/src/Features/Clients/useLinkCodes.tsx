@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { del, get, patch, post } from '@/api/http';
+import { onResourceChange } from '@/stores/invalidation';
 import { openInfo } from '@/Components/InfoPopup';
 import {
     LINK_CODE_TTL_MAX_SECONDS,
@@ -114,12 +115,13 @@ export function useLinkCodes(refresh: () => Promise<void> | void) {
 
     const showLinkInfo = () => void openInfo({ title: 'Lier un appareil', body: <LinkInfo />, width: 460 });
 
-    // While the dialog is open, refresh the codes periodically so one consumed by
-    // a device enrolling in the background drops out of the table on its own.
+    // Tant que le dialogue est ouvert, un code consommé par un appareil en train
+    // de s'appairer doit disparaître du tableau. Plus de sondage : la route
+    // d'appairage signale le changement au moteur de présence, et le code s'en
+    // va au moment exact où il est consommé plutôt qu'au tour suivant.
     useEffect(() => {
         if (!showLinkModal) return;
-        const timer = setInterval(() => void fetchCodes(), 4000);
-        return () => clearInterval(timer);
+        return onResourceChange('device.list', () => void fetchCodes());
     }, [showLinkModal]);
 
     return {

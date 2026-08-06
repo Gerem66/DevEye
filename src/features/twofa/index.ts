@@ -55,6 +55,7 @@ export const twoFactorSetupFeature: FeatureDefinition<
     typeof twoFactorSetup.output
 > = defineFeature({
     ...twoFactorSetup,
+    mutates: true,
     access: { scope: 'account' },
     handler: async (ctx) => {
         const existing = await ctx.db.twoFactor.get(ctx.userId);
@@ -82,6 +83,7 @@ export const twoFactorEnableFeature: FeatureDefinition<
     typeof twoFactorEnable.output
 > = defineFeature({
     ...twoFactorEnable,
+    mutates: true,
     access: { scope: 'account' },
     handler: async (ctx, input) => {
         const row = await ctx.db.twoFactor.get(ctx.userId);
@@ -103,6 +105,7 @@ export const twoFactorDisableFeature: FeatureDefinition<
     typeof twoFactorDisable.output
 > = defineFeature({
     ...twoFactorDisable,
+    mutates: true,
     access: { scope: 'account' },
     handler: async (ctx, input) => {
         await assertValidCode(ctx, input.code);
@@ -118,6 +121,7 @@ export const twoFactorRegenBackupFeature: FeatureDefinition<
     typeof twoFactorRegenBackup.output
 > = defineFeature({
     ...twoFactorRegenBackup,
+    mutates: true,
     access: { scope: 'account' },
     handler: async (ctx) => {
         const row = await ctx.db.twoFactor.get(ctx.userId);

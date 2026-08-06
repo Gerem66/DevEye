@@ -7,6 +7,7 @@ import { useWeather } from '@/stores/weather';
 import { useHomeLayout } from '@/stores/homeLayout';
 import { wmoIcon } from '@/Features/Weather/wmoIcon';
 import { SecrecyTimer } from './SecrecyTimer';
+import { LivePresence } from './LivePresence';
 import styles from './TopNavbar.module.css';
 
 /**
@@ -26,7 +27,8 @@ export const TOPBAR_WIDGETS: TopbarWidgetMeta[] = [
     { id: 'weather', title: 'Météo', icon: 'cloud', description: 'Température de la ville principale' },
     { id: 'devices', title: 'Appareils connectés', icon: 'server', description: "Nombre d'appareils en ligne" },
     { id: 'secrecy', title: 'Chiffrement', icon: 'lock', description: 'Minuteur du chiffrement par mot de passe' },
-    { id: 'uptime', title: 'Uptime', icon: 'uptime', description: 'Services en ligne sur les services surveillés' }
+    { id: 'uptime', title: 'Uptime', icon: 'uptime', description: 'Services en ligne sur les services surveillés' },
+    { id: 'live', title: 'Présence', icon: 'user', description: 'Qui est dans cet espace, et où' }
 ];
 
 /** Weather mini-widget: current temperature of the primary city. */
@@ -80,6 +82,8 @@ export function renderTopbarWidget(id: HomeTopbarWidgetId, onOpenSecurity?: (e: 
             return <SecrecyTimer onOpenSecurity={onOpenSecurity} />;
         case 'uptime':
             return <UptimeStatus />;
+        case 'live':
+            return <LivePresence />;
         default:
             return null;
     }

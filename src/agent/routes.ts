@@ -28,12 +28,15 @@ import type { AuditLog } from '@/Services/AuditLog';
 import { agentDistDir, readSyncedManifest } from './sync';
 import { deviceRowToDevice } from './mappers';
 import type { MonitorHub } from './hub';
+import type { LiveHub } from '@/live/hub';
 
 import type { Database } from '@/db';
 
 interface AgentRouteDeps {
     db: Database;
     hub: MonitorHub;
+    /** Présence en direct : l'appairage d'un appareil change la liste de l'espace. */
+    live: LiveHub;
     audit: AuditLog;
 }
 
@@ -69,7 +72,7 @@ async function serveBinary(reply: FastifyReply, target: AgentTarget): Promise<Fa
  *  - POST /api/devices/link   (auth user)  → mint a short-lived link code
  *  - POST /api/agent/enroll   (public)     → exchange code for a device token
  */
-export async function agentRoutes(app: FastifyInstance, { db, hub, audit }: AgentRouteDeps): Promise<void> {
+export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }: AgentRouteDeps): Promise<void> {
     /**
      * Resolve the caller as an admin for the fleet (Appareils) HTTP endpoints.
      * Device pairing, link-code management and agent-binary distribution are
@@ -286,6 +289,11 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, audit }: Agen
         // re-enrollment case too re-pairs a previously archived/revoked machine
         // instead of leaving it stuck (and hidden) in its old state.
         await db.devices.markEnrolled(deviceId, consumed.autoApprove ? 'active' : 'pending');
+        // Un appareil vient d'entrer dans l'espace, et son code d'appairage de
+        // disparaître : c'est ce qui remplace le sondage du dialogue « Lier un
+        // appareil ». L'appairage passe par cette route HTTP, pas par une
+        // commande WS — sans ce signal, rien n'en avertirait personne.
+        live.changed(workspaceId, ['devices'], null);
         audit.record({
             source: 'agent',
             category: 'device',

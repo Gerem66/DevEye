@@ -1,0 +1,28 @@
+/* Bordure de présence : le nœud où se trouve quelqu'un d'autre, à sa couleur.
+
+   Règle globale plutôt qu'un module CSS : elle s'applique à des éléments très
+   différents — une tuile de l'accueil, une carte de compte mail, une ligne de
+   dossier — qui ont chacun leur propre feuille. Une seule déclaration, posée par
+   un attribut de données, évite d'en recopier une variante dans chacune.
+
+   L'épaisseur vient d'une ombre INTÉRIEURE, jamais de `border-width` : les tuiles
+   sont animées par framer-motion (`layoutId`), et changer la largeur de bordure
+   en plein morphe fait re-mesurer la boîte et vibrer l'élément. */
+
+[data-live-peer] {
+    border-color: var(--live-peer) !important;
+    box-shadow:
+        inset 0 0 0 1px var(--live-peer),
+        0 0 14px -4px var(--live-peer);
+    /* Le fondu de l'alternance entre plusieurs couleurs : c'est cette transition
+       qui rend le passage d'un occupant à l'autre lisible plutôt que brutal. */
+    transition:
+        border-color 600ms ease,
+        box-shadow 600ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-live-peer] {
+        transition: none;
+    }
+}

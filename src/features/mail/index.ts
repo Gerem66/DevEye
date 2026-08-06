@@ -174,6 +174,7 @@ export const mailAccountAddFeature: FeatureDefinition<
     typeof mailAccountAdd.output
 > = defineFeature({
     ...mailAccountAdd,
+    mutates: true,
     handler: async (ctx, input) => {
         await assertMailUnlocked(ctx, input.draft.securityTier);
         const cipher = cipherFor(ctx, input.draft.securityTier);
@@ -209,6 +210,7 @@ export const mailAccountUpdateFeature: FeatureDefinition<
     typeof mailAccountUpdate.output
 > = defineFeature({
     ...mailAccountUpdate,
+    mutates: true,
     handler: async (ctx, input) => {
         const existing = await loadAccount(ctx, input.id);
         if (existing.auth_method !== 'password') {
@@ -269,6 +271,7 @@ export const mailAccountSetProfileFeature: FeatureDefinition<
     typeof mailAccountSetProfile.output
 > = defineFeature({
     ...mailAccountSetProfile,
+    mutates: true,
     handler: async (ctx, input) => {
         const existing = await loadAccount(ctx, input.id);
         // Both ends of the move have to be reachable: reading what's there now,
@@ -314,6 +317,7 @@ export const mailAccountDeleteFeature: FeatureDefinition<
     typeof mailAccountDelete.output
 > = defineFeature({
     ...mailAccountDelete,
+    mutates: true,
     handler: async (ctx, input) => {
         await loadAccount(ctx, input.id);
         await ctx.db.mailAccounts.delete(input.id, ctx.workspaceId);
@@ -333,6 +337,7 @@ export const mailAccountReorderFeature: FeatureDefinition<
     typeof mailAccountReorder.output
 > = defineFeature({
     ...mailAccountReorder,
+    mutates: true,
     handler: async (ctx, input) => {
         await ctx.db.mailAccounts.reorder(ctx.workspaceId, input.ids);
         return { ids: input.ids };
@@ -345,6 +350,7 @@ export const mailAccountSetEnabledFeature: FeatureDefinition<
     typeof mailAccountSetEnabled.output
 > = defineFeature({
     ...mailAccountSetEnabled,
+    mutates: true,
     handler: async (ctx, input) => {
         const row = await ctx.db.mailAccounts.setEnabled(input.id, ctx.workspaceId, input.enabled);
         if (!row) throw new FeatureError('not_found', 'Compte mail introuvable');
@@ -442,6 +448,7 @@ export const mailFolderReorderFeature: FeatureDefinition<
     typeof mailFolderReorder.output
 > = defineFeature({
     ...mailFolderReorder,
+    mutates: true,
     handler: async (ctx, input) => {
         await loadAccount(ctx, input.accountId);
         await ctx.db.mailFolders.reorder(input.accountId, input.ids);
@@ -455,6 +462,7 @@ export const mailFolderSyncFeature: FeatureDefinition<
     typeof mailFolderSync.output
 > = defineFeature({
     ...mailFolderSync,
+    mutates: true,
     handler: async (ctx, input) => {
         const { folder, account } = await loadFolderWithAccount(ctx, input.folderId);
         await assertMailUnlocked(ctx, account.security_tier);
@@ -471,6 +479,7 @@ export const mailFolderBackfillFeature: FeatureDefinition<
     typeof mailFolderBackfill.output
 > = defineFeature({
     ...mailFolderBackfill,
+    mutates: true,
     handler: async (ctx, input) => {
         const { folder, account } = await loadFolderWithAccount(ctx, input.folderId);
         await assertMailUnlocked(ctx, account.security_tier);
@@ -486,6 +495,7 @@ export const mailFolderResetFeature: FeatureDefinition<
     typeof mailFolderReset.output
 > = defineFeature({
     ...mailFolderReset,
+    mutates: true,
     handler: async (ctx, input) => {
         const { folder, account } = await loadFolderWithAccount(ctx, input.folderId);
         await assertMailUnlocked(ctx, account.security_tier);
@@ -673,6 +683,7 @@ export const mailMessageSetFlagsFeature: FeatureDefinition<
     typeof mailMessageSetFlags.output
 > = defineFeature({
     ...mailMessageSetFlags,
+    mutates: true,
     handler: async (ctx, input) => {
         const { message, folder, account } = await loadMessageChain(ctx, input.messageId);
         await assertMailUnlocked(ctx, account.security_tier);
@@ -697,6 +708,7 @@ export const mailMessageMoveFeature: FeatureDefinition<
     typeof mailMessageMove.output
 > = defineFeature({
     ...mailMessageMove,
+    mutates: true,
     handler: async (ctx, input) => {
         const { message, folder, account } = await loadMessageChain(ctx, input.messageId);
         const target = await ctx.db.mailFolders.findById(input.toFolderId);
@@ -723,6 +735,7 @@ export const mailMessageDeleteFeature: FeatureDefinition<
     typeof mailMessageDelete.output
 > = defineFeature({
     ...mailMessageDelete,
+    mutates: true,
     handler: async (ctx, input) => {
         const { message, folder, account } = await loadMessageChain(ctx, input.messageId);
         await assertMailUnlocked(ctx, account.security_tier);
@@ -796,6 +809,7 @@ export const mailSendFeature: FeatureDefinition<
     typeof mailSend.output
 > = defineFeature({
     ...mailSend,
+    mutates: true,
     handler: async (ctx, input) => {
         const account = await loadAccount(ctx, input.accountId);
         await assertMailUnlocked(ctx, account.security_tier);
@@ -850,6 +864,7 @@ export const mailSetSettingsFeature: FeatureDefinition<
     typeof mailSetSettings.output
 > = defineFeature({
     ...mailSetSettings,
+    mutates: true,
     handler: async (ctx, input) => {
         const row = await ctx.db.mailSettings.set(ctx.workspaceId, {
             externalScanEnabledDefault: input.externalScanEnabledDefault,
