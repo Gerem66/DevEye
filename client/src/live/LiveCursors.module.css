@@ -6,7 +6,9 @@
 .layer {
     position: fixed;
     inset: 0;
-    z-index: var(--z-modal);
+    /* Au-dessus de tout, dialogues compris : un curseur de pair est une couche
+       de présence, pas un élément de la page — il ne doit jamais passer dessous. */
+    z-index: var(--z-toast);
     pointer-events: none;
 }
 
@@ -22,17 +24,17 @@
     will-change: transform;
 }
 
-.arrow {
-    width: 14px;
-    height: 20px;
+.glyph {
     flex-shrink: 0;
     color: var(--peer);
-    /* Un filet sombre décolle la flèche d'un fond clair sans la rendre lourde. */
+    /* Un filet sombre décolle la forme d'un fond clair sans la rendre lourde.
+       Les dimensions viennent du glyphe : elles changent d'une forme à l'autre. */
     filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
 }
 
 .label {
-    margin-top: 12px;
+    /* `margin-top` est posé par le composant : chaque forme a sa hauteur, et
+       l'étiquette doit rester juste dessous sans jamais la chevaucher. */
     padding: 2px 7px;
     border-radius: var(--radius-pill);
     background: var(--peer);

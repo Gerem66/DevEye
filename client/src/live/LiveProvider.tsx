@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useRef, type ReactNode } from 're
 
 import { ws } from '@/api/ws';
 import { refreshLive } from '@/stores/live';
+import { cursorKindAt } from './cursorKind';
 import { useWorkspaceState } from '@/stores/workspace';
 
 /**
@@ -50,7 +51,13 @@ export function LiveProvider({ surface, children }: { surface: HTMLElement | nul
 
     const lastSentAt = useRef(0);
     const frame = useRef<number | null>(null);
-    const nextCursor = useRef<LiveCursor | null>(null);
+    /**
+     * Le dernier point vu, **brut**. Rien n'est calculé ici : `pointermove` peut
+     * dépasser la centaine d'événements par seconde, alors qu'on n'en émet que
+     * vingt. La conversion et surtout la lecture du curseur effectif — qui
+     * interroge la mise en page — attendent la vidange.
+     */
+    const lastPoint = useRef<{ x: number; y: number; buttons: number } | null>(null);
     const hadCursor = useRef(false);
 
     useEffect(() => {
@@ -58,8 +65,23 @@ export function LiveProvider({ surface, children }: { surface: HTMLElement | nul
 
         const flush = (): void => {
             frame.current = null;
-            const cursor = nextCursor.current;
             lastSentAt.current = Date.now();
+
+            const point = lastPoint.current;
+            let cursor: LiveCursor | null = null;
+            if (point) {
+                const rect = surface.getBoundingClientRect();
+                if (rect.width > 0 && rect.height > 0) {
+                    // Les coordonnées peuvent sortir de la surface — marges de la
+                    // popup, bords de l'écran — et c'est voulu : on est toujours
+                    // sur la même page, le curseur doit continuer d'exister.
+                    cursor = {
+                        x: (point.x - rect.left) / rect.width,
+                        y: point.y - rect.top + surface.scrollTop,
+                        kind: cursorKindAt(point.x, point.y, (point.buttons & 1) !== 0)
+                    };
+                }
+            }
             hadCursor.current = cursor !== null;
             ws.post(LIVE_CURSOR_COMMAND, { cursor });
         };
@@ -75,29 +97,28 @@ export function LiveProvider({ surface, children }: { surface: HTMLElement | nul
             // curseur qui se fige là où quelqu'un a tapé se lit comme une
             // présence qui n'existe plus.
             if (e.pointerType !== 'mouse') return;
-            const rect = surface.getBoundingClientRect();
-            if (rect.width === 0 || rect.height === 0) return;
-            nextCursor.current = {
-                x: (e.clientX - rect.left) / rect.width,
-                y: e.clientY - rect.top + surface.scrollTop
-            };
+            lastPoint.current = { x: e.clientX, y: e.clientY, buttons: e.buttons };
             schedule();
         };
 
         const clear = (): void => {
             if (!hadCursor.current) return;
-            nextCursor.current = null;
+            lastPoint.current = null;
             schedule();
         };
 
         window.addEventListener('pointermove', onMove, { passive: true });
-        surface.addEventListener('pointerleave', clear);
+        // Effacé quand le pointeur quitte la **fenêtre**, jamais la surface : le
+        // faire sur la surface était ce qui donnait l'impression que le curseur
+        // d'un pair « disparaissait sur les côtés » alors qu'il était encore là,
+        // simplement dans la marge de la popup.
+        document.documentElement.addEventListener('pointerleave', clear);
         // Un onglet caché ne doit pas laisser un curseur immobile chez les autres.
         document.addEventListener('visibilitychange', clear);
 
         return () => {
             window.removeEventListener('pointermove', onMove);
-            surface.removeEventListener('pointerleave', clear);
+            document.documentElement.removeEventListener('pointerleave', clear);
             document.removeEventListener('visibilitychange', clear);
             if (frame.current !== null) clearTimeout(frame.current);
             frame.current = null;

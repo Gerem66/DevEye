@@ -6,6 +6,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { userColorVar } from '@/Features/Profile/userColors';
 import { useLive } from '@/stores/live';
 import { useActiveWorkspace } from '@/stores/workspace';
+import { CURSOR_GLYPHS } from './cursorGlyphs';
 import { useLiveSurface } from './LiveProvider';
 import styles from './LiveCursors.module.css';
 
@@ -14,11 +15,14 @@ import styles from './LiveCursors.module.css';
  *
  * Le serveur a déjà fait le tri : il n'envoie de curseurs qu'entre connexions au
  * chemin identique. Il ne reste ici qu'à replacer les coordonnées dans **notre**
- * surface, et à en tirer un pseudo et une couleur.
+ * surface, et à en tirer un pseudo, une couleur et une forme.
  *
- * Hors de la boîte visible, le curseur est **masqué** plutôt qu'épinglé au bord :
- * un curseur collé au bord se lit comme quelqu'un qui serait là, et qui n'y est
- * pas.
+ * La surface sert de **repère**, pas de cadre : le curseur d'un pair reste
+ * affiché dans les marges de la popup et jusqu'aux bords de l'écran — on est sur
+ * la même page, il n'y a aucune raison qu'il s'évanouisse en chemin. Seule la
+ * fenêtre borne l'affichage, et au-delà le curseur est **masqué** plutôt
+ * qu'épinglé au bord : un curseur collé au bord se lit comme quelqu'un qui serait
+ * là et qui n'y est pas.
  */
 
 /**
@@ -73,6 +77,10 @@ export function LiveCursors() {
     const colors = new Map(peers.map((p) => [p.connId, p.color]));
     const { rect, scrollTop } = geometry;
 
+    // Le cadre est la fenêtre, jamais la surface.
+    const viewWidth = window.innerWidth;
+    const viewHeight = window.innerHeight;
+
     const visible = cursors.flatMap((entry) => {
         // Mes propres autres onglets : c'est moi, ça n'apprend rien.
         if (user && entry.userId === user.id) return [];
@@ -81,8 +89,9 @@ export function LiveCursors() {
         const member = members.get(entry.userId);
         const left = rect.left + entry.cursor.x * rect.width;
         const top = rect.top + entry.cursor.y - scrollTop;
-        if (top < rect.top || top > rect.bottom || left < rect.left || left > rect.right) return [];
-        return [{ ...entry, color, left, top, username: member?.username ?? 'Membre' }];
+        if (top < 0 || top > viewHeight || left < 0 || left > viewWidth) return [];
+        const glyph = CURSOR_GLYPHS[entry.cursor.kind];
+        return [{ ...entry, color, left, top, glyph, username: member?.username ?? 'Membre' }];
     });
 
     if (visible.length === 0) return null;
@@ -97,19 +106,24 @@ export function LiveCursors() {
                     // saut par trame se lirait comme une saccade plutôt qu'un
                     // mouvement. Un ressort ferme, pour ne pas traîner derrière.
                     initial={false}
-                    animate={{ x: c.left, y: c.top }}
+                    // Le point chaud du dessin — pointe de flèche, bout du doigt,
+                    // milieu de la barre — doit tomber sur la position reçue.
+                    animate={{ x: c.left - c.glyph.offsetX, y: c.top - c.glyph.offsetY }}
                     transition={{ type: 'spring', stiffness: 700, damping: 45, mass: 0.6 }}
                     style={{ '--peer': userColorVar(c.color) } as CSSProperties}
                 >
-                    <svg className={styles.arrow} viewBox='0 0 14 20' fill='currentColor'>
-                        <path
-                            d='M1 1 L1 16.5 L5.2 12.6 L7.8 18.6 L10.6 17.4 L8 11.5 L13 11.2 Z'
-                            stroke='rgba(0,0,0,0.45)'
-                            strokeWidth='1'
-                            strokeLinejoin='round'
-                        />
+                    <svg
+                        className={styles.glyph}
+                        width={c.glyph.width}
+                        height={c.glyph.height}
+                        viewBox={c.glyph.viewBox}
+                        fill='currentColor'
+                    >
+                        {c.glyph.shape}
                     </svg>
-                    <span className={styles.label}>{c.username}</span>
+                    <span className={styles.label} style={{ marginTop: c.glyph.labelOffset }}>
+                        {c.username}
+                    </span>
                 </motion.div>
             ))}
         </div>,
