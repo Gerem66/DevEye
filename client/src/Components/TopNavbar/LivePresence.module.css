@@ -23,7 +23,7 @@
    peu plus que la pile, qui porte déjà sa propre marge visuelle par la rondeur
    des bulles. */
 .pillAlone {
-    padding: 3px 10px;
+    padding: 7px 12px 5px 10px;
 }
 
 /* Les bulles se chevauchent : la pile dit « plusieurs » d'un coup d'œil, sans
