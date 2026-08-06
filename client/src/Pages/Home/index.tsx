@@ -51,7 +51,7 @@ import {
 } from './tiles/tileVisual';
 import { EditableHome } from './organize/EditableHome';
 
-import type { HomeSection, WorkspaceFeatureId } from 'deveye-types';
+import type { HomeFeatureId, HomeLayout, HomeSection, WorkspaceFeatureId, WorkspacePermissions } from 'deveye-types';
 import { WORKSPACE_FEATURE_IDS } from 'deveye-types';
 import type { FeatureProps } from '@/Features/types';
 import styles from './Dashboard.module.css';
@@ -151,6 +151,39 @@ function featureBehind(viewId: string): WorkspaceFeatureId | null {
     // La page Appareils et chaque vue d'appareil relèvent du même droit.
     if (viewId === 'clients' || viewId.startsWith(DEVICE_VIEW_PREFIX)) return 'devices';
     return null;
+}
+
+/**
+ * Cette vue a-t-elle encore un sens dans l'espace où l'on arrive ?
+ *
+ * Trois conditions, et la troisième est la règle demandée : le rôle doit ouvrir
+ * la feature, et la tuile doit **figurer sur l'accueil de la cible**. Une feature
+ * qu'on n'y a pas posée n'a pas à s'ouvrir toute seule parce qu'on venait
+ * d'ailleurs.
+ *
+ * Les vues **sans tuile** — profil, sécurité, journaux, utilisateurs, gestion de
+ * l'espace — échappent à la règle : elles ne sont pas composées dans l'accueil,
+ * donc l'y chercher n'aurait aucun sens, et leur contenu ne dépend pas de
+ * l'espace (ou le suit, pour la gestion de l'espace). Les refermer serait gratuit.
+ */
+function survivesWorkspaceSwitch(
+    viewId: string,
+    layout: HomeLayout,
+    permissions: WorkspacePermissions,
+    views: readonly ViewConfig[]
+): boolean {
+    const feature = featureBehind(viewId);
+    if (feature !== null && !permissions.features.some((g) => g.feature === feature)) return false;
+
+    const config = views.find((v) => v.id === viewId);
+    if (config && !config.hasCard) return true;
+
+    if (viewId.startsWith(DEVICE_VIEW_PREFIX)) {
+        // Un appareil appartient à un espace : le même identifiant n'existe pas
+        // ailleurs, cette vue ne survit donc jamais — et c'est bien ainsi.
+        return placedDeviceIds(layout).includes(viewId.slice(DEVICE_VIEW_PREFIX.length));
+    }
+    return placedFeatureIds(layout).includes(viewId as HomeFeatureId);
 }
 
 function getGreeting(): string {
@@ -485,9 +518,23 @@ export default function HomePage() {
      * portent aussitôt), puis on recharge la session — ce qui rapatrie le thème
      * et la disposition de la cible et corrige l'id si l'accès n'existe plus.
      * L'incrément d'époque du store remonte au passage toutes les features.
+     *
+     * **La vue ouverte survit à la bascule quand la cible la propose aussi.**
+     * Changer d'espace en gardant Mail sous les yeux, pour y retrouver les mêmes
+     * boîtes ailleurs, est le geste courant ; refermer à chaque fois obligeait à
+     * rouvrir. Son contenu, lui, repart de zéro — l'époque du store d'espaces
+     * entre dans la clé de remontage, donc rien de l'espace précédent ne traîne.
+     *
+     * La composition de l'accueil d'un autre espace n'est **pas** connue d'avance
+     * (la session n'embarque que celle de l'espace actif) : la décision ne peut
+     * donc tomber qu'après `workspace.activate`. D'ici là le contenu est démonté
+     * plutôt que laissé vivant — il interrogerait le nouvel espace avec les
+     * droits de l'ancien, et l'on verrait passer une erreur avant même de savoir
+     * si la vue reste.
      */
     const handleSelectWorkspace = (workspaceId: number) => {
-        if (expandedWidget) handleClose();
+        const openView = expandedWidget;
+        if (openView) unmountFeature(openView);
         // Vider la liste d'appareils AVANT de basculer : sinon l'effet d'élagage
         // ci-dessus tourne encore contre ceux de l'espace précédent alors que la
         // nouvelle disposition est déjà en place, et supprime définitivement ses
@@ -506,9 +553,17 @@ export default function HomePage() {
                 // plus rien ne la re-sollicite tant que rien ne change — les
                 // tuiles d'appareils resteraient vides indéfiniment.
                 void refreshDevices();
+
+                if (!openView) return;
+                // `doExpand` avec remontage forcé : la vue reparaît vierge, sur
+                // les données de l'espace d'arrivée.
+                if (survivesWorkspaceSwitch(openView, getHomeLayout(), res.permissions, viewsRef.current)) {
+                    doExpand(openView, true);
+                } else handleClose();
             } catch {
                 // Accès perdu entre-temps : recharger la session remet le client
                 // sur un espace valide.
+                if (openView) handleClose();
                 void refresh();
             }
         })();

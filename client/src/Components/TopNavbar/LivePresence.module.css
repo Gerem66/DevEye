@@ -2,11 +2,14 @@
    Même idiome de pastille que SecrecyTimer : bordure de verre, coins pilule,
    libellé révélé au survol par une animation de largeur. */
 
+/* Rembourrage **symétrique** : il ne l'était pas (5 à gauche, 8 à droite, hérité
+   d'une pastille icône + texte), ce qui décalait la pile de bulles d'un pixel et
+   demi vers la droite — assez pour se voir sur une forme ronde. */
 .pill {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 3px 8px 3px 5px;
+    padding: 3px 6px;
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-pill);
     background: var(--glass-bg-light);
@@ -14,6 +17,13 @@
     font: inherit;
     line-height: 1.2;
     white-space: nowrap;
+}
+
+/* Variante « Seul » : une icône et un mot, pas une forme ronde. Elle respire un
+   peu plus que la pile, qui porte déjà sa propre marge visuelle par la rondeur
+   des bulles. */
+.pillAlone {
+    padding: 3px 10px;
 }
 
 /* Les bulles se chevauchent : la pile dit « plusieurs » d'un coup d'œil, sans
@@ -57,6 +67,7 @@
 }
 
 .bubble img {
+    display: block;
     width: 100%;
     height: 100%;
     object-fit: cover;

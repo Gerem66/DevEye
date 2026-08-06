@@ -39,7 +39,7 @@ export function LivePresence() {
 
     if (peers.length === 0) {
         return (
-            <span className={styles.pill} title='Personne d’autre dans cet espace'>
+            <span className={`${styles.pill} ${styles.pillAlone}`} title='Personne d’autre dans cet espace'>
                 <span className={`icon icon-user ${styles.icon}`} />
                 <span className={styles.count}>Seul</span>
             </span>
