@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import styles from './style.module.css';
 
 import type { PasswordEntry, PasswordEntryMasked } from 'deveye-types';
+import { useLiveOutline } from '@/live/useLiveOutline';
 
 type RowPassword = PasswordEntry | PasswordEntryMasked;
 
@@ -77,6 +78,8 @@ function PasswordRow({
     onCopyPassword
 }: PasswordRowProps) {
     const id = password?.id ?? null;
+    // Quelqu'un consulte cette entrée : sa couleur sur la ligne.
+    const outline = useLiveOutline('l1', id === null ? null : String(id));
     const isRevealed = password !== null && password.password !== '';
     // A masked entry whose stored password is empty: show an empty cell rather
     // than fake dots + reveal/copy controls that would yield nothing. Only the
@@ -108,7 +111,7 @@ function PasswordRow({
     const handleReveal = () => onReveal(password.id);
 
     return (
-        <tr data-id={`${password.id}`}>
+        <tr data-id={`${password.id}`} {...outline}>
             <td>{password.service}</td>
 
             <td>

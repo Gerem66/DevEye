@@ -57,7 +57,7 @@ export function AccountCard({
     };
 
     // Quelqu'un travaille dans ce compte, plus bas que moi : sa couleur ici.
-    const outline = useLiveOutline('account', String(account.id));
+    const outline = useLiveOutline('l1', String(account.id));
 
     return (
         <div

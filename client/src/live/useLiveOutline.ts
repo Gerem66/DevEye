@@ -1,22 +1,25 @@
 import type { UserColor } from 'deveye-types';
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useReducer, type CSSProperties } from 'react';
 
 import { userColorVar } from '@/Features/Profile/userColors';
 import { useLive, type LiveSegmentKind } from '@/stores/live';
+import { divergingSegment } from './paths';
 
 /**
- * Entoure un nœud de la couleur de qui s'y trouve, **plus bas que moi**.
+ * Entoure un nœud de la couleur de qui s'y trouve.
  *
  * C'est la seconde moitié du moteur, et elle tient en un appel :
  *
  * ```tsx
- * <div className={styles.accountCard} {...useLiveOutline('account', String(account.id))}>
+ * <div className={styles.card} {...useLiveOutline('l1', String(service.id))}>
  * ```
  *
- * La règle, appliquée ici une fois pour toutes : un pair dont le chemin
- * **commence par le mien** et va plus loin est signalé sur le segment situé juste
- * en dessous de moi. Deux chemins identiques n'entourent rien — à ce moment-là on
- * se voit par les curseurs. Deux chemins divergents non plus.
+ * Dans une liste, un hook par ligne est impossible : {@link useLiveOutlines}
+ * rend alors une fonction de consultation, appelée autant de fois qu'il y a de
+ * lignes.
+ *
+ * La règle elle-même — quel nœud désigner pour un pair donné — vit dans
+ * `paths.ts`, isolée du rendu et vérifiable directement.
  *
  * ## Plusieurs occupants
  *
@@ -31,14 +34,14 @@ const ROTATE_MS = 3000;
 
 let tick = 0;
 let timer: ReturnType<typeof setInterval> | null = null;
-const tickListeners = new Set<(n: number) => void>();
+const tickListeners = new Set<() => void>();
 
-function subscribeTick(fn: (n: number) => void): () => void {
+function subscribeTick(fn: () => void): () => void {
     tickListeners.add(fn);
     if (timer === null) {
         timer = setInterval(() => {
             tick += 1;
-            for (const l of tickListeners) l(tick);
+            for (const l of tickListeners) l();
         }, ROTATE_MS);
     }
     return () => {
@@ -56,36 +59,54 @@ export interface LiveOutlineProps {
     style?: CSSProperties;
 }
 
-export function useLiveOutline(kind: LiveSegmentKind, value: string | null): LiveOutlineProps {
+/**
+ * Forme liste : rend une fonction qui donne les propriétés d'un nœud de ce
+ * niveau, à appeler dans un `map`. Tout le travail est fait une fois pour tous
+ * les pairs, quel que soit le nombre de lignes.
+ */
+export function useLiveOutlines(kind: LiveSegmentKind): (value: string | null) => LiveOutlineProps {
     const { peers, path } = useLive();
-    const [, setTick] = useState(0);
+    const [, bump] = useReducer((n: number) => n + 1, 0);
 
-    const colors = useMemo(() => {
-        if (value === null) return [];
-        const segment = `${kind}:${value}`;
-        const found = new Set<UserColor>();
+    const byValue = useMemo(() => {
+        const prefix = `${kind}:`;
+        const map = new Map<string, UserColor[]>();
         for (const peer of peers) {
-            // Strictement plus profond, et sur ma branche : un pair au même
-            // endroit que moi ne s'entoure pas, il se voit.
-            if (peer.path.length <= path.length) continue;
-            if (!path.every((mine, i) => peer.path[i] === mine)) continue;
-            if (peer.path[path.length] !== segment) continue;
-            found.add(peer.color);
+            const segment = divergingSegment(path, peer.path);
+            if (segment === null || !segment.startsWith(prefix)) continue;
+            const value = segment.slice(prefix.length);
+            const colors = map.get(value);
+            if (colors) {
+                if (!colors.includes(peer.color)) colors.push(peer.color);
+            } else {
+                map.set(value, [peer.color]);
+            }
         }
-        return [...found].sort();
-    }, [peers, path, kind, value]);
+        // Trié : l'alternance doit être stable d'un rendu à l'autre, sinon la
+        // couleur affichée sauterait au gré de l'ordre du roster.
+        for (const colors of map.values()) colors.sort();
+        return map;
+    }, [peers, path, kind]);
 
     // L'abonnement au compteur n'existe que tant qu'il y a de quoi alterner.
-    const rotating = colors.length > 1;
+    const rotating = useMemo(() => [...byValue.values()].some((c) => c.length > 1), [byValue]);
     useEffect(() => {
         if (!rotating) return;
-        return subscribeTick(setTick);
+        return subscribeTick(bump);
     }, [rotating]);
 
-    if (colors.length === 0) return {};
-    const color = colors[tick % colors.length];
-    return {
-        'data-live-peer': true,
-        style: { '--live-peer': userColorVar(color) } as CSSProperties
+    return (value) => {
+        if (value === null) return {};
+        const colors = byValue.get(value);
+        if (!colors || colors.length === 0) return {};
+        return {
+            'data-live-peer': true,
+            style: { '--live-peer': userColorVar(colors[tick % colors.length]) } as CSSProperties
+        };
     };
+}
+
+/** Forme unitaire, pour un composant qui ne représente qu'un seul nœud. */
+export function useLiveOutline(kind: LiveSegmentKind, value: string | null): LiveOutlineProps {
+    return useLiveOutlines(kind)(value);
 }

@@ -219,9 +219,14 @@ export default function HomePage() {
     // The open popup's body element — feature content is portaled into it.
     const [popupBodyEl, setPopupBodyEl] = useState<HTMLDivElement | null>(null);
     // Cadre de référence des curseurs : le corps de la popup quand une feature
-    // est ouverte, la zone de contenu de l'accueil sinon. Jamais un nœud
+    // est ouverte, la zone défilante de l'accueil sinon. Jamais un nœud
     // appartenant à une feature — `FeatureKeepAlive` les déplace.
-    const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
+    //
+    // C'est `main` et non `content` : cette dernière est centrée et bornée à
+    // 1280 px, si bien qu'un curseur disparaissait dès qu'il sortait de la
+    // colonne des tuiles. `main` couvre toute la page sauf la barre du haut, et
+    // porte le défilement — donc `scrollTop` y a le sens attendu.
+    const [mainEl, setMainEl] = useState<HTMLElement | null>(null);
     // Timers for TTL-based auto-unmount, keyed by view id.
     const ttlTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
     // The view whose popup is currently animating out (policy applied on exit).
@@ -605,7 +610,7 @@ export default function HomePage() {
     };
 
     return (
-        <LiveProvider surface={popupBodyEl ?? contentEl}>
+        <LiveProvider surface={popupBodyEl ?? mainEl}>
             <div className={styles.dashboard}>
                 <Wallpaper />
 
@@ -628,8 +633,8 @@ export default function HomePage() {
 
                 {/* The grid stays mounted under the popup so the shared-element morph
                 back into a card is smooth and never dips behind sibling cards. */}
-                <main className={styles.main}>
-                    <div className={styles.content} ref={setContentEl}>
+                <main className={styles.main} ref={setMainEl}>
+                    <div className={styles.content}>
                         <header className={styles.greeting}>
                             <h1 className={styles.greetingText}>{heading.title}</h1>
                             <p className={styles.dateText}>{heading.subtitle}</p>

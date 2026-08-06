@@ -8,6 +8,8 @@ import { wmoIcon } from './wmoIcon';
 import type { WeatherLocation, WeatherProvider, WeatherReport } from 'deveye-types';
 import type { FeatureProps } from '../types';
 import styles from './Weather.module.css';
+import { useLiveOutline } from '@/live/useLiveOutline';
+import { useLiveSegment } from '@/live/useLiveSegment';
 
 const REFRESH_MS = 10 * 60 * 1000;
 
@@ -297,11 +299,14 @@ function LocationTab({
     onRemove: () => void;
 }) {
     const controls = useDragControls();
+    // Quelqu'un consulte cette ville : sa couleur sur l'onglet.
+    const outline = useLiveOutline('l1', loc.id);
     return (
         <Reorder.Item
             value={loc}
             dragListener={false}
             dragControls={controls}
+            {...outline}
             className={`${styles.locationTabWrapper} ${active ? styles.activeTab : ''} ${
                 loc.isPrimary ? styles.primaryTab : ''
             }`}
@@ -357,6 +362,9 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
     // The location whose settings popup is open, if any.
     const [settingsFor, setSettingsFor] = useState<WeatherLocation | null>(null);
 
+    // Le niveau profond de Météo : la ville consultée.
+    const liveTarget = useLiveSegment('l1', selectedId);
+
     // The order persisted on the server; lets us skip a redundant reorder call
     // when a drag ends without actually changing anything.
     const persistedOrder = useRef<string>('');
@@ -403,6 +411,16 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
             cancelled = true;
         };
     }, [loadReport]);
+
+    // Rejoindre quelqu'un : la cible est redonnée à chaque rendu tant qu'elle
+    // n'est pas atteinte, il suffit donc d'attendre que la liste soit chargée.
+    useEffect(() => {
+        if (!liveTarget?.value) return;
+        const id = liveTarget.value;
+        if (!locations.some((l) => l.id === id)) return;
+        setSelectedId(id);
+        void loadReport(id);
+    }, [liveTarget, locations, loadReport]);
 
     // Keep the selected report fresh in the background.
     useEffect(() => {

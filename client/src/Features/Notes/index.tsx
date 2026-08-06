@@ -23,6 +23,7 @@ import { invalidate } from '@/stores/invalidation';
 
 import type { FeatureProps } from '@/Features/types';
 import type { Note, NoteFolder, NoteSummary } from 'deveye-types';
+import { useLiveSegment } from '@/live/useLiveSegment';
 
 /** The user's manual order; the id only breaks ties. */
 function byOrder(a: NoteSummary, b: NoteSummary): number {
@@ -35,6 +36,9 @@ function FeatureNotes({ workspace }: FeatureProps) {
     const [notes, setNotes] = useState<NoteSummary[]>([]);
     const [folders, setFolders] = useState<NoteFolder[]>([]);
     const [actionError, setActionError] = useState<string | null>(null);
+    /** La note ouverte dans l'éditeur — c'est le niveau profond des Notes. */
+    const [openNoteId, setOpenNoteId] = useState<number | null>(null);
+    useLiveSegment('l1', openNoteId === null ? null : String(openNoteId));
     const reloadRef = useRef<Promise<void> | null>(null);
     const draggingRef = useRef<NoteSummary | null>(null);
     // Session lock state, from the store the topbar widget and the unlock prompt
@@ -132,7 +136,11 @@ function FeatureNotes({ workspace }: FeatureProps) {
             }
 
             const input: NoteEditorInput = { note: existing, folderId: existing ? existing.folderId : targetFolderId };
+            // Déclaré le temps de l'édition : deux membres sur la même note se
+            // voient, sur deux notes différentes chacun voit l'autre entouré.
+            setOpenNoteId(existing?.id ?? null);
             const result = await OpenPopup<NoteEditorResult>(NOTE_EDITOR_POPUP, input);
+            setOpenNoteId(null);
             if (result === null) return;
 
             // Deletion is already confirmed inside the editor (popup over it), so

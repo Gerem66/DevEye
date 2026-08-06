@@ -153,10 +153,10 @@ export default function Mail(_props: FeatureProps) {
     }, [selectedAccountId]);
 
     // Les deux niveaux profonds de Mail, déclarés au moteur de présence. Le
-    // composant ne sait rien de l'arbre : il annonce « compte » et « dossier »,
-    // et la racine `view:mail` vient de l'accueil.
-    const accountTarget = useLiveSegment('account', selectedAccountId === null ? null : String(selectedAccountId));
-    const folderTarget = useLiveSegment('folder', selectedFolderId === null ? null : String(selectedFolderId));
+    // composant ne sait rien de l'arbre : il annonce ses deux niveaux (compte,
+    // puis dossier), et la racine `view:mail` vient de l'accueil.
+    const accountTarget = useLiveSegment('l1', selectedAccountId === null ? null : String(selectedAccountId));
+    const folderTarget = useLiveSegment('l2', selectedFolderId === null ? null : String(selectedFolderId));
 
     // Rejoindre quelqu'un. La cible est **redonnée à chaque rendu** tant qu'elle
     // n'est pas atteinte : ces gardes attendent simplement que les données

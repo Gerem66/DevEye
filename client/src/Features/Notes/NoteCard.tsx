@@ -4,6 +4,7 @@ import styles from './style.module.css';
 import { stripInline } from './markdown';
 
 import type { NoteFolder, NoteSummary } from 'deveye-types';
+import { useLiveOutline } from '@/live/useLiveOutline';
 
 /**
  * Compact "last modified" label for a card corner: a short numeric date, or the
@@ -43,6 +44,8 @@ interface NoteCardProps {
 export default function NoteCard({ note, folders, draggable, onOpen, onMove, onDragStart, onDragEnd }: NoteCardProps) {
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement | null>(null);
+    // Quelqu'un édite cette note : sa couleur sur la carte.
+    const outline = useLiveOutline('l1', String(note.id));
 
     useEffect(() => {
         if (!menuOpen) return;
@@ -55,9 +58,12 @@ export default function NoteCard({ note, folders, draggable, onOpen, onMove, onD
 
     // Shared by both renderings so a masked card drags exactly like a readable
     // one; `data-note-card` is how the grid locates the cards to measure.
+    // La bordure de présence y est aussi : les deux rendus la portent alors sans
+    // avoir à la répéter.
     const dnd = {
         draggable,
         'data-note-card': '',
+        ...outline,
         onDragStart: (e: React.DragEvent) => {
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', String(note.id));

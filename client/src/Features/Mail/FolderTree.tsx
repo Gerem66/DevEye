@@ -1,7 +1,7 @@
 import styles from './style.module.css';
 
 import type { MailFolder } from 'deveye-types';
-import { useLiveOutline } from '@/live/useLiveOutline';
+import { useLiveOutlines } from '@/live/useLiveOutline';
 
 interface FolderTreeProps {
     folders: MailFolder[];
@@ -21,40 +21,25 @@ const SPECIAL_ICONS: Record<string, string> = {
 
 /** Plain sorted list — folder drag & drop reorder is a V2 nicety, not V1 scope. */
 export function FolderTree({ folders, selectedId, onSelect }: FolderTreeProps) {
+    // Quelqu'un est dans l'un de ces dossiers : sa couleur sur la ligne. La
+    // forme liste évite d'extraire un composant par ligne juste pour un hook.
+    const outlineOf = useLiveOutlines('l2');
     return (
         <div className={styles.folderTree}>
             {folders.map((folder) => (
-                <FolderRow key={folder.id} folder={folder} selected={selectedId === folder.id} onSelect={onSelect} />
+                <button
+                    key={folder.id}
+                    type='button'
+                    className={`${styles.folderRow} ${selectedId === folder.id ? styles.folderRowSelected : ''}`}
+                    onClick={() => onSelect(folder)}
+                    {...outlineOf(String(folder.id))}
+                >
+                    <span className={`icon icon-${SPECIAL_ICONS[folder.specialUse] ?? 'folder'}`} />
+                    <span className={styles.folderName}>{folder.name}</span>
+                    {folder.unreadCount > 0 && <span className={styles.folderUnread}>{folder.unreadCount}</span>}
+                </button>
             ))}
         </div>
-    );
-}
-
-/** Une ligne, extraite parce qu'elle porte un hook (la bordure de présence). */
-function FolderRow({
-    folder,
-    selected,
-    onSelect
-}: {
-    folder: MailFolder;
-    selected: boolean;
-    onSelect: (folder: MailFolder) => void;
-}) {
-    // Quelqu'un est dans ce dossier, plus bas que moi : sa couleur ici.
-    const outline = useLiveOutline('folder', String(folder.id));
-    return (
-        <>
-            <button
-                type='button'
-                className={`${styles.folderRow} ${selected ? styles.folderRowSelected : ''}`}
-                onClick={() => onSelect(folder)}
-                {...outline}
-            >
-                <span className={`icon icon-${SPECIAL_ICONS[folder.specialUse] ?? 'folder'}`} />
-                <span className={styles.folderName}>{folder.name}</span>
-                {folder.unreadCount > 0 && <span className={styles.folderUnread}>{folder.unreadCount}</span>}
-            </button>
-        </>
     );
 }
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ws } from '@/api/ws';
 import { onResourceChange } from '@/stores/invalidation';
+import { useLiveSegment } from '@/live/useLiveSegment';
 import Button from '@/Components/Button';
 import { OpenPopup } from '@/Components/Popup';
 import { refreshUptime } from '@/stores/uptime';
@@ -26,6 +27,21 @@ export default function Uptime({ workspace }: FeatureProps) {
     const dragging = useRef(false);
 
     const workspaceId = workspace.id;
+
+    // Le niveau profond d'Uptime : le service ouvert. La racine `view:uptime`
+    // vient de l'accueil ; cette feature n'annonce que le sien.
+    const liveTarget = useLiveSegment('l1', selectedId === null ? null : String(selectedId));
+    useEffect(() => {
+        if (!liveTarget) return;
+        if (liveTarget.value === null) {
+            setSelectedId(null);
+            return;
+        }
+        const id = Number(liveTarget.value);
+        // Redonné à chaque rendu tant qu'il n'est pas atteint : il suffit
+        // d'attendre que la liste soit là.
+        if (services.some((svc) => svc.id === id)) setSelectedId(id);
+    }, [liveTarget, services]);
 
     const reload = useCallback(async () => {
         try {

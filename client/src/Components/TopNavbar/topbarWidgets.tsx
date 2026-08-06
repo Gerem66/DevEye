@@ -1,10 +1,11 @@
 import { type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
-import type { HomeTopbarWidgetId } from 'deveye-types';
+import type { HomeTopbarWidgetId, WorkspaceKind } from 'deveye-types';
 
 import { useDevices } from '@/stores/devices';
 import { useUptimeCount } from '@/stores/uptime';
 import { useWeather } from '@/stores/weather';
 import { useHomeLayout } from '@/stores/homeLayout';
+import { useActiveWorkspace } from '@/stores/workspace';
 import { wmoIcon } from '@/Features/Weather/wmoIcon';
 import { SecrecyTimer } from './SecrecyTimer';
 import { LivePresence } from './LivePresence';
@@ -30,6 +31,32 @@ export const TOPBAR_WIDGETS: TopbarWidgetMeta[] = [
     { id: 'uptime', title: 'Uptime', icon: 'uptime', description: 'Services en ligne sur les services surveillés' },
     { id: 'live', title: 'Présence', icon: 'user', description: 'Qui est dans cet espace, et où' }
 ];
+
+/**
+ * Les widgets proposables dans cet espace.
+ *
+ * « Présence » n'a aucun sens dans un espace personnel : c'est une salle d'une
+ * seule personne, le widget y afficherait à vie « vous, tout seul ». Il n'est
+ * donc pas seulement masqué — il n'est **pas proposé** au choix, et un espace
+ * personnel qui en hériterait par une disposition venue d'ailleurs ne
+ * l'afficherait pas davantage.
+ *
+ * Une seule fonction pour les trois usages (liste vivante, éditeur, dialogue
+ * d'ajout) : la règle ne peut pas diverger entre eux.
+ */
+export function availableTopbarWidgets(kind: WorkspaceKind | undefined): TopbarWidgetMeta[] {
+    if (kind === 'shared') return TOPBAR_WIDGETS;
+    return TOPBAR_WIDGETS.filter((w) => w.id !== 'live');
+}
+
+/** Le même filtre, appliqué à une liste d'identifiants déjà épinglés. */
+export function usableTopbarWidgetIds(
+    ids: readonly HomeTopbarWidgetId[],
+    kind: WorkspaceKind | undefined
+): HomeTopbarWidgetId[] {
+    const allowed = new Set(availableTopbarWidgets(kind).map((w) => w.id));
+    return ids.filter((id) => allowed.has(id));
+}
 
 /** Weather mini-widget: current temperature of the primary city. */
 export function WeatherStatus() {
@@ -96,7 +123,8 @@ export function renderTopbarWidget(id: HomeTopbarWidgetId, onOpenSecurity?: (e: 
  */
 export function TopbarWidgets({ onOpenSecurity }: { onOpenSecurity?: (e: ReactMouseEvent) => void }) {
     const layout = useHomeLayout();
-    const items = layout.topbar;
+    const workspace = useActiveWorkspace();
+    const items = usableTopbarWidgetIds(layout.topbar, workspace?.kind);
     if (items.length === 0) return null;
     return (
         <div className={styles.status}>

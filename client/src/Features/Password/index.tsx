@@ -15,6 +15,7 @@ import { invalidate } from '@/stores/invalidation';
 
 import type { FeatureProps } from '@/Features/types';
 import type { PasswordEntry, PasswordEntryMasked } from 'deveye-types';
+import { useLiveSegment } from '@/live/useLiveSegment';
 
 /**
  * Run a request, and if the server reports the password-encryption layer is
@@ -51,6 +52,9 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
     const [search, setSearch] = useState('');
     const [allPasswords, setAllPasswords] = useState<RowPassword[]>([]);
     const [actionError, setActionError] = useState<string | null>(null);
+    /** L'entrée ouverte dans le formulaire — le niveau profond du coffre. */
+    const [openEntryId, setOpenEntryId] = useState<number | null>(null);
+    useLiveSegment('l1', openEntryId === null ? null : String(openEntryId));
     const reloadRef = useRef<Promise<void> | null>(null);
     // Read at call time so the load effect never depends on this changing prop.
     const closeFeatureRef = useRef(closeFeature);
@@ -161,7 +165,9 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
                 }
             }
 
+            setOpenEntryId(id);
             const result = await OpenPopup<PopupResult>('popup-add-password', initial);
+            setOpenEntryId(null);
             if (result === null) return;
 
             if (result === 'delete' && id !== null) {

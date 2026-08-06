@@ -12,7 +12,7 @@ import { segmentTarget, setLiveSegment, useLive, type LiveSegmentKind, type Live
  * complet — `view:mail account:12 folder:34` — s'assemble tout seul.
  *
  * ```tsx
- * const target = useLiveSegment('account', selectedId ? String(selectedId) : null);
+ * const target = useLiveSegment('l1', selectedId ? String(selectedId) : null);
  * useEffect(() => {
  *     if (!target) return;                       // rien de demandé
  *     const id = target.value === null ? null : Number(target.value);
@@ -28,6 +28,18 @@ import { segmentTarget, setLiveSegment, useLive, type LiveSegmentKind, type Live
  * `null` en `value` retire le niveau, et referme du même coup tout ce qui est en
  * dessous : on ne peut pas être dans un dossier sans être dans le compte qui le
  * contient.
+ *
+ * ## Un seul déclarant par niveau
+ *
+ * Ce hook doit être appelé **une fois** par `kind`, dans le composant qui détient
+ * la sélection — jamais depuis chaque ligne d'une liste. Le registre est une map
+ * par `kind` : plusieurs déclarants s'écraseraient, et surtout celui qui se
+ * démonte remettrait le niveau à `null` en effaçant ce qu'un autre vient de
+ * poser. C'est pourquoi `CloudSync` fait remonter l'ouverture d'un dialogue
+ * depuis ses cartes au lieu de laisser chacune déclarer son propre niveau.
+ *
+ * Pour entourer des lignes, c'est `useLiveOutlines` qu'il faut : il n'écrit rien
+ * et se consulte autant de fois qu'on veut.
  */
 export function useLiveSegment(kind: LiveSegmentKind, value: string | null): LiveSegmentTarget | null {
     const { teleportPath } = useLive();

@@ -29,13 +29,21 @@ import { getActiveWorkspaceId } from './workspace';
  * L'ordre des niveaux, **déclaré** plutôt que déduit de l'ordre de montage.
  *
  * Les effets React se déclenchent de la feuille vers la racine : s'en remettre à
- * l'ordre de montage donnerait des chemins à l'envers. Et comme un `kind` est
- * unique dans un chemin — la téléportation apparie par `kind`, jamais par indice
- * — un ordre global fixe dit exactement la même chose, sans aucune fragilité.
+ * l'ordre de montage donnerait des chemins à l'envers. Un ordre global fixe dit
+ * la même chose sans aucune fragilité.
  *
- * Une nouvelle feature profonde ajoute son niveau ici, et nulle part ailleurs.
+ * Les niveaux sont **positionnels et non sémantiques** — `l1`, `l2`, `l3` plutôt
+ * que `account`, `folder`, `message`. C'est ce qui permet à n'importe quelle
+ * feature d'entrer dans le moteur sans rien ajouter ici : `l1` est « la chose
+ * sélectionnée dans cette feature », que ce soit une boîte mail, un service
+ * surveillé, une ville ou un appareil. Des noms sémantiques auraient obligé à
+ * étendre cette liste par feature, et surtout à décider où insérer `service`
+ * par rapport à `folder` — une question qui n'a pas de réponse.
+ *
+ * Aucun risque de confusion entre features : les niveaux ne sont comparés
+ * qu'après un préfixe commun, lequel commence toujours par `view:<feature>`.
  */
-export const LIVE_SEGMENT_ORDER = ['view', 'account', 'folder', 'message'] as const;
+export const LIVE_SEGMENT_ORDER = ['view', 'l1', 'l2', 'l3'] as const;
 export type LiveSegmentKind = (typeof LIVE_SEGMENT_ORDER)[number];
 
 export interface LiveCursorEntry {

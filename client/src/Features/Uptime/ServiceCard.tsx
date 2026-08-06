@@ -4,6 +4,7 @@ import { formatAgo, formatDuration, formatMs, formatRatio } from './format';
 import styles from './style.module.css';
 
 import type { UptimeService } from 'deveye-types';
+import { useLiveOutline } from '@/live/useLiveOutline';
 
 interface ServiceCardProps {
     service: UptimeService;
@@ -53,6 +54,8 @@ export function ServiceCard({
     onDragPointerDown
 }: ServiceCardProps) {
     const badge = statusBadge(service);
+    // Quelqu'un consulte ce service, plus bas que moi : sa couleur ici.
+    const outline = useLiveOutline('l1', String(service.id));
     const action = (run: () => void) => (e: React.MouseEvent) => {
         e.stopPropagation();
         run();
@@ -61,6 +64,7 @@ export function ServiceCard({
     return (
         <div
             className={`${styles.card} ${service.enabled ? '' : styles.cardPaused} ${dragging ? styles.cardDragging : ''}`}
+            {...outline}
             role='button'
             tabIndex={0}
             data-service-card=''

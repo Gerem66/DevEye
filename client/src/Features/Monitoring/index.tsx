@@ -7,6 +7,8 @@ import MonitoringPanel from './MonitoringPanel';
 import { useAgentUpdate } from './useAgentUpdate';
 import { agentUpdatable } from '../agentVersion';
 import styles from './Monitoring.module.css';
+import { useLiveOutlines } from '@/live/useLiveOutline';
+import { useLiveSegment } from '@/live/useLiveSegment';
 
 // ─── Widget compact ─────────────────────────────────────────────────────────
 
@@ -110,6 +112,15 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
         }
     }, [devices, selectedId]);
 
+    // Le niveau profond de Monitoring : l'appareil consulté.
+    const outlineOf = useLiveOutlines('l1');
+    const liveTarget = useLiveSegment('l1', selectedId);
+    useEffect(() => {
+        if (!liveTarget) return;
+        if (liveTarget.value === null) return;
+        if (devices.some((d) => d.id === liveTarget.value)) setSelectedId(liveTarget.value);
+    }, [liveTarget, devices]);
+
     const showInfo = () =>
         void openInfo({ title: 'Monitoring — comment ça marche', body: <MonitoringInfo />, width: 560 });
 
@@ -148,6 +159,7 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                                     role='button'
                                     tabIndex={0}
                                     className={`${styles.deviceCard} ${d.id === selectedId ? styles.selected : ''}`}
+                                    {...outlineOf(d.id)}
                                     onClick={() => setSelectedId(d.id)}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter' || e.key === ' ') setSelectedId(d.id);

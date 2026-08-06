@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { CloudSyncShare } from 'deveye-types';
 
 import { ws } from '@/api/ws';
@@ -13,10 +13,19 @@ import SettingsDialog from './SettingsDialog';
 import VersionsBrowser from './VersionsBrowser';
 import { stateLook } from './state';
 import styles from './style.module.css';
+import type { LiveOutlineProps } from '@/live/useLiveOutline';
 
 interface ShareCardProps {
     share: CloudSyncShare;
     onChanged: () => void;
+    /**
+     * Un dialogue de ce partage s'ouvre ou se ferme. Remonté plutôt que déclaré
+     * ici : le niveau de présence doit être annoncé par **un seul** composant,
+     * sinon la carte fermée effacerait au démontage ce que la carte ouverte
+     * vient de poser.
+     */
+    onOpenChange: (shareId: number, open: boolean) => void;
+    outline: LiveOutlineProps;
 }
 
 /**
@@ -24,10 +33,14 @@ interface ShareCardProps {
  * ou synchro en cours avec barre de progression et fichier courant), puis une
  * rangée d'actions discrètes.
  */
-export default function ShareCard({ share, onChanged }: ShareCardProps) {
+export default function ShareCard({ share, onChanged, onOpenChange, outline }: ShareCardProps) {
     const { stateFor, progressFor } = useCloudSyncLive();
     const [dialog, setDialog] = useState<'devices' | 'exclusions' | 'versions' | 'logs' | 'settings' | null>(null);
     const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        onOpenChange(share.id, dialog !== null);
+    }, [dialog, share.id, onOpenChange]);
 
     const live = stateFor(share.id);
     const shareState = live?.state ?? (share.status === 'paused' ? 'paused' : 'synced');
@@ -55,7 +68,7 @@ export default function ShareCard({ share, onChanged }: ShareCardProps) {
     const paused = share.status === 'paused';
 
     return (
-        <section className={styles.card}>
+        <section className={styles.card} {...outline}>
             <header className={styles.cardHeader}>
                 <span className={styles.cardTitle}>
                     <span className='icon icon-cloud' />
