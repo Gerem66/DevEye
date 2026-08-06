@@ -1,7 +1,13 @@
 import { useState, useCallback, useMemo, useEffect, useRef, type ComponentType, type ReactNode } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
-import { setActiveWorkspace, upsertWorkspace, useActiveWorkspace, useWorkspaceState } from '@/stores/workspace';
+import {
+    getWorkspaceState,
+    setActiveWorkspace,
+    upsertWorkspace,
+    useActiveWorkspace,
+    useWorkspaceState
+} from '@/stores/workspace';
 import { ws } from '@/api/ws';
 import { OpenPopup } from '@/Components/Popup';
 import { isHomeReady, onHomeReady } from '@/stores/homeReady';
@@ -273,6 +279,22 @@ export default function HomePage() {
     const forceUnmountRef = useRef<Set<string>>(new Set());
     // Expand requested while another popup is still open / animating out.
     const pendingExpandRef = useRef<{ widgetId: string; forceReset: boolean } | null>(null);
+    /**
+     * L'époque d'espace **au moment où la popup s'est ouverte**, qui identifie sa
+     * paire de morphe avec la tuile d'origine.
+     *
+     * Sans elle, garder une vue ouverte en changeant d'espace la faisait
+     * disparaître : la disposition remplacée démonte puis remonte toutes les
+     * tuiles, la nouvelle tuile reparaît avec le même `layoutId` que la popup
+     * ouverte, et framer-motion — qui n'admet qu'un élément par identité —
+     * projette alors la popup **dans** cette tuile. Mesuré : la popup passait de
+     * 1143×743 à 290×206, la taille d'une carte, sans jamais se refermer côté
+     * React (d'où le fond assombri qui restait).
+     *
+     * Figer l'époque suffit : la tuile d'après-bascule porte une autre identité,
+     * la paire ne peut plus se former, et la popup reste où elle est.
+     */
+    const morphEpochRef = useRef(0);
 
     const unmountFeature = useCallback((featureId: string) => {
         clearTimeout(ttlTimers.current.get(featureId));
@@ -285,10 +307,29 @@ export default function HomePage() {
         });
     }, []);
 
+    /**
+     * Remonte une vue à neuf sans toucher à son ouverture : le contenu repart de
+     * zéro, la popup ne bouge pas. C'est ce qui permet à une feature de traverser
+     * une bascule d'espace en restant à l'écran.
+     */
+    const remountFeature = useCallback((featureId: string) => {
+        clearTimeout(ttlTimers.current.get(featureId));
+        ttlTimers.current.delete(featureId);
+        setFeatureGen((prev) => {
+            const next = new Map(prev);
+            next.set(featureId, (prev.get(featureId) ?? 0) + 1);
+            return next;
+        });
+        setMountedFeatures((prev) => new Set(prev).add(featureId));
+    }, []);
+
     const doExpand = useCallback((widgetId: string, forceReset: boolean) => {
         clearTimeout(ttlTimers.current.get(widgetId));
         ttlTimers.current.delete(widgetId);
         if (closingFeatureRef.current === widgetId) closingFeatureRef.current = null;
+        // Une ouverture, et elle seule, fixe l'identité de morphe : la relecture
+        // d'une vue déjà ouverte passe par `remountFeature`, qui n'y touche pas.
+        morphEpochRef.current = getWorkspaceState().epoch;
 
         if (forceReset) {
             setFeatureGen((prev) => {
@@ -558,7 +599,7 @@ export default function HomePage() {
                 // `doExpand` avec remontage forcé : la vue reparaît vierge, sur
                 // les données de l'espace d'arrivée.
                 if (survivesWorkspaceSwitch(openView, getHomeLayout(), res.permissions, viewsRef.current)) {
-                    doExpand(openView, true);
+                    remountFeature(openView);
                 } else handleClose();
             } catch {
                 // Accès perdu entre-temps : recharger la session remet le client
@@ -722,7 +763,16 @@ export default function HomePage() {
                 {popupConfig && (
                     <WidgetPopup
                         key={popupConfig.hasCard ? popupConfig.id : 'page'}
-                        layoutId={popupConfig.hasCard ? popupConfig.id : undefined}
+                        // Le morphe n'a de partenaire que tant qu'on est dans
+                        // l'espace où la vue a été ouverte. Après une bascule, la
+                        // tuile porte une autre identité : la popup renonce au
+                        // morphe et se referme par un simple fondu, ce qui est de
+                        // toute façon plus juste — sa carte d'origine n'est plus là.
+                        layoutId={
+                            popupConfig.hasCard && morphEpochRef.current === workspaceEpoch
+                                ? `${morphEpochRef.current}:${popupConfig.id}`
+                                : undefined
+                        }
                         open={!!expandedWidget}
                         onClose={handleClose}
                         bodyRef={setPopupBodyEl}

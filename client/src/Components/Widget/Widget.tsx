@@ -1,6 +1,7 @@
 import { forwardRef, type CSSProperties, type ElementType, type ReactNode, type MouseEvent } from 'react';
 import { motion, type HTMLMotionProps } from 'framer-motion';
 import { useLiveOutline } from '@/live/useLiveOutline';
+import { useWorkspaceState } from '@/stores/workspace';
 import styles from './Widget.module.css';
 
 export interface WidgetProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
@@ -42,19 +43,27 @@ const Widget = forwardRef<HTMLDivElement, WidgetProps>(function Widget(
     { widgetId, title, icon, children, onExpand, className, compact, slim, interactive = true, href, ...motionProps },
     ref
 ) {
-    // Render as an anchor when `href` is set, else a div. Typed loosely so the
-    // motion props + click handler aren't constrained to the div/anchor union.
-    const Tag = (href ? motion.a : motion.div) as ElementType;
-    const linkProps = href ? { href, target: '_blank', rel: 'noopener noreferrer' } : undefined;
     // Présence : la tuile s'entoure de la couleur de qui se trouve dans la
     // feature qu'elle ouvre. Posé ici plutôt que chez chaque appelant — le
     // `widgetId` **est** le segment de vue — ce qui donne le comportement à
     // toutes les tuiles de l'accueil sans une ligne par feature.
     const outline = useLiveOutline('view', widgetId);
+
+    // L'identité de morphe est **portée par l'espace**. Deux éléments ne peuvent
+    // pas partager une identité chez framer-motion : sans ce préfixe, une tuile
+    // remontée après une bascule d'espace reprenait celle d'une popup restée
+    // ouverte, et la popup se retrouvait projetée dans la tuile.
+    const { epoch: workspaceEpoch } = useWorkspaceState();
+    const layoutKey = `${workspaceEpoch}:${widgetId}`;
+
+    // Render as an anchor when `href` is set, else a div. Typed loosely so the
+    // motion props + click handler aren't constrained to the div/anchor union.
+    const Tag = (href ? motion.a : motion.div) as ElementType;
+    const linkProps = href ? { href, target: '_blank', rel: 'noopener noreferrer' } : undefined;
     return (
         <Tag
             ref={ref as never}
-            layoutId={interactive ? widgetId : undefined}
+            layoutId={interactive ? layoutKey : undefined}
             className={`${styles.widget} ${compact ? styles.compact : ''} ${slim ? styles.slim : ''} ${interactive ? '' : styles.static} ${className ?? ''}`}
             onClick={interactive && !href ? (e: MouseEvent<HTMLDivElement>) => onExpand?.(e) : undefined}
             whileHover={interactive ? { y: -4 } : undefined}
