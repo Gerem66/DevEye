@@ -48,11 +48,14 @@ function useSurfaceGeometry(surface: HTMLElement | null): { rect: DOMRect; scrol
         if (!surface) return;
         const observer = new ResizeObserver(bump);
         observer.observe(surface);
-        surface.addEventListener('scroll', bump, { passive: true });
+        // En capture, sur le document : le repère de l'accueil ne défile pas
+        // lui-même — c'est son parent qui bouge — et un écouteur posé sur le
+        // repère raterait donc tout défilement de la page.
+        document.addEventListener('scroll', bump, { passive: true, capture: true });
         window.addEventListener('resize', bump);
         return () => {
             observer.disconnect();
-            surface.removeEventListener('scroll', bump);
+            document.removeEventListener('scroll', bump, { capture: true });
             window.removeEventListener('resize', bump);
         };
     }, [surface]);

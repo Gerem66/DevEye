@@ -61,16 +61,19 @@ export const CURSOR_GLYPHS: Record<LiveCursorKind, CursorGlyph> = withOffsets({
         shape: <path d='M1 1 L1 16.5 L5.2 12.6 L7.8 18.6 L10.6 17.4 L8 11.5 L13 11.2 Z' {...OUTLINE} />
     },
 
-    // Main pointant vers le haut : l'index est le point de contact.
+    // Main de clic : index tendu, trois doigts repliés en bosses, pouce en coin.
+    // La silhouette est celle que tous les systèmes dessinent — c'est elle qu'on
+    // reconnaît, pas le détail — et elle tient en un seul tracé pour que le
+    // contour sombre en épouse le pourtour sans coutures internes.
     pointer: {
-        width: 17,
-        height: 21,
-        viewBox: '0 0 20 24',
-        hotspot: [8, 1],
-        labelOffset: 14,
+        width: 16,
+        height: 17.5,
+        viewBox: '0 0 21 23',
+        hotspot: [8.5, 2],
+        labelOffset: 12,
         shape: (
             <path
-                d='M6.4 1.9a1.6 1.6 0 0 1 3.2 0v8.4h1.3a3.2 3.2 0 0 1 3.2 3.2v3.4a5.5 5.5 0 0 1-5.5 5.5H8a4.6 4.6 0 0 1-3.4-1.5l-3-3.3a1.5 1.5 0 0 1 2.1-2.1l2.7 2.3V1.9Z'
+                d='M8.6 2c-1 0-1.8.8-1.8 1.8v9.9l-1.6-1.6c-.7-.7-1.9-.7-2.6 0-.7.7-.7 1.9 0 2.6l4.1 4.1c1.1 1.1 2.6 1.7 4.2 1.7h2.3c2.9 0 5.3-2.4 5.3-5.3v-4.4c0-1-.8-1.8-1.8-1.8-.4 0-.7.1-1 .3-.2-.8-.9-1.4-1.8-1.4-.4 0-.8.1-1.1.4-.3-.6-.9-1.1-1.7-1.1-.3 0-.6.1-.9.2V3.8c0-1-.8-1.8-1.8-1.8z'
                 {...OUTLINE}
             />
         )
