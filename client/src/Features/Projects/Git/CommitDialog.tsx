@@ -40,6 +40,16 @@ export function CommitDialog({ open, projectId, sha, onClose }: CommitDialogProp
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
+    /**
+     * Les fichiers déjà ouverts au moins une fois.
+     *
+     * Un diff ne se monte qu'au premier dépliage — un commit de fusion en
+     * touche parfois trois cents, et les rendre tous d'emblée coûterait cher
+     * pour n'en lire qu'un. Mais il reste monté ensuite : sans ça, le repli
+     * démonterait le contenu avant que l'animation n'ait le temps de jouer, et
+     * la fermeture redeviendrait le à-coup qu'on cherche à supprimer.
+     */
+    const [mounted, setMounted] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         if (!open || sha === null) {
@@ -57,7 +67,10 @@ export function CommitDialog({ open, projectId, sha, onClose }: CommitDialogProp
                 if (cancelled) return;
                 setDetail(res.detail);
                 // Un seul fichier : l'ouvrir, il n'y a rien à choisir.
-                setExpanded(res.detail.files.length === 1 ? new Set([res.detail.files[0].filename]) : new Set());
+                const first =
+                    res.detail.files.length === 1 ? new Set([res.detail.files[0].filename]) : new Set<string>();
+                setExpanded(first);
+                setMounted(first);
             } catch (e) {
                 if (!cancelled) setError(humanizeError(e, 'Le détail du commit n’a pas pu être lu.'));
             } finally {
@@ -72,6 +85,7 @@ export function CommitDialog({ open, projectId, sha, onClose }: CommitDialogProp
     }, [open, projectId, sha]);
 
     const toggle = (filename: string) => {
+        setMounted((prev) => (prev.has(filename) ? prev : new Set(prev).add(filename)));
         setExpanded((prev) => {
             const next = new Set(prev);
             if (next.has(filename)) next.delete(filename);
@@ -142,8 +156,8 @@ export function CommitDialog({ open, projectId, sha, onClose }: CommitDialogProp
                                         aria-expanded={expanded.has(file.filename)}
                                     >
                                         <span
-                                            className={`icon icon-chevron ${
-                                                expanded.has(file.filename) ? styles.chevronOpen : ''
+                                            className={`icon icon-chevron ${styles.diffChevron} ${
+                                                expanded.has(file.filename) ? styles.diffChevronOpen : ''
                                             }`}
                                         />
                                         <span className={styles.diffPath} data-status={file.status}>
@@ -158,7 +172,18 @@ export function CommitDialog({ open, projectId, sha, onClose }: CommitDialogProp
                                             <span className={styles.diffDel}>−{file.deletions}</span>
                                         </span>
                                     </button>
-                                    {expanded.has(file.filename) && <Patch patch={file.patch} />}
+                                    {/* Dépliage animé : la grille passe de `0fr` à
+                                        `1fr`, ce qui interpole la hauteur réelle
+                                        sans qu'on ait à la mesurer. */}
+                                    <div
+                                        className={`${styles.diffReveal} ${
+                                            expanded.has(file.filename) ? styles.diffRevealOpen : ''
+                                        }`}
+                                    >
+                                        <div className={styles.diffRevealInner}>
+                                            {mounted.has(file.filename) && <Patch patch={file.patch} />}
+                                        </div>
+                                    </div>
                                 </li>
                             ))}
                         </ul>

@@ -18,7 +18,7 @@ import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { humanizeError, withSecrecy } from '../api';
 import { CommitGraph } from './CommitGraph';
 import { CommitDialog } from './CommitDialog';
-import { PullRequestView, PULL_STATE_LABELS } from './PullRequestView';
+import { PullRequestDialog, PULL_STATE_LABELS } from './PullRequestDialog';
 import { RepoDialog } from './RepoDialog';
 import styles from '../style.module.css';
 
@@ -115,25 +115,29 @@ export function Git({ project, members, canWrite }: GitProps) {
     }, [load, version]);
 
     /**
-     * Sonde l'avancement tant qu'une synchronisation tourne.
+     * La vue est-elle encore montée ?
      *
-     * Sondage plutôt que diffusion `live` : les six étapes d'un tour
-     * feraient sinon re-solliciter tout le tableau six fois d'affilée chez
-     * **tous** les membres de l'espace, pour une information qui n'intéresse que
-     * celui qui a pressé le bouton. La fin du sondage, elle, re-sollicite une
-     * fois — et c'est bien la seule chose que les autres ont besoin de voir.
+     * Quitter l'onglet arrête le sondage : sans ça, une vue démontée
+     * continuerait d'interroger le serveur toutes les 700 ms jusqu'à la fin de
+     * la synchronisation.
      */
     const alive = useRef(true);
     useEffect(() => {
         alive.current = true;
-        // Quitter l'onglet arrête le sondage : sans ça, une vue démontée
-        // continuerait d'interroger le serveur toutes les 700 ms jusqu'à la fin
-        // de la synchronisation.
         return () => {
             alive.current = false;
         };
     }, []);
 
+    /**
+     * Sonde l'avancement tant qu'une synchronisation tourne.
+     *
+     * Sondage plutôt que diffusion `live` : les six étapes d'un tour feraient
+     * sinon re-solliciter tout le tableau six fois d'affilée chez **tous** les
+     * membres de l'espace, pour une information qui n'intéresse que celui qui a
+     * pressé le bouton. La fin du sondage, elle, re-sollicite une fois — et
+     * c'est bien la seule chose que les autres ont besoin de voir.
+     */
     const poll = useCallback(async () => {
         const until = Date.now() + POLL_TIMEOUT_MS;
         for (;;) {
@@ -217,8 +221,14 @@ export function Git({ project, members, canWrite }: GitProps) {
 
     if (!loaded) return <p className={styles.empty}>Chargement…</p>;
 
-    // Une PR ouverte prend tout l'onglet : voir `PullRequestView`.
-    if (openPull) return <PullRequestView pull={openPull} onBack={() => setOpenPull(null)} />;
+    /**
+     * Racine du dépôt chez le fournisseur.
+     *
+     * Reconstruite à partir de `owner`/`repo` plutôt que lue quelque part : les
+     * URL ne sont stockées que sur les objets (commit, release, PR), jamais sur
+     * le dépôt lui-même, et un dépôt fraîchement lié n'a encore aucun objet.
+     */
+    const repoUrl = repo ? `https://github.com/${repo.owner}/${repo.repo}` : null;
 
     return (
         <div className={styles.git}>
@@ -317,7 +327,7 @@ export function Git({ project, members, canWrite }: GitProps) {
                             )}
 
                             <div className={styles.gitCols}>
-                                <Panel title='Branches' count={branches.length}>
+                                <Panel title='Branches' count={branches.length} href={repoUrl && `${repoUrl}/branches`}>
                                     {branches.length === 0 && <p className={styles.empty}>Aucune branche.</p>}
                                     <ul className={styles.gitList}>
                                         {branches.map((b) => (
@@ -334,7 +344,7 @@ export function Git({ project, members, canWrite }: GitProps) {
                                     </ul>
                                 </Panel>
 
-                                <Panel title='Releases' count={releases.length}>
+                                <Panel title='Releases' count={releases.length} href={repoUrl && `${repoUrl}/releases`}>
                                     {releases.length === 0 && <p className={styles.empty}>Aucune release.</p>}
                                     <ul className={styles.gitList}>
                                         {releases.slice(0, 10).map((r) => (
@@ -350,7 +360,7 @@ export function Git({ project, members, canWrite }: GitProps) {
                                     </ul>
                                 </Panel>
 
-                                <Panel title='Pull requests' count={pulls.length}>
+                                <Panel title='Pull requests' count={pulls.length} href={repoUrl && `${repoUrl}/pulls`}>
                                     {pulls.length === 0 && <p className={styles.empty}>Aucune pull request.</p>}
                                     <ul className={styles.gitList}>
                                         {pulls.slice(0, 12).map((p) => (
@@ -373,7 +383,12 @@ export function Git({ project, members, canWrite }: GitProps) {
                                     </ul>
                                 </Panel>
 
-                                <Panel title='Derniers commits' count={graph?.total ?? commits.length} wide>
+                                <Panel
+                                    title='Derniers commits'
+                                    count={graph?.total ?? commits.length}
+                                    href={repoUrl && `${repoUrl}/commits`}
+                                    wide
+                                >
                                     {commits.length === 0 && <p className={styles.empty}>Aucun commit.</p>}
                                     <ul className={styles.gitList}>
                                         {commits.map((c) => (
@@ -427,6 +442,8 @@ export function Git({ project, members, canWrite }: GitProps) {
                 sha={openSha}
                 onClose={() => setOpenSha(null)}
             />
+
+            <PullRequestDialog open={openPull !== null} pull={openPull} onClose={() => setOpenPull(null)} />
         </div>
     );
 }
@@ -437,6 +454,8 @@ const emptyGraph: GraphState = { points: [], authors: [], firstCommitAt: null, l
 interface PanelProps {
     title: string;
     count: number;
+    /** La page correspondante chez le fournisseur, ouverte depuis le titre. */
+    href?: string | null;
     /** Occupe toute la largeur de la grille (pour les listes longues). */
     wide?: boolean;
     children: ReactNode;
@@ -447,13 +466,23 @@ interface PanelProps {
  *
  * Sans elle, les quatre listes s'étalaient sur toute la largeur et ne se
  * distinguaient plus les unes des autres qu'à leur titre. Un contour discret et
- * une grille suffisent à leur rendre un contour — inutile d'aller plus loin.
+ * une grille suffisent à leur rendre une limite — inutile d'aller plus loin.
+ *
+ * Le titre mène à la page correspondante du dépôt : c'est la sortie naturelle
+ * quand la liste, forcément tronquée, ne suffit pas.
  */
-function Panel({ title, count, wide, children }: PanelProps) {
+function Panel({ title, count, href, wide, children }: PanelProps) {
     return (
         <section className={wide ? styles.panelWide : styles.panel}>
             <header className={styles.panelHead}>
-                <h3 className={styles.gitTitle}>{title}</h3>
+                {href ? (
+                    <a className={styles.panelLink} href={href} target='_blank' rel='noreferrer'>
+                        <h3 className={styles.gitTitle}>{title}</h3>
+                        <span className={`icon icon-arrow ${styles.panelLinkIcon}`} />
+                    </a>
+                ) : (
+                    <h3 className={styles.gitTitle}>{title}</h3>
+                )}
                 <span className={styles.panelCount}>{count}</span>
             </header>
             {children}

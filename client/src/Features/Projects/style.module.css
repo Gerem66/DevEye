@@ -1217,11 +1217,27 @@
     }
 }
 
+/*
+ * Trois colonnes explicites, et non `auto-fit`.
+ *
+ * `auto-fit` déduit le nombre de colonnes de la largeur : à 1200 px avec un
+ * plancher de 300 px il en fabrique quatre, les trois panneaux occupent les
+ * trois premières et chacun vaut un quart de la largeur au lieu d'un tiers. Une
+ * grille de trois dit ce qu'on veut vraiment.
+ *
+ * `align-items` reste à sa valeur par défaut (`stretch`) : les trois panneaux
+ * d'une même ligne prennent la hauteur du plus grand.
+ */
 .gitCols {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--space-md);
-    align-items: start;
+}
+
+@media (max-width: 900px) {
+    .gitCols {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 /*
@@ -1255,6 +1271,39 @@
     gap: var(--space-sm);
 }
 
+/* Le titre mène à la page correspondante du dépôt. La flèche n'apparaît qu'au
+   survol : affichée en permanence sur quatre panneaux, elle ferait du bruit. */
+.panelLink {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    color: inherit;
+    text-decoration: none;
+}
+
+.panelLink:hover .gitTitle {
+    color: var(--accent);
+}
+
+.panelLinkIcon {
+    width: 12px;
+    align-self: center;
+    color: var(--accent);
+    filter: opacity(0);
+    transition: filter var(--transition-fast);
+}
+
+.panelLink:hover .panelLinkIcon,
+.panelLink:focus-visible .panelLinkIcon {
+    filter: opacity(1);
+}
+
+.panelLink:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: var(--radius-sm);
+}
+
 .panelCount {
     margin-left: auto;
     padding: 0 6px;
@@ -1271,6 +1320,7 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--text-muted);
+    transition: color var(--transition-fast);
 }
 
 .gitList {
@@ -1408,31 +1458,6 @@
     color: var(--danger);
 }
 
-.pullView {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-md);
-}
-
-.pullViewHead {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-}
-
-.pullNumber {
-    margin-left: auto;
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-}
-
-.pullTitle {
-    margin: 0;
-    font-size: 1.15rem;
-    color: var(--text-primary);
-    overflow-wrap: anywhere;
-}
-
 .pullMeta {
     display: flex;
     align-items: center;
@@ -1567,8 +1592,53 @@
     color: var(--text-primary);
 }
 
-.chevronOpen {
+/* 12 px et non les 18 par défaut : à taille d'icône pleine, un chevron devant
+   un chemin de fichier écrase la ligne. */
+.diffChevron {
+    width: 12px;
+    color: var(--text-muted);
+    transition: transform var(--transition-normal);
+}
+
+/* Fermé : pointe à droite. Ouvert : vers le bas. C'est le sens de lecture d'un
+   dépliage, et la rotation se voit puisqu'elle est animée. */
+.diffChevronOpen {
     transform: rotate(90deg);
+}
+
+/*
+ * Dépliage animé, sans mesurer le DOM.
+ *
+ * `grid-template-rows: 0fr → 1fr` interpole la hauteur **réelle** du contenu :
+ * c'est la seule façon d'animer vers `auto` en CSS pur. Une `max-height`
+ * arbitraire aurait soit tronqué un gros diff, soit produit une fin
+ * d'animation dans le vide sur un petit.
+ *
+ * Sur un moteur qui ne sait pas interpoler `fr`, la bascule reste correcte —
+ * elle est simplement instantanée.
+ */
+.diffReveal {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--transition-normal);
+}
+
+.diffRevealOpen {
+    grid-template-rows: 1fr;
+}
+
+/* `min-height: 0` : sans lui, la piste de grille refuse de descendre sous la
+   hauteur du contenu et rien ne s'anime. */
+.diffRevealInner {
+    min-height: 0;
+    overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .diffReveal,
+    .diffChevron {
+        transition: none;
+    }
 }
 
 .diffPath {
