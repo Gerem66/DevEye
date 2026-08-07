@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDismissLayer } from '@/Components/Dialog';
+import { usePopupWide } from '@/stores/popupWidth';
 import { useSecrecyHold } from '@/stores/secrecy';
 import styles from './WidgetPopup.module.css';
 
@@ -58,6 +59,12 @@ export default function WidgetPopup({
     // Keep the encrypted DEK alive for sensitive feature views while open.
     useSecrecyHold(Boolean(open && holdSecrecy));
 
+    // Horizontal views (kanban, timeline…) can ask for the full width. The
+    // change rides a CSS transition rather than a style prop so framer-motion —
+    // which owns this element through `layoutId` — sees no layout jump to
+    // reconcile at render time, and the growth stays smooth on its own.
+    const wide = usePopupWide();
+
     return (
         <AnimatePresence onExitComplete={onExitComplete}>
             {open && (
@@ -76,7 +83,7 @@ export default function WidgetPopup({
                         given, otherwise fades + scales in (structural pages). */}
                     <motion.div
                         layoutId={layoutId}
-                        className={styles.popup}
+                        className={`${styles.popup} ${wide ? styles.popupWide : ''}`}
                         initial={layoutId ? false : { opacity: 0, scale: 0.95 }}
                         animate={layoutId ? undefined : { opacity: 1, scale: 1 }}
                         exit={layoutId ? undefined : { opacity: 0, scale: 0.95 }}

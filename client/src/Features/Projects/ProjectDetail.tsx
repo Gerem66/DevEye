@@ -12,6 +12,7 @@ import type {
 import { Button } from '@/Components';
 import { ws } from '@/api/ws';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
+import { useRequestPopupWide } from '@/stores/popupWidth';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import { humanizeError, STATUS_LABELS, withSecrecy } from './api';
 import { Board } from './Board/Board';
@@ -77,6 +78,11 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
 
     // Présence : « qui regarde quelle carte ».
     useLiveSegment('l2', cardDialog?.card ? `card:${cardDialog.card.id}` : null);
+
+    // Le tableau et la frise s'étalent horizontalement : sur un écran large, la
+    // largeur de confort de lecture leur coûte des colonnes entières. Les autres
+    // onglets sont du texte, et la gardent.
+    useRequestPopupWide(tab === 'board' || tab === 'timeline');
 
     const reload = useCallback(async () => {
         if (reloadRef.current) return reloadRef.current;
@@ -329,25 +335,24 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
                     <Button variant='ghost' icon='arrow-left' onClick={onBack}>
                         Projets
                     </Button>
-                    <div>
+                    {/* Titre et qualificatifs sur une seule ligne : le statut est
+                        une propriété du titre, pas une légende sous celui-ci. */}
+                    <div className={styles.detailTitle}>
                         <h2 className={styles.heading}>{project.title || 'Sans titre'}</h2>
-                        <p className={styles.subheading}>
-                            <span className={styles.status} data-status={project.status}>
-                                {STATUS_LABELS[project.status]}
+                        <span className={styles.status} data-status={project.status}>
+                            {STATUS_LABELS[project.status]}
+                        </span>
+                        {project.version && <span className={styles.version}>v{project.version}</span>}
+                        {project.securityTier === 'guarded' && (
+                            <span className={styles.lock} title='Projet confidentiel'>
+                                <span className='icon icon-lock' />
                             </span>
-                            {project.version && <span className={styles.version}> v{project.version}</span>}
-                            {project.securityTier === 'guarded' && (
-                                <span className={styles.lock} title='Projet confidentiel'>
-                                    {' '}
-                                    <span className='icon icon-lock' />
-                                </span>
-                            )}
-                        </p>
+                        )}
                     </div>
                 </div>
                 {canWrite && (
                     <Button variant='secondary' icon='edit' onClick={onEditProfile}>
-                        Profil
+                        Modifier le projet
                     </Button>
                 )}
             </header>

@@ -277,6 +277,16 @@ function Column({
                 )}
                 {canWrite && (
                     <span className={styles.columnActions}>
+                        {/* Doublon assumé de « Carte » plus bas : dans une colonne
+                            pleine, l'autre bouton est sous la ligne de flottaison. */}
+                        <button
+                            type='button'
+                            onClick={() => onCardCreate(column.id)}
+                            title='Ajouter une carte'
+                            aria-label='Ajouter une carte'
+                        >
+                            <span className='icon icon-add' />
+                        </button>
                         <button
                             type='button'
                             onClick={() => onMove(column.id, -1)}
@@ -320,13 +330,15 @@ function Column({
                     ))}
                 </SortableContext>
                 {cards.length === 0 && <p className={styles.columnEmpty}>Aucune carte</p>}
-            </div>
 
-            {canWrite && (
-                <Button variant='ghost' icon='add' onClick={() => onCardCreate(column.id)}>
-                    Carte
-                </Button>
-            )}
+                {/* Dans la zone défilante, donc **juste sous la dernière carte**
+                    et non collé au bas d'une colonne pleine hauteur. */}
+                {canWrite && (
+                    <Button variant='ghost' icon='add' onClick={() => onCardCreate(column.id)}>
+                        Carte
+                    </Button>
+                )}
+            </div>
         </section>
     );
 }
