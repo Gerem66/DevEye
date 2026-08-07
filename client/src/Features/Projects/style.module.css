@@ -1403,3 +1403,35 @@
     color: var(--text-muted);
     white-space: nowrap;
 }
+
+/* ----------------------------------------------------------- liens DevEye */
+
+.links {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.links summary {
+    cursor: pointer;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.linkCount {
+    padding: 0 7px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+}
+
+.linkList {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    margin: var(--space-sm) 0;
+    padding: 0;
+    list-style: none;
+}

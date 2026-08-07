@@ -23,6 +23,7 @@ import { History } from './History/History';
 import { ArchivedCardDialog } from './History/ArchivedCardDialog';
 import { Git } from './Git/Git';
 import { Deploy } from './Deploy/Deploy';
+import { Links } from './Links/Links';
 import styles from './style.module.css';
 
 /** Les onglets du projet. Les suivants arrivent avec leurs phases. */
@@ -364,6 +365,10 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
                     </button>
                 ))}
             </nav>
+
+            {/* Métadonnée de projet, donc hors des onglets : elle vaut quel que
+                soit ce qu'on regarde. En repli, car c'est du contexte. */}
+            <Links projectId={project.id} canWrite={canWrite} />
 
             {error && <p className={styles.error}>{error}</p>}
             {!loaded && <p className={styles.empty}>Chargement…</p>}
