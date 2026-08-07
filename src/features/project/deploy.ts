@@ -8,7 +8,7 @@ import {
 } from 'deveye-types';
 import type { DeployStatus, ProjectDeployment, ProjectDeploymentRow, ProjectDeployTargetRow } from 'deveye-types';
 import type { Cipher } from '@/Services/SecureStore';
-import { listApplications, triggerDeploy } from '@/Services/projectProviders/dokploy';
+import { listTargets, triggerDeploy, type DokployKind } from '@/Services/projectProviders/dokploy';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { assertProjectUnlocked, cipherFor, loadProject, recordEvent } from './_shared';
 
@@ -59,6 +59,7 @@ async function toTarget(cipher: Cipher, row: ProjectDeployTargetRow) {
     return {
         projectId: row.project_id,
         provider: (row.provider === 'github' ? 'github' : 'dokploy') as 'github' | 'dokploy',
+        kind: (row.target_kind === 'compose' ? 'compose' : 'application') as DokployKind,
         externalId: row.external_id,
         name: body?.name ?? row.external_id,
         credentialId: row.credential_id
@@ -107,8 +108,17 @@ export const projectDeployCandidatesFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         const { baseUrl, apiKey } = await loadDokployCredential(ctx, input.credentialId);
         try {
-            const apps = await listApplications(baseUrl, apiKey);
-            return { candidates: apps.map((a) => ({ externalId: a.externalId, name: a.name, path: a.path })) };
+            // Applications **et** piles compose : sur une infra Dokploy, les
+            // secondes sont souvent majoritaires.
+            const targets = await listTargets(baseUrl, apiKey);
+            return {
+                candidates: targets.map((t) => ({
+                    kind: t.kind,
+                    externalId: t.externalId,
+                    name: t.name,
+                    path: t.path
+                }))
+            };
         } catch (e) {
             throw new FeatureError('internal', e instanceof Error ? e.message : 'Instance Dokploy injoignable.');
         }
@@ -143,6 +153,7 @@ export const projectDeployLinkFeature: FeatureDefinition<
             workspaceId: ctx.workspaceId,
             credentialId: input.credentialId,
             provider: 'dokploy',
+            kind: input.kind,
             externalId: input.externalId,
             content: await cipher.encrypt(JSON.stringify({ name: input.name }))
         });
@@ -215,7 +226,14 @@ export const projectDeployTriggerFeature: FeatureDefinition<
         });
 
         try {
-            await triggerDeploy(baseUrl, apiKey, target.external_id, title, input.description);
+            await triggerDeploy(
+                baseUrl,
+                apiKey,
+                target.target_kind === 'compose' ? 'compose' : 'application',
+                target.external_id,
+                title,
+                input.description
+            );
         } catch (e) {
             const message = e instanceof Error ? e.message : 'Déclenchement refusé.';
             await ctx.db.projectDeploy.updateDeployment(row.id, {

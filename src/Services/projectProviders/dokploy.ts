@@ -1,24 +1,22 @@
 /**
  * Adaptateur Dokploy.
  *
- * **Ce qui est vérifié** contre la documentation officielle : l'authentification
- * par en-tête `x-api-key` (jeton engendré dans `/settings/profile`, section
- * API/CLI), et les chemins —
+ * **Calé sur une instance réelle**, et le résultat diffère nettement de ce que
+ * décrit la documentation publique :
  *
- *   GET  /api/application.list
- *   GET  /api/application.one?applicationId=…
- *   POST /api/application.deploy      { applicationId, title?, description? }
- *   GET  /api/deployment.all?applicationId=…
+ *  - La couche REST (`/api/application.list`, `/api/application.deploy`) n'y
+ *    existe pas. Tout passe par **tRPC**, sous `/api/trpc/<procédure>`.
+ *  - Les charges utiles sont enveloppées par **superjson** : une réponse est
+ *    `{ result: { data: { json: … } } }`, une entrée `{ "json": { … } }`.
+ *  - Il n'y a **pas** de `application.all`. Les cibles se découvrent par
+ *    `project.all`, où elles sont imbriquées dans les environnements de chaque
+ *    projet.
+ *  - Une infra Dokploy est souvent majoritairement faite de piles **compose**,
+ *    pas d'applications. Les ignorer reviendrait à ne rien pouvoir déployer.
  *
- * **Ce qui ne l'est pas** : la forme exacte des corps de réponse, qui dépend de
- * la version de l'instance. Tout le décodage ci-dessous est donc **défensif** —
- * chaque champ est cherché sous plusieurs noms plausibles et retombe sur une
- * valeur neutre s'il manque. Une instance qui répond autrement dégrade
- * l'affichage, elle ne fait rien planter.
- *
- * Pour caler précisément : `curl -H 'x-api-key: …' https://<instance>/api/openapi.json`,
- * et resserrer {@link readApplications} / {@link readDeployments} sur ce que
- * l'instance annonce réellement.
+ * Le décodage reste **défensif** : les champs sont cherchés sous plusieurs noms
+ * plausibles et retombent sur une valeur neutre s'ils manquent. Une instance
+ * d'une autre version dégrade l'affichage, elle ne fait rien planter.
  */
 
 export class DokployError extends Error {
@@ -31,15 +29,20 @@ export class DokployError extends Error {
     }
 }
 
-export interface DokployApplication {
+/** Ce qu'on déploie : une application, ou une pile compose. */
+export type DokployKind = 'application' | 'compose';
+
+export interface DokployTarget {
+    kind: DokployKind;
     externalId: string;
     name: string;
+    /** « Projet / environnement », tel que Dokploy l'organise. */
     path: string | null;
 }
 
 export interface DokployDeployment {
     externalId: string | null;
-    /** Vocabulaire Dokploy, projeté plus haut sur `DeployStatus`. */
+    /** Vocabulaire Dokploy, projeté sur le nôtre. */
     status: 'queued' | 'running' | 'success' | 'failed';
     title: string;
     description: string;
@@ -48,46 +51,82 @@ export interface DokployDeployment {
 }
 
 function base(baseUrl: string): string {
-    return baseUrl.replace(/\/+$/, '');
+    return `${baseUrl.replace(/\/+$/, '')}/api/trpc`;
 }
 
 async function call<T>(
     baseUrl: string,
-    path: string,
+    procedure: string,
     apiKey: string,
-    init?: { method: 'POST'; body: unknown }
+    options: { input?: unknown; mutate?: boolean } = {}
 ): Promise<T> {
+    // superjson : l'entrée voyage sous une clé `json`, en query pour une
+    // requête, en corps pour une mutation.
+    const wrapped = options.input === undefined ? undefined : JSON.stringify({ json: options.input });
+    const url =
+        !options.mutate && wrapped !== undefined
+            ? `${base(baseUrl)}/${procedure}?input=${encodeURIComponent(wrapped)}`
+            : `${base(baseUrl)}/${procedure}`;
+
     let res: Response;
     try {
-        res = await fetch(`${base(baseUrl)}${path}`, {
-            method: init?.method ?? 'GET',
+        res = await fetch(url, {
+            method: options.mutate ? 'POST' : 'GET',
             headers: {
                 accept: 'application/json',
                 'x-api-key': apiKey,
-                ...(init ? { 'content-type': 'application/json' } : {})
+                ...(options.mutate ? { 'content-type': 'application/json' } : {})
             },
-            body: init ? JSON.stringify(init.body) : undefined,
+            body: options.mutate ? (wrapped ?? '{"json":{}}') : undefined,
             signal: AbortSignal.timeout(30_000)
         });
     } catch (e) {
         throw new DokployError(e instanceof Error ? e.message : 'Instance Dokploy injoignable', 0);
     }
 
-    if (!res.ok) {
-        const message =
-            res.status === 401 || res.status === 403
-                ? 'Clé d’API refusée par Dokploy.'
-                : res.status === 404
-                  ? 'Ressource introuvable sur cette instance Dokploy.'
-                  : `Dokploy a répondu ${res.status}.`;
-        throw new DokployError(message, res.status);
+    let payload: unknown;
+    try {
+        payload = await res.json();
+    } catch {
+        throw new DokployError(`Réponse Dokploy illisible (HTTP ${res.status}).`, res.status);
     }
 
-    try {
-        return (await res.json()) as T;
-    } catch {
-        throw new DokployError('Réponse Dokploy illisible.', res.status);
+    // tRPC répond parfois 200 avec une erreur dans le corps : on lit l'erreur
+    // avant le code HTTP.
+    const err = readError(payload);
+    if (err) throw new DokployError(err, res.status);
+    if (!res.ok) throw new DokployError(`Dokploy a répondu ${res.status}.`, res.status);
+
+    return unwrap(payload) as T;
+}
+
+function readError(payload: unknown): string | null {
+    if (!payload || typeof payload !== 'object') return null;
+    const raw = (payload as Record<string, unknown>).error;
+    if (!raw || typeof raw !== 'object') return null;
+    const e = (raw as Record<string, unknown>).json ?? raw;
+    if (!e || typeof e !== 'object') return 'Erreur Dokploy.';
+    const rec = e as Record<string, unknown>;
+    const code = (rec.data as Record<string, unknown> | undefined)?.code;
+    const message = typeof rec.message === 'string' ? rec.message : 'Erreur Dokploy.';
+    if (code === 'UNAUTHORIZED' || code === 'FORBIDDEN') return 'Clé d’API refusée par Dokploy.';
+    if (code === 'NOT_FOUND') return 'Procédure ou ressource introuvable sur cette instance Dokploy.';
+    return message;
+}
+
+/** Déballe `{ result: { data: { json: … } } }`, en tolérant les variantes. */
+function unwrap(payload: unknown): unknown {
+    let current = payload;
+    for (const key of ['result', 'data', 'json']) {
+        if (current && typeof current === 'object' && key in (current as Record<string, unknown>)) {
+            current = (current as Record<string, unknown>)[key];
+        }
     }
+    return current;
+}
+
+function asArray(value: unknown): Record<string, unknown>[] {
+    return Array.isArray(value) ? (value as Record<string, unknown>[]) : [];
 }
 
 /** Le premier champ présent parmi plusieurs noms plausibles. */
@@ -109,37 +148,45 @@ function toSeconds(value: unknown): number | null {
 }
 
 /**
- * Certaines instances rendent un tableau nu, d'autres l'enveloppent (`data`,
- * `result`, `json`). On déballe plutôt que de supposer.
+ * Aplatit `project.all` en cibles déployables.
+ *
+ * L'arborescence réelle est projet → environnements → { applications, compose }.
+ * Les deux familles sont ramenées à la même forme, en gardant leur type : c'est
+ * lui qui décidera de la procédure à appeler pour déployer.
  */
-function unwrapArray(payload: unknown): Record<string, unknown>[] {
-    if (Array.isArray(payload)) return payload as Record<string, unknown>[];
-    if (payload && typeof payload === 'object') {
-        for (const key of ['data', 'result', 'json', 'items']) {
-            const inner = (payload as Record<string, unknown>)[key];
-            if (Array.isArray(inner)) return inner as Record<string, unknown>[];
-            // tRPC enveloppe parfois deux fois : { result: { data: [...] } }
-            if (inner && typeof inner === 'object') {
-                const deeper = unwrapArray(inner);
-                if (deeper.length > 0) return deeper;
+export function readTargets(payload: unknown): DokployTarget[] {
+    const targets: DokployTarget[] = [];
+    for (const project of asArray(payload)) {
+        const projectName = pick(project, ['name']) ?? '';
+        for (const env of asArray(project.environments)) {
+            const envName = pick(env, ['name']) ?? '';
+            const path = [projectName, envName].filter(Boolean).join(' / ') || null;
+
+            for (const app of asArray(env.applications)) {
+                const externalId = pick(app, ['applicationId', 'id']);
+                if (externalId) {
+                    targets.push({
+                        kind: 'application',
+                        externalId,
+                        name: pick(app, ['name', 'appName']) ?? externalId,
+                        path
+                    });
+                }
+            }
+            for (const compose of asArray(env.compose)) {
+                const externalId = pick(compose, ['composeId', 'id']);
+                if (externalId) {
+                    targets.push({
+                        kind: 'compose',
+                        externalId,
+                        name: pick(compose, ['name', 'appName']) ?? externalId,
+                        path
+                    });
+                }
             }
         }
     }
-    return [];
-}
-
-export function readApplications(payload: unknown): DokployApplication[] {
-    return unwrapArray(payload)
-        .map((row) => {
-            const externalId = pick(row, ['applicationId', 'id', 'appId']);
-            if (!externalId) return null;
-            return {
-                externalId,
-                name: pick(row, ['name', 'appName', 'title']) ?? externalId,
-                path: pick(row, ['projectName', 'environmentName', 'description'])
-            };
-        })
-        .filter((a): a is DokployApplication => a !== null);
+    return targets;
 }
 
 /**
@@ -157,49 +204,57 @@ function readStatus(raw: string | null): DokployDeployment['status'] {
 }
 
 export function readDeployments(payload: unknown): DokployDeployment[] {
-    return unwrapArray(payload).map((row) => {
+    return asArray(payload).map((row) => {
         const status = readStatus(pick(row, ['status', 'state']));
-        const startedAt = toSeconds(row.createdAt ?? row.startedAt ?? row.date) ?? Math.floor(Date.now() / 1000);
-        const finishedAt = toSeconds(row.finishedAt ?? row.completedAt ?? row.updatedAt);
+        const startedAt = toSeconds(row.startedAt ?? row.createdAt ?? row.date) ?? Math.floor(Date.now() / 1000);
+        const finishedAt = toSeconds(row.finishedAt ?? row.completedAt);
+        // Le message d'erreur du fournisseur est plus utile que la description
+        // d'origine quand le déploiement a échoué.
+        const description = pick(row, ['errorMessage']) ?? pick(row, ['description', 'message']) ?? '';
         return {
             externalId: pick(row, ['deploymentId', 'id']),
             status,
             title: pick(row, ['title', 'name']) ?? 'Déploiement',
-            description: pick(row, ['description', 'message']) ?? '',
+            description,
             startedAt,
-            // Un déploiement encore en cours n'a pas de fin, même si l'instance
-            // renvoie un `updatedAt` qui bouge à chaque battement.
+            // Un déploiement en cours n'a pas de fin, même si l'instance
+            // renvoie un horodatage qui bouge à chaque battement.
             finishedAt: status === 'running' || status === 'queued' ? null : finishedAt
         };
     });
 }
 
-export async function listApplications(baseUrl: string, apiKey: string): Promise<DokployApplication[]> {
-    return readApplications(await call<unknown>(baseUrl, '/api/application.list', apiKey));
+export async function listTargets(baseUrl: string, apiKey: string): Promise<DokployTarget[]> {
+    return readTargets(await call<unknown>(baseUrl, 'project.all', apiKey));
 }
 
 export async function listDeployments(
     baseUrl: string,
     apiKey: string,
-    applicationId: string
+    kind: DokployKind,
+    externalId: string
 ): Promise<DokployDeployment[]> {
-    const payload = await call<unknown>(
-        baseUrl,
-        `/api/deployment.all?applicationId=${encodeURIComponent(applicationId)}`,
-        apiKey
-    );
+    const payload =
+        kind === 'compose'
+            ? await call<unknown>(baseUrl, 'deployment.allByCompose', apiKey, { input: { composeId: externalId } })
+            : await call<unknown>(baseUrl, 'deployment.all', apiKey, { input: { applicationId: externalId } });
     return readDeployments(payload);
 }
 
 export async function triggerDeploy(
     baseUrl: string,
     apiKey: string,
-    applicationId: string,
+    kind: DokployKind,
+    externalId: string,
     title: string,
     description: string
 ): Promise<void> {
-    await call<unknown>(baseUrl, '/api/application.deploy', apiKey, {
-        method: 'POST',
-        body: { applicationId, title, description }
+    const input =
+        kind === 'compose'
+            ? { composeId: externalId, title, description }
+            : { applicationId: externalId, title, description };
+    await call<unknown>(baseUrl, kind === 'compose' ? 'compose.deploy' : 'application.deploy', apiKey, {
+        input,
+        mutate: true
     });
 }

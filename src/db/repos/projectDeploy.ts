@@ -10,6 +10,7 @@ export interface ProjectDeployRepo {
         workspaceId: number;
         credentialId: number;
         provider: string;
+        kind: string;
         externalId: string;
         content: string;
     }): Promise<ProjectDeployTargetRow>;
@@ -44,17 +45,18 @@ export function projectDeployRepo(pool: Q): ProjectDeployRepo {
             );
             return r.rows[0] ?? null;
         },
-        async upsertTarget({ projectId, workspaceId, credentialId, provider, externalId, content }) {
+        async upsertTarget({ projectId, workspaceId, credentialId, provider, kind, externalId, content }) {
             await pool.query(
                 `INSERT INTO project_deploy_targets
-                     (project_id, workspace_id, credential_id, provider, external_id, content)
-                 VALUES (?, ?, ?, ?, ?, ?)
+                     (project_id, workspace_id, credential_id, provider, target_kind, external_id, content)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE
                      credential_id = VALUES(credential_id),
                      provider = VALUES(provider),
+                     target_kind = VALUES(target_kind),
                      external_id = VALUES(external_id),
                      content = VALUES(content)`,
-                [projectId, workspaceId, credentialId, provider, externalId, content]
+                [projectId, workspaceId, credentialId, provider, kind, externalId, content]
             );
             const r = await pool.query<ProjectDeployTargetRow>(
                 'SELECT * FROM project_deploy_targets WHERE project_id = ?',

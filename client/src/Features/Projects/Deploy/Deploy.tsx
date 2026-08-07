@@ -117,7 +117,10 @@ export function Deploy({ project, members, canWrite }: DeployProps) {
                                 {target.credentialId === null ? (
                                     <span className={styles.overdue}>accès retiré, déclenchement impossible</span>
                                 ) : (
-                                    <span>Dokploy · {target.externalId}</span>
+                                    <span>
+                                        Dokploy · {target.kind === 'compose' ? 'pile compose' : 'application'} ·{' '}
+                                        {target.externalId}
+                                    </span>
                                 )}
                             </p>
                         </div>
@@ -239,6 +242,10 @@ function LinkDialog({ open, projectId, credentials, current, onClose, onSaved }:
                 ws.send('project.deployLink', {
                     projectId,
                     credentialId: Number(credentialId),
+                    // Une cible saisie à la main est supposée être une
+                    // application : c'est le repli, et le sélecteur donne le
+                    // vrai type dès qu'on passe par lui.
+                    kind: chosen?.kind ?? 'application',
                     externalId,
                     name: chosen?.name ?? externalId
                 })
@@ -255,7 +262,7 @@ function LinkDialog({ open, projectId, credentials, current, onClose, onSaved }:
         <Dialog
             open={open}
             onClose={onClose}
-            title='Lier une application'
+            title='Lier une cible de déploiement'
             width={560}
             onSubmit={submit}
             holdSecrecy
@@ -288,11 +295,12 @@ function LinkDialog({ open, projectId, credentials, current, onClose, onSaved }:
 
                 {candidates.length > 0 && (
                     <label className={styles.field}>
-                        <span className={styles.label}>Application</span>
+                        <span className={styles.label}>Cible</span>
                         <SelectInput value={externalId} onChange={(e) => setExternalId(e.target.value)}>
                             <option value=''>Choisir…</option>
                             {candidates.map((c) => (
-                                <option key={c.externalId} value={c.externalId}>
+                                <option key={`${c.kind}:${c.externalId}`} value={c.externalId}>
+                                    {c.kind === 'compose' ? '🧩 ' : '📦 '}
                                     {c.name}
                                     {c.path ? ` — ${c.path}` : ''}
                                 </option>
@@ -304,10 +312,10 @@ function LinkDialog({ open, projectId, credentials, current, onClose, onSaved }:
                 {/* Repli manuel : si l'instance répond dans une forme que le
                     décodeur ne reconnaît pas, on doit quand même pouvoir lier. */}
                 <label className={styles.field}>
-                    <span className={styles.label}>…ou identifiant d’application</span>
+                    <span className={styles.label}>…ou identifiant de cible</span>
                     <TextInput
                         value={externalId}
-                        placeholder='applicationId'
+                        placeholder='applicationId ou composeId'
                         onChange={(e) => setExternalId(e.target.value)}
                     />
                 </label>

@@ -276,7 +276,12 @@ export class ProjectSyncService {
                 if (!credential?.base_url) continue;
                 const apiKey = await cipher.decrypt(credential.secret_enc);
 
-                const remote = await listDeployments(credential.base_url, apiKey, target.external_id);
+                const remote = await listDeployments(
+                    credential.base_url,
+                    apiKey,
+                    target.target_kind === 'compose' ? 'compose' : 'application',
+                    target.external_id
+                );
                 // On rattache par identifiant externe quand on en a un, sinon
                 // par proximité de date : Dokploy ne renvoie pas toujours
                 // l'identifiant au déclenchement.
