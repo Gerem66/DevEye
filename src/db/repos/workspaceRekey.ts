@@ -42,7 +42,34 @@ const COLUMNS: EncryptedColumn[] = [
     // Uptime : étage ouvert, pour que l'ordonnanceur y travaille sans session.
     { table: 'uptime_services', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
     { table: 'uptime_settings', id: 'workspace_id', column: 'email_enc', scope: 'workspace_id', tier: 'open' },
-    { table: 'uptime_settings', id: 'workspace_id', column: 'webhook_enc', scope: 'workspace_id', tier: 'open' }
+    { table: 'uptime_settings', id: 'workspace_id', column: 'webhook_enc', scope: 'workspace_id', tier: 'open' },
+    // Projets : l'étage est choisi **par projet**, alors qu'une entrée ici n'en
+    // porte qu'un. C'est `blockers()` qui rend cette ligne vraie — il refuse la
+    // conversion tant qu'un projet gardé subsiste, donc tout ce qui reste à
+    // convertir est forcément sous l'étage ouvert.
+    { table: 'projects', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'project_columns', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'project_cards', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'project_messages', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'project_milestones', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'project_events', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'project_repos', id: 'project_id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    // `sync_state` et `last_sync_error` sont volontairement absents : éphémères,
+    // réécrits en permanence par le service de fond, et donc source de course
+    // pendant une conversion. Voir la note détaillée dans `projectRekey.ts`.
+    // La conversion d'espace les laisse tels quels ; la synchronisation suivante
+    // les remplace, et un ETag illisible ne fait rien de pire qu'un 200 au lieu
+    // d'un 304.
+    { table: 'project_commit_authors', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'project_commits', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'project_branches', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'project_releases', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'project_deploy_targets', id: 'project_id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'project_deployments', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    // Les secrets d'accès sont **toujours** sous l'étage ouvert, quel que soit
+    // le tier des projets qui s'en servent : le service de fond les lit sans
+    // session. Ils suivent donc la conversion d'espace, jamais celle d'un projet.
+    { table: 'project_credentials', id: 'id', column: 'secret_enc', scope: 'workspace_id', tier: 'open' }
 ];
 
 export interface EncryptedCell {
@@ -107,6 +134,22 @@ export function workspaceRekeyRepo(pool: Q): WorkspaceRekeyRepo {
                 found.push(
                     `${priv.rows[0].n} note(s) privée(s) : rendez-les publiques avant la conversion, ` +
                         'sinon elles deviendraient lisibles par tous les membres.'
+                );
+            }
+
+            // Un projet gardé est chiffré sous l'étage gardé du propriétaire, et
+            // toute la liste ci-dessus le déclare « ouvert ». Le convertir tel
+            // quel le rendrait illisible — et le convertir vraiment le rendrait
+            // lisible par tous les membres, ce qui est précisément ce que son
+            // auteur a refusé en le marquant confidentiel.
+            const guarded = await pool.query<{ n: number }>(
+                "SELECT COUNT(*) AS n FROM projects WHERE workspace_id = ? AND security_tier = 'guarded'",
+                [workspaceId]
+            );
+            if (Number(guarded.rows[0]?.n ?? 0) > 0) {
+                found.push(
+                    `${guarded.rows[0].n} projet(s) confidentiel(s) : repassez-les en standard avant la ` +
+                        'conversion, sinon ils deviendraient lisibles par tous les membres.'
                 );
             }
 

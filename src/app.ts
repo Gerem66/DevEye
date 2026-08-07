@@ -23,6 +23,7 @@ import { registerWS } from '@/ws/handler';
 import { createAuditLog } from '@/Services/AuditLog';
 import { MailSyncService } from '@/Services/MailSyncService';
 import { UptimeMonitor } from '@/Services/UptimeMonitor';
+import { ProjectSyncService } from '@/Services/ProjectSyncService';
 import { mailAttachmentRoutes } from '@/mail/attachmentRoutes';
 import { mailOAuthRoutes } from '@/mail/oauthRoutes';
 import { status } from '@/status';
@@ -41,6 +42,7 @@ export interface BuiltApp {
     cloudSync: CloudSyncEngine;
     /** Ordonnanceur Uptime — démarré/arrêté par index.ts. */
     uptime: UptimeMonitor;
+    projects: ProjectSyncService;
     /** Synchro Mail en tâche de fond (comptes « open » uniquement) — démarrée/arrêtée par index.ts. */
     mailSync: MailSyncService;
 }
@@ -116,12 +118,13 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
 
     const uptime = new UptimeMonitor({ db: deps.db, crypt: deps.crypt, audit, logger, live });
     const mailSync = new MailSyncService({ db: deps.db, crypt: deps.crypt, logger, live });
+    const projects = new ProjectSyncService({ db: deps.db, crypt: deps.crypt, logger, live });
 
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await agentRoutes(app, { db: deps.db, hub, live, audit });
     await mailOAuthRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await mailAttachmentRoutes(app, { db: deps.db, crypt: deps.crypt });
-    await registerWS(app, { db: deps.db, crypt: deps.crypt, hub, live, cloudSync, uptime, audit });
+    await registerWS(app, { db: deps.db, crypt: deps.crypt, hub, live, cloudSync, uptime, projects, audit });
     await registerAgentWS(app, { db: deps.db, hub, live, cloudSync, audit });
 
     // Serve the built web client from the same origin as the API whenever a
@@ -151,5 +154,5 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         app.log.debug({ clientDir }, 'No client build found; static serving disabled (host dev uses Vite)');
     }
 
-    return { app, cloudSync, uptime, mailSync };
+    return { app, cloudSync, uptime, mailSync, projects };
 }

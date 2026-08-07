@@ -26,6 +26,10 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     metrics: 'devices',
     note: 'notes',
     password: 'password',
+    // Un seul préfixe pour tout le module, donc un seul sujet par défaut. Les
+    // commandes de discussion déclarent explicitement `['projectsChat']` : un
+    // message ne doit pas faire re-solliciter le tableau et la frise entiers.
+    project: 'projects',
     secrecy: 'account',
     twofa: 'account',
     uptime: 'uptime',

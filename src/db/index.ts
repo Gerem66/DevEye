@@ -16,6 +16,15 @@ import { presenceRepo, type PresenceRepo } from './repos/presence';
 import { processSamplesRepo, type ProcessSamplesRepo } from './repos/processSamples';
 import { noteFoldersRepo, type NoteFoldersRepo } from './repos/noteFolders';
 import { notesRepo, type NotesRepo } from './repos/notes';
+import { projectsRepo, type ProjectsRepo } from './repos/projects';
+import { projectRekeyRepo, type ProjectRekeyRepo } from './repos/projectRekey';
+import { projectBoardRepo, type ProjectBoardRepo } from './repos/projectBoard';
+import { projectChatRepo, type ProjectChatRepo } from './repos/projectChat';
+import { projectPlanRepo, type ProjectPlanRepo } from './repos/projectPlan';
+import { projectHistoryRepo, type ProjectHistoryRepo } from './repos/projectHistory';
+import { projectGitRepo, type ProjectGitRepo } from './repos/projectGit';
+import { projectDeployRepo, type ProjectDeployRepo } from './repos/projectDeploy';
+import { projectLinksRepo, type ProjectLinksRepo } from './repos/projectLinks';
 import { passwordsRepo, type PasswordsRepo } from './repos/passwords';
 import { refreshTokensRepo, type RefreshTokensRepo } from './repos/refreshTokens';
 import { syncEventsRepo, type SyncEventsRepo } from './repos/syncEvents';
@@ -59,6 +68,15 @@ export interface Database {
     logs: LogsRepo;
     passwords: PasswordsRepo;
     notes: NotesRepo;
+    projects: ProjectsRepo;
+    projectRekey: ProjectRekeyRepo;
+    projectBoard: ProjectBoardRepo;
+    projectChat: ProjectChatRepo;
+    projectPlan: ProjectPlanRepo;
+    projectHistory: ProjectHistoryRepo;
+    projectGit: ProjectGitRepo;
+    projectDeploy: ProjectDeployRepo;
+    projectLinks: ProjectLinksRepo;
     noteFolders: NoteFoldersRepo;
     devices: DevicesRepo;
     linkCodes: LinkCodesRepo;
@@ -96,6 +114,15 @@ export function createDatabase(q: Queryable): Database {
         logs: logsRepo(q),
         passwords: passwordsRepo(q),
         notes: notesRepo(q),
+        projects: projectsRepo(q),
+        projectRekey: projectRekeyRepo(q),
+        projectBoard: projectBoardRepo(q),
+        projectChat: projectChatRepo(q),
+        projectPlan: projectPlanRepo(q),
+        projectHistory: projectHistoryRepo(q),
+        projectGit: projectGitRepo(q),
+        projectDeploy: projectDeployRepo(q),
+        projectLinks: projectLinksRepo(q),
         noteFolders: noteFoldersRepo(q),
         devices: devicesRepo(q),
         linkCodes: linkCodesRepo(q),

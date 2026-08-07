@@ -6,6 +6,7 @@ import type { SecretKeyService } from '@/Services/SecretKeyService';
 import type { MonitorTransport } from '@/agent/hub';
 import type { LiveTransport } from '@/live/hub';
 import type { UptimeMonitor } from '@/Services/UptimeMonitor';
+import type { ProjectSyncService } from '@/Services/ProjectSyncService';
 import type { ErrorCode, LiveTopic, LogLevelName } from 'deveye-types';
 import type { Logger } from 'pino';
 import type { FeatureAccess, WorkspaceCapability, WorkspaceFeatureId } from 'deveye-types';
@@ -95,6 +96,13 @@ export interface FeatureContext {
     cloudSync?: CloudSyncEngine;
     /** Uptime scheduler — backs the "check now" and "test notification" commands. */
     uptime?: UptimeMonitor;
+    /**
+     * Ordonnanceur de synchronisation des dépôts. Sert uniquement à *réveiller*
+     * une lecture (`project.repoSyncNow`, liaison d'un dépôt) : aucune commande
+     * n'appelle le fournisseur elle-même, pour qu'aucune ne dépende de la
+     * latence d'une API tierce.
+     */
+    projects?: ProjectSyncService;
 }
 
 /**

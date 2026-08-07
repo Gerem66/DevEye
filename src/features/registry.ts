@@ -8,6 +8,7 @@ import { logsFeatures } from './logs';
 import { mailFeatures } from './mail';
 import { metricsFeatures } from './metrics';
 import { noteFeatures } from './note';
+import { projectFeatures } from './project';
 import {
     passwordAddFeature,
     passwordCountFeature,
@@ -72,6 +73,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     passwordDeleteFeature,
     passwordUnlockFeature,
     ...noteFeatures,
+    ...projectFeatures,
     ...deviceFeatures,
     ...cloudSyncFeatures,
     ...metricsFeatures,
