@@ -8,6 +8,7 @@ import { PasswordWidget } from '@/Features/Password/PasswordWidget';
 import { CloudSyncWidget } from '@/Features/CloudSync';
 import { UptimeWidget } from '@/Features/Uptime/UptimeWidget';
 import { MailWidget } from '@/Features/Mail/MailWidget';
+import { ProjectsWidget } from '@/Features/Projects/ProjectsWidget';
 
 import Monitoring from '@/Features/Monitoring';
 import Weather from '@/Features/Weather';
@@ -16,6 +17,7 @@ import FeatureNotes from '@/Features/Notes';
 import CloudSync from '@/Features/CloudSync';
 import Uptime from '@/Features/Uptime';
 import Mail from '@/Features/Mail';
+import FeatureProjects from '@/Features/Projects';
 
 import type { FeatureProps } from '@/Features/types';
 
@@ -100,6 +102,18 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         WidgetContent: CloudSyncWidget,
         FullComponent: CloudSync,
         cacheDurationMinutes: 5
+    },
+    {
+        id: 'projects',
+        title: 'Projets',
+        icon: 'projects',
+        WidgetContent: ProjectsWidget,
+        FullComponent: FeatureProjects,
+        // Démonté dès la fermeture, comme Mail et Uptime : le portefeuille, les
+        // fils de discussion et la présence vivent en direct, une instance en
+        // cache continuerait de travailler sans être vue.
+        cacheDurationMinutes: 0,
+        holdSecrecy: true
     },
     {
         id: 'mail',

@@ -29,7 +29,12 @@ export type ResourceKey =
     | 'uptime.list'
     | 'device.list'
     | 'weather.list'
-    | 'workspace.roleList';
+    | 'workspace.roleList'
+    | 'project.count'
+    | 'project.list'
+    | 'project.board'
+    | 'project.myTasks'
+    | 'project.messages';
 
 /**
  * Ce qu'un sujet du serveur invalide chez nous.
@@ -49,6 +54,13 @@ const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
     devices: ['device.list'],
     monitoring: ['device.list'],
     weather: ['weather.list'],
+    // Deux sujets pour une seule feature : la structure d'un côté, les fils de
+    // discussion de l'autre. Un message ne doit pas faire re-solliciter le
+    // portefeuille entier — d'où la coupure côté serveur (`domain/live.ts`).
+    projects: ['project.count', 'project.list', 'project.board', 'project.myTasks'],
+    // Le portefeuille affiche le compte de non-lus : un message venu d'ailleurs
+    // doit donc le rafraîchir lui aussi.
+    projectsChat: ['project.messages', 'project.list'],
     workspace: ['workspace.roleList'],
     home: [],
     account: []

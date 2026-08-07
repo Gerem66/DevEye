@@ -1,0 +1,1405 @@
+/* Projets — portefeuille et formulaire de profil.
+   Uniquement des variables de thème : aucune couleur en dur. */
+
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+/* ----------------------------------------------------------------- en-tête */
+
+.header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.heading {
+    margin: 0;
+    font-size: 1.25rem;
+    color: var(--text-primary);
+}
+
+.subheading {
+    margin: var(--space-xs) 0 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.empty {
+    margin: 0;
+    padding: var(--space-xl) 0;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.error {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--danger-bg);
+    color: var(--danger);
+    font-size: 0.85rem;
+}
+
+/* ------------------------------------------------------------ portefeuille */
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--space-md);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.card {
+    position: relative;
+    display: flex;
+    border-radius: var(--radius-lg);
+    background: var(--surface-widget);
+    border: 1px solid var(--glass-border);
+    transition: border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.card:hover {
+    border-color: var(--glass-border-strong);
+    transform: translateY(-2px);
+}
+
+.cardBody {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+    min-width: 0;
+}
+
+.cardTop {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.status {
+    padding: 2px 10px;
+    border-radius: var(--radius-pill);
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+}
+
+.status[data-status='active'] {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.status[data-status='done'] {
+    background: var(--success-bg);
+    color: var(--success);
+}
+
+.status[data-status='paused'] {
+    background: var(--warning-bg);
+    color: var(--warning);
+}
+
+.lock {
+    display: inline-flex;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+/* Badge de non-lus : rendu seulement quand il y en a (voir index.tsx). */
+.unread {
+    margin-left: auto;
+    min-width: 20px;
+    padding: 1px 6px;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    color: var(--on-accent);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+.title {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.masked {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.description {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    font-size: 0.72rem;
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    border: 1px solid var(--glass-border);
+}
+
+/* Les deux familles se distinguent d'un coup d'œil sans légende. */
+.tag[data-kind='type'] {
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    color: var(--accent);
+}
+
+.progress {
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    overflow: hidden;
+}
+
+.progressFill {
+    height: 100%;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    transition: width var(--transition-normal);
+}
+
+.meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.overdue {
+    color: var(--danger);
+}
+
+.version {
+    font-family: var(--font-mono);
+}
+
+.archive {
+    align-self: flex-start;
+    margin: var(--space-sm) var(--space-sm) 0 0;
+    padding: var(--space-xs);
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+    /* framer-motion possède l'`opacity` en ligne sur les surfaces animées :
+       on atténue par un filtre, jamais par la propriété elle-même. */
+    filter: opacity(0.6);
+    transition: filter var(--transition-fast), color var(--transition-fast);
+}
+
+.archive:hover {
+    filter: opacity(1);
+    color: var(--danger);
+}
+
+/* Même géométrie que `.archive`, mais l'action est constructive. */
+.restore {
+    composes: archive;
+}
+
+.restore:hover {
+    filter: opacity(1);
+    color: var(--success);
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+/* ------------------------------------------------------------- vue détail */
+
+.detailHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    min-width: 0;
+}
+
+.tabs {
+    display: flex;
+    gap: var(--space-xs);
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.tabActive {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    background: none;
+    border: none;
+    border-bottom: 2px solid var(--accent);
+    color: var(--accent);
+    font: inherit;
+    cursor: pointer;
+}
+
+/* ------------------------------------------------------------------ kanban */
+
+.board {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+    /* Le tableau défile horizontalement dans sa propre boîte : la page, elle,
+       ne doit jamais partir en travers. */
+    overflow-x: auto;
+    padding-bottom: var(--space-sm);
+}
+
+.column {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    flex: 0 0 288px;
+    max-height: 100%;
+    padding: var(--space-sm);
+    border-radius: var(--radius-lg);
+    background: var(--surface-subtle);
+    border: 1px solid var(--glass-border);
+}
+
+.columnHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 0 var(--space-xs);
+}
+
+.columnName {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.columnCount {
+    padding: 0 6px;
+    border-radius: var(--radius-pill);
+    background: var(--glass-bg-light);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+/* Au-delà de la limite de travail en cours : signalé, jamais bloqué. */
+.columnCountOver {
+    composes: columnCount;
+    background: var(--warning-bg);
+    color: var(--warning);
+    font-weight: 700;
+}
+
+.doneFlag {
+    display: inline-flex;
+    color: var(--success);
+    font-size: 0.8rem;
+}
+
+.columnActions {
+    display: flex;
+    gap: 2px;
+    margin-left: auto;
+}
+
+.columnActions button {
+    padding: 2px;
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.75rem;
+    filter: opacity(0.6);
+    transition: filter var(--transition-fast), color var(--transition-fast);
+}
+
+.columnActions button:hover:not(:disabled) {
+    filter: opacity(1);
+    color: var(--accent);
+}
+
+.columnActions button:disabled {
+    cursor: default;
+    filter: opacity(0.2);
+}
+
+.columnBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    min-height: 60px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 2px;
+    border-radius: var(--radius-md);
+    transition: background var(--transition-fast);
+}
+
+.columnOver {
+    background: var(--accent-bg);
+}
+
+.columnEmpty {
+    margin: 0;
+    padding: var(--space-md) 0;
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.addColumn {
+    flex: 0 0 160px;
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    padding: var(--space-md);
+    border-radius: var(--radius-lg);
+    background: none;
+    border: 1px dashed var(--glass-border-strong);
+    color: var(--text-muted);
+    font: inherit;
+    cursor: pointer;
+    transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.addColumn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+/* ------------------------------------------------------------------ carte */
+
+.card2 {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-sm);
+    border-radius: var(--radius-md);
+    background: var(--surface-widget);
+    border: 1px solid var(--glass-border);
+    cursor: pointer;
+    transition: border-color var(--transition-fast);
+}
+
+.card2:hover {
+    border-color: var(--glass-border-strong);
+}
+
+.card2Dragging {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-lg);
+    cursor: grabbing;
+}
+
+.card2Top {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-xs);
+}
+
+.card2Title {
+    flex: 1;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.priority {
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    margin-top: 6px;
+    border-radius: var(--radius-pill);
+    background: var(--text-muted);
+}
+
+.priority[data-priority='low'] {
+    background: var(--success);
+}
+
+.priority[data-priority='normal'] {
+    background: var(--accent);
+}
+
+.priority[data-priority='high'] {
+    background: var(--danger);
+}
+
+.card2Meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.card2Spacer {
+    flex: 1;
+}
+
+.avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-pill);
+    object-fit: cover;
+    color: var(--on-accent);
+    font-weight: 700;
+    flex: 0 0 auto;
+}
+
+.avatarGhost {
+    background: var(--surface-subtle);
+    color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------- formulaire */
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    flex: 1;
+    min-width: 0;
+}
+
+.label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.row {
+    display: flex;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.textarea {
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    color: var(--text-primary);
+    font: inherit;
+    resize: vertical;
+}
+
+.textarea:focus {
+    outline: none;
+    border-color: var(--input-focus);
+}
+
+.textarea::placeholder {
+    color: var(--input-placeholder);
+}
+
+.tagRow {
+    display: flex;
+    gap: var(--space-sm);
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.tagRemove {
+    display: inline-flex;
+    padding: 0;
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 0.65rem;
+    filter: opacity(0.7);
+}
+
+.tagRemove:hover {
+    filter: opacity(1);
+}
+
+.checklist {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin: 0 0 var(--space-xs);
+    padding: 0;
+    list-style: none;
+}
+
+.checkItem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.checkToggle {
+    display: inline-flex;
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+}
+
+.checkDone {
+    flex: 1;
+    text-decoration: line-through;
+    color: var(--text-muted);
+}
+
+.checkRow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.checkRow .hint {
+    display: block;
+}
+
+/* ------------------------------------------------------------------ frise */
+
+.timeline {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.timelineEmpty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-xl) 0;
+}
+
+.timelineBar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+}
+
+.zoom {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+}
+
+.zoomBtn {
+    padding: 4px 12px;
+    border: none;
+    border-radius: var(--radius-pill);
+    background: none;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+.zoomActive {
+    composes: zoomBtn;
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
+/* La frise défile dans sa propre boîte : la page ne part jamais en travers. */
+.timelineScroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: var(--surface-subtle);
+}
+
+.timelineInner {
+    position: relative;
+    padding: var(--space-sm) 0;
+}
+
+.grid {
+    position: absolute;
+    inset: var(--space-sm) 0 auto 0;
+    pointer-events: none;
+}
+
+.gridLine,
+.gridLineMajor {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--glass-border);
+}
+
+.gridLineMajor {
+    background: var(--glass-border-strong);
+}
+
+.gridLabel {
+    position: absolute;
+    top: 0;
+    left: 4px;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* Aujourd'hui : le seul repère qui bouge tout seul, donc le seul en accent. */
+.today {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--accent);
+    filter: opacity(0.55);
+}
+
+.milestone,
+.milestoneDone {
+    position: absolute;
+    top: 12px;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 8px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--warning);
+    background: var(--warning-bg);
+    color: var(--warning);
+    font: inherit;
+    font-size: 0.68rem;
+    white-space: nowrap;
+    cursor: pointer;
+    pointer-events: auto;
+    z-index: var(--z-base);
+}
+
+.milestoneDone {
+    border-color: var(--success);
+    background: var(--success-bg);
+    color: var(--success);
+}
+
+.milestoneLabel {
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.depLayer {
+    position: absolute;
+    left: 0;
+    pointer-events: none;
+}
+
+.dep {
+    stroke: var(--text-muted);
+    stroke-width: 1.5;
+    stroke-dasharray: 3 3;
+}
+
+/* Une dépendance qui remonte le temps : le bloqueur finit après le début du
+   bloqué. C'est un vrai problème de planning, il se voit. */
+.depLate {
+    composes: dep;
+    stroke: var(--danger);
+    stroke-dasharray: none;
+}
+
+.rows {
+    position: relative;
+}
+
+.row {
+    position: relative;
+}
+
+.bar {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 0 var(--space-sm);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--accent);
+    background: var(--accent-bg);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.75rem;
+    overflow: hidden;
+    cursor: pointer;
+    text-align: left;
+}
+
+/* Une seule date connue : un point, pas une durée qu'on n'a pas. */
+.barPoint {
+    border-radius: var(--radius-pill);
+    border-style: dashed;
+}
+
+.barLate {
+    border-color: var(--danger);
+    background: var(--danger-bg);
+}
+
+.barLabel {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.undated {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.undated summary {
+    cursor: pointer;
+    color: var(--text-muted);
+}
+
+.undatedList {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    margin: var(--space-sm) 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.undatedList button {
+    padding: 2px 10px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--glass-border);
+    background: var(--surface-widget);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+.undatedList button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.tab {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    cursor: pointer;
+}
+
+.tab:hover {
+    color: var(--text-primary);
+}
+
+/* -------------------------------------------------------------------- git */
+
+.git {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+.gitEmpty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-xl) 0;
+}
+
+.repoHead {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.repoName {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin: 0;
+    font-size: 1rem;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+}
+
+.repoMeta {
+    margin: var(--space-xs) 0 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.graphWrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.graphHead {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.graphRange {
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
+
+.graph {
+    height: 200px;
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    border: 1px solid var(--glass-border);
+}
+
+.graphAxis {
+    stroke: var(--glass-border-strong);
+    stroke-width: 1;
+}
+
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.legendItem {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 2px 10px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--glass-border);
+    background: var(--surface-widget);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+.legendOn {
+    composes: legendItem;
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.legendDot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-pill);
+}
+
+.legendCount {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+.authorMap {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.authorMap summary {
+    cursor: pointer;
+    color: var(--text-muted);
+}
+
+.authorList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin: var(--space-sm) 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.authorList li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+}
+
+.authorName {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.gitCols {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: var(--space-lg);
+}
+
+.gitTitle {
+    margin: 0 0 var(--space-sm);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.gitList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.gitList li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    min-width: 0;
+}
+
+.gitItemName {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+}
+
+.gitDate {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+.sha {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--accent);
+}
+
+.defaultTag,
+.preTag {
+    padding: 0 6px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 0.68rem;
+    white-space: nowrap;
+}
+
+.preTag {
+    background: var(--warning-bg);
+    color: var(--warning);
+}
+
+.tokenBox {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+    border: 1px dashed var(--glass-border-strong);
+    background: var(--surface-subtle);
+}
+
+/* ------------------------------------------------------------- historique */
+
+.history {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    max-width: 720px;
+}
+
+.histList {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+    margin: 0;
+    padding: 0 0 0 var(--space-lg);
+    list-style: none;
+}
+
+/* Le trait qui tient la frise : fin et discret, c'est tout ce qu'on lui
+   demande. Il s'arrête aux pastilles extrêmes plutôt que de filer dans le vide. */
+.histList::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    top: 8px;
+    bottom: 8px;
+    width: 1px;
+    background: var(--glass-border-strong);
+}
+
+.histItem {
+    position: relative;
+    display: flex;
+    gap: var(--space-md);
+}
+
+.histDot {
+    position: absolute;
+    left: calc(-1 * var(--space-lg) + 2px);
+    top: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-popup-solid);
+    border: 1px solid var(--glass-border-strong);
+    color: var(--text-muted);
+    font-size: 0.6rem;
+}
+
+.histBody {
+    flex: 1;
+    min-width: 0;
+}
+
+.histHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.histKind {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+}
+
+.histTime {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.histLabel {
+    margin: 2px 0 0;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.histLink {
+    padding: 0;
+    background: none;
+    border: none;
+    border-bottom: 1px dashed var(--accent);
+    color: var(--accent);
+    font: inherit;
+    cursor: pointer;
+}
+
+.histDiff {
+    margin: 2px 0 0;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+}
+
+.histFrom {
+    color: var(--text-muted);
+    text-decoration: line-through;
+}
+
+/* ------------------------------------------------- carte en lecture seule */
+
+.readonlyTitle {
+    margin: 0;
+    font-size: 1.05rem;
+    color: var(--text-primary);
+}
+
+.readonlyText {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+}
+
+.readonlyMeta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-lg);
+    margin: 0;
+}
+
+.readonlyMeta dt {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.readonlyMeta dd {
+    margin: 2px 0 0;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.readonlyAssignee {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+/* ------------------------------------------------------------- discussion */
+
+.chat {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: var(--surface-subtle);
+    padding: var(--space-sm);
+}
+
+.chatScroll {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    max-height: 320px;
+    min-height: 120px;
+    overflow-y: auto;
+    padding-right: var(--space-xs);
+}
+
+.loadMore {
+    align-self: center;
+    padding: var(--space-xs) var(--space-sm);
+    background: none;
+    border: none;
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+.msgGroup {
+    display: flex;
+    gap: var(--space-sm);
+    align-items: flex-start;
+}
+
+.msgBody {
+    flex: 1;
+    min-width: 0;
+}
+
+.msgHead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+}
+
+.msgAuthor {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.msgTime {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.msgText {
+    margin: 2px 0 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.msgEdited {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+/* Ligne toujours présente, même vide : l'apparition d'un « écrit… » ne doit
+   pas faire sauter le composeur d'une ligne sous le curseur. */
+.typing {
+    margin: 0;
+    min-height: 1.1em;
+    font-size: 0.75rem;
+    font-style: italic;
+    color: var(--text-muted);
+}
+
+.composer {
+    display: flex;
+    gap: var(--space-sm);
+    align-items: flex-end;
+}
+
+.composer .textarea {
+    flex: 1;
+}
+
+.deployStatus {
+    padding: 1px 8px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.deployStatus[data-status='running'],
+.deployStatus[data-status='queued'] {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.deployStatus[data-status='success'] {
+    background: var(--success-bg);
+    color: var(--success);
+}
+
+.deployStatus[data-status='failed'] {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+/* -------------------------------------------------------------- mes tâches */
+
+.myTasks {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.taskList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.taskItem > button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--surface-widget);
+    border: 1px solid var(--glass-border);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--transition-fast);
+}
+
+.taskItem > button:hover {
+    border-color: var(--accent);
+}
+
+.taskTitle {
+    flex: 1;
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.taskProject {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
