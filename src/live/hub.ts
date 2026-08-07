@@ -4,6 +4,7 @@ import {
     LIVE_CHANGED_EVENT,
     LIVE_CURSORS_EVENT,
     LIVE_PEERS_EVENT,
+    LIVE_TYPERS_EVENT,
     livePathGate,
     ok,
     TOPIC_FEATURE,
@@ -59,6 +60,21 @@ const CURSOR_FLOOR_MS = 25;
 /** Trames de curseur hors cadence tolérées avant de fermer la socket. */
 const CURSOR_STRIKES_MAX = 200;
 
+/**
+ * Durée de vie d'un « en train d'écrire » sans rafraîchissement.
+ *
+ * Le client réaffirme sa frappe périodiquement ; passé ce délai sans nouvelle,
+ * le pair cesse d'être annoncé. C'est ce qui garantit qu'un onglet fermé
+ * brutalement — ou un client fautif — ne laisse pas un fantôme à l'écran.
+ */
+const TYPING_TTL_MS = 6_000;
+
+/** Cadence du balayage de péremption, actif seulement pendant qu'on écrit. */
+const TYPING_SWEEP_MS = 1_000;
+
+/** Débit maximal accepté sur la voie rapide de la frappe. */
+const TYPING_FLOOR_MS = 250;
+
 /** Au-delà, la socket est en retard : on laisse tomber la trame de curseur. */
 const BACKPRESSURE_BYTES = 64 * 1024;
 
@@ -89,6 +105,17 @@ export interface LiveConn {
     path: LivePath;
     color: UserColor | null;
 
+    /**
+     * Échéance du « en train d'écrire » de cette connexion, en millisecondes
+     * épochales. `0` = n'écrit pas. Une échéance plutôt qu'un booléen : la
+     * péremption devient un simple test au moment de diffuser, sans minuteur
+     * par connexion à annuler.
+     */
+    typingUntil: number;
+    typingAt: number;
+    /** A reçu des typers au dernier envoi : sert à lui livrer la liste vide. */
+    hasTypingPeers: boolean;
+
     cursor: LiveCursor | null;
     cursorAt: number;
     cursorStrikes: number;
@@ -117,6 +144,8 @@ export interface LiveTransport {
     here(workspaceId: number, path: LivePath, color: UserColor): LivePeer[];
     /** Propage un changement de couleur à toutes les connexions de ce compte. */
     colorChanged(color: UserColor): void;
+    /** Annonce (ou retire) « en train d'écrire » aux pairs du même lieu. */
+    typing(typing: boolean): void;
 
     // -- portée : le moteur entier, après une mutation d'accès -------------
     //
@@ -145,6 +174,8 @@ export class LiveHub {
 
     private readonly dirtyRoster = new Set<number>();
     private readonly dirtyCursors = new Set<number>();
+    private readonly dirtyTyping = new Set<number>();
+    private typingSweepTimer: ReturnType<typeof setInterval> | null = null;
     private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
     /** `${workspaceId}:${topic}` -> dernier envoi, pour le plancher de débit. */
@@ -170,6 +201,9 @@ export class LiveHub {
             workspaceId: null,
             path: [],
             color: null,
+            typingUntil: 0,
+            typingAt: 0,
+            hasTypingPeers: false,
             cursor: null,
             cursorAt: 0,
             cursorStrikes: 0,
@@ -206,6 +240,8 @@ export class LiveHub {
         this.heartbeatTimer = null;
         if (this.flushTimer) clearTimeout(this.flushTimer);
         this.flushTimer = null;
+        if (this.typingSweepTimer) clearInterval(this.typingSweepTimer);
+        this.typingSweepTimer = null;
     }
 
     private sweep(): void {
@@ -255,7 +291,12 @@ export class LiveHub {
         conn.workspaceId = workspaceId;
         conn.path = path;
         conn.color = color;
-        if (relocated) conn.cursor = null;
+        // Changer de lieu invalide la frappe autant que la position : on
+        // n'écrit pas « ici » depuis « ailleurs ».
+        if (relocated) {
+            conn.cursor = null;
+            conn.typingUntil = 0;
+        }
 
         let room = this.byWorkspace.get(workspaceId);
         if (!room) this.byWorkspace.set(workspaceId, (room = new Set()));
@@ -274,8 +315,10 @@ export class LiveHub {
         if (room && room.size === 0) this.byWorkspace.delete(wsId);
         conn.workspaceId = null;
         conn.cursor = null;
+        conn.typingUntil = 0;
         this.markRoster(wsId);
         this.markCursors(wsId);
+        this.markTyping(wsId);
     }
 
     /**
@@ -466,7 +509,79 @@ export class LiveHub {
         this.markCursors(conn.workspaceId);
     }
 
+    /**
+     * Voie rapide : « j'écris » / « j'ai fini », sans réponse.
+     *
+     * Mêmes précautions que {@link cursor}. **L'espace de l'enveloppe est ignoré**
+     * — il est contrôlé par le client et n'est validé que dans
+     * `access.forWorkspace()`, que cette voie court-circuite. Seul
+     * `conn.workspaceId` fait foi, et il n'a pu être posé que par un `live.here`
+     * passé, lui, par le dispatcheur.
+     *
+     * La trame ne dit pas *où* : le lieu vient du dernier `live.here`, donc un
+     * pair ne peut annoncer sa frappe que là où il se trouve réellement.
+     */
+    typing(socket: WebSocket, typing: boolean): void {
+        const conn = this.bySocket.get(socket);
+        if (!conn || conn.workspaceId === null) return;
+
+        const now = Date.now();
+        // Étouffement simple plutôt que compteur de fautes : la frappe est une
+        // trame rare (début, fin, et un rappel toutes les quelques secondes),
+        // l'ignorer suffit à la borner.
+        if (now - conn.typingAt < TYPING_FLOOR_MS) return;
+        conn.typingAt = now;
+
+        const until = typing ? now + TYPING_TTL_MS : 0;
+        // Un rappel identique ne change rien pour les pairs : on repousse
+        // l'échéance sans reprogrammer de diffusion.
+        const wasTyping = conn.typingUntil > now;
+        conn.typingUntil = until;
+        if (wasTyping === typing) return;
+
+        this.markTyping(conn.workspaceId);
+    }
+
     // ---------------------------------------------------------------- diffusion
+
+    private markTyping(workspaceId: number): void {
+        this.dirtyTyping.add(workspaceId);
+        this.scheduleFlush();
+        this.ensureTypingSweep();
+    }
+
+    /**
+     * Balayage de péremption, **vivant seulement pendant qu'on écrit**.
+     *
+     * Sans lui, un pair qui s'arrête net (onglet tué, réseau coupé) resterait
+     * annoncé jusqu'à la prochaine diffusion fortuite. Un seul minuteur pour
+     * tout le moteur, qui s'éteint dès que plus personne n'écrit — c'est ce qui
+     * évite de payer une cadence permanente pour un cas rare.
+     */
+    private ensureTypingSweep(): void {
+        if (this.typingSweepTimer) return;
+        this.typingSweepTimer = setInterval(() => {
+            const now = Date.now();
+            let alive = false;
+            for (const [workspaceId, room] of this.byWorkspace) {
+                let expired = false;
+                for (const conn of room) {
+                    if (conn.typingUntil === 0) continue;
+                    if (conn.typingUntil > now) alive = true;
+                    else {
+                        conn.typingUntil = 0;
+                        expired = true;
+                    }
+                }
+                if (expired) this.markTyping(workspaceId);
+            }
+            if (!alive && this.typingSweepTimer) {
+                clearInterval(this.typingSweepTimer);
+                this.typingSweepTimer = null;
+            }
+        }, TYPING_SWEEP_MS);
+        this.typingSweepTimer.unref?.();
+    }
 
     private markRoster(workspaceId: number): void {
         this.dirtyRoster.add(workspaceId);
@@ -490,10 +605,13 @@ export class LiveHub {
     private flush(): void {
         const rosterRooms = [...this.dirtyRoster];
         const cursorRooms = [...this.dirtyCursors];
+        const typingRooms = [...this.dirtyTyping];
         this.dirtyRoster.clear();
         this.dirtyCursors.clear();
+        this.dirtyTyping.clear();
         for (const wsId of rosterRooms) this.flushRoster(wsId);
         for (const wsId of cursorRooms) this.flushCursors(wsId);
+        for (const wsId of typingRooms) this.flushTyping(wsId);
     }
 
     /**
@@ -586,6 +704,39 @@ export class LiveHub {
     }
 
     /**
+     * Qui écrit, entre pairs situés au **même chemin exactement** — même
+     * projection que les curseurs, donc la frappe sur une carte n'est annoncée
+     * qu'à ceux qui regardent cette carte.
+     */
+    private flushTyping(workspaceId: number): void {
+        const room = this.byWorkspace.get(workspaceId);
+        if (!room || room.size === 0) return;
+
+        const now = Date.now();
+        const byPath = new Map<string, LiveConn[]>();
+        for (const conn of room) {
+            const key = conn.path.join(' ');
+            const group = byPath.get(key);
+            if (group) group.push(conn);
+            else byPath.set(key, [conn]);
+        }
+
+        for (const group of byPath.values()) {
+            for (const recipient of group) {
+                const typers = group
+                    .filter((peer) => peer !== recipient && peer.typingUntil > now)
+                    .map((peer) => ({ connId: peer.connId, userId: peer.userId }));
+                // Une liste vide n'est envoyée qu'à qui en avait une : sinon la
+                // mention du dernier partant resterait affichée, mais l'envoyer
+                // à tout le monde à chaque frappe serait du bruit.
+                if (typers.length === 0 && !recipient.hasTypingPeers) continue;
+                recipient.hasTypingPeers = typers.length > 0;
+                this.send(recipient, LIVE_TYPERS_EVENT, { workspaceId, typers });
+            }
+        }
+    }
+
+    /**
      * Un envoi ne doit jamais lever : le dispatcheur diffuse depuis l'intérieur
      * du `try` d'une commande déjà répondue, et une exception y transformerait
      * un succès en second message d'erreur.
@@ -605,6 +756,7 @@ export function createLiveTransport(hub: LiveHub, socket: WebSocket): LiveTransp
     return {
         here: (workspaceId, path, color) => hub.here(socket, workspaceId, path, color),
         colorChanged: (color) => hub.colorChanged(socket, color),
+        typing: (typing) => hub.typing(socket, typing),
         evict: (workspaceId, userId) => hub.evict(workspaceId, userId),
         evictEverywhere: (userId) => hub.evictEverywhere(userId),
         evictRoom: (workspaceId) => hub.evictRoom(workspaceId),

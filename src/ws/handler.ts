@@ -4,7 +4,9 @@ import {
     clientMessageSchema,
     err,
     LIVE_CURSOR_COMMAND,
+    LIVE_TYPING_COMMAND,
     liveCursorFrameSchema,
+    liveTypingFrameSchema,
     ok,
     type FeatureAccess,
     type ServerMessage,
@@ -27,6 +29,7 @@ import { logger } from '@/logger';
 
 import type { CloudSyncEngine } from '@/cloudSync/engine';
 import type { UptimeMonitor } from '@/Services/UptimeMonitor';
+import type { ProjectSyncService } from '@/Services/ProjectSyncService';
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import type { AuditLog } from '@/Services/AuditLog';
@@ -39,6 +42,7 @@ interface WSDeps {
     live: LiveHub;
     cloudSync: CloudSyncEngine;
     uptime: UptimeMonitor;
+    projects: ProjectSyncService;
     audit: AuditLog;
 }
 
@@ -53,7 +57,7 @@ function send(socket: WebSocket, msg: ServerMessage): void {
 
 export async function registerWS(
     app: FastifyInstance,
-    { db, crypt, hub, live: liveHub, cloudSync, uptime, audit }: WSDeps
+    { db, crypt, hub, live: liveHub, cloudSync, uptime, projects, audit }: WSDeps
 ): Promise<void> {
     app.get('/ws', { websocket: true }, async (socket, req) => {
         const accessToken = req.cookies[ACCESS_COOKIE];
@@ -136,6 +140,15 @@ export async function registerWS(
             if (command === LIVE_CURSOR_COMMAND) {
                 const frame = liveCursorFrameSchema.safeParse(payload);
                 if (frame.success) liveHub.cursor(socket, frame.data.cursor);
+                return;
+            }
+
+            // Même voie rapide, mêmes raisons, pour « en train d'écrire » : une
+            // trame sans réponse ni audit, dont le lieu vient du dernier
+            // `live.here` et jamais de l'enveloppe.
+            if (command === LIVE_TYPING_COMMAND) {
+                const frame = liveTypingFrameSchema.safeParse(payload);
+                if (frame.success) liveHub.typing(socket, frame.data.typing);
                 return;
             }
 
@@ -251,7 +264,8 @@ export async function registerWS(
                         monitor,
                         live,
                         cloudSync,
-                        uptime
+                        uptime,
+                        projects
                     },
                     inputParse.data
                 );
