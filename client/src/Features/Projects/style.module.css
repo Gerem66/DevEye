@@ -1,10 +1,16 @@
 /* Projets — portefeuille et formulaire de profil.
    Uniquement des variables de thème : aucune couleur en dur. */
 
+/* La popup fournit une boîte défilante en `flex: 1` ; la racine d'une feature
+   doit l'occuper entièrement, sinon son contenu se tasse en haut à gauche.
+   Même contrat que `Features/Notes` (`.container`). */
 .root {
     display: flex;
     flex-direction: column;
     gap: var(--space-lg);
+    /* `min-height` et non `height` : la racine remplit la boîte quand le
+       contenu est court, et grandit avec lui quand il déborde. */
+    min-height: 100%;
 }
 
 /* ----------------------------------------------------------------- en-tête */
@@ -49,16 +55,26 @@
 
 .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    /* `auto-fill` laisse des colonnes vides quand il y a peu de projets, ce qui
+       tasse les cartes dans un coin. `auto-fit` les fait au contraire occuper
+       la largeur disponible — c'est ce qu'on veut ici, où l'on a rarement de
+       quoi remplir quatre colonnes. */
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: var(--space-md);
     margin: 0;
-    padding: 0;
+    padding: 0 0 var(--space-md);
     list-style: none;
+    align-content: start;
 }
 
 .card {
     position: relative;
     display: flex;
+    align-items: stretch;
+    /* Une hauteur commune par ligne : sans ça, une carte sans description ou
+       sans étiquette est plus courte que ses voisines et la grille devient
+       irrégulière. */
+    min-height: 168px;
     border-radius: var(--radius-lg);
     background: var(--surface-widget);
     border: 1px solid var(--glass-border);
@@ -76,13 +92,18 @@
     flex-direction: column;
     gap: var(--space-sm);
     padding: var(--space-md);
-    background: none;
-    border: none;
     text-align: left;
     cursor: pointer;
     color: inherit;
     font: inherit;
     min-width: 0;
+}
+
+/* Le focus clavier doit se voir : la carte est activable par Entrée et Espace. */
+.cardBody:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    border-radius: var(--radius-lg);
 }
 
 .cardTop {

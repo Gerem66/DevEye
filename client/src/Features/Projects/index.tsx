@@ -200,30 +200,38 @@ export function FeatureProjects({ user, workspace }: FeatureProps) {
                     )}
                 </div>
                 <div className={styles.actions}>
-                    {/* Rien ne se supprime : l'archive est le seul chemin de
-                        sortie, elle doit donc aussi être un chemin de retour. */}
                     {/* Bascule, pas un onglet : « mes tâches » est une lecture
-                        du même portefeuille, sous un autre angle. */}
+                        du même portefeuille, sous un autre angle. Une fois
+                        dedans, le bouton devient le chemin de retour — d'où la
+                        flèche posée à gauche de son icône. */}
                     <Button
                         variant={showMine ? 'primary' : 'secondary'}
-                        icon='user'
                         onClick={() => {
                             setShowMine((v) => !v);
                             setShowArchived(false);
                         }}
                     >
+                        {showMine && <span className='icon icon-arrow-left' />}
+                        <span className='icon icon-user' />
                         Mes tâches
                     </Button>
-                    <Button
-                        variant='secondary'
-                        icon='archive'
-                        onClick={() => {
-                            setShowArchived((v) => !v);
-                            setShowMine(false);
-                        }}
-                    >
-                        {showArchived ? 'Retour au portefeuille' : 'Archives'}
-                    </Button>
+
+                    {/* Masqué dans « mes tâches » : deux sorties concurrentes
+                        pour un même écran ne feraient qu'embrouiller. */}
+                    {!showMine && (
+                        <Button
+                            variant='secondary'
+                            onClick={() => {
+                                setShowArchived((v) => !v);
+                                setShowMine(false);
+                            }}
+                        >
+                            {showArchived && <span className='icon icon-arrow-left' />}
+                            <span className='icon icon-archive' />
+                            {showArchived ? 'Portefeuille' : 'Archives'}
+                        </Button>
+                    )}
+
                     {canWrite && !showArchived && !showMine && (
                         <Button icon='add' onClick={openCreate}>
                             Nouveau projet
@@ -299,7 +307,24 @@ function ProjectCard({ summary, canWrite, archived, outline, onOpen, onArchive }
 
     return (
         <li className={styles.card} {...outline}>
-            <button type='button' className={styles.cardBody} onClick={onOpen}>
+            {/* `div role="button"` et non `<button>` : la carte contient un
+                titre, un paragraphe et une liste d'étiquettes, c'est-à-dire du
+                contenu de flux — interdit dans un bouton, dont le modèle de
+                contenu est phrasé. Les navigateurs rendaient alors la carte
+                mal dimensionnée et l'interaction devenait erratique. Même
+                motif que la carte du kanban, qui fonctionne. */}
+            <div
+                className={styles.cardBody}
+                role='button'
+                tabIndex={0}
+                onClick={onOpen}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onOpen();
+                    }
+                }}
+            >
                 <div className={styles.cardTop}>
                     <span className={styles.status} data-status={project.status}>
                         {STATUS_LABELS[project.status]}
@@ -344,7 +369,7 @@ function ProjectCard({ summary, canWrite, archived, outline, onOpen, onArchive }
                     {due && <span>échéance {due}</span>}
                     {!masked && project.version && <span className={styles.version}>v{project.version}</span>}
                 </div>
-            </button>
+            </div>
 
             {canWrite && (
                 <button
