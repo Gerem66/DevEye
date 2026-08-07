@@ -97,10 +97,15 @@ export interface FeatureContext {
     /** Uptime scheduler — backs the "check now" and "test notification" commands. */
     uptime?: UptimeMonitor;
     /**
-     * Ordonnanceur de synchronisation des dépôts. Sert uniquement à *réveiller*
-     * une lecture (`project.repoSyncNow`, liaison d'un dépôt) : aucune commande
-     * n'appelle le fournisseur elle-même, pour qu'aucune ne dépende de la
-     * latence d'une API tierce.
+     * Ordonnanceur de synchronisation des dépôts. Sert à *réveiller* une lecture
+     * (`project.repoSyncNow`, liaison d'un dépôt) et à rendre l'avancement d'une
+     * synchronisation en vol (`project.syncStatus`) : ces commandes-là ne
+     * dépendent donc d'aucune API tierce.
+     *
+     * Une seule exception dans tout le module, et elle est délibérée :
+     * `project.commitDetail` va chercher le diff chez le fournisseur au moment
+     * de la demande, parce qu'un diff ne se met pas en cache (voir
+     * `projectCommitDetailSchema`).
      */
     projects?: ProjectSyncService;
 }

@@ -3,10 +3,13 @@ import type Encryption from '@/Services/Encryption';
 import type { LiveHub } from '@/live/hub';
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
 import type { Logger } from 'pino';
+import type { ProjectSyncStatus } from 'deveye-types';
 import {
     authorRef,
     fetchBranches,
     fetchCommits,
+    fetchComparison,
+    fetchPullRequests,
     fetchReleases,
     fetchRepoInfo,
     GitHubError,
@@ -42,6 +45,26 @@ const MIN_INTERVAL_SECONDS = 600;
 /** Recul appliqué quand le fournisseur annonce un quota épuisé. */
 const RATE_LIMIT_BACKOFF_SECONDS = 3600;
 
+/**
+ * Les étapes d'une synchronisation, dans l'ordre.
+ *
+ * Elles sont l'**unité de progression** rendue à l'interface : on ne sait pas
+ * combien de commits le distant va rendre avant de les avoir lus, donc une
+ * barre calée sur un total deviné mentirait. Une barre qui avance d'étape
+ * nommée en étape nommée dit exactement où on en est.
+ */
+const SYNC_PHASES = ['Dépôt', 'Branches', 'Commits', 'Comparaison des branches', 'Releases', 'Pull requests'] as const;
+
+/**
+ * Branches comparées par tour à la branche par défaut.
+ *
+ * Chaque comparaison est un appel : un dépôt à cinquante branches ne doit pas
+ * consommer cinquante requêtes par tour. Celles dont le sha n'a pas bougé sont
+ * de toute façon sautées ; cette borne ne concerne que le premier tour et les
+ * rafales de nouvelles branches, qui rattraperont au tour suivant.
+ */
+const MAX_COMPARISONS_PER_RUN = 12;
+
 export interface ProjectSyncDeps {
     db: Database;
     crypt: Encryption;
@@ -56,6 +79,16 @@ export class ProjectSyncService {
     private readonly ciphers = new Map<number, Cipher>();
     /** Projets à traiter en priorité, demandés à la main par `repoSyncNow`. */
     private readonly forced = new Set<number>();
+    /**
+     * L'étape en cours par projet, pour les synchronisations en vol.
+     *
+     * En mémoire et non en base : c'est un état de quelques secondes, lu par
+     * sondage depuis l'interface qui a lancé la synchronisation. L'écrire en
+     * base coûterait six écritures par tour pour une information périmée avant
+     * d'être relue. Corollaire assumé, et vrai de tout le direct : derrière
+     * deux instances, seule celle qui synchronise connaît l'avancement.
+     */
+    private readonly progress = new Map<number, { step: number; startedAt: number }>();
 
     constructor(private readonly deps: ProjectSyncDeps) {}
 
@@ -78,6 +111,27 @@ export class ProjectSyncService {
     requestSync(projectId: number): void {
         this.forced.add(projectId);
         void this.tick();
+    }
+
+    /**
+     * Où en est la synchronisation de ce projet.
+     *
+     * `running: false` avec une étape nulle est la réponse normale hors
+     * synchronisation — ce n'est pas une erreur, et l'interface s'en sert pour
+     * savoir qu'elle peut cesser de sonder.
+     */
+    syncStatus(projectId: number): ProjectSyncStatus {
+        const current = this.progress.get(projectId);
+        if (!current) {
+            return { running: false, phase: null, step: 0, stepCount: SYNC_PHASES.length, startedAt: null };
+        }
+        return {
+            running: true,
+            phase: SYNC_PHASES[Math.min(current.step, SYNC_PHASES.length - 1)],
+            step: current.step,
+            stepCount: SYNC_PHASES.length,
+            startedAt: current.startedAt
+        };
     }
 
     private cipherFor(workspaceId: number): Cipher {
@@ -116,12 +170,22 @@ export class ProjectSyncService {
     private syncOne(projectId: number, workspaceId: number): Promise<void> {
         const running = this.inFlight.get(projectId);
         if (running) return running;
+        this.progress.set(projectId, { step: 0, startedAt: Math.floor(Date.now() / 1000) });
         const task = this.runSync(projectId, workspaceId).finally(() => {
             this.inFlight.delete(projectId);
             this.forced.delete(projectId);
+            // Dans le `finally` : un échec doit lever le voile de chargement
+            // aussi sûrement qu'un succès, sinon l'interface sonde à vide.
+            this.progress.delete(projectId);
         });
         this.inFlight.set(projectId, task);
         return task;
+    }
+
+    /** Avance l'étape affichée. Sans effet si la synchronisation est finie. */
+    private advance(projectId: number, step: number): void {
+        const current = this.progress.get(projectId);
+        if (current) current.step = step;
     }
 
     private async runSync(projectId: number, workspaceId: number): Promise<void> {
@@ -143,11 +207,13 @@ export class ProjectSyncService {
             let changed = false;
 
             // -- dépôt : branche par défaut
+            this.advance(projectId, 0);
             const info = await fetchRepoInfo(target.owner, target.repo, token, state.repoEtag);
             next.repoEtag = info.etag ?? undefined;
             const defaultBranch = info.data?.defaultBranch ?? repo.default_branch;
 
             // -- branches
+            this.advance(projectId, 1);
             const branches = await fetchBranches(target.owner, target.repo, token, state.branchesEtag);
             next.branchesEtag = branches.etag ?? undefined;
             if (branches.data) {
@@ -172,6 +238,7 @@ export class ProjectSyncService {
             }
 
             // -- commits, à partir du dernier connu
+            this.advance(projectId, 2);
             const since = await this.deps.db.projectGit.latestCommitAt(projectId);
             const commits = await fetchCommits(target.owner, target.repo, token, since ?? undefined);
             for (const commit of commits) {
@@ -203,7 +270,14 @@ export class ProjectSyncService {
             }
             if (commits.length > 0) changed = true;
 
+            // -- avance / retard des branches sur la branche par défaut
+            this.advance(projectId, 3);
+            if (defaultBranch && (await this.compareBranches(projectId, workspaceId, target, token, defaultBranch))) {
+                changed = true;
+            }
+
             // -- releases
+            this.advance(projectId, 4);
             const releases = await fetchReleases(target.owner, target.repo, token, state.releasesEtag);
             next.releasesEtag = releases.etag ?? undefined;
             if (releases.data) {
@@ -226,6 +300,39 @@ export class ProjectSyncService {
                 }
                 changed = true;
                 await this.applyReleaseVersion(projectId, workspaceId, cipher);
+            }
+
+            // -- pull requests
+            this.advance(projectId, 5);
+            const pulls = await fetchPullRequests(target.owner, target.repo, token, state.pullsEtag);
+            next.pullsEtag = pulls.etag ?? undefined;
+            if (pulls.data) {
+                for (const pull of pulls.data) {
+                    await this.deps.db.projectGit.upsertPullRequest({
+                        projectId,
+                        workspaceId,
+                        number: pull.number,
+                        state: pull.state,
+                        // Le login est un identifiant public : on ne le garde
+                        // en clair pas plus que l'adresse d'un auteur de commit.
+                        authorRef: pull.authorLogin ? nameRef(pull.authorLogin) : null,
+                        createdAt: pull.createdAt,
+                        updatedAt: pull.updatedAt,
+                        mergedAt: pull.mergedAt,
+                        closedAt: pull.closedAt,
+                        content: await cipher.encrypt(
+                            JSON.stringify({
+                                title: pull.title,
+                                body: pull.body,
+                                authorName: pull.authorLogin,
+                                headBranch: pull.headBranch,
+                                baseBranch: pull.baseBranch,
+                                url: pull.url
+                            })
+                        )
+                    });
+                }
+                changed = true;
             }
 
             await this.deps.db.projectGit.markSynced(projectId, {
@@ -256,6 +363,67 @@ export class ProjectSyncService {
                 });
             this.deps.logger.warn({ err: e, projectId }, 'Project sync: échec');
         }
+    }
+
+    /**
+     * Recalcule l'avance et le retard de chaque branche sur la branche par
+     * défaut, en sautant tout ce qui n'a pas bougé.
+     *
+     * Une comparaison coûte un appel, et le résultat ne change que si l'un des
+     * deux côtés a bougé : on mémorise donc le couple `base..tête` qui l'a
+     * produit et on ne recompare que lorsqu'il diffère. Sur un dépôt stable,
+     * cette étape ne consomme rien du tout.
+     *
+     * Un échec sur une branche n'interrompt pas les autres : une branche
+     * comparée reste plus utile qu'un tour entier abandonné. Le cas courant est
+     * d'ailleurs banal — une branche partant d'un historique sans ancêtre commun
+     * fait répondre 404 au fournisseur.
+     *
+     * Rend `true` si au moins une comparaison a changé quelque chose.
+     */
+    private async compareBranches(
+        projectId: number,
+        workspaceId: number,
+        target: { owner: string; repo: string },
+        token: string,
+        defaultBranch: string
+    ): Promise<boolean> {
+        const rows = await this.deps.db.projectGit.listBranches(projectId, workspaceId);
+        const base = rows.find((row) => row.is_default === 1);
+        // Sans branche par défaut connue, ou sans son sha, il n'y a rien à quoi
+        // comparer : mieux vaut ne rien afficher qu'un compteur arbitraire.
+        if (!base?.head_sha) return false;
+
+        const cipher = this.cipherFor(workspaceId);
+        let changed = false;
+        let budget = MAX_COMPARISONS_PER_RUN;
+
+        for (const row of rows) {
+            if (budget <= 0) break;
+            if (row.is_default === 1 || !row.head_sha) continue;
+            const pair = `${base.head_sha}..${row.head_sha}`;
+            if (row.compared_sha === pair) continue;
+
+            const name = (await this.readJson<{ name?: string }>(cipher, row.content))?.name;
+            if (!name) continue;
+
+            budget -= 1;
+            try {
+                const diff = await fetchComparison(target.owner, target.repo, token, defaultBranch, name);
+                await this.deps.db.projectGit.setBranchComparison(projectId, row.name_ref, {
+                    ahead: diff.ahead,
+                    behind: diff.behind,
+                    comparedSha: pair
+                });
+                changed = true;
+            } catch (e) {
+                // Un quota épuisé, lui, concerne tout le tour : on le laisse
+                // remonter pour que l'ordonnanceur applique son recul.
+                if (e instanceof GitHubError && e.rateLimited) throw e;
+                this.deps.logger.debug({ err: e, projectId }, 'Project sync: comparaison de branche ignorée');
+            }
+        }
+        return changed;
     }
 
     /**

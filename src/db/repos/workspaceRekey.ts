@@ -64,6 +64,7 @@ const COLUMNS: EncryptedColumn[] = [
     { table: 'project_commits', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
     { table: 'project_branches', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
     { table: 'project_releases', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'project_pull_requests', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
     { table: 'project_deploy_targets', id: 'project_id', column: 'content', scope: 'workspace_id', tier: 'open' },
     { table: 'project_deployments', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
     // Les secrets d'accès sont **toujours** sous l'étage ouvert, quel que soit

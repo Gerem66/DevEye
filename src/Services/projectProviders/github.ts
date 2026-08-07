@@ -63,11 +63,55 @@ export interface GitHubRepoInfo {
     defaultBranch: string;
 }
 
+export interface GitHubPullRequest {
+    number: number;
+    state: 'open' | 'draft' | 'merged' | 'closed';
+    title: string;
+    body: string;
+    authorLogin: string;
+    headBranch: string;
+    baseBranch: string;
+    url: string;
+    createdAt: number;
+    updatedAt: number;
+    mergedAt: number | null;
+    closedAt: number | null;
+}
+
+/** Avance et retard d'une référence sur une autre. */
+export interface GitHubComparison {
+    ahead: number;
+    behind: number;
+}
+
+export interface GitHubDiffFile {
+    filename: string;
+    previousFilename: string | null;
+    status: string;
+    additions: number;
+    deletions: number;
+    patch: string | null;
+}
+
+export interface GitHubCommitDetail {
+    sha: string;
+    message: string;
+    authorName: string;
+    committedAt: number;
+    url: string;
+    additions: number;
+    deletions: number;
+    files: GitHubDiffFile[];
+    /** GitHub écrête la liste des fichiers au-delà de 300. */
+    truncated: boolean;
+}
+
 /** Les ETags mémorisés d'une synchronisation à l'autre. */
 export interface GitHubSyncState {
     branchesEtag?: string;
     releasesEtag?: string;
     repoEtag?: string;
+    pullsEtag?: string;
     /** Horodatage du commit le plus récent déjà connu, en secondes. */
     lastCommitAt?: number;
 }
@@ -196,6 +240,148 @@ export async function fetchReleases(
             isPrerelease: r.prerelease === true
         })),
         etag: res.etag
+    };
+}
+
+/** Secondes unix, ou `null` — jamais `0`, qui se lirait comme 1970. */
+function seconds(value: string | null | undefined): number | null {
+    if (!value) return null;
+    const ms = new Date(value).getTime();
+    return Number.isNaN(ms) ? null : Math.floor(ms / 1000);
+}
+
+interface RawPull {
+    number: number;
+    state?: string;
+    draft?: boolean;
+    title?: string;
+    body?: string | null;
+    html_url?: string;
+    user?: { login?: string } | null;
+    head?: { ref?: string } | null;
+    base?: { ref?: string } | null;
+    created_at?: string;
+    updated_at?: string;
+    merged_at?: string | null;
+    closed_at?: string | null;
+}
+
+/**
+ * Les pull requests, ouvertes comme fermées, les plus récemment actives d'abord.
+ *
+ * Une seule page : au-delà de cent, ce qui suit n'a plus été touché depuis
+ * longtemps et n'apprend rien sur l'état courant du projet. Le fournisseur
+ * confond « fusionnée » et « fermée » dans `state` ; on les sépare ici, sur la
+ * seule preuve fiable — la présence de `merged_at`.
+ */
+export async function fetchPullRequests(
+    owner: string,
+    repo: string,
+    token: string,
+    etag?: string
+): Promise<FetchResult<GitHubPullRequest[]>> {
+    const res = await call<RawPull[]>(
+        `/repos/${owner}/${repo}/pulls?state=all&sort=updated&direction=desc&per_page=${PER_PAGE}`,
+        token,
+        etag
+    );
+    if (res.data === null) return { data: null, etag: res.etag };
+    return {
+        data: res.data.map((raw) => {
+            const mergedAt = seconds(raw.merged_at);
+            const closedAt = seconds(raw.closed_at);
+            const state: GitHubPullRequest['state'] =
+                mergedAt !== null ? 'merged' : raw.state === 'closed' ? 'closed' : raw.draft ? 'draft' : 'open';
+            const createdAt = seconds(raw.created_at) ?? 0;
+            return {
+                number: raw.number,
+                state,
+                title: raw.title ?? '',
+                body: raw.body ?? '',
+                authorLogin: raw.user?.login ?? '',
+                headBranch: raw.head?.ref ?? '',
+                baseBranch: raw.base?.ref ?? '',
+                url: raw.html_url ?? '',
+                createdAt,
+                updatedAt: seconds(raw.updated_at) ?? createdAt,
+                mergedAt,
+                closedAt
+            };
+        }),
+        etag: res.etag
+    };
+}
+
+/**
+ * De combien `head` est en avance et en retard sur `base`.
+ *
+ * Un appel par branche : c'est cher, et c'est la raison pour laquelle le
+ * résultat est mémorisé avec le couple de sha qui l'a produit
+ * (`project_branches.compared_sha`). Tant que ni la branche ni la base ne
+ * bougent, la comparaison n'est pas refaite.
+ */
+export async function fetchComparison(
+    owner: string,
+    repo: string,
+    token: string,
+    base: string,
+    head: string
+): Promise<GitHubComparison> {
+    const res = await call<{ ahead_by?: number; behind_by?: number }>(
+        `/repos/${owner}/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`,
+        token
+    );
+    return { ahead: res.data?.ahead_by ?? 0, behind: res.data?.behind_by ?? 0 };
+}
+
+/**
+ * Le détail d'un commit, diff compris.
+ *
+ * Lu à la demande et jamais conservé — voir `projectCommitDetailSchema`. GitHub
+ * n'inclut les `patch` que jusqu'à 300 fichiers et les omet pour les binaires
+ * comme pour les fichiers trop volumineux ; l'absence est donc une information,
+ * pas un défaut de lecture, et elle remonte telle quelle.
+ */
+export async function fetchCommitDetail(
+    owner: string,
+    repo: string,
+    token: string,
+    sha: string
+): Promise<GitHubCommitDetail> {
+    const res = await call<{
+        sha?: string;
+        html_url?: string;
+        commit?: { message?: string; author?: { name?: string; date?: string } };
+        stats?: { additions?: number; deletions?: number };
+        files?: {
+            filename?: string;
+            previous_filename?: string;
+            status?: string;
+            additions?: number;
+            deletions?: number;
+            patch?: string;
+        }[];
+    }>(`/repos/${owner}/${repo}/commits/${encodeURIComponent(sha)}`, token);
+
+    const data = res.data ?? {};
+    const files = data.files ?? [];
+    return {
+        sha: data.sha ?? sha,
+        message: data.commit?.message ?? '',
+        authorName: data.commit?.author?.name ?? '',
+        committedAt: seconds(data.commit?.author?.date) ?? 0,
+        url: data.html_url ?? '',
+        additions: data.stats?.additions ?? 0,
+        deletions: data.stats?.deletions ?? 0,
+        files: files.map((f) => ({
+            filename: f.filename ?? '',
+            previousFilename: f.previous_filename ?? null,
+            status: f.status ?? 'modified',
+            additions: f.additions ?? 0,
+            deletions: f.deletions ?? 0,
+            patch: f.patch ?? null
+        })),
+        truncated: files.length >= 300
     };
 }
 

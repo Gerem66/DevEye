@@ -1,23 +1,29 @@
 import {
     projectAuthorMap,
     projectBranchList,
+    projectCommitDetail,
     projectCommitGraph,
     projectCommitList,
     projectCredentialAdd,
     projectCredentialList,
     projectCredentialRemove,
     projectCredentialUpdate,
+    projectDiffStatusSchema,
+    projectPullRequestList,
+    projectPullStateSchema,
     projectReleaseList,
     projectRepoGet,
     projectRepoLink,
     projectRepoSetEnabled,
     projectRepoSyncNow,
     projectRepoUnlink,
+    projectSyncStatus,
     USER_COLORS,
     defaultUserColor
 } from 'deveye-types';
 import type { ProjectCredential, ProjectCredentialRow, ProjectRepo, ProjectRepoRow, UserColor } from 'deveye-types';
 import type { Cipher } from '@/Services/SecureStore';
+import { fetchCommitDetail } from '@/Services/projectProviders/github';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { assertProjectUnlocked, cipherFor, loadProject } from './_shared';
 
@@ -305,16 +311,169 @@ export const projectBranchListFeature: FeatureDefinition<
         await assertProjectUnlocked(ctx, project);
         const cipher = cipherFor(ctx, project.security_tier);
         const rows = await ctx.db.projectGit.listBranches(input.projectId, ctx.workspaceId);
+        const base = rows.find((row) => row.is_default === 1);
         const branches = await Promise.all(
-            rows.map(async (row) => ({
-                id: row.id,
-                name: (await readJson<{ name?: string }>(cipher, row.content))?.name ?? '',
-                headSha: row.head_sha,
-                isDefault: row.is_default === 1,
-                updatedAt: row.updated_at
-            }))
+            rows.map(async (row) => {
+                // Les compteurs ne valent que pour le couple de sha qui les a
+                // produits. Dès qu'un des deux côtés a bougé, ils sont périmés :
+                // on rend `null` plutôt qu'un chiffre faux, et la
+                // synchronisation suivante les recalculera.
+                const fresh =
+                    row.compared_sha !== null &&
+                    base?.head_sha != null &&
+                    row.head_sha != null &&
+                    row.compared_sha === `${base.head_sha}..${row.head_sha}`;
+                return {
+                    id: row.id,
+                    name: (await readJson<{ name?: string }>(cipher, row.content))?.name ?? '',
+                    headSha: row.head_sha,
+                    isDefault: row.is_default === 1,
+                    updatedAt: row.updated_at,
+                    aheadCount: fresh ? (row.ahead_count ?? null) : null,
+                    behindCount: fresh ? (row.behind_count ?? null) : null
+                };
+            })
         );
         return { branches };
+    }
+});
+
+export const projectPullRequestListFeature: FeatureDefinition<
+    typeof projectPullRequestList.command,
+    typeof projectPullRequestList.input,
+    typeof projectPullRequestList.output
+> = defineFeature({
+    ...projectPullRequestList,
+    access: READ,
+    handler: async (ctx, input) => {
+        const project = await loadProject(ctx, input.projectId);
+        await assertProjectUnlocked(ctx, project);
+        const cipher = cipherFor(ctx, project.security_tier);
+        const rows = await ctx.db.projectGit.listPullRequests(input.projectId, ctx.workspaceId);
+        const pullRequests = await Promise.all(
+            rows.map(async (row) => {
+                const body = await readJson<{
+                    title?: string;
+                    body?: string;
+                    authorName?: string;
+                    headBranch?: string;
+                    baseBranch?: string;
+                    url?: string;
+                }>(cipher, row.content);
+                return {
+                    id: row.id,
+                    number: row.number,
+                    // `.catch()` du schéma : un état inconnu venu d'une autre
+                    // version dégrade l'affichage, il ne casse pas la liste.
+                    state: projectPullStateSchema.catch('open').parse(row.state),
+                    title: body?.title ?? '',
+                    body: body?.body ?? '',
+                    authorName: body?.authorName ?? '',
+                    headBranch: body?.headBranch ?? '',
+                    baseBranch: body?.baseBranch ?? '',
+                    url: body?.url || null,
+                    createdAt: Number(row.created_at),
+                    updatedAt: Number(row.updated_at),
+                    mergedAt: row.merged_at === null ? null : Number(row.merged_at),
+                    closedAt: row.closed_at === null ? null : Number(row.closed_at)
+                };
+            })
+        );
+        return { pullRequests };
+    }
+});
+
+/**
+ * Où en est la synchronisation de ce dépôt.
+ *
+ * Pas de `mutates` — elle n'écrit rien — et volontairement **très bon marché** :
+ * elle ne lit qu'une table en mémoire du service. C'est ce qui permet à
+ * l'interface de la sonder pendant qu'une synchronisation tourne, plutôt que de
+ * diffuser une invalidation `live` à chaque étape, laquelle ferait re-solliciter
+ * tout le tableau six fois d'affilée à tous les membres de l'espace.
+ */
+export const projectSyncStatusFeature: FeatureDefinition<
+    typeof projectSyncStatus.command,
+    typeof projectSyncStatus.input,
+    typeof projectSyncStatus.output
+> = defineFeature({
+    ...projectSyncStatus,
+    access: READ,
+    handler: async (ctx, input) => {
+        // `loadProject` porte la frontière d'espace : sans lui, on répondrait
+        // sur l'identifiant d'un projet d'un autre espace.
+        await loadProject(ctx, input.projectId);
+        const status = ctx.projects?.syncStatus(input.projectId) ?? {
+            running: false,
+            phase: null,
+            step: 0,
+            stepCount: 1,
+            startedAt: null
+        };
+        return { status };
+    }
+});
+
+/**
+ * Le diff d'un commit, lu chez le fournisseur **au moment de la demande**.
+ *
+ * C'est la seule lecture du module qui sorte du cache local, et donc la seule
+ * dont la latence dépend d'une API tierce. Le parti pris est assumé : un diff
+ * pèse des ordres de grandeur de plus que la ligne qui le résume, on ne le
+ * regarde qu'une fois, et le conserver chiffré ferait grossir la base sans
+ * contrepartie.
+ */
+export const projectCommitDetailFeature: FeatureDefinition<
+    typeof projectCommitDetail.command,
+    typeof projectCommitDetail.input,
+    typeof projectCommitDetail.output
+> = defineFeature({
+    ...projectCommitDetail,
+    access: READ,
+    handler: async (ctx, input) => {
+        const project = await loadProject(ctx, input.projectId);
+        await assertProjectUnlocked(ctx, project);
+
+        const repoRow = await ctx.db.projectGit.findRepo(input.projectId, ctx.workspaceId);
+        if (!repoRow) throw new FeatureError('not_found', 'Aucun dépôt lié');
+        if (repoRow.credential_id === null) {
+            throw new FeatureError('validation', 'Le jeton d’accès a été retiré : le dépôt n’est plus lisible.');
+        }
+
+        const cipher = cipherFor(ctx, project.security_tier);
+        const target = await readJson<{ owner?: string; repo?: string }>(cipher, repoRow.content);
+        if (!target?.owner || !target.repo) throw new FeatureError('internal', 'Dépôt lié illisible');
+
+        const credential = await ctx.db.projectGit.findCredential(repoRow.credential_id, ctx.workspaceId);
+        if (!credential) throw new FeatureError('not_found', 'Identifiant introuvable');
+        // Le secret vit sous l'étage ouvert quel que soit le tier du projet
+        // (voir `secretCipher`) : il se lit avec ce chiffre-là, pas celui du
+        // projet.
+        const token = await secretCipher(ctx).decrypt(credential.secret_enc);
+
+        const detail = await fetchCommitDetail(target.owner, target.repo, token, input.sha);
+        return {
+            detail: {
+                sha: detail.sha,
+                message: detail.message,
+                authorName: detail.authorName,
+                committedAt: detail.committedAt,
+                url: detail.url || null,
+                additions: detail.additions,
+                deletions: detail.deletions,
+                files: detail.files.map((f) => ({
+                    filename: f.filename,
+                    previousFilename: f.previousFilename,
+                    // `.catch()` : un état de fichier inconnu retombe sur
+                    // « modifié » plutôt que de faire échouer tout le diff.
+                    status: projectDiffStatusSchema.parse(f.status),
+                    additions: f.additions,
+                    deletions: f.deletions,
+                    patch: f.patch
+                })),
+                truncated: detail.truncated
+            }
+        };
     }
 });
 
@@ -509,5 +668,8 @@ export const projectGitFeatures = [
     projectCommitListFeature,
     projectCommitGraphFeature,
     projectAuthorMapFeature,
-    projectReleaseListFeature
+    projectReleaseListFeature,
+    projectPullRequestListFeature,
+    projectSyncStatusFeature,
+    projectCommitDetailFeature
 ];

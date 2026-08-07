@@ -58,6 +58,7 @@ const COLUMNS: EncryptedCell[] = [
     { table: 'project_commits', idColumn: 'id', column: 'content' },
     { table: 'project_branches', idColumn: 'id', column: 'content' },
     { table: 'project_releases', idColumn: 'id', column: 'content' },
+    { table: 'project_pull_requests', idColumn: 'id', column: 'content' },
     { table: 'project_deploy_targets', idColumn: 'project_id', column: 'content' },
     { table: 'project_deployments', idColumn: 'id', column: 'content' }
 ];

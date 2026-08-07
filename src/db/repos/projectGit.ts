@@ -3,6 +3,7 @@ import type {
     ProjectCommitAuthorRow,
     ProjectCommitRow,
     ProjectCredentialRow,
+    ProjectPullRequestRow,
     ProjectReleaseRow,
     ProjectRepoRow
 } from 'deveye-types';
@@ -81,6 +82,29 @@ export interface ProjectGitRepo {
     /** Retire les branches disparues du distant. */
     pruneBranches(projectId: number, keepRefs: string[]): Promise<void>;
     listBranches(projectId: number, workspaceId: number): Promise<ProjectBranchRow[]>;
+    /**
+     * Inscrit l'avance-retard d'une branche, avec le couple de sha qui l'a
+     * produit — c'est lui qui dira, au tour suivant, si le calcul tient encore.
+     */
+    setBranchComparison(
+        projectId: number,
+        nameRef: string,
+        input: { ahead: number; behind: number; comparedSha: string }
+    ): Promise<void>;
+
+    upsertPullRequest(input: {
+        projectId: number;
+        workspaceId: number;
+        number: number;
+        state: string;
+        authorRef: string | null;
+        createdAt: number;
+        updatedAt: number;
+        mergedAt: number | null;
+        closedAt: number | null;
+        content: string;
+    }): Promise<void>;
+    listPullRequests(projectId: number, workspaceId: number): Promise<ProjectPullRequestRow[]>;
 
     upsertAuthor(input: { projectId: number; workspaceId: number; authorRef: string; content: string }): Promise<void>;
     listAuthors(projectId: number, workspaceId: number): Promise<ProjectCommitAuthorRow[]>;
@@ -202,6 +226,7 @@ export function projectGitRepo(pool: Q): ProjectGitRepo {
             await pool.query('DELETE FROM project_commits WHERE project_id = ?', [projectId]);
             await pool.query('DELETE FROM project_branches WHERE project_id = ?', [projectId]);
             await pool.query('DELETE FROM project_releases WHERE project_id = ?', [projectId]);
+            await pool.query('DELETE FROM project_pull_requests WHERE project_id = ?', [projectId]);
             await pool.query('DELETE FROM project_commit_authors WHERE project_id = ?', [projectId]);
             const r = await pool.query('DELETE FROM project_repos WHERE project_id = ? AND workspace_id = ?', [
                 projectId,
@@ -268,6 +293,10 @@ export function projectGitRepo(pool: Q): ProjectGitRepo {
         },
 
         async upsertBranch({ projectId, workspaceId, nameRef, headSha, isDefault, updatedAt, content }) {
+            // `ahead_count`, `behind_count` et `compared_sha` ne sont pas touchés
+            // ici : ils appartiennent à `setBranchComparison`, qui seul sait sur
+            // quel couple de sha ils portent. Les remettre à zéro à chaque tour
+            // reviendrait à refaire la comparaison à chaque tour.
             await pool.query(
                 `INSERT INTO project_branches (project_id, workspace_id, name_ref, head_sha, is_default, updated_at, content)
                  VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -277,6 +306,13 @@ export function projectGitRepo(pool: Q): ProjectGitRepo {
                      updated_at = VALUES(updated_at),
                      content = VALUES(content)`,
                 [projectId, workspaceId, nameRef, headSha, isDefault ? 1 : 0, updatedAt, content]
+            );
+        },
+        async setBranchComparison(projectId, nameRef, { ahead, behind, comparedSha }) {
+            await pool.query(
+                `UPDATE project_branches SET ahead_count = ?, behind_count = ?, compared_sha = ?
+                 WHERE project_id = ? AND name_ref = ?`,
+                [ahead, behind, comparedSha, projectId, nameRef]
             );
         },
         async pruneBranches(projectId, keepRefs) {
@@ -401,6 +437,43 @@ export function projectGitRepo(pool: Q): ProjectGitRepo {
             const r = await pool.query<ProjectReleaseRow>(
                 `SELECT * FROM project_releases WHERE project_id = ? AND workspace_id = ?
                  ORDER BY published_at DESC, id DESC`,
+                [projectId, workspaceId]
+            );
+            return r.rows;
+        },
+
+        async upsertPullRequest({
+            projectId,
+            workspaceId,
+            number,
+            state,
+            authorRef,
+            createdAt,
+            updatedAt,
+            mergedAt,
+            closedAt,
+            content
+        }) {
+            await pool.query(
+                `INSERT INTO project_pull_requests
+                     (project_id, workspace_id, number, state, author_ref, created_at, updated_at, merged_at, closed_at, content)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE
+                     state = VALUES(state),
+                     author_ref = VALUES(author_ref),
+                     updated_at = VALUES(updated_at),
+                     merged_at = VALUES(merged_at),
+                     closed_at = VALUES(closed_at),
+                     content = VALUES(content)`,
+                [projectId, workspaceId, number, state, authorRef, createdAt, updatedAt, mergedAt, closedAt, content]
+            );
+        },
+        async listPullRequests(projectId, workspaceId) {
+            // Les ouvertes d'abord — ce sont elles qui demandent une action —
+            // puis les plus récemment actives.
+            const r = await pool.query<ProjectPullRequestRow>(
+                `SELECT * FROM project_pull_requests WHERE project_id = ? AND workspace_id = ?
+                 ORDER BY state IN ('open', 'draft') DESC, updated_at DESC, number DESC`,
                 [projectId, workspaceId]
             );
             return r.rows;

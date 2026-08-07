@@ -13,6 +13,8 @@ interface RepoDialogProps {
     credentials: ProjectCredential[];
     onClose: () => void;
     onSaved: () => void;
+    /** Délier le dépôt. Absent quand rien n'est lié, ou en lecture seule. */
+    onUnlink?: () => void;
 }
 
 /**
@@ -27,7 +29,7 @@ interface RepoDialogProps {
  * reste donc vide à la ré-ouverture, et le laisser vide veut dire « garder
  * celui en place ».
  */
-export function RepoDialog({ open, projectId, repo, credentials, onClose, onSaved }: RepoDialogProps) {
+export function RepoDialog({ open, projectId, repo, credentials, onClose, onSaved, onUnlink }: RepoDialogProps) {
     const [owner, setOwner] = useState('');
     const [repoName, setRepoName] = useState('');
     const [credentialId, setCredentialId] = useState<string>('');
@@ -37,9 +39,12 @@ export function RepoDialog({ open, projectId, repo, credentials, onClose, onSave
     const [showToken, setShowToken] = useState(false);
     const [label, setLabel] = useState('');
     const [secret, setSecret] = useState('');
+    /** Le déliement efface le cache local : il se confirme sur place. */
+    const [confirmUnlink, setConfirmUnlink] = useState(false);
 
     useEffect(() => {
         if (!open) return;
+        setConfirmUnlink(false);
         setOwner(repo?.owner ?? '');
         setRepoName(repo?.repo ?? '');
         setCredentialId(repo?.credentialId === null || repo === null ? '' : String(repo.credentialId));
@@ -192,6 +197,35 @@ export function RepoDialog({ open, projectId, repo, credentials, onClose, onSave
                                 Enregistrer le jeton
                             </Button>
                         </div>
+                    </div>
+                )}
+
+                {/* Le déliement vit ici, avec les autres réglages du dépôt, et
+                    non dans l'en-tête de l'onglet : une action destructrice n'a
+                    pas à côtoyer « Synchroniser », qu'on presse souvent. */}
+                {onUnlink && repo && (
+                    <div className={styles.dangerZone}>
+                        <div>
+                            <span className={styles.label}>Délier ce dépôt</span>
+                            <span className={styles.hint}>
+                                Le projet perd branches, commits, releases et pull requests mémorisés. Le dépôt sur
+                                GitHub, lui, n’est pas touché.
+                            </span>
+                        </div>
+                        {confirmUnlink ? (
+                            <div className={styles.actions}>
+                                <Button variant='secondary' onClick={() => setConfirmUnlink(false)} disabled={busy}>
+                                    Annuler
+                                </Button>
+                                <Button variant='danger' onClick={onUnlink} disabled={busy}>
+                                    Confirmer
+                                </Button>
+                            </div>
+                        ) : (
+                            <Button variant='danger' onClick={() => setConfirmUnlink(true)} disabled={busy}>
+                                Délier
+                            </Button>
+                        )}
                     </div>
                 )}
 
