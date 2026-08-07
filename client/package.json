@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "ci": "npm run lint && npm run typecheck && npm run build",
+    "check:css": "node scripts/check-css-modules.mjs",
+    "ci": "npm run check:css && npm run lint && npm run typecheck && npm run build",
     "test": "echo \"Error: no test specified\" && exit 1",
     "gen:css-types": "tcm src --include '**/*.module.css'",
     "clean": "rm -rf ./build ./dist ./node_modules package-lock.json"

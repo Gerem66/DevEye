@@ -701,7 +701,10 @@
     padding: var(--space-sm) 0;
 }
 
-.grid {
+/* Couche de fond de la frise : graduations et jalons, sous les barres.
+   Préfixée `tl` — une classe `.grid` générique entrait en collision avec la
+   grille du portefeuille, plus haut dans ce même module, et l'écrasait. */
+.tlGrid {
     position: absolute;
     inset: var(--space-sm) 0 auto 0;
     pointer-events: none;
@@ -796,7 +799,8 @@
     position: relative;
 }
 
-.row {
+/* Idem : `.row` est déjà la ligne de formulaire, plus haut. */
+.tlRow {
     position: relative;
 }
 

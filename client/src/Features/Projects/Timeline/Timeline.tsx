@@ -132,7 +132,7 @@ export function Timeline({
             <div className={styles.timelineScroll}>
                 <div className={styles.timelineInner} style={{ width }}>
                     {/* Graduations + jalons : une seule couche de fond, sous les barres. */}
-                    <div className={styles.grid} style={{ height: dated.length * ROW_H + 28 }}>
+                    <div className={styles.tlGrid} style={{ height: dated.length * ROW_H + 28 }}>
                         {ticks.map((tick) => (
                             <div
                                 key={tick.t}
@@ -199,7 +199,7 @@ export function Timeline({
                             const assignee = members.find((m) => m.id === card.assigneeUserId);
                             const overdue = card.dueDate !== null && card.dueDate * 1000 < Date.now();
                             return (
-                                <div key={card.id} className={styles.row} style={{ height: ROW_H }}>
+                                <div key={card.id} className={styles.tlRow} style={{ height: ROW_H }}>
                                     <button
                                         type='button'
                                         className={`${styles.bar} ${s.pointOnly ? styles.barPoint : ''} ${
