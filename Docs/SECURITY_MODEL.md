@@ -178,3 +178,61 @@ utilise donc systématiquement l'**étage ouvert** :
 Même garantie que la BMK CloudSync : protégé au repos, lisible par un serveur
 vivant compromis. Le choix est ici structurel — un moniteur qui exigerait le mot
 de passe ne pourrait tout simplement pas sonder.
+
+## Projets — l'étage choisi par l'utilisateur
+
+Contrairement à Uptime (toujours ouvert) et au coffre (toujours gardé), les
+projets laissent le choix **par projet** : `projects.security_tier` vaut `open`
+ou `guarded`, exactement comme `mail_accounts.security_tier`.
+
+Ce qui en découle :
+
+- **Tout l'arbre d'un projet suit l'étage de son projet** — cartes, messages,
+  jalons, événements d'historique, cache git, déploiements. Pas de tier par
+  ligne : c'est ce qui rend la bascule atomique (`reencryptProjectTree`), qui
+  lit et re-chiffre tout **avant** la moindre écriture et abandonne sans rien
+  toucher si une seule ligne résiste.
+- **`guarded` n'existe qu'en espace personnel.** En espace partagé, l'étage
+  gardé est la clé du *propriétaire* : le projet serait illisible pour les
+  autres membres, ou (si l'espace a sa propre clé) lisible par tous tout en
+  s'annonçant confidentiel. Refus explicite plutôt qu'une de ces deux issues.
+  Un espace partagé reste chiffré — sous la clé de l'espace, à l'étage ouvert.
+- **Un projet gardé perd ses intégrations.** La synchronisation git et le suivi
+  de déploiement tournent sans session : ils n'atteindront jamais l'étage gardé.
+  La règle est portée par la requête d'ordonnancement elle-même, pas par une
+  garde applicative, pour qu'elle ne puisse pas être contournée par un nouvel
+  appelant.
+- **`workspace.enableSharedKey` est refusée** tant qu'un projet gardé subsiste
+  dans l'espace : le convertir le rendrait lisible par tous les membres, ce que
+  son auteur a précisément refusé. Voir le bloqueur dans
+  `src/db/repos/workspaceRekey.ts`.
+
+### Ce qui reste en clair, et pourquoi
+
+Le module en garde plus que les autres, à dessein : ce sont les colonnes sans
+lesquelles il faudrait déchiffrer des dizaines de milliers de lignes pour
+afficher un écran.
+
+- **`assignee_user_id`** — « toutes mes tâches, tous projets » en une requête.
+  Le serveur connaît déjà l'appartenance à l'espace : il n'apprend rien de neuf.
+- **`message_count` et le point d'eau haute de lecture** — le badge « des
+  messages non lus ici » sans ouvrir un seul message.
+- **`committed_at` et `author_ref`** — le graphe des commits est une agrégation
+  SQL. `author_ref` est un condensé de l'adresse e-mail (16 caractères de son
+  sha256) : identité stable et graine de couleur, **sans adresse en clair**.
+- **Les dates, `archived_at`, `counts_as_done`** — la frise, les retards et
+  l'avancement, tous calculés sans clé.
+
+Aucune de ces colonnes ne dit *quoi* est fait, par qui hors de l'espace, ni ce
+qui est écrit. Les titres, descriptions, messages, noms de branches et messages
+de commit passent tous par le chiffre.
+
+> **Corollaire à ne pas oublier** : le chiffrement est non déterministe, donc ce
+> qui doit être **unique** ne peut pas être chiffré. D'où les colonnes `*_ref`
+> (`author_ref`, `name_ref`, `tag_ref`) — des condensés stables qui portent
+> l'unicité pendant que la valeur lisible vit dans le payload chiffré.
+
+Les secrets d'accès (`project_credentials.secret_enc` : jeton GitHub, clé
+Dokploy) sont **toujours** sous l'étage ouvert, quel que soit le tier des projets
+qui s'en servent — le service de fond doit les lire sans session. Ils ne sont
+jamais renvoyés au client, qui n'en reçoit qu'un booléen `hasSecret`.

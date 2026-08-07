@@ -116,8 +116,12 @@ handler })` par commande. Le handler reçoit un `FeatureContext` (`ctx.db`,
       enregistrer son action via `useDialogSubmit(submit)` au lieu de `onSubmit`.
     - **Cohérence d'ajout** : une popup/sous-formulaire d'ajout se ferme après un
       ajout réussi (appareils, raccourcis, features, formulaires — tous pareils).
-3. **Enregistrement** — `src/Pages/Home/index.tsx` : - widget de grille → ajouter à `FEATURES` (`{ id, title, icon, WidgetContent,
-FullComponent, cacheDurationMinutes, preload? }`) ; - page structurelle → ajouter à `PAGES` et passer un `onOpenX` au `TopNavbar`
+3. **Enregistrement** — - widget de grille → ajouter à `FEATURE_CATALOG` dans
+   **`src/Pages/Home/catalog.tsx`** (`{ id, title, icon, WidgetContent,
+   FullComponent, cacheDurationMinutes, preload?, holdSecrecy? }`). Cela suffit
+   à le faire apparaître dans la grille **et** dans le sélecteur « ajouter une
+   tuile » ; - page structurelle → ajouter à `STATIC_VIEWS` dans `src/Pages/Home/index.tsx`
+   (avec `hasCard: false`) et passer un `onOpenX` au `TopNavbar`
    (gater par rôle si besoin : `user.role === 'admin' ? () => handleExpand('x') : undefined`).
 4. **Navbar** (page structurelle) — `src/Components/TopNavbar/TopNavbar.tsx` :
    ajouter la prop `onOpenX?` et l'entrée de menu (rendue seulement si la prop est
