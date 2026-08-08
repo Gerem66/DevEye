@@ -46,7 +46,7 @@ export function FeatureProjects({ user, workspace }: FeatureProps) {
 
     // Présence : « qui regarde quel projet ». Un seul déclarant par niveau —
     // ce composant possède `l1`, et rien d'autre dans la feature n'y touche.
-    useLiveSegment('l1', selectedId === null ? null : `project:${selectedId}`);
+    const liveTarget = useLiveSegment('l1', selectedId === null ? null : `project:${selectedId}`);
     const outlineFor = useLiveOutlines('l1');
 
     const reload = useCallback(async () => {
@@ -82,7 +82,7 @@ export function FeatureProjects({ user, workspace }: FeatureProps) {
     };
 
     /** Charge le projet en entier — c'est ici que l'invite peut apparaître. */
-    const fetchProject = async (projectId: number): Promise<Project | null> => {
+    const fetchProject = useCallback(async (projectId: number): Promise<Project | null> => {
         try {
             const res = await withSecrecy(() => ws.send('project.get', { projectId }));
             return res.project;
@@ -90,15 +90,23 @@ export function FeatureProjects({ user, workspace }: FeatureProps) {
             setError(humanizeError(e, 'Impossible d’ouvrir ce projet.'));
             return null;
         }
-    };
+    }, []);
 
-    /** Ouvre le projet : sa vue détail (tableau, et bientôt les autres onglets). */
-    const openProject = async (summary: ProjectSummary) => {
-        const project = await fetchProject(summary.project.id);
-        if (!project) return;
-        setOpened(project);
-        setSelectedId(project.id);
-    };
+    /**
+     * Ouvre le projet : sa vue détail.
+     *
+     * Mémoïsée parce que l'effet de téléportation en dépend : recréée à chaque
+     * rendu, elle ferait rejouer cet effet en boucle tant qu'une cible est posée.
+     */
+    const openProject = useCallback(
+        async (summary: ProjectSummary) => {
+            const project = await fetchProject(summary.project.id);
+            if (!project) return;
+            setOpened(project);
+            setSelectedId(project.id);
+        },
+        [fetchProject]
+    );
 
     /** Ouvre le formulaire de profil, depuis la liste ou depuis le détail. */
     const openEdit = async (projectId: number) => {
@@ -144,6 +152,59 @@ export function FeatureProjects({ user, workspace }: FeatureProps) {
         }
     };
 
+    /**
+     * Archive depuis « Modifier le projet ».
+     *
+     * Si le projet archivé était ouvert, on referme sa vue : il vient de quitter
+     * le portefeuille, l'y laisser affiché montrerait un écran qui ne correspond
+     * plus à rien.
+     */
+    const archiveFromDialog = async (project: Project) => {
+        setBusy(true);
+        setDialogError(null);
+        try {
+            await withSecrecy(() => ws.send('project.archive', { projectId: project.id }));
+            invalidate('project.list', 'project.count');
+            setDialogOpen(false);
+            if (opened?.id === project.id) {
+                setOpened(null);
+                setSelectedId(null);
+            }
+        } catch (e) {
+            setDialogError(humanizeError(e, 'L’archivage a échoué.'));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    /**
+     * Où une téléportation veut nous emmener.
+     *
+     * Deux usages, un seul mécanisme : rejoindre quelqu'un qui regarde un projet
+     * (présence), et le « ouvrir le projet » de la feature Git, qui pose le même
+     * chemin `view:projects l1:project:<id>`.
+     *
+     * La cible est rendue **tant qu'elle n'est pas atteinte** (voir
+     * `useLiveSegment`) : si le portefeuille n'a pas fini de charger, l'effet la
+     * retrouvera au rendu suivant, sans rien avoir à acquitter.
+     */
+    useEffect(() => {
+        if (!liveTarget) return;
+        if (liveTarget.value === null) {
+            // « Ce niveau doit être refermé » — on remonte au portefeuille.
+            setOpened(null);
+            setSelectedId(null);
+            return;
+        }
+        const id = Number(liveTarget.value.replace(/^project:/, ''));
+        if (!Number.isFinite(id) || id === selectedId) return;
+        const summary = summaries?.find((s) => s.project.id === id);
+        // Pas encore chargé : la cible reste posée, on la retrouvera au rendu
+        // suivant — c'est tout l'intérêt de ne rien avoir à acquitter.
+        if (!summary) return;
+        void openProject(summary);
+    }, [liveTarget, summaries, selectedId, openProject]);
+
     const totals = useMemo(() => {
         if (!summaries) return null;
         return {
@@ -177,6 +238,7 @@ export function FeatureProjects({ user, workspace }: FeatureProps) {
                     error={dialogError}
                     onClose={() => setDialogOpen(false)}
                     onSubmit={(result) => void submit(result)}
+                    onArchive={canWrite && editing ? () => void archiveFromDialog(editing) : undefined}
                 />
             </>
         );
@@ -187,7 +249,7 @@ export function FeatureProjects({ user, workspace }: FeatureProps) {
             <header className={styles.header}>
                 <div>
                     <h2 className={styles.heading}>
-                        {showMine ? 'Mes tâches' : showArchived ? 'Projets archivés' : 'Portefeuille'}
+                        {showMine ? 'Mes tâches' : showArchived ? 'Projets archivés' : 'Projets'}
                     </h2>
                     {totals && !showArchived && !showMine && (
                         <p className={styles.subheading}>
@@ -228,7 +290,7 @@ export function FeatureProjects({ user, workspace }: FeatureProps) {
                         >
                             {showArchived && <span className='icon icon-arrow-left' />}
                             <span className='icon icon-archive' />
-                            {showArchived ? 'Portefeuille' : 'Archives'}
+                            {showArchived ? 'Projets' : 'Archives'}
                         </Button>
                     )}
 
@@ -285,6 +347,7 @@ export function FeatureProjects({ user, workspace }: FeatureProps) {
                 error={dialogError}
                 onClose={() => setDialogOpen(false)}
                 onSubmit={(result) => void submit(result)}
+                onArchive={canWrite && editing ? () => void archiveFromDialog(editing) : undefined}
             />
         </div>
     );
@@ -300,6 +363,15 @@ interface ProjectCardProps {
     onArchive: () => void;
 }
 
+/**
+ * Une ligne du portefeuille.
+ *
+ * Une ligne pleine largeur et non une carte de grille : ce qui distingue deux
+ * projets tient dans un titre et quelques chiffres, et une grille de cartes
+ * imposait une hauteur minimale commune (168 px) que la plupart ne remplissaient
+ * pas. En ligne, l'avancement peut de surcroît occuper toute la place restante
+ * plutôt qu'un filet de 300 px.
+ */
 function ProjectCard({ summary, canWrite, archived, outline, onOpen, onArchive }: ProjectCardProps) {
     const { project, masked, cardTotal, cardDone, cardOverdue, nextDueDate, unread } = summary;
     const progress = cardTotal === 0 ? 0 : Math.round((cardDone / cardTotal) * 100);
@@ -325,61 +397,88 @@ function ProjectCard({ summary, canWrite, archived, outline, onOpen, onArchive }
                     }
                 }}
             >
-                <div className={styles.cardTop}>
-                    <span className={styles.status} data-status={project.status}>
-                        {STATUS_LABELS[project.status]}
-                    </span>
-                    {project.securityTier === 'guarded' && (
-                        <span className={styles.lock} title='Projet confidentiel'>
-                            <span className='icon icon-lock' />
+                <div className={styles.cardIdent}>
+                    <div className={styles.cardTitleRow}>
+                        {/* Le statut ouvre la ligne : c'est la première chose
+                            qu'on cherche en balayant la liste, elle doit se lire
+                            sans avoir à traverser le titre. */}
+                        <span className={styles.status} data-status={project.status}>
+                            {STATUS_LABELS[project.status]}
                         </span>
-                    )}
+                        {project.securityTier === 'guarded' && (
+                            <span className={styles.lock} title='Projet confidentiel'>
+                                <span className='icon icon-lock' />
+                            </span>
+                        )}
+
+                        <h3 className={styles.title}>
+                            {masked ? (
+                                <span className={styles.masked}>Projet confidentiel</span>
+                            ) : (
+                                project.title || 'Sans titre'
+                            )}
+                        </h3>
+
+                        {!masked && project.tags.length > 0 && (
+                            <ul className={styles.tags}>
+                                {project.tags.map((tag) => (
+                                    <li key={`${tag.kind}:${tag.label}`} className={styles.tag} data-kind={tag.kind}>
+                                        {tag.label}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+
+                    {!masked && project.description && <p className={styles.description}>{project.description}</p>}
+                </div>
+
+                {/* Colonne de largeur **fixe**, et c'est tout l'intérêt : la
+                    barre commence et finit au même endroit sur toutes les
+                    lignes, quelle que soit la longueur du titre. En flux, elle
+                    absorbait la place restante et changeait donc de taille à
+                    chaque projet — impossible de comparer deux avancements d'un
+                    coup d'œil, ce qui est pourtant tout ce qu'on lui demande. */}
+                <div className={styles.cardProgress}>
+                    <div className={styles.progress} aria-label={`Avancement ${progress}%`}>
+                        <div className={styles.progressFill} style={{ width: `${progress}%` }} />
+                    </div>
+                    <div className={styles.meta}>
+                        <span>
+                            {cardDone}/{cardTotal} tâche{cardTotal > 1 ? 's' : ''}
+                        </span>
+                        {cardOverdue > 0 && <span className={styles.overdue}>{cardOverdue} en retard</span>}
+                        {due && <span>échéance {due}</span>}
+                        {!masked && project.version && <span className={styles.version}>v{project.version}</span>}
+                    </div>
+                </div>
+
+                <div className={styles.cardAside}>
                     {/* Badge visible uniquement s'il y a réellement du non-lu. */}
                     {unread > 0 && <span className={styles.unread}>{unread}</span>}
-                </div>
 
-                <h3 className={styles.title}>
-                    {masked ? (
-                        <span className={styles.masked}>Projet confidentiel</span>
-                    ) : (
-                        project.title || 'Sans titre'
-                    )}
-                </h3>
-
-                {!masked && project.description && <p className={styles.description}>{project.description}</p>}
-
-                {!masked && project.tags.length > 0 && (
-                    <ul className={styles.tags}>
-                        {project.tags.map((tag) => (
-                            <li key={`${tag.kind}:${tag.label}`} className={styles.tag} data-kind={tag.kind}>
-                                {tag.label}
-                            </li>
-                        ))}
-                    </ul>
-                )}
-
-                <div className={styles.progress} aria-label={`Avancement ${progress}%`}>
-                    <div className={styles.progressFill} style={{ width: `${progress}%` }} />
-                </div>
-                <div className={styles.meta}>
-                    <span>
-                        {cardDone}/{cardTotal} tâche{cardTotal > 1 ? 's' : ''}
+                    {/* Symbole, pas bouton : il dit que toute la ligne est
+                        cliquable. « Archiver » a quitté cette place pour
+                        « Modifier le projet » — c'est un geste rare, il n'a pas
+                        à être le plus accessible de l'écran. */}
+                    <span className={styles.openArrow} aria-hidden='true'>
+                        <span className='icon icon-arrow' />
                     </span>
-                    {cardOverdue > 0 && <span className={styles.overdue}>{cardOverdue} en retard</span>}
-                    {due && <span>échéance {due}</span>}
-                    {!masked && project.version && <span className={styles.version}>v{project.version}</span>}
                 </div>
             </div>
 
-            {canWrite && (
+            {/* Dans les archives, en revanche, restaurer est le **seul** geste de
+                l'écran : l'enfouir dans une popup ajouterait trois clics à
+                l'unique action qu'on vient y faire. */}
+            {canWrite && archived && (
                 <button
                     type='button'
-                    className={archived ? styles.restore : styles.archive}
-                    title={archived ? 'Restaurer' : 'Archiver'}
-                    aria-label={`${archived ? 'Restaurer' : 'Archiver'} ${project.title || 'ce projet'}`}
+                    className={styles.restore}
+                    title='Restaurer'
+                    aria-label={`Restaurer ${project.title || 'ce projet'}`}
                     onClick={onArchive}
                 >
-                    <span className={archived ? 'icon icon-refresh' : 'icon icon-archive'} />
+                    <span className='icon icon-refresh' />
                 </button>
             )}
         </li>

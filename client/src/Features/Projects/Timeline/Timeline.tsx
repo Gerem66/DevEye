@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import type { MinimalUser, ProjectCard, ProjectCardDep, ProjectMilestone } from 'deveye-types';
 import { Button } from '@/Components';
 import { useLiveOutlines } from '@/live/useLiveOutline';
+import { useRequestPopupWidth } from '@/stores/popupWidth';
 import { Avatar } from '../Board/Avatar';
+import { timelineNaturalWidth } from '../Board/width';
 import { DAY_MS, startOfDay, timelineTicks, ZOOM_LEVELS, type ZoomId } from './scale';
 import styles from '../style.module.css';
 
@@ -73,6 +75,12 @@ export function Timeline({
     }, [dated, milestones]);
 
     const width = Math.max(320, ((range.max - range.min) / DAY_MS) * dayWidth);
+
+    // La frise réclame à la popup la largeur qu'elle vient de calculer : elle
+    // découle de la fenêtre de dates et du zoom, donc changer de zoom fait
+    // suivre la popup. Rien à mesurer — la valeur est déjà là.
+    useRequestPopupWidth(timelineNaturalWidth(width));
+
     const x = (t: number) => ((t - range.min) / DAY_MS) * dayWidth;
     const ticks = useMemo(() => timelineTicks(range.min, range.max, dayWidth), [range, dayWidth]);
 

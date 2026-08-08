@@ -19,8 +19,6 @@ import { createHash } from 'crypto';
 
 const API = 'https://api.github.com';
 
-/** Au-delà, on arrête de remonter : un premier import doit rester borné. */
-const MAX_COMMIT_PAGES = 10;
 const PER_PAGE = 100;
 
 export class GitHubError extends Error {
@@ -114,6 +112,27 @@ export interface GitHubSyncState {
     pullsEtag?: string;
     /** Horodatage du commit le plus récent déjà connu, en secondes. */
     lastCommitAt?: number;
+    /**
+     * L'historique ancien a-t-il été entièrement rapatrié ?
+     *
+     * Sans ce drapeau, un dépôt n'aurait jamais que ses commits récents : le
+     * premier tour en lisait mille, et tous les suivants repartaient de
+     * `since = le plus récent connu`, si bien que **rien d'antérieur ne pouvait
+     * plus jamais arriver**. C'est ce que cette bascule répare — on remonte le
+     * temps par tranches jusqu'à toucher le premier commit du dépôt.
+     */
+    backfillDone?: boolean;
+    /**
+     * Jusqu'où le backfill de la **branche par défaut** est descendu.
+     *
+     * Mémorisé ici plutôt que déduit d'un `MIN(committed_at)` sur le cache, et
+     * c'est une correction de fond : le cache contient aussi les commits des
+     * autres branches. Un seul commit ancien venu d'une branche latérale
+     * abaissait le minimum global, la tranche suivante repartait de bien plus
+     * bas, et **tout l'historique intermédiaire de la branche principale était
+     * sauté** — sans que rien ne le signale.
+     */
+    backfillUntil?: number;
 }
 
 interface FetchResult<T> {
@@ -180,8 +199,33 @@ interface RawCommit {
     html_url?: string;
     commit?: {
         message?: string;
+        /** Qui a **écrit** le code, et quand. C'est l'attribution. */
         author?: { name?: string; email?: string; date?: string };
+        /** Quand le commit a **atterri** dans le dépôt. Voir `commitDate`. */
+        committer?: { date?: string };
     };
+}
+
+/**
+ * La date à retenir pour un commit : celle du **committer**, pas de l'auteur.
+ *
+ * Deux raisons, et la seconde est un piège coûteux :
+ *
+ *  1. C'est le sens du champ. `committed_at` répond à « quand ce travail
+ *     a-t-il atterri dans le dépôt ? » ; la date d'auteur répond à « quand a-t-il
+ *     été écrit ? ». Un rebase, un cherry-pick ou une PR fusionnée des semaines
+ *     plus tard écartent les deux.
+ *  2. **C'est celle sur laquelle GitHub filtre** ses paramètres `since` et
+ *     `until`. Mesuré sur un dépôt ordinaire : 66 commits sur 100 ont deux dates
+ *     différentes. Borner le backfill sur la date d'auteur revenait donc à
+ *     comparer deux grandeurs distinctes — la borne pouvait ne pas reculer, ou
+ *     sauter des commits sans que rien ne le signale.
+ *
+ * L'auteur reste l'auteur : `authorName` / `authorEmail` continuent de venir de
+ * `author`, et c'est bien lui qui colore le graphe.
+ */
+function commitDate(raw: RawCommit): string | undefined {
+    return raw.commit?.committer?.date ?? raw.commit?.author?.date;
 }
 
 export async function fetchRepoInfo(
@@ -351,7 +395,7 @@ export async function fetchCommitDetail(
     const res = await call<{
         sha?: string;
         html_url?: string;
-        commit?: { message?: string; author?: { name?: string; date?: string } };
+        commit?: { message?: string; author?: { name?: string; date?: string }; committer?: { date?: string } };
         stats?: { additions?: number; deletions?: number };
         files?: {
             filename?: string;
@@ -369,7 +413,10 @@ export async function fetchCommitDetail(
         sha: data.sha ?? sha,
         message: data.commit?.message ?? '',
         authorName: data.commit?.author?.name ?? '',
-        committedAt: seconds(data.commit?.author?.date) ?? 0,
+        // Même date que dans la liste (voir `commitDate`) : sans ça, la popup
+        // d'un commit rebasé afficherait une heure différente de celle du point
+        // qu'on vient de cliquer dans le graphe.
+        committedAt: seconds(data.commit?.committer?.date ?? data.commit?.author?.date) ?? 0,
         url: data.html_url ?? '',
         additions: data.stats?.additions ?? 0,
         deletions: data.stats?.deletions ?? 0,
@@ -385,30 +432,71 @@ export async function fetchCommitDetail(
     };
 }
 
+/** Le résultat d'une lecture de commits, et si le distant en a encore. */
+export interface CommitPage {
+    commits: GitHubCommit[];
+    /**
+     * `true` quand le distant n'avait plus rien à rendre dans cette direction —
+     * et non quand on a simplement épuisé son budget de pages. C'est cette
+     * distinction qui dit au backfill s'il a fini ou s'il doit reprendre au tour
+     * suivant.
+     */
+    exhausted: boolean;
+}
+
 /**
- * Les commits, du plus récent au plus ancien, à partir de `since`.
+ * Lit des commits dans une fenêtre temporelle, avec un budget de pages.
  *
- * Pagination bornée par {@link MAX_COMMIT_PAGES} : un premier import sur un
- * dépôt vieux de dix ans ne doit pas monopoliser l'ordonnanceur ni le quota.
- * Les tours suivants reprendront où celui-ci s'est arrêté.
+ * Trois usages, un seul code :
+ *
+ *  - `{ since }` — la **tête** : ce qui est arrivé depuis le dernier commit
+ *    connu. Court en régime établi, souvent vide.
+ *  - `{ until }` — la **queue** : on remonte le temps depuis le plus ancien
+ *    commit connu. C'est le backfill, qui converge en quelques tours.
+ *  - `{ ref }` — une **branche** précise. ⚠️ Sans lui, GitHub ne rend que la
+ *    branche **par défaut** : tout ce qui ne vit que sur une branche de travail
+ *    reste invisible. C'est ce paramètre qui fait que « tous les commits » veut
+ *    vraiment dire tous.
+ *
+ * `until` est inclusif chez GitHub : le commit de la borne revient à chaque
+ * tranche. Sans conséquence — `INSERT IGNORE` le laisse tomber — mais c'est la
+ * raison pour laquelle l'appelant surveille la **progression** de la borne et
+ * non le simple nombre de lignes insérées.
  */
 export async function fetchCommits(
     owner: string,
     repo: string,
     token: string,
-    since?: number
-): Promise<GitHubCommit[]> {
+    window: { ref?: string; since?: number; until?: number },
+    maxPages: number
+): Promise<CommitPage> {
     const commits: GitHubCommit[] = [];
-    const sinceParam = since ? `&since=${new Date(since * 1000).toISOString()}` : '';
+    const iso = (t: number) => new Date(t * 1000).toISOString();
+    // ⚠️ La seconde de battement sur `until` n'est pas de la prudence gratuite.
+    //
+    // Nos horodatages sont **arrondis à la seconde** (`Math.floor`), alors que
+    // GitHub date ses commits à la milliseconde et compare strictement. Une
+    // borne posée à `12:00:07.000` exclut donc un commit réellement daté
+    // `12:00:07.400` — mesuré : la tranche suivante ne renvoie pas le commit de
+    // la borne. Sans ce +1, tout commit partageant la seconde de la borne serait
+    // sauté **définitivement**, puisque le backfill ne repasse jamais.
+    //
+    // Le prix est un chevauchement d'une seconde par tranche, que
+    // `INSERT IGNORE` absorbe sans bruit.
+    const bounds =
+        (window.ref ? `&sha=${encodeURIComponent(window.ref)}` : '') +
+        (window.since ? `&since=${iso(window.since)}` : '') +
+        (window.until ? `&until=${iso(window.until + 1)}` : '');
 
-    for (let page = 1; page <= MAX_COMMIT_PAGES; page++) {
+    let exhausted = false;
+    for (let page = 1; page <= maxPages; page++) {
         const res = await call<RawCommit[]>(
-            `/repos/${owner}/${repo}/commits?per_page=${PER_PAGE}&page=${page}${sinceParam}`,
+            `/repos/${owner}/${repo}/commits?per_page=${PER_PAGE}&page=${page}${bounds}`,
             token
         );
         const batch = res.data ?? [];
         for (const raw of batch) {
-            const date = raw.commit?.author?.date;
+            const date = commitDate(raw);
             commits.push({
                 sha: raw.sha,
                 message: raw.commit?.message ?? '',
@@ -419,8 +507,133 @@ export async function fetchCommits(
                 url: raw.html_url ?? ''
             });
         }
-        // Une page incomplète est la dernière.
-        if (batch.length < PER_PAGE) break;
+        // Une page incomplète est la dernière : le distant n'a plus rien.
+        if (batch.length < PER_PAGE) {
+            exhausted = true;
+            break;
+        }
     }
-    return commits;
+    return { commits, exhausted };
+}
+
+/** Un dépôt proposé au choix, tel qu'on le liste pour un propriétaire. */
+export interface GitHubOwnerRepo {
+    name: string;
+    private: boolean;
+    archived: boolean;
+    description: string;
+    /** Dernier push, pour trier les dépôts vivants en tête. */
+    pushedAt: number | null;
+}
+
+interface RawOwnerRepo {
+    name: string;
+    private?: boolean;
+    archived?: boolean;
+    description?: string | null;
+    pushed_at?: string | null;
+}
+
+/**
+ * Une requête GitHub **sans jeton obligatoire**.
+ *
+ * Le reste de l'adaptateur travaille toujours authentifié : on synchronise un
+ * dépôt qu'on a explicitement relié, avec le jeton qu'on lui a donné. La
+ * découverte, elle, doit fonctionner avant qu'aucun jeton n'existe — c'est
+ * précisément le moment où l'on en cherche un. Sans jeton, GitHub ne rend que
+ * le public et applique un quota horaire bien plus serré (60 par IP), ce que
+ * l'appelant annonce à l'écran plutôt que de le subir en silence.
+ */
+async function callPublic<T>(path: string, token: string | null): Promise<T> {
+    const headers: Record<string, string> = {
+        accept: 'application/vnd.github+json',
+        'x-github-api-version': '2022-11-28',
+        'user-agent': 'DevEye'
+    };
+    if (token) headers.authorization = `Bearer ${token}`;
+
+    let res: Response;
+    try {
+        res = await fetch(`${API}${path}`, { headers, signal: AbortSignal.timeout(15_000) });
+    } catch (e) {
+        throw new GitHubError(e instanceof Error ? e.message : 'GitHub injoignable', 0);
+    }
+
+    if (!res.ok) {
+        const remaining = res.headers.get('x-ratelimit-remaining');
+        const rateLimited = (res.status === 403 || res.status === 429) && remaining === '0';
+        const message =
+            res.status === 404
+                ? 'Propriétaire ou organisation introuvable.'
+                : res.status === 401
+                  ? 'Jeton refusé par GitHub.'
+                  : rateLimited
+                    ? token
+                        ? 'Quota GitHub épuisé pour ce jeton.'
+                        : 'Quota GitHub anonyme épuisé — choisissez un jeton.'
+                    : `GitHub a répondu ${res.status}.`;
+        throw new GitHubError(message, res.status, rateLimited);
+    }
+    return (await res.json()) as T;
+}
+
+function toOwnerRepo(raw: RawOwnerRepo): GitHubOwnerRepo {
+    return {
+        name: raw.name,
+        private: raw.private === true,
+        archived: raw.archived === true,
+        description: raw.description ?? '',
+        pushedAt: raw.pushed_at ? Math.floor(new Date(raw.pushed_at).getTime() / 1000) : null
+    };
+}
+
+/**
+ * Les dépôts d'un propriétaire ou d'une organisation.
+ *
+ * Trois chemins, essayés dans cet ordre, parce que GitHub n'expose pas la même
+ * chose selon qui demande :
+ *
+ *  1. **`/user/repos`** quand le jeton appartient au propriétaire demandé —
+ *     c'est le **seul** endpoint qui rende ses dépôts privés. `/users/{login}/repos`
+ *     ne rend que le public, même avec le jeton de l'intéressé : c'est le piège
+ *     de cette API, et la raison de l'aller-retour sur `/user`.
+ *  2. **`/orgs/{owner}/repos`** — une organisation, dont un jeton membre voit
+ *     aussi les dépôts privés.
+ *  3. **`/users/{owner}/repos`** — le repli public, qui marche sans jeton.
+ *
+ * Une seule page : cent dépôts suffisent à choisir dans une liste, et
+ * paginer pour en proposer trois cents serait rendre le choix plus difficile,
+ * pas plus complet.
+ */
+export async function listOwnerRepos(owner: string, token: string | null): Promise<GitHubOwnerRepo[]> {
+    const query = `sort=pushed&direction=desc&per_page=${PER_PAGE}`;
+
+    if (token) {
+        // Qui est ce jeton ? La réponse décide de l'endpoint, et elle seule
+        // permet d'atteindre les dépôts privés d'un compte personnel.
+        let login: string | null = null;
+        try {
+            login = (await callPublic<{ login?: string }>('/user', token)).login ?? null;
+        } catch {
+            // Un jeton à portée réduite peut refuser `/user` sans être invalide
+            // pour autant : on retombe simplement sur les chemins publics.
+        }
+        if (login && login.toLowerCase() === owner.trim().toLowerCase()) {
+            const rows = await callPublic<RawOwnerRepo[]>(`/user/repos?affiliation=owner&${query}`, token);
+            return rows.map(toOwnerRepo);
+        }
+    }
+
+    try {
+        const rows = await callPublic<RawOwnerRepo[]>(`/orgs/${owner}/repos?${query}`, token);
+        return rows.map(toOwnerRepo);
+    } catch (e) {
+        // 404 = ce n'est pas une organisation. Toute autre cause (quota, jeton
+        // refusé) doit remonter telle quelle plutôt que d'être masquée par un
+        // second échec.
+        if (!(e instanceof GitHubError) || e.status !== 404) throw e;
+    }
+
+    const rows = await callPublic<RawOwnerRepo[]>(`/users/${owner}/repos?${query}`, token);
+    return rows.map(toOwnerRepo);
 }

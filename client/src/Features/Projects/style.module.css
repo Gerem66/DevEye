@@ -53,14 +53,19 @@
 
 /* ------------------------------------------------------------ portefeuille */
 
+/*
+ * Une ligne par projet.
+ *
+ * C'était une grille de cartes (`repeat(auto-fit, minmax(300px, 1fr))`), ce qui
+ * imposait deux compromis : une hauteur minimale commune que la plupart des
+ * projets ne remplissaient pas, et un avancement coincé dans une colonne de
+ * 300 px. En ligne, la barre prend toute la place restante et la densité suit
+ * le contenu réel.
+ */
 .grid {
     display: grid;
-    /* `auto-fill` laisse des colonnes vides quand il y a peu de projets, ce qui
-       tasse les cartes dans un coin. `auto-fit` les fait au contraire occuper
-       la largeur disponible — c'est ce qu'on veut ici, où l'on a rarement de
-       quoi remplir quatre colonnes. */
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: var(--space-md);
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-sm);
     margin: 0;
     padding: 0 0 var(--space-md);
     list-style: none;
@@ -71,10 +76,6 @@
     position: relative;
     display: flex;
     align-items: stretch;
-    /* Une hauteur commune par ligne : sans ça, une carte sans description ou
-       sans étiquette est plus courte que ses voisines et la grille devient
-       irrégulière. */
-    min-height: 168px;
     border-radius: var(--radius-lg);
     background: var(--surface-widget);
     border: 1px solid var(--glass-border);
@@ -83,15 +84,33 @@
 
 .card:hover {
     border-color: var(--glass-border-strong);
-    transform: translateY(-2px);
+    /* Un seul pixel : sur une liste dense, le décalage de deux pixels de
+       l'ancienne grille se lisait comme un sursaut. */
+    transform: translateY(-1px);
 }
 
+/*
+ * Trois colonnes : l'identité, l'avancement, les indicateurs de fin de ligne.
+ *
+ * Une grille et non une ligne flex, pour une raison précise : la colonne du
+ * milieu a une **largeur fixe**, donc la barre d'avancement commence et finit au
+ * même endroit sur toutes les lignes. En flex elle absorbait la place restante
+ * et changeait de taille à chaque projet selon la longueur du titre — on ne
+ * pouvait plus comparer deux avancements d'un coup d'œil, ce qui est pourtant
+ * la seule chose qu'on lui demande.
+ *
+ * Deux lignes de contenu (titre, puis description) plutôt qu'une seule : la
+ * version tout-en-une était trop dense pour se lire, la grille de cartes
+ * d'avant trop aérée. Le juste milieu tient dans un `padding` moyen et une
+ * description qui garde sa ligne.
+ */
 .cardBody {
     flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
-    padding: var(--space-md);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px auto;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
     text-align: left;
     cursor: pointer;
     color: inherit;
@@ -99,17 +118,41 @@
     min-width: 0;
 }
 
+/* Colonne 1 : ce qui identifie le projet, sur une ou deux lignes. */
+.cardIdent {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.cardTitleRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-width: 0;
+}
+
+/* Colonne 2 : l'avancement et ses chiffres, largeur fixe (voir ci-dessus). */
+.cardProgress {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    min-width: 0;
+}
+
+/* Colonne 3 : non-lus et flèche, toujours au bout. */
+.cardAside {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
 /* Le focus clavier doit se voir : la carte est activable par Entrée et Espace. */
 .cardBody:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
     border-radius: var(--radius-lg);
-}
-
-.cardTop {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
 }
 
 .status {
@@ -144,7 +187,7 @@
 
 /* Badge de non-lus : rendu seulement quand il y en a (voir index.tsx). */
 .unread {
-    margin-left: auto;
+    flex: 0 0 auto;
     min-width: 20px;
     padding: 1px 6px;
     border-radius: var(--radius-pill);
@@ -155,11 +198,18 @@
     text-align: center;
 }
 
+/* Le titre se tronque plutôt que de pousser la barre d'avancement hors de la
+   ligne. `flex-shrink` sans `flex-grow` : il garde sa largeur naturelle tant
+   qu'il y a la place, et cède avant l'avancement. */
 .title {
+    flex: 0 1 auto;
+    min-width: 0;
     margin: 0;
-    font-size: 1rem;
+    font-size: 0.95rem;
     color: var(--text-primary);
-    overflow-wrap: anywhere;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .masked {
@@ -167,20 +217,22 @@
     font-style: italic;
 }
 
+/* Sur une ligne, la description est un complément du titre : une seule ligne,
+   tronquée, et la première à disparaître quand la place manque. */
 .description {
+    flex: 0 1 auto;
+    min-width: 0;
     margin: 0;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
+    font-size: 0.8rem;
+    color: var(--text-muted);
     overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .tags {
     display: flex;
-    flex-wrap: wrap;
+    flex: 0 0 auto;
     gap: var(--space-xs);
     margin: 0;
     padding: 0;
@@ -205,8 +257,16 @@
     color: var(--accent);
 }
 
+/*
+ * Le seul élément élastique de la ligne : il absorbe toute la place que les
+ * autres n'ont pas prise, avec des marges égales de part et d'autre.
+ *
+ * `min-width` non nul : sans lui, une ligne chargée (titre long, description,
+ * étiquettes) le comprimerait jusqu'à zéro et l'avancement disparaîtrait sans
+ * que rien ne le signale.
+ */
 .progress {
-    height: 4px;
+    height: 5px;
     border-radius: var(--radius-pill);
     background: var(--surface-subtle);
     overflow: hidden;
@@ -219,11 +279,14 @@
     transition: width var(--transition-normal);
 }
 
+/* Les chiffres sous la barre. `flex-wrap` plutôt que `nowrap` : la colonne a
+   une largeur fixe, un projet très en retard doit pouvoir passer à la ligne
+   plutôt que de déborder sur ses voisines. */
 .meta {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-sm);
-    font-size: 0.75rem;
+    gap: var(--space-xs) var(--space-sm);
+    font-size: 0.72rem;
     color: var(--text-muted);
 }
 
@@ -235,9 +298,17 @@
     font-family: var(--font-mono);
 }
 
-.archive {
-    align-self: flex-start;
-    margin: var(--space-sm) var(--space-sm) 0 0;
+/*
+ * Restaurer, dans la vue des archives — et seulement là.
+ *
+ * « Archiver » a quitté la carte du portefeuille pour « Modifier le projet » :
+ * c'est un geste rare, il n'avait pas à être le plus accessible de l'écran.
+ * Restaurer, lui, est **le** geste des archives : l'enfouir dans une popup
+ * ajouterait trois clics à la seule action qu'on vient y faire.
+ */
+.restore {
+    align-self: center;
+    margin-right: var(--space-sm);
     padding: var(--space-xs);
     background: none;
     border: none;
@@ -250,19 +321,46 @@
     transition: filter var(--transition-fast), color var(--transition-fast);
 }
 
-.archive:hover {
-    filter: opacity(1);
-    color: var(--danger);
-}
-
-/* Même géométrie que `.archive`, mais l'action est constructive. */
-.restore {
-    composes: archive;
-}
-
 .restore:hover {
     filter: opacity(1);
     color: var(--success);
+}
+
+/* Symbole de fin de ligne : il dit que toute la ligne est cliquable, il ne se
+   clique pas lui-même. */
+.openArrow {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-muted);
+    pointer-events: none;
+    filter: opacity(0.5);
+    transition: filter var(--transition-fast), color var(--transition-fast);
+}
+
+.card:hover .openArrow {
+    filter: opacity(1);
+    color: var(--accent);
+}
+
+/*
+ * Sous cette largeur, une ligne unique n'a plus la place de tout porter : on
+ * repasse en pile. L'avancement reprend alors toute la largeur, et la méta
+ * passe dessous plutôt que d'écraser le titre.
+ */
+/*
+ * Sous cette largeur, la colonne fixe de 260 px ne tient plus à côté du titre :
+ * on empile. L'avancement passe alors pleine largeur sous l'identité, et la
+ * flèche rejoint la première ligne.
+ */
+@media (max-width: 720px) {
+    .cardBody {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .cardProgress {
+        grid-column: 1 / -1;
+    }
 }
 
 .actions {
@@ -932,15 +1030,22 @@
     color: var(--text-primary);
 }
 
-/* -------------------------------------------------------------------- git */
+/* ------------------------------------------------------------ déploiement */
 
-.git {
+/*
+ * Ces classes portaient des noms en `git*` du temps où l'onglet Déploiement
+ * empruntait la feuille de style de l'onglet Git. Le git ayant sa propre
+ * feature (et son propre module), l'emprunt n'était plus possible — et il était
+ * de toute façon trompeur : rien ici ne parle de dépôt.
+ */
+
+.deploy {
     display: flex;
     flex-direction: column;
     gap: var(--space-lg);
 }
 
-.gitEmpty {
+.deployEmpty {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -948,7 +1053,7 @@
     padding: var(--space-xl) 0;
 }
 
-.repoHead {
+.targetHead {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -956,82 +1061,7 @@
     flex-wrap: wrap;
 }
 
-/* `min-width: 0` : sans lui, un nom de dépôt long refuse de se tronquer et
-   pousse les boutons hors de la ligne. */
-.repoIdent {
-    min-width: 0;
-    flex: 1;
-}
-
-/* Boîte du contenu synchronisable : c'est elle que le voile recouvre, et elle
-   seule — l'en-tête reste net et cliquable pendant la synchronisation. */
-.gitContent {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-}
-
-/* La pile de contenu, sous le voile. Une classe explicite et non un
-   `.gitContent > div` : ce sélecteur aurait aussi frappé le voile lui-même —
-   plus spécifique que `.syncOverlay`, il aurait écrasé son centrage. */
-.gitStack {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-lg);
-}
-
-.gitDimmed {
-    /* framer-motion possède l'`opacity` en ligne sur les surfaces animées : on
-       atténue par un filtre, jamais par la propriété elle-même. */
-    filter: opacity(0.25);
-    pointer-events: none;
-    transition: filter var(--transition-normal);
-}
-
-.syncOverlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-sm);
-    /* Le voile ne capture rien : ce qu'il couvre est déjà inerte. */
-    pointer-events: none;
-}
-
-.syncPhase {
-    font-size: 0.9rem;
-    color: var(--text-primary);
-}
-
-.syncBar {
-    width: min(280px, 60%);
-    height: 4px;
-    border-radius: var(--radius-pill);
-    background: var(--surface-subtle);
-    overflow: hidden;
-}
-
-.syncBarFill {
-    height: 100%;
-    border-radius: var(--radius-pill);
-    background: var(--accent);
-    transition: width var(--transition-normal);
-}
-
-.spinning {
-    animation: projectsSpin 1s linear infinite;
-    color: var(--accent);
-}
-
-@keyframes projectsSpin {
-    to {
-        transform: rotate(360deg);
-    }
-}
-
-.repoName {
+.targetName {
     display: flex;
     align-items: center;
     gap: var(--space-xs);
@@ -1041,289 +1071,21 @@
     color: var(--text-primary);
 }
 
-.repoMeta {
+.targetMeta {
     margin: var(--space-xs) 0 0;
     font-size: 0.78rem;
     color: var(--text-muted);
 }
 
-.graphWrap {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
-}
-
-.graphHead {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.78rem;
-    color: var(--text-secondary);
-}
-
-.graphRange {
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-}
-
-/* Boîte mesurée : le graphe travaille en pixels réels (voir useElementWidth),
-   et l'info-bulle se positionne dans ce repère. */
-.graphBox {
-    position: relative;
-    border-radius: var(--radius-md);
-    background: var(--surface-subtle);
-    border: 1px solid var(--glass-border);
-    overflow: hidden;
-}
-
-.graph {
-    display: block;
-}
-
-.graphAxis {
-    stroke: var(--glass-border-strong);
-    stroke-width: 1;
-}
-
-.graphGrid {
-    stroke: var(--glass-border);
-    stroke-width: 1;
-}
-
-.graphGridMajor {
-    stroke: var(--glass-border-strong);
-    stroke-width: 1;
-}
-
-.graphLabel {
-    fill: var(--text-muted);
-    font-size: 10px;
-    font-family: var(--font-mono);
-}
-
-/* Halo du point survolé : il ne remplace pas le point, il l'entoure. */
-.graphHalo {
-    fill: none;
-    stroke: var(--text-primary);
-    stroke-width: 1.5;
-}
-
-.graphTip {
-    position: absolute;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: var(--space-xs) var(--space-sm);
-    border-radius: var(--radius-md);
-    background: var(--surface-popup);
-    border: 1px solid var(--glass-border-strong);
-    box-shadow: var(--shadow-lg);
-    font-size: 0.75rem;
-    color: var(--text-primary);
-    white-space: nowrap;
-    pointer-events: none;
-    z-index: 1;
-}
-
-.legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-xs);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-.legendItem {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-xs);
-    padding: 2px 10px;
-    border-radius: var(--radius-pill);
-    border: 1px solid var(--glass-border);
-    background: var(--surface-widget);
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: 0.75rem;
-    cursor: pointer;
-}
-
-.legendOn {
-    composes: legendItem;
-    border-color: var(--accent);
-    color: var(--text-primary);
-}
-
-.legendDot {
-    width: 8px;
-    height: 8px;
-    border-radius: var(--radius-pill);
-}
-
-.legendCount {
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-}
-
-.authorMap {
-    font-size: 0.82rem;
-    color: var(--text-secondary);
-}
-
-.authorMap summary {
-    cursor: pointer;
-    color: var(--text-muted);
-}
-
-.authorList {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
-    margin: var(--space-sm) 0 0;
-    padding: 0;
-    list-style: none;
-}
-
-/* Une grille, et non `justify-content: space-between` : c'est ce qui aligne
-   tous les sélecteurs sur une même colonne. En flex, chaque ligne se répartit
-   pour son compte, et un sélecteur suivait la longueur du nom qui le précède —
-   ils mordaient alors sur les adresses e-mail et ne s'alignaient jamais. */
-.authorList li {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 200px;
-    align-items: center;
-    gap: var(--space-md);
-}
-
-.authorName {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-}
-
-/* Les deux lignes du nom se tronquent plutôt que de pousser le sélecteur. */
-.authorName > * {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.authorSelect {
-    width: 100%;
-}
-
-@media (max-width: 560px) {
-    .authorList li {
-        grid-template-columns: minmax(0, 1fr);
-    }
-}
-
-/*
- * Trois colonnes explicites, et non `auto-fit`.
- *
- * `auto-fit` déduit le nombre de colonnes de la largeur : à 1200 px avec un
- * plancher de 300 px il en fabrique quatre, les trois panneaux occupent les
- * trois premières et chacun vaut un quart de la largeur au lieu d'un tiers. Une
- * grille de trois dit ce qu'on veut vraiment.
- *
- * `align-items` reste à sa valeur par défaut (`stretch`) : les trois panneaux
- * d'une même ligne prennent la hauteur du plus grand.
- */
-.gitCols {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--space-md);
-}
-
-@media (max-width: 900px) {
-    .gitCols {
-        grid-template-columns: minmax(0, 1fr);
-    }
-}
-
-/*
- * Carte autour d'une liste.
- *
- * Les quatre listes s'étalaient auparavant sur toute la largeur sans rien qui
- * les sépare : un contour discret leur rend une limite, sans alourdir. Même
- * traitement que `.column` du kanban, pour que les deux onglets se ressemblent.
- */
-.panel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
-    min-width: 0;
-    padding: var(--space-md);
-    border-radius: var(--radius-lg);
-    background: var(--surface-subtle);
-    border: 1px solid var(--glass-border);
-}
-
-/* Les listes longues (les commits) traversent la grille au lieu de tenir dans
-   une colonne de 300 px, où chaque message serait tronqué à trois mots. */
-.panelWide {
-    composes: panel;
-    grid-column: 1 / -1;
-}
-
-.panelHead {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-sm);
-}
-
-/* Le titre mène à la page correspondante du dépôt. La flèche n'apparaît qu'au
-   survol : affichée en permanence sur quatre panneaux, elle ferait du bruit. */
-.panelLink {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-xs);
-    color: inherit;
-    text-decoration: none;
-}
-
-.panelLink:hover .gitTitle {
-    color: var(--accent);
-}
-
-.panelLinkIcon {
-    width: 12px;
-    align-self: center;
-    color: var(--accent);
-    filter: opacity(0);
-    transition: filter var(--transition-fast);
-}
-
-.panelLink:hover .panelLinkIcon,
-.panelLink:focus-visible .panelLinkIcon {
-    filter: opacity(1);
-}
-
-.panelLink:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 3px;
-    border-radius: var(--radius-sm);
-}
-
-.panelCount {
-    margin-left: auto;
-    padding: 0 6px;
-    border-radius: var(--radius-pill);
-    background: var(--glass-bg-light);
-    color: var(--text-muted);
-    font-size: 0.72rem;
-    font-family: var(--font-mono);
-}
-
-.gitTitle {
+.sectionTitle {
     margin: 0;
     font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--text-muted);
-    transition: color var(--transition-fast);
 }
 
-.gitList {
+.itemList {
     display: flex;
     flex-direction: column;
     gap: var(--space-xs);
@@ -1332,7 +1094,7 @@
     list-style: none;
 }
 
-.gitList li {
+.itemList li {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
@@ -1341,7 +1103,7 @@
     min-width: 0;
 }
 
-.gitItemName {
+.itemName {
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1349,384 +1111,14 @@
     color: var(--text-primary);
 }
 
-.gitDate {
+.itemDate {
     color: var(--text-muted);
     font-size: 0.72rem;
     white-space: nowrap;
 }
 
-.sha {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    color: var(--accent);
-}
-
-.defaultTag,
-.preTag {
-    padding: 0 6px;
-    border-radius: var(--radius-pill);
-    background: var(--accent-bg);
-    color: var(--accent);
-    font-size: 0.68rem;
-    white-space: nowrap;
-}
-
-.preTag {
-    background: var(--warning-bg);
-    color: var(--warning);
-}
-
-/* Une ligne de liste rendue cliquable, sans rien changer à sa mise en page. */
-.gitRowButton {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    min-width: 0;
-    margin: 0 calc(-1 * var(--space-xs));
-    padding: var(--space-xs);
-    border: none;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: inherit;
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-    transition: background var(--transition-fast);
-}
-
-.gitRowButton:hover {
-    background: var(--glass-bg-light);
-}
-
-.gitRowButton:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: -2px;
-}
-
-/* Avance / retard d'une branche sur la principale. */
-.drift {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.7rem;
-    font-family: var(--font-mono);
-    white-space: nowrap;
-}
-
-.driftAhead {
-    color: var(--success);
-}
-
-.driftBehind {
-    color: var(--warning);
-}
-
-.driftSync {
-    color: var(--text-muted);
-}
-
-/* ----------------------------------------------------------- pull requests */
-
-.pullState {
-    padding: 0 8px;
-    border-radius: var(--radius-pill);
-    background: var(--surface-subtle);
-    color: var(--text-secondary);
-    font-size: 0.68rem;
-    font-weight: 600;
-    white-space: nowrap;
-}
-
-.pullState[data-state='open'] {
-    background: var(--success-bg);
-    color: var(--success);
-}
-
-.pullState[data-state='draft'] {
-    background: var(--surface-subtle);
-    color: var(--text-muted);
-}
-
-.pullState[data-state='merged'] {
-    background: var(--accent-bg);
-    color: var(--accent);
-}
-
-.pullState[data-state='closed'] {
-    background: var(--danger-bg);
-    color: var(--danger);
-}
-
-.pullMeta {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--space-md);
-    margin: 0;
-    font-size: 0.82rem;
-    color: var(--text-secondary);
-}
-
-.pullBranches {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-xs);
-    color: var(--text-muted);
-}
-
-.pullDates {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-md);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    font-size: 0.78rem;
-    color: var(--text-secondary);
-}
-
-.pullDates li {
-    display: flex;
-    flex-direction: column;
-}
-
-/* La description telle qu'elle a été écrite : retours à la ligne et
-   indentation préservés (voir PullRequestView pour le parti pris). */
-.pullBody {
-    margin: 0;
-    padding: var(--space-md);
-    border-radius: var(--radius-md);
-    background: var(--surface-subtle);
-    border: 1px solid var(--glass-border);
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: 0.85rem;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-}
-
-.externalLink {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-xs);
-    align-self: flex-start;
-    font-size: 0.82rem;
-    color: var(--accent);
-    text-decoration: none;
-}
-
-.externalLink:hover {
-    text-decoration: underline;
-}
-
-/* --------------------------------------------------------- détail d'un commit */
-
-.commitHead {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--space-sm);
-}
-
-.commitBody {
-    margin: 0;
-    padding: var(--space-sm) var(--space-md);
-    border-radius: var(--radius-md);
-    background: var(--surface-subtle);
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: 0.82rem;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-}
-
-.diffStat {
-    display: inline-flex;
-    gap: var(--space-xs);
-    margin-left: auto;
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    white-space: nowrap;
-}
-
-.diffAdd {
-    color: var(--success);
-}
-
-.diffDel {
-    color: var(--danger);
-}
-
-.diffList {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-.diffFile {
-    border-radius: var(--radius-md);
-    border: 1px solid var(--glass-border);
-    overflow: hidden;
-}
-
-.diffFileHead {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    width: 100%;
-    padding: var(--space-xs) var(--space-sm);
-    background: var(--surface-subtle);
-    border: none;
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: 0.8rem;
-    text-align: left;
-    cursor: pointer;
-}
-
-.diffFileHead:hover {
-    color: var(--text-primary);
-}
-
-/* 12 px et non les 18 par défaut : à taille d'icône pleine, un chevron devant
-   un chemin de fichier écrase la ligne. */
-.diffChevron {
-    width: 12px;
-    color: var(--text-muted);
-    transition: transform var(--transition-normal);
-}
-
-/* Fermé : pointe à droite. Ouvert : vers le bas. C'est le sens de lecture d'un
-   dépliage, et la rotation se voit puisqu'elle est animée. */
-.diffChevronOpen {
-    transform: rotate(90deg);
-}
-
-/*
- * Dépliage animé, sans mesurer le DOM.
- *
- * `grid-template-rows: 0fr → 1fr` interpole la hauteur **réelle** du contenu :
- * c'est la seule façon d'animer vers `auto` en CSS pur. Une `max-height`
- * arbitraire aurait soit tronqué un gros diff, soit produit une fin
- * d'animation dans le vide sur un petit.
- *
- * Sur un moteur qui ne sait pas interpoler `fr`, la bascule reste correcte —
- * elle est simplement instantanée.
- */
-.diffReveal {
-    display: grid;
-    grid-template-rows: 0fr;
-    transition: grid-template-rows var(--transition-normal);
-}
-
-.diffRevealOpen {
-    grid-template-rows: 1fr;
-}
-
-/* `min-height: 0` : sans lui, la piste de grille refuse de descendre sous la
-   hauteur du contenu et rien ne s'anime. */
-.diffRevealInner {
-    min-height: 0;
-    overflow: hidden;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .diffReveal,
-    .diffChevron {
-        transition: none;
-    }
-}
-
-.diffPath {
-    flex: 1;
-    min-width: 0;
-    font-family: var(--font-mono);
-    color: var(--text-primary);
-    /* `anywhere` plutôt qu'une troncature : un chemin coupé perd son nom de
-       fichier, c'est-à-dire la seule partie qui identifie la ligne. Mieux vaut
-       qu'il passe à la ligne. */
-    overflow-wrap: anywhere;
-}
-
-.diffPath[data-status='removed'] {
-    color: var(--danger);
-}
-
-.diffPath[data-status='added'] {
-    color: var(--success);
-}
-
-.diffOldPath {
-    color: var(--text-muted);
-}
-
-.diffTag {
-    padding: 0 6px;
-    border-radius: var(--radius-pill);
-    background: var(--glass-bg-light);
-    color: var(--text-muted);
-    font-size: 0.68rem;
-    white-space: nowrap;
-}
-
-/* Le diff défile horizontalement dans sa propre boîte : une ligne longue ne
-   doit jamais faire partir la page en travers. */
-.diffBody {
-    margin: 0;
-    padding: var(--space-sm) 0;
-    max-height: 420px;
-    overflow: auto;
-    background: var(--surface-widget);
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    line-height: 1.5;
-    tab-size: 4;
-}
-
-.diffLine,
-.diffLineAdd,
-.diffLineDel,
-.diffHunk,
-.diffMeta {
-    display: block;
-    padding: 0 var(--space-sm);
-    color: var(--text-secondary);
-    white-space: pre;
-}
-
-.diffLineAdd {
-    background: var(--success-bg);
-    color: var(--success);
-}
-
-.diffLineDel {
-    background: var(--danger-bg);
-    color: var(--danger);
-}
-
-.diffHunk {
-    background: var(--accent-bg);
-    color: var(--accent);
-}
-
-.diffMeta {
-    color: var(--text-muted);
-}
-
-.diffNone {
-    margin: 0;
-    padding: var(--space-md);
-    text-align: center;
-    font-size: 0.8rem;
-    color: var(--text-muted);
-}
-
-/* Zone rouge du dialogue de dépôt : une action destructrice se sépare
-   visuellement de ce qui l'entoure. */
+/* Bloc d'action destructrice au pied d'un dialogue : il se signale de lui-même
+   plutôt que de côtoyer les boutons ordinaires. */
 .dangerZone {
     display: flex;
     align-items: center;
@@ -1739,22 +1131,20 @@
     background: var(--danger-bg);
 }
 
-.dangerZone > div {
+/*
+ * Le texte de la zone, et lui seul.
+ *
+ * C'était `.dangerZone > div`, ce qui frappait aussi le groupe de boutons de
+ * confirmation — enfant direct lui aussi. « Annuler / Confirmer » héritaient
+ * donc de `flex-direction: column` et s'empilaient, étirés, au lieu de rester
+ * côte à côte. Une classe nommée ne peut pas se tromper de cible.
+ */
+.dangerText {
     display: flex;
     flex-direction: column;
     gap: 2px;
     min-width: 0;
     flex: 1;
-}
-
-.tokenBox {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
-    padding: var(--space-md);
-    border-radius: var(--radius-md);
-    border: 1px dashed var(--glass-border-strong);
-    background: var(--surface-subtle);
 }
 
 /* ------------------------------------------------------------- historique */
@@ -1904,22 +1294,56 @@
 
 /* ------------------------------------------------------------- discussion */
 
+/*
+ * La chaîne qui fait grandir la discussion avec la popup.
+ *
+ * Le dialogue en mode `fill` est une colonne flex de hauteur libre, bornée par
+ * `max-height`. Pour que la discussion absorbe la place restante — et elle
+ * seule — chaque maillon doit la transmettre : `.formFill` → `.chatField` →
+ * `.chat` → `.chatScroll`. Un seul `min-height: 0` manquant et la boîte refuse
+ * de rétrécir, ce qui redonne un second ascenseur autour du premier.
+ */
+.formFill {
+    composes: form;
+    flex: 1;
+    min-height: 0;
+}
+
+.chatField {
+    composes: field;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
 .chat {
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
+    flex: 1;
+    min-height: 0;
     border-radius: var(--radius-md);
     border: 1px solid var(--glass-border);
     background: var(--surface-subtle);
     padding: var(--space-sm);
 }
 
+/*
+ * La seule zone défilante du dialogue.
+ *
+ * Plus de `max-height: 320px` : c'est la popup qui borne désormais, et la
+ * discussion prend tout ce qu'elle lui laisse. Le `min-height` reste, et il
+ * porte le cas des petits écrans — quand les champs du formulaire mangent déjà
+ * l'écran, la discussion ne se laisse pas écraser sous quelques messages
+ * lisibles, et c'est alors le corps du dialogue qui défile à son tour. Deux
+ * ascenseurs imbriqués, assumés : mieux vaut ça qu'une discussion réduite à un
+ * trait.
+ */
 .chatScroll {
     display: flex;
     flex-direction: column;
     gap: var(--space-md);
-    max-height: 320px;
-    min-height: 120px;
+    flex: 1 1 auto;
+    min-height: 180px;
     overflow-y: auto;
     padding-right: var(--space-xs);
 }
@@ -1992,8 +1416,22 @@
     align-items: flex-end;
 }
 
+/*
+ * Le champ de saisie : une ligne au repos, qui grandit avec le texte.
+ *
+ * `resize: none` parce que la hauteur est pilotée par le contenu (voir
+ * `autoGrow` dans `Chat.tsx`) : laisser la poignée de redimensionnement
+ * donnerait deux autorités concurrentes sur la même valeur, et la saisie
+ * suivante écraserait ce que l'utilisateur vient de régler à la main.
+ *
+ * Le plafond garde le composeur à sa place : au-delà, c'est le champ qui
+ * défile, pas la discussion qui disparaît sous lui.
+ */
 .composer .textarea {
     flex: 1;
+    resize: none;
+    max-height: 40vh;
+    overflow-y: auto;
 }
 
 .deployStatus {

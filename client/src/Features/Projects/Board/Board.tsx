@@ -26,8 +26,10 @@ import { CSS } from '@dnd-kit/utilities';
 import type { MinimalUser, ProjectCard, ProjectColumn } from 'deveye-types';
 import { Button } from '@/Components';
 import { useLiveOutlines, type LiveOutlineProps } from '@/live/useLiveOutline';
+import { useRequestPopupWidth } from '@/stores/popupWidth';
 import { formatDate, PRIORITY_LABELS } from '../api';
 import { Avatar } from './Avatar';
+import { boardNaturalWidth } from './width';
 import styles from '../style.module.css';
 
 interface BoardProps {
@@ -78,6 +80,12 @@ export function Board({
     /** D'où la carte est partie, pour la remettre en place sur Échap. */
     const origin = useRef<{ columnId: number; index: number } | null>(null);
     const outlineFor = useLiveOutlines('l2');
+
+    // Le tableau réclame à la popup la largeur de ses colonnes — ni plus (un
+    // tableau de trois colonnes n'a rien à faire aux bords de l'écran), ni moins
+    // (à huit colonnes, la largeur de confort de lecture en cache la moitié).
+    // La demande est relâchée au démontage, donc en quittant l'onglet.
+    useRequestPopupWidth(boardNaturalWidth(columns.length, canWrite));
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -277,13 +285,13 @@ function Column({
                 )}
                 {canWrite && (
                     <span className={styles.columnActions}>
-                        {/* Doublon assumé de « Carte » plus bas : dans une colonne
+                        {/* Doublon assumé de « Tâche » plus bas : dans une colonne
                             pleine, l'autre bouton est sous la ligne de flottaison. */}
                         <button
                             type='button'
                             onClick={() => onCardCreate(column.id)}
-                            title='Ajouter une carte'
-                            aria-label='Ajouter une carte'
+                            title='Ajouter une tâche'
+                            aria-label='Ajouter une tâche'
                         >
                             <span className='icon icon-add' />
                         </button>
@@ -329,13 +337,15 @@ function Column({
                         />
                     ))}
                 </SortableContext>
-                {cards.length === 0 && <p className={styles.columnEmpty}>Aucune carte</p>}
+                {/* Pas de « Aucune carte » : le bouton « + » juste dessous dit
+                    déjà qu'il n'y en a pas, et le dire deux fois alourdit une
+                    colonne vide au lieu de l'alléger. */}
 
                 {/* Dans la zone défilante, donc **juste sous la dernière carte**
                     et non collé au bas d'une colonne pleine hauteur. */}
                 {canWrite && (
                     <Button variant='ghost' icon='add' onClick={() => onCardCreate(column.id)}>
-                        Carte
+                        Tâche
                     </Button>
                 )}
             </div>

@@ -27,23 +27,21 @@
     flex-direction: column;
     overflow: hidden;
     /*
-     * Widening is a CSS transition, not an animated style prop, for two reasons:
-     * the size settles *after* the render that toggled the class, so
-     * framer-motion (which owns this node through `layoutId`) measures no layout
-     * jump and never fights it; and length↔percentage interpolation gives a
-     * genuinely even growth all the way to the edge, which animating a px cap
-     * could not (it would saturate against the left/right insets mid-flight).
+     * The 1240px cap above is the floor, not the ceiling: `stores/popupWidth`
+     * overrides `max-width` inline with the width the open view's content
+     * actually needs (a kanban of eight columns, a zoomed-out timeline), so the
+     * panel adapts to its content instead of jumping to full width.
+     *
+     * Widening is a CSS transition, not an animated style prop: the size settles
+     * *after* the render that changed it, so framer-motion (which owns this node
+     * through `layoutId`) measures no layout jump and never fights it.
+     *
+     * The store clamps its value to `innerWidth - margin`. That clamp is what
+     * keeps the growth even: the left/right insets already bound the real width,
+     * so animating `max-width` past them would saturate mid-flight — the box
+     * would stop growing while the transition kept running.
      */
     transition: max-width var(--transition-slow);
-}
-
-/*
- * Full width on demand — see `stores/popupWidth.ts`. For horizontal views
- * (kanban, timeline) where the reading-comfort cap costs whole columns. The
- * left/right insets still apply, so "100%" never means edge to edge.
- */
-.popupWide {
-    max-width: 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {

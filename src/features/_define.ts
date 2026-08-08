@@ -6,7 +6,7 @@ import type { SecretKeyService } from '@/Services/SecretKeyService';
 import type { MonitorTransport } from '@/agent/hub';
 import type { LiveTransport } from '@/live/hub';
 import type { UptimeMonitor } from '@/Services/UptimeMonitor';
-import type { ProjectSyncService } from '@/Services/ProjectSyncService';
+import type { IntegrationSyncService } from '@/Services/IntegrationSyncService';
 import type { ErrorCode, LiveTopic, LogLevelName } from 'deveye-types';
 import type { Logger } from 'pino';
 import type { FeatureAccess, WorkspaceCapability, WorkspaceFeatureId } from 'deveye-types';
@@ -97,17 +97,18 @@ export interface FeatureContext {
     /** Uptime scheduler — backs the "check now" and "test notification" commands. */
     uptime?: UptimeMonitor;
     /**
-     * Ordonnanceur de synchronisation des dépôts. Sert à *réveiller* une lecture
-     * (`project.repoSyncNow`, liaison d'un dépôt) et à rendre l'avancement d'une
-     * synchronisation en vol (`project.syncStatus`) : ces commandes-là ne
-     * dépendent donc d'aucune API tierce.
+     * Ordonnanceur des intégrations externes : synchronisation des dépôts git de
+     * l'espace, et suivi des déploiements en vol.
      *
-     * Une seule exception dans tout le module, et elle est délibérée :
-     * `project.commitDetail` va chercher le diff chez le fournisseur au moment
-     * de la demande, parce qu'un diff ne se met pas en cache (voir
-     * `projectCommitDetailSchema`).
+     * Sert à *réveiller* une lecture (`git.repoAdd`, `git.repoSyncNow`) et à
+     * rendre l'avancement d'une synchronisation (`git.repoSyncStatus`) : ces
+     * commandes-là ne dépendent donc d'aucune API tierce.
+     *
+     * Une seule exception, délibérée : `git.commitDetail` va chercher le diff
+     * chez le fournisseur au moment de la demande, parce qu'un diff ne se met
+     * pas en cache (voir `gitCommitDetailSchema`).
      */
-    projects?: ProjectSyncService;
+    integrations?: IntegrationSyncService;
 }
 
 /**

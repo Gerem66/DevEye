@@ -26,7 +26,8 @@ const FEATURE_LABELS: Record<(typeof WORKSPACE_FEATURE_IDS)[number], string> = {
     cloudsync: 'CloudSync',
     uptime: 'Uptime',
     mail: 'Mail',
-    projects: 'Projets'
+    projects: 'Projets',
+    git: 'Git'
 };
 
 export interface RoleDraft {

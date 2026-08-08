@@ -1,20 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { ProjectCommitDetail, ProjectDiffFile } from 'deveye-types';
+import type { GitCommitDetail, GitDiffFile } from 'deveye-types';
 import { Button, Dialog } from '@/Components';
 import { ws } from '@/api/ws';
-import { humanizeError, withSecrecy } from '../api';
-import styles from '../style.module.css';
+import { humanizeError } from '../Projects/api';
+import styles from './style.module.css';
 
 interface CommitDialogProps {
     open: boolean;
-    projectId: number;
+    repoId: number;
     /** Le commit demandé ; `null` ferme le dialogue. */
     sha: string | null;
     onClose: () => void;
 }
 
 /** Libellé court de l'état d'un fichier. */
-const STATUS_LABELS: Record<ProjectDiffFile['status'], string> = {
+const STATUS_LABELS: Record<GitDiffFile['status'], string> = {
     added: 'ajouté',
     modified: 'modifié',
     removed: 'supprimé',
@@ -28,15 +28,15 @@ const STATUS_LABELS: Record<ProjectDiffFile['status'], string> = {
  * Le détail d'un commit : son message, ses compteurs, et son diff.
  *
  * Le diff est lu **chez le fournisseur à l'ouverture**, jamais dans le cache
- * local : voir `projectCommitDetailSchema` pour la raison. C'est donc le seul
+ * local : voir `gitCommitDetailSchema` pour la raison. C'est donc le seul
  * écran du module dont l'attente dépend d'une API tierce, et il l'annonce.
  *
  * Les fichiers sont repliés par défaut : un commit de fusion touche parfois cent
  * fichiers, et dérouler cent diffs pour en lire un serait absurde. Le premier
  * s'ouvre seul quand il n'y en a qu'un — le cas le plus fréquent.
  */
-export function CommitDialog({ open, projectId, sha, onClose }: CommitDialogProps) {
-    const [detail, setDetail] = useState<ProjectCommitDetail | null>(null);
+export function CommitDialog({ open, repoId, sha, onClose }: CommitDialogProps) {
+    const [detail, setDetail] = useState<GitCommitDetail | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -63,7 +63,7 @@ export function CommitDialog({ open, projectId, sha, onClose }: CommitDialogProp
         setDetail(null);
         void (async () => {
             try {
-                const res = await withSecrecy(() => ws.send('project.commitDetail', { projectId, sha }));
+                const res = await ws.send('git.commitDetail', { repoId, sha });
                 if (cancelled) return;
                 setDetail(res.detail);
                 // Un seul fichier : l'ouvrir, il n'y a rien à choisir.
@@ -82,7 +82,7 @@ export function CommitDialog({ open, projectId, sha, onClose }: CommitDialogProp
         return () => {
             cancelled = true;
         };
-    }, [open, projectId, sha]);
+    }, [open, repoId, sha]);
 
     const toggle = (filename: string) => {
         setMounted((prev) => (prev.has(filename) ? prev : new Set(prev).add(filename)));
@@ -108,7 +108,7 @@ export function CommitDialog({ open, projectId, sha, onClose }: CommitDialogProp
                 <>
                     {detail?.url && (
                         <a className={styles.externalLink} href={detail.url} target='_blank' rel='noreferrer'>
-                            <span className='icon icon-branch' /> Voir sur GitHub
+                            <span className='icon icon-github' /> Voir sur GitHub
                         </a>
                     )}
                     <Button variant='secondary' onClick={onClose}>
@@ -124,7 +124,10 @@ export function CommitDialog({ open, projectId, sha, onClose }: CommitDialogProp
                 {detail && (
                     <>
                         <div className={styles.commitHead}>
-                            <code className={styles.sha}>{detail.sha.slice(0, 10)}</code>
+                            {/* Le sha **entier**, et non les dix caractères
+                                affichés : ce qu'on copie doit être ce qu'un
+                                `git checkout` accepte sans ambiguïté. */}
+                            <CopySha sha={detail.sha} />
                             <span className={styles.hint}>
                                 {detail.authorName || 'Auteur inconnu'}
                                 {detail.committedAt > 0 &&
@@ -191,6 +194,53 @@ export function CommitDialog({ open, projectId, sha, onClose }: CommitDialogProp
                 )}
             </div>
         </Dialog>
+    );
+}
+
+/** Combien de temps la confirmation « copié » reste affichée. */
+const COPIED_MS = 1600;
+
+/**
+ * Le sha du commit, cliquable pour le copier.
+ *
+ * Le retour est **sur le bouton lui-même** plutôt que dans un toast : c'est un
+ * geste minuscule dont on veut la confirmation là où l'on regarde déjà, et un
+ * toast pour une copie de presse-papiers serait disproportionné.
+ *
+ * `navigator.clipboard` n'existe qu'en contexte sécurisé (HTTPS ou localhost).
+ * Ailleurs on ne prétend pas avoir copié : le bouton le dit.
+ */
+function CopySha({ sha }: { sha: string }) {
+    const [state, setState] = useState<'idle' | 'done' | 'failed'>('idle');
+
+    useEffect(() => {
+        if (state === 'idle') return;
+        const timer = setTimeout(() => setState('idle'), COPIED_MS);
+        return () => clearTimeout(timer);
+    }, [state]);
+
+    const copy = async () => {
+        try {
+            await navigator.clipboard.writeText(sha);
+            setState('done');
+        } catch {
+            setState('failed');
+        }
+    };
+
+    return (
+        <button
+            type='button'
+            className={styles.copySha}
+            onClick={() => void copy()}
+            title={`Copier ${sha}`}
+            aria-label='Copier le hash du commit'
+        >
+            <code className={styles.sha}>{sha.slice(0, 10)}</code>
+            <span className={`icon icon-${state === 'done' ? 'success' : 'copy'}`} />
+            {state === 'done' && <span className={styles.copiedTag}>copié</span>}
+            {state === 'failed' && <span className={styles.copyFailed}>copie impossible</span>}
+        </button>
     );
 }
 

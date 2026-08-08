@@ -22,6 +22,16 @@ interface ProjectDialogProps {
     error: string | null;
     onClose: () => void;
     onSubmit: (result: ProjectDialogResult) => void;
+    /**
+     * Archiver le projet. Absent à la création, sur un projet déjà archivé, ou
+     * en lecture seule.
+     *
+     * L'action vit ici et non sur la carte du portefeuille : on archive un
+     * projet une fois dans sa vie, ce n'est pas un geste qui mérite d'être le
+     * plus accessible de l'écran — ni de côtoyer l'ouverture, qu'on fait vingt
+     * fois par jour.
+     */
+    onArchive?: () => void;
 }
 
 const EMPTY: ProjectDraft = {
@@ -40,11 +50,22 @@ const EMPTY: ProjectDraft = {
  * `holdSecrecy` : le formulaire *écrit* de la donnée chiffrée, une saisie longue
  * ne doit donc pas tomber sur la re-validation en cours de route.
  */
-export function ProjectDialog({ open, project, allowGuarded, busy, error, onClose, onSubmit }: ProjectDialogProps) {
+export function ProjectDialog({
+    open,
+    project,
+    allowGuarded,
+    busy,
+    error,
+    onClose,
+    onSubmit,
+    onArchive
+}: ProjectDialogProps) {
     const [draft, setDraft] = useState<ProjectDraft>(EMPTY);
     const [tier, setTier] = useState<ProjectSecurityTier>('open');
     const [tagKind, setTagKind] = useState<ProjectTag['kind']>('tech');
     const [tagLabel, setTagLabel] = useState('');
+    /** L'archivage sort le projet de l'espace de travail : il se confirme. */
+    const [confirmArchive, setConfirmArchive] = useState(false);
 
     // Recharge le formulaire à chaque ouverture : une popup réutilisée ne doit
     // jamais rouvrir sur les valeurs de la fois d'avant.
@@ -64,6 +85,7 @@ export function ProjectDialog({ open, project, allowGuarded, busy, error, onClos
         );
         setTier(project?.securityTier ?? 'open');
         setTagLabel('');
+        setConfirmArchive(false);
     }, [open, project]);
 
     const addTag = () => {
@@ -205,6 +227,37 @@ export function ProjectDialog({ open, project, allowGuarded, busy, error, onClos
                             déploiement : ces tâches tournent sans session.
                         </span>
                     </label>
+                )}
+
+                {onArchive && project && !project.archived && (
+                    <div className={styles.dangerZone}>
+                        <div className={styles.dangerText}>
+                            <span className={styles.label}>Archiver ce projet</span>
+                            <span className={styles.hint}>
+                                Il quitte le portefeuille et rejoint les archives, d’où il se restaure d’un clic. Rien
+                                n’est supprimé — dans ce module, rien ne l’est jamais.
+                            </span>
+                        </div>
+                        {confirmArchive ? (
+                            <div className={styles.actions}>
+                                <Button variant='secondary' onClick={() => setConfirmArchive(false)} disabled={busy}>
+                                    Annuler
+                                </Button>
+                                <Button variant='danger' onClick={onArchive} disabled={busy}>
+                                    Confirmer
+                                </Button>
+                            </div>
+                        ) : (
+                            <Button
+                                variant='danger'
+                                icon='archive'
+                                onClick={() => setConfirmArchive(true)}
+                                disabled={busy}
+                            >
+                                Archiver
+                            </Button>
+                        )}
+                    </div>
                 )}
 
                 {error && <p className={styles.error}>{error}</p>}

@@ -84,7 +84,7 @@ export function CardDialog({
     const blockers = card ? deps.filter((d) => d.cardId === card.id) : [];
     /** Celles qu'elle bloque : utile à voir, non modifiable d'ici. */
     const blocking = card ? deps.filter((d) => d.blockedByCardId === card.id) : [];
-    const titleOf = (id: number) => siblings.find((c) => c.id === id)?.title || `Carte #${id}`;
+    const titleOf = (id: number) => siblings.find((c) => c.id === id)?.title || `Tâche #${id}`;
     // On ne propose ni la carte elle-même, ni un bloqueur déjà déclaré. Les
     // cycles plus longs sont refusés par le serveur, qui voit tout le graphe.
     const candidates = card
@@ -138,9 +138,14 @@ export function CardDialog({
         <Dialog
             open={open}
             onClose={onClose}
-            title={card ? 'Modifier la carte' : 'Nouvelle carte'}
+            title={card ? 'Modifier la tâche' : 'Nouvelle tâche'}
             width={720}
-            tall={card !== null}
+            // `fill` et non `tall` : la popup prend la hauteur de son contenu
+            // et s'arrête au bord de l'écran, au lieu d'occuper d'emblée toute
+            // la hauteur même pour une tâche de trois champs. C'est la
+            // discussion, plus bas, qui absorbe la place restante et devient la
+            // seule zone défilante.
+            fill={card !== null}
             onSubmit={submit}
             holdSecrecy
             footer={
@@ -160,7 +165,7 @@ export function CardDialog({
                 </>
             }
         >
-            <div className={styles.form}>
+            <div className={card ? styles.formFill : styles.form}>
                 <label className={styles.field}>
                     <span className={styles.label}>Titre</span>
                     <TextInput
@@ -302,9 +307,27 @@ export function CardDialog({
                     </label>
                 )}
 
-                {card && (
+                {/*
+                 * Les dépendances de la tâche : ce qui doit être terminé avant
+                 * qu'elle puisse démarrer.
+                 *
+                 * Le bloc ne se rend que s'il a quelque chose à montrer **ou**
+                 * quelque chose à faire faire. Il s'affichait auparavant dès
+                 * qu'une tâche existait : sur un projet d'une seule tâche, on
+                 * lisait donc un intitulé « Bloquée par » suivi de rien — un
+                 * champ qui n'explique pas ce qu'il attend et n'offre rien à
+                 * remplir n'apprend rien à personne.
+                 *
+                 * L'intitulé porte désormais son explication, et la frise trace
+                 * ces liens en flèches (voir `Timeline`). Le serveur refuse les
+                 * cycles : A ne peut pas attendre B qui attend A.
+                 */}
+                {card && (blockers.length > 0 || blocking.length > 0 || (canWrite && candidates.length > 0)) && (
                     <div className={styles.field}>
-                        <span className={styles.label}>Bloquée par</span>
+                        <span className={styles.label}>Dépend de</span>
+                        <span className={styles.hint}>
+                            Les tâches à terminer avant celle-ci. La frise les relie par une flèche.
+                        </span>
                         {blockers.length > 0 && (
                             <ul className={styles.tags}>
                                 {blockers.map((d) => (
@@ -327,10 +350,10 @@ export function CardDialog({
                         {canWrite && candidates.length > 0 && (
                             <div className={styles.tagRow}>
                                 <SelectInput value={depPick} onChange={(e) => setDepPick(e.target.value)}>
-                                    <option value=''>Choisir une carte…</option>
+                                    <option value=''>Choisir une tâche…</option>
                                     {candidates.map((c) => (
                                         <option key={c.id} value={c.id}>
-                                            {c.title || `Carte #${c.id}`}
+                                            {c.title || `Tâche #${c.id}`}
                                         </option>
                                     ))}
                                 </SelectInput>
@@ -348,7 +371,7 @@ export function CardDialog({
                         )}
                         {blocking.length > 0 && (
                             <span className={styles.hint}>
-                                Bloque : {blocking.map((d) => titleOf(d.cardId)).join(', ')}
+                                Cette tâche bloque : {blocking.map((d) => titleOf(d.cardId)).join(', ')}
                             </span>
                         )}
                     </div>
@@ -357,7 +380,7 @@ export function CardDialog({
                 {/* Le fil n'existe que sur une carte déjà créée : il lui est
                     rattaché par son identifiant. */}
                 {card && (
-                    <div className={styles.field}>
+                    <div className={styles.chatField}>
                         <span className={styles.label}>Discussion</span>
                         <Chat cardId={card.id} members={members} meUserId={meUserId} canWrite={canWrite} />
                     </div>

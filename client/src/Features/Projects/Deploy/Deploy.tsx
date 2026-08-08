@@ -4,7 +4,7 @@ import type {
     DeployStatus,
     MinimalUser,
     Project,
-    ProjectCredential,
+    GitCredential,
     ProjectDeployTarget,
     ProjectDeployment
 } from 'deveye-types';
@@ -43,7 +43,7 @@ interface DeployProps {
 export function Deploy({ project, members, canWrite }: DeployProps) {
     const [target, setTarget] = useState<ProjectDeployTarget | null>(null);
     const [deployments, setDeployments] = useState<ProjectDeployment[]>([]);
-    const [credentials, setCredentials] = useState<ProjectCredential[]>([]);
+    const [credentials, setCredentials] = useState<GitCredential[]>([]);
     const [loaded, setLoaded] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [linkOpen, setLinkOpen] = useState(false);
@@ -57,7 +57,7 @@ export function Deploy({ project, members, canWrite }: DeployProps) {
         try {
             const [t, creds] = await Promise.all([
                 withSecrecy(() => ws.send('project.deployGet', { projectId: project.id })),
-                ws.send('project.credentialList', {})
+                ws.send('git.credentialList', {})
             ]);
             setTarget(t.target);
             setCredentials(creds.credentials.filter((c) => c.provider === 'dokploy'));
@@ -87,11 +87,11 @@ export function Deploy({ project, members, canWrite }: DeployProps) {
     if (!loaded) return <p className={styles.empty}>Chargement…</p>;
 
     return (
-        <div className={styles.git}>
+        <div className={styles.deploy}>
             {error && <p className={styles.error}>{error}</p>}
 
             {!target && (
-                <div className={styles.gitEmpty}>
+                <div className={styles.deployEmpty}>
                     <p className={styles.empty}>Aucune application liée à ce projet.</p>
                     {canWrite && (
                         <Button icon='add' onClick={() => setLinkOpen(true)} disabled={credentials.length === 0}>
@@ -100,7 +100,13 @@ export function Deploy({ project, members, canWrite }: DeployProps) {
                     )}
                     {credentials.length === 0 && (
                         <p className={styles.hint}>
-                            Ajoutez d’abord un accès Dokploy (adresse de l’instance + clé d’API) depuis l’onglet Git.
+                            {/* L'ancien texte renvoyait vers l'onglet Git d'un
+                                projet, qui ne savait créer que des jetons
+                                GitHub : le conseil était donc impossible à
+                                suivre. La feature Git, elle, gère les deux
+                                fournisseurs. */}
+                            Ajoutez d’abord un accès Dokploy (adresse de l’instance + clé d’API) depuis la feature Git,
+                            section « Jetons d’accès ».
                         </p>
                     )}
                 </div>
@@ -108,12 +114,12 @@ export function Deploy({ project, members, canWrite }: DeployProps) {
 
             {target && (
                 <>
-                    <header className={styles.repoHead}>
+                    <header className={styles.targetHead}>
                         <div>
-                            <p className={styles.repoName}>
+                            <p className={styles.targetName}>
                                 <span className='icon icon-rocket' /> {target.name}
                             </p>
-                            <p className={styles.repoMeta}>
+                            <p className={styles.targetMeta}>
                                 {target.credentialId === null ? (
                                     <span className={styles.overdue}>accès retiré, déclenchement impossible</span>
                                 ) : (
@@ -141,19 +147,19 @@ export function Deploy({ project, members, canWrite }: DeployProps) {
                     </header>
 
                     <section>
-                        <h3 className={styles.gitTitle}>Déploiements</h3>
+                        <h3 className={styles.sectionTitle}>Déploiements</h3>
                         {deployments.length === 0 && <p className={styles.empty}>Aucun déploiement déclenché d’ici.</p>}
-                        <ul className={styles.gitList}>
+                        <ul className={styles.itemList}>
                             {deployments.map((d) => (
                                 <li key={d.id}>
                                     <span className={styles.deployStatus} data-status={d.status}>
                                         {STATUS_LABELS[d.status]}
                                     </span>
-                                    <span className={styles.gitItemName}>{d.title}</span>
+                                    <span className={styles.itemName}>{d.title}</span>
                                     {d.triggeredByUserId !== null && (
                                         <Avatar user={members.find((m) => m.id === d.triggeredByUserId)} size={18} />
                                     )}
-                                    <span className={styles.gitDate}>
+                                    <span className={styles.itemDate}>
                                         {new Date(d.startedAt * 1000).toLocaleString('fr-FR')}
                                     </span>
                                 </li>
@@ -193,7 +199,7 @@ export function Deploy({ project, members, canWrite }: DeployProps) {
 interface LinkDialogProps {
     open: boolean;
     projectId: number;
-    credentials: ProjectCredential[];
+    credentials: GitCredential[];
     current: ProjectDeployTarget | null;
     onClose: () => void;
     onSaved: () => void;

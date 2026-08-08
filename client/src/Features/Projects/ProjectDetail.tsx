@@ -12,7 +12,6 @@ import type {
 import { Button } from '@/Components';
 import { ws } from '@/api/ws';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
-import { useRequestPopupWide } from '@/stores/popupWidth';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import { humanizeError, STATUS_LABELS, withSecrecy } from './api';
 import { Board } from './Board/Board';
@@ -79,10 +78,11 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
     // Présence : « qui regarde quelle carte ».
     useLiveSegment('l2', cardDialog?.card ? `card:${cardDialog.card.id}` : null);
 
-    // Le tableau et la frise s'étalent horizontalement : sur un écran large, la
-    // largeur de confort de lecture leur coûte des colonnes entières. Les autres
-    // onglets sont du texte, et la gardent.
-    useRequestPopupWide(tab === 'board' || tab === 'timeline');
+    // La largeur de la popup n'est plus décidée ici : `Board` et `Timeline`
+    // déclarent chacun celle que **leur contenu** réclame (voir
+    // `stores/popupWidth`). Un seul onglet est monté à la fois, donc il n'y a
+    // jamais qu'un demandeur — et cet écran n'a pas à connaître la géométrie
+    // interne de ses onglets.
 
     const reload = useCallback(async () => {
         if (reloadRef.current) return reloadRef.current;

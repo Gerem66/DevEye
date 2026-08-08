@@ -136,6 +136,10 @@
     -webkit-mask-image: url(/icons/branch.svg);
     mask-image: url(/icons/branch.svg);
 }
+.icon.icon-github {
+    -webkit-mask-image: url(/icons/github.svg);
+    mask-image: url(/icons/github.svg);
+}
 .icon.icon-projects {
     -webkit-mask-image: url(/icons/projects.svg);
     mask-image: url(/icons/projects.svg);

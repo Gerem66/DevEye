@@ -18,7 +18,7 @@ import { projectBoardFeatures } from './board';
 import { projectChatFeatures } from './chat';
 import { projectTimelineFeatures } from './timeline';
 import { projectHistoryFeatures } from './history';
-import { projectGitFeatures } from './git';
+import { projectRepoLinkFeatures } from './repoLink';
 import { projectDeployFeatures } from './deploy';
 import { projectLinkFeatures } from './links';
 import {
@@ -349,12 +349,22 @@ export const projectSetSecurityTierFeature: FeatureDefinition<
             );
         }
 
-        // Jeté **avant** la conversion : l'état de reprise et le dernier message
-        // d'erreur sont écrits par le service de fond, toujours à l'étage
-        // ouvert, et il a le droit d'écrire tant que la ligne `projects` porte
-        // encore l'ancien tier. Les convertir ouvrirait une course qui laisse un
-        // blob sous la mauvaise clé au milieu d'un arbre converti.
-        await ctx.db.projectGit.clearSyncState(input.projectId, ctx.workspaceId);
+        // Passer en confidentiel retire la liaison au dépôt. Elle est en clair
+        // par construction (le dépôt appartient à l'espace, pas au projet) :
+        // rattacher un projet confidentiel à un dépôt nommé montrerait
+        // précisément ce que le palier est censé cacher. Le dépôt, son cache et
+        // les autres projets qui s'en servent ne sont pas touchés.
+        //
+        // Fait **avant** la conversion, pour que l'événement de frise soit
+        // enregistré sous l'ancien tier — celui sous lequel le reste de
+        // l'historique du projet a été écrit.
+        if (input.securityTier === 'guarded' && (await ctx.db.git.findLink(input.projectId, ctx.workspaceId))) {
+            await ctx.db.git.unlinkProject(input.projectId, ctx.workspaceId);
+            await recordEvent(ctx, existing, {
+                kind: 'project.repoUnlink',
+                label: 'Dépôt git délié (projet passé en confidentiel)'
+            });
+        }
 
         const from = cipherFor(ctx, existing.security_tier);
         const to = cipherFor(ctx, input.securityTier);
@@ -469,7 +479,7 @@ export const projectFeatures: FeatureDefinition<string, any, any>[] = [
     ...projectChatFeatures,
     ...projectTimelineFeatures,
     ...projectHistoryFeatures,
-    ...projectGitFeatures,
+    ...projectRepoLinkFeatures,
     ...projectDeployFeatures,
     ...projectLinkFeatures
 ];

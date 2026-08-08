@@ -29,7 +29,7 @@ import { logger } from '@/logger';
 
 import type { CloudSyncEngine } from '@/cloudSync/engine';
 import type { UptimeMonitor } from '@/Services/UptimeMonitor';
-import type { ProjectSyncService } from '@/Services/ProjectSyncService';
+import type { IntegrationSyncService } from '@/Services/IntegrationSyncService';
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import type { AuditLog } from '@/Services/AuditLog';
@@ -42,7 +42,7 @@ interface WSDeps {
     live: LiveHub;
     cloudSync: CloudSyncEngine;
     uptime: UptimeMonitor;
-    projects: ProjectSyncService;
+    integrations: IntegrationSyncService;
     audit: AuditLog;
 }
 
@@ -57,7 +57,7 @@ function send(socket: WebSocket, msg: ServerMessage): void {
 
 export async function registerWS(
     app: FastifyInstance,
-    { db, crypt, hub, live: liveHub, cloudSync, uptime, projects, audit }: WSDeps
+    { db, crypt, hub, live: liveHub, cloudSync, uptime, integrations, audit }: WSDeps
 ): Promise<void> {
     app.get('/ws', { websocket: true }, async (socket, req) => {
         const accessToken = req.cookies[ACCESS_COOKIE];
@@ -265,7 +265,7 @@ export async function registerWS(
                         live,
                         cloudSync,
                         uptime,
-                        projects
+                        integrations
                     },
                     inputParse.data
                 );

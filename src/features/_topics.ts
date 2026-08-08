@@ -19,6 +19,10 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     cloudSync: 'cloudsync',
     device: 'devices',
     folder: 'notes',
+    // Même forme que `project` : préfixe unique, verbes en camelCase derrière le
+    // point. Le filet `MUTATION_VERB` plus bas n'en verra donc **aucune** — les
+    // `mutates` de cette feature se relisent à la main.
+    git: 'git',
     home: 'home',
     live: null,
     logs: null,
@@ -67,6 +71,11 @@ const NON_MUTATING = new Set([
     'cloudSync.subscribe',
     'cloudSync.unsubscribe',
     'cloudSync.syncNow',
+    // Lecture pure : elle rend l'avancement des synchronisations en cours, lu
+    // dans une table en mémoire du service. Elle ne tombe ici que parce que son
+    // verbe suit immédiatement le point — contrairement au reste du module git,
+    // que le filet ne voit pas du tout (camelCase sous un préfixe unique).
+    'git.syncStatuses',
     'cloudSync.validatePath',
     'mail.oauthStart',
     'mail.accountTestConnection',

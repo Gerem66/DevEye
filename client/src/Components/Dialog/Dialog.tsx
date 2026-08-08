@@ -70,6 +70,21 @@ export interface DialogProps {
      */
     tall?: boolean;
     /**
+     * Let the dialog's height **follow its content**, up to the viewport cap,
+     * and make the body the single scroll area once that cap is reached.
+     *
+     * Different from `tall`, and the difference is the point: `tall` pins the
+     * dialog to the full viewport height whatever it contains — a short form
+     * then floats in a mostly empty panel. `fill` keeps the natural height and
+     * only takes what it needs, which is what a dialog holding a growing region
+     * (a conversation) wants: it grows with the thread, stops at the edge of the
+     * screen, and never produces a second scrollbar around the first.
+     *
+     * The content is responsible for claiming the leftover space (`flex: 1` down
+     * to the scrollable region); everything else keeps its natural size.
+     */
+    fill?: boolean;
+    /**
      * When true, hold the password-encryption DEK alive for as long as this
      * dialog is open: a long edit then never trips the re-validation prompt
      * mid-action, and a fresh window restarts the instant the dialog closes (for
@@ -114,6 +129,7 @@ export default function Dialog({
     dirty = false,
     onSave,
     tall = false,
+    fill = false,
     holdSecrecy = false
 }: DialogProps) {
     const dialogRef = useRef<HTMLDivElement>(null);
@@ -215,7 +231,7 @@ export default function Dialog({
                         ref={dialogRef}
                         tabIndex={-1}
                         onKeyDown={handleKeyDown}
-                        className={`${styles.dialog} ${tall ? styles.dialogTall : ''}`}
+                        className={`${styles.dialog} ${tall ? styles.dialogTall : ''} ${fill ? styles.dialogFill : ''}`}
                         role='dialog'
                         aria-modal='true'
                         initial={{ opacity: 0, scale: 0.94, maxWidth: width, height: tall ? tallHeight : 'auto' }}
@@ -233,7 +249,9 @@ export default function Dialog({
                         {description && <p className={styles.description}>{description}</p>}
                         <DialogCloseContext.Provider value={attemptClose}>
                             <DialogPrimaryContext.Provider value={registerPrimary}>
-                                <div className={`${styles.body} ${tall ? styles.bodyFill : ''}`}>{children}</div>
+                                <div className={`${styles.body} ${tall || fill ? styles.bodyFill : ''}`}>
+                                    {children}
+                                </div>
                             </DialogPrimaryContext.Provider>
                         </DialogCloseContext.Provider>
                         {footer && <div className={styles.footer}>{footer}</div>}

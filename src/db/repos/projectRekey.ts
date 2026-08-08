@@ -15,18 +15,18 @@ type Q = Queryable;
  * deviendrait illisible à la bascule. Rien ne peut le détecter : un blob chiffré
  * est indistinguable d'un autre.
  *
- * N'y figure PAS, et c'est volontaire : `project_credentials.secret_enc`, qui
- * est toujours sous l'étage ouvert quel que soit le tier du projet — le service
- * de fond doit pouvoir le lire sans session. Il relève de `workspaceRekey`.
+ * N'y figurent PAS, et c'est volontaire : `project_credentials.secret_enc` et
+ * tout le cache git (`git_*`), toujours sous l'étage ouvert quel que soit le
+ * tier des projets qui s'y rattachent — le service de fond doit pouvoir les lire
+ * sans session. Ils relèvent de `workspaceRekey`.
  */
 interface EncryptedCell {
     table: string;
     /**
      * Colonne identifiante, **unique à elle seule**. Toutes ces tables n'ont pas
-     * de `id` : `project_repos` et `project_deploy_targets` sont clés sur
-     * `project_id`. Aucune n'a de clé composite — c'est précisément pourquoi
-     * `project_commit_authors` porte une clé de substitution (voir la migration
-     * `061`) : cibler une ligne par deux colonnes n'est pas exprimable ici.
+     * de `id` : `project_deploy_targets` est clé sur `project_id`. Aucune n'a de
+     * clé composite — cibler une ligne par deux colonnes n'est pas exprimable
+     * ici, ce qui explique les clés de substitution ailleurs dans le schéma.
      */
     idColumn: string;
     column: string;
@@ -38,27 +38,17 @@ const COLUMNS: EncryptedCell[] = [
     { table: 'project_messages', idColumn: 'id', column: 'content' },
     { table: 'project_milestones', idColumn: 'id', column: 'content' },
     { table: 'project_events', idColumn: 'id', column: 'content' },
-    // Intégrations : le cache git suit le tier du projet comme le reste.
-    { table: 'project_repos', idColumn: 'project_id', column: 'content' },
-    // ⚠️ `sync_state` et `last_sync_error` n'y figurent **pas**, et ce n'est pas
-    // un oubli. Ce sont des données éphémères — des ETags et un message
-    // transitoire — que le service de fond réécrit **toujours à l'étage
-    // ouvert**. Or, pendant la conversion, la ligne `projects` porte encore
-    // l'ancien tier : le service a donc parfaitement le droit d'écrire entre la
-    // lecture et l'écriture de la conversion, et déposerait un blob sous
-    // l'ancienne clé au milieu d'un arbre déjà converti. La conversion suivante
-    // resterait alors bloquée pour de bon sur une ligne illisible (course
-    // observée en test, pas théorique).
+    // ⚠️ **Le cache git n'y figure plus, et ce n'est pas un oubli.** Depuis la
+    // migration `064`, un dépôt appartient à l'espace et non à un projet : il
+    // est chiffré à l'étage ouvert une fois pour toutes, et plusieurs projets
+    // peuvent s'y rattacher. Il ne peut donc suivre le tier d'aucun d'eux. Un
+    // projet qui passe en confidentiel **perd sa liaison** (voir
+    // `projectSetSecurityTierFeature`) ; le dépôt et son cache, eux, ne bougent
+    // pas. Ils relèvent désormais de `workspaceRekey` seul.
     //
-    // Plutôt que d'ajouter un verrou, on les **efface** à la bascule
-    // (`clearSyncState`). Le coût est nul : la synchronisation suivante refera
-    // une requête sans ETag, et le message d'erreur n'avait de sens que pour le
-    // tour passé.
-    { table: 'project_commit_authors', idColumn: 'id', column: 'content' },
-    { table: 'project_commits', idColumn: 'id', column: 'content' },
-    { table: 'project_branches', idColumn: 'id', column: 'content' },
-    { table: 'project_releases', idColumn: 'id', column: 'content' },
-    { table: 'project_pull_requests', idColumn: 'id', column: 'content' },
+    // Effet de bord bienvenu : la course qui obligeait à effacer `sync_state` et
+    // `last_sync_error` à chaque bascule a disparu avec sa cause — plus rien de
+    // ce que le service de fond écrit ne traverse une conversion de projet.
     { table: 'project_deploy_targets', idColumn: 'project_id', column: 'content' },
     { table: 'project_deployments', idColumn: 'id', column: 'content' }
 ];

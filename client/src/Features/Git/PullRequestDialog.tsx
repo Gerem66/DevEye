@@ -1,8 +1,8 @@
-import type { ProjectPullRequest, ProjectPullState } from 'deveye-types';
+import type { GitPullRequest, GitPullState } from 'deveye-types';
 import { Button, Dialog } from '@/Components';
-import styles from '../style.module.css';
+import styles from './style.module.css';
 
-export const PULL_STATE_LABELS: Record<ProjectPullState, string> = {
+export const PULL_STATE_LABELS: Record<GitPullState, string> = {
     open: 'Ouverte',
     draft: 'Brouillon',
     merged: 'Fusionnée',
@@ -12,7 +12,7 @@ export const PULL_STATE_LABELS: Record<ProjectPullState, string> = {
 interface PullRequestDialogProps {
     open: boolean;
     /** La pull request affichée ; `null` ferme le dialogue. */
-    pull: ProjectPullRequest | null;
+    pull: GitPullRequest | null;
     onClose: () => void;
 }
 
@@ -45,7 +45,7 @@ export function PullRequestDialog({ open, pull, onClose }: PullRequestDialogProp
                 <>
                     {pull?.url && (
                         <a className={styles.externalLink} href={pull.url} target='_blank' rel='noreferrer'>
-                            <span className='icon icon-branch' /> Voir sur GitHub
+                            <span className='icon icon-github' /> Voir sur GitHub
                         </a>
                     )}
                     <Button variant='secondary' onClick={onClose}>

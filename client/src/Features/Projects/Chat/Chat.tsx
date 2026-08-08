@@ -43,6 +43,7 @@ export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
 
     const version = useResourceVersion('project.messages');
     const bottomRef = useRef<HTMLDivElement | null>(null);
+    const composerRef = useRef<HTMLTextAreaElement | null>(null);
     const typers = useTypers();
     const { onInput, stop } = useTypingSignal();
 
@@ -113,6 +114,26 @@ export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
         .filter((n): n is string => Boolean(n));
     const uniqueTyping = [...new Set(typingNames)];
 
+    /**
+     * La hauteur du composeur suit son contenu.
+     *
+     * Mesurée et non calculée : le nombre de lignes *visuelles* dépend du
+     * retour à la ligne automatique, donc de la largeur du champ et de la
+     * police — compter les `\n` donnerait un champ trop court dès qu'une phrase
+     * dépasse la ligne. Remettre `height: auto` avant de lire `scrollHeight`
+     * est ce qui permet au champ de **rétrécir** aussi : sans ça, `scrollHeight`
+     * resterait bloqué sur la plus grande taille jamais atteinte.
+     *
+     * Le plafond vit dans le CSS (`max-height`), pas ici : passé cette limite,
+     * `scrollHeight` continue de croître mais la boîte, elle, défile.
+     */
+    useEffect(() => {
+        const el = composerRef.current;
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = `${el.scrollHeight}px`;
+    }, [text]);
+
     return (
         <div className={styles.chat}>
             {error && <p className={styles.error}>{error}</p>}
@@ -161,9 +182,10 @@ export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
             {canWrite && (
                 <div className={styles.composer}>
                     <textarea
+                        ref={composerRef}
                         className={styles.textarea}
                         value={text}
-                        rows={2}
+                        rows={1}
                         maxLength={PROJECT_MESSAGE_MAX_LENGTH}
                         placeholder='Écrire un message… (@ pour mentionner)'
                         onChange={(e) => {

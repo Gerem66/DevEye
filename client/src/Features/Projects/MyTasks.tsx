@@ -73,7 +73,7 @@ export function MyTasks({ onOpenProject }: MyTasksProps) {
                                     <span className={styles.taskProject}>
                                         {task.masked ? '—' : task.projectTitle || 'Projet'}
                                     </span>
-                                    {due && <span className={overdue ? styles.overdue : styles.gitDate}>{due}</span>}
+                                    {due && <span className={overdue ? styles.overdue : styles.itemDate}>{due}</span>}
                                     {task.card.unread > 0 && <span className={styles.unread}>{task.card.unread}</span>}
                                 </button>
                             </li>

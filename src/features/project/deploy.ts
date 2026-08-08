@@ -8,7 +8,7 @@ import {
 } from 'deveye-types';
 import type { DeployStatus, ProjectDeployment, ProjectDeploymentRow, ProjectDeployTargetRow } from 'deveye-types';
 import type { Cipher } from '@/Services/SecureStore';
-import { listTargets, triggerDeploy, type DokployKind } from '@/Services/projectProviders/dokploy';
+import { listTargets, triggerDeploy, type DokployKind } from '@/Services/integrations/dokploy';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { assertProjectUnlocked, cipherFor, loadProject, recordEvent } from './_shared';
 
@@ -71,7 +71,7 @@ async function loadDokployCredential(
     ctx: FeatureContext,
     credentialId: number
 ): Promise<{ baseUrl: string; apiKey: string }> {
-    const credential = await ctx.db.projectGit.findCredential(credentialId, ctx.workspaceId);
+    const credential = await ctx.db.git.findCredential(credentialId, ctx.workspaceId);
     if (!credential) throw new FeatureError('not_found', 'Identifiant introuvable');
     if (credential.provider !== 'dokploy') {
         throw new FeatureError('validation', 'Cet identifiant n’est pas un accès Dokploy.');
@@ -252,8 +252,10 @@ export const projectDeployTriggerFeature: FeatureDefinition<
             label: title
         });
         // Le suivi d'état est repris par l'ordonnanceur : c'est lui qui ira
-        // demander à Dokploy où en est ce déploiement.
-        ctx.projects?.requestSync(input.projectId);
+        // demander à Dokploy où en est ce déploiement. `wake()` et non
+        // `requestSync()` — il n'y a aucun dépôt git à synchroniser ici, juste
+        // un tour à déclencher plus tôt que la cadence.
+        ctx.integrations?.wake();
 
         return { deployment: await toDeployment(cipher, row) };
     }

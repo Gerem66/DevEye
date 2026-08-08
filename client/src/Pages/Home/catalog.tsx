@@ -9,6 +9,7 @@ import { CloudSyncWidget } from '@/Features/CloudSync';
 import { UptimeWidget } from '@/Features/Uptime/UptimeWidget';
 import { MailWidget } from '@/Features/Mail/MailWidget';
 import { ProjectsWidget } from '@/Features/Projects/ProjectsWidget';
+import { GitWidget } from '@/Features/Git/GitWidget';
 
 import Monitoring from '@/Features/Monitoring';
 import Weather from '@/Features/Weather';
@@ -18,6 +19,7 @@ import CloudSync from '@/Features/CloudSync';
 import Uptime from '@/Features/Uptime';
 import Mail from '@/Features/Mail';
 import FeatureProjects from '@/Features/Projects';
+import FeatureGit from '@/Features/Git';
 
 import type { FeatureProps } from '@/Features/types';
 
@@ -114,6 +116,18 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         // cache continuerait de travailler sans être vue.
         cacheDurationMinutes: 0,
         holdSecrecy: true
+    },
+    {
+        id: 'git',
+        title: 'Git',
+        icon: 'branch',
+        WidgetContent: GitWidget,
+        FullComponent: FeatureGit,
+        // Démonté dès la fermeture : la vue d'un dépôt sonde l'avancement d'une
+        // synchronisation en cours, et une instance en cache continuerait de
+        // sonder sans être vue. Pas de `holdSecrecy` : rien n'y est chiffré à
+        // l'étage gardé, donc rien ne peut déclencher l'invite.
+        cacheDurationMinutes: 0
     },
     {
         id: 'mail',

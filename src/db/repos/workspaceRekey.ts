@@ -53,20 +53,21 @@ const COLUMNS: EncryptedColumn[] = [
     { table: 'project_messages', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
     { table: 'project_milestones', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
     { table: 'project_events', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
-    { table: 'project_repos', id: 'project_id', column: 'content', scope: 'workspace_id', tier: 'open' },
-    // `sync_state` et `last_sync_error` sont volontairement absents : éphémères,
-    // réécrits en permanence par le service de fond, et donc source de course
-    // pendant une conversion. Voir la note détaillée dans `projectRekey.ts`.
-    // La conversion d'espace les laisse tels quels ; la synchronisation suivante
-    // les remplace, et un ETag illisible ne fait rien de pire qu'un 200 au lieu
-    // d'un 304.
-    { table: 'project_commit_authors', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
-    { table: 'project_commits', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
-    { table: 'project_branches', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
-    { table: 'project_releases', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
-    { table: 'project_pull_requests', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
     { table: 'project_deploy_targets', id: 'project_id', column: 'content', scope: 'workspace_id', tier: 'open' },
     { table: 'project_deployments', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    // Git : le dépôt appartient à l'**espace** et non à un projet (migration
+    // `064`). Il n'a donc aucun tier à suivre, et tout son cache relève de cette
+    // conversion-ci et d'elle seule — `projectRekey` ne le connaît plus.
+    { table: 'git_repos', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    // `sync_state` et `last_sync_error` sont volontairement absents : éphémères,
+    // réécrits en permanence par le service de fond. La conversion d'espace les
+    // laisse tels quels ; la synchronisation suivante les remplace, et un ETag
+    // illisible ne fait rien de pire qu'un 200 au lieu d'un 304.
+    { table: 'git_commit_authors', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'git_commits', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'git_branches', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'git_releases', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'git_pull_requests', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
     // Les secrets d'accès sont **toujours** sous l'étage ouvert, quel que soit
     // le tier des projets qui s'en servent : le service de fond les lit sans
     // session. Ils suivent donc la conversion d'espace, jamais celle d'un projet.

@@ -34,7 +34,10 @@ export type ResourceKey =
     | 'project.list'
     | 'project.board'
     | 'project.myTasks'
-    | 'project.messages';
+    | 'project.messages'
+    | 'git.count'
+    | 'git.list'
+    | 'git.repo';
 
 /**
  * Ce qu'un sujet du serveur invalide chez nous.
@@ -61,6 +64,9 @@ const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
     // Le portefeuille affiche le compte de non-lus : un message venu d'ailleurs
     // doit donc le rafraîchir lui aussi.
     projectsChat: ['project.messages', 'project.list'],
+    // Un dépôt qui bouge touche la liste (dates de synchro, compteurs) et la vue
+    // ouverte. `git.count` suit pour la tuile de l'accueil.
+    git: ['git.count', 'git.list', 'git.repo'],
     workspace: ['workspace.roleList'],
     home: [],
     account: []
