@@ -72,6 +72,47 @@
     color: var(--text-secondary);
 }
 
+/* Le bouton **est** l'intitulé d'une section repliable : une cible séparée du
+   titre serait minuscule, et le titre resterait un texte mort à côté. */
+.sectionToggle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    align-self: flex-start;
+    padding: 2px var(--space-xs);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.sectionToggle:hover {
+    color: var(--text-secondary);
+}
+
+.sectionToggle:hover .sectionHeading {
+    color: var(--text-primary);
+}
+
+.sectionToggle .sectionHeading {
+    margin: 0;
+}
+
+/* Le chevron pivote plutôt que de changer d'icône : c'est le même objet dans
+   deux états, et l'animation dit lequel. La transition est portée par l'état
+   *neutre*, sinon le dépliage se ferait sans animation. */
+.chevron {
+    transition: transform var(--transition-fast);
+}
+
+.chevronFolded {
+    composes: chevron;
+    transform: rotate(-90deg);
+}
+
 /* Empty home: the only affordance on a fresh dashboard. */
 .emptyHome {
     display: flex;

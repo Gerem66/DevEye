@@ -5,8 +5,7 @@ import type {
     GitCredentialRow,
     GitPullRequestRow,
     GitReleaseRow,
-    GitRepoRow,
-    ProjectRepoLinkRow
+    GitRepoRow
 } from 'deveye-types';
 import type { Queryable } from '../pool';
 
@@ -88,9 +87,12 @@ export interface GitRepo {
     listUsage(repoId: number, workspaceId: number): Promise<GitRepoUsageRow[]>;
 
     // -- liaison projet → dépôt -------------------------------------------
-    findLink(projectId: number, workspaceId: number): Promise<ProjectRepoLinkRow | null>;
+    /** Les dépôts liés à un projet, dans l'ordre de la liste de la feature Git. */
+    listLinkedRepoIds(projectId: number, workspaceId: number): Promise<number[]>;
     linkProject(projectId: number, workspaceId: number, repoId: number): Promise<void>;
-    unlinkProject(projectId: number, workspaceId: number): Promise<boolean>;
+    unlinkProject(projectId: number, workspaceId: number, repoId: number): Promise<boolean>;
+    /** Retire toutes les liaisons d'un projet (passage en confidentiel). */
+    unlinkAllProjects(projectId: number, workspaceId: number): Promise<number>;
 
     // -- synchronisation ---------------------------------------------------
     /** Résultat d'un tour de synchronisation : succès (erreur nulle) ou échec. */
@@ -361,27 +363,39 @@ export function gitRepo(pool: Q): GitRepo {
             return r.rows;
         },
 
-        async findLink(projectId, workspaceId) {
-            const r = await pool.query<ProjectRepoLinkRow>(
-                'SELECT * FROM project_repo_links WHERE project_id = ? AND workspace_id = ?',
+        async listLinkedRepoIds(projectId, workspaceId) {
+            const r = await pool.query<{ repo_id: number }>(
+                `SELECT l.repo_id
+                   FROM project_repo_links l
+                   JOIN git_repos g ON g.id = l.repo_id
+                  WHERE l.project_id = ? AND l.workspace_id = ?
+                  ORDER BY g.sort_order ASC, g.id ASC`,
                 [projectId, workspaceId]
             );
-            return r.rows[0] ?? null;
+            return r.rows.map((row) => Number(row.repo_id));
         },
         async linkProject(projectId, workspaceId, repoId) {
-            // Un projet, un dépôt : re-lier remplace, il n'ajoute pas.
+            // Le couple (projet, dépôt) est la clé primaire depuis la migration
+            // 069 : relier deux fois le même dépôt n'est pas une erreur, c'est
+            // le même fait déclaré deux fois.
             await pool.query(
-                `INSERT INTO project_repo_links (project_id, workspace_id, repo_id) VALUES (?, ?, ?)
-                 ON DUPLICATE KEY UPDATE repo_id = VALUES(repo_id)`,
+                'INSERT IGNORE INTO project_repo_links (project_id, workspace_id, repo_id) VALUES (?, ?, ?)',
                 [projectId, workspaceId, repoId]
             );
         },
-        async unlinkProject(projectId, workspaceId) {
+        async unlinkProject(projectId, workspaceId, repoId) {
+            const r = await pool.query(
+                'DELETE FROM project_repo_links WHERE project_id = ? AND repo_id = ? AND workspace_id = ?',
+                [projectId, repoId, workspaceId]
+            );
+            return r.rowCount > 0;
+        },
+        async unlinkAllProjects(projectId, workspaceId) {
             const r = await pool.query('DELETE FROM project_repo_links WHERE project_id = ? AND workspace_id = ?', [
                 projectId,
                 workspaceId
             ]);
-            return r.rowCount > 0;
+            return r.rowCount;
         },
 
         async markSynced(repoId, { at, error, syncState, defaultBranch }) {

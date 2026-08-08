@@ -1,11 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Project, ProjectDraft, ProjectSecurityTier, ProjectStatus, ProjectTag } from 'deveye-types';
-import { PROJECT_MAX_TAGS, PROJECT_TAG_LABEL_MAX_LENGTH, PROJECT_TITLE_MAX_LENGTH } from 'deveye-types';
+import {
+    PROJECT_ICON_MAX_LENGTH,
+    PROJECT_MAX_TAGS,
+    PROJECT_TAG_LABEL_MAX_LENGTH,
+    PROJECT_TITLE_MAX_LENGTH
+} from 'deveye-types';
+import { ACCEPTED_TYPES, fileToSquareDataUrl } from '@/imageResize';
 import { Button, Dialog, SelectInput, TextInput } from '@/Components';
 import { dateInputToSeconds, dateInputValue, STATUS_LABELS, TAG_KIND_LABELS } from './api';
 import styles from './style.module.css';
 
 const STATUSES: ProjectStatus[] = ['draft', 'active', 'paused', 'done'];
+
+/** Côté de la vignette enregistrée, en pixels. La carte l'affiche à 36 px. */
+const PROJECT_ICON_SIZE = 128;
 
 export interface ProjectDialogResult {
     draft: ProjectDraft;
@@ -36,6 +45,7 @@ interface ProjectDialogProps {
 
 const EMPTY: ProjectDraft = {
     title: '',
+    icon: '',
     description: '',
     tags: [],
     status: 'active',
@@ -66,6 +76,9 @@ export function ProjectDialog({
     const [tagLabel, setTagLabel] = useState('');
     /** L'archivage sort le projet de l'espace de travail : il se confirme. */
     const [confirmArchive, setConfirmArchive] = useState(false);
+    /** Ce qui a empêché la dernière image d'être acceptée, s'il y a lieu. */
+    const [iconError, setIconError] = useState<string | null>(null);
+    const fileRef = useRef<HTMLInputElement>(null);
 
     // Recharge le formulaire à chaque ouverture : une popup réutilisée ne doit
     // jamais rouvrir sur les valeurs de la fois d'avant.
@@ -75,6 +88,7 @@ export function ProjectDialog({
             project
                 ? {
                       title: project.title,
+                      icon: project.icon,
                       description: project.description,
                       tags: project.tags,
                       status: project.status,
@@ -86,6 +100,7 @@ export function ProjectDialog({
         setTier(project?.securityTier ?? 'open');
         setTagLabel('');
         setConfirmArchive(false);
+        setIconError(null);
     }, [open, project]);
 
     const addTag = () => {
@@ -94,6 +109,27 @@ export function ProjectDialog({
         const exists = draft.tags.some((t) => t.kind === tagKind && t.label.toLowerCase() === label.toLowerCase());
         if (!exists) setDraft({ ...draft, tags: [...draft.tags, { kind: tagKind, label }] });
         setTagLabel('');
+    };
+
+    /**
+     * Réduit l'image déposée et la pose dans le brouillon.
+     *
+     * Un échec n'efface pas l'icône en place et ne bloque rien : il s'affiche
+     * sous le titre, et le reste du formulaire continue de fonctionner.
+     */
+    const pickIcon = async (file: File | null) => {
+        if (!file) return;
+        try {
+            setDraft((d) => ({ ...d, icon: '' }));
+            const icon = await fileToSquareDataUrl(file, {
+                size: PROJECT_ICON_SIZE,
+                maxLength: PROJECT_ICON_MAX_LENGTH
+            });
+            setDraft((d) => ({ ...d, icon }));
+            setIconError(null);
+        } catch (e) {
+            setIconError(e instanceof Error ? e.message : 'Image refusée.');
+        }
     };
 
     const removeTag = (index: number) => setDraft({ ...draft, tags: draft.tags.filter((_, i) => i !== index) });
@@ -123,16 +159,57 @@ export function ProjectDialog({
             }
         >
             <div className={styles.form}>
-                <label className={styles.field}>
-                    <span className={styles.label}>Titre</span>
-                    <TextInput
-                        data-autofocus
-                        value={draft.title}
-                        maxLength={PROJECT_TITLE_MAX_LENGTH}
-                        placeholder='Nom du projet'
-                        onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+                {/* La vignette à côté du titre, pas dans une section à part :
+                    les deux nomment le projet, et on les choisit d'un même
+                    geste. L'image est réduite **dans le navigateur** avant
+                    d'être envoyée — le contrat borne la charge utile, et
+                    transporter huit mégaoctets pour en garder cinquante kilos
+                    n'aurait aucun sens. */}
+                <div className={styles.iconRow}>
+                    <button
+                        type='button'
+                        className={styles.iconPicker}
+                        onClick={() => fileRef.current?.click()}
+                        title='Choisir une image'
+                        aria-label='Choisir une icône pour le projet'
+                    >
+                        {draft.icon ? (
+                            <img src={draft.icon} alt='' />
+                        ) : (
+                            <span className='icon icon-projects' aria-hidden='true' />
+                        )}
+                    </button>
+                    <input
+                        ref={fileRef}
+                        type='file'
+                        accept={ACCEPTED_TYPES.join(',')}
+                        hidden
+                        onChange={(e) => void pickIcon(e.target.files?.[0] ?? null)}
                     />
-                </label>
+
+                    <label className={styles.field}>
+                        <span className={styles.label}>Titre</span>
+                        <TextInput
+                            data-autofocus
+                            value={draft.title}
+                            maxLength={PROJECT_TITLE_MAX_LENGTH}
+                            placeholder='Nom du projet'
+                            onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+                        />
+                        <span className={iconError ? styles.error : styles.hint}>
+                            {iconError ??
+                                (draft.icon
+                                    ? 'Cliquez sur la vignette pour la remplacer.'
+                                    : 'Cliquez sur la vignette pour choisir une image (PNG, JPEG ou WebP).')}
+                        </span>
+                    </label>
+
+                    {draft.icon && (
+                        <Button variant='ghost' onClick={() => setDraft({ ...draft, icon: '' })}>
+                            Retirer
+                        </Button>
+                    )}
+                </div>
 
                 <label className={styles.field}>
                     <span className={styles.label}>Description</span>

@@ -72,6 +72,7 @@ const DEFAULT_COLUMNS: { name: string; countsAsDone: boolean }[] = [
 function toPayload(draft: ProjectDraft, version: string): StoredProject {
     return {
         title: draft.title,
+        icon: draft.icon,
         description: draft.description,
         tags: draft.tags,
         version
@@ -359,12 +360,14 @@ export const projectSetSecurityTierFeature: FeatureDefinition<
         // Fait **avant** la conversion, pour que l'événement de frise soit
         // enregistré sous l'ancien tier — celui sous lequel le reste de
         // l'historique du projet a été écrit.
-        if (input.securityTier === 'guarded' && (await ctx.db.git.findLink(input.projectId, ctx.workspaceId))) {
-            await ctx.db.git.unlinkProject(input.projectId, ctx.workspaceId);
-            await recordEvent(ctx, existing, {
-                kind: 'project.repoUnlink',
-                label: 'Dépôt git délié (projet passé en confidentiel)'
-            });
+        if (input.securityTier === 'guarded') {
+            const dropped = await ctx.db.git.unlinkAllProjects(input.projectId, ctx.workspaceId);
+            if (dropped > 0) {
+                await recordEvent(ctx, existing, {
+                    kind: 'project.repoUnlink',
+                    label: `${dropped} dépôt${dropped > 1 ? 's' : ''} git délié${dropped > 1 ? 's' : ''} (projet passé en confidentiel)`
+                });
+            }
         }
 
         // Même règle pour les bases de données, et pour la même raison : elles

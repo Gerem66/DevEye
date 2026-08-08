@@ -3,19 +3,16 @@ import type { GitCredential, GitRepo } from 'deveye-types';
 import { Button, Dialog, SelectInput } from '@/Components';
 import { ws } from '@/api/ws';
 import { RepoPicker, type RepoTarget } from '@/Features/Git/RepoPicker';
-import gitStyles from '@/Features/Git/style.module.css';
 import { humanizeError } from '../api';
 import styles from '../style.module.css';
 
 interface LinkRepoDialogProps {
     open: boolean;
     projectId: number;
-    /** Le dépôt actuellement pointé, s'il y en a un. */
-    linkedRepoId: number | null;
+    /** Les dépôts déjà reliés : ils sortent de la liste des choix possibles. */
+    linkedRepoIds: number[];
     onClose: () => void;
     onSaved: () => void;
-    /** Retirer la liaison. Absent quand rien n'est lié, ou en lecture seule. */
-    onUnlink?: () => void;
 }
 
 /** Deux façons d'arriver au même endroit : pointer l'existant, ou en créer un. */
@@ -40,7 +37,7 @@ type Mode = 'pick' | 'create';
  * `git.repoAdd` étant idempotente sur `owner/repo`, saisir par mégarde un dépôt
  * déjà présent le retrouve au lieu de le dupliquer.
  */
-export function LinkRepoDialog({ open, projectId, linkedRepoId, onClose, onSaved, onUnlink }: LinkRepoDialogProps) {
+export function LinkRepoDialog({ open, projectId, linkedRepoIds, onClose, onSaved }: LinkRepoDialogProps) {
     const [repos, setRepos] = useState<GitRepo[]>([]);
     const [credentials, setCredentials] = useState<GitCredential[]>([]);
     const [mode, setMode] = useState<Mode>('pick');
@@ -48,12 +45,10 @@ export function LinkRepoDialog({ open, projectId, linkedRepoId, onClose, onSaved
     const [target, setTarget] = useState<RepoTarget>({ owner: '', repo: '', credentialId: null });
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [confirmUnlink, setConfirmUnlink] = useState(false);
 
     useEffect(() => {
         if (!open) return;
-        setConfirmUnlink(false);
-        setPicked(linkedRepoId === null ? '' : String(linkedRepoId));
+        setPicked('');
         setTarget({ owner: '', repo: '', credentialId: null });
         setError(null);
         void (async () => {
@@ -64,14 +59,17 @@ export function LinkRepoDialog({ open, projectId, linkedRepoId, onClose, onSaved
                 ]);
                 setRepos(list.repos);
                 setCredentials(creds.credentials.filter((c) => c.provider === 'github'));
-                // Un espace sans aucun dépôt n'a rien à faire choisir : on ouvre
+                // Rien à choisir — espace vide, ou tout déjà relié — : on ouvre
                 // directement sur la création.
-                setMode(list.repos.length === 0 ? 'create' : 'pick');
+                setMode(list.repos.some((r) => !linkedRepoIds.includes(r.id)) ? 'pick' : 'create');
             } catch (e) {
                 setError(humanizeError(e, 'Impossible de charger les dépôts de l’espace.'));
             }
         })();
-    }, [open, linkedRepoId]);
+    }, [open]);
+
+    /** Ce qui reste à relier : un dépôt déjà là n'a rien à faire dans la liste. */
+    const free = repos.filter((r) => !linkedRepoIds.includes(r.id));
 
     const canSubmit = mode === 'pick' ? picked !== '' : target.owner.trim() !== '' && target.repo.trim() !== '';
 
@@ -104,7 +102,7 @@ export function LinkRepoDialog({ open, projectId, linkedRepoId, onClose, onSaved
         <Dialog
             open={open}
             onClose={onClose}
-            title={linkedRepoId === null ? 'Relier un dépôt' : 'Modifier le dépôt relié'}
+            title='Ajouter un dépôt au projet'
             width={560}
             onSubmit={submit}
             footer={
@@ -119,7 +117,7 @@ export function LinkRepoDialog({ open, projectId, linkedRepoId, onClose, onSaved
             }
         >
             <div className={styles.form}>
-                {repos.length > 0 && (
+                {free.length > 0 && (
                     <div className={styles.tabs}>
                         <button
                             type='button'
@@ -143,7 +141,7 @@ export function LinkRepoDialog({ open, projectId, linkedRepoId, onClose, onSaved
                         <span className={styles.label}>Dépôt de l’espace</span>
                         <SelectInput value={picked} onChange={(e) => setPicked(e.target.value)}>
                             <option value=''>Choisir un dépôt…</option>
-                            {repos.map((r) => (
+                            {free.map((r) => (
                                 <option key={r.id} value={r.id}>
                                     {r.owner}/{r.repo}
                                     {r.projectCount > 0 &&
@@ -152,7 +150,8 @@ export function LinkRepoDialog({ open, projectId, linkedRepoId, onClose, onSaved
                             ))}
                         </SelectInput>
                         <span className={styles.hint}>
-                            Un dépôt peut servir plusieurs projets : en choisir un déjà utilisé ne le retire à personne.
+                            Un dépôt peut servir plusieurs projets : en choisir un déjà utilisé ailleurs ne le retire à
+                            personne.
                         </span>
                     </label>
                 )}
@@ -169,35 +168,6 @@ export function LinkRepoDialog({ open, projectId, linkedRepoId, onClose, onSaved
                             d’autres projets.
                         </span>
                     </>
-                )}
-
-                {/* Le déliement vit ici, avec les autres réglages de la liaison,
-                    et non dans l'en-tête de l'onglet : une action destructrice
-                    n'a pas à côtoyer « Synchroniser », qu'on presse souvent. */}
-                {onUnlink && (
-                    <div className={gitStyles.dangerZone}>
-                        <div className={gitStyles.dangerText}>
-                            <span className={styles.label}>Délier ce dépôt</span>
-                            <span className={styles.hint}>
-                                Le projet perd son dépôt. Le dépôt lui-même, son historique et les autres projets qui
-                                l’utilisent ne sont pas touchés.
-                            </span>
-                        </div>
-                        {confirmUnlink ? (
-                            <div className={styles.actions}>
-                                <Button variant='secondary' onClick={() => setConfirmUnlink(false)} disabled={busy}>
-                                    Annuler
-                                </Button>
-                                <Button variant='danger' onClick={onUnlink} disabled={busy}>
-                                    Confirmer
-                                </Button>
-                            </div>
-                        ) : (
-                            <Button variant='danger' onClick={() => setConfirmUnlink(true)} disabled={busy}>
-                                Délier
-                            </Button>
-                        )}
-                    </div>
                 )}
 
                 {error && <p className={styles.error}>{error}</p>}

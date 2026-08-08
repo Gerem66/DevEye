@@ -269,7 +269,7 @@ export function FeatureGit({ workspace }: FeatureProps) {
         <div className={styles.root}>
             <header className={styles.header}>
                 <div>
-                    <h2 className={styles.heading}>Dépôts</h2>
+                    <h2 className={styles.heading}>Dépôts Git</h2>
                     {repos && (
                         <p className={styles.subheading}>
                             {repos.length} dépôt{repos.length > 1 ? 's' : ''} · {credentials.length} jeton

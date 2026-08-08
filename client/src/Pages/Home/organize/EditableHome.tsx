@@ -34,6 +34,8 @@ import {
     removeSection,
     removeShortcut,
     renameSection,
+    setSectionCollapsed,
+    setSectionCollapsible,
     setSectionOrder,
     transferSectionItem,
     useHomeLayout
@@ -293,6 +295,31 @@ function SortableSection({
                     maxLength={40}
                     aria-label='Titre de la section'
                 />
+                {/*
+                 * Deux réglages, et le second dépend du premier : « démarre
+                 * repliée » n'apparaît que si la section peut l'être. Une
+                 * section qu'on ne peut pas déplier mais qui démarre repliée
+                 * serait simplement invisible, et le store retire d'ailleurs le
+                 * second drapeau avec le premier.
+                 */}
+                <label className={styles.sectionToggle} title='La section peut être repliée sur l’accueil'>
+                    <input
+                        type='checkbox'
+                        checked={section.collapsible === true}
+                        onChange={(e) => setSectionCollapsible(section.id, e.target.checked)}
+                    />
+                    Repliable
+                </label>
+                {section.collapsible === true && (
+                    <label className={styles.sectionToggle} title='Elle s’ouvre repliée'>
+                        <input
+                            type='checkbox'
+                            checked={section.collapsed === true}
+                            onChange={(e) => setSectionCollapsed(section.id, e.target.checked)}
+                        />
+                        Repliée au départ
+                    </label>
+                )}
                 <span className={styles.sectionKind}>{SECTION_KIND_LABEL[section.kind]}</span>
                 <span className={styles.sectionCount}>{section.items.length}</span>
                 <button

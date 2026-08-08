@@ -22,6 +22,8 @@ import type { ProjectStats } from '@/db/repos/projects';
  */
 export interface StoredProject {
     title: string;
+    /** URL de données de la vignette, ou chaîne vide. Chiffrée comme le titre. */
+    icon: string;
     description: string;
     tags: ProjectTag[];
     version: string;
@@ -45,6 +47,7 @@ function parseProject(plain: string): StoredProject | null {
         const parsed = JSON.parse(plain) as Partial<StoredProject>;
         return {
             title: typeof parsed.title === 'string' ? parsed.title : '',
+            icon: typeof parsed.icon === 'string' ? parsed.icon : '',
             description: typeof parsed.description === 'string' ? parsed.description : '',
             tags: Array.isArray(parsed.tags) ? (parsed.tags as ProjectTag[]) : [],
             version: typeof parsed.version === 'string' ? parsed.version : ''
@@ -69,6 +72,7 @@ export function toProject(row: ProjectRow, payload: StoredProject): Project {
     return projectSchema.parse({
         id: row.id,
         title: payload.title,
+        icon: payload.icon,
         description: payload.description,
         tags: payload.tags,
         version: payload.version,
@@ -92,7 +96,9 @@ export function toProject(row: ProjectRow, payload: StoredProject): Project {
  * notes privées.
  */
 export function toMaskedSummary(row: ProjectRow, stats: ProjectStats | undefined): ProjectSummary {
-    return withStats(toProject(row, { title: '', description: '', tags: [], version: '' }), true, stats);
+    // Icône vide comprise : une vignette est aussi identifiante qu'un titre, et
+    // la laisser passer sur un projet verrouillé viderait la garde de son sens.
+    return withStats(toProject(row, { title: '', icon: '', description: '', tags: [], version: '' }), true, stats);
 }
 
 export function toSummary(row: ProjectRow, payload: StoredProject, stats: ProjectStats | undefined): ProjectSummary {

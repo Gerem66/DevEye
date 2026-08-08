@@ -1,34 +1,37 @@
-import { projectRepoGet, projectRepoLink, projectRepoUnlink } from 'deveye-types';
+import { projectRepoLink, projectRepoList, projectRepoUnlink } from 'deveye-types';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
-import { assertProjectUnlocked, loadProject, recordEvent } from './_shared';
+import { loadProject, recordEvent } from './_shared';
 
 /**
- * La liaison d'un projet vers un dépôt de l'espace.
+ * Le pointeur d'un projet vers des dépôts de l'espace.
  *
- * Trois commandes, et rien d'autre : **le dépôt n'appartient pas au projet.**
- * Il vit dans la feature Git (`src/features/git/`), qui porte son cache, sa
- * synchronisation et ses jetons — et qui est aussi la seule à pouvoir les lire
- * (`{ feature: 'git' }`). Ce qui suit ne pose et ne retire qu'un pointeur, sous
- * le droit du projet.
+ * Trois commandes seulement : **le dépôt n'appartient pas au projet.** Il vit
+ * dans la feature Git, qui porte son cache, sa synchronisation et ses jetons.
+ * Ce qui suit ne fait que poser et retirer un pointeur — d'où le fait que tout
+ * y soit un `repoId` et rien d'autre.
  *
- * Conséquence voulue : délier un dépôt d'un projet ne détruit rien. Le dépôt,
- * son historique et les autres projets qui s'en servent ne bougent pas.
+ * **Plusieurs dépôts par projet** depuis la migration 069 : un projet réel se
+ * compose souvent d'un client, d'un serveur et de contrats partagés, chacun dans
+ * son dépôt. La liaison est donc non exclusive dans les deux sens, comme celle
+ * aux bases de données et aux services surveillés.
+ *
+ * Gardé sous `projects: write` : c'est le projet qu'on modifie ici, pas le
+ * dépôt. Lire son contenu relève, lui, du droit `git`.
  */
 
-const WRITE = { feature: 'projects', level: 'write' } as const;
 const READ = { feature: 'projects' } as const;
+const WRITE = { feature: 'projects', level: 'write' } as const;
 
-export const projectRepoGetFeature: FeatureDefinition<
-    typeof projectRepoGet.command,
-    typeof projectRepoGet.input,
-    typeof projectRepoGet.output
+export const projectRepoListFeature: FeatureDefinition<
+    typeof projectRepoList.command,
+    typeof projectRepoList.input,
+    typeof projectRepoList.output
 > = defineFeature({
-    ...projectRepoGet,
+    ...projectRepoList,
     access: READ,
     handler: async (ctx, input) => {
         await loadProject(ctx, input.projectId);
-        const link = await ctx.db.git.findLink(input.projectId, ctx.workspaceId);
-        return { repoId: link?.repo_id ?? null };
+        return { repoIds: await ctx.db.git.listLinkedRepoIds(input.projectId, ctx.workspaceId) };
     }
 });
 
@@ -38,37 +41,33 @@ export const projectRepoLinkFeature: FeatureDefinition<
     typeof projectRepoLink.output
 > = defineFeature({
     ...projectRepoLink,
-    mutates: true,
+    mutates: ['projects', 'git'],
     access: WRITE,
     handler: async (ctx, input) => {
         const project = await loadProject(ctx, input.projectId);
-        await assertProjectUnlocked(ctx, project);
 
-        // Un projet confidentiel ne se lie pas. Deux raisons qui vont dans le
-        // même sens : le service de fond tourne sans session et n'atteindra
-        // jamais l'étage gardé ; et la liaison elle-même est une ligne en clair,
-        // qui rattacherait un projet confidentiel à un dépôt nommé — c'est
-        // exactement ce que le palier est censé ne pas laisser voir.
+        // Un projet confidentiel ne peut pas être lié : la liaison est une ligne
+        // en clair, le dépôt vit à l'étage ouvert, et la synchronisation tourne
+        // sans session. Accepter reviendrait à promettre une confidentialité
+        // qu'on ne tient pas.
         if (project.security_tier === 'guarded') {
-            throw new FeatureError(
-                'validation',
-                'Un projet confidentiel ne peut pas être relié à un dépôt : la liaison serait visible en clair, ' +
-                    'et la synchronisation tourne sans session.'
-            );
+            throw new FeatureError('validation', 'Un projet confidentiel ne peut pas être relié à un dépôt.');
         }
 
-        // La frontière d'espace : sans elle, on lierait le dépôt d'un autre.
+        // Le dépôt existe-t-il, et dans **cet** espace ? Sans cette garde on
+        // lierait n'importe quel identifiant, y compris celui d'un dépôt d'un
+        // autre espace — dont l'existence même n'a pas à fuiter.
         const repo = await ctx.db.git.findRepo(input.repoId, ctx.workspaceId);
-        if (!repo) throw new FeatureError('not_found', 'Dépôt introuvable');
+        if (!repo) throw new FeatureError('not_found', 'Ce dépôt n’existe pas dans cet espace.');
 
         await ctx.db.git.linkProject(input.projectId, ctx.workspaceId, input.repoId);
         await recordEvent(ctx, project, { kind: 'project.repoLink', label: 'Dépôt git relié' });
         ctx.audit({
             action: 'project.repoLink',
-            description: 'Dépôt relié au projet',
+            description: 'Dépôt git relié au projet',
             metadata: { projectId: input.projectId, repoId: input.repoId }
         });
-        return { repoId: input.repoId };
+        return { repoIds: await ctx.db.git.listLinkedRepoIds(input.projectId, ctx.workspaceId) };
     }
 });
 
@@ -78,16 +77,16 @@ export const projectRepoUnlinkFeature: FeatureDefinition<
     typeof projectRepoUnlink.output
 > = defineFeature({
     ...projectRepoUnlink,
-    mutates: true,
+    mutates: ['projects', 'git'],
     access: WRITE,
     handler: async (ctx, input) => {
         const project = await loadProject(ctx, input.projectId);
-        await assertProjectUnlocked(ctx, project);
-        const ok = await ctx.db.git.unlinkProject(input.projectId, ctx.workspaceId);
-        if (!ok) throw new FeatureError('not_found', 'Aucun dépôt lié');
-        await recordEvent(ctx, project, { kind: 'project.repoUnlink', label: 'Dépôt git délié' });
-        return { projectId: input.projectId };
+        // Le dépôt et son cache survivent : ils appartiennent à l'espace, et
+        // d'autres projets peuvent s'en servir.
+        const ok = await ctx.db.git.unlinkProject(input.projectId, ctx.workspaceId, input.repoId);
+        if (ok) await recordEvent(ctx, project, { kind: 'project.repoUnlink', label: 'Dépôt git délié' });
+        return { repoIds: await ctx.db.git.listLinkedRepoIds(input.projectId, ctx.workspaceId) };
     }
 });
 
-export const projectRepoLinkFeatures = [projectRepoGetFeature, projectRepoLinkFeature, projectRepoUnlinkFeature];
+export const projectRepoLinkFeatures = [projectRepoListFeature, projectRepoLinkFeature, projectRepoUnlinkFeature];

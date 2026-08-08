@@ -138,6 +138,37 @@ export function renameSection(sectionId: string, title: string): void {
     });
 }
 
+/**
+ * Rend une section repliable, ou cesse de l'être.
+ *
+ * Retirer le repli **retire aussi** l'état initial replié : une section qu'on ne
+ * peut pas déplier mais qui démarre repliée serait simplement invisible, et
+ * c'est le genre d'incohérence qu'il vaut mieux rendre impossible que d'avoir à
+ * expliquer.
+ */
+export function setSectionCollapsible(sectionId: string, collapsible: boolean): void {
+    commit({
+        ...state,
+        sections: state.sections.map((s) => {
+            if (s.id !== sectionId) return s;
+            const { collapsible: _c, collapsed: _d, ...rest } = s;
+            return (collapsible ? { ...rest, collapsible: true } : rest) as HomeSection;
+        })
+    });
+}
+
+/** Pose l'état initial : la section s'ouvre-t-elle repliée ? */
+export function setSectionCollapsed(sectionId: string, collapsed: boolean): void {
+    commit({
+        ...state,
+        sections: state.sections.map((s) => {
+            if (s.id !== sectionId) return s;
+            const { collapsed: _dropped, ...rest } = s;
+            return (collapsed ? { ...rest, collapsed: true } : rest) as HomeSection;
+        })
+    });
+}
+
 export function setSectionOrder(ids: string[]): void {
     const byId = new Map(state.sections.map((s) => [s.id, s]));
     const reordered = ids.map((id) => byId.get(id)).filter((s): s is HomeSection => !!s);

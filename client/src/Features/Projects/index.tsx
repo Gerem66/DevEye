@@ -397,6 +397,18 @@ function ProjectCard({ summary, canWrite, archived, outline, onOpen, onArchive }
                     }
                 }}
             >
+                {/* La vignette, en tête de carte : c'est elle qu'on reconnaît
+                    avant d'avoir lu le titre, une fois qu'on en a plusieurs.
+                    Masquée sur un projet verrouillé, comme le titre — une image
+                    identifie autant qu'un nom. */}
+                <span className={styles.cardIcon} aria-hidden='true'>
+                    {!masked && project.icon ? (
+                        <img src={project.icon} alt='' />
+                    ) : (
+                        <span className='icon icon-projects' />
+                    )}
+                </span>
+
                 <div className={styles.cardIdent}>
                     <div className={styles.cardTitleRow}>
                         {/* Le statut ouvre la ligne : c'est la première chose
@@ -433,12 +445,12 @@ function ProjectCard({ summary, canWrite, archived, outline, onOpen, onArchive }
                     {!masked && project.description && <p className={styles.description}>{project.description}</p>}
                 </div>
 
-                {/* Colonne de largeur **fixe**, et c'est tout l'intérêt : la
-                    barre commence et finit au même endroit sur toutes les
-                    lignes, quelle que soit la longueur du titre. En flux, elle
-                    absorbait la place restante et changeait donc de taille à
-                    chaque projet — impossible de comparer deux avancements d'un
-                    coup d'œil, ce qui est pourtant tout ce qu'on lui demande. */}
+                {/* Sous l'identité, et non à côté : en ligne, tout le milieu
+                    de la carte restait vide et l'avancement se retrouvait à
+                    l'autre bout de l'écran, loin du titre qu'il décrit. En
+                    grille, la barre reprend toute la largeur de la carte, donc
+                    la même sur toutes — deux avancements se comparent encore
+                    d'un coup d'œil, ce qui est tout ce qu'on lui demande. */}
                 <div className={styles.cardProgress}>
                     <div className={styles.progress} aria-label={`Avancement ${progress}%`}>
                         <div className={styles.progressFill} style={{ width: `${progress}%` }} />

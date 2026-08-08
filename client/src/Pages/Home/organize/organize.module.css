@@ -93,6 +93,23 @@
     color: var(--text-primary);
 }
 
+/* Les deux réglages de repli, en clair dans l'en-tête plutôt que derrière un
+   menu : ils se règlent une fois, au moment où l'on compose la section. */
+.sectionToggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.sectionToggle:hover {
+    color: var(--text-secondary);
+}
+
 .sectionKind,
 .sectionCount {
     flex-shrink: 0;

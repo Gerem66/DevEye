@@ -733,3 +733,28 @@
     flex: 1 1 260px;
     min-width: 0;
 }
+
+/* ------------------------------------------------- un objet dans un projet */
+
+/*
+ * Un dépôt / une base à l'intérieur de l'onglet d'un projet.
+ *
+ * Sans cadre tant qu'il n'y en a qu'un : une boîte dans une boîte n'apporterait
+ * rien. À partir de deux, un contour sobre — pas une carte pleine — dit
+ * simplement où l'un finit et où l'autre commence, entre deux graphes et huit
+ * panneaux qui se ressembleraient sinon.
+ */
+.linkedBlock {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-width: 0;
+}
+
+.linkedBlockFramed {
+    composes: linkedBlock;
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-subtle);
+}

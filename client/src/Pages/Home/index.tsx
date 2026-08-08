@@ -208,6 +208,61 @@ function getGreeting(): string {
  * reste. La salutation ne disparaît pas pour autant, elle passe en sous-titre :
  * l'accueil appartient au lieu, mais on continue d'y être reçu.
  */
+/**
+ * Une section de l'accueil, repliable ou non.
+ *
+ * Le repli est **local et éphémère** : l'état enregistré (`section.collapsed`)
+ * dit seulement comment la section *s'ouvre*, pas comment on l'a laissée. C'est
+ * délibéré — replier une section pour dégager la vue une minute ne devrait pas
+ * modifier la disposition partagée de l'espace, ni partir en écriture sur le
+ * réseau. Recharger la page revient donc à l'état choisi dans l'organiseur.
+ *
+ * Sans `collapsible`, il n'y a **rien à cliquer** : un chevron sur une section
+ * que personne ne veut replier est une chose de plus à ignorer. Le titre reste
+ * alors un simple intitulé.
+ */
+function CollapsibleSection({ section, children }: { section: HomeSection; children: ReactNode }) {
+    const foldable = section.collapsible === true;
+    const [folded, setFolded] = useState(foldable && section.collapsed === true);
+
+    // L'organiseur peut changer les deux réglages sous nos pieds : on repart de
+    // l'état déclaré plutôt que de garder un repli devenu impossible.
+    useEffect(() => {
+        setFolded(section.collapsible === true && section.collapsed === true);
+    }, [section.collapsible, section.collapsed]);
+
+    if (!foldable) {
+        return (
+            <div className={styles.sectionGroup}>
+                {section.title && <h2 className={styles.sectionHeading}>{section.title}</h2>}
+                {children}
+            </div>
+        );
+    }
+
+    return (
+        <div className={styles.sectionGroup}>
+            {/* Le bouton **est** l'intitulé : une cible séparée du titre serait
+                minuscule, et le titre resterait un texte mort à côté. Une
+                section repliable sans titre reste cliquable — elle affiche
+                simplement le chevron seul. */}
+            <button
+                type='button'
+                className={styles.sectionToggle}
+                aria-expanded={!folded}
+                onClick={() => setFolded((v) => !v)}
+            >
+                <span
+                    className={`icon icon-chevron-down ${folded ? styles.chevronFolded : styles.chevron}`}
+                    aria-hidden='true'
+                />
+                <span className={styles.sectionHeading}>{section.title ?? 'Section'}</span>
+            </button>
+            {!folded && children}
+        </div>
+    );
+}
+
 function homeHeading(workspace: Workspace, username: string): { title: string; subtitle: string } {
     if (workspace.kind === 'personal') {
         return { title: `${getGreeting()}, ${username}`, subtitle: upperFirst(formatDate()) };
@@ -702,10 +757,9 @@ export default function HomePage() {
         }
         if (tiles.length === 0) return null;
         return (
-            <div key={section.id} className={styles.sectionGroup}>
-                {section.title && <h2 className={styles.sectionHeading}>{section.title}</h2>}
+            <CollapsibleSection key={section.id} section={section}>
                 <WidgetGrid>{tiles}</WidgetGrid>
-            </div>
+            </CollapsibleSection>
         );
     };
 

@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Database, Project } from 'deveye-types';
-import { Button, SelectInput } from '@/Components';
-import { ws, WsError } from '@/api/ws';
+import type { Database, DatabaseAlert, DatabaseProbe, Project } from 'deveye-types';
+import { Button, Dialog } from '@/Components';
+import { ws } from '@/api/ws';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
-import { startTeleport } from '@/stores/live';
-import { useActiveWorkspace } from '@/stores/workspace';
-import { ENGINE_LABELS, formatAgo, formatBytes, STATUS_META } from '@/Features/Database/format';
+import { DatabaseDialog } from '@/Features/Database/DatabaseDialog';
+import { DatabaseHeader } from '@/Features/Database/DatabaseHeader';
+import { DatabaseView } from '@/Features/Database/DatabaseView';
 import dbStyles from '@/Features/Database/style.module.css';
 import { humanizeError } from '../api';
+import { LinkDatabaseDialog } from './LinkDatabaseDialog';
 import styles from '../style.module.css';
 
 interface DatabasesProps {
@@ -16,36 +17,46 @@ interface DatabasesProps {
     canWrite: boolean;
 }
 
+/** Ce qu'une base ouverte dans cet onglet porte avec elle. */
+interface Linked {
+    database: Database;
+    alerts: DatabaseAlert[];
+}
+
 /**
  * L'onglet « Bases de données » d'un projet : celles qu'il pointe.
  *
- * Enveloppe mince, comme l'onglet Git. **La base n'appartient pas au projet** :
- * elle vit dans sa feature, avec ses alertes et son relevé, et plusieurs projets
- * peuvent viser la même. Cet onglet ne possède qu'un pointeur
- * (`project.databaseList` / `databaseLink` / `databaseUnlink`).
+ * Enveloppe mince, exactement comme l'onglet Git. **La base n'appartient pas au
+ * projet** : elle vit dans sa feature, avec ses alertes et son relevé, et
+ * plusieurs projets peuvent viser la même. Cet onglet ne possède qu'un pointeur
+ * (`project.databaseList` / `databaseLink` / `databaseUnlink`) et délègue tout
+ * l'affichage à `DatabaseView`, le composant de la feature.
  *
- * Une différence avec le dépôt git, et une seule : un projet peut suivre
- * **plusieurs** bases, là où il n'a qu'un dépôt.
+ * Le contenu est rendu **ici**, et non derrière un renvoi vers la feature : une
+ * base reliée à un projet se consulte depuis le projet, sinon la liaison ne sert
+ * qu'à ranger. Au-delà de la première, chaque base reçoit un cadre discret —
+ * sans lui, deux jeux de statistiques, d'alertes et de tables s'enchaîneraient
+ * sans qu'on sache où l'un finit.
  *
  * Corollaire à connaître : lire une base relève du droit `database`, pas de
  * `projects`. Un membre qui a l'un sans l'autre voit qu'il y a des bases
- * rattachées sans pouvoir les nommer, et l'écran le dit.
+ * rattachées sans pouvoir les ouvrir, et l'écran le dit.
  */
 export function Databases({ project, canWrite }: DatabasesProps) {
     const permissions = useWorkspacePermissions();
-    const workspace = useActiveWorkspace();
     const canReadDb = permissions.canFeature('database');
     const canWriteDb = permissions.canFeature('database', 'write');
 
     const [linkedIds, setLinkedIds] = useState<number[]>([]);
-    const [catalog, setCatalog] = useState<Database[] | null>(null);
-    const [picked, setPicked] = useState('');
+    const [linked, setLinked] = useState<Linked[]>([]);
     const [loaded, setLoaded] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [linkOpen, setLinkOpen] = useState(false);
+    const [unlinking, setUnlinking] = useState<Database | null>(null);
 
     const boardVersion = useResourceVersion('project.board');
-    const dbVersion = useResourceVersion('database.list');
+    const dbVersion = useResourceVersion('database.detail');
     const guarded = project.securityTier === 'guarded';
 
     const load = useCallback(async () => {
@@ -56,61 +67,38 @@ export function Databases({ project, canWrite }: DatabasesProps) {
         try {
             const res = await ws.send('project.databaseList', { projectId: project.id });
             setLinkedIds(res.databaseIds);
+            // Le détail relève de la feature Bases : sans le droit, on s'arrête
+            // aux pointeurs plutôt que d'encaisser un refus.
+            setLinked(
+                canReadDb
+                    ? (await Promise.all(res.databaseIds.map((id) => ws.send('database.get', { databaseId: id })))).map(
+                          (r) => ({ database: r.database, alerts: r.alerts })
+                      )
+                    : []
+            );
             setError(null);
         } catch (e) {
             setError(humanizeError(e, 'Impossible de charger les bases liées.'));
         } finally {
             setLoaded(true);
         }
-    }, [project.id, guarded]);
+    }, [project.id, guarded, canReadDb]);
 
     useEffect(() => {
         void load();
-    }, [load, boardVersion]);
+    }, [load, boardVersion, dbVersion]);
 
-    // Le catalogue de l'espace : pour nommer les liées et proposer les autres.
-    // Un refus de droit n'est pas une erreur à afficher.
-    useEffect(() => {
-        if (guarded || !canReadDb) {
-            setCatalog([]);
-            return;
-        }
-        let alive = true;
-        void (async () => {
-            try {
-                const res = await ws.send('database.list', {});
-                if (alive) setCatalog(res.databases);
-            } catch (e) {
-                if (alive) setCatalog([]);
-                if (!(e instanceof WsError && e.code === 'forbidden')) {
-                    setError(humanizeError(e, 'Impossible de charger les bases de l’espace.'));
-                }
-            }
-        })();
-        return () => {
-            alive = false;
-        };
-    }, [guarded, canReadDb, dbVersion]);
-
-    const write = async (command: 'project.databaseLink' | 'project.databaseUnlink', databaseId: number) => {
+    const unlink = async (databaseId: number) => {
         setBusy(true);
         try {
-            const res = await ws.send(command, { projectId: project.id, databaseId });
-            setLinkedIds(res.databaseIds);
-            setPicked('');
-            setError(null);
-            invalidate('database.list');
+            await ws.send('project.databaseUnlink', { projectId: project.id, databaseId });
+            setUnlinking(null);
+            invalidate('project.board', 'database.list');
         } catch (e) {
-            setError(humanizeError(e, 'La liaison n’a pas pu être modifiée.'));
+            setError(humanizeError(e, 'Le déliement a échoué.'));
         } finally {
             setBusy(false);
         }
-    };
-
-    /** Ouvre la base dans sa feature — le second sens de l'interconnexion. */
-    const openDatabase = (databaseId: number) => {
-        if (!workspace) return;
-        startTeleport(workspace.id, ['view:database', `l1:db:${databaseId}`]);
     };
 
     if (guarded) {
@@ -124,134 +112,38 @@ export function Databases({ project, canWrite }: DatabasesProps) {
 
     if (!loaded) return <p className={styles.empty}>Chargement…</p>;
 
-    const byId = new Map((catalog ?? []).map((d) => [d.id, d]));
-    const free = (catalog ?? []).filter((d) => !linkedIds.includes(d.id));
-
     return (
         <div className={dbStyles.root}>
             {error && <p className={styles.error}>{error}</p>}
 
-            {linkedIds.length === 0 && (
+            {linkedIds.length === 0 && <p className={styles.empty}>Aucune base reliée à ce projet.</p>}
+
+            {linkedIds.length > 0 && !canReadDb && (
                 <p className={styles.empty}>
-                    Aucune base reliée à ce projet.
-                    {canWrite && canWriteDb && ' Reliez celles dont il dépend pour en lire l’état ici même.'}
+                    Ce projet est relié à {linkedIds.length} base{linkedIds.length > 1 ? 's' : ''}, mais votre rôle
+                    n’ouvre pas la feature « Bases de données ».
                 </p>
             )}
 
-            {linkedIds.length > 0 && (
-                <ul className={dbStyles.grid}>
-                    {linkedIds.map((id) => {
-                        const database = byId.get(id);
-                        const status = database ? STATUS_META[database.status] : null;
-                        return (
-                            <li key={id} className={dbStyles.card}>
-                                <div
-                                    className={dbStyles.cardBody}
-                                    role='button'
-                                    tabIndex={0}
-                                    onClick={() => openDatabase(id)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' || e.key === ' ') {
-                                            e.preventDefault();
-                                            openDatabase(id);
-                                        }
-                                    }}
-                                >
-                                    <div className={dbStyles.cardMain}>
-                                        <p className={dbStyles.cardName}>
-                                            <span
-                                                className={dbStyles.statusDot}
-                                                data-tone={status?.tone ?? 'neutral'}
-                                                aria-hidden='true'
-                                            />
-                                            {/* Le pointeur existe mais la base n'est pas
-                                                lisible : c'est un manque de droit, pas une
-                                                erreur. Le dire plutôt que d'afficher un vide
-                                                qui se lirait comme un bug. */}
-                                            {database?.name ?? `Base #${id}`}
-                                        </p>
-                                        {database ? (
-                                            <>
-                                                <p className={dbStyles.cardMeta}>
-                                                    {ENGINE_LABELS[database.engine]} · {database.host}:{database.port}/
-                                                    {database.database}
-                                                </p>
-                                                <div className={dbStyles.cardFoot}>
-                                                    <span className={dbStyles.statusTag} data-tone={status?.tone}>
-                                                        {status?.label}
-                                                    </span>
-                                                    <span className={dbStyles.tag}>
-                                                        {database.monitorEnabled
-                                                            ? `relevée ${formatAgo(database.lastCheckAt)}`
-                                                            : 'à la demande'}
-                                                    </span>
-                                                    {database.sizeBytes !== null && (
-                                                        <span className={dbStyles.tag}>
-                                                            {formatBytes(database.sizeBytes)}
-                                                        </span>
-                                                    )}
-                                                    {database.firingCount > 0 && (
-                                                        <span className={dbStyles.alertTag}>
-                                                            {database.firingCount} alerte
-                                                            {database.firingCount > 1 ? 's' : ''}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <p className={dbStyles.hint}>
-                                                Votre rôle n’ouvre pas la feature « Bases de données ».
-                                            </p>
-                                        )}
-                                    </div>
-                                    <span className={dbStyles.openArrow} aria-hidden='true'>
-                                        <span className='icon icon-arrow' />
-                                    </span>
-                                </div>
+            {linked.map((item) => (
+                <DatabaseBlock
+                    key={item.database.id}
+                    database={item.database}
+                    alerts={item.alerts}
+                    canWrite={canWrite && canWriteDb}
+                    // Le cadre n'apparaît qu'à partir de deux : sur une base
+                    // unique il n'aurait rien à séparer.
+                    framed={linked.length > 1}
+                    onUnlink={() => setUnlinking(item.database)}
+                />
+            ))}
 
-                                {canWrite && canWriteDb && (
-                                    <button
-                                        type='button'
-                                        className={dbStyles.conditionRemove}
-                                        aria-label={`Délier ${database?.name ?? `la base #${id}`}`}
-                                        disabled={busy}
-                                        onClick={() => void write('project.databaseUnlink', id)}
-                                    >
-                                        <span className='icon icon-x' />
-                                    </button>
-                                )}
-                            </li>
-                        );
-                    })}
-                </ul>
-            )}
-
+            {/* Toujours en bas, même quand une base est déjà reliée : on peut en
+                ajouter autant qu'on veut. */}
             {canWrite && canWriteDb && (
                 <div className={dbStyles.actions}>
-                    <SelectInput
-                        value={picked}
-                        onChange={(e) => setPicked(e.target.value)}
-                        disabled={busy || free.length === 0}
-                    >
-                        <option value=''>
-                            {catalog === null
-                                ? 'Chargement…'
-                                : free.length === 0
-                                  ? 'Aucune base à relier'
-                                  : 'Choisir une base…'}
-                        </option>
-                        {free.map((d) => (
-                            <option key={d.id} value={d.id}>
-                                {d.name}
-                            </option>
-                        ))}
-                    </SelectInput>
-                    <Button
-                        variant='secondary'
-                        disabled={busy || !picked}
-                        onClick={() => void write('project.databaseLink', Number(picked))}
-                    >
-                        Relier
+                    <Button icon='add' onClick={() => setLinkOpen(true)}>
+                        Ajouter une base
                     </Button>
                 </div>
             )}
@@ -261,7 +153,128 @@ export function Databases({ project, canWrite }: DatabasesProps) {
                     Votre rôle ne permet pas de modifier les bases de données de cet espace.
                 </span>
             )}
+
+            <LinkDatabaseDialog
+                open={linkOpen}
+                projectId={project.id}
+                linkedIds={linkedIds}
+                onClose={() => setLinkOpen(false)}
+                onSaved={() => {
+                    setLinkOpen(false);
+                    invalidate('project.board', 'database.list', 'database.count');
+                }}
+            />
+
+            <Dialog
+                open={unlinking !== null}
+                onClose={() => setUnlinking(null)}
+                title='Délier cette base ?'
+                width={460}
+                footer={
+                    <>
+                        <Button variant='secondary' onClick={() => setUnlinking(null)} disabled={busy}>
+                            Annuler
+                        </Button>
+                        <Button variant='danger' disabled={busy} onClick={() => unlinking && void unlink(unlinking.id)}>
+                            Délier
+                        </Button>
+                    </>
+                }
+            >
+                <p className={styles.hint}>
+                    {unlinking && (
+                        <>
+                            <strong>{unlinking.name}</strong> quitte ce projet. La base elle-même, ses alertes et les
+                            autres projets qui l’utilisent ne sont pas touchés.
+                        </>
+                    )}
+                </p>
+            </Dialog>
         </div>
+    );
+}
+
+interface DatabaseBlockProps {
+    database: Database;
+    alerts: DatabaseAlert[];
+    canWrite: boolean;
+    framed: boolean;
+    onUnlink: () => void;
+}
+
+/** Une base du projet : son en-tête, et le contenu partagé avec la feature. */
+function DatabaseBlock({ database, alerts, canWrite, framed, onUnlink }: DatabaseBlockProps) {
+    const [probe, setProbe] = useState<DatabaseProbe | null>(null);
+    const [busy, setBusy] = useState(false);
+    const [dialogOpen, setDialogOpen] = useState(false);
+
+    const test = async () => {
+        setBusy(true);
+        setProbe(null);
+        try {
+            const res = await ws.send('database.test', { databaseId: database.id });
+            setProbe(res.probe);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const inspect = async () => {
+        setBusy(true);
+        setProbe(null);
+        try {
+            const res = await ws.send('database.inspect', { databaseId: database.id });
+            setProbe(res.probe);
+            invalidate('database.list', 'database.detail', 'database.count');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const removeAlert = async (alertId: number) => {
+        await ws.send('database.alertRemove', { alertId });
+        invalidate('database.detail', 'database.list');
+    };
+
+    return (
+        <section className={framed ? dbStyles.linkedBlockFramed : dbStyles.linkedBlock}>
+            <DatabaseHeader
+                database={database}
+                canWrite={canWrite}
+                busy={busy}
+                onTest={() => void test()}
+                onInspect={() => void inspect()}
+                onEdit={() => setDialogOpen(true)}
+                after={
+                    // Destructeur, donc à part et confirmé : il ne doit pas
+                    // côtoyer « Tester », qu'on presse souvent.
+                    <Button variant='ghost' onClick={onUnlink} disabled={busy}>
+                        Délier
+                    </Button>
+                }
+            />
+
+            <DatabaseView
+                database={database}
+                alerts={alerts}
+                canWrite={canWrite}
+                probe={probe}
+                onAlertsChanged={() => invalidate('database.detail', 'database.list')}
+                onRemoveAlert={(alertId) => void removeAlert(alertId)}
+            />
+
+            {/* Le vrai formulaire de la feature, pas une copie : régler une base
+                depuis un projet ou depuis sa feature doit être le même geste. */}
+            <DatabaseDialog
+                open={dialogOpen}
+                database={database}
+                onClose={() => setDialogOpen(false)}
+                onSaved={() => {
+                    setDialogOpen(false);
+                    invalidate('database.list', 'database.detail', 'database.count');
+                }}
+            />
+        </section>
     );
 }
 

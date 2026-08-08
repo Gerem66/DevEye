@@ -62,14 +62,32 @@
  * 300 px. En ligne, la barre prend toute la place restante et la densité suit
  * le contenu réel.
  */
+/*
+ * Des cartes, plus des lignes.
+ *
+ * En pleine largeur, tout le milieu d'un projet restait vide : le titre à
+ * gauche, l'avancement à l'autre bout, et rien entre les deux. Une grille
+ * auto-ajustée en fait des cartes qui se remplissent, et l'écran en montre
+ * plusieurs par rangée au lieu d'une seule ligne creuse.
+ *
+ * `auto-fill` et non `auto-fit` : sur un espace à deux projets, `auto-fit`
+ * étirerait les deux cartes sur toute la largeur — on retomberait exactement
+ * sur les lignes vides qu'on cherche à quitter.
+ */
 .grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: var(--space-sm);
     margin: 0;
     padding: 0 0 var(--space-md);
     list-style: none;
     align-content: start;
+}
+
+@media (max-width: 560px) {
+    .grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 .card {
@@ -104,13 +122,20 @@
  * d'avant trop aérée. Le juste milieu tient dans un `padding` moyen et une
  * description qui garde sa ligne.
  */
+/*
+ * Deux rangées : identité en haut (vignette, statut, titre, description), état
+ * en bas (avancement, tâches, échéance). La flèche et les non-lus occupent une
+ * colonne de droite qui traverse les deux, de sorte qu'ils restent calés dans
+ * le coin quelle que soit la hauteur du texte.
+ */
 .cardBody {
     flex: 1;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 260px auto;
-    align-items: center;
-    gap: var(--space-md);
-    padding: var(--space-sm) var(--space-md);
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    align-items: start;
+    gap: var(--space-xs) var(--space-sm);
+    padding: var(--space-sm) var(--space-md) var(--space-md);
     text-align: left;
     cursor: pointer;
     color: inherit;
@@ -118,8 +143,33 @@
     min-width: 0;
 }
 
-/* Colonne 1 : ce qui identifie le projet, sur une ou deux lignes. */
+/* Vignette du projet : une image déposée, ou l'icône par défaut de la feature.
+   Taille fixe — une carte ne doit pas changer de hauteur selon l'image. */
+.cardIcon {
+    grid-column: 1;
+    grid-row: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    color: var(--text-muted);
+    overflow: hidden;
+}
+
+.cardIcon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Rangée 1, colonne 2 : ce qui identifie le projet. */
 .cardIdent {
+    grid-column: 2;
+    grid-row: 1;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -133,18 +183,23 @@
     min-width: 0;
 }
 
-/* Colonne 2 : l'avancement et ses chiffres, largeur fixe (voir ci-dessus). */
+/* Rangée 2 : l'avancement et ses chiffres, sur toute la largeur du texte. */
 .cardProgress {
+    grid-column: 1 / 3;
+    grid-row: 2;
     display: flex;
     flex-direction: column;
     gap: var(--space-xs);
     min-width: 0;
+    margin-top: var(--space-xs);
 }
 
-/* Colonne 3 : non-lus et flèche, toujours au bout. */
+/* Colonne 3 : non-lus et flèche, dans le coin, sur les deux rangées. */
 .cardAside {
+    grid-column: 3;
+    grid-row: 1 / 3;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--space-sm);
 }
 
@@ -1549,4 +1604,44 @@
     margin: 0;
     padding: 0;
     list-style: none;
+}
+
+/* --------------------------------------------- vignette du projet (dialogue) */
+
+/* Le choix de l'image et le titre sur une même ligne : les deux nomment le
+   projet, et on les choisit d'un même geste. */
+.iconRow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+}
+
+.iconPicker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+    padding: 0;
+    border: 1px dashed var(--glass-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    color: var(--text-muted);
+    cursor: pointer;
+    overflow: hidden;
+    transition:
+        border-color var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.iconPicker:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.iconPicker img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
