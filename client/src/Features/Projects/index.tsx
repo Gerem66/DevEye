@@ -452,16 +452,23 @@ function ProjectCard({ summary, canWrite, archived, outline, onOpen, onArchive }
                     la même sur toutes — deux avancements se comparent encore
                     d'un coup d'œil, ce qui est tout ce qu'on lui demande. */}
                 <div className={styles.cardProgress}>
-                    <div className={styles.progress} aria-label={`Avancement ${progress}%`}>
-                        <div className={styles.progressFill} style={{ width: `${progress}%` }} />
-                    </div>
+                    {/* Tout ce qui se lit en mots passe **au-dessus** de la
+                        barre, le décompte des tâches calé à droite contre son
+                        extrémité : la carte se termine alors sur la barre au
+                        lieu d'une ligne de texte, et l'avancement se compare
+                        sans qu'un bloc s'intercale entre deux cartes. */}
                     <div className={styles.meta}>
+                        <span className={styles.metaLeft}>
+                            {cardOverdue > 0 && <span className={styles.overdue}>{cardOverdue} en retard</span>}
+                            {due && <span>échéance {due}</span>}
+                            {!masked && project.version && <span className={styles.version}>v{project.version}</span>}
+                        </span>
                         <span>
                             {cardDone}/{cardTotal} tâche{cardTotal > 1 ? 's' : ''}
                         </span>
-                        {cardOverdue > 0 && <span className={styles.overdue}>{cardOverdue} en retard</span>}
-                        {due && <span>échéance {due}</span>}
-                        {!masked && project.version && <span className={styles.version}>v{project.version}</span>}
+                    </div>
+                    <div className={styles.progress} aria-label={`Avancement ${progress}%`}>
+                        <div className={styles.progressFill} style={{ width: `${progress}%` }} />
                     </div>
                 </div>
 
