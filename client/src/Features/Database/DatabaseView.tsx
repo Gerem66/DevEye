@@ -75,6 +75,15 @@ export function DatabaseView({
                 <Stat label='Version' value={database.serverVersion ?? '—'} />
             </section>
 
+            {/* Dire d'où viennent ces chiffres, sans quoi on les croit lus à
+                l'instant — alors qu'ils datent du dernier relevé, lequel peut
+                n'avoir jamais eu lieu. */}
+            <p className={styles.hint}>
+                {database.lastCheckAt === null
+                    ? 'Ces chiffres sont vides : cette base n’a jamais été relevée. « Relever l’état » va les chercher.'
+                    : `Chiffres du dernier relevé (${formatAgo(database.lastCheckAt)}), pas une lecture en direct.`}
+            </p>
+
             <section className={styles.panel}>
                 <header className={styles.panelHead}>
                     <h3 className={styles.panelTitle}>

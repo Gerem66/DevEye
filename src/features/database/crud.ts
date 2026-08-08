@@ -117,7 +117,8 @@ export const databaseAddFeature: FeatureDefinition<
             host: input.host.trim(),
             port: input.port,
             database: input.database.trim(),
-            username: input.username.trim()
+            username: input.username.trim(),
+            autoLoadTables: input.autoLoadTables
         };
 
         const row = await ctx.db.databases.create({
@@ -164,7 +165,8 @@ export const databaseUpdateFeature: FeatureDefinition<
             host: input.host.trim(),
             port: input.port,
             database: input.database.trim(),
-            username: input.username.trim()
+            username: input.username.trim(),
+            autoLoadTables: input.autoLoadTables
         };
 
         // Secret absent = inchangé, chaîne vide = effacé. Le client ne le reçoit

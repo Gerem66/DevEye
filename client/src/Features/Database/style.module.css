@@ -621,18 +621,41 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    flex: 1 1 200px;
     min-width: 0;
 }
 
 .fieldWide {
     composes: field;
-    flex: 3 1 260px;
 }
 
 .fieldNarrow {
     composes: field;
+    /* Un port, un nombre de minutes : hors d'une ligne, il n'a aucune raison de
+       traverser la popup. */
+    max-width: 160px;
+}
+
+/*
+ * Les proportions ne valent **que dans une ligne**.
+ *
+ * Portées par `.field` lui-même, elles s'appliquaient aussi quand il est enfant
+ * direct du formulaire ou d'une section — qui sont des colonnes : la base de
+ * 200 px y devenait une *hauteur*. Le champ « Chemin » de la section Accès
+ * mesurait donc 200 px à lui seul, ses voisins autant, et la popup se retrouvait
+ * à la hauteur de l'écran pour six champs. C'est toute l'origine des blancs
+ * démesurés autour de « Accès ».
+ */
+.fieldRow > .field {
+    flex: 1 1 200px;
+}
+
+.fieldRow > .fieldWide {
+    flex: 3 1 260px;
+}
+
+.fieldRow > .fieldNarrow {
     flex: 0 1 130px;
+    max-width: none;
 }
 
 .label {
@@ -640,12 +663,30 @@
     color: var(--text-secondary);
 }
 
+/*
+ * Un bloc du formulaire, et le rythme de toute la popup.
+ *
+ * **Un seul écart, partout** : `--space-md`. Entre deux champs, entre un titre
+ * et son premier champ, de part et d'autre du trait de séparation. Ce qui varie
+ * n'est pas l'espace mais le trait, et c'est lui qui dit où un bloc finit. Deux
+ * écarts différents suffisaient à donner l'impression que certaines sections
+ * respiraient plus que d'autres alors qu'elles ne portaient qu'un champ de plus.
+ *
+ * Seule exception, d'un autre ordre : les 4 px entre une étiquette et son
+ * champ, qui ne séparent pas deux choses mais en désignent une seule.
+ */
 .section {
     display: flex;
     flex-direction: column;
-    gap: var(--space-sm);
-    padding-top: var(--space-sm);
+    gap: var(--space-md);
+    padding-top: var(--space-md);
     border-top: 1px solid var(--glass-border);
+}
+
+/* Le premier bloc n'a rien au-dessus de lui à séparer. */
+.section:first-child {
+    padding-top: 0;
+    border-top: none;
 }
 
 .sectionTitle {
@@ -655,32 +696,26 @@
     color: var(--text-muted);
 }
 
-.checkRow {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-sm);
-    cursor: pointer;
-}
-
-.checkRow > span {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-}
-
-/* Une requête s'écrit en chasse fixe, et ne se redimensionne pas à la main :
-   la hauteur suit le nombre de lignes déclaré. */
+/*
+ * Une zone de saisie multiligne : requête SQL, clé privée, message d'alerte.
+ *
+ * `min-height` est calé sur **une ligne pleine**, rembourrage compris. Sans
+ * lui, la poignée de redimensionnement permettait de réduire le champ à un
+ * filet où plus aucune ligne n'était lisible entière — un état qu'aucun
+ * utilisateur ne cherche et dont on ne ressort qu'en tâtonnant.
+ */
 .sqlField,
 .keyField {
     width: 100%;
     padding: var(--space-sm);
+    min-height: calc(1.5em + 2 * var(--space-sm) + 2px);
     border-radius: var(--radius-md);
     border: 1px solid var(--glass-border);
     background: var(--surface-subtle);
     color: var(--text-primary);
     font-family: var(--font-mono);
     font-size: 0.8rem;
+    line-height: 1.5;
     resize: vertical;
 }
 
@@ -722,8 +757,36 @@
     justify-content: space-between;
     gap: var(--space-md);
     flex-wrap: wrap;
-    padding-top: var(--space-sm);
+    padding-top: var(--space-md);
     border-top: 1px solid var(--glass-border);
+}
+
+/* Une action de pied qui n'est pas une issue de la popup (« Tester ») : elle
+   part à gauche, loin du couple Annuler / Enregistrer. */
+.footerLead {
+    margin-right: auto;
+}
+
+/* Le « i » d'une explication : présent, mais sans le poids d'un bouton — il ne
+   fait rien à la base, il raconte ce que font ses voisins. */
+.infoButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-xs);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.infoButton:hover {
+    color: var(--accent);
+    background: var(--surface-subtle);
 }
 
 .dangerText {

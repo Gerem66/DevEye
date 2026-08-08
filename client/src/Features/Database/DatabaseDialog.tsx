@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { Database, DatabaseAccessKind, DatabaseEngine, DatabaseSshAuth } from 'deveye-types';
-import { Button, Dialog, SelectInput, TextInput } from '@/Components';
+import type { Database, DatabaseAccessKind, DatabaseEngine, DatabaseProbe, DatabaseSshAuth } from 'deveye-types';
+import { Button, Checkbox, Dialog, SelectInput, TextInput } from '@/Components';
 import { ws } from '@/api/ws';
 import { humanizeError } from '../Projects/api';
 import { ENGINE_LABELS, ENGINE_PORTS } from './format';
@@ -36,6 +36,8 @@ interface Form {
     accessSecretTouched: boolean;
     monitorEnabled: boolean;
     intervalMinutes: string;
+    /** Charger les tables dès l'ouverture de la fiche. Éteint par défaut. */
+    autoLoadTables: boolean;
 }
 
 const EMPTY: Form = {
@@ -55,7 +57,8 @@ const EMPTY: Form = {
     accessSecret: '',
     accessSecretTouched: false,
     monitorEnabled: false,
-    intervalMinutes: '5'
+    intervalMinutes: '5',
+    autoLoadTables: false
 };
 
 /**
@@ -76,11 +79,15 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [confirmRemove, setConfirmRemove] = useState(false);
+    /** L'essai en cours, et son résultat — distinct de l'enregistrement. */
+    const [testing, setTesting] = useState(false);
+    const [probe, setProbe] = useState<DatabaseProbe | null>(null);
 
     useEffect(() => {
         if (!open) return;
         setConfirmRemove(false);
         setError(null);
+        setProbe(null);
         setForm(
             database
                 ? {
@@ -100,7 +107,8 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
                       accessSecret: '',
                       accessSecretTouched: false,
                       monitorEnabled: database.monitorEnabled,
-                      intervalMinutes: String(Math.max(1, Math.round(database.intervalSeconds / 60)))
+                      intervalMinutes: String(Math.max(1, Math.round(database.intervalSeconds / 60))),
+                      autoLoadTables: database.autoLoadTables
                   }
                 : EMPTY
         );
@@ -119,30 +127,41 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
     const canSubmit =
         form.name.trim() !== '' && form.host.trim() !== '' && form.database.trim() !== '' && form.port.trim() !== '';
 
+    /**
+     * Les réglages tels qu'ils sont saisis, dans la forme du contrat.
+     *
+     * Une seule source pour l'essai et pour l'enregistrement : les deux doivent
+     * viser exactement la même chose, sans quoi « Tester » validerait une
+     * connexion qui n'est pas celle qu'on s'apprête à écrire.
+     */
+    const draft = () => ({
+        name: form.name.trim(),
+        host: form.host.trim(),
+        port: Number(form.port),
+        database: form.database.trim(),
+        username: form.username.trim(),
+        access: {
+            kind: form.accessKind,
+            host: form.accessHost.trim(),
+            port: form.accessPort.trim() === '' ? null : Number(form.accessPort),
+            username: form.accessUser.trim(),
+            auth: form.accessAuth,
+            // Non touché = on garde celui en place ; c'est ce que `undefined`
+            // veut dire au contrat.
+            ...(form.accessSecretTouched ? { secret: form.accessSecret } : {})
+        }
+    });
+
     const submit = async () => {
         if (busy || !canSubmit) return;
         setBusy(true);
         setError(null);
         try {
-            const access = {
-                kind: form.accessKind,
-                host: form.accessHost.trim(),
-                port: form.accessPort.trim() === '' ? null : Number(form.accessPort),
-                username: form.accessUser.trim(),
-                auth: form.accessAuth,
-                // Non touché = on garde celui en place ; c'est ce que
-                // `undefined` veut dire au contrat.
-                ...(form.accessSecretTouched ? { secret: form.accessSecret } : {})
-            };
             const common = {
-                name: form.name.trim(),
-                host: form.host.trim(),
-                port: Number(form.port),
-                database: form.database.trim(),
-                username: form.username.trim(),
-                access,
+                ...draft(),
                 monitorEnabled: form.monitorEnabled,
-                intervalSeconds: Math.max(60, Math.round(Number(form.intervalMinutes || '5') * 60))
+                intervalSeconds: Math.max(60, Math.round(Number(form.intervalMinutes || '5') * 60)),
+                autoLoadTables: form.autoLoadTables
             };
 
             const res = database
@@ -160,6 +179,35 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
         }
     };
 
+    /**
+     * Essayer la connexion **avant** d'enregistrer.
+     *
+     * L'ordre naturel : on saisit une adresse, on vérifie qu'elle répond, puis
+     * on garde. Sans cela il fallait créer la base pour découvrir qu'un port
+     * était faux, la corriger, et recommencer.
+     */
+    const test = async () => {
+        if (busy || !canSubmit) return;
+        setTesting(true);
+        setProbe(null);
+        setError(null);
+        try {
+            const res = await ws.send('database.testDraft', {
+                // Sur une base existante, le serveur reprend les secrets qu'on
+                // n'a pas ressaisis — ils ne redescendent jamais jusqu'ici.
+                ...(database ? { databaseId: database.id } : {}),
+                engine: form.engine,
+                ...draft(),
+                ...(form.passwordTouched || !database ? { password: form.password } : {})
+            });
+            setProbe(res.probe);
+        } catch (e) {
+            setError(humanizeError(e, 'L’essai de connexion a échoué.'));
+        } finally {
+            setTesting(false);
+        }
+    };
+
     const tunnelled = form.accessKind !== 'direct';
 
     return (
@@ -171,6 +219,17 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
             onSubmit={submit}
             footer={
                 <>
+                    {/* À gauche du couple Annuler / Enregistrer : ce n'est pas
+                        une issue de la popup, c'est une vérification qu'on fait
+                        avant de choisir. */}
+                    <Button
+                        variant='secondary'
+                        className={styles.footerLead}
+                        onClick={() => void test()}
+                        disabled={busy || testing || !canSubmit}
+                    >
+                        {testing ? 'Essai…' : 'Tester la connexion'}
+                    </Button>
                     <Button variant='secondary' onClick={onClose} disabled={busy}>
                         Annuler
                     </Button>
@@ -182,79 +241,85 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
         >
             <div className={styles.form}>
                 {/* ---- où elle est ---- */}
-                <div className={styles.fieldRow}>
+                <div className={styles.section}>
+                    <span className={styles.sectionTitle}>Adresse</span>
+                    <div className={styles.fieldRow}>
+                        <label className={styles.field}>
+                            <span className={styles.label}>Moteur</span>
+                            <SelectInput
+                                value={form.engine}
+                                // Le moteur ne se change pas après coup : les deux
+                                // dialectes n'exposent pas les mêmes notions, et le
+                                // relevé conservé serait celui de l'autre.
+                                disabled={database !== null}
+                                onChange={(e) => setEngine(e.target.value as DatabaseEngine)}
+                            >
+                                {(Object.keys(ENGINE_LABELS) as DatabaseEngine[]).map((id) => (
+                                    <option key={id} value={id}>
+                                        {ENGINE_LABELS[id]}
+                                    </option>
+                                ))}
+                            </SelectInput>
+                        </label>
+                        <label className={styles.field}>
+                            <span className={styles.label}>Nom</span>
+                            <TextInput
+                                value={form.name}
+                                autoFocus
+                                placeholder='Production'
+                                onChange={(e) => set('name', e.target.value)}
+                            />
+                        </label>
+                    </div>
+
+                    <div className={styles.fieldRow}>
+                        <label className={styles.fieldWide}>
+                            <span className={styles.label}>Hôte</span>
+                            <TextInput
+                                value={form.host}
+                                placeholder='127.0.0.1'
+                                onChange={(e) => set('host', e.target.value)}
+                            />
+                        </label>
+                        <label className={styles.fieldNarrow}>
+                            <span className={styles.label}>Port</span>
+                            <TextInput
+                                value={form.port}
+                                inputMode='numeric'
+                                onChange={(e) => set('port', e.target.value)}
+                            />
+                        </label>
+                    </div>
+
+                    <div className={styles.fieldRow}>
+                        <label className={styles.field}>
+                            <span className={styles.label}>Base</span>
+                            <TextInput value={form.database} onChange={(e) => set('database', e.target.value)} />
+                        </label>
+                        <label className={styles.field}>
+                            <span className={styles.label}>Utilisateur</span>
+                            <TextInput value={form.username} onChange={(e) => set('username', e.target.value)} />
+                        </label>
+                    </div>
+
                     <label className={styles.field}>
-                        <span className={styles.label}>Moteur</span>
-                        <SelectInput
-                            value={form.engine}
-                            // Le moteur ne se change pas après coup : les deux
-                            // dialectes n'exposent pas les mêmes notions, et le
-                            // relevé conservé serait celui de l'autre.
-                            disabled={database !== null}
-                            onChange={(e) => setEngine(e.target.value as DatabaseEngine)}
-                        >
-                            {(Object.keys(ENGINE_LABELS) as DatabaseEngine[]).map((id) => (
-                                <option key={id} value={id}>
-                                    {ENGINE_LABELS[id]}
-                                </option>
-                            ))}
-                        </SelectInput>
-                    </label>
-                    <label className={styles.field}>
-                        <span className={styles.label}>Nom</span>
+                        <span className={styles.label}>Mot de passe</span>
                         <TextInput
-                            value={form.name}
-                            autoFocus
-                            placeholder='Production'
-                            onChange={(e) => set('name', e.target.value)}
+                            type='password'
+                            value={form.password}
+                            placeholder={database?.hasPassword ? '•••••••• (inchangé)' : ''}
+                            onChange={(e) =>
+                                setForm((f) => ({ ...f, password: e.target.value, passwordTouched: true }))
+                            }
                         />
+                        <span className={styles.hint}>
+                            Un compte en <strong>lecture seule</strong> suffit tant qu’on ne fait que consulter. Pour
+                            modifier des lignes depuis l’explorateur, il faut un compte qui en a le droit : c’est le
+                            serveur qui tranche en dernier ressort.
+                            {database?.hasPassword && ' Laissez vide pour conserver celui enregistré.'}
+                        </span>
                     </label>
                 </div>
-
-                <div className={styles.fieldRow}>
-                    <label className={styles.fieldWide}>
-                        <span className={styles.label}>Hôte</span>
-                        <TextInput
-                            value={form.host}
-                            placeholder='127.0.0.1'
-                            onChange={(e) => set('host', e.target.value)}
-                        />
-                    </label>
-                    <label className={styles.fieldNarrow}>
-                        <span className={styles.label}>Port</span>
-                        <TextInput
-                            value={form.port}
-                            inputMode='numeric'
-                            onChange={(e) => set('port', e.target.value)}
-                        />
-                    </label>
-                </div>
-
-                <div className={styles.fieldRow}>
-                    <label className={styles.field}>
-                        <span className={styles.label}>Base</span>
-                        <TextInput value={form.database} onChange={(e) => set('database', e.target.value)} />
-                    </label>
-                    <label className={styles.field}>
-                        <span className={styles.label}>Utilisateur</span>
-                        <TextInput value={form.username} onChange={(e) => set('username', e.target.value)} />
-                    </label>
-                </div>
-
-                <label className={styles.field}>
-                    <span className={styles.label}>Mot de passe</span>
-                    <TextInput
-                        type='password'
-                        value={form.password}
-                        placeholder={database?.hasPassword ? '•••••••• (inchangé)' : ''}
-                        onChange={(e) => setForm((f) => ({ ...f, password: e.target.value, passwordTouched: true }))}
-                    />
-                    <span className={styles.hint}>
-                        Un compte en <strong>lecture seule</strong> suffit et reste le bon réflexe : DevEye ne fait que
-                        lire, mais c’est le serveur qui tranche en dernier ressort.
-                        {database?.hasPassword && ' Laissez vide pour conserver celui enregistré.'}
-                    </span>
-                </label>
 
                 {/* ---- par où on y va ---- */}
                 <div className={styles.section}>
@@ -366,21 +431,16 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
                 {/* ---- si on la surveille ---- */}
                 <div className={styles.section}>
                     <span className={styles.sectionTitle}>Surveillance</span>
-                    <label className={styles.checkRow}>
-                        <input
-                            type='checkbox'
-                            checked={form.monitorEnabled}
-                            onChange={(e) => set('monitorEnabled', e.target.checked)}
-                        />
-                        <span>
+                    <Checkbox checked={form.monitorEnabled} onChange={(v) => set('monitorEnabled', v)}>
+                        <>
                             <span className={styles.label}>Relever cette base régulièrement</span>
                             <span className={styles.hint}>
                                 Décoché — c’est le réglage par défaut — rien ne se connecte : la base ne se joint qu’au
                                 moment où vous le demandez. Coché, DevEye relève sa taille et son état, et c’est
                                 <strong> ce qui rend ses alertes vivantes</strong>.
                             </span>
-                        </span>
-                    </label>
+                        </>
+                    </Checkbox>
 
                     {form.monitorEnabled && (
                         <label className={styles.fieldNarrow}>
@@ -393,6 +453,32 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
                         </label>
                     )}
                 </div>
+
+                {/* ---- ce qu'on charge en ouvrant sa fiche ---- */}
+                <div className={styles.section}>
+                    <span className={styles.sectionTitle}>Exploration</span>
+                    <Checkbox checked={form.autoLoadTables} onChange={(v) => set('autoLoadTables', v)}>
+                        <>
+                            <span className={styles.label}>Charger les tables à l’ouverture</span>
+                            <span className={styles.hint}>
+                                Décoché — le réglage par défaut — ouvrir la fiche de cette base ne joint aucun serveur :
+                                c’est « Charger les tables » qui va voir. Coché, l’inventaire des tables est lu dès
+                                l’affichage de la fiche, ce qui fait gagner un clic sur une base qu’on consulte souvent
+                                et coûte une connexion à chaque ouverture.
+                            </span>
+                        </>
+                    </Checkbox>
+                </div>
+
+                {/* Le résultat de l'essai, au-dessus du pied : c'est de là que
+                    part le geste, et c'est là qu'on lit ce qu'il a donné. */}
+                {probe && (
+                    <p className={probe.ok ? styles.ok : styles.error}>
+                        {probe.ok
+                            ? `Connexion réussie en ${probe.elapsedMs} ms — ${probe.serverVersion}`
+                            : `Connexion impossible : ${probe.error}`}
+                    </p>
+                )}
 
                 {onRemove && database && (
                     <div className={styles.dangerZone}>

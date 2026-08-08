@@ -1,8 +1,60 @@
 import type { ReactNode } from 'react';
 import type { Database } from 'deveye-types';
 import { Button } from '@/Components';
+import { openInfo } from '@/Components/InfoPopup';
 import { ENGINE_LABELS, STATUS_META } from './format';
 import styles from './style.module.css';
+
+/**
+ * Ce que « Relever » fait vraiment.
+ *
+ * La question s'est posée telle quelle : est-ce que ça copie la base ? est-ce
+ * que ça la teste ? est-ce que ça évalue les alertes ? Le mot seul ne pouvait
+ * pas y répondre, et deux boutons voisins qui joignent tous deux le serveur sans
+ * dire en quoi ils diffèrent laissaient la question ouverte.
+ */
+function explainInspect() {
+    void openInfo({
+        title: 'Tester, relever : quelle différence ?',
+        width: 560,
+        body: (
+            <>
+                <p>
+                    <strong>Tester</strong> ouvre une connexion, lit la version du serveur et referme. Rien n’est
+                    enregistré : c’est un « est-ce que ça répond ? », et son résultat s’affiche le temps qu’on le
+                    regarde.
+                </p>
+                <p>
+                    <strong>Relever</strong> fait davantage, en trois temps :
+                </p>
+                <ul>
+                    <li>
+                        il lit l’<strong>inventaire</strong> — version du serveur, taille totale de la base, nombre de
+                        tables ;
+                    </li>
+                    <li>
+                        il <strong>enregistre</strong> ces chiffres dans DevEye, avec la date et l’état joignable ou
+                        non. Ce sont eux, et pas une lecture en direct, que montre le bandeau « État / Taille / Tables /
+                        Version » juste en dessous : ils datent donc du dernier relevé ;
+                    </li>
+                    <li>
+                        il <strong>évalue les alertes</strong> de cette base et envoie les notifications si l’une
+                        bascule — exactement comme le fait le relevé périodique, puisque c’est le même code.
+                    </li>
+                </ul>
+                <p>
+                    Ce qu’il ne fait <strong>pas</strong> : aucune donnée de vos tables n’est copiée, ni téléchargée, ni
+                    conservée. Seuls trois chiffres et une date entrent dans DevEye. Le contenu des tables ne se lit que
+                    dans l’explorateur, à la demande, et n’est jamais gardé.
+                </p>
+                <p>
+                    Relever à la main est utile même sans surveillance périodique : c’est ce qui permet de vérifier une
+                    alerte qu’on vient d’écrire sur une base laissée au repos.
+                </p>
+            </>
+        )
+    });
+}
 
 interface DatabaseHeaderProps {
     database: Database;
@@ -63,8 +115,19 @@ export function DatabaseHeader({
                         Tester
                     </Button>
                     <Button variant='secondary' icon='search' onClick={onInspect} disabled={busy}>
-                        Relever
+                        Relever l’état
                     </Button>
+                    {/* Deux boutons voisins joignent le serveur ; celui-ci dit
+                        en quoi ils diffèrent, et ce que « relever » garde. */}
+                    <button
+                        type='button'
+                        className={styles.infoButton}
+                        aria-label='Que font « Tester » et « Relever l’état » ?'
+                        title='Que font ces deux boutons ?'
+                        onClick={explainInspect}
+                    >
+                        <span className='icon icon-info' />
+                    </button>
                     <Button variant='secondary' icon='edit' onClick={onEdit} disabled={busy}>
                         Modifier
                     </Button>

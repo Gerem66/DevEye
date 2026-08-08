@@ -1,8 +1,15 @@
-import { databaseInspect, databaseQuery, databaseTableList, databaseTableRows, databaseTest } from 'deveye-types';
+import {
+    databaseInspect,
+    databaseQuery,
+    databaseTableList,
+    databaseTableRows,
+    databaseTest,
+    databaseTestDraft
+} from 'deveye-types';
 import type { DatabaseTable } from 'deveye-types';
 import { explainError, openSession, ROWS_PAGE_DEFAULT, type Session } from '@/Services/databases/engine';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
-import { loadDatabase, monitorOf, READ, reloadDatabase, WRITE } from './_shared';
+import { databaseCipher, loadDatabase, monitorOf, READ, reloadDatabase, WRITE } from './_shared';
 
 /**
  * Ce qui joint réellement un serveur.
@@ -66,6 +73,69 @@ export const databaseTestFeature: FeatureDefinition<
         } catch (e) {
             const message = e instanceof FeatureError ? e.message : explainError(e);
             return { probe: { ok: false, serverVersion: null, elapsedMs: Date.now() - started, error: message } };
+        }
+    }
+});
+
+/**
+ * Le même essai, mais sur des réglages **pas encore enregistrés**.
+ *
+ * Sans lui, on ne peut vérifier une base qu'après l'avoir créée : on
+ * enregistrerait pour découvrir qu'un port est faux, puis on corrigerait — alors
+ * que l'essai ne coûte qu'une connexion.
+ *
+ * N'écrit rien : ni ligne, ni état de la base. Un échec reste une réponse, pas
+ * une erreur de commande, exactement comme pour `database.test`.
+ */
+export const databaseTestDraftFeature: FeatureDefinition<
+    typeof databaseTestDraft.command,
+    typeof databaseTestDraft.input,
+    typeof databaseTestDraft.output
+> = defineFeature({
+    ...databaseTestDraft,
+    access: WRITE,
+    handler: async (ctx, input) => {
+        const cipher = databaseCipher(ctx);
+        let password = input.password ?? null;
+        let accessSecret = input.access.secret ?? null;
+
+        // Champ laissé intact : le secret enregistré prend le relais. Il est lu
+        // sur la base **visée**, que `loadDatabase` borne à l'espace actif — on
+        // ne peut donc pas essayer le mot de passe d'autrui sur son propre hôte.
+        if (input.databaseId !== undefined && (input.password === undefined || input.access.secret === undefined)) {
+            const row = await loadDatabase(ctx, input.databaseId);
+            if (input.password === undefined) {
+                password = row.secret_enc ? await cipher.tryDecrypt(row.secret_enc) : null;
+            }
+            if (input.access.secret === undefined) {
+                accessSecret = row.access_secret_enc ? await cipher.tryDecrypt(row.access_secret_enc) : null;
+            }
+        }
+
+        const started = Date.now();
+        let session: Session | null = null;
+        try {
+            session = await openSession({
+                engine: input.engine,
+                host: input.host,
+                port: input.port,
+                database: input.database,
+                username: input.username,
+                password,
+                access: { ...input.access, secret: accessSecret }
+            });
+            const version = await session.serverVersion();
+            return { probe: { ok: true, serverVersion: version, elapsedMs: Date.now() - started, error: null } };
+        } catch (e) {
+            return {
+                probe: { ok: false, serverVersion: null, elapsedMs: Date.now() - started, error: explainError(e) }
+            };
+        } finally {
+            try {
+                await session?.close();
+            } catch {
+                /* la fermeture d'une session déjà morte n'a rien à dire */
+            }
         }
     }
 });
@@ -146,6 +216,7 @@ export const databaseQueryFeature: FeatureDefinition<
 
 export const databaseProbeFeatures = [
     databaseTestFeature,
+    databaseTestDraftFeature,
     databaseInspectFeature,
     databaseTableListFeature,
     databaseTableRowsFeature,

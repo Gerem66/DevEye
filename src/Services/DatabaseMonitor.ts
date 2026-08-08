@@ -60,6 +60,14 @@ export interface StoredDatabase {
     port: number;
     database: string;
     username: string;
+    /**
+     * Charger les tables à l'ouverture de la fiche.
+     *
+     * Ici et non dans une colonne : c'est un réglage d'affichage, il n'entre
+     * dans aucune requête et ne se trie sur rien. Le blob chiffré est fait pour
+     * ça, et l'ajouter n'a donc coûté aucune migration.
+     */
+    autoLoadTables?: boolean;
 }
 
 /** Ce que porte `database_connections.access_content`, chiffré. */

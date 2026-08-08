@@ -82,6 +82,7 @@ export async function toDatabase(cipher: Cipher, row: DatabaseWithStatsRow): Pro
         },
         monitorEnabled: row.monitor_enabled === 1,
         intervalSeconds: row.interval_seconds,
+        autoLoadTables: body?.autoLoadTables === true,
         lastCheckAt: row.last_check_at,
         status: row.status === 'up' || row.status === 'down' ? row.status : 'unknown',
         lastError: row.last_error ? await cipher.tryDecrypt(row.last_error) : null,

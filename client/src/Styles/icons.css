@@ -278,6 +278,12 @@
     -webkit-mask-image: url(/icons/info.svg);
     mask-image: url(/icons/info.svg);
 }
+/* Manquait, alors qu'une feature la demandait déjà : sans masque, `.icon` ne
+   montre pas « rien » mais un carré plein de la couleur du texte. */
+.icon.icon-search {
+    -webkit-mask-image: url(/icons/search.svg);
+    mask-image: url(/icons/search.svg);
+}
 .icon.icon-power {
     -webkit-mask-image: url(/icons/power.svg);
     mask-image: url(/icons/power.svg);

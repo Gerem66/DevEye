@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { DatabaseAlert, DatabaseCombinator, DatabaseComparator, DatabaseCondition } from 'deveye-types';
-import { Button, Dialog, SelectInput, TextInput } from '@/Components';
+import { Button, Checkbox, Dialog, SelectInput, TextInput } from '@/Components';
 import { ws } from '@/api/ws';
 import { humanizeError } from '../Projects/api';
 import { COMPARATOR_LABELS } from './format';
@@ -126,26 +126,37 @@ export function AlertDialog({ open, databaseId, alert, monitorEnabled, onClose, 
                     </p>
                 )}
 
-                <div className={styles.fieldRow}>
-                    <label className={styles.field}>
-                        <span className={styles.label}>Nom</span>
-                        <TextInput
-                            value={name}
-                            autoFocus
-                            placeholder='Trop d’erreurs'
-                            onChange={(e) => setName(e.target.value)}
-                        />
-                    </label>
-                    <label className={styles.field}>
-                        <span className={styles.label}>Déclenche si</span>
-                        <SelectInput
-                            value={combinator}
-                            onChange={(e) => setCombinator(e.target.value as DatabaseCombinator)}
-                        >
-                            <option value='and'>toutes les conditions sont remplies (ET)</option>
-                            <option value='or'>au moins une condition est remplie (OU)</option>
-                        </SelectInput>
-                    </label>
+                <div className={styles.section}>
+                    <div className={styles.fieldRow}>
+                        <label className={styles.field}>
+                            <span className={styles.label}>Nom</span>
+                            <TextInput
+                                value={name}
+                                autoFocus
+                                placeholder='Trop d’erreurs'
+                                onChange={(e) => setName(e.target.value)}
+                            />
+                        </label>
+                        <label className={styles.field}>
+                            <span className={styles.label}>Déclenche si</span>
+                            <SelectInput
+                                value={combinator}
+                                onChange={(e) => setCombinator(e.target.value as DatabaseCombinator)}
+                            >
+                                <option value='and'>toutes les conditions sont remplies (ET)</option>
+                                <option value='or'>au moins une condition est remplie (OU)</option>
+                            </SelectInput>
+                        </label>
+                    </div>
+
+                    <Checkbox checked={enabled} onChange={setEnabled}>
+                        <>
+                            <span className={styles.label}>Alerte active</span>
+                            <span className={styles.hint}>
+                                Décochée, elle reste enregistrée avec ses conditions mais n’est plus évaluée.
+                            </span>
+                        </>
+                    </Checkbox>
                 </div>
 
                 <div className={styles.section}>
@@ -202,6 +213,7 @@ export function AlertDialog({ open, databaseId, alert, monitorEnabled, onClose, 
                                 value={condition.sql}
                                 rows={2}
                                 spellCheck={false}
+                                placeholder='SELECT COUNT(*) FROM logs WHERE level = &#39;error&#39;'
                                 onChange={(e) => patch(i, { sql: e.target.value })}
                             />
                             {test && (
@@ -236,29 +248,22 @@ export function AlertDialog({ open, databaseId, alert, monitorEnabled, onClose, 
                     )}
                 </div>
 
-                <label className={styles.field}>
-                    <span className={styles.label}>Message envoyé</span>
-                    <textarea
-                        className={styles.sqlField}
-                        value={message}
-                        rows={3}
-                        placeholder='Déjà {mesure} erreurs cette heure-ci sur la production.'
-                        onChange={(e) => setMessage(e.target.value)}
-                    />
-                    <span className={styles.hint}>
-                        Écrivez <code>{'{nom court}'}</code> pour insérer la valeur mesurée par la condition de ce nom.
-                    </span>
-                </label>
-
-                <label className={styles.checkRow}>
-                    <input type='checkbox' checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-                    <span>
-                        <span className={styles.label}>Alerte active</span>
+                <div className={styles.section}>
+                    <span className={styles.sectionTitle}>Message envoyé</span>
+                    <label className={styles.field}>
+                        <textarea
+                            className={styles.sqlField}
+                            value={message}
+                            rows={3}
+                            placeholder='Déjà {mesure} erreurs cette heure-ci sur la production.'
+                            onChange={(e) => setMessage(e.target.value)}
+                        />
                         <span className={styles.hint}>
-                            Décochée, elle reste enregistrée avec ses conditions mais n’est plus évaluée.
+                            Écrivez <code>{'{nom court}'}</code> pour insérer la valeur mesurée par la condition de ce
+                            nom.
                         </span>
-                    </span>
-                </label>
+                    </label>
+                </div>
 
                 {onRemove && alert && (
                     <div className={styles.dangerZone}>
