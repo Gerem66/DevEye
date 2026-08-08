@@ -1,5 +1,5 @@
 import type { GitCommitAuthor, MinimalUser } from 'deveye-types';
-import { Dialog, SelectInput } from '@/Components';
+import { Checkbox, Dialog, SelectInput } from '@/Components';
 import styles from './style.module.css';
 
 interface AuthorMapDialogProps {
@@ -56,13 +56,8 @@ export function AuthorMapDialog({
                  * une fois le travail ci-dessous terminé, et c'est justement en
                  * finissant de rattacher qu'on veut l'atteindre.
                  */}
-                <label className={styles.checkRow}>
-                    <input
-                        type='checkbox'
-                        checked={groupByMember}
-                        onChange={(e) => onGroupByMemberChange(e.target.checked)}
-                    />
-                    <span>
+                <Checkbox checked={groupByMember} onChange={onGroupByMemberChange}>
+                    <>
                         <span className={styles.label}>N’afficher que les membres rattachés</span>
                         <span className={styles.hint}>
                             Dans le graphe, les auteurs git rattachés disparaissent au profit du membre lui-même, qui
@@ -71,8 +66,8 @@ export function AuthorMapDialog({
                             {mapped > 0 &&
                                 ` Actuellement, ${mapped} auteur${mapped > 1 ? 's' : ''} sur ${authors.length} ${mapped > 1 ? 'sont rattachés' : 'est rattaché'}.`}
                         </span>
-                    </span>
-                </label>
+                    </>
+                </Checkbox>
 
                 <ul className={styles.authorList}>
                     {authors.map((author) => (

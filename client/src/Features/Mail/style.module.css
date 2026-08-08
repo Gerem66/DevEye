@@ -1415,19 +1415,6 @@
     width: 10px;
 }
 
-.check {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    cursor: pointer;
-}
-
-.check input {
-    accent-color: var(--accent);
-}
-
 .status {
     margin: 0;
     font-size: 0.8rem;

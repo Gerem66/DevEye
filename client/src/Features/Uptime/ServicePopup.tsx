@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 
 import Button from '@/Components/Button';
+import Checkbox from '@/Components/Checkbox';
 import { DialogCancelButton } from '@/Components/Dialog';
 import Popup, { ClosePopup } from '@/Components/Popup';
 import SelectInput from '@/Components/SelectInput';
@@ -251,14 +252,12 @@ export function ServicePopup() {
                     </span>
                 </label>
 
-                <label className={styles.check}>
-                    <input type='checkbox' checked={draft.notify} onChange={(e) => set('notify', e.target.checked)} />
-                    <span>M’alerter quand ce service tombe ou revient</span>
-                </label>
-                <label className={styles.check}>
-                    <input type='checkbox' checked={draft.enabled} onChange={(e) => set('enabled', e.target.checked)} />
-                    <span>Surveillance active</span>
-                </label>
+                <Checkbox checked={draft.notify} onChange={(v) => set('notify', v)}>
+                    M’alerter quand ce service tombe ou revient
+                </Checkbox>
+                <Checkbox checked={draft.enabled} onChange={(v) => set('enabled', v)}>
+                    Surveillance active
+                </Checkbox>
             </div>
 
             <div className={styles.popupActions}>

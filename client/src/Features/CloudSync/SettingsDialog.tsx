@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import type { CloudSyncShare, SyncConflictPolicy } from 'deveye-types';
 
 import { ws } from '@/api/ws';
-import { Button, Dialog, SelectInput, TextInput } from '@/Components';
+import { Button, Checkbox, Dialog, SelectInput, TextInput } from '@/Components';
 import { OpenPopup } from '@/Components/Popup';
 import { CLOUDSYNC_CONFIRM_POPUP, type ConfirmInput } from './ConfirmPopup';
 import NumberField from './NumberField';
@@ -113,17 +113,11 @@ export default function SettingsDialog({ open, share, onClose, onChanged, onDele
                         <option value='rename'>Garder les deux (l’autre est renommé « conflit … »)</option>
                     </SelectInput>
                 </label>
-                <label className={styles.checkRow}>
-                    <input
-                        type='checkbox'
-                        className={styles.checkbox}
-                        checked={pruneEnabled}
-                        onChange={(e) => setPruneEnabled(e.target.checked)}
-                    />
+                <Checkbox checked={pruneEnabled} onChange={setPruneEnabled}>
                     <span className={styles.rowTitle}>
                         Purger automatiquement les sauvegardes les plus anciennes au-delà d’une limite
                     </span>
-                </label>
+                </Checkbox>
                 {pruneEnabled && (
                     <label className={styles.field} htmlFor={limitFieldId}>
                         Limite des sauvegardes (Go)

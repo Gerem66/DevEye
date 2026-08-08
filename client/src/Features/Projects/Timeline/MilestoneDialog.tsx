@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ProjectMilestone, ProjectMilestoneDraft } from 'deveye-types';
 import { PROJECT_MILESTONE_NAME_MAX_LENGTH } from 'deveye-types';
-import { Button, Dialog, TextInput } from '@/Components';
+import { Button, Checkbox, Dialog, TextInput } from '@/Components';
 import { dateInputToSeconds, dateInputValue } from '../api';
 import styles from '../style.module.css';
 
@@ -96,21 +96,16 @@ export function MilestoneDialog({
                 </label>
 
                 {milestone && onSetReached && (
-                    <label className={styles.checkRow}>
-                        <input
-                            type='checkbox'
-                            checked={milestone.reachedAt !== null}
-                            onChange={(e) => onSetReached(e.target.checked)}
-                        />
-                        <span>
+                    <Checkbox checked={milestone.reachedAt !== null} onChange={onSetReached}>
+                        <>
                             Jalon atteint
                             {milestone.reachedAt !== null && (
                                 <span className={styles.hint}>
                                     Le {new Date(milestone.reachedAt * 1000).toLocaleDateString('fr-FR')}
                                 </span>
                             )}
-                        </span>
-                    </label>
+                        </>
+                    </Checkbox>
                 )}
 
                 {error && <p className={styles.error}>{error}</p>}

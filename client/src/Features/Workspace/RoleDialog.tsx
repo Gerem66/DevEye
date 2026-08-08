@@ -3,6 +3,7 @@ import { WORKSPACE_CAPABILITIES, WORKSPACE_FEATURE_IDS } from 'deveye-types';
 import type { FeatureAccess, WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole } from 'deveye-types';
 
 import Button from '@/Components/Button';
+import Checkbox from '@/Components/Checkbox';
 import { Dialog } from '@/Components/Dialog';
 import SelectInput from '@/Components/SelectInput';
 import TextInput from '@/Components/TextInput';
@@ -129,11 +130,9 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                 {WORKSPACE_CAPABILITIES.map((c) => {
                     const on = capabilities.includes(c);
                     return (
-                        <label key={c} className={styles.checkRow}>
-                            <input type='checkbox' checked={on} onChange={() => toggle(c)} />
-                            <span className={`icon icon-square-${on ? 'check' : 'empty'} ${styles.checkIcon}`} />
-                            <span className={styles.checkLabel}>{CAPABILITY_LABELS[c]}</span>
-                        </label>
+                        <Checkbox key={c} className={styles.checkRow} checked={on} onChange={() => toggle(c)}>
+                            {CAPABILITY_LABELS[c]}
+                        </Checkbox>
                     );
                 })}
             </div>

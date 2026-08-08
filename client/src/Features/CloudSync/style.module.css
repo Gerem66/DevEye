@@ -542,12 +542,6 @@
     flex-shrink: 0;
 }
 
-/* Cases à cocher aux couleurs du thème (natives sinon). */
-.checkbox {
-    accent-color: var(--accent);
-    cursor: pointer;
-}
-
 /* Icône d'une ligne du journal d'erreurs. */
 .logIcon {
     color: var(--danger);

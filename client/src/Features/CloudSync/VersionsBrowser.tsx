@@ -8,7 +8,7 @@ import {
 } from 'deveye-types';
 
 import { ws } from '@/api/ws';
-import { Button, Dialog, SelectInput } from '@/Components';
+import { Button, Checkbox, Dialog, SelectInput } from '@/Components';
 import { OpenPopup } from '@/Components/Popup';
 import { formatBytesFr } from '@/Features/Monitoring/utils';
 import { CLOUDSYNC_CONFIRM_POPUP, type ConfirmInput } from './ConfirmPopup';
@@ -199,15 +199,9 @@ export default function VersionsBrowser({ open, share, onClose, onChanged }: Ver
             <div className={styles.browserCol}>
                 {versions.length > 0 && (
                     <div className={styles.selectBar}>
-                        <label className={styles.checkRow}>
-                            <input
-                                type='checkbox'
-                                className={styles.checkbox}
-                                checked={allOnPageSelected}
-                                onChange={toggleAll}
-                            />
+                        <Checkbox checked={allOnPageSelected} onChange={toggleAll}>
                             <span className={styles.rowSub}>Tout sélectionner</span>
-                        </label>
+                        </Checkbox>
                         <span className={styles.selectBarSpacer} />
                         <SelectInput
                             className={styles.sortSelect}
@@ -237,9 +231,7 @@ export default function VersionsBrowser({ open, share, onClose, onChanged }: Ver
                 <div className={`${styles.rows} ${styles.scrollRows}`}>
                     {versions.map((v) => (
                         <div key={v.id} className={styles.row}>
-                            <input
-                                type='checkbox'
-                                className={styles.checkbox}
+                            <Checkbox
                                 checked={selected.has(v.id)}
                                 onChange={() => toggle(v.id)}
                                 aria-label='Sélectionner cette sauvegarde'

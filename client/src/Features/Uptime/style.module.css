@@ -713,19 +713,6 @@
     color: var(--text-muted);
 }
 
-.check {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    cursor: pointer;
-}
-
-.check input {
-    accent-color: var(--accent);
-}
-
 .warning {
     margin: 0;
     padding: var(--space-sm);

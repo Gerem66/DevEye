@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 
+import Checkbox from '@/Components/Checkbox';
 import styles from './style.module.css';
 import {
     DEFAULT_GENERATOR_OPTIONS,
@@ -132,14 +133,14 @@ function PasswordGeneratorMenu({ onGenerate }: PasswordGeneratorMenuProps) {
 
                             <div className={styles.generatorOptions}>
                                 {CHARSET_TOGGLES.map(({ key, label }) => (
-                                    <label key={key} className={styles.generatorOption}>
-                                        <input
-                                            type='checkbox'
-                                            checked={options[key]}
-                                            onChange={() => toggleCharset(key)}
-                                        />
+                                    <Checkbox
+                                        key={key}
+                                        className={styles.generatorOption}
+                                        checked={options[key]}
+                                        onChange={() => toggleCharset(key)}
+                                    >
                                         {label}
-                                    </label>
+                                    </Checkbox>
                                 ))}
                             </div>
 

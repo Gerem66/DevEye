@@ -267,35 +267,6 @@
     color: var(--text-primary);
 }
 
-.checkRow input {
-    position: absolute;
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-
-.checkIcon {
-    color: var(--text-muted);
-    flex-shrink: 0;
-    transition: color var(--transition-fast);
-}
-
-.checkRow input:checked ~ .checkIcon {
-    color: var(--accent);
-}
-
-/* Anneau de focus visible : l'input étant masqué, le navigateur n'en dessine
-   plus aucun, et la navigation au clavier deviendrait aveugle. */
-.checkRow input:focus-visible ~ .checkIcon {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-    border-radius: var(--radius-sm);
-}
-
-.checkRow input:checked ~ .checkLabel {
-    color: var(--text-primary);
-}
-
 /* Une feature et le niveau qu'un rôle y accorde. C'est le sélecteur, le plus haut
    des deux enfants, qui donne sa hauteur à la ligne ; le padding — symétrique —
    n'ajoute qu'une respiration égale de part et d'autre du trait. */

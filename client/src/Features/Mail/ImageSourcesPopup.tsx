@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import Button from '@/Components/Button';
+import Checkbox from '@/Components/Checkbox';
 import styles from './style.module.css';
 
 interface ImageSourcesPopupProps {
@@ -72,10 +73,14 @@ export function ImageSourcesPopup({
             <p className={styles.imageSourcesTitle}>Images bloquées sur ce message</p>
             <div className={styles.imageSourcesList}>
                 {sources.map((source) => (
-                    <label key={source} className={styles.imageSourceRow}>
-                        <input type='checkbox' checked={checked.has(source)} onChange={() => toggle(source)} />
-                        <span>{source}</span>
-                    </label>
+                    <Checkbox
+                        key={source}
+                        className={styles.imageSourceRow}
+                        checked={checked.has(source)}
+                        onChange={() => toggle(source)}
+                    >
+                        {source}
+                    </Checkbox>
                 ))}
             </div>
             <div className={styles.imageSourcesActions}>

@@ -41,6 +41,7 @@ import {
     useHomeLayout
 } from '@/stores/homeLayout';
 import Button from '@/Components/Button';
+import Checkbox from '@/Components/Checkbox';
 import { Dialog } from '@/Components/Dialog';
 import { Widget } from '@/Components/Widget';
 import { deviceTileVisual, featureTileVisual, shortcutTileVisual, type TileVisual } from '../tiles/tileVisual';
@@ -302,23 +303,21 @@ function SortableSection({
                  * serait simplement invisible, et le store retire d'ailleurs le
                  * second drapeau avec le premier.
                  */}
-                <label className={styles.sectionToggle} title='La section peut être repliée sur l’accueil'>
-                    <input
-                        type='checkbox'
-                        checked={section.collapsible === true}
-                        onChange={(e) => setSectionCollapsible(section.id, e.target.checked)}
-                    />
+                <Checkbox
+                    className={styles.sectionToggle}
+                    checked={section.collapsible === true}
+                    onChange={(checked) => setSectionCollapsible(section.id, checked)}
+                >
                     Repliable
-                </label>
+                </Checkbox>
                 {section.collapsible === true && (
-                    <label className={styles.sectionToggle} title='Elle s’ouvre repliée'>
-                        <input
-                            type='checkbox'
-                            checked={section.collapsed === true}
-                            onChange={(e) => setSectionCollapsed(section.id, e.target.checked)}
-                        />
+                    <Checkbox
+                        className={styles.sectionToggle}
+                        checked={section.collapsed === true}
+                        onChange={(checked) => setSectionCollapsed(section.id, checked)}
+                    >
                         Repliée au départ
-                    </label>
+                    </Checkbox>
                 )}
                 <span className={styles.sectionKind}>{SECTION_KIND_LABEL[section.kind]}</span>
                 <span className={styles.sectionCount}>{section.items.length}</span>

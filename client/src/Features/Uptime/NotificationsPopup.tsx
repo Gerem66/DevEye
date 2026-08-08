@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
+import Checkbox from '@/Components/Checkbox';
 import { DialogCancelButton } from '@/Components/Dialog';
 import Popup, { ClosePopup } from '@/Components/Popup';
 import SelectInput from '@/Components/SelectInput';
@@ -92,10 +93,9 @@ export function NotificationsPopup() {
             </p>
 
             <div className={styles.form}>
-                <label className={styles.check}>
-                    <input type='checkbox' checked={emailEnabled} onChange={(e) => setEmailEnabled(e.target.checked)} />
-                    <span>Par e-mail</span>
-                </label>
+                <Checkbox checked={emailEnabled} onChange={setEmailEnabled}>
+                    Par e-mail
+                </Checkbox>
                 <label className={styles.field}>
                     <span className={styles.fieldLabel}>Compte expéditeur</span>
                     <SelectInput
@@ -128,14 +128,9 @@ export function NotificationsPopup() {
                     <span className={styles.fieldHint}>Laissez vide pour utiliser l’adresse du compte expéditeur.</span>
                 </label>
 
-                <label className={styles.check}>
-                    <input
-                        type='checkbox'
-                        checked={webhookEnabled}
-                        onChange={(e) => setWebhookEnabled(e.target.checked)}
-                    />
-                    <span>Par webhook</span>
-                </label>
+                <Checkbox checked={webhookEnabled} onChange={setWebhookEnabled}>
+                    Par webhook
+                </Checkbox>
                 <label className={styles.field}>
                     <span className={styles.fieldLabel}>URL appelée en POST</span>
                     <TextInput

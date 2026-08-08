@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ProjectColumn } from 'deveye-types';
 import { PROJECT_COLUMN_NAME_MAX_LENGTH } from 'deveye-types';
-import { Button, Dialog, TextInput } from '@/Components';
+import { Button, Checkbox, Dialog, TextInput } from '@/Components';
 import styles from '../style.module.css';
 
 export interface ColumnDialogResult {
@@ -79,15 +79,14 @@ export function ColumnDialog({ open, column, busy, error, onClose, onSubmit, onR
                     />
                 </label>
 
-                <label className={styles.checkRow}>
-                    <input type='checkbox' checked={countsAsDone} onChange={(e) => setCountsAsDone(e.target.checked)} />
-                    <span>
+                <Checkbox checked={countsAsDone} onChange={setCountsAsDone}>
+                    <>
                         Cette colonne vaut « terminé »
                         <span className={styles.hint}>
                             C’est ce qui fait avancer la barre de progression du projet.
                         </span>
-                    </span>
-                </label>
+                    </>
+                </Checkbox>
 
                 <label className={styles.field}>
                     <span className={styles.label}>Limite de travail en cours</span>

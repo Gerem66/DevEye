@@ -1,0 +1,98 @@
+/* Case à cocher — uniquement des variables de thème, aucune couleur en dur. */
+
+.row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    min-width: 0;
+    cursor: pointer;
+    user-select: none;
+}
+
+.row[aria-disabled='true'] {
+    cursor: not-allowed;
+    /* `filter` et non `opacity` : celle-ci est revendiquée en style inline par
+       les surfaces animées de l'application. */
+    filter: opacity(0.55);
+}
+
+/*
+ * La case native reste dans le DOM, seulement masquée à l'œil.
+ *
+ * C'est elle qui porte l'état, le focus, le clavier et l'accessibilité ; la
+ * boîte visible n'en est que le reflet, piloté par `:checked` et
+ * `:focus-visible`. Un `<div role="checkbox">` aurait demandé de réécrire à la
+ * main tout ce que le navigateur donne ici gratuitement.
+ */
+.native {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.box {
+    position: relative;
+    flex-shrink: 0;
+    /* Alignée sur la première ligne du libellé, pas sur le bloc entier : une
+       description sur trois lignes ne doit pas faire glisser la case au milieu. */
+    margin-top: 1px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--on-accent);
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.row:hover .box {
+    border-color: var(--glass-border-strong);
+}
+
+.mark {
+    width: 11px;
+    /* La coche n'apparaît qu'une fois cochée ; elle garde sa place pour que la
+       boîte ne change pas de taille. */
+    filter: opacity(0);
+    transform: scale(0.7);
+    transition:
+        filter var(--transition-fast),
+        transform var(--transition-fast);
+}
+
+.native:checked + .box {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.native:checked + .box .mark {
+    filter: opacity(1);
+    transform: scale(1);
+}
+
+.native:focus-visible + .box {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+/* Le libellé : un titre, et le cas échéant une explication sous lui. */
+.text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}

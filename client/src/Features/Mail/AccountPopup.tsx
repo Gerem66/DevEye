@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 
 import Button from '@/Components/Button';
+import Checkbox from '@/Components/Checkbox';
 import { DialogCancelButton } from '@/Components/Dialog';
 import Popup, { ClosePopup } from '@/Components/Popup';
 import TextInput from '@/Components/TextInput';
@@ -461,26 +462,24 @@ export function AccountPopup() {
 
                 {showProxyFields && (
                     <>
-                        <label className={styles.check}>
-                            <input
-                                type='checkbox'
-                                checked={proxyEnabled}
-                                onChange={(e) => {
-                                    setProxyEnabled(e.target.checked);
-                                    setProxyTouched(true);
-                                    if (e.target.checked && !draft.proxy) {
-                                        set('proxy', {
-                                            kind: 'socks5',
-                                            host: '',
-                                            port: 1080,
-                                            username: null,
-                                            password: null
-                                        });
-                                    }
-                                }}
-                            />
-                            <span>Passer par un proxy (SOCKS5/HTTP) — déjà géré par vous, DevEye n’en fournit pas</span>
-                        </label>
+                        <Checkbox
+                            checked={proxyEnabled}
+                            onChange={(checked) => {
+                                setProxyEnabled(checked);
+                                setProxyTouched(true);
+                                if (checked && !draft.proxy) {
+                                    set('proxy', {
+                                        kind: 'socks5',
+                                        host: '',
+                                        port: 1080,
+                                        username: null,
+                                        password: null
+                                    });
+                                }
+                            }}
+                        >
+                            Passer par un proxy (SOCKS5/HTTP) — déjà géré par vous, DevEye n’en fournit pas
+                        </Checkbox>
                         {proxyEnabled && draft.proxy && (
                             <div className={styles.formRow}>
                                 <TextInput

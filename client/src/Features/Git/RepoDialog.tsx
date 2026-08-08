@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { GitCredential, GitRepo } from 'deveye-types';
-import { Button, Dialog, SelectInput } from '@/Components';
+import { Button, Checkbox, Dialog, SelectInput } from '@/Components';
 import { ws } from '@/api/ws';
 import { humanizeError } from '../Projects/api';
 import { RepoPicker, type RepoTarget } from './RepoPicker';
@@ -162,15 +162,14 @@ export function RepoDialog({ open, repo, credentials, onClose, onSaved, onRemove
                 )}
 
                 {repo && (
-                    <label className={styles.checkRow}>
-                        <input type='checkbox' checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-                        <span>
+                    <Checkbox checked={enabled} onChange={setEnabled}>
+                        <>
                             <span className={styles.label}>Synchroniser ce dépôt</span>
                             <span className={styles.hint}>
                                 Décoché, le dépôt reste dans la liste avec son historique, mais n’est plus relu.
                             </span>
-                        </span>
-                    </label>
+                        </>
+                    </Checkbox>
                 )}
 
                 {/*

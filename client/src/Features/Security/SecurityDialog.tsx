@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 import { ws, WsError } from '@/api/ws';
 import { Dialog } from '@/Components/Dialog';
-import { TextInput } from '@/Components';
+import { Checkbox, TextInput } from '@/Components';
 import Button from '@/Components/Button';
 import { setUnlocked } from '@/stores/secrecy';
 
@@ -179,13 +179,10 @@ export function SecurityDialog({ open, enabled, onClose, onChanged }: SecurityDi
                         onChange={(e) => setPassword(e.target.value)}
                     />
                 </label>
-                <label className={styles.field} style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem' }}>
-                    <input type='checkbox' checked={wantRecovery} onChange={(e) => setWantRecovery(e.target.checked)} />
-                    <span className={styles.fieldLabel}>
-                        Générer un code de récupération (si vous oubliez votre mot de passe, vos données seront
-                        irrécupérables sans ce code)
-                    </span>
-                </label>
+                <Checkbox checked={wantRecovery} onChange={setWantRecovery}>
+                    Générer un code de récupération (si vous oubliez votre mot de passe, vos données seront
+                    irrécupérables sans ce code)
+                </Checkbox>
                 {error && <p className={styles.formError}>{error}</p>}
             </div>
         </Dialog>
