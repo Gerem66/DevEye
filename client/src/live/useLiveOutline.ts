@@ -2,7 +2,7 @@ import type { UserColor } from 'deveye-types';
 import { useEffect, useMemo, useReducer, type CSSProperties } from 'react';
 
 import { userColorVar } from '@/Features/Profile/userColors';
-import { useLive, type LiveSegmentKind } from '@/stores/live';
+import { useLivePresence, type LiveSegmentKind } from '@/stores/live';
 import { divergingSegment } from './paths';
 
 /**
@@ -65,7 +65,9 @@ export interface LiveOutlineProps {
  * les pairs, quel que soit le nombre de lignes.
  */
 export function useLiveOutlines(kind: LiveSegmentKind): (value: string | null) => LiveOutlineProps {
-    const { peers, path } = useLive();
+    // Vue étroite : les contours ne dépendent pas des curseurs, et ne doivent
+    // donc pas se redessiner vingt fois par seconde parce qu'un pair bouge.
+    const { peers, path } = useLivePresence();
     const [, bump] = useReducer((n: number) => n + 1, 0);
 
     const byValue = useMemo(() => {

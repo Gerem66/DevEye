@@ -84,8 +84,67 @@ export function getLiveState(): LiveState {
     return state;
 }
 
+/**
+ * L'état complet. **À réserver à ce qui lit vraiment les curseurs.**
+ *
+ * Les curseurs arrivent jusqu'à vingt fois par seconde, et chaque poussée
+ * remplace l'objet d'état : tout lecteur de ce hook se réaffiche donc à cette
+ * cadence, même s'il ne regarde que le roster. C'est ce qui faisait « sauter des
+ * trames » sur les écrans de listes — le portefeuille des projets, les dépôts,
+ * les bases, les appareils — dès qu'un pair bougeait sa souris quelque part
+ * dans l'espace.
+ *
+ * Les vues étroites ci-dessous existent pour ça : `useSyncExternalStore` ne
+ * redessine que si l'instantané change au sens de `Object.is`, donc une tranche
+ * dont l'identité ne bouge pas isole ses lecteurs des poussées qui ne les
+ * concernent pas.
+ */
 export function useLive(): LiveState {
     return useSyncExternalStore(subscribe, getLiveState, getLiveState);
+}
+
+/**
+ * Le roster seul.
+ *
+ * `state.peers` garde son identité d'une poussée de curseurs à l'autre (l'état
+ * est recopié en surface), donc aucun rendu n'est déclenché tant que la
+ * composition de la salle ne change pas.
+ */
+function getPeers(): LivePeer[] {
+    return state.peers;
+}
+
+export function usePeers(): LivePeer[] {
+    return useSyncExternalStore(subscribe, getPeers, getPeers);
+}
+
+/** La cible d'une téléportation, seule — elle ne bouge qu'à la demande. */
+function getTeleportPath(): string[] | null {
+    return state.teleportPath;
+}
+
+export function useTeleportPath(): string[] | null {
+    return useSyncExternalStore(subscribe, getTeleportPath, getTeleportPath);
+}
+
+/**
+ * Le couple « qui est là » / « où je suis » : ce dont les contours ont besoin.
+ *
+ * Mémorisé parce qu'il faut rendre un objet : sans ce cache, chaque appel en
+ * fabriquerait un nouveau et `useSyncExternalStore` conclurait à un changement
+ * à chaque vérification — exactement le rendu permanent qu'on cherche à éviter.
+ */
+let presenceView: { peers: LivePeer[]; path: string[] } = { peers: EMPTY.peers, path: EMPTY.path };
+
+function getPresence(): { peers: LivePeer[]; path: string[] } {
+    if (presenceView.peers !== state.peers || presenceView.path !== state.path) {
+        presenceView = { peers: state.peers, path: state.path };
+    }
+    return presenceView;
+}
+
+export function useLivePresence(): { peers: LivePeer[]; path: string[] } {
+    return useSyncExternalStore(subscribe, getPresence, getPresence);
 }
 
 // ------------------------------------------------------------------ publication

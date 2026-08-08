@@ -1,6 +1,12 @@
 import { useEffect, useMemo } from 'react';
 
-import { segmentTarget, setLiveSegment, useLive, type LiveSegmentKind, type LiveSegmentTarget } from '@/stores/live';
+import {
+    segmentTarget,
+    setLiveSegment,
+    useTeleportPath,
+    type LiveSegmentKind,
+    type LiveSegmentTarget
+} from '@/stores/live';
 
 /**
  * Déclare le niveau de l'arborescence où se trouve ce composant, **et** reçoit
@@ -42,7 +48,9 @@ import { segmentTarget, setLiveSegment, useLive, type LiveSegmentKind, type Live
  * et se consulte autant de fois qu'on veut.
  */
 export function useLiveSegment(kind: LiveSegmentKind, value: string | null): LiveSegmentTarget | null {
-    const { teleportPath } = useLive();
+    // Seule la téléportation intéresse ce hook : le lire sur l'état complet
+    // ferait re-rendre toute feature montée à chaque trame de curseur.
+    const teleportPath = useTeleportPath();
 
     useEffect(() => {
         setLiveSegment(kind, value);

@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { FEATURE_CATALOG } from '@/Pages/Home/catalog';
-import { useLive } from '@/stores/live';
+import { usePeers } from '@/stores/live';
 import { useActiveWorkspace } from '@/stores/workspace';
 
 /**
@@ -57,7 +57,7 @@ export function livePathLabel(path: readonly string[]): string {
  * Moi-même exclu : mes propres onglets ne m'apprennent rien.
  */
 export function usePresentUsers(): PresentUser[] {
-    const { peers } = useLive();
+    const peers = usePeers();
     const { user } = useAuth();
     const workspace = useActiveWorkspace();
 
