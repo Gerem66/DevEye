@@ -155,7 +155,15 @@
 }
 
 /* Vignette du projet : une image déposée, ou l'icône par défaut de la feature.
-   Taille fixe — une carte ne doit pas changer de hauteur selon l'image. */
+   Taille fixe — une carte ne doit pas changer de hauteur selon l'image.
+
+   Le liseré détache l'image du fond de la carte : sans lui, un logo à fond clair
+   ou sombre se fondait dans la carte et perdait ses bords. Il est posé sur la
+   boîte et non sur l'image, pour cerner aussi l'icône par défaut.
+
+   À demi-opacité : il doit cerner sans dessiner. `color-mix` plutôt qu'une
+   couleur en dur — le liseré suit ainsi le thème, ce qu'un `rgba()` figé ne
+   ferait pas. */
 .cardIcon {
     grid-column: 1;
     grid-row: 1;
@@ -165,6 +173,7 @@
     width: 36px;
     height: 36px;
     flex-shrink: 0;
+    border: 1px solid color-mix(in srgb, var(--glass-border-strong) 50%, transparent);
     border-radius: var(--radius-md);
     background: var(--surface-subtle);
     color: var(--text-muted);
