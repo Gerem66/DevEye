@@ -7,6 +7,7 @@ import type { MonitorTransport } from '@/agent/hub';
 import type { LiveTransport } from '@/live/hub';
 import type { UptimeMonitor } from '@/Services/UptimeMonitor';
 import type { IntegrationSyncService } from '@/Services/IntegrationSyncService';
+import type { DatabaseMonitor } from '@/Services/DatabaseMonitor';
 import type { ErrorCode, LiveTopic, LogLevelName } from 'deveye-types';
 import type { Logger } from 'pino';
 import type { FeatureAccess, WorkspaceCapability, WorkspaceFeatureId } from 'deveye-types';
@@ -109,6 +110,15 @@ export interface FeatureContext {
      * pas en cache (voir `gitCommitDetailSchema`).
      */
     integrations?: IntegrationSyncService;
+    /**
+     * Relevé des bases de données de l'espace.
+     *
+     * Sert à deux choses, et à rien d'autre : déchiffrer la cible d'une
+     * connexion (`targetOf`, qui seule voit les secrets) et déclencher un relevé
+     * par le **même chemin** que l'ordonnanceur (`checkNow`), de sorte qu'un
+     * relevé manuel et un relevé automatique ne puissent pas diverger.
+     */
+    databases?: DatabaseMonitor;
 }
 
 /**

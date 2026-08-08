@@ -22,6 +22,7 @@ import { projectBoardRepo, type ProjectBoardRepo } from './repos/projectBoard';
 import { projectChatRepo, type ProjectChatRepo } from './repos/projectChat';
 import { projectPlanRepo, type ProjectPlanRepo } from './repos/projectPlan';
 import { projectHistoryRepo, type ProjectHistoryRepo } from './repos/projectHistory';
+import { databaseRepo, type DatabaseRepo } from './repos/database';
 import { gitRepo, type GitRepo } from './repos/git';
 import { projectDeployRepo, type ProjectDeployRepo } from './repos/projectDeploy';
 import { projectLinksRepo, type ProjectLinksRepo } from './repos/projectLinks';
@@ -75,6 +76,7 @@ export interface Database {
     projectPlan: ProjectPlanRepo;
     projectHistory: ProjectHistoryRepo;
     git: GitRepo;
+    databases: DatabaseRepo;
     projectDeploy: ProjectDeployRepo;
     projectLinks: ProjectLinksRepo;
     noteFolders: NoteFoldersRepo;
@@ -121,6 +123,7 @@ export function createDatabase(q: Queryable): Database {
         projectPlan: projectPlanRepo(q),
         projectHistory: projectHistoryRepo(q),
         git: gitRepo(q),
+        databases: databaseRepo(q),
         projectDeploy: projectDeployRepo(q),
         projectLinks: projectLinksRepo(q),
         noteFolders: noteFoldersRepo(q),

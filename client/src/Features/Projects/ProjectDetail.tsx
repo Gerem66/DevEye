@@ -22,16 +22,18 @@ import { MilestoneDialog } from './Timeline/MilestoneDialog';
 import { History } from './History/History';
 import { ArchivedCardDialog } from './History/ArchivedCardDialog';
 import { Git } from './Git/Git';
+import { Databases } from './Database/Databases';
 import { Deploy } from './Deploy/Deploy';
 import styles from './style.module.css';
 
 /** Les onglets du projet. Les suivants arrivent avec leurs phases. */
-type TabId = 'board' | 'timeline' | 'git' | 'deploy' | 'history';
+type TabId = 'board' | 'timeline' | 'git' | 'database' | 'deploy' | 'history';
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
     { id: 'board', label: 'Tableau', icon: 'projects' },
     { id: 'timeline', label: 'Frise', icon: 'clock' },
     { id: 'git', label: 'Git', icon: 'branch' },
+    { id: 'database', label: 'Bases de données', icon: 'database' },
     { id: 'deploy', label: 'Déploiement', icon: 'rocket' },
     // Dernier et discret : on l'ouvre rarement, pour une question précise.
     { id: 'history', label: 'Historique', icon: 'archive' }
@@ -426,6 +428,7 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
             )}
 
             {loaded && tab === 'git' && <Git project={project} members={members} canWrite={canWrite} />}
+            {loaded && tab === 'database' && <Databases project={project} canWrite={canWrite} />}
 
             {loaded && tab === 'deploy' && <Deploy project={project} members={members} canWrite={canWrite} />}
 

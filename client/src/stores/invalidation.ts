@@ -37,7 +37,10 @@ export type ResourceKey =
     | 'project.messages'
     | 'git.count'
     | 'git.list'
-    | 'git.repo';
+    | 'git.repo'
+    | 'database.count'
+    | 'database.list'
+    | 'database.detail';
 
 /**
  * Ce qu'un sujet du serveur invalide chez nous.
@@ -67,6 +70,9 @@ const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
     // Un dépôt qui bouge touche la liste (dates de synchro, compteurs) et la vue
     // ouverte. `git.count` suit pour la tuile de l'accueil.
     git: ['git.count', 'git.list', 'git.repo'],
+    // Un relevé qui aboutit touche la liste (état, taille, alertes franchies) et
+    // la fiche ouverte. `database.count` suit pour la tuile de l'accueil.
+    database: ['database.count', 'database.list', 'database.detail'],
     workspace: ['workspace.roleList'],
     home: [],
     account: []

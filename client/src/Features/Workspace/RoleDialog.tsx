@@ -27,7 +27,8 @@ const FEATURE_LABELS: Record<(typeof WORKSPACE_FEATURE_IDS)[number], string> = {
     uptime: 'Uptime',
     mail: 'Mail',
     projects: 'Projets',
-    git: 'Git'
+    git: 'Git',
+    database: 'Bases de données'
 };
 
 export interface RoleDraft {

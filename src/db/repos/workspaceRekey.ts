@@ -71,7 +71,21 @@ const COLUMNS: EncryptedColumn[] = [
     // Les secrets d'accès sont **toujours** sous l'étage ouvert, quel que soit
     // le tier des projets qui s'en servent : le service de fond les lit sans
     // session. Ils suivent donc la conversion d'espace, jamais celle d'un projet.
-    { table: 'project_credentials', id: 'id', column: 'secret_enc', scope: 'workspace_id', tier: 'open' }
+    { table: 'project_credentials', id: 'id', column: 'secret_enc', scope: 'workspace_id', tier: 'open' },
+    // Bases de données (migration `068`). Comme les dépôts git, elles
+    // appartiennent à l'espace et vivent toujours à l'étage ouvert.
+    //
+    // ⚠️ **Quatre colonnes par base**, dont deux secrets. En oublier une la
+    // rendrait illisible après une conversion de clé, sans rien pour le
+    // signaler : `content` cesserait d'afficher l'hôte, ou — bien pire — le
+    // mot de passe deviendrait un octet mort et la base injoignable sans qu'on
+    // sache pourquoi. `last_error` est volontairement absent : éphémère,
+    // réécrit au relevé suivant.
+    { table: 'database_connections', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'database_connections', id: 'id', column: 'secret_enc', scope: 'workspace_id', tier: 'open' },
+    { table: 'database_connections', id: 'id', column: 'access_content', scope: 'workspace_id', tier: 'open' },
+    { table: 'database_connections', id: 'id', column: 'access_secret_enc', scope: 'workspace_id', tier: 'open' },
+    { table: 'database_alerts', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' }
 ];
 
 export interface EncryptedCell {

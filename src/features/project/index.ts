@@ -18,6 +18,7 @@ import { projectBoardFeatures } from './board';
 import { projectChatFeatures } from './chat';
 import { projectTimelineFeatures } from './timeline';
 import { projectHistoryFeatures } from './history';
+import { projectDatabaseLinkFeatures } from './databaseLink';
 import { projectRepoLinkFeatures } from './repoLink';
 import { projectDeployFeatures } from './deploy';
 import { projectLinkFeatures } from './links';
@@ -366,6 +367,20 @@ export const projectSetSecurityTierFeature: FeatureDefinition<
             });
         }
 
+        // Même règle pour les bases de données, et pour la même raison : elles
+        // vivent à l'étage ouvert, et le relevé périodique les lit sans session.
+        // Les bases et leurs alertes survivent — seules les liaisons tombent.
+        if (input.securityTier === 'guarded') {
+            const linked = await ctx.db.databases.listLinkedIds(input.projectId, ctx.workspaceId);
+            if (linked.length > 0) {
+                await ctx.db.databases.unlinkAll(input.projectId, ctx.workspaceId);
+                await recordEvent(ctx, existing, {
+                    kind: 'project.databaseUnlink',
+                    label: `${linked.length} base${linked.length > 1 ? 's' : ''} déliée${linked.length > 1 ? 's' : ''} (projet passé en confidentiel)`
+                });
+            }
+        }
+
         const from = cipherFor(ctx, existing.security_tier);
         const to = cipherFor(ctx, input.securityTier);
         const content = await reencryptProjectTree(ctx, existing, from, to);
@@ -480,6 +495,7 @@ export const projectFeatures: FeatureDefinition<string, any, any>[] = [
     ...projectTimelineFeatures,
     ...projectHistoryFeatures,
     ...projectRepoLinkFeatures,
+    ...projectDatabaseLinkFeatures,
     ...projectDeployFeatures,
     ...projectLinkFeatures
 ];

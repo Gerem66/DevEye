@@ -10,6 +10,7 @@ import { UptimeWidget } from '@/Features/Uptime/UptimeWidget';
 import { MailWidget } from '@/Features/Mail/MailWidget';
 import { ProjectsWidget } from '@/Features/Projects/ProjectsWidget';
 import { GitWidget } from '@/Features/Git/GitWidget';
+import { DatabaseWidget } from '@/Features/Database/DatabaseWidget';
 
 import Monitoring from '@/Features/Monitoring';
 import Weather from '@/Features/Weather';
@@ -20,6 +21,7 @@ import Uptime from '@/Features/Uptime';
 import Mail from '@/Features/Mail';
 import FeatureProjects from '@/Features/Projects';
 import FeatureGit from '@/Features/Git';
+import FeatureDatabase from '@/Features/Database';
 
 import type { FeatureProps } from '@/Features/types';
 
@@ -127,6 +129,18 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         // synchronisation en cours, et une instance en cache continuerait de
         // sonder sans être vue. Pas de `holdSecrecy` : rien n'y est chiffré à
         // l'étage gardé, donc rien ne peut déclencher l'invite.
+        cacheDurationMinutes: 0
+    },
+    {
+        id: 'database',
+        title: 'Bases de données',
+        icon: 'database',
+        WidgetContent: DatabaseWidget,
+        FullComponent: FeatureDatabase,
+        // Démonté dès la fermeture, comme Git : l'explorateur de tables tient
+        // des résultats lus chez un serveur tiers, qui n'ont aucune raison de
+        // survivre à la fermeture de l'écran. Pas de `holdSecrecy` : rien n'y
+        // est chiffré à l'étage gardé.
         cacheDurationMinutes: 0
     },
     {

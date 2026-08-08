@@ -8,6 +8,7 @@ import { logsFeatures } from './logs';
 import { mailFeatures } from './mail';
 import { metricsFeatures } from './metrics';
 import { noteFeatures } from './note';
+import { databaseFeatures } from './database';
 import { gitFeatures } from './git';
 import { projectFeatures } from './project';
 import {
@@ -76,6 +77,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...noteFeatures,
     ...projectFeatures,
     ...gitFeatures,
+    ...databaseFeatures,
     ...deviceFeatures,
     ...cloudSyncFeatures,
     ...metricsFeatures,

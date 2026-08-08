@@ -17,6 +17,10 @@ import { featureHandlers } from './registry';
 const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     admin: 'workspace',
     cloudSync: 'cloudsync',
+    // Même forme que `git` : préfixe unique, verbes en camelCase derrière le
+    // point. Le filet `MUTATION_VERB` n'en voit donc presque aucune — les
+    // `mutates` de cette feature se relisent à la main.
+    database: 'database',
     device: 'devices',
     folder: 'notes',
     // Même forme que `project` : préfixe unique, verbes en camelCase derrière le

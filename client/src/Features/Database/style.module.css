@@ -1,0 +1,735 @@
+/*
+ * Feature « Bases de données ».
+ *
+ * Module à part, comme celui de Git : une feature, une feuille. C'est ce qui
+ * évite les collisions de noms de classe qu'un module partagé finit toujours par
+ * produire (voir la note de PROJECTS.md sur `.grid`).
+ */
+
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-height: 0;
+}
+
+.header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.heading {
+    margin: 0;
+    font-size: 1.25rem;
+    color: var(--text-primary);
+}
+
+.subheading {
+    margin: 2px 0 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.error {
+    font-size: 0.82rem;
+    color: var(--danger);
+}
+
+.ok {
+    font-size: 0.82rem;
+    color: var(--success);
+}
+
+/* Un avertissement qui n'est pas une erreur : « ceci ne tournera pas ». */
+.warn {
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--warning);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+
+/* ------------------------------------------------------------------ liste */
+
+.grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-sm);
+    margin: 0;
+    padding: 0 0 var(--space-md);
+    list-style: none;
+    align-content: start;
+    /* Repère de la barre d'insertion, positionnée par rapport à cette boîte. */
+    position: relative;
+}
+
+/*
+ * Où atterrirait la carte glissée. Traverse la liste et se tient dans
+ * l'interstice lui-même : aucune ligne n'est déplacée ni restylée pour montrer
+ * la cible. Pilotée par le DOM (voir `src/dragReorder.ts`), jamais par un état.
+ */
+.dropBar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent-glow);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.card {
+    position: relative;
+    display: flex;
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    background: var(--surface-widget);
+    border: 1px solid var(--glass-border);
+    transition:
+        border-color var(--transition-fast),
+        transform var(--transition-fast);
+}
+
+.card:hover {
+    border-color: var(--glass-border-strong);
+    transform: translateY(-1px);
+}
+
+/* La carte en cours de déplacement : estompée plutôt que masquée, pour que sa
+   place reste un repère pendant que la barre montre la cible. `filter:
+   opacity()` et non `opacity` — la propriété est revendiquée par les surfaces
+   animées de l'application. */
+.cardDragging {
+    filter: opacity(0.4);
+    cursor: grabbing;
+}
+
+/* Poignée de réorganisation, comme dans Uptime, Git et Monitoring. */
+.grip {
+    flex-shrink: 0;
+    align-self: center;
+    width: 18px;
+    height: 18px;
+    margin-left: var(--space-sm);
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: grab;
+    touch-action: none;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+}
+
+.card:hover .grip,
+.card:focus-within .grip {
+    opacity: 1;
+}
+
+.grip:active {
+    cursor: grabbing;
+}
+
+@media (pointer: coarse) {
+    .grip {
+        opacity: 1;
+    }
+}
+
+.cardBody {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    text-align: left;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+}
+
+.cardBody:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    border-radius: var(--radius-lg);
+}
+
+.cardMain {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.cardName {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin: 0;
+    font-size: 1rem;
+    color: var(--text-primary);
+}
+
+.cardMeta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+    margin: 0;
+    font-size: 0.78rem;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
+
+.cardFoot {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+    margin-top: var(--space-xs);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* Symbole, pas bouton : il dit que toute la carte est cliquable. */
+.openArrow {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-muted);
+    pointer-events: none;
+    filter: opacity(0.5);
+}
+
+.card:hover .openArrow {
+    filter: opacity(1);
+    color: var(--accent);
+}
+
+/* --------------------------------------------------------------- état */
+
+/*
+ * Trois tons, et « neutre » est le défaut assumé : une base jamais jointe n'est
+ * pas en panne, c'est le réglage par défaut de la feature. La peindre en rouge
+ * ferait passer un inventaire au repos pour un incident.
+ */
+.statusDot {
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+    border-radius: var(--radius-pill);
+    background: var(--text-muted);
+}
+
+.statusDot[data-tone='online'] {
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success);
+}
+
+.statusDot[data-tone='danger'] {
+    background: var(--danger);
+    box-shadow: 0 0 6px var(--danger);
+}
+
+.tag {
+    padding: 0 8px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+}
+
+.statusTag {
+    composes: tag;
+    color: var(--text-secondary);
+}
+
+.statusTag[data-tone='online'] {
+    color: var(--success);
+}
+
+.statusTag[data-tone='danger'] {
+    color: var(--danger);
+}
+
+.alertTag {
+    padding: 0 8px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-bg);
+    color: var(--warning);
+    font-size: 0.72rem;
+}
+
+.viaTag {
+    padding: 0 8px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--glass-border);
+    font-size: 0.7rem;
+}
+
+/* --------------------------------------------------------------- détail */
+
+.detailHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    min-width: 0;
+}
+
+.ident {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.statRow {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--space-sm);
+}
+
+.stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: var(--surface-widget);
+}
+
+.statLabel {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.statValue {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.statValue[data-tone='online'] {
+    color: var(--success);
+}
+
+.statValue[data-tone='danger'] {
+    color: var(--danger);
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--glass-border);
+    background: var(--surface-widget);
+    min-width: 0;
+}
+
+.panelHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.panelTitle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: 0;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------- alertes */
+
+.alertList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.alertRow {
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: var(--surface-subtle);
+}
+
+/* Une alerte franchie se voit sans être lue : c'est tout son intérêt. */
+.alertRowOn {
+    composes: alertRow;
+    border-color: var(--warning);
+}
+
+.alertButton {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    border: none;
+    background: transparent;
+    text-align: left;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.alertButton:disabled {
+    cursor: default;
+}
+
+.alertName {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+    color: var(--text-primary);
+}
+
+/* ---------------------------------------------------------- exploration */
+
+/*
+ * Deux colonnes : la liste des tables, et le contenu de celle qu'on a choisie.
+ * `minmax(0, 1fr)` sur la seconde, sinon un tableau large la pousserait au-delà
+ * du panneau au lieu de défiler dedans.
+ */
+.explorer {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: var(--space-md);
+    min-width: 0;
+}
+
+@media (max-width: 720px) {
+    .explorer {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.tableList {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    max-height: 320px;
+    overflow-y: auto;
+    list-style: none;
+}
+
+.tableItem {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    width: 100%;
+    padding: var(--space-xs) var(--space-sm);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    text-align: left;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.tableItem:hover {
+    background: var(--surface-subtle);
+}
+
+.tableItemOn {
+    composes: tableItem;
+    background: var(--accent-bg);
+}
+
+.tableName {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tableMeta {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.rowsPane {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    min-width: 0;
+}
+
+.rowsHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+/* Le tableau défile dans sa propre boîte : quarante colonnes ne doivent pas
+   faire défiler la page entière. */
+.rowsScroll {
+    overflow: auto;
+    max-height: 360px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+}
+
+.dataTable {
+    border-collapse: collapse;
+    width: max-content;
+    min-width: 100%;
+    font-size: 0.78rem;
+    font-family: var(--font-mono);
+}
+
+.dataTable th,
+.dataTable td {
+    padding: 4px var(--space-sm);
+    border-bottom: 1px solid var(--glass-border);
+    text-align: left;
+    white-space: nowrap;
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dataTable th {
+    position: sticky;
+    top: 0;
+    background: var(--surface-widget);
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.dataTable td {
+    color: var(--text-secondary);
+}
+
+/* NULL n'est pas une chaîne vide, et l'écran doit pouvoir le dire. */
+.nullCell {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* ------------------------------------------------------------- projets */
+
+.usageList {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.usageItem {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    max-width: 320px;
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--glass-border);
+    background: var(--surface-widget);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.usageItem:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.status {
+    padding: 2px 10px;
+    border-radius: var(--radius-pill);
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: var(--surface-subtle);
+}
+
+.status[data-status='active'] {
+    color: var(--success);
+}
+
+.status[data-status='done'] {
+    color: var(--accent);
+}
+
+.status[data-status='paused'] {
+    color: var(--warning);
+}
+
+/* ------------------------------------------------------------ formulaires */
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.fieldRow {
+    display: flex;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1 1 200px;
+    min-width: 0;
+}
+
+.fieldWide {
+    composes: field;
+    flex: 3 1 260px;
+}
+
+.fieldNarrow {
+    composes: field;
+    flex: 0 1 130px;
+}
+
+.label {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--glass-border);
+}
+
+.sectionTitle {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.checkRow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    cursor: pointer;
+}
+
+.checkRow > span {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+/* Une requête s'écrit en chasse fixe, et ne se redimensionne pas à la main :
+   la hauteur suit le nombre de lignes déclaré. */
+.sqlField,
+.keyField {
+    width: 100%;
+    padding: var(--space-sm);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    resize: vertical;
+}
+
+.sqlField:focus,
+.keyField:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.condition {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-sm);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: var(--surface-subtle);
+}
+
+.conditionRemove {
+    align-self: flex-end;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.conditionRemove:hover {
+    color: var(--danger);
+}
+
+.dangerZone {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--glass-border);
+}
+
+.dangerText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 260px;
+    min-width: 0;
+}

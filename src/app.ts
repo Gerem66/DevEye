@@ -24,6 +24,7 @@ import { createAuditLog } from '@/Services/AuditLog';
 import { MailSyncService } from '@/Services/MailSyncService';
 import { UptimeMonitor } from '@/Services/UptimeMonitor';
 import { IntegrationSyncService } from '@/Services/IntegrationSyncService';
+import { DatabaseMonitor } from '@/Services/DatabaseMonitor';
 import { mailAttachmentRoutes } from '@/mail/attachmentRoutes';
 import { mailOAuthRoutes } from '@/mail/oauthRoutes';
 import { status } from '@/status';
@@ -43,6 +44,7 @@ export interface BuiltApp {
     /** Ordonnanceur Uptime — démarré/arrêté par index.ts. */
     uptime: UptimeMonitor;
     integrations: IntegrationSyncService;
+    databases: DatabaseMonitor;
     /** Synchro Mail en tâche de fond (comptes « open » uniquement) — démarrée/arrêtée par index.ts. */
     mailSync: MailSyncService;
 }
@@ -119,12 +121,25 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     const uptime = new UptimeMonitor({ db: deps.db, crypt: deps.crypt, audit, logger, live });
     const mailSync = new MailSyncService({ db: deps.db, crypt: deps.crypt, logger, live });
     const integrations = new IntegrationSyncService({ db: deps.db, crypt: deps.crypt, logger, live });
+    // Les canaux de notification sont ceux d'Uptime : mêmes destinataires, une
+    // seule configuration à tenir à jour.
+    const databases = new DatabaseMonitor({ db: deps.db, crypt: deps.crypt, logger, live, uptime });
 
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await agentRoutes(app, { db: deps.db, hub, live, audit });
     await mailOAuthRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await mailAttachmentRoutes(app, { db: deps.db, crypt: deps.crypt });
-    await registerWS(app, { db: deps.db, crypt: deps.crypt, hub, live, cloudSync, uptime, integrations, audit });
+    await registerWS(app, {
+        db: deps.db,
+        crypt: deps.crypt,
+        hub,
+        live,
+        cloudSync,
+        uptime,
+        integrations,
+        databases,
+        audit
+    });
     await registerAgentWS(app, { db: deps.db, hub, live, cloudSync, audit });
 
     // Serve the built web client from the same origin as the API whenever a
@@ -154,5 +169,5 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         app.log.debug({ clientDir }, 'No client build found; static serving disabled (host dev uses Vite)');
     }
 
-    return { app, cloudSync, uptime, mailSync, integrations };
+    return { app, cloudSync, uptime, mailSync, integrations, databases };
 }
