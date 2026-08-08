@@ -9,6 +9,7 @@ import {
     deviceListFeature,
     deviceReactivateFeature,
     deviceRenameFeature,
+    deviceReorderFeature,
     deviceRequestDeleteFeature,
     deviceRevokeFeature,
     deviceSetConfigFeature
@@ -51,6 +52,7 @@ export const deviceFeatures: FeatureDefinition<string, any, any>[] = [
     deviceRevokeFeature,
     deviceReactivateFeature,
     deviceRenameFeature,
+    deviceReorderFeature,
     deviceSetConfigFeature,
     deviceUpdateAgentFeature,
     deviceSetAutostartFeature,

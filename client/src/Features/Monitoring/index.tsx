@@ -1,5 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { Device } from 'deveye-types';
+import { ws } from '@/api/ws';
+import { useDragReorder } from '@/dragReorder';
 import { useDevices } from '@/stores/devices';
+import { useWorkspacePermissions } from '@/stores/workspace';
 import { openInfo } from '@/Components/InfoPopup';
 import type { FeatureProps } from '../types';
 import { MonitoringInfo } from './MonitoringInfo';
@@ -95,9 +99,53 @@ function MonitoringTitle({
 }
 
 export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps) {
-    const { devices, loading } = useDevices();
+    const { devices: stored, loading } = useDevices();
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const updater = useAgentUpdate();
+    const canWrite = useWorkspacePermissions().canFeature('devices', 'write');
+
+    /**
+     * L'ordre posé à la main, en attendant que le serveur le confirme.
+     *
+     * La liste vient d'un magasin partagé (accueil, topbar, Monitoring) qui n'a
+     * pas de setter : on superpose donc l'ordre local le temps de l'aller-retour,
+     * plutôt que de laisser la carte revenir à sa place avant d'y repartir.
+     */
+    const [ordered, setOrdered] = useState<Device[] | null>(null);
+    /** Un glissé est en cours : la liste ne doit pas bouger dessous. */
+    const dragging = useRef(false);
+    const devices = ordered ?? stored;
+
+    // Le serveur reprend la main dès qu'il a répondu — mais jamais pendant un
+    // glissé, où une relecture réordonnerait les lignes sous le pointeur.
+    useEffect(() => {
+        if (!dragging.current) setOrdered(null);
+    }, [stored]);
+
+    // La liste courante, lue au moment du dépôt : `reorder` est mémoïsé, il ne
+    // doit pas capturer un tableau vieux d'un rendu.
+    const currentList = useRef(devices);
+    currentList.current = devices;
+
+    /**
+     * Applique un dépôt : on range d'abord localement, pour que la carte reste
+     * là où on l'a lâchée sans aller-retour, puis on persiste. Un échec rend la
+     * main au serveur, seul détenteur de l'ordre réellement enregistré.
+     */
+    const reorder = useCallback((ids: (string | number)[]) => {
+        const byId = new Map(currentList.current.map((d) => [d.id, d]));
+        setOrdered(ids.flatMap((id) => byId.get(String(id)) ?? []));
+        ws.send('device.reorder', { ids: ids.map(String) }).catch(() => setOrdered(null));
+    }, []);
+
+    const drag = useDragReorder<HTMLDivElement, HTMLSpanElement>({
+        ids: devices.map((d) => d.id),
+        rowSelector: '[data-device-card]',
+        onReorder: reorder,
+        onDragStateChange: (active) => {
+            dragging.current = active;
+        }
+    });
 
     // Devices whose agent runs an older build than this interface (online).
     const updatableIds = devices.filter((d) => d.online && agentUpdatable(d)).map((d) => d.id);
@@ -151,52 +199,75 @@ export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps
                             onUpdateAll={() => void updater.updateAll(updatableIds)}
                             updating={updater.anyBusy}
                         />
-                        {devices.map((d) => {
-                            const canUpdate = d.online && agentUpdatable(d);
-                            return (
-                                <div
-                                    key={d.id}
-                                    role='button'
-                                    tabIndex={0}
-                                    className={`${styles.deviceCard} ${d.id === selectedId ? styles.selected : ''}`}
-                                    {...outlineOf(d.id)}
-                                    onClick={() => setSelectedId(d.id)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' || e.key === ' ') setSelectedId(d.id);
-                                    }}
-                                >
+                        {/* Boîte intérieure, et non `.deviceListFull` : c'est
+                            elle qui ancre la barre d'insertion, et comme elle
+                            n'est pas le conteneur défilant, sa position suit le
+                            défilement toute seule. */}
+                        <div ref={drag.listRef} className={styles.deviceCards}>
+                            {devices.map((d) => {
+                                const canUpdate = d.online && agentUpdatable(d);
+                                return (
                                     <div
-                                        className={`${styles.statusDot} ${d.online ? styles.online : styles.offline}`}
-                                    />
-                                    <div className={styles.deviceCardInfo}>
-                                        <span className={styles.deviceCardName}>{d.name}</span>
-                                        <span className={styles.deviceCardPlatform}>
-                                            {d.platform}
-                                            {d.agentVersion && ` · v${d.agentVersion}`}
-                                        </span>
+                                        key={d.id}
+                                        role='button'
+                                        tabIndex={0}
+                                        data-device-card=''
+                                        className={`${styles.deviceCard} ${d.id === selectedId ? styles.selected : ''} ${drag.draggingId === d.id ? styles.deviceCardDragging : ''}`}
+                                        {...outlineOf(d.id)}
+                                        onClick={() => setSelectedId(d.id)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') setSelectedId(d.id);
+                                        }}
+                                    >
+                                        {/* Poignée d'abord, comme dans Uptime, Git et les
+                                            bases de données : seule elle renonce au
+                                            défilement tactile, le reste de la carte
+                                            continue de faire défiler la liste. */}
+                                        {canWrite && (
+                                            <button
+                                                type='button'
+                                                className={styles.grip}
+                                                aria-label='Réordonner l’appareil'
+                                                onPointerDown={(e) => drag.onGripPointerDown(e, d.id)}
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <span className='icon icon-drag' />
+                                            </button>
+                                        )}
+                                        <div
+                                            className={`${styles.statusDot} ${d.online ? styles.online : styles.offline}`}
+                                        />
+                                        <div className={styles.deviceCardInfo}>
+                                            <span className={styles.deviceCardName}>{d.name}</span>
+                                            <span className={styles.deviceCardPlatform}>
+                                                {d.platform}
+                                                {d.agentVersion && ` · v${d.agentVersion}`}
+                                            </span>
+                                        </div>
+                                        {canUpdate && (
+                                            <button
+                                                className={styles.cardUpdateBtn}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    void updater.update(d.id);
+                                                }}
+                                                disabled={updater.isBusy(d.id)}
+                                                title={
+                                                    d.latestAgentVersion
+                                                        ? `Mettre à jour l’agent vers la v${d.latestAgentVersion}`
+                                                        : 'Mettre à jour l’agent'
+                                                }
+                                            >
+                                                <span
+                                                    className={`icon ${updater.isBusy(d.id) ? `icon-spinner ${styles.spinning}` : 'icon-cloud'}`}
+                                                />
+                                            </button>
+                                        )}
                                     </div>
-                                    {canUpdate && (
-                                        <button
-                                            className={styles.cardUpdateBtn}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                void updater.update(d.id);
-                                            }}
-                                            disabled={updater.isBusy(d.id)}
-                                            title={
-                                                d.latestAgentVersion
-                                                    ? `Mettre à jour l’agent vers la v${d.latestAgentVersion}`
-                                                    : 'Mettre à jour l’agent'
-                                            }
-                                        >
-                                            <span
-                                                className={`icon ${updater.isBusy(d.id) ? `icon-spinner ${styles.spinning}` : 'icon-cloud'}`}
-                                            />
-                                        </button>
-                                    )}
-                                </div>
-                            );
-                        })}
+                                );
+                            })}
+                            <span ref={drag.barRef} className={styles.dropBar} aria-hidden='true' />
+                        </div>
                     </div>
 
                     {/* Right: per-device panel (shared with the home device popup),

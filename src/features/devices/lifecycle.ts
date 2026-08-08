@@ -6,6 +6,7 @@ import {
     deviceList,
     deviceReactivate,
     deviceRename,
+    deviceReorder,
     deviceRequestDelete,
     deviceRevoke,
     deviceSetConfig
@@ -136,6 +137,28 @@ export const deviceRenameFeature: FeatureDefinition<
             metadata: { deviceId: row.id, ownerId: row.owner_id }
         });
         return { device: await toDevice(ctx, updated ?? { ...row, name: input.name }) };
+    }
+});
+
+/**
+ * Range les appareils de l'espace.
+ *
+ * Sous `devices: write` et non `admin: true` comme le reste de ce module :
+ * arranger la liste que son propre espace affiche n'est pas de la gestion de
+ * flotte, et un membre qui peut piloter ses machines doit pouvoir les ranger.
+ * Aucun état d'agent n'est touché.
+ */
+export const deviceReorderFeature: FeatureDefinition<
+    typeof deviceReorder.command,
+    typeof deviceReorder.input,
+    typeof deviceReorder.output
+> = defineFeature({
+    ...deviceReorder,
+    mutates: true,
+    access: { feature: 'devices', level: 'write' },
+    handler: async (ctx, input) => {
+        await ctx.db.devices.reorder(ctx.workspaceId, input.ids);
+        return { ids: input.ids };
     }
 });
 

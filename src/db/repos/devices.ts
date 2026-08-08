@@ -53,6 +53,11 @@ export interface DevicesRepo {
     /** Abort a deletion after a self-destruct failure: restore status + record why. */
     failDeletion(id: string, message: string): Promise<void>;
     delete(id: string): Promise<boolean>;
+    /**
+     * Range les appareils d'un espace : `ids` est la liste complète, rang =
+     * indice. Ne touche aucun état d'agent.
+     */
+    reorder(workspaceId: number, ids: string[]): Promise<void>;
 }
 
 export function devicesRepo(pool: Q): DevicesRepo {
@@ -69,11 +74,24 @@ export function devicesRepo(pool: Q): DevicesRepo {
             return r.rows[0] ?? null;
         },
         async listByWorkspace(workspaceId) {
+            // L'ordre de l'utilisateur ; la date ne fait que départager.
             const r = await pool.query<DeviceRow>(
-                'SELECT * FROM devices WHERE workspace_id = ? ORDER BY created DESC',
+                'SELECT * FROM devices WHERE workspace_id = ? ORDER BY sort_order ASC, created DESC',
                 [workspaceId]
             );
             return r.rows;
+        },
+        async reorder(workspaceId, ids) {
+            // Rang = indice ; un appareil d'un autre espace est ignoré en
+            // silence, la clause `workspace_id` s'en charge. Rien d'autre n'est
+            // touché : ranger n'est pas administrer une machine.
+            for (let i = 0; i < ids.length; i++) {
+                await pool.query('UPDATE devices SET sort_order = ? WHERE id = ? AND workspace_id = ?', [
+                    i,
+                    ids[i],
+                    workspaceId
+                ]);
+            }
         },
         async listAll() {
             const r = await pool.query<DeviceRow>('SELECT * FROM devices ORDER BY created DESC');
@@ -81,10 +99,26 @@ export function devicesRepo(pool: Q): DevicesRepo {
         },
         async create({ ownerId, workspaceId, name, fingerprint, platform, publicKey, tokenHash }) {
             const id = randomUUID();
+            // Un nouvel appareil atterrit à la fin de la liste, jamais au
+            // milieu : l'ordre appartient à l'utilisateur.
+            const posRow = await pool.query<{ next: number }>(
+                'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next FROM devices WHERE workspace_id = ?',
+                [workspaceId]
+            );
             await pool.query(
-                `INSERT INTO devices (id, owner_id, workspace_id, name, fingerprint, platform, status, public_key, token_hash)
-                 VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
-                [id, ownerId, workspaceId, name, fingerprint, platform, publicKey, tokenHash]
+                `INSERT INTO devices (id, owner_id, workspace_id, name, fingerprint, platform, status, public_key, token_hash, sort_order)
+                 VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+                [
+                    id,
+                    ownerId,
+                    workspaceId,
+                    name,
+                    fingerprint,
+                    platform,
+                    publicKey,
+                    tokenHash,
+                    Number(posRow.rows[0]?.next ?? 0)
+                ]
             );
             const r = await pool.query<DeviceRow>('SELECT * FROM devices WHERE id = ?', [id]);
             return r.rows[0];

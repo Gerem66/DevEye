@@ -213,6 +213,81 @@
     }
 }
 
+/*
+ * Les cartes, dans leur propre boîte à l'intérieur du volet défilant.
+ *
+ * C'est elle qui ancre la barre d'insertion : `.deviceListFull` défile, donc un
+ * enfant absolu s'y positionnerait par rapport au *contenu* et non à ce qu'on
+ * voit. Ici, la boîte se déplace avec le défilement, et la barre suit sans
+ * qu'aucun code n'ait à corriger un `scrollTop`.
+ */
+.deviceCards {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+/*
+ * Où atterrirait la carte glissée. Traverse la liste et se tient dans
+ * l'interstice lui-même : aucune ligne n'est déplacée ni restylée pour montrer
+ * la cible. Pilotée par le DOM (voir `src/dragReorder.ts`), jamais par un état.
+ */
+.dropBar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent-glow);
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Poignée de réorganisation, comme dans Uptime, Git et les bases de données :
+   cachée jusqu'au survol, à la manière des éditeurs natifs. `touch-action: none`
+   est ce qui rend le geste possible au doigt — il empêche le défileur de
+   revendiquer le mouvement — et reste cantonné à ces 16 px, de sorte qu'une
+   pression ailleurs sur la carte fait toujours défiler la liste. */
+.grip {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: grab;
+    touch-action: none;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+}
+
+.deviceCard:hover .grip,
+.deviceCard:focus-within .grip {
+    opacity: 1;
+}
+
+.grip:active {
+    cursor: grabbing;
+}
+
+/* Aucun survol pour la révéler : elle doit être là d'emblée. */
+@media (pointer: coarse) {
+    .grip {
+        opacity: 1;
+    }
+}
+
+/* La carte en cours de déplacement : estompée plutôt que masquée, pour que sa
+   place reste un repère pendant que la barre montre la cible. */
+.deviceCardDragging {
+    filter: opacity(0.4);
+    cursor: grabbing;
+}
+
 .deviceCard {
     display: flex;
     align-items: center;
