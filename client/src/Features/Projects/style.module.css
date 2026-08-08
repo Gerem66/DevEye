@@ -134,8 +134,19 @@
     grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-rows: auto auto;
     align-items: start;
+    /*
+     * `align-content: center` répartit l'espace libre **autour** des rangées.
+     *
+     * Les cartes d'une même rangée de la grille s'étirent sur la hauteur de la
+     * plus grande ; sans cela, une carte courte collait son contenu en haut et
+     * gardait tout son vide en bas — d'où l'impression d'un rembourrage
+     * asymétrique alors que le padding, lui, l'était à peine. `align-items`
+     * reste à `start` : il gouverne l'intérieur d'une rangée, pas leur
+     * répartition.
+     */
+    align-content: center;
     gap: var(--space-xs) var(--space-sm);
-    padding: var(--space-sm) var(--space-md) var(--space-md);
+    padding: var(--space-md);
     text-align: left;
     cursor: pointer;
     color: inherit;
@@ -191,7 +202,6 @@
     flex-direction: column;
     gap: var(--space-xs);
     min-width: 0;
-    margin-top: var(--space-xs);
 }
 
 /* Colonne 3 : non-lus et flèche, dans le coin, sur les deux rangées. */
@@ -383,19 +393,33 @@
 
 /* Symbole de fin de ligne : il dit que toute la ligne est cliquable, il ne se
    clique pas lui-même. */
+/*
+ * Symbole, pas bouton : il dit que toute la carte est cliquable.
+ *
+ * Absent au repos, il n'apparaît qu'au survol en glissant d'un cheveu vers la
+ * droite — sur une grille de cartes, une flèche affichée en permanence sur
+ * chacune n'apprend plus rien et ne fait qu'ajouter du bruit. L'atténuation
+ * passe par `filter: opacity()` et non par la propriété `opacity`, revendiquée
+ * en style inline par les surfaces animées de l'application.
+ */
 .openArrow {
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
-    color: var(--text-muted);
+    color: var(--accent);
     pointer-events: none;
-    filter: opacity(0.5);
-    transition: filter var(--transition-fast), color var(--transition-fast);
+    filter: opacity(0);
+    transform: translateX(-4px);
+    transition:
+        filter var(--transition-fast),
+        transform var(--transition-fast);
 }
 
-.card:hover .openArrow {
+/* Au clavier aussi : la carte s'active par Entrée, la flèche doit le dire. */
+.card:hover .openArrow,
+.cardBody:focus-visible .openArrow {
     filter: opacity(1);
-    color: var(--accent);
+    transform: translateX(0);
 }
 
 /*

@@ -141,7 +141,7 @@ export function Databases({ project, canWrite }: DatabasesProps) {
             {/* Toujours en bas, même quand une base est déjà reliée : on peut en
                 ajouter autant qu'on veut. */}
             {canWrite && canWriteDb && (
-                <div className={dbStyles.actions}>
+                <div className={dbStyles.addRow}>
                     <Button icon='add' onClick={() => setLinkOpen(true)}>
                         Ajouter une base
                     </Button>

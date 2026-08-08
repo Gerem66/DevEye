@@ -146,7 +146,7 @@ export function Git({ project, members, canWrite }: GitProps) {
                 ajouter autant qu'on veut, et c'est le geste suivant naturel une
                 fois qu'on a fini de lire ce qui précède. */}
             {canWrite && canWriteGit && (
-                <div className={gitStyles.actions}>
+                <div className={gitStyles.addRow}>
                     <Button icon='add' onClick={() => setLinkOpen(true)}>
                         Ajouter un dépôt
                     </Button>
