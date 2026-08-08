@@ -1,11 +1,11 @@
-import { projectLinkAdd, projectLinkList, projectLinkRemove, projectMyTasks } from 'deveye-types';
-import type { MyTask, ProjectLink, ProjectLinkRow, ProjectRow } from 'deveye-types';
-import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
+import { projectMyTasks, projectUptimeLink, projectUptimeList, projectUptimeUnlink } from 'deveye-types';
+import type { MyTask, ProjectRow } from 'deveye-types';
+import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { cipherFor, decryptCard, loadProject, toCard, tryDecryptProject } from './_shared';
 
 /**
- * Le transverse : mes tâches à travers tous les projets, et les liens d'un
- * projet vers le reste de DevEye.
+ * Le transverse : mes tâches à travers tous les projets, et les services
+ * surveillés qu'un projet rattache.
  *
  * Les deux répondent à la même question posée dans les deux sens — « qu'est-ce
  * qui touche ce projet ? » et « qu'est-ce qui me touche, moi, dans tous les
@@ -14,16 +14,6 @@ import { cipherFor, decryptCard, loadProject, toCard, tryDecryptProject } from '
 
 const READ = { feature: 'projects' } as const;
 const WRITE = { feature: 'projects', level: 'write' } as const;
-
-function toLink(row: ProjectLinkRow): ProjectLink {
-    return {
-        id: row.id,
-        projectId: row.project_id,
-        kind: row.kind === 'device' || row.kind === 'note' ? row.kind : 'uptime',
-        targetId: row.target_id,
-        created: row.created
-    };
-}
 
 export const projectMyTasksFeature: FeatureDefinition<
     typeof projectMyTasks.command,
@@ -78,86 +68,60 @@ export const projectMyTasksFeature: FeatureDefinition<
     }
 });
 
-export const projectLinkListFeature: FeatureDefinition<
-    typeof projectLinkList.command,
-    typeof projectLinkList.input,
-    typeof projectLinkList.output
+export const projectUptimeListFeature: FeatureDefinition<
+    typeof projectUptimeList.command,
+    typeof projectUptimeList.input,
+    typeof projectUptimeList.output
 > = defineFeature({
-    ...projectLinkList,
+    ...projectUptimeList,
     access: READ,
     handler: async (ctx, input) => {
         await loadProject(ctx, input.projectId);
-        const rows = await ctx.db.projectLinks.listByProject(input.projectId, ctx.workspaceId);
-        return { links: rows.map(toLink) };
+        return { serviceIds: await ctx.db.projectLinks.listServiceIds(input.projectId, ctx.workspaceId) };
     }
 });
 
-/**
- * La cible existe-t-elle, et dans **cet** espace ?
- *
- * Sans cette garde, on pourrait rattacher n'importe quel identifiant — y compris
- * celui d'un objet d'un autre espace, dont l'existence même n'a pas à fuiter.
- * On ne vérifie que l'existence : le **droit** de l'ouvrir reste celui de la
- * feature cible, vérifié au moment où on l'ouvre.
- */
-async function assertTargetExists(ctx: FeatureContext, kind: string, targetId: string): Promise<void> {
-    if (kind === 'uptime' || kind === 'note') {
-        const id = Number(targetId);
-        if (!Number.isInteger(id) || id <= 0) throw new FeatureError('validation', 'Identifiant de cible invalide.');
-        const found =
-            kind === 'uptime'
-                ? await ctx.db.uptimeServices.findById(id, ctx.workspaceId)
-                : await ctx.db.notes.findById(id, ctx.workspaceId);
-        if (!found) throw new FeatureError('not_found', 'Cette cible n’existe pas dans cet espace.');
-        return;
-    }
-    // L'identifiant d'un appareil est déjà une chaîne (son UUID) : pas de
-    // conversion, contrairement aux deux cas ci-dessus.
-    const device = await ctx.db.devices.findById(targetId);
-    if (!device || device.workspace_id !== ctx.workspaceId) {
-        throw new FeatureError('not_found', 'Cet appareil n’existe pas dans cet espace.');
-    }
-}
-
-export const projectLinkAddFeature: FeatureDefinition<
-    typeof projectLinkAdd.command,
-    typeof projectLinkAdd.input,
-    typeof projectLinkAdd.output
+export const projectUptimeLinkFeature: FeatureDefinition<
+    typeof projectUptimeLink.command,
+    typeof projectUptimeLink.input,
+    typeof projectUptimeLink.output
 > = defineFeature({
-    ...projectLinkAdd,
+    ...projectUptimeLink,
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
         await loadProject(ctx, input.projectId);
-        await assertTargetExists(ctx, input.kind, input.targetId);
-        const row = await ctx.db.projectLinks.create({
-            projectId: input.projectId,
-            workspaceId: ctx.workspaceId,
-            kind: input.kind,
-            targetId: input.targetId
-        });
-        return { link: toLink(row) };
+        // La cible existe-t-elle, et dans **cet** espace ? Sans cette garde on
+        // rattacherait n'importe quel identifiant, y compris celui d'un service
+        // d'un autre espace — dont l'existence même n'a pas à fuiter. On ne
+        // vérifie que l'existence : le **droit** de l'ouvrir reste celui
+        // d'Uptime, vérifié au moment où on l'ouvre.
+        const service = await ctx.db.uptimeServices.findById(input.serviceId, ctx.workspaceId);
+        if (!service) throw new FeatureError('not_found', 'Ce service n’existe pas dans cet espace.');
+        await ctx.db.projectLinks.link(input.projectId, ctx.workspaceId, input.serviceId);
+        return { serviceIds: await ctx.db.projectLinks.listServiceIds(input.projectId, ctx.workspaceId) };
     }
 });
 
-export const projectLinkRemoveFeature: FeatureDefinition<
-    typeof projectLinkRemove.command,
-    typeof projectLinkRemove.input,
-    typeof projectLinkRemove.output
+export const projectUptimeUnlinkFeature: FeatureDefinition<
+    typeof projectUptimeUnlink.command,
+    typeof projectUptimeUnlink.input,
+    typeof projectUptimeUnlink.output
 > = defineFeature({
-    ...projectLinkRemove,
+    ...projectUptimeUnlink,
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        const ok = await ctx.db.projectLinks.delete(input.linkId, ctx.workspaceId);
-        if (!ok) throw new FeatureError('not_found', 'Lien introuvable');
-        return { linkId: input.linkId };
+        await loadProject(ctx, input.projectId);
+        // Le service lui-même n'est pas touché : seule la liaison tombe.
+        await ctx.db.projectLinks.unlink(input.projectId, ctx.workspaceId, input.serviceId);
+        return { serviceIds: await ctx.db.projectLinks.listServiceIds(input.projectId, ctx.workspaceId) };
     }
 });
 
 export const projectLinkFeatures = [
     projectMyTasksFeature,
-    projectLinkListFeature,
-    projectLinkAddFeature,
-    projectLinkRemoveFeature
+    projectUptimeListFeature,
+    projectUptimeLinkFeature,
+    projectUptimeUnlinkFeature
 ];

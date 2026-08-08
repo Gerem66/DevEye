@@ -1514,32 +1514,39 @@
 
 /* ----------------------------------------------------------- liens DevEye */
 
-.links {
-    font-size: 0.82rem;
-    color: var(--text-secondary);
-}
-
-.links summary {
-    cursor: pointer;
-    color: var(--text-muted);
+/* Les services surveillés rattachés au projet, dans l'onglet Déploiement. */
+.uptimeLinks {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: var(--space-sm);
+    padding-bottom: var(--space-sm);
+    border-bottom: 1px solid var(--glass-border);
 }
 
-.linkCount {
-    padding: 0 7px;
+/* L'état d'un service, avec la même sémantique que dans Uptime : en ligne,
+   hors ligne, ou ni l'un ni l'autre (en pause, ou jamais testé). */
+.uptimeDot {
+    width: 8px;
+    height: 8px;
     border-radius: var(--radius-pill);
-    background: var(--surface-subtle);
-    color: var(--text-secondary);
-    font-size: 0.7rem;
+    background: var(--text-muted);
+}
+
+.uptimeDot[data-tone='online'] {
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success);
+}
+
+.uptimeDot[data-tone='down'] {
+    background: var(--danger);
+    box-shadow: 0 0 6px var(--danger);
 }
 
 .linkList {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-xs);
-    margin: var(--space-sm) 0;
+    margin: 0;
     padding: 0;
     list-style: none;
 }

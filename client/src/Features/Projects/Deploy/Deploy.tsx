@@ -14,6 +14,7 @@ import { ws } from '@/api/ws';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { humanizeError, withSecrecy } from '../api';
 import { Avatar } from '../Board/Avatar';
+import { UptimeLinks } from './UptimeLinks';
 import styles from '../style.module.css';
 
 const STATUS_LABELS: Record<DeployStatus, string> = {
@@ -89,6 +90,10 @@ export function Deploy({ project, members, canWrite }: DeployProps) {
     return (
         <div className={styles.deploy}>
             {error && <p className={styles.error}>{error}</p>}
+
+            {/* Au-dessus de l'application déployée, et non en dessous : « est-ce
+                en ligne ? » se lit avant « qu'ai-je livré ? ». */}
+            <UptimeLinks projectId={project.id} canWrite={canWrite} />
 
             {!target && (
                 <div className={styles.deployEmpty}>
