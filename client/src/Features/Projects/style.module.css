@@ -82,6 +82,29 @@
     padding: 0 0 var(--space-md);
     list-style: none;
     align-content: start;
+    /* Repère de la barre d'insertion, positionnée par rapport à cette boîte. */
+    position: relative;
+}
+
+/*
+ * Barre d'insertion du glisser-déposer — **verticale**, contrairement aux
+ * autres features.
+ *
+ * Le portefeuille est la seule liste à plusieurs colonnes : un trait horizontal
+ * y désignerait une rangée entière alors qu'une carte se dépose entre deux
+ * voisines. Sa hauteur est posée par le geste, qui la met à celle de la rangée
+ * visée ; la feuille de style ne garde que son épaisseur.
+ */
+.dropBar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent-glow);
+    opacity: 0;
+    pointer-events: none;
 }
 
 @media (max-width: 560px) {
@@ -97,7 +120,9 @@
     border-radius: var(--radius-lg);
     background: var(--surface-widget);
     border: 1px solid var(--glass-border);
-    transition: border-color var(--transition-fast), transform var(--transition-fast);
+    transition:
+        border-color var(--transition-fast),
+        transform var(--transition-fast);
 }
 
 .card:hover {
@@ -105,6 +130,70 @@
     /* Un seul pixel : sur une liste dense, le décalage de deux pixels de
        l'ancienne grille se lisait comme un sursaut. */
     transform: translateY(-1px);
+}
+
+/* La carte qu'on déplace s'efface derrière la barre d'insertion, sans quitter
+   sa place : ce qu'on voit reste la liste telle qu'elle est encore. */
+.cardDragging {
+    filter: opacity(0.4);
+    cursor: grabbing;
+}
+
+/*
+ * Poignée de réorganisation, comme dans Uptime, Git, Monitoring et les bases.
+ *
+ * Sœur du corps cliquable et non son enfant : un clic parti d'ici ne peut donc
+ * pas remonter jusqu'à « ouvrir le projet », même sans le neutraliser. Elle
+ * seule renonce au défilement tactile (`touch-action: none`), de sorte qu'une
+ * pression ailleurs sur la carte fait toujours défiler la page.
+ *
+ * **Hors du flux**, contrairement aux autres features, et logée dans la marge
+ * gauche de la carte : en colonne flex elle aurait décalé le corps vers la
+ * droite, et la barre d'avancement — qui court d'un bord à l'autre de ce corps
+ * — se serait retrouvée plus près du bord droit que du gauche. C'est exactement
+ * l'asymétrie qu'on venait de corriger. Ici elle ne déplace rien, et la carte au
+ * repos est au pixel près celle d'avant.
+ */
+.grip {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    /* `transform` sert au centrage : rien d'autre ne doit y toucher. */
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    /* La largeur du gabarit d'icône ; les six points, eux, n'en occupent que le
+       tiers central — ils tiennent donc dans les 16 px de marge sans jamais
+       toucher la vignette du projet. */
+    width: 18px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: grab;
+    touch-action: none;
+    /* `filter` et non `opacity` : celle-ci est revendiquée en style inline par
+       les surfaces animées de l'application. */
+    filter: opacity(0);
+    transition: filter var(--transition-fast);
+}
+
+.card:hover .grip,
+.card:focus-within .grip {
+    filter: opacity(1);
+}
+
+.grip:active {
+    cursor: grabbing;
+}
+
+/* Au doigt, il n'y a pas de survol : la poignée doit être là d'emblée. */
+@media (pointer: coarse) {
+    .grip {
+        filter: opacity(1);
+    }
 }
 
 /*
@@ -412,7 +501,9 @@
     /* framer-motion possède l'`opacity` en ligne sur les surfaces animées :
        on atténue par un filtre, jamais par la propriété elle-même. */
     filter: opacity(0.6);
-    transition: filter var(--transition-fast), color var(--transition-fast);
+    transition:
+        filter var(--transition-fast),
+        color var(--transition-fast);
 }
 
 .restore:hover {
@@ -612,7 +703,9 @@
     cursor: pointer;
     font-size: 0.75rem;
     filter: opacity(0.6);
-    transition: filter var(--transition-fast), color var(--transition-fast);
+    transition:
+        filter var(--transition-fast),
+        color var(--transition-fast);
 }
 
 .columnActions button:hover:not(:disabled) {
@@ -672,7 +765,9 @@
     color: var(--text-muted);
     font: inherit;
     cursor: pointer;
-    transition: color var(--transition-fast), border-color var(--transition-fast);
+    transition:
+        color var(--transition-fast),
+        border-color var(--transition-fast);
 }
 
 .addColumn:hover {

@@ -13,6 +13,15 @@ const DRAG_THRESHOLD = 6;
 /** Ce que peut identifier une ligne : un entier (SQL) ou un uuid (appareils). */
 type RowId = string | number;
 
+/**
+ * Comment la liste est disposée — donc où se glisse un interstice.
+ *
+ * `rows` : une colonne, les interstices sont horizontaux, la barre aussi.
+ * `grid` : plusieurs colonnes, les interstices sont **entre deux cartes d'une
+ * même rangée**, et la barre est verticale, haute comme la rangée visée.
+ */
+type Layout = 'rows' | 'grid';
+
 export interface DragReorder<L extends HTMLElement, B extends HTMLElement> {
     /** À poser sur le conteneur de la liste (il doit être `position: relative`). */
     listRef: RefObject<L | null>;
@@ -33,11 +42,131 @@ interface DragReorderOptions {
     onReorder: (ids: RowId[]) => void;
     /** Un glissé commence ou finit — l'appelant suspend ses relectures. */
     onDragStateChange?: (dragging: boolean) => void;
+    /** La disposition de la liste. Une colonne par défaut. */
+    layout?: Layout;
 }
 
-/** La moitié de l'écart entre deux lignes, où se centre la barre d'insertion. */
-function halfGap(list: HTMLElement): number {
-    return (parseFloat(getComputedStyle(list).rowGap) || 0) / 2;
+/**
+ * Où poser la barre d'insertion, en coordonnées de la fenêtre.
+ *
+ * `x` à `null` : la barre garde la largeur que lui donne la feuille de style
+ * (elle traverse la liste, cas d'une colonne). `height` à `null` : elle garde
+ * son épaisseur, et `y` en est alors le **centre** et non le haut.
+ */
+interface Spot {
+    /** L'interstice visé : 0 = avant la première ligne. */
+    gap: number;
+    x: number | null;
+    y: number;
+    height: number | null;
+}
+
+/** La moitié de l'écart entre deux cases, où se centre la barre d'insertion. */
+function halfGap(list: HTMLElement, axis: 'rowGap' | 'columnGap'): number {
+    return (parseFloat(getComputedStyle(list)[axis]) || 0) / 2;
+}
+
+/**
+ * L'interstice visé dans une colonne : chaque bord horizontal est un candidat.
+ *
+ * Le centre de l'interstice se prend sur la case qui le borde, à la moitié de
+ * l'écart : la barre est centrée par construction, et non par un décalage
+ * correctif qu'il faudrait ajuster à chaque changement d'écart.
+ */
+function rowsSpot(list: HTMLElement, boxes: DOMRect[], clientY: number): Spot {
+    const half = halfGap(list, 'rowGap');
+    let best: Spot = { gap: 0, x: null, y: boxes[0].top - half, height: null };
+    let bestDistance = Infinity;
+    for (const [i, box] of boxes.entries()) {
+        for (const [edge, gap, centre] of [
+            [box.top, i, box.top - half],
+            [box.bottom, i + 1, box.bottom + half]
+        ]) {
+            const distance = Math.abs(clientY - edge);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = { gap, x: null, y: centre, height: null };
+            }
+        }
+    }
+    return best;
+}
+
+/** Distance à un bord vertical, nulle tant qu'on reste dans la bande de sa rangée. */
+function edgeDistance(clientX: number, clientY: number, box: DOMRect, edge: number): number {
+    const dy = clientY < box.top ? box.top - clientY : clientY > box.bottom ? clientY - box.bottom : 0;
+    return Math.hypot(clientX - edge, dy);
+}
+
+/**
+ * Les cartes regroupées par rangée, dans l'ordre de lecture.
+ *
+ * Le critère est le **chevauchement vertical** avec la rangée en cours, et non
+ * l'égalité des `top` : deux cartes d'une même rangée s'étirent à la même
+ * hauteur, mais un pixel d'écart suffirait à faire éclater le regroupement.
+ */
+function rowsOf(boxes: DOMRect[]): DOMRect[][] {
+    const rows: DOMRect[][] = [];
+    for (const box of boxes) {
+        const row = rows[rows.length - 1];
+        if (row && box.top < row[0].bottom) row.push(box);
+        else rows.push([box]);
+    }
+    return rows;
+}
+
+/**
+ * L'interstice visé dans une grille : **combien de cartes le pointeur a-t-il
+ * dépassées**, dans l'ordre de lecture.
+ *
+ * Un comptage rangée par rangée, et non la recherche du bord le plus proche.
+ * Celle-ci se trompait dès que la grille se repliait sur une seule colonne :
+ * l'intention y est purement verticale, alors que le bord le plus proche se
+ * décide sur l'abscisse — et la poignée étant à gauche de la carte, le pointeur
+ * y traîne. « Déposer à la fin » donnait alors « avant la dernière carte », et
+ * la dernière position devenait tout bonnement inatteignable.
+ *
+ * Dans la rangée que le pointeur traverse, c'est l'axe qui offre réellement un
+ * choix qui tranche : l'abscisse quand plusieurs cartes s'y partagent la
+ * largeur, l'ordonnée quand elle n'en porte qu'une — c'est-à-dire exactement la
+ * règle des listes en colonne, retrouvée sans être écrite deux fois.
+ *
+ * Reste à placer la barre. Un interstice qui tombe sur un retour à la ligne se
+ * dessine à **deux** endroits — fin d'une rangée, début de la suivante — pour un
+ * seul et même rang. On garde celui que le pointeur désigne ; ailleurs les deux
+ * candidats se confondent, la gouttière étant partagée.
+ */
+function gridSpot(list: HTMLElement, boxes: DOMRect[], clientX: number, clientY: number): Spot {
+    const half = halfGap(list, 'columnGap');
+    let gap = 0;
+    for (const row of rowsOf(boxes)) {
+        const { top, bottom } = row[0];
+        // Entièrement au-dessus du pointeur : toute la rangée est dépassée.
+        if (clientY > bottom) {
+            gap += row.length;
+            continue;
+        }
+        // Entièrement en dessous : celle-ci et toutes les suivantes restent
+        // devant lui — y compris quand il flotte dans l'écart entre deux rangées.
+        if (clientY < top) break;
+        for (const box of row) {
+            const past = row.length > 1 ? clientX > (box.left + box.right) / 2 : clientY > (top + bottom) / 2;
+            if (past) gap++;
+        }
+        break;
+    }
+
+    const next = boxes[Math.min(gap, boxes.length - 1)];
+    const previous = boxes[Math.max(gap - 1, 0)];
+    const nextEdge = next.left - half;
+    const previousEdge = previous.right + half;
+    const atNext: Spot = { gap, x: nextEdge, y: next.top, height: next.height };
+    const atPrevious: Spot = { gap, x: previousEdge, y: previous.top, height: previous.height };
+    if (gap === 0) return atNext;
+    if (gap === boxes.length) return atPrevious;
+    return edgeDistance(clientX, clientY, next, nextEdge) <= edgeDistance(clientX, clientY, previous, previousEdge)
+        ? atNext
+        : atPrevious;
 }
 
 /** L'ordre que devient `ids` quand `draggedId` atterrit dans l'interstice `gap`. */
@@ -58,6 +187,17 @@ function reordered(ids: RowId[], draggedId: RowId, gap: number): RowId[] | null 
  * verticale ; ce geste avait été écrit trois fois avant d'être rassemblé ici.
  * Chaque feature garde en propre ce qui la distingue vraiment — l'apparence de
  * ses lignes, de sa poignée et de sa barre d'insertion — et rien d'autre.
+ *
+ * ## Une colonne, ou une grille
+ *
+ * Le portefeuille des projets est une grille à plusieurs colonnes : deux cartes
+ * côte à côte y partagent le même haut et le même bas, et un interstice choisi
+ * sur la seule ordonnée n'y voudrait rien dire. `layout: 'grid'` change donc les
+ * candidats — les bords **verticaux** plutôt qu'horizontaux — et la barre, qui
+ * se dresse dans la gouttière, haute comme la rangée visée.
+ *
+ * Ce qui ne change pas : l'ordre résultant. Une grille reste une suite, et
+ * {@link reordered} n'a jamais besoin de savoir combien de colonnes elle a.
  *
  * ## Pointer Events, jamais l'API `draggable` du HTML5
  *
@@ -90,12 +230,13 @@ export function useDragReorder<L extends HTMLElement = HTMLElement, B extends HT
     ids,
     rowSelector,
     onReorder,
-    onDragStateChange
+    onDragStateChange,
+    layout = 'rows'
 }: DragReorderOptions): DragReorder<L, B> {
     const listRef = useRef<L | null>(null);
     const barRef = useRef<B | null>(null);
-    /** L'interstice que marque la barre, ou `null` tant qu'elle est cachée. */
-    const gapRef = useRef<number | null>(null);
+    /** Où se tient la barre, ou `null` tant qu'elle est cachée. */
+    const spotRef = useRef<Spot | null>(null);
     /** La pression suivie, tant que le seuil n'est pas franchi. */
     const pressRef = useRef<{ id: RowId; pointerId: number; x: number; y: number } | null>(null);
     /** La ligne réellement glissée (seuil franchi). La logique lit celle-ci. */
@@ -116,6 +257,8 @@ export function useDragReorder<L extends HTMLElement = HTMLElement, B extends HT
     onReorderRef.current = onReorder;
     const onDragStateChangeRef = useRef(onDragStateChange);
     onDragStateChangeRef.current = onDragStateChange;
+    const layoutRef = useRef(layout);
+    layoutRef.current = layout;
 
     const rowEls = useCallback(
         () => Array.from(listRef.current?.querySelectorAll<HTMLElement>(rowSelectorRef.current) ?? []),
@@ -123,65 +266,50 @@ export function useDragReorder<L extends HTMLElement = HTMLElement, B extends HT
     );
 
     const hideBar = useCallback(() => {
-        gapRef.current = null;
+        spotRef.current = null;
         if (barRef.current) barRef.current.style.opacity = '0';
     }, []);
 
-    /** Dresse la barre dans l'interstice `index` (0 = au-dessus de la première). */
+    /** Dresse la barre dans l'interstice le plus proche du pointeur. */
     const showBar = useCallback(
-        (index: number) => {
+        (clientX: number, clientY: number) => {
             const list = listRef.current;
             const bar = barRef.current;
-            if (!list || !bar || gapRef.current === index) return;
-            const rows = rowEls();
-            if (rows.length === 0) return;
+            if (!list || !bar) return;
+            const boxes = rowEls().map((el) => el.getBoundingClientRect());
+            if (boxes.length === 0) return;
 
-            // Le vrai milieu de l'interstice, pris sur les lignes qui le bordent :
-            // la barre est centrée par construction, et non par un décalage
-            // correctif qu'il faudrait ajuster à chaque changement d'écart.
-            const boxes = rows.map((el) => el.getBoundingClientRect());
-            let centre: number;
-            if (index <= 0) centre = boxes[0].top - halfGap(list);
-            else if (index >= boxes.length) centre = boxes[boxes.length - 1].bottom + halfGap(list);
-            else centre = (boxes[index - 1].bottom + boxes[index].top) / 2;
+            const spot =
+                layoutRef.current === 'grid' ? gridSpot(list, boxes, clientX, clientY) : rowsSpot(list, boxes, clientY);
 
-            gapRef.current = index;
+            // Rien à réécrire tant que la barre est déjà là : sur une grille, le
+            // même numéro d'interstice peut désigner deux endroits (fin d'une
+            // rangée, début de la suivante), d'où la comparaison de la position
+            // entière et non du seul numéro.
+            const held = spotRef.current;
+            if (held && held.gap === spot.gap && held.x === spot.x && held.y === spot.y) return;
+            spotRef.current = spot;
+
             const listBox = list.getBoundingClientRect();
-            // Moins la moitié de son épaisseur, lue dans le DOM pour que celle-ci
-            // ne soit définie que dans la feuille de style de la feature.
-            bar.style.transform = `translateY(${centre - listBox.top - bar.offsetHeight / 2}px)`;
+            // La barre garde de la feuille de style de la feature ce qui lui
+            // appartient : son épaisseur en liste, sa largeur en grille. On ne
+            // pose ici que ce que la disposition impose.
+            if (spot.height !== null) bar.style.height = `${spot.height}px`;
+            // Aux deux extrémités d'une rangée, la gouttière n'existe pas : la
+            // barre se retrouverait à cheval sur le bord de la liste, donc
+            // rognée par la boîte défilante. On la ramène juste à l'intérieur.
+            const half = bar.offsetWidth / 2;
+            const centre = spot.x === null ? 0 : Math.min(Math.max(spot.x - listBox.left, half), listBox.width - half);
+            const dx = spot.x === null ? 0 : centre - half;
+            const dy = spot.y - listBox.top - (spot.height === null ? bar.offsetHeight / 2 : 0);
+            bar.style.transform = `translate(${dx}px, ${dy}px)`;
             bar.style.opacity = '1';
-        },
-        [rowEls]
-    );
-
-    /** L'interstice le plus proche : chaque bord de ligne est un candidat. */
-    const gapAt = useCallback(
-        (clientY: number): number => {
-            let best = 0;
-            let bestDistance = Infinity;
-            for (const [i, el] of rowEls().entries()) {
-                const box = el.getBoundingClientRect();
-                for (const [y, gap] of [
-                    [box.top, i],
-                    [box.bottom, i + 1]
-                ]) {
-                    const distance = Math.abs(clientY - y);
-                    if (distance < bestDistance) {
-                        bestDistance = distance;
-                        best = gap;
-                    }
-                }
-            }
-            return best;
         },
         [rowEls]
     );
 
     const showBarRef = useRef(showBar);
     showBarRef.current = showBar;
-    const gapAtRef = useRef(gapAt);
-    gapAtRef.current = gapAt;
 
     // Les cinq écouteurs, créés une fois pour toutes (voir la note sur les
     // `ref` plus haut). `handlers.current` casse la circularité : `endDrag` doit
@@ -231,13 +359,13 @@ export function useDragReorder<L extends HTMLElement = HTMLElement, B extends HT
                     document.body.style.cursor = 'grabbing';
                     document.body.style.userSelect = 'none';
                 }
-                showBarRef.current(gapAtRef.current(e.clientY));
+                showBarRef.current(e.clientX, e.clientY);
             },
             up: (e) => {
                 const press = pressRef.current;
                 if (!press || e.pointerId !== press.pointerId) return;
                 const dragged = draggedRef.current;
-                const gap = gapRef.current;
+                const gap = spotRef.current?.gap ?? null;
                 endDragRef.current();
                 if (dragged !== null && gap !== null) {
                     const next = reordered(idsRef.current, dragged, gap);

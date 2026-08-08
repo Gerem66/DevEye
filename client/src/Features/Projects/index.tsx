@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { Project, ProjectSummary } from 'deveye-types';
 import { Button } from '@/Components';
 import { ws } from '@/api/ws';
+import { useDragReorder } from '@/dragReorder';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
 import { useLiveSegment } from '@/live/useLiveSegment';
@@ -43,6 +44,9 @@ export function FeatureProjects({ user, workspace }: FeatureProps) {
 
     const version = useResourceVersion('project.list');
     const reloadRef = useRef<Promise<void> | null>(null);
+    /** Un glisser-déposer est en cours : la liste ne doit pas bouger dessous. */
+    const dragging = useRef(false);
+    const pendingReload = useRef(false);
 
     // Présence : « qui regarde quel projet ». Un seul déclarant par niveau —
     // ce composant possède `l1`, et rien d'autre dans la feature n'y touche.
@@ -68,12 +72,64 @@ export function FeatureProjects({ user, workspace }: FeatureProps) {
         }
     }, [showArchived]);
 
+    /**
+     * Repartir de rien — mais seulement quand l'écran change vraiment.
+     *
+     * Vider la liste dans l'effet de relecture ferait clignoter tout le
+     * portefeuille à la moindre invalidation, y compris celle que provoque notre
+     * propre glisser-déposer : les cartes disparaîtraient sous le pointeur pour
+     * revenir juste après. Changer d'espace ou passer aux archives, en revanche,
+     * montre autre chose : là, « Chargement… » est la bonne réponse.
+     */
     useEffect(() => {
         setSummaries(null);
+    }, [workspace.id, showArchived]);
+
+    useEffect(() => {
+        // Une relecture réordonne la liste sous le pointeur : jamais pendant un
+        // glissé. Elle est retenue et rejouée au relâchement.
+        if (dragging.current) {
+            pendingReload.current = true;
+            return;
+        }
         void reload();
         // `version` rejoue l'effet quand la ressource est invalidée — par notre
         // propre écriture, ou par `live.changed` venu d'un autre membre.
     }, [reload, workspace.id, version]);
+
+    const onDragStateChange = useCallback(
+        (active: boolean) => {
+            dragging.current = active;
+            if (!active && pendingReload.current) {
+                pendingReload.current = false;
+                void reload();
+            }
+        },
+        [reload]
+    );
+
+    /**
+     * Ranger le portefeuille.
+     *
+     * L'ordre est posé localement d'abord : la carte reste là où on l'a lâchée,
+     * sans attendre l'aller-retour. `project.reorder` ne touche jamais au corps
+     * chiffré — un portefeuille où dorment des projets confidentiels se range
+     * donc sans rien déverrouiller.
+     */
+    const reorder = useCallback(
+        (ids: number[]) => {
+            setSummaries((prev) => {
+                if (!prev) return prev;
+                const byId = new Map(prev.map((s) => [s.project.id, s]));
+                return ids.flatMap((id) => byId.get(id) ?? []);
+            });
+            ws.send('project.reorder', { projectIds: ids }).catch(() => {
+                setError('Réorganisation impossible.');
+                void reload();
+            });
+        },
+        [reload]
+    );
 
     const openCreate = () => {
         setEditing(null);
@@ -214,6 +270,24 @@ export function FeatureProjects({ user, workspace }: FeatureProps) {
         };
     }, [summaries]);
 
+    /**
+     * Ranger n'a de sens que sur le portefeuille vivant : les archives se lisent
+     * dans l'ordre où l'on y a rangé les projets (`archived_at DESC`), un ordre
+     * manuel n'y survivrait pas à la restauration, qui les renvoie en fin de
+     * liste.
+     */
+    const canReorder = canWrite && !showArchived && !showMine;
+
+    // La grille compte plusieurs colonnes : le geste vise les gouttières
+    // verticales, et non les interstices horizontaux des listes en colonne.
+    const drag = useDragReorder<HTMLUListElement, HTMLLIElement>({
+        ids: summaries?.map((s) => s.project.id) ?? [],
+        rowSelector: '[data-project-card]',
+        layout: 'grid',
+        onReorder: (ids) => reorder(ids as number[]),
+        onDragStateChange
+    });
+
     // Vue détail : le portefeuille cède la place, mais reste monté derrière —
     // le retour est alors instantané et sans re-sollicitation.
     if (opened) {
@@ -324,7 +398,7 @@ export function FeatureProjects({ user, workspace }: FeatureProps) {
             )}
 
             {!showMine && summaries && summaries.length > 0 && (
-                <ul className={styles.grid}>
+                <ul ref={drag.listRef} className={styles.grid}>
                     {summaries.map((summary) => (
                         <ProjectCard
                             key={summary.project.id}
@@ -332,10 +406,18 @@ export function FeatureProjects({ user, workspace }: FeatureProps) {
                             canWrite={canWrite}
                             archived={showArchived}
                             outline={outlineFor(`project:${summary.project.id}`)}
+                            dragging={drag.draggingId === summary.project.id}
                             onOpen={() => void openProject(summary)}
                             onArchive={() => void setArchived(summary, !showArchived)}
+                            onDragPointerDown={
+                                canReorder ? (e) => drag.onGripPointerDown(e, summary.project.id) : undefined
+                            }
                         />
                     ))}
+                    {/* Un `<li>` et non un `<span>` : dans une `<ul>`, seul un
+                        `<li>` est un enfant valide. Sorti du flux par
+                        `position: absolute`, il n'occupe aucune cellule. */}
+                    <li ref={drag.barRef} className={styles.dropBar} aria-hidden='true' />
                 </ul>
             )}
 
@@ -359,8 +441,12 @@ interface ProjectCardProps {
     /** La carte est rendue depuis la vue des archives : l'action est un retour. */
     archived: boolean;
     outline: ReturnType<ReturnType<typeof useLiveOutlines>>;
+    /** Cette carte est celle qu'on déplace : elle s'estompe sur place. */
+    dragging: boolean;
     onOpen: () => void;
     onArchive: () => void;
+    /** Absent = pas de poignée : ranger est une écriture, et non dans les archives. */
+    onDragPointerDown?: (e: ReactPointerEvent) => void;
 }
 
 /**
@@ -372,13 +458,36 @@ interface ProjectCardProps {
  * pas. En ligne, l'avancement peut de surcroît occuper toute la place restante
  * plutôt qu'un filet de 300 px.
  */
-function ProjectCard({ summary, canWrite, archived, outline, onOpen, onArchive }: ProjectCardProps) {
+function ProjectCard({
+    summary,
+    canWrite,
+    archived,
+    outline,
+    dragging,
+    onOpen,
+    onArchive,
+    onDragPointerDown
+}: ProjectCardProps) {
     const { project, masked, cardTotal, cardDone, cardOverdue, nextDueDate, unread } = summary;
     const progress = cardTotal === 0 ? 0 : Math.round((cardDone / cardTotal) * 100);
     const due = formatDate(nextDueDate);
 
     return (
-        <li className={styles.card} {...outline}>
+        <li className={`${styles.card} ${dragging ? styles.cardDragging : ''}`} data-project-card='' {...outline}>
+            {/* La poignée est sœur du corps cliquable, et non son enfant : un
+                clic parti d'ici ne peut donc pas remonter jusqu'à « ouvrir le
+                projet », même sans le neutraliser. */}
+            {onDragPointerDown && (
+                <button
+                    type='button'
+                    className={styles.grip}
+                    aria-label={`Réordonner ${masked ? 'ce projet' : project.title || 'ce projet'}`}
+                    onPointerDown={onDragPointerDown}
+                >
+                    <span className='icon icon-drag' />
+                </button>
+            )}
+
             {/* `div role="button"` et non `<button>` : la carte contient un
                 titre, un paragraphe et une liste d'étiquettes, c'est-à-dire du
                 contenu de flux — interdit dans un bouton, dont le modèle de
