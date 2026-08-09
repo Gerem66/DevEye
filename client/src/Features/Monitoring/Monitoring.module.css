@@ -1629,6 +1629,14 @@
     pointer-events: none;
 }
 
+/* An instant that also carries a process list. Marks are metric instants, so
+   with `processCapture: 'off'` every tick is navigable but none is inspectable —
+   this keeps the difference readable instead of implicit. Declared before
+   .snapshotMarkPinned so pinning still wins the colour. */
+.snapshotMarkProc {
+    opacity: 0.75;
+}
+
 /* Continuous "data available" run, drawn instead of individual ticks once the
    window holds more marks than are legible (see MAX_INDIVIDUAL_MARKS). */
 .snapshotBand {

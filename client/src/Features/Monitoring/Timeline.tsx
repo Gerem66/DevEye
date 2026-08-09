@@ -8,10 +8,16 @@ interface TimelineProps {
     windowEnd: number;
     onlineAtStart: boolean;
     events: PresenceEvent[];
-    /** Timestamps of process snapshots in the window (clickable tick marks). */
+    /** Timestamps of the stored instants in the window (clickable tick marks). */
     snapshotTimes: number[];
     /** Subset of `snapshotTimes` that are pinned (kept past retention). */
     pinnedTimes: number[];
+    /**
+     * Subset of `snapshotTimes` whose process list was recorded. Empty when the
+     * device captures no processes — the marks and the stepping stay usable, only
+     * the process detail is absent.
+     */
+    processTimes: number[];
     /** Current zone selection, or null when not in range mode. */
     selection: { start: number; end: number } | null;
     /** Current single-point selection, or null when not in snapshot mode. */
@@ -156,6 +162,7 @@ export function Timeline({
     events,
     snapshotTimes,
     pinnedTimes,
+    processTimes,
     selection,
     pointAt,
     onSelectRange,
@@ -241,6 +248,7 @@ export function Timeline({
     const selCount = sel ? countInRange(sortedSnaps, sel.start, sel.end) : 0;
 
     const pinnedSet = useMemo(() => new Set(pinnedTimes), [pinnedTimes]);
+    const procSet = useMemo(() => new Set(processTimes), [processTimes]);
     // Dense windows collapse to bands; a run breaks when a gap exceeds twice the
     // median spacing, so a real agent outage still reads as a hole.
     const dense = sortedSnaps.length > MAX_INDIVIDUAL_MARKS;
@@ -372,8 +380,11 @@ export function Timeline({
                     : snapshotTimes.map((t) => (
                           <div
                               key={`m${t}`}
-                              className={`${styles.snapshotMark} ${pinnedSet.has(t) ? styles.snapshotMarkPinned : ''}`}
+                              className={`${styles.snapshotMark} ${pinnedSet.has(t) ? styles.snapshotMarkPinned : ''} ${
+                                  procSet.has(t) ? styles.snapshotMarkProc : ''
+                              }`}
                               style={{ left: `${pctOf(t)}%` }}
+                              title={procSet.has(t) ? undefined : 'Instant sans liste de processus'}
                           />
                       ))}
                 {/* Pinned instants stay individually visible whatever the density:
@@ -429,6 +440,8 @@ export function Timeline({
                             <span className='icon icon-arrow-left' style={{ transform: 'rotate(180deg)' }} />
                         </button>
                     </span>
+                ) : sortedSnaps.length === 0 ? (
+                    <span className={styles.dragHint}>Aucun instant enregistré sur cette fenêtre</span>
                 ) : (
                     <span className={styles.dragHint}>Cliquez un instant · glissez pour une période</span>
                 )}

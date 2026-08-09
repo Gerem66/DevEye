@@ -276,6 +276,10 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     });
     const [snapshotTimes, setSnapshotTimes] = useState<number[]>([]);
     const [pinnedTimes, setPinnedTimes] = useState<number[]>([]);
+    // Subset of `snapshotTimes` whose process list was actually recorded. Marks
+    // are metric instants now, so with `processCapture: 'off'` the timeline still
+    // navigates while this stays empty — and the process-only actions know it.
+    const [procTimes, setProcTimes] = useState<number[]>([]);
     const [points, setPoints] = useState<MetricSeriesPoint[]>([]);
     // Two sources, never merged: `liveProc` is the latest pushed instant,
     // `histProc` the one fetched for a focused past instant/range. Keeping them
@@ -329,6 +333,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         setHistProc(null);
         setSnapshotTimes([]);
         setPinnedTimes([]);
+        setProcTimes([]);
         setStorage(null);
         setPresence({ onlineAtStart: false, events: [] });
     }, [deviceId]);
@@ -382,6 +387,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 if (idRef.current === id) {
                     setSnapshotTimes(res.timestamps);
                     setPinnedTimes(res.pinned);
+                    setProcTimes(res.withProcesses);
                 }
             })
             .catch(() => {});
@@ -452,15 +458,22 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         return off;
     }, [deviceId, liveTail]);
 
-    // What a delete action would remove, per the current focus.
+    // What a delete action would remove, per the current focus. Counted on the
+    // *process* instants only: `metrics.deleteSnapshots` removes process lists and
+    // deliberately leaves the metric rows (the graphs) alone, so an instant with no
+    // recorded process list has nothing to delete and must not offer the action.
+    const procSet = useMemo(() => new Set(procTimes), [procTimes]);
     const deleteTarget = useMemo(() => {
-        if (focus.kind === 'snapshot') return { kind: 'snapshot' as const, from: focus.at, to: focus.at, count: 1 };
+        if (focus.kind === 'snapshot') {
+            if (!procSet.has(focus.at)) return null;
+            return { kind: 'snapshot' as const, from: focus.at, to: focus.at, count: 1 };
+        }
         if (focus.kind === 'range') {
-            const count = snapshotTimes.filter((t) => t >= focus.start && t <= focus.end).length;
+            const count = procTimes.filter((t) => t >= focus.start && t <= focus.end).length;
             return { kind: 'range' as const, from: focus.start, to: focus.end, count };
         }
         return null;
-    }, [focus, snapshotTimes]);
+    }, [focus, procTimes, procSet]);
 
     const pinnedSet = useMemo(() => new Set(pinnedTimes), [pinnedTimes]);
 
@@ -489,6 +502,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 if (idRef.current === id) {
                     setSnapshotTimes(res.timestamps);
                     setPinnedTimes(res.pinned);
+                    setProcTimes(res.withProcesses);
                 }
             })
             .catch(() => {});
@@ -1012,6 +1026,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 events={presence.events}
                 snapshotTimes={snapshotTimes}
                 pinnedTimes={pinnedTimes}
+                processTimes={procTimes}
                 selection={focus.kind === 'range' ? { start: focus.start, end: focus.end } : null}
                 pointAt={focus.kind === 'snapshot' ? focus.at : null}
                 onSelectRange={(sel) => setFocus({ kind: 'range', ...sel })}

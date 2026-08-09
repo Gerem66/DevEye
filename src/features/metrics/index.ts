@@ -149,8 +149,25 @@ export const metricsSnapshotsFeature: FeatureDefinition<
     ...metricsSnapshots,
     handler: async (ctx, input) => {
         await authorizeRead(ctx, input.deviceId);
-        const { timestamps, pinned } = await ctx.db.processSamples.snapshotTimes(input.deviceId, input.from, input.to);
-        return { deviceId: input.deviceId, timestamps, pinned };
+        // The marks are the *metric* instants: process capture is optional, and
+        // keying them on the process blob left a `processCapture: 'off'` device
+        // with an empty timeline — no marks, and the ‹ › / arrow-key stepping
+        // permanently disabled. The process samples only qualify which instants
+        // carry a list, and still supply the pinned set they pin in lockstep.
+        const [instants, samples] = await Promise.all([
+            ctx.db.metrics.instantTimes(input.deviceId, input.from, input.to),
+            ctx.db.processSamples.snapshotTimes(input.deviceId, input.from, input.to)
+        ]);
+        // Pins are applied to both tables together (`metrics.setSnapshotsPinned`),
+        // so either side is authoritative; union them so a row that only got one
+        // half of a past pin still reads as pinned.
+        const pinned = [...new Set([...instants.pinned, ...samples.pinned])].sort((a, b) => a - b);
+        return {
+            deviceId: input.deviceId,
+            timestamps: instants.timestamps,
+            pinned,
+            withProcesses: samples.timestamps
+        };
     }
 });
 

@@ -17,6 +17,14 @@ export interface MetricsRepo {
      * the client's timezone (`tzOffsetMinutes` = `Date.getTimezoneOffset()`).
      */
     availableDays(deviceId: string, tzOffsetMinutes: number): Promise<string[]>;
+    /**
+     * Timestamps of the stored instants within [from, to], ascending, split into
+     * all vs the pinned subset — the timeline's marks. Keyed on the metric rows
+     * (one per collection tick) rather than on the process samples, which are
+     * optional: a device with `processCapture: 'off'` still has instants to
+     * navigate.
+     */
+    instantTimes(deviceId: string, from: number, to: number): Promise<{ timestamps: number[]; pinned: number[] }>;
     /** Set the pinned flag on every metric row in [from, to] for a device. */
     setPinnedRange(deviceId: string, from: number, to: number, pinned: boolean): Promise<void>;
     /**
@@ -181,6 +189,25 @@ export function metricsRepo(pool: Q): MetricsRepo {
             // Day index → 'YYYY-MM-DD': index*dayMs is local midnight expressed as
             // a UTC instant, so formatting it as UTC yields the local calendar day.
             return r.rows.map((row) => new Date(Number(row.d) * dayMs).toISOString().slice(0, 10));
+        },
+        async instantTimes(deviceId, from, to) {
+            // Same shape and bound as `processSamples.snapshotTimes`, so the two
+            // sources merge without either side having to handle a different cap.
+            const r = await pool.query<{ ts: number; pinned: number }>(
+                `SELECT ts, pinned FROM device_metrics
+                 WHERE device_id = ? AND ts BETWEEN ? AND ?
+                 ORDER BY ts ASC
+                 LIMIT 5000`,
+                [deviceId, from, to]
+            );
+            const timestamps: number[] = [];
+            const pinned: number[] = [];
+            for (const row of r.rows) {
+                const ts = Number(row.ts);
+                timestamps.push(ts);
+                if (Number(row.pinned) === 1) pinned.push(ts);
+            }
+            return { timestamps, pinned };
         },
         async setPinnedRange(deviceId, from, to, pinned) {
             await pool.query(
