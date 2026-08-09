@@ -184,6 +184,27 @@ export function CardDialog({
     const patch = (next: Partial<ProjectCardDraft>) => setDraft((d) => ({ ...d, ...next }));
 
     /**
+     * La liste de sous-tâches suit la carte, y compris quand elle bouge ailleurs.
+     *
+     * Elle est la seule à le faire, et c'est cohérent avec le reste : les autres
+     * champs attendent « Enregistrer », donc les rafraîchir effacerait une saisie
+     * en cours ; la liste, elle, part à chaque geste — il n'y a jamais rien d'elle
+     * en attente, et ce qu'affiche le serveur fait autorité.
+     *
+     * La comparaison évite le rendu inutile qu'un simple `setDraft` produirait à
+     * chaque re-sollicitation, et surtout la seconde d'aller-retour pendant
+     * laquelle notre propre coche, déjà posée localement, reviendrait en arrière.
+     */
+    const savedChecklist = card?.checklist ?? null;
+    const savedKey = savedChecklist === null ? null : JSON.stringify(savedChecklist);
+    useEffect(() => {
+        if (savedChecklist === null) return;
+        setDraft((d) => (JSON.stringify(d.checklist) === savedKey ? d : { ...d, checklist: savedChecklist }));
+        // `savedKey` seul : il change exactement quand la liste change, là où
+        // l'objet, lui, est neuf à chaque re-sollicitation.
+    }, [savedKey]);
+
+    /**
      * Pose la nouvelle liste — et l'envoie aussitôt, sur une carte existante.
      *
      * Le brouillon local est mis à jour dans tous les cas : c'est lui qu'on

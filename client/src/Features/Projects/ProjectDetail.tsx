@@ -126,6 +126,17 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
                 setMilestones(plan.milestones);
                 setDeps(plan.deps);
                 setArchivedCards(archived.cards);
+                // La popup détient sa propre copie de la carte, et c'est elle
+                // qu'elle affiche : sans cette remise à jour, une sous-tâche
+                // cochée par quelqu'un d'autre arrivait bien dans le tableau
+                // derrière, mais jamais dans la carte ouverte devant.
+                setCardDialog((prev) => {
+                    if (!prev?.card) return prev;
+                    const fresh = board.cards.find((c) => c.id === prev.card?.id);
+                    // Absente = archivée entre-temps : on garde ce qu'on a
+                    // plutôt que de vider la popup sous les yeux de son lecteur.
+                    return fresh ? { ...prev, card: fresh } : prev;
+                });
                 setError(null);
             } catch (e) {
                 setError(humanizeError(e, 'Impossible de charger le tableau.'));
