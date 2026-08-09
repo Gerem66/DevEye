@@ -140,22 +140,94 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
         }
     };
 
-    const submitCard = async (draft: ProjectCardDraft) => {
+    /**
+     * Enregistre la tâche : son corps, puis ses rattachements.
+     *
+     * Ni le jalon ni les dépendances ne tiennent dans le brouillon chiffré — ce
+     * sont des commandes à part, qui exigent un identifiant de carte. La popup
+     * ne les a donc pas envoyés de son côté ; elle rend l'état voulu, et c'est
+     * ici qu'on le rapproche de l'état connu pour n'émettre que la différence.
+     * Rien ne part tant qu'on n'a pas cliqué « Enregistrer ».
+     */
+    const submitCard = async (draft: ProjectCardDraft, links: { milestoneId: number | null; blockedBy: number[] }) => {
         if (!cardDialog) return;
         setBusy(true);
         setDialogError(null);
         try {
-            await withSecrecy(() =>
-                cardDialog.card
-                    ? ws.send('project.cardUpdate', { cardId: cardDialog.card.id, card: draft })
-                    : ws.send('project.cardAdd', { projectId: project.id, columnId: cardDialog.columnId, card: draft })
-            );
+            await withSecrecy(async () => {
+                const existing = cardDialog.card;
+                const cardId = existing
+                    ? (await ws.send('project.cardUpdate', { cardId: existing.id, card: draft })).card.id
+                    : (
+                          await ws.send('project.cardAdd', {
+                              projectId: project.id,
+                              columnId: cardDialog.columnId,
+                              card: draft
+                          })
+                      ).card.id;
+
+                if (links.milestoneId !== (existing?.milestoneId ?? null)) {
+                    await ws.send('project.cardSetMilestone', { cardId, milestoneId: links.milestoneId });
+                }
+
+                const before = existing
+                    ? deps.filter((d) => d.cardId === existing.id).map((d) => d.blockedByCardId)
+                    : [];
+                // En série et non en parallèle : le serveur refuse les cycles en
+                // lisant le graphe, une rafale simultanée le ferait juger sur un
+                // état incomplet.
+                for (const id of links.blockedBy.filter((id) => !before.includes(id))) {
+                    await ws.send('project.depAdd', { cardId, blockedByCardId: id });
+                }
+                for (const id of before.filter((id) => !links.blockedBy.includes(id))) {
+                    await ws.send('project.depRemove', { cardId, blockedByCardId: id });
+                }
+            });
             invalidate('project.board', 'project.list');
             setCardDialog(null);
         } catch (e) {
             setDialogError(humanizeError(e, 'L’enregistrement a échoué.'));
         } finally {
             setBusy(false);
+        }
+    };
+
+    /**
+     * Écrit une carte sur place, à partir de ce qu'elle est déjà.
+     *
+     * `cardUpdate` ne connaît pas la modification partielle : il prend un
+     * brouillon complet et réécrit le corps chiffré. Les retouches ponctuelles —
+     * un glissé sur la frise, une case cochée — repartent donc de la carte
+     * enregistrée, à laquelle elles ne changent que leur champ. C'est ce qui
+     * garantit qu'elles n'emportent pas au passage une saisie en cours dans la
+     * popup, restée volontairement en attente d'« Enregistrer ».
+     *
+     * Optimiste, comme le déplacement d'une carte du kanban : l'état local prend
+     * la valeur tout de suite, sinon elle reviendrait en arrière le temps d'un
+     * battement.
+     */
+    const patchCard = async (card: ProjectCard, change: Partial<ProjectCard>, failure: string) => {
+        const next = { ...card, ...change };
+        const draft: ProjectCardDraft = {
+            title: next.title,
+            description: next.description,
+            checklist: next.checklist,
+            priority: next.priority,
+            assigneeUserId: next.assigneeUserId,
+            startDate: next.startDate,
+            dueDate: next.dueDate,
+            estimateMinutes: next.estimateMinutes
+        };
+        setCards((prev) => prev.map((c) => (c.id === card.id ? next : c)));
+        // La popup détient sa propre copie : sans ça, le prochain geste repartirait
+        // de la version d'avant et défferait celui-ci.
+        setCardDialog((prev) => (prev?.card?.id === card.id ? { ...prev, card: next } : prev));
+        try {
+            await withSecrecy(() => ws.send('project.cardUpdate', { cardId: card.id, card: draft }));
+            invalidate('project.board', 'project.list');
+        } catch (e) {
+            setError(humanizeError(e, failure));
+            void reload();
         }
     };
 
@@ -211,41 +283,6 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
             setDialogError(humanizeError(e, 'Le retrait a échoué.'));
         } finally {
             setBusy(false);
-        }
-    };
-
-    const addDep = async (blockedByCardId: number) => {
-        if (!cardDialog?.card) return;
-        try {
-            await ws.send('project.depAdd', { cardId: cardDialog.card.id, blockedByCardId });
-            invalidate('project.board');
-        } catch (e) {
-            // Le serveur refuse les cycles avec un message explicite : on le
-            // montre tel quel plutôt qu'un « échec » qui n'apprendrait rien.
-            setDialogError(humanizeError(e, 'La dépendance n’a pas pu être ajoutée.'));
-        }
-    };
-
-    const removeDep = async (blockedByCardId: number) => {
-        if (!cardDialog?.card) return;
-        try {
-            await ws.send('project.depRemove', { cardId: cardDialog.card.id, blockedByCardId });
-            invalidate('project.board');
-        } catch (e) {
-            setDialogError(humanizeError(e, 'Le retrait a échoué.'));
-        }
-    };
-
-    const setCardMilestone = async (milestoneId: number | null) => {
-        if (!cardDialog?.card) return;
-        try {
-            await ws.send('project.cardSetMilestone', { cardId: cardDialog.card.id, milestoneId });
-            // La carte affichée porte le jalon : sans cette mise à jour locale,
-            // le sélecteur reviendrait à l'ancienne valeur jusqu'au re-fetch.
-            setCardDialog({ ...cardDialog, card: { ...cardDialog.card, milestoneId } });
-            invalidate('project.board');
-        } catch (e) {
-            setDialogError(humanizeError(e, 'Le rattachement a échoué.'));
         }
     };
 
@@ -416,6 +453,9 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
                         setDialogError(null);
                         setCardDialog({ card, columnId: card.columnId });
                     }}
+                    onCardDates={(card, startDate, dueDate) =>
+                        void patchCard(card, { startDate, dueDate }, 'Le déplacement a échoué.')
+                    }
                     onMilestoneCreate={() => {
                         setDialogError(null);
                         setMilestoneDialog({ milestone: null });
@@ -474,11 +514,11 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
                 busy={busy}
                 error={dialogError}
                 onClose={() => setCardDialog(null)}
-                onSubmit={(draft) => void submitCard(draft)}
+                onSubmit={(draft, links) => void submitCard(draft, links)}
+                onChecklistChange={(checklist) => {
+                    if (cardDialog?.card) void patchCard(cardDialog.card, { checklist }, 'L’enregistrement a échoué.');
+                }}
                 onArchive={cardDialog?.card ? () => void archiveCard() : undefined}
-                onDepAdd={(blockedByCardId) => void addDep(blockedByCardId)}
-                onDepRemove={(blockedByCardId) => void removeDep(blockedByCardId)}
-                onSetMilestone={(milestoneId) => void setCardMilestone(milestoneId)}
             />
 
             <ColumnDialog

@@ -43,7 +43,6 @@ export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
 
     const version = useResourceVersion('project.messages');
     const bottomRef = useRef<HTMLDivElement | null>(null);
-    const composerRef = useRef<HTMLTextAreaElement | null>(null);
     const typers = useTypers();
     const { onInput, stop } = useTypingSignal();
 
@@ -114,35 +113,18 @@ export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
         .filter((n): n is string => Boolean(n));
     const uniqueTyping = [...new Set(typingNames)];
 
-    /**
-     * La hauteur du composeur suit son contenu.
-     *
-     * Mesurée et non calculée : le nombre de lignes *visuelles* dépend du
-     * retour à la ligne automatique, donc de la largeur du champ et de la
-     * police — compter les `\n` donnerait un champ trop court dès qu'une phrase
-     * dépasse la ligne. Remettre `height: auto` avant de lire `scrollHeight`
-     * est ce qui permet au champ de **rétrécir** aussi : sans ça, `scrollHeight`
-     * resterait bloqué sur la plus grande taille jamais atteinte.
-     *
-     * Le plafond vit dans le CSS (`max-height`), pas ici : passé cette limite,
-     * `scrollHeight` continue de croître mais la boîte, elle, défile.
-     *
-     * Les bordures se rajoutent à la mesure : `scrollHeight` ne compte que le
-     * contenu et ses marges intérieures, alors que `box-sizing: border-box` les
-     * fait tenir *dans* la hauteur qu'on pose. Sans ce rattrapage, le champ est
-     * deux pixels trop court pour sa propre ligne de texte, et la barre de
-     * défilement s'installe à demeure — sur un composeur vide.
-     */
-    useEffect(() => {
-        const el = composerRef.current;
-        if (!el) return;
-        el.style.height = 'auto';
-        const borders = el.offsetHeight - el.clientHeight;
-        el.style.height = `${el.scrollHeight + borders}px`;
-    }, [text]);
-
     return (
         <div className={styles.chat}>
+            {/* L'intitulé est **dans** l'encart, comme celui des sous-tâches en
+                face : deux panneaux côte à côte dont l'un porte son titre au
+                dessus et l'autre dedans ne se lisent pas comme une paire. */}
+            <div className={styles.chatHead}>
+                <span className={styles.label}>Discussion</span>
+                {messages !== null && messages.length > 0 && (
+                    <span className={styles.checkCount}>{messages.length}</span>
+                )}
+            </div>
+
             {error && <p className={styles.error}>{error}</p>}
 
             <div className={styles.chatScroll}>
@@ -188,28 +170,34 @@ export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
 
             {canWrite && (
                 <div className={styles.composer}>
-                    <textarea
-                        ref={composerRef}
-                        className={styles.textarea}
-                        value={text}
-                        rows={1}
-                        maxLength={PROJECT_MESSAGE_MAX_LENGTH}
-                        placeholder='Écrire un message… (@ pour mentionner)'
-                        onChange={(e) => {
-                            setText(e.target.value);
-                            onInput();
-                        }}
-                        onBlur={stop}
-                        onKeyDown={(e) => {
-                            // Entrée envoie, Maj+Entrée passe à la ligne. Le
-                            // `onSubmit` du Dialog ne s'applique pas aux
-                            // textarea, on câble donc l'envoi ici.
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault();
-                                void send();
-                            }
-                        }}
-                    />
+                    {/* Le champ grandit avec son texte **par le CSS seul** : ce
+                        conteneur superpose la saisie et une copie invisible du
+                        même texte, et c'est la copie qui donne la hauteur. Voir
+                        `.grow` — l'ancienne mesure en JavaScript arrondissait
+                        au pixel et laissait une barre de défilement à demeure. */}
+                    <div className={styles.grow} data-value={text}>
+                        <textarea
+                            className={styles.textarea}
+                            value={text}
+                            rows={1}
+                            maxLength={PROJECT_MESSAGE_MAX_LENGTH}
+                            placeholder='Écrire un message… (@ pour mentionner)'
+                            onChange={(e) => {
+                                setText(e.target.value);
+                                onInput();
+                            }}
+                            onBlur={stop}
+                            onKeyDown={(e) => {
+                                // Entrée envoie, Maj+Entrée passe à la ligne. Le
+                                // `onSubmit` du Dialog ne s'applique pas aux
+                                // textarea, on câble donc l'envoi ici.
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    void send();
+                                }
+                            }}
+                        />
+                    </div>
                     <Button onClick={() => void send()} disabled={busy || !text.trim()}>
                         Envoyer
                     </Button>

@@ -417,15 +417,22 @@ function CardBody({ card, members, dragging, onOpen }: CardBodyProps) {
                 {card.unread > 0 && <span className={styles.unread}>{card.unread}</span>}
             </div>
 
+            {/* Le début de la description : de quoi reconnaître une tâche sans
+                l'ouvrir. Bornée à trois lignes par le CSS — au-delà, c'est un
+                cahier des charges, et la colonne n'en montrerait plus qu'une. */}
+            {card.description && <p className={styles.card2Desc}>{card.description}</p>}
+
             <div className={styles.card2Meta}>
                 {card.checklist.length > 0 && (
-                    <span>
-                        <span className='icon icon-square-check' /> {done}/{card.checklist.length}
+                    <span className={styles.card2Chip}>
+                        <span className={`icon icon-square-check ${styles.chipIcon}`} />
+                        {done}/{card.checklist.length}
                     </span>
                 )}
                 {card.messageCount > 0 && (
-                    <span>
-                        <span className='icon icon-notes' /> {card.messageCount}
+                    <span className={styles.card2Chip}>
+                        <span className={`icon icon-notes ${styles.chipIcon}`} />
+                        {card.messageCount}
                     </span>
                 )}
                 {due && <span className={overdue ? styles.overdue : undefined}>{due}</span>}
