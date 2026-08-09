@@ -120,33 +120,44 @@ async function presentCount(distDir: string): Promise<number> {
  *    served agents but the operator sees this deploy didn't get its version);
  *  - nothing to serve at all (first deploy + a failed build) → `error`.
  * Per-target download errors ride along in the `error` field regardless of state.
+ *
+ * `note` qualifies *why* we're settling — it is appended to every detail, so the
+ * "sync is off" case reads as a served-set verdict rather than as a build verdict.
  */
-async function settle(distDir: string, errors: string[], want: string): Promise<void> {
+async function settle(distDir: string, errors: string[], want: string, note?: string): Promise<void> {
     const available = await presentCount(distDir);
     const errorDetail = errors.length ? errors.join(' · ') : null;
+    const qualify = (detail: string): string => (note ? `${detail} · ${note}` : detail);
 
     if (available === 0) {
         status.update(TASK_ID, {
             state: 'error',
             progress: null,
             detail: null,
-            error: errorDetail ?? `Build des agents indisponible (version ${want})`
+            error: errorDetail ?? qualify(`Build des agents indisponible (version ${want})`)
         });
         return;
     }
 
     const version = (await readSyncedManifest(distDir))?.version ?? null;
     if (version === want) {
-        status.update(TASK_ID, { state: 'done', progress: 1, detail: `Version ${version}`, error: errorDetail });
+        status.update(TASK_ID, {
+            state: 'done',
+            progress: 1,
+            detail: qualify(`Version ${version}`),
+            error: errorDetail
+        });
         return;
     }
 
     status.update(TASK_ID, {
         state: 'warning',
         progress: null,
-        detail: version
-            ? `Agents en v${version} — build v${want} indisponible`
-            : `Build v${want} indisponible (${available}/${AGENT_TARGETS.length} binaires)`,
+        detail: qualify(
+            version
+                ? `Agents en v${version} — build v${want} indisponible`
+                : `Build v${want} indisponible (${available}/${AGENT_TARGETS.length} binaires)`
+        ),
         error: errorDetail
     });
 }
@@ -211,7 +222,13 @@ export function startAgentReconcile(distDir: string): void {
     const repo = env.AGENT_REPO || '';
     if (!token || !repo) {
         // No upstream configured (no token, or AGENT_REPO unset): serve disk only.
-        status.update(TASK_ID, { state: 'done', progress: 1, detail: 'Synchronisation désactivée (hors ligne)' });
+        // Still *judge* that disk against this deploy's version instead of
+        // reporting `done` outright — a disabled sync freezes the served set
+        // forever, and announcing it green is how a server ended up handing out
+        // two-versions-old agents (and their dead protocol) without a warning.
+        void settle(distDir, [], appVersion(), 'synchronisation désactivée').catch((e) => {
+            logger.error({ err: (e as Error).message }, 'Agent settle (sync disabled) failed');
+        });
         return;
     }
 

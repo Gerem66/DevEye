@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { get } from '@/api/http';
 import { Dialog } from '@/Components/Dialog';
 import Button from '@/Components/Button';
-import { AGENT_TARGETS, agentTargetsResponseSchema, type AgentOs, type AgentTargetStatus } from 'deveye-types';
+import {
+    AGENT_TARGETS,
+    agentTargetsResponseSchema,
+    compareVersions,
+    type AgentOs,
+    type AgentTargetStatus
+} from 'deveye-types';
 import { APP_VERSION } from '../agentVersion';
 import styles from './Clients.module.css';
 
@@ -53,7 +59,13 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
     const statusById = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses]);
 
     // Make sure, at download time, the agent matches the running DevEye version.
-    const versionMismatch = agentVersion !== null && agentVersion !== APP_VERSION;
+    // The *direction* of the gap decides the message: a served set NEWER than this
+    // interface is a deploy still rolling out (transient, wait it out), whereas a
+    // served set OLDER is a stale `agent/dist` — the boot sync never replaced it,
+    // so the binaries offered here are frozen and nothing will fix that on its own.
+    const versionGap = agentVersion === null ? 0 : compareVersions(agentVersion, APP_VERSION);
+    const servedStale = versionGap < 0;
+    const versionMismatch = versionGap !== 0;
 
     const title = os ? `Agent — ${OS_GROUPS.find((g) => g.os === os)?.label}` : "Télécharger l'agent";
 
@@ -87,8 +99,18 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
                 (versionMismatch ? (
                     <p className={`${styles.agentVersion} ${styles.agentVersionWarn}`}>
                         <span className='icon icon-info' />
-                        Agent v{agentVersion} — différent de l’interface (v{APP_VERSION}). Une nouvelle version est
-                        peut-être en cours de déploiement.
+                        {servedStale ? (
+                            <>
+                                Agent v{agentVersion} — en retard sur l’interface (v{APP_VERSION}). Les binaires
+                                proposés ici sont périmés : vérifiez la synchronisation des agents (AGENT_REPO / jeton
+                                de téléchargement).
+                            </>
+                        ) : (
+                            <>
+                                Agent v{agentVersion} — différent de l’interface (v{APP_VERSION}). Une nouvelle version
+                                est peut-être en cours de déploiement.
+                            </>
+                        )}
                     </p>
                 ) : (
                     <p className={styles.agentVersion}>Version de l’agent : v{agentVersion}</p>
