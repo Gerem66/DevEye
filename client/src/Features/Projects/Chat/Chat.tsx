@@ -6,6 +6,7 @@ import { ws } from '@/api/ws';
 import { useResourceVersion } from '@/stores/invalidation';
 import { useTypers, useTypingSignal } from '@/live/useTyping';
 import { humanizeError, withSecrecy } from '../api';
+import { renderMessage } from './markdown';
 import { Avatar } from '../Board/Avatar';
 import styles from '../style.module.css';
 
@@ -148,10 +149,14 @@ export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
                                     <span className={styles.msgTime}>{formatTime(group.created)}</span>
                                 </div>
                                 {group.messages.map((m) => (
-                                    <p key={m.id} className={styles.msgText}>
-                                        {m.text}
-                                        {m.edited !== null && <span className={styles.msgEdited}> (modifié)</span>}
-                                    </p>
+                                    <div key={m.id} className={styles.msgText}>
+                                        {renderMessage(
+                                            m.text,
+                                            m.edited !== null ? (
+                                                <span className={styles.msgEdited}> (modifié)</span>
+                                            ) : null
+                                        )}
+                                    </div>
                                 ))}
                             </div>
                         </div>

@@ -1892,12 +1892,70 @@
     color: var(--text-muted);
 }
 
+/*
+ * Le corps d'un message.
+ *
+ * `pre-wrap` reste, et ce n'est pas redondant avec les blocs : à l'intérieur
+ * d'un paragraphe, les retours à la ligne sont conservés tels quels (voir
+ * `Chat/markdown.tsx`), de sorte qu'un message reste fidèle à la façon dont il a
+ * été tapé.
+ */
 .msgText {
     margin: 2px 0 0;
     font-size: 0.85rem;
     color: var(--text-secondary);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+}
+
+/*
+ * Les blocs d'un message : discrets.
+ *
+ * Un titre dans une bulle de discussion n'a pas à peser comme un titre de page —
+ * il sépare deux idées dans un paragraphe de trois lignes. D'où des tailles à
+ * peine au-dessus du texte courant, et de la graisse plutôt que de la taille.
+ */
+.msgText > * {
+    margin: 0;
+}
+
+.msgText > * + * {
+    margin-top: var(--space-xs);
+}
+
+.msgText h4,
+.msgText h5,
+.msgText h6 {
+    color: var(--text-primary);
+    font-weight: 700;
+    line-height: 1.35;
+}
+
+.msgText h4 {
+    font-size: 1.05em;
+}
+
+.msgText h5,
+.msgText h6 {
+    font-size: 1em;
+}
+
+.msgText ul,
+.msgText ol {
+    /* La puce vit dans la marge du texte, pas dans une gouttière à elle : une
+       liste de deux points ne doit pas se détacher du fil comme un encart. */
+    padding-left: 1.35em;
+}
+
+.msgText li + li {
+    margin-top: 2px;
+}
+
+/* `u` est bien un soulignement ici : c'est ce que la marque `_texte_` demande,
+   et non l'emphase que porte déjà l'italique. */
+.msgText u {
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
 }
 
 .msgEdited {
