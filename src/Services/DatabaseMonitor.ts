@@ -266,6 +266,7 @@ export class DatabaseMonitor {
             const inventory = await session.inventory();
             await this.deps.db.databases.recordCheck(databaseId, {
                 at: Math.floor(Date.now() / 1000),
+                elapsedMs: Date.now() - started,
                 status: 'up',
                 error: null,
                 serverVersion: inventory.serverVersion.slice(0, 255),
@@ -290,6 +291,10 @@ export class DatabaseMonitor {
             );
             await this.deps.db.databases.recordCheck(databaseId, {
                 at: Math.floor(Date.now() / 1000),
+                // Le temps d'un échec compte autant que celui d'un succès : un
+                // relevé qui met douze secondes à tomber dit qu'on a attendu un
+                // délai d'attente, pas qu'on s'est fait refuser tout de suite.
+                elapsedMs: Date.now() - started,
                 status: 'down',
                 error: await cipher.encrypt(message),
                 // La version et la taille connues sont **conservées** : elles

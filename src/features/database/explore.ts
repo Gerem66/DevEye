@@ -8,8 +8,15 @@ import {
     databaseTableRows,
     databaseTableStructure
 } from 'deveye-types';
-import type { DatabaseCell, DatabaseExportFormat, DatabaseRows, DatabaseStructure, DatabaseTable } from 'deveye-types';
-import { ROWS_PAGE_DEFAULT, type Session } from '@/Services/databases/engine';
+import type {
+    DatabaseCell,
+    DatabaseExportFormat,
+    DatabaseIdRange,
+    DatabaseRows,
+    DatabaseStructure,
+    DatabaseTable
+} from 'deveye-types';
+import { ROWS_PAGE_DEFAULT, type IdRanges, type Session } from '@/Services/databases/engine';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { WRITE } from './_shared';
 import { withSession } from './probe';
@@ -38,9 +45,18 @@ import { withSession } from './probe';
  * la base dit explicitement.
  */
 
-/** Le plafond d'un export : il traverse la connexion en un seul morceau. */
-const EXPORT_MAX_ROWS = 20_000;
-const EXPORT_MAX_BYTES = 6_000_000;
+/**
+ * Le plafond d'un export — un **garde-fou mémoire**, pas une limite produit.
+ *
+ * L'export lit tout ce que la portée désigne : c'est ce qu'on lui demande, et
+ * s'arrêter à vingt mille lignes en le taisant serait pire que ne pas exporter.
+ * Reste qu'il se construit en mémoire avant de traverser la connexion en un seul
+ * morceau : au-delà de ces bornes, ce n'est plus l'export qui souffre mais le
+ * serveur. Elles sont donc placées là où un export réel n'arrive jamais, et
+ * quand elles sont touchées `truncated` le dit sans détour.
+ */
+const EXPORT_MAX_ROWS = 5_000_000;
+const EXPORT_MAX_BYTES = 64_000_000;
 /** Lignes lues par tour pendant un export, pour ne pas tout tenir en mémoire. */
 const EXPORT_PAGE = 500;
 
@@ -251,6 +267,15 @@ export interface ExportRequest {
     format: DatabaseExportFormat;
     schema?: string;
     table?: string;
+    /**
+     * Plages d'identifiants, bornes comprises.
+     *
+     * N'a de sens que sur **une** table : d'une table à l'autre, la clé primaire
+     * n'a ni le même nom ni le même sens, et « 1 à 500 » ne désignerait pas les
+     * mêmes objets. Sur une portée « toute la base », elles sont ignorées — ce
+     * que l'interface dit avant de laisser saisir quoi que ce soit.
+     */
+    idRanges?: DatabaseIdRange[];
 }
 
 /**
@@ -292,6 +317,24 @@ export async function buildExport(
     const targets =
         request.table === undefined ? all : [await resolveTable(session, request.schema ?? '', request.table)];
 
+    // Les plages ne s'appliquent qu'à une table unique, et seulement si sa clé
+    // primaire tient en une colonne : sur une clé composite, « 1 à 500 » ne
+    // désigne rien de précis. Le nom de colonne vient du catalogue, jamais du
+    // client — c'est ce qui autorise à le citer.
+    let ranges: IdRanges | undefined;
+    if (request.idRanges !== undefined && request.idRanges.length > 0 && targets.length === 1) {
+        const only = targets[0];
+        const structure = await session.structure(only.schema, only.name);
+        if (structure.primaryKey.length !== 1) {
+            throw new FeatureError(
+                'conflict',
+                'Filtrer par identifiants demande une clé primaire d’une seule colonne ; ' +
+                    `« ${only.name} » n’en a pas.`
+            );
+        }
+        ranges = { column: structure.primaryKey[0], ranges: request.idRanges };
+    }
+
     const parts: string[] = [];
     let bytes = 0;
     let rowCount = 0;
@@ -320,7 +363,11 @@ export async function buildExport(
         let header = false;
         let first = true;
         for (;;) {
-            const page = await session.tableRows(table.schema, table.name, { offset, limit: limits.page });
+            const page = await session.tableRows(table.schema, table.name, {
+                offset,
+                limit: limits.page,
+                ...(ranges ? { ranges } : {})
+            });
             if (page.rows.length === 0) break;
 
             for (const row of page.rows) {

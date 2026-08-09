@@ -67,6 +67,8 @@ export interface DatabaseRepo {
         id: number,
         input: {
             at: number;
+            /** Durée du relevé, en ms — écrite aussi quand il a échoué. */
+            elapsedMs: number;
             status: 'up' | 'down';
             error: string | null;
             serverVersion: string | null;
@@ -252,10 +254,19 @@ export function databaseRepo(pool: Q): DatabaseRepo {
         async recordCheck(id, input) {
             await pool.query(
                 `UPDATE database_connections
-                    SET last_check_at = ?, status = ?, last_error = ?,
+                    SET last_check_at = ?, last_elapsed_ms = ?, status = ?, last_error = ?,
                         server_version = ?, size_bytes = ?, table_count = ?
                   WHERE id = ?`,
-                [input.at, input.status, input.error, input.serverVersion, input.sizeBytes, input.tableCount, id]
+                [
+                    input.at,
+                    input.elapsedMs,
+                    input.status,
+                    input.error,
+                    input.serverVersion,
+                    input.sizeBytes,
+                    input.tableCount,
+                    id
+                ]
             );
         },
         async listDue(now, limit) {

@@ -1,19 +1,29 @@
-import { useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import type { Database, DatabaseAlert, DatabaseProbe } from 'deveye-types';
 import { Button } from '@/Components';
 import { AlertDialog } from './AlertDialog';
+import { ProbeLine } from './ProbeLine';
 import { TableExplorer } from './TableExplorer';
-import { formatAgo, formatBytes, formatCount, formatInterval, STATUS_META } from './format';
+import { formatAgo, formatBytes, formatCount, formatInterval, formatMs, STATUS_META } from './format';
 import styles from './style.module.css';
 
 interface DatabaseViewProps {
     database: Database;
     alerts: DatabaseAlert[];
     canWrite: boolean;
+    /** Un essai de connexion est en cours (« Tester », pas « Relever »). */
+    testing: boolean;
     /** Le dernier essai de connexion, s'il y en a eu un dans cette vue. */
     probe: DatabaseProbe | null;
     onAlertsChanged: () => void;
     onRemoveAlert: (alertId: number) => void;
+    /**
+     * L'explorateur passe (ou sort) du plein écran.
+     *
+     * Remonté parce que l'appelant possède ce que ce mode doit effacer — son
+     * en-tête — et la racine dont le panneau agrandi tire sa hauteur.
+     */
+    onExpandChange?: (expanded: boolean) => void;
     /** Rendu après l'explorateur (les projets liés, par exemple). */
     children?: ReactNode;
 }
@@ -34,122 +44,153 @@ interface DatabaseViewProps {
  * **qu'est-ce qui la surveille**, **qu'y a-t-il dedans**. L'exploration vient en
  * dernier et non en premier parce qu'elle est la seule qui ouvre une connexion —
  * on ne la déclenche pas par accident en affichant l'écran.
+ *
+ * ## Le mode agrandi
+ *
+ * L'explorateur peut prendre toute la place : tout ce qui décrit la **base** —
+ * son état, ses alertes, ses projets — s'efface alors, pour ne plus laisser à
+ * l'écran que la table qu'on regarde. C'est l'état qui remonte à l'appelant, lui
+ * seul pouvant effacer l'en-tête et donner sa hauteur à la racine.
  */
 export function DatabaseView({
     database,
     alerts,
     canWrite,
+    testing,
     probe,
     onAlertsChanged,
     onRemoveAlert,
+    onExpandChange,
     children
 }: DatabaseViewProps) {
     const [alertDialog, setAlertDialog] = useState<{ alert: DatabaseAlert | null } | null>(null);
+    const [expanded, setExpanded] = useState(false);
     const status = STATUS_META[database.status];
+
+    // Stable : l'explorateur s'en sert dans un effet de remise à zéro, qui
+    // rejouerait à chaque rendu si la fonction changeait d'identité.
+    const expand = useCallback(
+        (next: boolean) => {
+            setExpanded(next);
+            onExpandChange?.(next);
+        },
+        [onExpandChange]
+    );
 
     return (
         <>
-            {/* Le résultat d'un test à la demande, à part de l'état enregistré :
-                l'un dit « en ce moment », l'autre « au dernier relevé ». */}
-            {probe && (
-                <p className={probe.ok ? styles.ok : styles.error}>
-                    {probe.ok
-                        ? `Connexion réussie en ${probe.elapsedMs} ms · ${probe.serverVersion}`
-                        : `Connexion impossible : ${probe.error}`}
-                </p>
-            )}
+            {!expanded && (
+                <>
+                    {/* Le résultat d'un essai à la demande, à part de l'état
+                        enregistré : l'un dit « en ce moment », l'autre « au
+                        dernier relevé ». */}
+                    <ProbeLine testing={testing} probe={probe} />
 
-            <section className={styles.statRow}>
-                <Stat label='État' value={status.label} tone={status.tone} />
-                <Stat
-                    label='Surveillance'
-                    value={
-                        database.monitorEnabled
-                            ? `toutes les ${formatInterval(database.intervalSeconds)}`
-                            : 'à la demande'
-                    }
-                />
-                <Stat label='Dernier relevé' value={formatAgo(database.lastCheckAt)} />
-                <Stat label='Taille' value={formatBytes(database.sizeBytes)} />
-                <Stat label='Tables' value={formatCount(database.tableCount)} />
-                <Stat label='Version' value={database.serverVersion ?? '—'} />
-            </section>
+                    <section className={styles.statRow}>
+                        <Stat label='État' value={status.label} tone={status.tone} />
+                        <Stat
+                            label='Surveillance'
+                            value={
+                                database.monitorEnabled
+                                    ? `toutes les ${formatInterval(database.intervalSeconds)}`
+                                    : 'à la demande'
+                            }
+                        />
+                        <Stat label='Dernier relevé' value={formatAgo(database.lastCheckAt)} />
+                        {/* Le temps qu'a mis le dernier relevé à aboutir. C'est
+                            le premier signe d'une base qui se dégrade, bien avant
+                            qu'elle devienne injoignable — et il n'apparaissait
+                            jusqu'ici que dans un essai, donc jamais deux fois de
+                            suite au même endroit. */}
+                        <Stat label='Temps de réponse' value={formatMs(database.lastElapsedMs)} />
+                        <Stat label='Taille' value={formatBytes(database.sizeBytes)} />
+                        <Stat label='Tables' value={formatCount(database.tableCount)} />
+                        <Stat label='Version' value={database.serverVersion ?? '—'} />
+                    </section>
 
-            {/* Dire d'où viennent ces chiffres, sans quoi on les croit lus à
-                l'instant — alors qu'ils datent du dernier relevé, lequel peut
-                n'avoir jamais eu lieu. */}
-            {database.lastCheckAt === null && (
-                <p className={styles.hint}>
-                    Ces chiffres sont vides : cette base n’a jamais été relevée. « Relever l’état » va les chercher.
-                </p>
-            )}
-
-            <section className={styles.panel}>
-                <header className={styles.panelHead}>
-                    <h3 className={styles.panelTitle}>
-                        Alertes
-                        {database.firingCount > 0 && (
-                            <span className={styles.alertTag}>
-                                {database.firingCount} franchie{database.firingCount > 1 ? 's' : ''}
-                            </span>
-                        )}
-                    </h3>
-                    {canWrite && (
-                        <Button variant='secondary' icon='add' onClick={() => setAlertDialog({ alert: null })}>
-                            Nouvelle alerte
-                        </Button>
+                    {/* Dire d'où viennent ces chiffres, sans quoi on les croit lus
+                        à l'instant — alors qu'ils datent du dernier relevé, lequel
+                        peut n'avoir jamais eu lieu. */}
+                    {database.lastCheckAt === null && (
+                        <p className={styles.hint}>
+                            Ces chiffres sont vides : cette base n’a jamais été relevée. « Relever l’état » va les
+                            chercher.
+                        </p>
                     )}
-                </header>
+                </>
+            )}
 
-                {!database.monitorEnabled && alerts.length > 0 && (
-                    <p className={styles.warn}>
-                        La surveillance est éteinte : ces alertes ne sont <strong>pas évaluées</strong>. Activez le
-                        relevé régulier dans « Modifier » pour les rendre vivantes.
-                    </p>
-                )}
-
-                {alerts.length === 0 && (
-                    <p className={styles.hint}>
-                        Aucune alerte. Une alerte compare le résultat de requêtes à des seuils — nombre d’erreurs de la
-                        dernière heure, utilisateurs actifs, lignes en attente — et prévient sur les canaux de l’espace.
-                    </p>
-                )}
-
-                <ul className={styles.alertList}>
-                    {alerts.map((alert) => (
-                        <li key={alert.id} className={alert.firing ? styles.alertRowOn : styles.alertRow}>
-                            <button
-                                type='button'
-                                className={styles.alertButton}
-                                disabled={!canWrite}
-                                onClick={() => setAlertDialog({ alert })}
-                            >
-                                <span className={styles.alertName}>
-                                    {alert.name}
-                                    {!alert.enabled && <span className={styles.tag}>désactivée</span>}
-                                    {alert.firing && <span className={styles.alertTag}>franchie</span>}
+            {!expanded && (
+                <section className={styles.panel}>
+                    <header className={styles.panelHead}>
+                        <h3 className={styles.panelTitle}>
+                            Alertes
+                            {database.firingCount > 0 && (
+                                <span className={styles.alertTag}>
+                                    {database.firingCount} franchie{database.firingCount > 1 ? 's' : ''}
                                 </span>
-                                <span className={styles.hint}>
-                                    {alert.conditions.length} condition{alert.conditions.length > 1 ? 's' : ''} ·{' '}
-                                    {alert.combinator === 'and' ? 'toutes' : 'au moins une'}
-                                    {alert.lastCheckAt !== null && ` · évaluée ${formatAgo(alert.lastCheckAt)}`}
-                                    {alert.lastValues.length > 0 &&
-                                        ` · ${alert.lastValues.map((v) => (v === null ? '—' : v)).join(' / ')}`}
-                                </span>
-                                {alert.lastError && <span className={styles.error}>{alert.lastError}</span>}
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-            </section>
+                            )}
+                        </h3>
+                        {canWrite && (
+                            <Button variant='secondary' icon='add' onClick={() => setAlertDialog({ alert: null })}>
+                                Nouvelle alerte
+                            </Button>
+                        )}
+                    </header>
+
+                    {!database.monitorEnabled && alerts.length > 0 && (
+                        <p className={styles.warn}>
+                            La surveillance est éteinte : ces alertes ne sont <strong>pas évaluées</strong>. Activez le
+                            relevé régulier dans « Modifier » pour les rendre vivantes.
+                        </p>
+                    )}
+
+                    {alerts.length === 0 && (
+                        <p className={styles.hint}>
+                            Aucune alerte. Une alerte compare le résultat de requêtes à des seuils — nombre d’erreurs de
+                            la dernière heure, utilisateurs actifs, lignes en attente — et prévient sur les canaux de
+                            l’espace.
+                        </p>
+                    )}
+
+                    <ul className={styles.alertList}>
+                        {alerts.map((alert) => (
+                            <li key={alert.id} className={alert.firing ? styles.alertRowOn : styles.alertRow}>
+                                <button
+                                    type='button'
+                                    className={styles.alertButton}
+                                    disabled={!canWrite}
+                                    onClick={() => setAlertDialog({ alert })}
+                                >
+                                    <span className={styles.alertName}>
+                                        {alert.name}
+                                        {!alert.enabled && <span className={styles.tag}>désactivée</span>}
+                                        {alert.firing && <span className={styles.alertTag}>franchie</span>}
+                                    </span>
+                                    <span className={styles.hint}>
+                                        {alert.conditions.length} condition{alert.conditions.length > 1 ? 's' : ''} ·{' '}
+                                        {alert.combinator === 'and' ? 'toutes' : 'au moins une'}
+                                        {alert.lastCheckAt !== null && ` · évaluée ${formatAgo(alert.lastCheckAt)}`}
+                                        {alert.lastValues.length > 0 &&
+                                            ` · ${alert.lastValues.map((v) => (v === null ? '—' : v)).join(' / ')}`}
+                                    </span>
+                                    {alert.lastError && <span className={styles.error}>{alert.lastError}</span>}
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                </section>
+            )}
 
             <TableExplorer
                 databaseId={database.id}
                 databaseName={database.name}
                 autoLoad={canWrite && database.autoLoadTables}
+                expanded={expanded}
+                onExpandedChange={expand}
             />
 
-            {children}
+            {!expanded && children}
 
             <AlertDialog
                 open={alertDialog !== null}

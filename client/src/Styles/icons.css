@@ -266,6 +266,14 @@
     -webkit-mask-image: url(/icons/copy.svg);
     mask-image: url(/icons/copy.svg);
 }
+.icon.icon-expand {
+    -webkit-mask-image: url(/icons/expand.svg);
+    mask-image: url(/icons/expand.svg);
+}
+.icon.icon-collapse {
+    -webkit-mask-image: url(/icons/collapse.svg);
+    mask-image: url(/icons/collapse.svg);
+}
 .icon.icon-settings {
     -webkit-mask-image: url(/icons/settings.svg);
     mask-image: url(/icons/settings.svg);

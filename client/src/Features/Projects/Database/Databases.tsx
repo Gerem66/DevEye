@@ -205,26 +205,33 @@ interface DatabaseBlockProps {
 /** Une base du projet : son en-tête, et le contenu partagé avec la feature. */
 function DatabaseBlock({ database, alerts, canWrite, framed, onUnlink }: DatabaseBlockProps) {
     const [probe, setProbe] = useState<DatabaseProbe | null>(null);
+    const [testing, setTesting] = useState(false);
     const [busy, setBusy] = useState(false);
     const [dialogOpen, setDialogOpen] = useState(false);
+    /** L'explorateur occupe tout : l'en-tête et les voisins s'effacent. */
+    const [expanded, setExpanded] = useState(false);
 
     const test = async () => {
         setBusy(true);
+        setTesting(true);
         setProbe(null);
         try {
             const res = await ws.send('database.test', { databaseId: database.id });
             setProbe(res.probe);
         } finally {
+            setTesting(false);
             setBusy(false);
         }
     };
 
+    /**
+     * Relever n'écrit rien à l'écran : son résultat est le bandeau d'état, juste
+     * en dessous. La phrase de connexion appartient aux essais seuls.
+     */
     const inspect = async () => {
         setBusy(true);
-        setProbe(null);
         try {
-            const res = await ws.send('database.inspect', { databaseId: database.id });
-            setProbe(res.probe);
+            await ws.send('database.inspect', { databaseId: database.id });
             invalidate('database.list', 'database.detail', 'database.count');
         } finally {
             setBusy(false);
@@ -237,30 +244,34 @@ function DatabaseBlock({ database, alerts, canWrite, framed, onUnlink }: Databas
     };
 
     return (
-        <section className={framed ? dbStyles.linkedBlockFramed : dbStyles.linkedBlock}>
-            <DatabaseHeader
-                database={database}
-                canWrite={canWrite}
-                busy={busy}
-                onTest={() => void test()}
-                onInspect={() => void inspect()}
-                onEdit={() => setDialogOpen(true)}
-                after={
-                    // Destructeur, donc à part et confirmé : il ne doit pas
-                    // côtoyer « Tester », qu'on presse souvent.
-                    <Button variant='ghost' onClick={onUnlink} disabled={busy}>
-                        Délier
-                    </Button>
-                }
-            />
+        <section className={framed && !expanded ? dbStyles.linkedBlockFramed : dbStyles.linkedBlock}>
+            {!expanded && (
+                <DatabaseHeader
+                    database={database}
+                    canWrite={canWrite}
+                    busy={busy}
+                    onTest={() => void test()}
+                    onInspect={() => void inspect()}
+                    onEdit={() => setDialogOpen(true)}
+                    after={
+                        // Destructeur, donc à part et confirmé : il ne doit pas
+                        // côtoyer « Tester », qu'on presse souvent.
+                        <Button variant='ghost' onClick={onUnlink} disabled={busy}>
+                            Délier
+                        </Button>
+                    }
+                />
+            )}
 
             <DatabaseView
                 database={database}
                 alerts={alerts}
                 canWrite={canWrite}
+                testing={testing}
                 probe={probe}
                 onAlertsChanged={() => invalidate('database.detail', 'database.list')}
                 onRemoveAlert={(alertId) => void removeAlert(alertId)}
+                onExpandChange={setExpanded}
             />
 
             {/* Le vrai formulaire de la feature, pas une copie : régler une base

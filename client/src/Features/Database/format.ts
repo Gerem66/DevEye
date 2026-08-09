@@ -1,4 +1,10 @@
-import type { DatabaseComparator, DatabaseEngine, DatabaseFilterOperator, DatabaseStatus } from 'deveye-types';
+import type {
+    DatabaseComparator,
+    DatabaseEngine,
+    DatabaseFilterOperator,
+    DatabaseStatus,
+    DatabaseTable
+} from 'deveye-types';
 
 /** Le nom d'usage d'un moteur, celui que l'utilisateur reconnaît. */
 export const ENGINE_LABELS: Record<DatabaseEngine, string> = {
@@ -97,6 +103,29 @@ export function formatAgo(epochSeconds: number | null): string {
     const hours = Math.floor(minutes / 60);
     if (hours < 24) return `il y a ${hours} h`;
     return `il y a ${Math.floor(hours / 24)} j`;
+}
+
+/** « 42 ms », « 1,8 s » — un temps de réponse se lit dans son ordre de grandeur. */
+export function formatMs(ms: number | null): string {
+    if (ms === null) return '—';
+    if (ms < 1000) return `${ms} ms`;
+    return `${(ms / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} s`;
+}
+
+/**
+ * L'ordre alphabétique des tables, celui dans lequel on les cherche.
+ *
+ * Trié **ici** et non laissé au moteur : `ORDER BY` suit la collation du
+ * serveur, qui range volontiers les majuscules avant les minuscules et ignore
+ * les accents à sa façon. `localeCompare` donne le même ordre partout, quels que
+ * soient le moteur et sa configuration — et c'est le seul ordre qu'on puisse
+ * annoncer sans mentir.
+ */
+export function compareTables(a: DatabaseTable, b: DatabaseTable): number {
+    return (
+        a.schema.localeCompare(b.schema, 'fr', { sensitivity: 'base' }) ||
+        a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' })
+    );
 }
 
 /** « 5 min », « 1 h » — une cadence de relevé. */

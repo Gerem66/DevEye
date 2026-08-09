@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react';
-import type { DatabaseExportFormat, DatabaseTable } from 'deveye-types';
-import { Button, Dialog, SelectInput } from '@/Components';
+import { useEffect, useMemo, useState } from 'react';
+import type { DatabaseExportFormat, DatabaseIdRange, DatabaseTable } from 'deveye-types';
+import { Button, Dialog, SelectInput, TextInput } from '@/Components';
 import { ws } from '@/api/ws';
 import { humanizeError } from '../Projects/api';
-import { formatCount } from './format';
+import { compareTables, formatBytes, formatCount } from './format';
 import styles from './style.module.css';
 
 interface ExportDialogProps {
     open: boolean;
     databaseId: number;
+    /** L'inventaire chargé, s'il l'est : c'est lui qui peuple la liste. */
+    tables: DatabaseTable[] | null;
     /** La table affichée, proposée par défaut ; `null` = toute la base. */
     table: DatabaseTable | null;
     onClose: () => void;
@@ -20,30 +22,122 @@ const FORMAT_LABELS: Record<DatabaseExportFormat, string> = {
     sql: 'SQL — des INSERT, rejouables sur une autre base'
 };
 
+/** La valeur du sélecteur qui désigne la base entière. */
+const WHOLE = '*';
+
+/** Une table dans le sélecteur — `schema.name` désigne une table sans ambiguïté. */
+function keyOf(table: DatabaseTable): string {
+    return `${table.schema}.${table.name}`;
+}
+
+/**
+ * « 1-50, 80, 200- » → des bornes.
+ *
+ * Analysé **ici**, dans le navigateur : le serveur ne reçoit que des paires de
+ * nombres, jamais ce texte. Une saisie incompréhensible ne bloque rien — les
+ * morceaux valides sont gardés, les autres ignorés, et l'écran dit combien de
+ * lignes la sélection représente pour qu'une faute de frappe se voie.
+ *
+ * Une borne ouverte (`200-`, `-99`) est bornée par l'entier sûr le plus grand :
+ * c'est un `BETWEEN`, il lui faut deux bouts, et aucun identifiant réel ne les
+ * atteint.
+ */
+const OPEN = Number.MAX_SAFE_INTEGER;
+
+export function parseIdRanges(input: string): DatabaseIdRange[] {
+    const out: DatabaseIdRange[] = [];
+    for (const chunk of input.split(/[,;\s]+/)) {
+        const piece = chunk.trim();
+        if (piece === '') continue;
+        const match = /^(-?\d+)?\s*(?:-|–|\.\.)\s*(-?\d+)?$/.exec(piece);
+        if (match && (match[1] !== undefined || match[2] !== undefined)) {
+            const from = match[1] === undefined ? -OPEN : Number(match[1]);
+            const to = match[2] === undefined ? OPEN : Number(match[2]);
+            out.push(from <= to ? { from, to } : { from: to, to: from });
+            continue;
+        }
+        if (/^-?\d+$/.test(piece)) {
+            const value = Number(piece);
+            out.push({ from: value, to: value });
+        }
+    }
+    return out;
+}
+
+/** Combien de lignes ces plages désignent, `null` si l'une est ouverte. */
+function countOf(ranges: DatabaseIdRange[]): number | null {
+    let total = 0;
+    for (const range of ranges) {
+        if (range.from === -OPEN || range.to === OPEN) return null;
+        total += range.to - range.from + 1;
+    }
+    return total;
+}
+
 /**
  * Exporter une table, ou toute la base.
  *
- * **Ce n'est pas une sauvegarde**, et l'écran le dit avant qu'on clique : le
- * résultat traverse la connexion en un seul morceau, donc il est plafonné. Un
- * export tronqué qui se croirait complet serait bien pire que pas d'export du
- * tout — c'est la raison du bandeau, et de l'avertissement rendu par le serveur.
+ * ## Ce que l'écran promet, il le tient
+ *
+ * L'export lit **tout** ce que la portée désigne. Il portait autrefois un bandeau
+ * d'avertissement et un plafond de vingt mille lignes ; un export qui s'arrête au
+ * milieu n'est pas un export, et prévenir n'y changeait rien. Ce qui reste au
+ * serveur est un garde-fou mémoire, placé là où un export réel n'arrive pas.
+ *
+ * À la place de l'avertissement : une **estimation de taille**, en pied, à côté
+ * du bouton. Elle répond à la seule question qu'on se pose avant de cliquer —
+ * « est-ce que ça va tenir ? » — et elle suit la portée comme le champ
+ * d'identifiants, donc elle réagit à ce qu'on vient de changer.
  *
  * Le téléchargement passe par un `Blob` local : le contenu est déjà dans le
  * navigateur, il n'a pas à repartir vers un serveur pour redescendre.
  */
-export function ExportDialog({ open, databaseId, table, onClose }: ExportDialogProps) {
+export function ExportDialog({ open, databaseId, tables, table, onClose }: ExportDialogProps) {
     const [format, setFormat] = useState<DatabaseExportFormat>('csv');
-    const [scope, setScope] = useState<'table' | 'database'>('table');
+    /** `WHOLE`, ou la clé `schema.name` d'une table. */
+    const [scope, setScope] = useState<string>(WHOLE);
+    const [ids, setIds] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [done, setDone] = useState<{ rowCount: number; tableCount: number; truncated: boolean } | null>(null);
+
+    /** L'inventaire dans l'ordre où l'on cherche une table. */
+    const listed = useMemo(() => (tables === null ? [] : [...tables].sort(compareTables)), [tables]);
 
     useEffect(() => {
         if (!open) return;
         setError(null);
         setDone(null);
-        setScope(table ? 'table' : 'database');
+        setIds('');
+        setScope(table ? keyOf(table) : WHOLE);
     }, [open, table]);
+
+    const target = scope === WHOLE ? null : (listed.find((t) => keyOf(t) === scope) ?? table);
+    const ranges = parseIdRanges(ids);
+    const selected = countOf(ranges);
+
+    /**
+     * Ce que pèsera l'export, à la louche.
+     *
+     * Tirée de la taille que le moteur déclare pour la table — index compris,
+     * donc plutôt au-dessus de la vérité pour un CSV, plutôt en dessous pour du
+     * SQL où chaque ligne réécrit ses noms de colonnes. C'est un ordre de
+     * grandeur, et l'écran ne prétend pas autre chose : il dit « environ ».
+     */
+    const estimate = useMemo(() => {
+        const scoped = target ? [target] : listed;
+        if (scoped.length === 0) return null;
+        const bytes = scoped.reduce((sum, t) => sum + (t.sizeBytes ?? 0), 0);
+        const rows = scoped.reduce((sum, t) => sum + (t.rowCount ?? 0), 0);
+        // Les plages ne s'appliquent qu'à une table : la part gardée est celle
+        // des lignes retenues, faute de mieux, et seulement si l'on sait
+        // combien la table en compte.
+        if (target && selected !== null && ranges.length > 0 && rows > 0) {
+            const kept = Math.min(selected, rows);
+            return { bytes: Math.round((bytes * kept) / rows), rows: kept };
+        }
+        return { bytes, rows };
+    }, [target, listed, selected, ranges.length]);
 
     const run = async () => {
         setBusy(true);
@@ -53,7 +147,8 @@ export function ExportDialog({ open, databaseId, table, onClose }: ExportDialogP
             const res = await ws.send('database.export', {
                 databaseId,
                 format,
-                ...(scope === 'table' && table ? { schema: table.schema, table: table.name } : {})
+                ...(target ? { schema: target.schema, table: target.name } : {}),
+                ...(target && ranges.length > 0 ? { idRanges: ranges } : {})
             });
 
             const blob = new Blob([res.content], { type: 'text/plain;charset=utf-8' });
@@ -83,6 +178,13 @@ export function ExportDialog({ open, databaseId, table, onClose }: ExportDialogP
             onSubmit={() => void run()}
             footer={
                 <>
+                    {/* L'estimation prend la place de gauche : elle n'est pas une
+                        action, elle est ce qu'on lit avant d'en déclencher une. */}
+                    <span className={styles.footerNote}>
+                        {estimate === null
+                            ? 'Chargez les tables pour estimer la taille.'
+                            : `≈ ${formatBytes(estimate.bytes)} · ${formatCount(estimate.rows)} ligne${estimate.rows > 1 ? 's' : ''}`}
+                    </span>
                     <Button variant='secondary' onClick={onClose} disabled={busy}>
                         Fermer
                     </Button>
@@ -96,13 +198,18 @@ export function ExportDialog({ open, databaseId, table, onClose }: ExportDialogP
                 <div className={styles.section}>
                     <label className={styles.field}>
                         <span className={styles.label}>Portée</span>
-                        <SelectInput
-                            value={scope}
-                            onChange={(e) => setScope(e.target.value as 'table' | 'database')}
-                            disabled={!table}
-                        >
-                            {table && <option value='table'>La table {table.name}</option>}
-                            <option value='database'>Toute la base</option>
+                        <SelectInput value={scope} onChange={(e) => setScope(e.target.value)}>
+                            <option value={WHOLE}>Toute la base</option>
+                            {/* Tout l'inventaire, pas seulement la table ouverte :
+                                exporter une autre table demandait de la sélectionner
+                                d'abord, alors qu'elle est déjà chargée ici. */}
+                            {listed.map((t) => (
+                                <option key={keyOf(t)} value={keyOf(t)}>
+                                    {t.name}
+                                    {t.rowCount === null ? '' : ` (${formatCount(t.rowCount)} l.)`}
+                                </option>
+                            ))}
+                            {listed.length === 0 && table && <option value={keyOf(table)}>{table.name}</option>}
                         </SelectInput>
                     </label>
 
@@ -117,18 +224,40 @@ export function ExportDialog({ open, databaseId, table, onClose }: ExportDialogP
                         </SelectInput>
                     </label>
 
-                    <p className={styles.warn}>
-                        Un export <strong>n’est pas une sauvegarde</strong> : il traverse la connexion en un seul
-                        morceau, et s’arrête donc à 20 000 lignes ou 6 Mo. Pour une copie fidèle, <code>mysqldump</code>{' '}
-                        et <code>pg_dump</code> restent les bons outils.
-                    </p>
+                    <label className={styles.field}>
+                        <span className={styles.label}>Identifiants (facultatif)</span>
+                        <TextInput
+                            value={ids}
+                            disabled={target === null}
+                            placeholder='1-500, 812, 2000-'
+                            onChange={(e) => setIds(e.target.value)}
+                        />
+                        <span className={styles.hint}>
+                            {target === null ? (
+                                <>
+                                    Réservé à une table : d’une table à l’autre, la clé primaire n’a ni le même nom ni
+                                    le même sens, et « 1 à 500 » ne désignerait pas les mêmes objets.
+                                </>
+                            ) : (
+                                <>
+                                    Des valeurs et des plages de la clé primaire, séparées par des virgules ; bornes
+                                    comprises. Vide, la table part en entier.
+                                    {ranges.length > 0 &&
+                                        ` ${ranges.length} plage${ranges.length > 1 ? 's' : ''} retenue${ranges.length > 1 ? 's' : ''}${
+                                            selected === null ? '' : `, ${formatCount(selected)} identifiants couverts`
+                                        }.`}
+                                </>
+                            )}
+                        </span>
+                    </label>
                 </div>
 
                 {done && (
                     <p className={done.truncated ? styles.warn : styles.ok}>
                         {formatCount(done.rowCount)} lignes sur {done.tableCount} table
                         {done.tableCount > 1 ? 's' : ''} — fichier téléchargé.
-                        {done.truncated && ' Le plafond a été atteint : la suite manque.'}
+                        {done.truncated &&
+                            ' Le garde-fou mémoire du serveur a été atteint : la suite manque. Passez par mysqldump ou pg_dump pour un volume pareil.'}
                     </p>
                 )}
 

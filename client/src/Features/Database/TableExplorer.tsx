@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 import type {
     DatabaseCombinator,
     DatabaseFilter,
@@ -11,11 +12,12 @@ import { Button, Checkbox, Dialog } from '@/Components';
 import { ws } from '@/api/ws';
 import { humanizeError } from '../Projects/api';
 import { ExportDialog } from './ExportDialog';
+import { Pagination } from './Pagination';
 import { RowDialog } from './RowDialog';
 import { SearchDialog } from './SearchDialog';
 import { StructureDialog } from './StructureDialog';
 import { TerminalDialog } from './TerminalDialog';
-import { FILTER_OPERATOR_LABELS, formatBytes, formatCount, OPERATOR_NEEDS_VALUE } from './format';
+import { compareTables, FILTER_OPERATOR_LABELS, formatBytes, formatCount, OPERATOR_NEEDS_VALUE } from './format';
 import { rowKey, rowKeyCells } from './rowKey';
 import styles from './style.module.css';
 
@@ -24,11 +26,23 @@ const PAGE = 50;
 /** Durée du halo d'une ligne qu'on vient de rejoindre. */
 const HIGHLIGHT_MS = 3500;
 
+/**
+ * Le ressort de l'agrandissement.
+ *
+ * Assez ferme pour que le geste paraisse immédiat, assez amorti pour qu'il ne
+ * rebondisse pas : un panneau qui dépasse sa taille puis revient donne
+ * l'impression d'un accident, pas d'un choix.
+ */
+const EXPAND_SPRING = { type: 'spring', stiffness: 260, damping: 32, mass: 0.9 } as const;
+
 interface TableExplorerProps {
     databaseId: number;
     databaseName: string;
     /** Charger l'inventaire des tables dès l'affichage (réglage de la base). */
     autoLoad: boolean;
+    /** La table ouverte occupe toute la popup. Piloté par l'appelant. */
+    expanded: boolean;
+    onExpandedChange: (expanded: boolean) => void;
 }
 
 /** Quelle popup est ouverte. Une seule à la fois, elles se recouvriraient. */
@@ -62,7 +76,7 @@ type Dialogue =
  * nombre sûr de JavaScript et une date n'a pas la même forme chez les deux
  * moteurs. On les affiche telles quelles, et on les renvoie telles quelles.
  */
-export function TableExplorer({ databaseId, databaseName, autoLoad }: TableExplorerProps) {
+export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, onExpandedChange }: TableExplorerProps) {
     const [tables, setTables] = useState<DatabaseTable[] | null>(null);
     const [table, setTable] = useState<DatabaseTable | null>(null);
     const [structure, setStructure] = useState<DatabaseStructure | null>(null);
@@ -81,7 +95,8 @@ export function TableExplorer({ databaseId, databaseName, autoLoad }: TableExplo
     const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Changer de base referme tout : garder les tables d'une autre à l'écran
-    // serait au mieux déroutant, au pire trompeur.
+    // serait au mieux déroutant, au pire trompeur. Le plein écran retombe avec
+    // le reste — il n'a plus de table à montrer.
     useEffect(() => {
         setTables(null);
         setTable(null);
@@ -92,7 +107,8 @@ export function TableExplorer({ databaseId, databaseName, autoLoad }: TableExplo
         setSort(null);
         setSelected(new Set());
         setError(null);
-    }, [databaseId]);
+        onExpandedChange(false);
+    }, [databaseId, onExpandedChange]);
 
     useEffect(() => () => (highlightTimer.current ? clearTimeout(highlightTimer.current) : undefined), []);
 
@@ -101,7 +117,10 @@ export function TableExplorer({ databaseId, databaseName, autoLoad }: TableExplo
         setError(null);
         try {
             const res = await ws.send('database.tableList', { databaseId });
-            setTables(res.tables);
+            // Rangées une fois pour toutes, ici : la liste de gauche, le
+            // sélecteur de l'export et le suivi d'une clé étrangère lisent tous
+            // celle-ci, et aucun n'a de raison de les voir dans un autre ordre.
+            setTables([...res.tables].sort(compareTables));
         } catch (e) {
             setError(humanizeError(e, 'Impossible de lire les tables.'));
         } finally {
@@ -203,8 +222,18 @@ export function TableExplorer({ databaseId, databaseName, autoLoad }: TableExplo
     const foreignKeyOf = (column: string) => structure?.foreignKeys.find((fk) => fk.columns.includes(column)) ?? null;
 
     const total = rows?.total ?? null;
-    const hasPrev = offset > 0;
-    const hasNext = total !== null && offset + PAGE < total;
+    /**
+     * Combien de pages, en tout.
+     *
+     * `total` peut manquer — un moteur ne sait pas toujours compter sans coût.
+     * On retombe alors sur ce qu'on a sous les yeux : une page pleine en suppose
+     * une suivante, une page entamée est la dernière. C'est faux d'une page au
+     * pire, et c'est ce qui permet de garder « Suivant » utilisable partout.
+     */
+    const pageCount =
+        total === null
+            ? Math.floor(offset / PAGE) + ((rows?.rows.length ?? 0) < PAGE ? 1 : 2)
+            : Math.max(1, Math.ceil(total / PAGE));
     const writable = structure !== null && structure.primaryKey.length > 0;
     const pageKeys = (rows?.rows ?? []).map((row) => rowKey(structure, rows?.columns ?? [], row));
     const selectedOnPage = pageKeys.filter((k) => k !== null && selected.has(k)).length;
@@ -258,31 +287,41 @@ export function TableExplorer({ databaseId, databaseName, autoLoad }: TableExplo
     };
 
     return (
-        <section className={styles.panel}>
-            <header className={styles.panelHead}>
-                <h3 className={styles.panelTitle}>Tables</h3>
-                <div className={styles.actions}>
-                    <Button
-                        variant='secondary'
-                        icon='terminal'
-                        onClick={() => setDialogue({ kind: 'terminal' })}
-                        disabled={busy}
-                    >
-                        Terminal
-                    </Button>
-                    <Button
-                        variant='secondary'
-                        icon='download'
-                        onClick={() => setDialogue({ kind: 'export' })}
-                        disabled={busy}
-                    >
-                        Exporter
-                    </Button>
-                    <Button variant='secondary' icon='refresh' onClick={() => void loadTables()} disabled={busy}>
-                        {tables === null ? 'Charger les tables' : 'Recharger'}
-                    </Button>
-                </div>
-            </header>
+        /*
+         * `layout` : l'agrandissement n'est pas un changement de classe qu'on
+         * subit, c'est un mouvement qu'on suit. framer-motion mesure la boîte
+         * avant et après, et anime l'écart — d'où un panneau qui *monte* vers sa
+         * pleine taille au lieu d'apparaître dedans.
+         */
+        <motion.section layout transition={EXPAND_SPRING} className={expanded ? styles.panelExpanded : styles.panel}>
+            {/* En plein écran, tout ce qui parle de la base disparaît — y compris
+                cet en-tête : on est venu regarder *une* table. */}
+            {!expanded && (
+                <header className={styles.panelHead}>
+                    <h3 className={styles.panelTitle}>Tables</h3>
+                    <div className={styles.actions}>
+                        <Button
+                            variant='secondary'
+                            icon='terminal'
+                            onClick={() => setDialogue({ kind: 'terminal' })}
+                            disabled={busy}
+                        >
+                            Terminal
+                        </Button>
+                        <Button
+                            variant='secondary'
+                            icon='download'
+                            onClick={() => setDialogue({ kind: 'export' })}
+                            disabled={busy}
+                        >
+                            Exporter
+                        </Button>
+                        <Button variant='secondary' icon='refresh' onClick={() => void loadTables()} disabled={busy}>
+                            {tables === null ? 'Charger les tables' : 'Recharger'}
+                        </Button>
+                    </div>
+                </header>
+            )}
 
             {error && <p className={styles.error}>{error}</p>}
 
@@ -296,35 +335,65 @@ export function TableExplorer({ databaseId, databaseName, autoLoad }: TableExplo
             {tables?.length === 0 && <p className={styles.hint}>Cette base ne contient aucune table.</p>}
 
             {tables && tables.length > 0 && (
-                <div className={styles.explorer}>
-                    <ul className={styles.tableList}>
-                        {tables.map((item) => (
-                            <li key={`${item.schema}.${item.name}`}>
-                                <button
-                                    type='button'
-                                    className={
-                                        table?.name === item.name && table.schema === item.schema
-                                            ? styles.tableItemOn
-                                            : styles.tableItem
-                                    }
-                                    onClick={() => open(item)}
-                                >
-                                    <span className={styles.tableName}>{item.name}</span>
-                                    <span className={styles.tableMeta}>
-                                        {formatCount(item.rowCount)} l. · {formatBytes(item.sizeBytes)}
-                                    </span>
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
+                /*
+                 * `layout` aussi ici, et sur le cadre de la table : une animation
+                 * de disposition redimensionne par une échelle, et une échelle
+                 * déforme tout ce qui est dedans. Un enfant qui porte `layout` à
+                 * son tour reçoit l'échelle inverse — c'est ce qui garde le texte
+                 * et les bordures nets pendant tout le mouvement, au lieu d'un
+                 * demi-seconde de contenu étiré.
+                 */
+                <motion.div
+                    layout
+                    transition={EXPAND_SPRING}
+                    className={expanded ? styles.explorerExpanded : styles.explorer}
+                >
+                    {/*
+                     * La liste tient dans une boîte qui, elle, s'étire à la
+                     * hauteur de la ligne : c'est la seule façon d'obtenir une
+                     * colonne aussi haute que sa voisine sans lui imposer une
+                     * hauteur en dur — trop courte, elle laissait un vide sous
+                     * elle ; sans plafond, elle repoussait la carte entière.
+                     */}
+                    <div className={styles.tableListPane}>
+                        <ul className={styles.tableList}>
+                            {tables.map((item) => (
+                                <li key={`${item.schema}.${item.name}`}>
+                                    <button
+                                        type='button'
+                                        className={
+                                            table?.name === item.name && table.schema === item.schema
+                                                ? styles.tableItemOn
+                                                : styles.tableItem
+                                        }
+                                        onClick={() => open(item)}
+                                    >
+                                        <span className={styles.tableName}>{item.name}</span>
+                                        <span className={styles.tableMeta}>
+                                            {formatCount(item.rowCount)} l. · {formatBytes(item.sizeBytes)}
+                                        </span>
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
 
                     <div className={styles.rowsPane}>
                         {!table && <p className={styles.hint}>Choisissez une table pour en voir le contenu.</p>}
 
+                        {/*
+                         * Un cadre autour de la table ouverte, et c'est tout son
+                         * objet : sans lui, « Ajouter / Modifier / Supprimer »
+                         * flottaient entre la liste des tables et le contenu, et
+                         * rien ne disait qu'ils portaient sur la table
+                         * sélectionnée plutôt que sur la base.
+                         */}
                         {table && rows && (
-                            <>
+                            <motion.div layout transition={EXPAND_SPRING} className={styles.tablePanel}>
                                 <div className={styles.rowsHead}>
-                                    <span className={styles.tableName}>{table.name}</span>
+                                    <span className={styles.tableName}>
+                                        {expanded ? `${databaseName} · ${table.name}` : table.name}
+                                    </span>
                                     <span className={styles.hint}>
                                         {total === null
                                             ? `${rows.rows.length} lignes`
@@ -383,6 +452,20 @@ export function TableExplorer({ databaseId, databaseName, autoLoad }: TableExplo
                                     >
                                         Structure
                                     </Button>
+                                    {/* Le seul bouton qui survit au plein écran :
+                                        c'est lui qui en sort. */}
+                                    <Button
+                                        variant='secondary'
+                                        icon={expanded ? 'collapse' : 'expand'}
+                                        title={
+                                            expanded
+                                                ? 'Rendre sa place au reste de la fiche'
+                                                : 'Ne garder que cette table à l’écran'
+                                        }
+                                        onClick={() => onExpandedChange(!expanded)}
+                                    >
+                                        {expanded ? 'Réduire' : 'Agrandir'}
+                                    </Button>
                                 </div>
 
                                 {!writable && structure && (
@@ -418,8 +501,10 @@ export function TableExplorer({ databaseId, databaseName, autoLoad }: TableExplo
 
                                 {/* Le tableau défile dans sa propre boîte : une
                                     table à quarante colonnes ne doit pas faire
-                                    défiler la page entière. */}
-                                <div className={styles.rowsScroll}>
+                                    défiler la page entière. En plein écran, cette
+                                    boîte prend toute la hauteur restante — c'est
+                                    tout l'intérêt d'y être passé. */}
+                                <div className={expanded ? styles.rowsScrollFill : styles.rowsScroll}>
                                     <table className={styles.dataTable}>
                                         <thead>
                                             <tr>
@@ -544,26 +629,16 @@ export function TableExplorer({ databaseId, databaseName, autoLoad }: TableExplo
                                     </p>
                                 )}
 
-                                <div className={styles.actions}>
-                                    <Button
-                                        variant='secondary'
-                                        onClick={() => void loadRows(table, Math.max(0, offset - PAGE))}
-                                        disabled={busy || !hasPrev}
-                                    >
-                                        Précédent
-                                    </Button>
-                                    <Button
-                                        variant='secondary'
-                                        onClick={() => void loadRows(table, offset + PAGE)}
-                                        disabled={busy || !hasNext}
-                                    >
-                                        Suivant
-                                    </Button>
-                                </div>
-                            </>
+                                <Pagination
+                                    page={Math.floor(offset / PAGE) + 1}
+                                    pageCount={pageCount}
+                                    disabled={busy}
+                                    onGo={(page) => void loadRows(table, (page - 1) * PAGE)}
+                                />
+                            </motion.div>
                         )}
                     </div>
-                </div>
+                </motion.div>
             )}
 
             {structure && (
@@ -622,6 +697,7 @@ export function TableExplorer({ databaseId, databaseName, autoLoad }: TableExplo
             <ExportDialog
                 open={dialogue?.kind === 'export'}
                 databaseId={databaseId}
+                tables={tables}
                 table={table}
                 onClose={() => setDialogue(null)}
             />
@@ -647,7 +723,7 @@ export function TableExplorer({ databaseId, databaseName, autoLoad }: TableExplo
                     ne sait pas revenir en arrière — seule une sauvegarde du serveur le permettrait.
                 </p>
             </Dialog>
-        </section>
+        </motion.section>
     );
 }
 

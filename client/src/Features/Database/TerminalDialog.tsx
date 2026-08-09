@@ -3,7 +3,12 @@ import type { DatabaseExecution } from 'deveye-types';
 import { Button, Dialog } from '@/Components';
 import { ws } from '@/api/ws';
 import { humanizeError } from '../Projects/api';
+import { ResultDialog, ResultTable } from './ResultTable';
+import { formatCount } from './format';
 import styles from './style.module.css';
+
+/** Lignes montrées dans l'aperçu d'un résultat, au fil de l'historique. */
+const PREVIEW_ROWS = 3;
 
 interface TerminalDialogProps {
     open: boolean;
@@ -45,17 +50,28 @@ function isRead(sql: string): boolean {
  *
  * L'historique reste dans la popup, sans jamais quitter le navigateur : ce qu'on
  * tape sur une base de production n'a pas à être conservé par DevEye.
+ *
+ * ## L'historique ne montre que des aperçus
+ *
+ * Une requête qui rend quatre cents lignes les déroulait entières dans le fil,
+ * poussant l'invite hors de l'écran et rendant illisible tout ce qui précédait.
+ * Or ce qu'on attend d'un résultat *passé* tient en une ligne — combien, et à
+ * quoi il ressemblait. Le fil en garde donc trois lignes, et le résultat complet
+ * s'ouvre d'un clic dans un écran fait pour lui, avec tri et copie.
  */
 export function TerminalDialog({ open, databaseId, databaseName, onClose, onWrote }: TerminalDialogProps) {
     const [sql, setSql] = useState('');
     const [history, setHistory] = useState<Entry[]>([]);
     const [busy, setBusy] = useState(false);
     const [confirm, setConfirm] = useState<string | null>(null);
+    /** Le résultat ouvert en grand, s'il y en a un. */
+    const [opened, setOpened] = useState<Entry | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (!open) return;
         setConfirm(null);
+        setOpened(null);
     }, [open]);
 
     // Le dernier résultat est celui qu'on attend : on l'amène sous les yeux.
@@ -140,33 +156,31 @@ export function TerminalDialog({ open, databaseId, databaseName, onClose, onWrot
                                 {entry.result?.rows && (
                                     <>
                                         <p className={styles.hint}>
-                                            {entry.result.rows.rows.length} ligne
+                                            {formatCount(entry.result.rows.rows.length)} ligne
                                             {entry.result.rows.rows.length > 1 ? 's' : ''} · {entry.result.elapsedMs} ms
                                         </p>
-                                        <div className={styles.rowsScroll}>
-                                            <table className={styles.dataTable}>
-                                                <thead>
-                                                    <tr>
-                                                        {entry.result.rows.columns.map((c) => (
-                                                            <th key={c}>{c}</th>
-                                                        ))}
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {entry.result.rows.rows.map((row, r) => (
-                                                        <tr key={r}>
-                                                            {row.map((cell, c) => (
-                                                                <td
-                                                                    key={c}
-                                                                    className={cell === null ? styles.nullCell : ''}
-                                                                >
-                                                                    {cell === null ? 'NULL' : cell}
-                                                                </td>
-                                                            ))}
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
+                                        {/* Un aperçu, cliquable en entier — et non un
+                                            tableau suivi d'un lien : la cible du geste
+                                            est ce qu'on regarde déjà. */}
+                                        <div
+                                            role='button'
+                                            tabIndex={0}
+                                            className={styles.resultPreview}
+                                            title='Ouvrir le résultat complet'
+                                            onClick={() => setOpened(entry)}
+                                            onKeyDown={(e) => {
+                                                if (e.key !== 'Enter' && e.key !== ' ') return;
+                                                e.preventDefault();
+                                                setOpened(entry);
+                                            }}
+                                        >
+                                            <ResultTable rows={entry.result.rows} limit={PREVIEW_ROWS} />
+                                            <span className={styles.resultPreviewFoot}>
+                                                <span className='icon icon-expand' aria-hidden='true' />
+                                                {entry.result.rows.rows.length > PREVIEW_ROWS
+                                                    ? `Voir les ${formatCount(entry.result.rows.rows.length)} lignes`
+                                                    : 'Ouvrir le résultat'}
+                                            </span>
                                         </div>
                                     </>
                                 )}
@@ -219,6 +233,13 @@ export function TerminalDialog({ open, databaseId, databaseName, onClose, onWrot
                 </p>
                 <pre className={styles.terminalSql}>{confirm}</pre>
             </Dialog>
+
+            <ResultDialog
+                open={opened !== null}
+                sql={opened?.sql ?? ''}
+                rows={opened?.result?.rows ?? null}
+                onClose={() => setOpened(null)}
+            />
         </>
     );
 }

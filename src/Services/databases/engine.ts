@@ -4,6 +4,7 @@ import type {
     DatabaseCell,
     DatabaseEngine,
     DatabaseFilter,
+    DatabaseIdRange,
     DatabaseRows,
     DatabaseSort,
     DatabaseStructure,
@@ -64,6 +65,17 @@ export interface Inventory {
     tableCount: number;
 }
 
+/**
+ * Des plages de valeurs sur une colonne, bornes comprises.
+ *
+ * La colonne est validée par l'appelant, comme partout ailleurs ici ; les bornes
+ * sont des nombres, liés en paramètres.
+ */
+export interface IdRanges {
+    column: string;
+    ranges: DatabaseIdRange[];
+}
+
 /** Comment lire une page de table : filtres, ordre, fenêtre. */
 export interface PageRequest {
     offset: number;
@@ -73,6 +85,8 @@ export interface PageRequest {
     /** Comment les filtres se combinent. `and` par défaut. */
     combinator?: 'and' | 'or';
     sort?: DatabaseSort;
+    /** Bornes sur une colonne, ajoutées **par un ET** aux critères. */
+    ranges?: IdRanges;
 }
 
 /** Ce qu'une instruction libre a produit : des lignes, ou un décompte. */
@@ -166,11 +180,6 @@ class Params {
     }
 }
 
-/** Neutralise les jokers d'un `LIKE` : on cherche un texte, pas un motif. */
-function escapeLike(value: string): string {
-    return value.replace(/[\\%_]/g, (c) => `\\${c}`);
-}
-
 /**
  * La clause `WHERE` d'une recherche.
  *
@@ -178,9 +187,27 @@ function escapeLike(value: string): string {
  * aucun fragment écrit par l'utilisateur n'entre dans le texte de la requête. Le
  * nom de colonne, lui, a été confronté au catalogue par l'appelant — c'est le
  * seul endroit où cette vérification peut se faire.
+ *
+ * ## Les jokers d'un `LIKE` sont **rendus tels quels**
+ *
+ * `%` et `_` gardent leur rôle de motif, et `\%` désigne un pourcentage
+ * littéral. C'est un choix, et l'inverse du précédent (qui échappait tout) : la
+ * recherche est une grille sur du vrai SQL, pas une boîte à texte, et pouvoir
+ * écrire `2026-%-01` vaut mieux que de n'avoir aucun moyen d'exprimer un motif.
+ * Rien n'en devient dangereux pour autant — la valeur reste **liée**, elle n'est
+ * jamais recollée dans le texte de la requête ; seul son *sens* pour l'opérateur
+ * `LIKE` change. Les deux moteurs prennent `\` comme caractère d'échappement par
+ * défaut, la convention est donc la même des deux côtés.
  */
-function buildWhere(d: Dialect, p: Params, filters: DatabaseFilter[] = [], combinator: 'and' | 'or' = 'and'): string {
-    if (filters.length === 0) return '';
+function buildWhere(
+    d: Dialect,
+    p: Params,
+    filters: DatabaseFilter[] = [],
+    combinator: 'and' | 'or' = 'and',
+    ranges?: IdRanges
+): string {
+    const grouped = buildRanges(d, p, ranges);
+    if (filters.length === 0) return grouped === '' ? '' : ` WHERE ${grouped}`;
     const parts = filters.map((f) => {
         const col = d.quote(f.column);
         switch (f.operator) {
@@ -199,11 +226,11 @@ function buildWhere(d: Dialect, p: Params, filters: DatabaseFilter[] = [], combi
             case 'lte':
                 return `${col} <= ${p.add(f.value)}`;
             case 'contains':
-                return `${col} LIKE ${p.add(`%${escapeLike(f.value)}%`)}`;
+                return `${col} LIKE ${p.add(`%${f.value}%`)}`;
             case 'starts':
-                return `${col} LIKE ${p.add(`${escapeLike(f.value)}%`)}`;
+                return `${col} LIKE ${p.add(`${f.value}%`)}`;
             case 'ends':
-                return `${col} LIKE ${p.add(`%${escapeLike(f.value)}`)}`;
+                return `${col} LIKE ${p.add(`%${f.value}`)}`;
             case 'eq':
                 return `${col} = ${p.add(f.value)}`;
             default:
@@ -213,7 +240,26 @@ function buildWhere(d: Dialect, p: Params, filters: DatabaseFilter[] = [], combi
                 throw new Error('Opérateur de recherche inconnu.');
         }
     });
-    return ` WHERE ${parts.join(combinator === 'or' ? ' OR ' : ' AND ')}`;
+    // Les plages s'ajoutent **par un ET**, quelle que soit la combinaison des
+    // critères : elles bornent la sélection, elles ne s'y ajoutent pas comme un
+    // critère de plus. Un `OU` entre critères reste donc parenthésé à part.
+    const clause = parts.join(combinator === 'or' ? ' OR ' : ' AND ');
+    return grouped === '' ? ` WHERE ${clause}` : ` WHERE (${clause}) AND ${grouped}`;
+}
+
+/**
+ * La condition qui borne une lecture à des plages d'identifiants.
+ *
+ * Un groupe de `BETWEEN` reliés par `OU`, bornes comprises et **liées** : « 1-50,
+ * 80 » ne traverse jamais le contrat sous forme de texte, seules des paires de
+ * nombres arrivent ici. Sert à l'export ; la colonne visée est la clé primaire,
+ * résolue par l'appelant sur le catalogue réel.
+ */
+function buildRanges(d: Dialect, p: Params, ranges?: IdRanges): string {
+    if (!ranges || ranges.ranges.length === 0) return '';
+    const col = d.quote(ranges.column);
+    const parts = ranges.ranges.map((r) => `${col} BETWEEN ${p.add(r.from)} AND ${p.add(r.to)}`);
+    return `(${parts.join(' OR ')})`;
 }
 
 /** La clause `ORDER BY`, colonne déjà validée par l'appelant. */
@@ -501,7 +547,7 @@ async function openMysql(target: EngineTarget, tunnel: { host: string; port: num
             // paramètre lié.
             const quoted = `${MYSQL.quote(schema)}.${MYSQL.quote(table)}`;
             const countParams = new Params(MYSQL);
-            const where = buildWhere(MYSQL, countParams, page.filters, page.combinator);
+            const where = buildWhere(MYSQL, countParams, page.filters, page.combinator, page.ranges);
             const count = await run(`SELECT COUNT(*) AS n FROM ${quoted}${where}`, countParams.values);
 
             // Une seconde suite de paramètres : la clause est identique, mais
@@ -509,7 +555,7 @@ async function openMysql(target: EngineTarget, tunnel: { host: string; port: num
             const pageParams = new Params(MYSQL);
             const sql =
                 `SELECT * FROM ${quoted}` +
-                buildWhere(MYSQL, pageParams, page.filters, page.combinator) +
+                buildWhere(MYSQL, pageParams, page.filters, page.combinator, page.ranges) +
                 buildOrder(MYSQL, page.sort) +
                 ` LIMIT ${pageParams.add(page.limit)} OFFSET ${pageParams.add(page.offset)}`;
             const rows = await run(sql, pageParams.values);
@@ -740,13 +786,13 @@ async function openPostgres(target: EngineTarget, tunnel: { host: string; port: 
         async tableRows(schema, table, page) {
             const quoted = `${POSTGRES.quote(schema)}.${POSTGRES.quote(table)}`;
             const countParams = new Params(POSTGRES);
-            const where = buildWhere(POSTGRES, countParams, page.filters, page.combinator);
+            const where = buildWhere(POSTGRES, countParams, page.filters, page.combinator, page.ranges);
             const count = await run(`SELECT COUNT(*) FROM ${quoted}${where}`, countParams.values);
 
             const pageParams = new Params(POSTGRES);
             const sql =
                 `SELECT * FROM ${quoted}` +
-                buildWhere(POSTGRES, pageParams, page.filters, page.combinator) +
+                buildWhere(POSTGRES, pageParams, page.filters, page.combinator, page.ranges) +
                 buildOrder(POSTGRES, page.sort) +
                 ` LIMIT ${pageParams.add(page.limit)} OFFSET ${pageParams.add(page.offset)}`;
             const rows = await run(sql, pageParams.values);

@@ -13,6 +13,24 @@
     min-height: 0;
 }
 
+/*
+ * La racine en mode « une table, et rien d'autre ».
+ *
+ * `height: 100%` est tout ce que le mode agrandi demande à cet étage : la
+ * feature est posée dans la zone défilante de la popup, qui a une hauteur
+ * définie (colonne flex bornée par les insets du panneau). La racine prend donc
+ * exactement la hauteur visible, et le panneau qui reste peut la remplir avec un
+ * simple `flex: 1`. Aucun positionnement absolu, aucune mesure en JavaScript.
+ *
+ * `overflow: hidden` supprime la barre de défilement de la popup pendant ce
+ * temps-là : ce qui déborde, désormais, c'est le tableau, dans sa propre boîte.
+ */
+.rootExpanded {
+    composes: root;
+    height: 100%;
+    overflow: hidden;
+}
+
 .header {
     display: flex;
     align-items: flex-start;
@@ -53,6 +71,14 @@
 .ok {
     font-size: 0.82rem;
     color: var(--success);
+}
+
+/* Une connexion en cours : ni un succès, ni un échec — l'orange dit « on
+   attend », et occupe la place où la réponse s'écrira, pour que l'écran ne
+   sursaute pas quand elle arrive. */
+.pending {
+    font-size: 0.82rem;
+    color: var(--warning);
 }
 
 /* Un avertissement qui n'est pas une erreur : « ceci ne tournera pas ». */
@@ -352,6 +378,20 @@
     min-width: 0;
 }
 
+/*
+ * Le panneau des tables quand il occupe tout.
+ *
+ * Il ne change ni de forme ni de couleur : il prend simplement la place que la
+ * racine lui laisse (`flex: 1`), ses voisins ayant disparu. C'est ce qui rend
+ * l'animation de framer-motion lisible — un seul rectangle bouge, et il reste
+ * reconnaissable d'un bout à l'autre.
+ */
+.panelExpanded {
+    composes: panel;
+    flex: 1;
+    min-height: 0;
+}
+
 .panelHead {
     display: flex;
     align-items: center;
@@ -432,6 +472,27 @@
     grid-template-columns: 240px minmax(0, 1fr);
     gap: var(--space-md);
     min-width: 0;
+    /* La largeur de la colonne de gauche s'anime : c'est ce qui fait glisser la
+       liste hors de l'écran au lieu de la faire disparaître d'un coup quand on
+       passe en plein écran. */
+    transition:
+        grid-template-columns var(--transition-slow),
+        gap var(--transition-slow);
+}
+
+/*
+ * En plein écran, la colonne des tables se referme.
+ *
+ * Une largeur nulle plutôt qu'un `display: none` : la liste reste dans le DOM,
+ * sa boîte se rétrécit, et le contenu suit le mouvement. La démonter aurait fait
+ * sauter la grille d'un état à l'autre au milieu de l'animation du panneau.
+ */
+.explorerExpanded {
+    composes: explorer;
+    grid-template-columns: 0 minmax(0, 1fr);
+    gap: 0;
+    flex: 1;
+    min-height: 0;
 }
 
 @media (max-width: 720px) {
@@ -440,15 +501,80 @@
     }
 }
 
+/* Le panneau, lui, est animé par framer-motion, qui suit déjà le réglage système
+   (`<MotionConfig reducedMotion="user">`). Cette colonne-ci est en CSS : elle
+   doit le suivre de son côté, sinon la moitié du mouvement subsisterait. */
+@media (prefers-reduced-motion: reduce) {
+    .explorer {
+        transition: none;
+    }
+}
+
+/*
+ * La boîte qui donne sa hauteur à la liste.
+ *
+ * Elle s'étire à la hauteur de la ligne de grille — donc à celle du contenu de
+ * la table, sa voisine — et la liste la remplit en défilant dedans. C'est le
+ * seul montage qui donne « aussi haute que la carte » sans hauteur en dur :
+ * `max-height: 320px` laissait un vide sous une liste courte et coupait
+ * arbitrairement une liste longue, et sans plafond du tout, quatre-vingts tables
+ * repoussaient la carte entière sur trois écrans.
+ *
+ * `position: absolute` sur la liste est ce qui casse la circularité : sans lui,
+ * le contenu de la liste participerait au calcul de la hauteur de la ligne
+ * qu'il est justement censé subir.
+ */
+.tableListPane {
+    position: relative;
+    min-height: 240px;
+    min-width: 0;
+    overflow: hidden;
+}
+
 .tableList {
+    position: absolute;
+    inset: 0;
     display: flex;
     flex-direction: column;
     gap: 2px;
     margin: 0;
     padding: 0;
-    max-height: 320px;
     overflow-y: auto;
     list-style: none;
+}
+
+@media (max-width: 720px) {
+    /* Une seule colonne : la liste reprend le fil, et son plafond avec — ici
+       elle n'a plus de voisine à laquelle s'aligner. */
+    .tableListPane {
+        min-height: 0;
+    }
+
+    .tableList {
+        position: static;
+        max-height: 240px;
+    }
+}
+
+/*
+ * Le cadre de la table ouverte.
+ *
+ * Sa seule fonction est de dire à qui appartiennent les boutons : « Ajouter »,
+ * « Supprimer », « Structure » agissent sur *cette* table, pas sur la base. Sans
+ * lui, ils flottaient entre la liste de gauche et le tableau, à égale distance
+ * des deux, et rien ne tranchait.
+ */
+.tablePanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    padding: var(--space-sm) var(--space-md) var(--space-md);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: var(--surface-subtle);
 }
 
 .tableItem {
@@ -494,6 +620,9 @@
     flex-direction: column;
     gap: var(--space-sm);
     min-width: 0;
+    /* Sans plancher à zéro, un enfant qui défile ne peut pas être plus court que
+       son contenu : le tableau pousserait la colonne au lieu de défiler dedans. */
+    min-height: 0;
 }
 
 .rowsHead {
@@ -510,6 +639,16 @@
     max-height: 360px;
     border-radius: var(--radius-md);
     border: 1px solid var(--glass-border);
+}
+
+/* La même boîte, mais qui prend toute la hauteur restante : le plein écran, et
+   la vue d'un résultat de terminal. Pas de plafond ici — c'est justement ce
+   qu'on est venu chercher. */
+.rowsScrollFill {
+    composes: rowsScroll;
+    flex: 1;
+    min-height: 0;
+    max-height: none;
 }
 
 .dataTable {
@@ -531,10 +670,17 @@
     text-overflow: ellipsis;
 }
 
+/*
+ * L'en-tête colle en haut du défilement — il faut donc qu'il **couvre** les
+ * lignes qui passent dessous. `--surface-widget` est à 0,62 d'opacité : les
+ * valeurs se lisaient en filigrane derrière les noms de colonnes, et sur une
+ * table dense on ne savait plus quel mot appartenait à quoi. `--surface-popup`
+ * (0,92) laisse encore deviner le fond de verre sans rien laisser traverser.
+ */
 .dataTable th {
     position: sticky;
     top: 0;
-    background: var(--surface-widget);
+    background: var(--surface-popup);
     color: var(--text-muted);
     font-weight: 600;
 }
@@ -918,6 +1064,7 @@
 }
 
 .condition {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--space-xs);
@@ -927,8 +1074,28 @@
     background: var(--surface-subtle);
 }
 
+/* La première ligne s'arrête avant la croix, qui occupe le coin. */
+.condition > .fieldRow {
+    padding-right: 32px;
+}
+
+/*
+ * Retirer cette condition — dans **le coin du bloc**, pas dans le fil des
+ * champs.
+ *
+ * En bout de ligne, la croix s'alignait sur la hauteur des champs et se
+ * retrouvait à mi-hauteur du bloc, sans dire à quoi elle se rapportait : au
+ * champ qui la précédait ? à la ligne ? Posée dans le coin supérieur droit, elle
+ * appartient visiblement au panneau entier — c'est la convention de toutes les
+ * cartes fermables, et elle se lit sans réfléchir.
+ */
 .conditionRemove {
-    align-self: flex-end;
+    position: absolute;
+    top: var(--space-xs);
+    right: var(--space-xs);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     width: 28px;
     height: 28px;
     padding: 0;
@@ -937,10 +1104,14 @@
     background: transparent;
     color: var(--text-muted);
     cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        background var(--transition-fast);
 }
 
 .conditionRemove:hover {
     color: var(--danger);
+    background: var(--surface-subtle);
 }
 
 .dangerZone {
@@ -957,6 +1128,238 @@
    part à gauche, loin du couple Annuler / Enregistrer. */
 .footerLead {
     margin-right: auto;
+}
+
+/*
+ * Un pied à deux étages : un message au-dessus, les boutons en dessous.
+ *
+ * Le pied du Dialog est une ligne alignée à droite ; un unique enfant pleine
+ * largeur en fait une colonne sans rien changer au composant partagé. Sert à ce
+ * qui se lit **juste avant de cliquer** — le résultat d'un essai de connexion.
+ */
+.footerStack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    width: 100%;
+    min-width: 0;
+}
+
+.footerRow {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+}
+
+/* Une indication, et non une action, à gauche du pied : l'estimation de taille
+   d'un export. Elle pousse les boutons au bout de la ligne comme le ferait un
+   bouton de tête, mais sans en avoir le poids. */
+.footerNote {
+    margin-right: auto;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+/*
+ * Les onglets d'une popup de réglages.
+ *
+ * Même dessin que ceux des comptes mail : un segment posé sur le fond, l'onglet
+ * actif surélevé plutôt que souligné. Deux features à l'écrire deux fois valent
+ * mieux qu'un composant partagé prématuré — mais si un troisième arrive, c'est
+ * là qu'il faudra le sortir.
+ */
+.tabBar {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+}
+
+.tabButton {
+    flex: 1 1 0;
+    padding: var(--space-xs) var(--space-sm);
+    border: none;
+    border-radius: calc(var(--radius-sm) - 2px);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.tabButton:hover {
+    color: var(--text-primary);
+}
+
+.tabButtonOn {
+    composes: tabButton;
+    background: var(--glass-bg-light);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
+}
+
+/*
+ * Une colonne que le moteur remplit, à la place de son champ.
+ *
+ * Un bouton, et pas un champ grisé : un champ désactivé dit « pas maintenant »,
+ * ce bouton dit « quelqu'un d'autre s'en charge, et tu peux reprendre la main ».
+ * La colonne garde son rang dans le formulaire — c'est tout l'intérêt par
+ * rapport à la retirer de la liste.
+ */
+.autoField {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-sm);
+    border-radius: var(--radius-md);
+    border: 1px dashed var(--glass-border);
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.8rem;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.autoField:hover {
+    border-color: var(--accent);
+    color: var(--text-secondary);
+}
+
+/* Le chemin inverse : rendre la colonne au moteur après l'avoir ouverte. */
+.autoBack {
+    align-self: flex-start;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.75rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.autoBack:hover {
+    color: var(--text-primary);
+}
+
+/* ------------------------------------------------------------ résultats */
+
+/*
+ * L'aperçu d'un résultat, dans le fil du terminal.
+ *
+ * Cliquable en entier plutôt que suivi d'un lien : la cible du geste est ce
+ * qu'on est déjà en train de regarder. Le dégradé en pied dit que la suite
+ * existe sans avoir à écrire « … » — et le pied, lui, dit où l'on va.
+ */
+.resultPreview {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: filter var(--transition-fast);
+}
+
+.resultPreview:hover {
+    filter: brightness(1.15);
+}
+
+.resultPreview:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.resultPreviewFoot {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    color: var(--accent);
+    font-size: 0.75rem;
+}
+
+/* Le corps de la popup d'un résultat : l'instruction, puis le tableau qui prend
+   tout ce qui reste. */
+.resultBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    flex: 1;
+    min-height: 0;
+}
+
+/* ---------------------------------------------------------- pagination */
+
+/*
+ * Parcourir les pages.
+ *
+ * Les deux boutons aux extrémités — le geste courant garde sa place et sa
+ * taille — et les numéros au milieu, en petit : ils servent aux sauts, qui sont
+ * rares mais qu'aucun « Suivant » ne remplace. Ils s'enroulent sur plusieurs
+ * lignes plutôt que de déborder, une table de mille pages en nommant une
+ * douzaine.
+ */
+.pager {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.pagerSteps {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-wrap: wrap;
+    flex: 1;
+    justify-content: center;
+    min-width: 0;
+}
+
+.pagerStep {
+    min-width: 28px;
+    padding: 2px var(--space-xs);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.pagerStep:hover:not(:disabled) {
+    color: var(--text-primary);
+    border-color: var(--glass-border);
+}
+
+.pagerStep:disabled {
+    cursor: default;
+}
+
+.pagerStepOn {
+    composes: pagerStep;
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.pagerGap {
+    padding: 0 2px;
+    color: var(--text-muted);
+    font-size: 0.78rem;
 }
 
 /* Le « i » d'une explication : présent, mais sans le poids d'un bouton — il ne

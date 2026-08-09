@@ -24,6 +24,11 @@ const EMPTY: DatabaseFilter = { column: '', operator: 'contains', value: '' };
  * recollée dans la requête. C'est ce qui permet d'offrir la recherche sans
  * ouvrir une porte, et de la proposer aux mêmes conditions sur les deux moteurs.
  *
+ * Les jokers d'un `LIKE` gardent leur sens : `%` remplace n'importe quelle
+ * suite, `_` un caractère, `\%` un pourcentage littéral. C'est le comportement
+ * de SQL, et l'écran n'a rien à en dire — une phrase pour prévenir du contraire
+ * était le signe qu'on avait pris une liberté de trop.
+ *
  * Le terminal, lui, est là pour ce que cette grille ne sait pas exprimer.
  */
 export function SearchDialog({ open, structure, filters, combinator, onClose, onApply }: SearchDialogProps) {
@@ -145,11 +150,6 @@ export function SearchDialog({ open, structure, filters, combinator, onClose, on
                             Ajouter un critère
                         </Button>
                     </div>
-
-                    <p className={styles.hint}>
-                        « Contient » cherche le texte tel quel : un <code>%</code> saisi est un pourcentage, pas un
-                        joker.
-                    </p>
                 </div>
             </div>
         </Dialog>

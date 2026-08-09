@@ -47,6 +47,9 @@ export function FeatureDatabase({ workspace }: FeatureProps) {
     /** Le dernier essai de connexion, propre à la vue ouverte. */
     const [probe, setProbe] = useState<DatabaseProbe | null>(null);
 
+    /** Un essai de connexion est en cours — distinct de `busy`, qui grise tout. */
+    const [testing, setTesting] = useState(false);
+
     const [dialog, setDialog] = useState<{ database: Database | null } | null>(null);
     const [busy, setBusy] = useState(false);
 
@@ -134,6 +137,7 @@ export function FeatureDatabase({ workspace }: FeatureProps) {
     /** Essaie la connexion, sans rien enregistrer. */
     const test = async (databaseId: number) => {
         setBusy(true);
+        setTesting(true);
         setProbe(null);
         try {
             const res = await ws.send('database.test', { databaseId });
@@ -141,17 +145,24 @@ export function FeatureDatabase({ workspace }: FeatureProps) {
         } catch (e) {
             setError(humanizeError(e, 'Le test n’a pas pu être lancé.'));
         } finally {
+            setTesting(false);
             setBusy(false);
         }
     };
 
-    /** Relève l'inventaire — le même chemin que l'ordonnanceur, alertes comprises. */
+    /**
+     * Relève l'inventaire — le même chemin que l'ordonnanceur, alertes comprises.
+     *
+     * **Ne touche pas à `probe`** : le résultat d'un relevé s'écrit dans le
+     * bandeau « État / Temps de réponse / … » juste en dessous, et le redire en
+     * une phrase au-dessus ne ferait que doubler la même information. La phrase
+     * de connexion est réservée aux essais, qui n'ont, eux, aucun autre endroit
+     * où s'afficher.
+     */
     const inspect = async (databaseId: number) => {
         setBusy(true);
-        setProbe(null);
         try {
-            const res = await ws.send('database.inspect', { databaseId });
-            setProbe(res.probe);
+            await ws.send('database.inspect', { databaseId });
             invalidate('database.list', 'database.detail', 'database.count');
         } catch (e) {
             setError(humanizeError(e, 'Le relevé n’a pas pu être fait.'));
@@ -203,6 +214,7 @@ export function FeatureDatabase({ workspace }: FeatureProps) {
                     alerts={opened.alerts}
                     canWrite={canWrite}
                     busy={busy}
+                    testing={testing}
                     probe={probe}
                     onBack={() => setOpenedId(null)}
                     onEdit={() => setDialog({ database: opened.database })}
