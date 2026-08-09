@@ -4,7 +4,6 @@ import { useState } from 'react';
 import HomePage from './Pages/Home/index.js';
 import LoginPage from './Pages/Login/index.js';
 import RegisterPage, { readRegisterToken } from './Pages/Login/Register';
-import { CrashScreen } from './Components/CrashScreen';
 import { SecrecyGate } from './Components/SecrecyGate';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 
@@ -55,15 +54,9 @@ function App() {
         // skips the heavy transform/layout morphs (keeping cheap opacity fades),
         // which is both an accessibility win and lighter on low-end GPUs.
         <MotionConfig reducedMotion='user'>
-            {/* Une erreur de rendu démonte la racine entière chez React 19 :
-                sans cette frontière, la moindre exception ne laisse qu'un fond
-                uni, sans message ni trace. Elle ne répare rien — elle rend la
-                panne lisible, ce qui est la condition pour la corriger. */}
-            <CrashScreen>
-                <AuthProvider>
-                    <AppRoot />
-                </AuthProvider>
-            </CrashScreen>
+            <AuthProvider>
+                <AppRoot />
+            </AuthProvider>
         </MotionConfig>
     );
 }

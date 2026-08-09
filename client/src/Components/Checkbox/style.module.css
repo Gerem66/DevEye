@@ -14,6 +14,19 @@
  * trois lignes, et la case doit rester en face de la première.
  */
 .row {
+    /*
+     * ⚠️ Indispensable, et pas décoratif : c'est le bloc conteneur de la case
+     * native, qui est en `position: absolute` juste en dessous.
+     *
+     * Sans elle, l'input masqué se rattache au premier ancêtre positionné —
+     * l'accueil, `.dashboard`, qui est **hors de la zone défilante**. L'input
+     * cesse alors de défiler avec son libellé : dès qu'on a descendu la page, il
+     * se retrouve à des centaines de pixels de la case qu'on voit. Cliquer le
+     * libellé lui donne le focus, le navigateur le ramène à l'écran en faisant
+     * défiler tous ses ancêtres défilables — `overflow: hidden` en fait partie —
+     * et toute l'interface se décale sans barre pour revenir en arrière.
+     */
+    position: relative;
     display: flex;
     align-items: flex-start;
     gap: var(--space-sm);

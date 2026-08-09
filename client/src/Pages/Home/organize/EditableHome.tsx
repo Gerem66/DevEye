@@ -373,17 +373,7 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
     );
 
     const sections = layout.sections;
-    /**
-     * Mémoïsé, et pas seulement par économie.
-     *
-     * dnd-kit compare le tableau d'items **par identité** dans `useSortable`
-     * (`items !== previous.current.items`) pour décider s'il doit rejouer une
-     * animation de disposition. Un tableau reconstruit à chaque rendu — et le
-     * store en provoque un à chaque case cochée — le laisse croire en permanence
-     * que la liste vient de changer, ce qui fait dépendre son comportement d'un
-     * détail de rendu plutôt que de la liste elle-même.
-     */
-    const ids = useMemo(() => sections.map((s) => s.id), [sections]);
+    const ids = sections.map((s) => s.id);
 
     // A dialog target must follow the live layout (a removed section closes it).
     const addSectionTarget = sections.find((s) => s.id === addTarget) ?? null;
