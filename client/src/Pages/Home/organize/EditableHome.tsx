@@ -364,6 +364,13 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
     const [activeTileId, setActiveTileId] = useState<string | null>(null);
     /** Where that tile started, so a cancelled drag puts it back. */
     const dragOrigin = useRef<{ sectionId: string; beforeId: string | null } | null>(null);
+    /**
+     * Le déplacement du pointeur au moment du dernier changement de section.
+     *
+     * C'est ce qui empêche la boucle décrite dans `onDragOver` : tant que le
+     * pointeur n'a pas bougé, il n'a rien demandé de nouveau.
+     */
+    const lastHandover = useRef<string | null>(null);
 
     // 8px activation distance: a plain click (e.g. the × button) never starts a
     // drag, and there's no stray text selection on press.
@@ -439,6 +446,7 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
         const id = String(e.active.id);
         // Sections drag as themselves (no overlay); only tiles get one.
         if (sections.some((s) => s.id === id)) return;
+        lastHandover.current = null;
         const owner = sectionOf(sections, id);
         // La tuile devant laquelle elle se trouvait : c'est ce qui la remet
         // exactement où elle était si le glissé est abandonné. Un rang aurait
@@ -458,9 +466,25 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
      * Rien n'est lu ici que des **identités** : cet événement part du pointeur,
      * donc bien plus souvent que React ne rend, et `sections` décrit toujours un
      * état d'avant. Le store, lui, résout les positions sur l'état courant.
+     *
+     * ## Un changement de section par mouvement du pointeur, pas davantage
+     *
+     * Changer une tuile de section **change la hauteur des deux sections** : la
+     * source se referme, la cible s'ouvre, et tout ce qui suit remonte. Sous un
+     * pointeur resté immobile, ce n'est donc plus la même section qui se trouve.
+     * dnd-kit remesure (la mesure est en continu, elle doit l'être pour qu'un
+     * lâcher tombe juste), rappelle cet événement, et l'on rend la tuile — ce qui
+     * défait la reflow, ramène la section d'origine sous le curseur, et
+     * recommence. Une boucle qui ne tient à aucun geste, et que React finit par
+     * arrêter en dépilant l'application entière (« Maximum update depth »).
+     *
+     * `delta` est le déplacement du pointeur depuis le début du glissé : deux
+     * événements qui le partagent décrivent le **même** geste. Le second n'a donc
+     * rien de neuf à demander, et un changement de section par position bornerait
+     * la réaction en chaîne à un seul tour.
      */
     const onDragOver = (e: DragOverEvent) => {
-        const { active, over } = e;
+        const { active, over, delta } = e;
         if (!over || !activeTileId) return;
         const activeId = String(active.id);
         const source = sectionOf(sections, activeId);
@@ -470,12 +494,17 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
         // Kinds must match — transferSectionItem refuses anyway, but bailing here
         // keeps the tile visibly anchored in its own section.
         if (target.section.kind !== source.kind) return;
+
+        const at = `${delta.x},${delta.y}`;
+        if (lastHandover.current === at) return;
+        lastHandover.current = at;
         transferSectionItem(source.id, target.section.id, activeId, target.beforeId);
     };
 
     const onDragEnd = (e: DragEndEvent) => {
         setActiveTileId(null);
         dragOrigin.current = null;
+        lastHandover.current = null;
         const { active, over } = e;
         if (!over) return;
         const activeId = String(active.id);
@@ -505,6 +534,7 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
         const id = activeTileId;
         setActiveTileId(null);
         dragOrigin.current = null;
+        lastHandover.current = null;
         if (!origin || !id) return;
         const current = sectionOf(sections, id);
         if (!current || current.id === origin.sectionId) return;
