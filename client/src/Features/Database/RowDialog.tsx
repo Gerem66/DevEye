@@ -137,7 +137,7 @@ export function RowDialog({ open, databaseId, structure, row, onClose, onSaved }
                     <Button variant='secondary' onClick={onClose} disabled={busy}>
                         Annuler
                     </Button>
-                    <Button onClick={() => void submit()} disabled={busy}>
+                    <Button onClick={() => void submit()} disabled={busy || editable.length === 0}>
                         {busy ? 'Écriture…' : editing ? 'Enregistrer' : 'Ajouter'}
                     </Button>
                 </>
@@ -197,6 +197,13 @@ export function RowDialog({ open, databaseId, structure, row, onClose, onSaved }
                         );
                     })}
                 </div>
+
+                {editable.length === 0 && (
+                    <p className={styles.warn}>
+                        Cette table n’a que des colonnes que le moteur remplit lui-même
+                        {editing && ' ou qui composent sa clé primaire'} : il n’y a rien à saisir ici.
+                    </p>
+                )}
 
                 {!editing && structure.columns.some((c) => c.generated) && (
                     <p className={styles.hint}>
