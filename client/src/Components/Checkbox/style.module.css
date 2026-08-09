@@ -1,10 +1,25 @@
 /* Case à cocher — uniquement des variables de thème, aucune couleur en dur. */
 
+/*
+ * La ligne entière est cliquable, puisque c'est un `<label>`.
+ *
+ * Elle porte aussi la **typographie par défaut** du libellé. Les classes que
+ * les appelants passent en `className` ne doivent donc rien redéclarer de ce
+ * qui est ici : à spécificité égale, ce n'est pas l'ordre des classes dans
+ * l'attribut qui tranche mais celui des fichiers dans le bundle — autant dire
+ * un hasard. Elles ne portent que ce qui leur est propre : un rembourrage, un
+ * fond au survol, une bordure.
+ *
+ * `flex-start` et non `center` : un libellé suivi d'une explication tient sur
+ * trois lignes, et la case doit rester en face de la première.
+ */
 .row {
     display: flex;
     align-items: flex-start;
     gap: var(--space-sm);
     min-width: 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
     cursor: pointer;
     user-select: none;
 }
@@ -36,6 +51,19 @@
     white-space: nowrap;
 }
 
+/*
+ * La case elle-même : un carré, et qui se voit.
+ *
+ * **Le rayon est en dur, à 4 px, et c'est délibéré.** L'échelle du thème
+ * commence à `--radius-sm` (8 px), taillée pour des champs de 36 px et des
+ * panneaux ; appliquée à une boîte de 18 px, elle arrondit presque un cercle et
+ * la case cesse de ressembler à une case. 4 px adoucit l'angle sans effacer la
+ * forme, qui est ici toute l'information.
+ *
+ * La bordure au repos est la **forte** (blanc à 16 %) et non celle des champs
+ * de saisie (9 %) : un champ de saisie est une grande surface que son fond
+ * suffit à délimiter, une case de 18 px n'a que son contour pour exister.
+ */
 .box {
     position: relative;
     flex-shrink: 0;
@@ -47,25 +75,30 @@
     justify-content: center;
     width: 18px;
     height: 18px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--input-border);
+    border-radius: 4px;
+    border: 1px solid var(--glass-border-strong);
     background: var(--input-bg);
+    /* La coche est sombre sur le cyan plein, comme le texte d'un bouton
+       principal : c'est le même couple de couleurs dans toute l'application. */
     color: var(--on-accent);
     transition:
         background var(--transition-fast),
-        border-color var(--transition-fast);
+        border-color var(--transition-fast),
+        box-shadow var(--transition-fast);
 }
 
 .row:hover .box {
-    border-color: var(--glass-border-strong);
+    border-color: var(--accent);
 }
 
 .mark {
-    width: 11px;
-    /* La coche n'apparaît qu'une fois cochée ; elle garde sa place pour que la
-       boîte ne change pas de taille. */
+    /* Assez large pour toucher les bords de la boîte : une coche timide au
+       milieu d'un carré de 18 px se lit mal. */
+    width: 13px;
+    /* Elle n'apparaît qu'une fois cochée, mais garde sa place — sans quoi la
+       boîte changerait de taille au clic. */
     filter: opacity(0);
-    transform: scale(0.7);
+    transform: scale(0.6);
     transition:
         filter var(--transition-fast),
         transform var(--transition-fast);
@@ -81,18 +114,36 @@
     transform: scale(1);
 }
 
+/* Cochée, le survol éclaircit le fond plutôt que la bordure : celle-ci a déjà
+   la couleur d'accent, elle n'a plus rien à signaler. */
+.row:hover .native:checked + .box {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+
+/*
+ * L'anneau de focus, posé à l'extérieur du carré.
+ *
+ * `box-shadow` et non `outline` : le carré n'ayant que 18 px, un contour posé
+ * dessus mangerait sa forme, alors qu'une lueur écartée de deux pixels la
+ * laisse intacte — c'est la même halo d'accent que les champs de saisie.
+ */
 .native:focus-visible + .box {
     border-color: var(--accent);
     box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
-/* Le libellé : un titre, et le cas échéant une explication sous lui. */
+/*
+ * Le libellé : un titre, et le cas échéant une explication sous lui.
+ *
+ * N'impose ni taille ni couleur — elles viennent de `.row`, donc de l'appelant
+ * s'il en décide autrement. Seule la hauteur de ligne est fixée : c'est elle
+ * qui aligne la case sur la première ligne du texte.
+ */
 .text {
     display: flex;
     flex-direction: column;
     gap: 2px;
     min-width: 0;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
     line-height: 1.4;
 }

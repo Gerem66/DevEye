@@ -317,21 +317,6 @@
     gap: var(--space-xs);
 }
 
-.generatorOption {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    font-size: 0.82rem;
-    color: var(--text-secondary);
-    cursor: pointer;
-    user-select: none;
-}
-
-.generatorOption input {
-    accent-color: var(--accent);
-    cursor: pointer;
-}
-
 .generatorWarning {
     font-size: 0.75rem;
     color: var(--danger);

@@ -54,7 +54,7 @@ export function DatabaseView({
             {probe && (
                 <p className={probe.ok ? styles.ok : styles.error}>
                     {probe.ok
-                        ? `Connexion réussie en ${probe.elapsedMs} ms — ${probe.serverVersion}`
+                        ? `Connexion réussie en ${probe.elapsedMs} ms · ${probe.serverVersion}`
                         : `Connexion impossible : ${probe.error}`}
                 </p>
             )}
@@ -78,11 +78,11 @@ export function DatabaseView({
             {/* Dire d'où viennent ces chiffres, sans quoi on les croit lus à
                 l'instant — alors qu'ils datent du dernier relevé, lequel peut
                 n'avoir jamais eu lieu. */}
-            <p className={styles.hint}>
-                {database.lastCheckAt === null
-                    ? 'Ces chiffres sont vides : cette base n’a jamais été relevée. « Relever l’état » va les chercher.'
-                    : `Chiffres du dernier relevé (${formatAgo(database.lastCheckAt)}), pas une lecture en direct.`}
-            </p>
+            {database.lastCheckAt === null && (
+                <p className={styles.hint}>
+                    Ces chiffres sont vides : cette base n’a jamais été relevée. « Relever l’état » va les chercher.
+                </p>
+            )}
 
             <section className={styles.panel}>
                 <header className={styles.panelHead}>

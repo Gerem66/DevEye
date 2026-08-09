@@ -133,12 +133,7 @@ function PasswordGeneratorMenu({ onGenerate }: PasswordGeneratorMenuProps) {
 
                             <div className={styles.generatorOptions}>
                                 {CHARSET_TOGGLES.map(({ key, label }) => (
-                                    <Checkbox
-                                        key={key}
-                                        className={styles.generatorOption}
-                                        checked={options[key]}
-                                        onChange={() => toggleCharset(key)}
-                                    >
+                                    <Checkbox key={key} checked={options[key]} onChange={() => toggleCharset(key)}>
                                         {label}
                                     </Checkbox>
                                 ))}

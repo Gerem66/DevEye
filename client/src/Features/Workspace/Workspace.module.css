@@ -248,14 +248,10 @@
     padding: var(--space-sm) var(--space-md);
 }
 
+/* Ne porte que ce qui lui est propre : la disposition, le curseur et la
+   typographie viennent du composant `Checkbox`. */
 .checkRow {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
     padding: var(--space-xs) 0;
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-    cursor: pointer;
     transition: color var(--transition-fast);
 }
 
