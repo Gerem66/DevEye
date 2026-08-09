@@ -150,7 +150,7 @@ export function Databases({ project, canWrite }: DatabasesProps) {
             )}
 
             {canWrite && !canWriteDb && (
-                <span className={dbStyles.hint}>
+                <span className={dbStyles.hintCentered}>
                     Votre rôle ne permet pas de modifier les bases de données de cet espace.
                 </span>
             )}

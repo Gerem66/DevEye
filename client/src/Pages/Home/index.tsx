@@ -14,6 +14,7 @@ import { OpenPopup } from '@/Components/Popup';
 import { isHomeReady, onHomeReady } from '@/stores/homeReady';
 import { refreshDevices, resetDevices, useDevices } from '@/stores/devices';
 import { setPermissions, useWorkspacePermissions } from '@/stores/workspace';
+import { useResourceVersion } from '@/stores/invalidation';
 import { syncThemeFromServer } from '@/stores/theme';
 import { syncHomeLayoutFromServer } from '@/stores/homeLayout';
 import {
@@ -536,6 +537,40 @@ export default function HomePage() {
     // Mirror of expandedWidget for stable callbacks that must read it at call time.
     const expandedWidgetRef = useRef(expandedWidget);
     expandedWidgetRef.current = expandedWidget;
+
+    /**
+     * Les droits viennent de bouger dans l'espace : on les relit.
+     *
+     * Quelqu'un a modifié un rôle ou une adhésion, et le serveur l'a diffusé
+     * (sujet `workspace`). Les tuiles se grisent ou se dégrisent d'elles-mêmes —
+     * elles lisent le store — mais une vue **ouverte** sur une feature qu'on
+     * vient de perdre resterait affichée : on la referme.
+     *
+     * Le serveur, lui, n'attend pas cette relecture pour refuser : toute commande
+     * re-résout les droits dès que l'époque d'accès a changé (`invalidateAccess`).
+     * Ce qui se joue ici est l'écran, pas la sûreté — une écriture partie juste
+     * avant la révocation est rejetée quoi qu'il arrive.
+     */
+    const accessVersion = useResourceVersion('workspace.permissions');
+    useEffect(() => {
+        // Rien à relire au premier rendu : la session vient de les livrer.
+        if (accessVersion === 0) return;
+        void (async () => {
+            try {
+                const res = await ws.send('workspace.activate', {});
+                setPermissions(res.permissions);
+                const open = expandedWidgetRef.current;
+                if (open && !survivesWorkspaceSwitch(open, getHomeLayout(), res.permissions, viewsRef.current)) {
+                    handleClose();
+                }
+            } catch {
+                // Plus d'accès du tout à cet espace : la session sait où nous
+                // remettre, et referme ce qui était ouvert en chemin.
+                if (expandedWidgetRef.current) handleClose();
+                void refresh();
+            }
+        })();
+    }, [accessVersion, handleClose, refresh]);
 
     // Cross-feature navigation: a feature can ask to open another view (e.g.
     // Monitoring's "Gérer les appareils" → the Appareils page).

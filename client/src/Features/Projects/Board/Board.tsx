@@ -79,7 +79,8 @@ export function Board({
     const [activeId, setActiveId] = useState<number | null>(null);
     /** D'où la carte est partie, pour la remettre en place sur Échap. */
     const origin = useRef<{ columnId: number; index: number } | null>(null);
-    const outlineFor = useLiveOutlines('l2');
+    // `l3` : l'onglet du projet occupe `l2` (voir `ProjectDetail`).
+    const outlineFor = useLiveOutlines('l3');
 
     // Le tableau réclame à la popup la largeur de ses colonnes — ni plus (un
     // tableau de trois colonnes n'a rien à faire aux bords de l'écran), ni moins

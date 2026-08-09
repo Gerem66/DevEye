@@ -13,6 +13,7 @@ import { Button } from '@/Components';
 import { ws } from '@/api/ws';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useLiveSegment } from '@/live/useLiveSegment';
+import { useLiveOutlines } from '@/live/useLiveOutline';
 import { humanizeError, STATUS_LABELS, withSecrecy } from './api';
 import { Board } from './Board/Board';
 import { CardDialog } from './Board/CardDialog';
@@ -76,8 +77,28 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
     const version = useResourceVersion('project.board');
     const reloadRef = useRef<Promise<void> | null>(null);
 
-    // Présence : « qui regarde quelle carte ».
-    useLiveSegment('l2', cardDialog?.card ? `card:${cardDialog.card.id}` : null);
+    /*
+     * Présence : « qui regarde quoi, dans ce projet ».
+     *
+     * L'onglet est un niveau à part entière, entre le projet et la carte. Ce
+     * n'est pas un raffinement d'affichage : un chemin détermine aussi à qui le
+     * serveur transmet les curseurs — seuls les pairs situés *exactement* au même
+     * endroit se voient. Sans ce niveau, quelqu'un resté sur la frise promenait
+     * son curseur en travers du tableau de son voisin.
+     *
+     * La carte ouverte descend donc en `l3`, et les contours qui la désignaient
+     * suivent (voir `Board` et `Timeline`).
+     */
+    const tabTarget = useLiveSegment('l2', `tab:${tab}`);
+    useLiveSegment('l3', cardDialog?.card ? `card:${cardDialog.card.id}` : null);
+    const outlineForTab = useLiveOutlines('l2');
+
+    // Rejoindre quelqu'un, c'est aussi arriver sur son onglet.
+    useEffect(() => {
+        if (!tabTarget?.value) return;
+        const wanted = tabTarget.value.replace(/^tab:/, '');
+        if (TABS.some((t) => t.id === wanted)) setTab(wanted as TabId);
+    }, [tabTarget]);
 
     // La largeur de la popup n'est plus décidée ici : `Board` et `Timeline`
     // déclarent chacun celle que **leur contenu** réclame (voir
@@ -403,6 +424,7 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
                         className={t.id === tab ? styles.tabActive : styles.tab}
                         aria-current={t.id === tab ? 'page' : undefined}
                         onClick={() => setTab(t.id)}
+                        {...outlineForTab(`tab:${t.id}`)}
                     >
                         <span className={`icon icon-${t.icon}`} /> {t.label}
                     </button>

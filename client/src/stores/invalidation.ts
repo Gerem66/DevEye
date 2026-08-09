@@ -30,6 +30,8 @@ export type ResourceKey =
     | 'device.list'
     | 'weather.list'
     | 'workspace.roleList'
+    /** Les droits de l'appelant dans l'espace actif — pas la liste des rôles. */
+    | 'workspace.permissions'
     | 'project.count'
     | 'project.list'
     | 'project.board'
@@ -73,7 +75,17 @@ const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
     // Un relevé qui aboutit touche la liste (état, taille, alertes franchies) et
     // la fiche ouverte. `database.count` suit pour la tuile de l'accueil.
     database: ['database.count', 'database.list', 'database.detail'],
-    workspace: ['workspace.roleList'],
+    /*
+     * Un rôle modifié, un membre ajouté ou retiré : la liste des rôles bouge,
+     * mais **les droits de chacun aussi** — y compris ceux de qui ne regardait
+     * pas la page Espace. C'est ce second effet qui fait qu'une feature se grise
+     * (ou se dégrise) chez ses membres sans qu'ils rechargent, et qu'une vue
+     * dont on vient de perdre l'accès se referme d'elle-même.
+     *
+     * Le sujet `workspace` n'exige aucun droit de feature (`TOPIC_FEATURE`), donc
+     * la trame atteint bien celui à qui on vient de tout retirer.
+     */
+    workspace: ['workspace.roleList', 'workspace.permissions'],
     home: [],
     account: []
 };

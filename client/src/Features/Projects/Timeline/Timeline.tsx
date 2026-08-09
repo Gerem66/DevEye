@@ -107,7 +107,8 @@ export function Timeline({
 }: TimelineProps) {
     const [zoom, setZoom] = useState<ZoomId>('month');
     const zoomDayWidth = ZOOM_LEVELS.find((z) => z.id === zoom)?.dayWidth ?? 10;
-    const outlineFor = useLiveOutlines('l2');
+    // `l3` : l'onglet du projet occupe `l2` (voir `ProjectDetail`).
+    const outlineFor = useLiveOutlines('l3');
 
     /**
      * La largeur réellement offerte à la frise.

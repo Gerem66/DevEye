@@ -79,6 +79,19 @@
     color: var(--text-muted);
 }
 
+/*
+ * Le mot d'explication d'un écran qu'on ne peut que consulter.
+ *
+ * Centré, parce qu'il ne commente aucune ligne en particulier : il vaut pour
+ * tout ce qui est au-dessus de lui. Calé à gauche sous une liste pleine
+ * largeur, il se lisait comme la légende du dernier élément.
+ */
+.hintCentered {
+    composes: hint;
+    display: block;
+    text-align: center;
+}
+
 .error {
     font-size: 0.82rem;
     color: var(--danger);
