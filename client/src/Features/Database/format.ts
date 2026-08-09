@@ -1,4 +1,4 @@
-import type { DatabaseComparator, DatabaseEngine, DatabaseStatus } from 'deveye-types';
+import type { DatabaseComparator, DatabaseEngine, DatabaseFilterOperator, DatabaseStatus } from 'deveye-types';
 
 /** Le nom d'usage d'un moteur, celui que l'utilisateur reconnaît. */
 export const ENGINE_LABELS: Record<DatabaseEngine, string> = {
@@ -19,6 +19,41 @@ export const COMPARATOR_LABELS: Record<DatabaseComparator, string> = {
     lte: '≤',
     eq: '=',
     ne: '≠'
+};
+
+/**
+ * Les conditions de recherche, dites en français plutôt qu'en SQL.
+ *
+ * L'ordre n'est pas alphabétique mais celui de l'usage : on cherche d'abord un
+ * texte contenu, ensuite une égalité, et les comparaisons en dernier.
+ */
+export const FILTER_OPERATOR_LABELS: Record<DatabaseFilterOperator, string> = {
+    contains: 'contient',
+    eq: 'est égal à',
+    ne: 'est différent de',
+    starts: 'commence par',
+    ends: 'finit par',
+    gt: 'est supérieur à',
+    gte: 'est supérieur ou égal à',
+    lt: 'est inférieur à',
+    lte: 'est inférieur ou égal à',
+    isNull: 'est NULL',
+    notNull: 'n’est pas NULL'
+};
+
+/** Deux conditions ne prennent pas de valeur : le champ disparaît alors. */
+export const OPERATOR_NEEDS_VALUE: Record<DatabaseFilterOperator, boolean> = {
+    contains: true,
+    eq: true,
+    ne: true,
+    starts: true,
+    ends: true,
+    gt: true,
+    gte: true,
+    lt: true,
+    lte: true,
+    isNull: false,
+    notNull: false
 };
 
 /**

@@ -1,13 +1,5 @@
-import {
-    databaseInspect,
-    databaseQuery,
-    databaseTableList,
-    databaseTableRows,
-    databaseTest,
-    databaseTestDraft
-} from 'deveye-types';
-import type { DatabaseTable } from 'deveye-types';
-import { explainError, openSession, ROWS_PAGE_DEFAULT, type Session } from '@/Services/databases/engine';
+import { databaseInspect, databaseQuery, databaseTest, databaseTestDraft } from 'deveye-types';
+import { explainError, openSession, type Session } from '@/Services/databases/engine';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { databaseCipher, loadDatabase, monitorOf, READ, reloadDatabase, WRITE } from './_shared';
 
@@ -163,42 +155,6 @@ export const databaseInspectFeature: FeatureDefinition<
     }
 });
 
-export const databaseTableListFeature: FeatureDefinition<
-    typeof databaseTableList.command,
-    typeof databaseTableList.input,
-    typeof databaseTableList.output
-> = defineFeature({
-    ...databaseTableList,
-    access: WRITE,
-    handler: async (ctx, input) => ({
-        tables: await withSession(ctx, input.databaseId, (s) => s.tables())
-    })
-});
-
-export const databaseTableRowsFeature: FeatureDefinition<
-    typeof databaseTableRows.command,
-    typeof databaseTableRows.input,
-    typeof databaseTableRows.output
-> = defineFeature({
-    ...databaseTableRows,
-    access: WRITE,
-    handler: async (ctx, input) => {
-        const rows = await withSession(ctx, input.databaseId, async (s) => {
-            // Un identifiant de table ne peut pas être un paramètre lié : la
-            // seule façon sûre de le nommer est de le confronter d'abord à la
-            // liste réelle des tables. Un nom qui n'y figure pas n'atteint
-            // jamais la requête.
-            const tables: DatabaseTable[] = await s.tables();
-            const found = tables.find(
-                (t) => t.name === input.table && (input.schema === '' || t.schema === input.schema)
-            );
-            if (!found) throw new FeatureError('not_found', 'Cette table n’existe pas dans cette base.');
-            return s.tableRows(found.schema, found.name, input.offset ?? 0, input.limit ?? ROWS_PAGE_DEFAULT);
-        });
-        return { rows };
-    }
-});
-
 export const databaseQueryFeature: FeatureDefinition<
     typeof databaseQuery.command,
     typeof databaseQuery.input,
@@ -218,8 +174,6 @@ export const databaseProbeFeatures = [
     databaseTestFeature,
     databaseTestDraftFeature,
     databaseInspectFeature,
-    databaseTableListFeature,
-    databaseTableRowsFeature,
     databaseQueryFeature
 ];
 

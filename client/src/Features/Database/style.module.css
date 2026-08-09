@@ -549,6 +549,198 @@
     font-style: italic;
 }
 
+/*
+ * La barre d'outils d'une table.
+ *
+ * Les trois gestes qui écrivent à gauche, ceux qui regardent à droite, séparés
+ * par un vide qui pousse les seconds au bout de la ligne. « Supprimer » garde sa
+ * teinte d'alerte : c'est le seul bouton de l'écran qui ne se rattrape pas.
+ */
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.toolbarGap {
+    flex: 1 1 var(--space-md);
+}
+
+/* La colonne des cases à cocher : aussi étroite que son contenu. */
+.selectCell {
+    width: 1%;
+    white-space: nowrap;
+}
+
+/* Un en-tête de colonne est un bouton de tri, sans en avoir l'apparence. */
+.sortButton {
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.sortButton:hover {
+    color: var(--accent);
+}
+
+/*
+ * Une valeur qui porte une clé étrangère.
+ *
+ * Soulignée en pointillé plutôt qu'en plein : c'est un lien vers une autre
+ * table, pas un lien de navigation ordinaire, et une table entière de liens
+ * pleins deviendrait illisible.
+ */
+.foreignLink {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+
+.foreignLink:hover {
+    text-decoration: underline solid;
+}
+
+/*
+ * Le halo d'une ligne qu'on vient de rejoindre par une clé étrangère.
+ *
+ * Il s'éteint tout seul : sa raison d'être est de dire « c'est celle-ci » à
+ * l'arrivée, pas de marquer durablement une ligne. L'animation part vive et
+ * finit fondue, de sorte que l'œil l'attrape sans que l'écran clignote.
+ */
+@keyframes rowHalo {
+    from {
+        background: var(--accent-bg);
+        box-shadow: inset 0 0 0 1px var(--accent);
+    }
+    to {
+        background: transparent;
+        box-shadow: inset 0 0 0 1px transparent;
+    }
+}
+
+.rowHalo td {
+    animation: rowHalo 3.5s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rowHalo td {
+        animation: none;
+        background: var(--accent-bg);
+    }
+}
+
+/* Les critères de recherche appliqués, et de quoi s'en défaire. */
+.filterBar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.filterChip {
+    padding: 2px var(--space-sm);
+    border-radius: var(--radius-pill);
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 0.75rem;
+}
+
+.filterClear {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.75rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.filterClear:hover {
+    color: var(--text-primary);
+}
+
+/* Le type d'une colonne, à côté de son nom dans un formulaire de ligne. */
+.columnType {
+    margin-left: var(--space-xs);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+}
+
+.requiredMark {
+    margin-left: var(--space-xs);
+    color: var(--warning);
+    font-size: 0.72rem;
+}
+
+/* Une contrainte ou un index, dans le panneau « Structure ». */
+.constraintList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.constraint {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+    font-size: 0.82rem;
+}
+
+.constraintBody {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+/* L'historique du terminal : il défile, l'invite reste en dessous. */
+.terminalHistory {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    max-height: 340px;
+    overflow-y: auto;
+}
+
+.terminalEntry {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.terminalSql {
+    margin: 0;
+    padding: var(--space-sm);
+    border-radius: var(--radius-sm);
+    border-left: 2px solid var(--accent);
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
 /* ------------------------------------------------------------- projets */
 
 .usageList {

@@ -1,6 +1,14 @@
 import mysql from 'mysql2/promise';
 import { Client as PgClient } from 'pg';
-import type { DatabaseEngine, DatabaseRows, DatabaseTable } from 'deveye-types';
+import type {
+    DatabaseCell,
+    DatabaseEngine,
+    DatabaseFilter,
+    DatabaseRows,
+    DatabaseSort,
+    DatabaseStructure,
+    DatabaseTable
+} from 'deveye-types';
 import { openTunnel, type TunnelConfig } from './tunnel';
 
 /**
@@ -56,15 +64,47 @@ export interface Inventory {
     tableCount: number;
 }
 
-/** Une session ouverte sur une base, le temps d'une suite d'opérations. */
+/** Comment lire une page de table : filtres, ordre, fenêtre. */
+export interface PageRequest {
+    offset: number;
+    limit: number;
+    /** Critères de recherche ; colonnes validées par l'appelant. */
+    filters?: DatabaseFilter[];
+    /** Comment les filtres se combinent. `and` par défaut. */
+    combinator?: 'and' | 'or';
+    sort?: DatabaseSort;
+}
+
+/** Ce qu'une instruction libre a produit : des lignes, ou un décompte. */
+export interface ExecutionResult {
+    rows: DatabaseRows | null;
+    affected: number | null;
+    elapsedMs: number;
+}
+
+/**
+ * Une session ouverte sur une base, le temps d'une suite d'opérations.
+ *
+ * **Aucun nom n'est validé ici.** Table et colonnes arrivent déjà confrontées au
+ * catalogue réel par l'appelant ({@link ../../features/database/explore}), qui
+ * est le seul endroit où cette vérification a du sens : c'est lui qui reçoit ce
+ * que le client a envoyé. La session, elle, ne fait que citer.
+ */
 export interface Session {
     serverVersion(): Promise<string>;
     inventory(): Promise<Inventory>;
     tables(): Promise<DatabaseTable[]>;
-    /** Le contenu d'une table, nom validé contre la liste réelle par l'appelant. */
-    tableRows(schema: string, table: string, offset: number, limit: number): Promise<DatabaseRows>;
+    /** Colonnes, clé primaire, clés étrangères et index d'une table. */
+    structure(schema: string, table: string): Promise<DatabaseStructure>;
+    /** Le contenu d'une table, page par page, filtres et ordre compris. */
+    tableRows(schema: string, table: string, page: PageRequest): Promise<DatabaseRows>;
     /** Une requête de lecture, telle que l'utilisateur l'a écrite. */
     query(sql: string): Promise<DatabaseRows>;
+    /** Une instruction libre, écriture comprise — le terminal. */
+    execute(sql: string): Promise<ExecutionResult>;
+    insertRow(schema: string, table: string, values: DatabaseCell[]): Promise<number>;
+    updateRow(schema: string, table: string, key: DatabaseCell[], values: DatabaseCell[]): Promise<number>;
+    deleteRows(schema: string, table: string, keys: DatabaseCell[][]): Promise<number>;
     close(): Promise<void>;
 }
 
@@ -82,6 +122,173 @@ function toText(value: unknown): string | null {
     if (Buffer.isBuffer(value)) return `0x${value.subarray(0, 32).toString('hex')}${value.length > 32 ? '…' : ''}`;
     if (typeof value === 'object') return JSON.stringify(value);
     return String(value);
+}
+
+// --------------------------------------------------------------- dialectes
+
+/**
+ * Ce qui distingue les deux moteurs dans la fabrication d'une requête.
+ *
+ * Deux points, et deux seulement : la façon de citer un identifiant, et la façon
+ * de désigner un paramètre. Tout le reste — clauses `WHERE`, `ORDER BY`,
+ * `INSERT`, `UPDATE`, `DELETE` — s'écrit une fois pour les deux, ce qui évite
+ * que la recherche marche d'un côté et pas de l'autre.
+ */
+interface Dialect {
+    quote(identifier: string): string;
+    /** Le marqueur du n-ième paramètre (1-indexé). */
+    param(index: number): string;
+}
+
+const MYSQL: Dialect = {
+    quote: (id) => `\`${id.replace(/`/g, '``')}\``,
+    param: () => '?'
+};
+
+const POSTGRES: Dialect = {
+    quote: (id) => `"${id.replace(/"/g, '""')}"`,
+    param: (i) => `$${i}`
+};
+
+/**
+ * Les valeurs liées d'une requête en construction.
+ *
+ * Un compteur partagé, parce que PostgreSQL numérote ses marqueurs : la clause
+ * `WHERE`, l'ordre et la fenêtre doivent puiser dans la même suite, sinon `$3`
+ * désigne la mauvaise valeur.
+ */
+class Params {
+    readonly values: unknown[] = [];
+    constructor(private readonly dialect: Dialect) {}
+    add(value: unknown): string {
+        this.values.push(value);
+        return this.dialect.param(this.values.length);
+    }
+}
+
+/** Neutralise les jokers d'un `LIKE` : on cherche un texte, pas un motif. */
+function escapeLike(value: string): string {
+    return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/**
+ * La clause `WHERE` d'une recherche.
+ *
+ * L'opérateur vient d'une énumération fermée et la valeur est **toujours liée** :
+ * aucun fragment écrit par l'utilisateur n'entre dans le texte de la requête. Le
+ * nom de colonne, lui, a été confronté au catalogue par l'appelant — c'est le
+ * seul endroit où cette vérification peut se faire.
+ */
+function buildWhere(d: Dialect, p: Params, filters: DatabaseFilter[] = [], combinator: 'and' | 'or' = 'and'): string {
+    if (filters.length === 0) return '';
+    const parts = filters.map((f) => {
+        const col = d.quote(f.column);
+        switch (f.operator) {
+            case 'isNull':
+                return `${col} IS NULL`;
+            case 'notNull':
+                return `${col} IS NOT NULL`;
+            case 'ne':
+                return `${col} <> ${p.add(f.value)}`;
+            case 'gt':
+                return `${col} > ${p.add(f.value)}`;
+            case 'gte':
+                return `${col} >= ${p.add(f.value)}`;
+            case 'lt':
+                return `${col} < ${p.add(f.value)}`;
+            case 'lte':
+                return `${col} <= ${p.add(f.value)}`;
+            case 'contains':
+                return `${col} LIKE ${p.add(`%${escapeLike(f.value)}%`)}`;
+            case 'starts':
+                return `${col} LIKE ${p.add(`${escapeLike(f.value)}%`)}`;
+            case 'ends':
+                return `${col} LIKE ${p.add(`%${escapeLike(f.value)}`)}`;
+            case 'eq':
+                return `${col} = ${p.add(f.value)}`;
+            default:
+                // Inatteignable : `DatabaseFilterOperator` est fermé et tous ses
+                // membres sont traités. Le garde-fou vaut pour le jour où l'un
+                // s'y ajoute sans passer par ici.
+                throw new Error('Opérateur de recherche inconnu.');
+        }
+    });
+    return ` WHERE ${parts.join(combinator === 'or' ? ' OR ' : ' AND ')}`;
+}
+
+/** La clause `ORDER BY`, colonne déjà validée par l'appelant. */
+function buildOrder(d: Dialect, sort?: DatabaseSort): string {
+    if (!sort) return '';
+    return ` ORDER BY ${d.quote(sort.column)} ${sort.direction === 'desc' ? 'DESC' : 'ASC'}`;
+}
+
+/**
+ * La condition qui désigne **une** ligne, par sa clé primaire.
+ *
+ * `IS NULL` pour une valeur nulle, et non `= NULL` qui ne vaut jamais vrai : une
+ * clé primaire ne devrait pas porter de nul, mais une clé qu'on ne retrouve pas
+ * silencieusement vaudrait un `UPDATE` sans effet plutôt qu'une erreur.
+ */
+function keyCondition(d: Dialect, p: Params, key: DatabaseCell[]): string {
+    return key
+        .map((cell) =>
+            cell.value === null ? `${d.quote(cell.column)} IS NULL` : `${d.quote(cell.column)} = ${p.add(cell.value)}`
+        )
+        .join(' AND ');
+}
+
+/** Les lignes plates que rendent les deux catalogues, avant regroupement. */
+interface StructureRows {
+    schema: string;
+    table: string;
+    columns: DatabaseStructure['columns'];
+    primaryKey: string[];
+    /** Une ligne par colonne de contrainte, déjà ordonnée par position. */
+    foreignRows: { name: string; column: string; refSchema: string; refTable: string; refColumn: string }[];
+    /** Une ligne par colonne d'index, déjà ordonnée. */
+    indexRows: { name: string; column: string; unique: boolean }[];
+}
+
+/**
+ * Regroupe les lignes plates du catalogue en contraintes et en index.
+ *
+ * Les deux moteurs rendent une ligne **par colonne** d'une contrainte : une clé
+ * composite y occupe deux lignes, appariées par leur position. Le regroupement
+ * est donc le même des deux côtés, et vaut d'être écrit une seule fois.
+ */
+function buildStructure(input: StructureRows): DatabaseStructure {
+    const foreignKeys = new Map<string, DatabaseStructure['foreignKeys'][number]>();
+    for (const row of input.foreignRows) {
+        const existing = foreignKeys.get(row.name);
+        if (existing) {
+            existing.columns.push(row.column);
+            existing.refColumns.push(row.refColumn);
+        } else {
+            foreignKeys.set(row.name, {
+                name: row.name,
+                columns: [row.column],
+                refSchema: row.refSchema,
+                refTable: row.refTable,
+                refColumns: [row.refColumn]
+            });
+        }
+    }
+
+    const indexes = new Map<string, DatabaseStructure['indexes'][number]>();
+    for (const row of input.indexRows) {
+        const existing = indexes.get(row.name);
+        if (existing) existing.columns.push(row.column);
+        else indexes.set(row.name, { name: row.name, columns: [row.column], unique: row.unique });
+    }
+
+    return {
+        schema: input.schema,
+        table: input.table,
+        columns: input.columns,
+        primaryKey: input.primaryKey,
+        foreignKeys: [...foreignKeys.values()],
+        indexes: [...indexes.values()]
+    };
 }
 
 /**
@@ -102,6 +309,25 @@ export function assertReadOnly(sql: string): void {
     }
     if (!/^(select|with|show|explain)\b/i.test(trimmed)) {
         throw new Error('Seules les requêtes de lecture sont acceptées (SELECT, WITH, SHOW, EXPLAIN).');
+    }
+}
+
+/**
+ * Refuse ce qui n'est pas **une seule** instruction — écriture comprise.
+ *
+ * Le terminal administre : refuser les écritures n'aurait pas de sens, puisque
+ * l'explorateur en propose déjà par ses formulaires. Ce qui reste interdit,
+ * c'est la salve : un copier-coller de trois instructions dont on ne visait que
+ * la première s'exécuterait en entier, sans qu'aucun écran n'ait montré les
+ * deux autres.
+ */
+export function assertSingleStatement(sql: string): void {
+    const trimmed = sql.trim().replace(/;\s*$/, '');
+    if (trimmed === '') throw new Error('L’instruction est vide.');
+    if (trimmed.includes(';')) {
+        throw new Error(
+            'Une seule instruction à la fois : le point-virgule n’est pas accepté au milieu d’une instruction.'
+        );
     }
 }
 
@@ -167,6 +393,12 @@ async function openMysql(target: EngineTarget, tunnel: { host: string; port: num
         };
     };
 
+    /** Une écriture : ce qui compte n'est pas ce qu'elle rend, mais combien. */
+    const exec = async (sql: string, params: unknown[] = []): Promise<number> => {
+        const [result] = await connection.query({ sql, values: params, timeout: QUERY_TIMEOUT_MS });
+        return Number((result as unknown as { affectedRows?: number }).affectedRows ?? 0);
+    };
+
     const session: Session = {
         async serverVersion() {
             const res = await run('SELECT VERSION() AS v');
@@ -202,18 +434,134 @@ async function openMysql(target: EngineTarget, tunnel: { host: string; port: num
                 sizeBytes: row[3] === null ? null : Number(row[3])
             }));
         },
-        async tableRows(schema, table, offset, limit) {
+        async structure(schema, table) {
+            const columns = await run(
+                `SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_KEY, EXTRA, COLUMN_COMMENT
+                   FROM information_schema.COLUMNS
+                  WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+                  ORDER BY ORDINAL_POSITION ASC`,
+                [schema, table]
+            );
+            // La clé primaire dans **l'ordre de la clé**, et non celui des
+            // colonnes : sur une clé composite, les deux diffèrent, et c'est
+            // l'ordre de la clé qui compte pour désigner une ligne.
+            const primary = await run(
+                `SELECT COLUMN_NAME FROM information_schema.STATISTICS
+                  WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME = 'PRIMARY'
+                  ORDER BY SEQ_IN_INDEX ASC`,
+                [schema, table]
+            );
+            const foreign = await run(
+                `SELECT CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_SCHEMA, REFERENCED_TABLE_NAME,
+                        REFERENCED_COLUMN_NAME
+                   FROM information_schema.KEY_COLUMN_USAGE
+                  WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND REFERENCED_TABLE_NAME IS NOT NULL
+                  ORDER BY CONSTRAINT_NAME ASC, ORDINAL_POSITION ASC`,
+                [schema, table]
+            );
+            const indexes = await run(
+                `SELECT INDEX_NAME, COLUMN_NAME, NON_UNIQUE FROM information_schema.STATISTICS
+                  WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME <> 'PRIMARY'
+                  ORDER BY INDEX_NAME ASC, SEQ_IN_INDEX ASC`,
+                [schema, table]
+            );
+
+            return buildStructure({
+                schema,
+                table,
+                columns: columns.rows.map((r) => ({
+                    name: r[0] ?? '',
+                    type: r[1] ?? '',
+                    nullable: r[2] === 'YES',
+                    default: r[3],
+                    primaryKey: r[4] === 'PRI',
+                    // `auto_increment`, mais aussi les colonnes calculées : dans
+                    // les deux cas le moteur refuse qu'on les renseigne.
+                    generated: /auto_increment|GENERATED/i.test(r[5] ?? ''),
+                    comment: r[6] ?? ''
+                })),
+                primaryKey: primary.rows.map((r) => r[0] ?? ''),
+                foreignRows: foreign.rows.map((r) => ({
+                    name: r[0] ?? '',
+                    column: r[1] ?? '',
+                    refSchema: r[2] ?? '',
+                    refTable: r[3] ?? '',
+                    refColumn: r[4] ?? ''
+                })),
+                indexRows: indexes.rows.map((r) => ({
+                    name: r[0] ?? '',
+                    column: r[1] ?? '',
+                    unique: r[2] === '0'
+                }))
+            });
+        },
+        async tableRows(schema, table, page) {
             // Le nom a déjà été confronté à la liste réelle par l'appelant ; il
             // ne reste qu'à le citer, un identifiant ne pouvant pas être un
             // paramètre lié.
-            const quoted = `\`${schema.replace(/`/g, '')}\`.\`${table.replace(/`/g, '')}\``;
-            const count = await run(`SELECT COUNT(*) AS n FROM ${quoted}`);
-            const page = await run(`SELECT * FROM ${quoted} LIMIT ? OFFSET ?`, [limit, offset]);
-            return { ...page, total: Number(count.rows[0]?.[0] ?? 0) };
+            const quoted = `${MYSQL.quote(schema)}.${MYSQL.quote(table)}`;
+            const countParams = new Params(MYSQL);
+            const where = buildWhere(MYSQL, countParams, page.filters, page.combinator);
+            const count = await run(`SELECT COUNT(*) AS n FROM ${quoted}${where}`, countParams.values);
+
+            // Une seconde suite de paramètres : la clause est identique, mais
+            // les valeurs sont consommées par une autre requête.
+            const pageParams = new Params(MYSQL);
+            const sql =
+                `SELECT * FROM ${quoted}` +
+                buildWhere(MYSQL, pageParams, page.filters, page.combinator) +
+                buildOrder(MYSQL, page.sort) +
+                ` LIMIT ${pageParams.add(page.limit)} OFFSET ${pageParams.add(page.offset)}`;
+            const rows = await run(sql, pageParams.values);
+            return { ...rows, total: Number(count.rows[0]?.[0] ?? 0) };
         },
         async query(sql) {
             assertReadOnly(sql);
             return run(sql);
+        },
+        async execute(sql) {
+            assertSingleStatement(sql);
+            const started = Date.now();
+            const [result, fields] = await connection.query({ sql, timeout: QUERY_TIMEOUT_MS });
+            // Un jeu de résultats arrive en tableau ; une écriture rend un
+            // en-tête portant son décompte. C'est la seule chose qui les
+            // distingue à ce niveau.
+            if (Array.isArray(result)) {
+                const columns = (fields ?? []).map((f) => f.name);
+                const list = result as Record<string, unknown>[];
+                return {
+                    rows: {
+                        columns,
+                        rows: list.map((row) => columns.map((c) => toText(row[c]))),
+                        total: null,
+                        elapsedMs: Date.now() - started
+                    },
+                    affected: null,
+                    elapsedMs: Date.now() - started
+                };
+            }
+            const header = result as unknown as { affectedRows?: number };
+            return { rows: null, affected: Number(header.affectedRows ?? 0), elapsedMs: Date.now() - started };
+        },
+        async insertRow(schema, table, values) {
+            const p = new Params(MYSQL);
+            const columns = values.map((v) => MYSQL.quote(v.column)).join(', ');
+            const markers = values.map((v) => p.add(v.value)).join(', ');
+            return exec(
+                `INSERT INTO ${MYSQL.quote(schema)}.${MYSQL.quote(table)} (${columns}) VALUES (${markers})`,
+                p.values
+            );
+        },
+        async updateRow(schema, table, key, values) {
+            const p = new Params(MYSQL);
+            const sets = values.map((v) => `${MYSQL.quote(v.column)} = ${p.add(v.value)}`).join(', ');
+            const where = keyCondition(MYSQL, p, key);
+            return exec(`UPDATE ${MYSQL.quote(schema)}.${MYSQL.quote(table)} SET ${sets} WHERE ${where}`, p.values);
+        },
+        async deleteRows(schema, table, keys) {
+            const p = new Params(MYSQL);
+            const where = keys.map((k) => `(${keyCondition(MYSQL, p, k)})`).join(' OR ');
+            return exec(`DELETE FROM ${MYSQL.quote(schema)}.${MYSQL.quote(table)} WHERE ${where}`, p.values);
         },
         async close() {
             try {
@@ -250,6 +598,12 @@ async function openPostgres(target: EngineTarget, tunnel: { host: string; port: 
             total: null,
             elapsedMs: Date.now() - started
         };
+    };
+
+    /** Une écriture : ce qui compte n'est pas ce qu'elle rend, mais combien. */
+    const exec = async (sql: string, params: unknown[] = []): Promise<number> => {
+        const res = await client.query({ text: sql, values: params });
+        return Number(res.rowCount ?? 0);
     };
 
     const session: Session = {
@@ -294,15 +648,158 @@ async function openPostgres(target: EngineTarget, tunnel: { host: string; port: 
                 sizeBytes: row[3] === null ? null : Number(row[3])
             }));
         },
-        async tableRows(schema, table, offset, limit) {
-            const quoted = `"${schema.replace(/"/g, '')}"."${table.replace(/"/g, '')}"`;
-            const count = await run(`SELECT COUNT(*) FROM ${quoted}`);
-            const page = await run(`SELECT * FROM ${quoted} LIMIT $1 OFFSET $2`, [limit, offset]);
-            return { ...page, total: Number(count.rows[0]?.[0] ?? 0) };
+        async structure(schema, table) {
+            // `format('%I.%I', …)::regclass` cite les deux identifiants du côté
+            // du serveur : la table est ainsi désignée par un paramètre lié, et
+            // non par un nom recollé dans le texte de la requête.
+            const relation = `format('%I.%I', $1::text, $2::text)::regclass`;
+            const columns = await run(
+                `SELECT a.attname,
+                        format_type(a.atttypid, a.atttypmod) AS type,
+                        NOT a.attnotnull AS nullable,
+                        pg_get_expr(d.adbin, d.adrelid) AS default_expr,
+                        COALESCE(bool_or(i.indisprimary), false) AS is_primary,
+                        (a.attidentity <> '' OR a.attgenerated <> ''
+                         OR COALESCE(pg_get_expr(d.adbin, d.adrelid), '') LIKE 'nextval(%') AS generated,
+                        COALESCE(col_description(a.attrelid, a.attnum), '') AS comment
+                   FROM pg_attribute a
+                   LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+                   LEFT JOIN pg_index i ON i.indrelid = a.attrelid AND i.indisprimary
+                                       AND a.attnum = ANY(i.indkey)
+                  WHERE a.attrelid = ${relation} AND a.attnum > 0 AND NOT a.attisdropped
+                  GROUP BY a.attname, a.atttypid, a.atttypmod, a.attnotnull, d.adbin, d.adrelid,
+                           a.attidentity, a.attgenerated, a.attrelid, a.attnum
+                  ORDER BY a.attnum ASC`,
+                [schema, table]
+            );
+            // La clé primaire dans l'ordre de la clé : `indkey` le porte, et
+            // c'est lui qui compte pour désigner une ligne.
+            const primary = await run(
+                `SELECT att.attname
+                   FROM pg_index i
+                   CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+                   JOIN pg_attribute att ON att.attrelid = i.indrelid AND att.attnum = k.attnum
+                  WHERE i.indrelid = ${relation} AND i.indisprimary
+                  ORDER BY k.ord ASC`,
+                [schema, table]
+            );
+            // `unnest(conkey, confkey)` apparie les deux côtés **position par
+            // position** : une contrainte composite reste donc juste, là où une
+            // jointure sur `constraint_column_usage` produirait un produit
+            // croisé et de faux appariements.
+            const foreign = await run(
+                `SELECT con.conname, att.attname, nsp2.nspname, cls2.relname, att2.attname
+                   FROM pg_constraint con
+                   CROSS JOIN LATERAL unnest(con.conkey, con.confkey) WITH ORDINALITY AS u(k, fk, ord)
+                   JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = u.k
+                   JOIN pg_attribute att2 ON att2.attrelid = con.confrelid AND att2.attnum = u.fk
+                   JOIN pg_class cls2 ON cls2.oid = con.confrelid
+                   JOIN pg_namespace nsp2 ON nsp2.oid = cls2.relnamespace
+                  WHERE con.contype = 'f' AND con.conrelid = ${relation}
+                  ORDER BY con.conname ASC, u.ord ASC`,
+                [schema, table]
+            );
+            const indexes = await run(
+                `SELECT cls.relname, att.attname, i.indisunique
+                   FROM pg_index i
+                   JOIN pg_class cls ON cls.oid = i.indexrelid
+                   CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+                   JOIN pg_attribute att ON att.attrelid = i.indrelid AND att.attnum = k.attnum
+                  WHERE i.indrelid = ${relation} AND NOT i.indisprimary
+                  ORDER BY cls.relname ASC, k.ord ASC`,
+                [schema, table]
+            );
+
+            return buildStructure({
+                schema,
+                table,
+                columns: columns.rows.map((r) => ({
+                    name: r[0] ?? '',
+                    type: r[1] ?? '',
+                    nullable: r[2] === 'true',
+                    default: r[3],
+                    primaryKey: r[4] === 'true',
+                    generated: r[5] === 'true',
+                    comment: r[6] ?? ''
+                })),
+                primaryKey: primary.rows.map((r) => r[0] ?? ''),
+                foreignRows: foreign.rows.map((r) => ({
+                    name: r[0] ?? '',
+                    column: r[1] ?? '',
+                    refSchema: r[2] ?? '',
+                    refTable: r[3] ?? '',
+                    refColumn: r[4] ?? ''
+                })),
+                indexRows: indexes.rows.map((r) => ({
+                    name: r[0] ?? '',
+                    column: r[1] ?? '',
+                    unique: r[2] === 'true'
+                }))
+            });
+        },
+        async tableRows(schema, table, page) {
+            const quoted = `${POSTGRES.quote(schema)}.${POSTGRES.quote(table)}`;
+            const countParams = new Params(POSTGRES);
+            const where = buildWhere(POSTGRES, countParams, page.filters, page.combinator);
+            const count = await run(`SELECT COUNT(*) FROM ${quoted}${where}`, countParams.values);
+
+            const pageParams = new Params(POSTGRES);
+            const sql =
+                `SELECT * FROM ${quoted}` +
+                buildWhere(POSTGRES, pageParams, page.filters, page.combinator) +
+                buildOrder(POSTGRES, page.sort) +
+                ` LIMIT ${pageParams.add(page.limit)} OFFSET ${pageParams.add(page.offset)}`;
+            const rows = await run(sql, pageParams.values);
+            return { ...rows, total: Number(count.rows[0]?.[0] ?? 0) };
         },
         async query(sql) {
             assertReadOnly(sql);
             return run(sql);
+        },
+        async execute(sql) {
+            assertSingleStatement(sql);
+            const started = Date.now();
+            const res = await client.query({ text: sql, rowMode: 'array' });
+            // Ici c'est la présence de colonnes qui distingue une lecture d'une
+            // écriture : `rowCount` est renseigné dans les deux cas.
+            if (res.fields.length > 0) {
+                const columns = res.fields.map((f) => f.name);
+                const rows = (res.rows as unknown[][]) ?? [];
+                return {
+                    rows: {
+                        columns,
+                        rows: rows.map((row) => row.map(toText)),
+                        total: null,
+                        elapsedMs: Date.now() - started
+                    },
+                    affected: null,
+                    elapsedMs: Date.now() - started
+                };
+            }
+            return { rows: null, affected: Number(res.rowCount ?? 0), elapsedMs: Date.now() - started };
+        },
+        async insertRow(schema, table, values) {
+            const p = new Params(POSTGRES);
+            const columns = values.map((v) => POSTGRES.quote(v.column)).join(', ');
+            const markers = values.map((v) => p.add(v.value)).join(', ');
+            return exec(
+                `INSERT INTO ${POSTGRES.quote(schema)}.${POSTGRES.quote(table)} (${columns}) VALUES (${markers})`,
+                p.values
+            );
+        },
+        async updateRow(schema, table, key, values) {
+            const p = new Params(POSTGRES);
+            const sets = values.map((v) => `${POSTGRES.quote(v.column)} = ${p.add(v.value)}`).join(', ');
+            const where = keyCondition(POSTGRES, p, key);
+            return exec(
+                `UPDATE ${POSTGRES.quote(schema)}.${POSTGRES.quote(table)} SET ${sets} WHERE ${where}`,
+                p.values
+            );
+        },
+        async deleteRows(schema, table, keys) {
+            const p = new Params(POSTGRES);
+            const where = keys.map((k) => `(${keyCondition(POSTGRES, p, k)})`).join(' OR ');
+            return exec(`DELETE FROM ${POSTGRES.quote(schema)}.${POSTGRES.quote(table)} WHERE ${where}`, p.values);
         },
         async close() {
             try {

@@ -143,7 +143,11 @@ export function DatabaseView({
                 </ul>
             </section>
 
-            <TableExplorer databaseId={database.id} />
+            <TableExplorer
+                databaseId={database.id}
+                databaseName={database.name}
+                autoLoad={canWrite && database.autoLoadTables}
+            />
 
             {children}
 
