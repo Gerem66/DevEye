@@ -8,7 +8,7 @@ import {
     databaseTableRows,
     databaseTableStructure
 } from 'deveye-types';
-import type { DatabaseCell, DatabaseRows, DatabaseStructure, DatabaseTable } from 'deveye-types';
+import type { DatabaseCell, DatabaseExportFormat, DatabaseRows, DatabaseStructure, DatabaseTable } from 'deveye-types';
 import { ROWS_PAGE_DEFAULT, type Session } from '@/Services/databases/engine';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { WRITE } from './_shared';
@@ -246,6 +246,124 @@ function sqlLiteral(value: string | null): string {
     return `'${value.replace(/'/g, "''")}'`;
 }
 
+/** Ce qu'un export vise, sans l'identifiant de base ni le contexte. */
+export interface ExportRequest {
+    format: DatabaseExportFormat;
+    schema?: string;
+    table?: string;
+}
+
+/**
+ * Le plafond, et pourquoi il est un paramètre.
+ *
+ * Il pourrait être une constante lue directement ; le passer permet de vérifier
+ * la troncature sans écrire vingt mille lignes dans une base d'essai. Le défaut
+ * reste la seule valeur qu'utilise la commande.
+ */
+export interface ExportLimits {
+    maxRows: number;
+    maxBytes: number;
+    page: number;
+}
+
+export const DEFAULT_EXPORT_LIMITS: ExportLimits = {
+    maxRows: EXPORT_MAX_ROWS,
+    maxBytes: EXPORT_MAX_BYTES,
+    page: EXPORT_PAGE
+};
+
+/**
+ * Construit un export, table par table et page par page.
+ *
+ * Séparé du handler pour une raison simple : c'est la seule logique du fichier
+ * qui mérite d'être vérifiée sur pièces — trois formats, une pagination, un
+ * plafond — et la mêler à l'ouverture de session la rendrait inatteignable.
+ *
+ * Le plafond se compte en **octets réels** (`Buffer.byteLength`) et non en
+ * caractères : un contenu accentué ou asiatique dépasserait sinon d'un tiers ce
+ * que l'écran a annoncé.
+ */
+export async function buildExport(
+    session: Session,
+    request: ExportRequest,
+    limits: ExportLimits = DEFAULT_EXPORT_LIMITS
+): Promise<{ content: string; rowCount: number; tableCount: number; truncated: boolean }> {
+    const all = await session.tables();
+    const targets =
+        request.table === undefined ? all : [await resolveTable(session, request.schema ?? '', request.table)];
+
+    const parts: string[] = [];
+    let bytes = 0;
+    let rowCount = 0;
+    let truncated = false;
+    const push = (text: string) => {
+        parts.push(text);
+        bytes += Buffer.byteLength(text);
+    };
+
+    // Un document JSON valide, et non une suite d'objets collés : le résultat
+    // doit pouvoir être relu par n'importe quel outil sans découpage préalable.
+    if (request.format === 'json') parts.push('[\n');
+
+    for (const [index, table] of targets.entries()) {
+        if (truncated) break;
+        if (request.format === 'csv' && targets.length > 1) {
+            // Un CSV ne porte qu'une table. Sur un export complet, on les sépare
+            // par un en-tête nommé plutôt que de mélanger des colonnes qui n'ont
+            // rien à voir.
+            push(`\n# ${table.schema}.${table.name}\n`);
+        }
+        if (request.format === 'sql') push(`\n-- ${table.schema}.${table.name}\n`);
+        if (request.format === 'json') push(`${index > 0 ? ',\n' : ''}{"table":${JSON.stringify(table.name)},"rows":[`);
+
+        let offset = 0;
+        let header = false;
+        let first = true;
+        for (;;) {
+            const page = await session.tableRows(table.schema, table.name, { offset, limit: limits.page });
+            if (page.rows.length === 0) break;
+
+            for (const row of page.rows) {
+                if (rowCount >= limits.maxRows || bytes >= limits.maxBytes) {
+                    truncated = true;
+                    break;
+                }
+                if (request.format === 'csv') {
+                    if (!header) {
+                        push(`${page.columns.map(csvCell).join(',')}\n`);
+                        header = true;
+                    }
+                    push(`${row.map(csvCell).join(',')}\n`);
+                } else if (request.format === 'sql') {
+                    const columns = page.columns.map((c) => `\`${c.replace(/`/g, '``')}\``).join(', ');
+                    push(
+                        `INSERT INTO \`${table.name.replace(/`/g, '``')}\` (${columns}) ` +
+                            `VALUES (${row.map(sqlLiteral).join(', ')});\n`
+                    );
+                } else {
+                    push(
+                        `${first ? '\n' : ',\n'}${JSON.stringify(
+                            Object.fromEntries(page.columns.map((c, i) => [c, row[i]]))
+                        )}`
+                    );
+                }
+                first = false;
+                rowCount++;
+            }
+
+            if (truncated) break;
+            offset += limits.page;
+            if (page.total !== null && offset >= page.total) break;
+        }
+
+        if (request.format === 'json') push('\n]}');
+    }
+
+    if (request.format === 'json') parts.push('\n]\n');
+
+    return { content: parts.join(''), rowCount, tableCount: targets.length, truncated };
+}
+
 export const databaseExportFeature: FeatureDefinition<
     typeof databaseExport.command,
     typeof databaseExport.input,
@@ -254,84 +372,10 @@ export const databaseExportFeature: FeatureDefinition<
     ...databaseExport,
     access: WRITE,
     handler: async (ctx, input) => {
-        return withSession(ctx, input.databaseId, async (s) => {
-            const all = await s.tables();
-            const targets = input.table === undefined ? all : [await resolveTable(s, input.schema ?? '', input.table)];
-
-            const parts: string[] = [];
-            let bytes = 0;
-            let rowCount = 0;
-            let truncated = false;
-
-            for (const table of targets) {
-                if (truncated) break;
-                if (input.format === 'csv' && targets.length > 1) {
-                    // Un CSV ne porte qu'une table. Sur un export complet, on
-                    // les sépare par un en-tête nommé plutôt que de mélanger
-                    // des colonnes qui n'ont rien à voir.
-                    parts.push(`\n# ${table.schema}.${table.name}\n`);
-                }
-                if (input.format === 'sql') {
-                    parts.push(`\n-- ${table.schema}.${table.name}\n`);
-                }
-
-                let offset = 0;
-                let header = false;
-                const jsonRows: string[] = [];
-                for (;;) {
-                    const page = await s.tableRows(table.schema, table.name, { offset, limit: EXPORT_PAGE });
-                    if (page.rows.length === 0) break;
-
-                    for (const row of page.rows) {
-                        if (rowCount >= EXPORT_MAX_ROWS || bytes >= EXPORT_MAX_BYTES) {
-                            truncated = true;
-                            break;
-                        }
-                        let line: string;
-                        if (input.format === 'csv') {
-                            if (!header) {
-                                const head = `${page.columns.map((c) => csvCell(c)).join(',')}\n`;
-                                parts.push(head);
-                                bytes += head.length;
-                                header = true;
-                            }
-                            line = `${row.map(csvCell).join(',')}\n`;
-                        } else if (input.format === 'sql') {
-                            const columns = page.columns.map((c) => `\`${c.replace(/`/g, '``')}\``).join(', ');
-                            line = `INSERT INTO \`${table.name.replace(/`/g, '``')}\` (${columns}) VALUES (${row
-                                .map(sqlLiteral)
-                                .join(', ')});\n`;
-                        } else {
-                            line = `${JSON.stringify(Object.fromEntries(page.columns.map((c, i) => [c, row[i]])))}`;
-                            jsonRows.push(line);
-                        }
-                        if (input.format !== 'json') parts.push(line);
-                        bytes += line.length;
-                        rowCount++;
-                    }
-
-                    if (truncated) break;
-                    offset += EXPORT_PAGE;
-                    if (page.total !== null && offset >= page.total) break;
-                }
-
-                if (input.format === 'json') {
-                    parts.push(`{"table":${JSON.stringify(`${table.schema}.${table.name}`)},"rows":[\n`);
-                    parts.push(jsonRows.join(',\n'));
-                    parts.push('\n]}\n');
-                }
-            }
-
-            const scope = input.table === undefined ? 'base' : input.table;
-            const stamp = new Date().toISOString().slice(0, 10);
-            return {
-                filename: `${scope}-${stamp}.${input.format}`,
-                content: parts.join(''),
-                rowCount,
-                tableCount: targets.length,
-                truncated
-            };
-        });
+        const built = await withSession(ctx, input.databaseId, (s) => buildExport(s, input));
+        const scope = input.table === undefined ? 'base' : input.table;
+        const stamp = new Date().toISOString().slice(0, 10);
+        return { filename: `${scope}-${stamp}.${input.format}`, ...built };
     }
 });
 
