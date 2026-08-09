@@ -62,8 +62,30 @@ export function FeatureDatabase({ workspace }: FeatureProps) {
 
     // Présence : « qui regarde quelle base ». Un seul déclarant par niveau —
     // ce composant possède `l1`, et rien d'autre dans la feature n'y touche.
-    useLiveSegment('l1', openedId === null ? null : `db:${openedId}`);
+    const l1Target = useLiveSegment('l1', openedId === null ? null : `db:${openedId}`);
     const outlineFor = useLiveOutlines('l1');
+
+    /**
+     * Appliquer ce qu'une téléportation demande à ce niveau.
+     *
+     * Le hook déclarait le niveau sans jamais **suivre** la cible : rejoindre
+     * quelqu'un — ou venir de l'onglet d'un projet — ouvrait donc la feature et
+     * s'arrêtait sur la liste, la base visée restant à trouver à la main.
+     *
+     * La cible est rendue tant qu'elle n'est pas atteinte, jamais consommée : on
+     * peut donc attendre que la liste soit chargée pour vérifier que la base
+     * existe, et l'ignorer sans rien avoir à acquitter si elle a disparu.
+     */
+    useEffect(() => {
+        if (!l1Target) return;
+        if (l1Target.value === null) {
+            setOpenedId(null);
+            return;
+        }
+        const id = Number(l1Target.value.replace(/^db:/, ''));
+        if (!Number.isInteger(id) || !databases?.some((d) => d.id === id)) return;
+        setOpenedId(id);
+    }, [l1Target, databases]);
 
     const reload = useCallback(async () => {
         try {

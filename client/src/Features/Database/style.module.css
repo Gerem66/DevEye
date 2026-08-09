@@ -233,6 +233,45 @@
     color: var(--text-primary);
 }
 
+/*
+ * Un titre qui mène ailleurs.
+ *
+ * Il garde exactement l'allure du titre inerte — même taille, même couleur — et
+ * ne se signale qu'au survol : c'est d'abord le nom de la chose qu'on regarde,
+ * et seulement ensuite un chemin. Une flèche discrète dit où il mène, le logo
+ * de quelle feature.
+ */
+.openName {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 1rem;
+    text-align: left;
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.openName:hover {
+    color: var(--accent);
+}
+
+.openNameArrow {
+    width: 14px;
+    filter: opacity(0.45);
+    transition: filter var(--transition-fast);
+}
+
+.openName:hover .openNameArrow {
+    filter: opacity(1);
+}
+
 .cardMeta {
     display: flex;
     align-items: center;
@@ -603,6 +642,7 @@
  * des deux, et rien ne tranchait.
  */
 .tablePanel {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
@@ -668,6 +708,86 @@
     align-items: center;
     gap: var(--space-sm);
     flex-wrap: wrap;
+}
+
+/*
+ * Le voile d'un chargement de table.
+ *
+ * Il **couvre**, il ne remplace pas : le contenu précédent reste dessous, la
+ * hauteur du panneau ne bouge pas, et le contenu suivant s'installe d'un coup au
+ * lieu de passer par un panneau vide qui se replie puis se redéploie.
+ *
+ * Il capte aussi les clics — tout n'est pas grisé dessous (un en-tête de colonne
+ * trie, une clé étrangère s'ouvre), et un clic sur des lignes qui vont
+ * disparaître ne peut que porter à faux.
+ *
+ * Volontairement léger : on doit reconnaître ce qu'il y a derrière, sans quoi le
+ * geste ressemble à un écran qui s'éteint plutôt qu'à un contenu qui se
+ * rafraîchit.
+ */
+.tableVeil {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    background: var(--surface-popup);
+    backdrop-filter: blur(1px);
+    -webkit-backdrop-filter: blur(1px);
+    color: var(--accent);
+    cursor: progress;
+    /* 420 ms au total, dont les deux premiers tiers invisibles : voir `veilIn`. */
+    animation: veilIn 420ms ease-out both;
+}
+
+/*
+ * Le voile ne paraît qu'après un délai, tenu par l'image-clé à 66 %.
+ *
+ * Une lecture qui revient en 40 ms — le cas ordinaire d'une base locale — ne
+ * doit produire aucun clignotement : le voile se lèverait avant d'avoir fini de
+ * paraître, et l'écran donnerait l'impression de sauter. Passé ~280 ms, en
+ * revanche, il faut dire que quelque chose part, sinon un clic sur une base
+ * lointaine reste une demi-seconde sans réponse visible.
+ *
+ * Un délai porté par l'animation, et non par un `setTimeout` : c'est un fait
+ * d'affichage, il n'a pas à devenir un état de plus à tenir dans le composant.
+ */
+@keyframes veilIn {
+    0%,
+    66% {
+        opacity: 0;
+    }
+    100% {
+        opacity: 0.66;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tableVeil {
+        animation: none;
+        opacity: 0.66;
+    }
+}
+
+/* La toute première lecture d'une table : rien à voiler, donc une ligne. */
+.loadingLine {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.spinning {
+    animation: databaseSpin 0.7s linear infinite;
+}
+
+@keyframes databaseSpin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* Le tableau défile dans sa propre boîte : quarante colonnes ne doivent pas

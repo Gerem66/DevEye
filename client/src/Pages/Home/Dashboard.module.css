@@ -63,6 +63,18 @@
     width: 100%;
 }
 
+/*
+ * La boîte qui se déroule au dépliage d'une section.
+ *
+ * Elle n'apporte aucune mise en forme — la grille reste seule maîtresse de la
+ * disposition — elle n'existe que pour porter la hauteur animée. `overflow` est
+ * piloté en ligne : découpant pendant le mouvement, transparent une fois posé,
+ * sinon le soulèvement d'une carte au survol se ferait rogner par le haut.
+ */
+.sectionBody {
+    min-width: 0;
+}
+
 .sectionHeading {
     margin: 0 0 0 var(--space-xs);
     font-size: 0.85rem;

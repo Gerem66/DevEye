@@ -45,6 +45,11 @@ const EXPAND_SPRING = { type: 'spring', stiffness: 260, damping: 32, mass: 0.9 }
  */
 const SETTLE_MS = 450;
 
+/** Deux références désignent-elles la même table ? Par son nom, pas son identité. */
+function sameTable(a: DatabaseTable | null, b: DatabaseTable | null): boolean {
+    return a !== null && b !== null && a.schema === b.schema && a.name === b.name;
+}
+
 interface TableExplorerProps {
     databaseId: number;
     databaseName: string;
@@ -88,7 +93,20 @@ type Dialogue =
  */
 export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, onExpandedChange }: TableExplorerProps) {
     const [tables, setTables] = useState<DatabaseTable[] | null>(null);
+    /** La table **choisie** — celle que la liste de gauche met en avant. */
     const [table, setTable] = useState<DatabaseTable | null>(null);
+    /**
+     * La table que `rows` et `structure` décrivent **réellement**.
+     *
+     * Distincte de la précédente le temps d'un chargement : le clic déplace la
+     * sélection tout de suite, le contenu ne change qu'à l'arrivée des lignes.
+     * Tout ce qui décrit le contenu affiché — son nom, sa fenêtre, sa clé
+     * primaire — se lit donc ici, sans quoi l'écran annoncerait pendant une
+     * demi-seconde une table dont il montre les lignes d'une autre.
+     */
+    const [shown, setShown] = useState<DatabaseTable | null>(null);
+    /** Le même, lisible depuis une closure asynchrone. */
+    const shownRef = useRef<DatabaseTable | null>(null);
     const [structure, setStructure] = useState<DatabaseStructure | null>(null);
     const [rows, setRows] = useState<DatabaseRows | null>(null);
     const [offset, setOffset] = useState(0);
@@ -168,6 +186,8 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
     useEffect(() => {
         setTables(null);
         setTable(null);
+        setShown(null);
+        shownRef.current = null;
         setStructure(null);
         setRows(null);
         setOffset(0);
@@ -237,11 +257,26 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
                     ...(nextSort ? { sort: nextSort } : {}),
                     ...(options.withStructure ? { withStructure: true } : {})
                 });
+                // Les trois d'un bloc : c'est ce qui fait qu'à aucun instant
+                // l'écran ne montre les lignes d'une table sous le nom d'une
+                // autre. Le remplacement est le seul moment où le contenu change.
                 setRows(res.rows);
                 setOffset(at);
+                shownRef.current = target;
+                setShown(target);
                 if (res.structure) setStructure(res.structure);
             } catch (e) {
                 setError(humanizeError(e, 'Impossible de lire cette table.'));
+                // Un échec **en changeant de table** ne doit pas laisser le
+                // contenu de la précédente derrière le voile qui se lève : il
+                // passerait pour celui de la nouvelle. Un échec de pagination,
+                // lui, garde la page affichée — elle est toujours juste.
+                if (!sameTable(shownRef.current, target)) {
+                    setRows(null);
+                    setStructure(null);
+                    shownRef.current = null;
+                    setShown(null);
+                }
             } finally {
                 setBusy(false);
             }
@@ -249,12 +284,19 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
         [databaseId, filters, combinator, sort]
     );
 
-    /** Ouvre une table : remet tout à zéro, puis lit structure et première page. */
+    /**
+     * Ouvre une table : ses critères repartent de zéro, son contenu **reste**.
+     *
+     * Vider `rows` et `structure` ici démontait tout le bloc de droite le temps
+     * de l'aller-retour : le panneau retombait à la hauteur d'un panneau vide,
+     * puis se redéployait — un sursaut de la moitié de l'écran pour un clic dans
+     * une liste. Les lignes précédentes tiennent donc la place jusqu'à ce que les
+     * nouvelles arrivent, et le voile de chargement dit qu'elles ne sont plus
+     * celles qu'on regarde.
+     */
     const open = useCallback(
         (target: DatabaseTable, nextFilters: DatabaseFilter[] = []) => {
             setTable(target);
-            setStructure(null);
-            setRows(null);
             setSelected(new Set());
             setFilters(nextFilters);
             setCombinator('and');
@@ -453,6 +495,16 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
                     <div className={styles.rowsPane}>
                         {!table && <p className={styles.hint}>Choisissez une table pour en voir le contenu.</p>}
 
+                        {/* La toute première lecture, la seule qui n'ait rien à
+                            garder à l'écran : elle a droit à une attente en
+                            clair, faute de contenu à voiler. */}
+                        {table && !shown && busy && (
+                            <p className={styles.loadingLine}>
+                                <span className={`icon icon-spinner ${styles.spinning}`} aria-hidden='true' />
+                                Lecture de {table.name}…
+                            </p>
+                        )}
+
                         {/*
                          * Un cadre autour de la table ouverte, et c'est tout son
                          * objet : sans lui, « Ajouter / Modifier / Supprimer »
@@ -460,11 +512,24 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
                          * rien ne disait qu'ils portaient sur la table
                          * sélectionnée plutôt que sur la base.
                          */}
-                        {table && rows && (
+                        {table && shown && rows && (
                             <motion.div layout transition={EXPAND_SPRING} className={styles.tablePanel}>
+                                {/*
+                                 * Le voile d'un chargement : il **couvre** le
+                                 * contenu précédent au lieu de le remplacer. Rien
+                                 * ne se démonte, donc rien ne se replie — la
+                                 * hauteur du panneau ne bouge pas d'un pixel entre
+                                 * deux tables, et le contenu suivant s'installe
+                                 * d'un coup, sans passer par un écran vide.
+                                 */}
+                                {busy && (
+                                    <div className={styles.tableVeil} aria-hidden='true'>
+                                        <span className={`icon icon-spinner ${styles.spinning}`} />
+                                    </div>
+                                )}
                                 <div className={styles.rowsHead}>
                                     <span className={styles.tableName}>
-                                        {expanded ? `${databaseName} · ${table.name}` : table.name}
+                                        {expanded ? `${databaseName} · ${shown.name}` : shown.name}
                                     </span>
                                     <span className={styles.hint}>
                                         {total === null

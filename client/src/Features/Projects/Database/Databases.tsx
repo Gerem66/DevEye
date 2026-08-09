@@ -3,7 +3,8 @@ import type { Database, DatabaseAlert, DatabaseProbe, Project } from 'deveye-typ
 import { Button, Dialog } from '@/Components';
 import { ws } from '@/api/ws';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
-import { useWorkspacePermissions } from '@/stores/workspace';
+import { startTeleport } from '@/stores/live';
+import { getActiveWorkspaceId, useWorkspacePermissions } from '@/stores/workspace';
 import { DatabaseDialog } from '@/Features/Database/DatabaseDialog';
 import { DatabaseHeader } from '@/Features/Database/DatabaseHeader';
 import { DatabaseView } from '@/Features/Database/DatabaseView';
@@ -253,6 +254,14 @@ function DatabaseBlock({ database, alerts, canWrite, framed, onUnlink }: Databas
                     onTest={() => void test()}
                     onInspect={() => void inspect()}
                     onEdit={() => setDialogOpen(true)}
+                    // Le sens qui manquait : la feature sait déjà mener aux
+                    // projets d'une base, l'onglet d'un projet ne savait pas
+                    // mener à la base. Par la téléportation, comme partout — un
+                    // chemin `view:database l1:db:7` dit « ouvre la feature, et
+                    // dedans, cette base-là », garde d'accès comprise.
+                    onOpenInFeature={() =>
+                        startTeleport(getActiveWorkspaceId() ?? 0, ['view:database', `l1:db:${database.id}`])
+                    }
                     after={
                         // Destructeur, donc à part et confirmé : il ne doit pas
                         // côtoyer « Tester », qu'on presse souvent.

@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef, type ComponentType, type ReactNode } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 
 import { useAuth } from '@/auth/AuthProvider';
 import {
@@ -209,6 +210,16 @@ function getGreeting(): string {
  * l'accueil appartient au lieu, mais on continue d'y être reçu.
  */
 /**
+ * La courbe du repli d'une section.
+ *
+ * Départ franc, arrivée longue : c'est ce qui donne l'impression que la section
+ * *se pose* au lieu de s'arrêter net. Un ressort aurait dépassé sa hauteur puis
+ * serait revenu, ce qui sur une boîte qui se referme se lit comme un rebond
+ * accidentel plutôt que comme une intention.
+ */
+const FOLD_EASE = [0.32, 0.72, 0, 1] as const;
+
+/**
  * Une section de l'accueil, repliable ou non.
  *
  * Le repli est **local et éphémère** : l'état enregistré (`section.collapsed`)
@@ -224,6 +235,9 @@ function getGreeting(): string {
 function CollapsibleSection({ section, children }: { section: HomeSection; children: ReactNode }) {
     const foldable = section.collapsible === true;
     const [folded, setFolded] = useState(foldable && section.collapsed === true);
+    /** Le dépliage est terminé : la boîte peut cesser de découper son contenu. */
+    const [settled, setSettled] = useState(true);
+    const reduced = useReducedMotion() === true;
 
     // L'organiseur peut changer les deux réglages sous nos pieds : on repart de
     // l'état déclaré plutôt que de garder un repli devenu impossible.
@@ -258,7 +272,41 @@ function CollapsibleSection({ section, children }: { section: HomeSection; child
                 />
                 <span className={styles.sectionHeading}>{section.title ?? 'Section'}</span>
             </button>
-            {!folded && children}
+
+            {/*
+             * Le repli se **déroule**, il ne clignote pas.
+             *
+             * `height: auto` est une valeur que framer sait mesurer et animer ;
+             * c'est ce qui permet de garder la grille telle quelle, sans lui
+             * imposer une hauteur en dur qu'il faudrait tenir à jour. L'opacité
+             * va plus vite que la hauteur : le contenu s'efface pendant que la
+             * boîte se referme, plutôt que de rester net jusqu'au dernier pixel.
+             *
+             * `overflow: hidden` **seulement pendant le mouvement** : c'est lui
+             * qui découpe les tuiles au fil du repli, mais le garder ensuite
+             * rognerait le petit soulèvement des cartes au survol.
+             */}
+            <AnimatePresence initial={false}>
+                {!folded && (
+                    <motion.div
+                        key='body'
+                        className={styles.sectionBody}
+                        style={{ overflow: settled ? 'visible' : 'hidden' }}
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={
+                            reduced
+                                ? { duration: 0 }
+                                : { height: { duration: 0.3, ease: FOLD_EASE }, opacity: { duration: 0.18 } }
+                        }
+                        onAnimationStart={() => setSettled(false)}
+                        onAnimationComplete={() => setSettled(true)}
+                    >
+                        {children}
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

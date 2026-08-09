@@ -228,6 +228,42 @@
     color: var(--text-primary);
 }
 
+/*
+ * Le même titre, mais qui mène au dépôt dans sa feature (onglet d'un projet).
+ *
+ * Il garde l'allure du titre inerte — même chasse, même taille, même couleur —
+ * et ne se signale qu'au survol : c'est d'abord le nom de ce qu'on regarde, et
+ * seulement ensuite un chemin. Le logo de la feature dit *où* il mène, la flèche
+ * dit qu'il mène quelque part.
+ */
+.repoNameLink {
+    composes: repoName;
+    max-width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    font-size: 1rem;
+    font-family: var(--font-mono);
+    text-align: left;
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.repoNameLink:hover {
+    color: var(--accent);
+}
+
+.repoNameArrow {
+    width: 14px;
+    filter: opacity(0.45);
+    transition: filter var(--transition-fast);
+}
+
+.repoNameLink:hover .repoNameArrow {
+    filter: opacity(1);
+}
+
 .repoMeta {
     margin: var(--space-xs) 0 0;
     font-size: 0.78rem;

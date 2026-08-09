@@ -63,6 +63,16 @@ interface DatabaseHeaderProps {
     onTest: () => void;
     onInspect: () => void;
     onEdit: () => void;
+    /**
+     * Ouvrir cette base dans la feature « Bases de données ».
+     *
+     * Absent quand on **y est déjà** — dans sa propre feature, le nom n'a nulle
+     * part où mener. Présent dans l'onglet d'un projet, où il rend le titre
+     * cliquable : la base y est montrée en entier, mais tout ce qui la concerne
+     * vraiment (ses réglages, ses projets, la liste de ses voisines) vit
+     * ailleurs, et on n'avait aucun chemin pour y aller.
+     */
+    onOpenInFeature?: () => void;
     /** Posé avant l'identité — un retour à la liste, par exemple. */
     before?: ReactNode;
     /** Posé après les boutons — un « Délier », par exemple. */
@@ -84,6 +94,7 @@ export function DatabaseHeader({
     onTest,
     onInspect,
     onEdit,
+    onOpenInFeature,
     before,
     after
 }: DatabaseHeaderProps) {
@@ -94,10 +105,27 @@ export function DatabaseHeader({
             <div className={styles.detailHead}>
                 {before}
                 <div className={styles.ident}>
-                    <p className={styles.cardName}>
-                        <span className={styles.statusDot} data-tone={status.tone} aria-hidden='true' />
-                        {database.name}
-                    </p>
+                    {onOpenInFeature ? (
+                        /* Le nom mène à la base, et le logo dit où. Un bouton et
+                           non un lien : la navigation de DevEye n'a pas d'URL, elle
+                           se joue par téléportation. */
+                        <button
+                            type='button'
+                            className={styles.openName}
+                            title={`Ouvrir ${database.name} dans « Bases de données »`}
+                            onClick={onOpenInFeature}
+                        >
+                            <span className={styles.statusDot} data-tone={status.tone} aria-hidden='true' />
+                            <span className='icon icon-database' aria-hidden='true' />
+                            {database.name}
+                            <span className={`icon icon-arrow ${styles.openNameArrow}`} aria-hidden='true' />
+                        </button>
+                    ) : (
+                        <p className={styles.cardName}>
+                            <span className={styles.statusDot} data-tone={status.tone} aria-hidden='true' />
+                            {database.name}
+                        </p>
+                    )}
                     <p className={styles.cardMeta}>
                         {ENGINE_LABELS[database.engine]} · {database.host}:{database.port}/{database.database}
                         {database.access.kind !== 'direct' && (

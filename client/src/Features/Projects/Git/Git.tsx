@@ -3,7 +3,8 @@ import type { GitCredential, GitRepo, MinimalUser, Project } from 'deveye-types'
 import { Button, Dialog } from '@/Components';
 import { ws } from '@/api/ws';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
-import { useWorkspacePermissions } from '@/stores/workspace';
+import { startTeleport } from '@/stores/live';
+import { getActiveWorkspaceId, useWorkspacePermissions } from '@/stores/workspace';
 import { RepoView } from '@/Features/Git/RepoView';
 import { RepoDialog } from '@/Features/Git/RepoDialog';
 import gitStyles from '@/Features/Git/style.module.css';
@@ -226,9 +227,23 @@ function RepoBlock({ repo, members, canWrite, canWriteGit, framed, onUnlink }: R
         <section className={framed ? gitStyles.repoBlockFramed : gitStyles.repoBlock}>
             <header className={gitStyles.repoHead}>
                 <div className={gitStyles.repoIdent}>
-                    <p className={gitStyles.repoName}>
-                        <span className='icon icon-branch' /> {repo.owner}/{repo.repo}
-                    </p>
+                    {/*
+                     * Le nom mène au dépôt dans sa feature. Le sens qui manquait :
+                     * Git sait déjà mener aux projets d'un dépôt, l'onglet d'un
+                     * projet ne savait pas mener au dépôt. Par la téléportation,
+                     * comme partout — un chemin `view:git l1:repo:7` dit « ouvre
+                     * la feature, et dedans, ce dépôt-là », garde d'accès
+                     * comprise.
+                     */}
+                    <button
+                        type='button'
+                        className={gitStyles.repoNameLink}
+                        title={`Ouvrir ${repo.owner}/${repo.repo} dans « Git »`}
+                        onClick={() => startTeleport(getActiveWorkspaceId() ?? 0, ['view:git', `l1:repo:${repo.id}`])}
+                    >
+                        <span className='icon icon-branch' aria-hidden='true' /> {repo.owner}/{repo.repo}
+                        <span className={`icon icon-arrow ${gitStyles.repoNameArrow}`} aria-hidden='true' />
+                    </button>
                     <p className={gitStyles.repoMeta}>
                         {repo.defaultBranch && <span>branche {repo.defaultBranch}</span>}
                         {repo.lastSyncAt !== null && (
