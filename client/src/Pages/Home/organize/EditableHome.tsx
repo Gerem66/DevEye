@@ -36,6 +36,7 @@ import {
     renameSection,
     setSectionCollapsed,
     setSectionCollapsible,
+    sectionTileIds,
     setSectionOrder,
     transferSectionItem,
     useHomeLayout
@@ -64,26 +65,31 @@ interface ShortcutEdit {
  */
 const sortInSection: SortingStrategy = (args) => (args.overIndex < 0 ? null : rectSortingStrategy(args));
 
-/** Drag ids of a section's tiles: shortcuts carry their own id, the rest *are* ids. */
-function tileIds(section: HomeSection): string[] {
-    return section.kind === 'shortcut' ? section.items.map((s) => s.id) : [...section.items];
+/**
+ * Où se trouve une tuile.
+ *
+ * Rend la **section**, jamais un rang : un indice lu ici décrit la disposition
+ * telle qu'elle était au dernier rendu, or un glissé émet bien plus d'événements
+ * que React ne rend. C'est le store qui résout les positions, sur l'état courant,
+ * au moment où il écrit (voir `moveSectionItem`).
+ */
+function sectionOf(sections: HomeSection[], tileId: string): HomeSection | null {
+    return sections.find((s) => sectionTileIds(s).includes(tileId)) ?? null;
 }
 
-/** Which section holds a tile, and at which position. */
-function locateTile(sections: HomeSection[], tileId: string): { section: HomeSection; index: number } | null {
-    for (const section of sections) {
-        const index = tileIds(section).indexOf(tileId);
-        if (index >= 0) return { section, index };
-    }
-    return null;
-}
-
-/** The section a drag id points at — either a section itself, or a tile's owner. */
-function resolveDropTarget(sections: HomeSection[], overId: string): { section: HomeSection; index: number } | null {
+/**
+ * Ce qu'un identifiant survolé désigne : une section, et la tuile devant laquelle
+ * insérer (`null` = à la fin, on est sur le bloc lui-même).
+ */
+function resolveDropTarget(
+    sections: HomeSection[],
+    overId: string
+): { section: HomeSection; beforeId: string | null } | null {
     const section = sections.find((s) => s.id === overId);
     // Dropped on the block itself (e.g. an empty section) → append at the end.
-    if (section) return { section, index: section.items.length };
-    return locateTile(sections, overId);
+    if (section) return { section, beforeId: null };
+    const owner = sectionOf(sections, overId);
+    return owner ? { section: owner, beforeId: overId } : null;
 }
 
 /** One tile's card visuals — shared by the grid and the drag overlay so the
@@ -212,7 +218,7 @@ function SectionTiles({
               ? styles.addShortcut
               : styles.addDevice;
 
-    const ids = useMemo<string[]>(() => tileIds(section), [section]);
+    const ids = useMemo<string[]>(() => sectionTileIds(section), [section]);
 
     const renderTile = (id: string) => {
         const { visual, compact } = tileVisualFor(section, id, devices);
@@ -357,7 +363,7 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
     /** Tile currently riding in the drag overlay (null when dragging a section). */
     const [activeTileId, setActiveTileId] = useState<string | null>(null);
     /** Where that tile started, so a cancelled drag puts it back. */
-    const dragOrigin = useRef<{ sectionId: string; index: number } | null>(null);
+    const dragOrigin = useRef<{ sectionId: string; beforeId: string | null } | null>(null);
 
     // 8px activation distance: a plain click (e.g. the × button) never starts a
     // drag, and there's no stray text selection on press.
@@ -406,8 +412,8 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
             // The keyboard sensor drags without a pointer, so `pointerWithin` would
             // find nothing: keep the plain in-section sorting it had before.
             if (!args.pointerCoordinates) {
-                const own = sections.find((s) => tileIds(s).includes(String(args.active.id)));
-                const ownTiles = new Set(own ? tileIds(own) : []);
+                const own = sectionOf(sections, String(args.active.id));
+                const ownTiles = new Set(own ? sectionTileIds(own) : []);
                 return closestCenter({
                     ...args,
                     droppableContainers: args.droppableContainers.filter((c) => ownTiles.has(String(c.id)))
@@ -421,7 +427,7 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
             if (hoveredSections.length === 0) return [];
 
             const hovered = sections.find((s) => s.id === String(hoveredSections[0].id));
-            const hoveredTileIds = new Set(hovered ? tileIds(hovered) : []);
+            const hoveredTileIds = new Set(hovered ? sectionTileIds(hovered) : []);
             const tiles = closestCenter({
                 ...args,
                 droppableContainers: args.droppableContainers.filter((c) => hoveredTileIds.has(String(c.id)))
@@ -435,16 +441,21 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
      *  section mid-drag. */
     const activeTile = useMemo(() => {
         if (!activeTileId) return null;
-        const found = locateTile(sections, activeTileId);
-        return found ? tileVisualFor(found.section, activeTileId, devices) : null;
+        const owner = sectionOf(sections, activeTileId);
+        return owner ? tileVisualFor(owner, activeTileId, devices) : null;
     }, [activeTileId, sections, devices]);
 
     const onDragStart = (e: DragStartEvent) => {
         const id = String(e.active.id);
         // Sections drag as themselves (no overlay); only tiles get one.
         if (sections.some((s) => s.id === id)) return;
-        const source = locateTile(sections, id);
-        dragOrigin.current = source ? { sectionId: source.section.id, index: source.index } : null;
+        const owner = sectionOf(sections, id);
+        // La tuile devant laquelle elle se trouvait : c'est ce qui la remet
+        // exactement où elle était si le glissé est abandonné. Un rang aurait
+        // désigné une place qui a bougé entre-temps.
+        const tiles = owner ? sectionTileIds(owner) : [];
+        const at = tiles.indexOf(id);
+        dragOrigin.current = owner ? { sectionId: owner.id, beforeId: at >= 0 ? (tiles[at + 1] ?? null) : null } : null;
         setActiveTileId(id);
     };
 
@@ -453,18 +464,23 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
      * drop. That's what makes the move feel like the in-section sort: the tile is
      * really part of the target grid, so its neighbours slide aside to open the
      * slot, and the section it left closes up behind it.
+     *
+     * Rien n'est lu ici que des **identités** : cet événement part du pointeur,
+     * donc bien plus souvent que React ne rend, et `sections` décrit toujours un
+     * état d'avant. Le store, lui, résout les positions sur l'état courant.
      */
     const onDragOver = (e: DragOverEvent) => {
         const { active, over } = e;
         if (!over || !activeTileId) return;
-        const source = locateTile(sections, String(active.id));
+        const activeId = String(active.id);
+        const source = sectionOf(sections, activeId);
         const target = resolveDropTarget(sections, String(over.id));
         if (!source || !target) return;
-        if (target.section.id === source.section.id) return;
+        if (target.section.id === source.id) return;
         // Kinds must match — transferSectionItem refuses anyway, but bailing here
         // keeps the tile visibly anchored in its own section.
-        if (target.section.kind !== source.section.kind) return;
-        transferSectionItem(source.section.id, target.section.id, source.index, target.index);
+        if (target.section.kind !== source.kind) return;
+        transferSectionItem(source.id, target.section.id, activeId, target.beforeId);
     };
 
     const onDragEnd = (e: DragEndEvent) => {
@@ -487,10 +503,10 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
 
         // The tile already sits in its target section (moved on hover); all that
         // is left is settling its position inside it.
-        const source = locateTile(sections, activeId);
+        const source = sectionOf(sections, activeId);
         const target = resolveDropTarget(sections, overId);
-        if (!source || !target || target.section.id !== source.section.id) return;
-        moveSectionItem(source.section.id, source.index, target.index);
+        if (!source || !target || target.section.id !== source.id) return;
+        moveSectionItem(source.id, activeId, target.beforeId);
     };
 
     /** Escape mid-drag: undo the hover-moves and put the tile back where it was. */
@@ -500,9 +516,9 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
         setActiveTileId(null);
         dragOrigin.current = null;
         if (!origin || !id) return;
-        const current = locateTile(sections, id);
-        if (!current || current.section.id === origin.sectionId) return;
-        transferSectionItem(current.section.id, origin.sectionId, current.index, origin.index);
+        const current = sectionOf(sections, id);
+        if (!current || current.id === origin.sectionId) return;
+        transferSectionItem(current.id, origin.sectionId, id, origin.beforeId);
     };
 
     /** Empty sections go without asking; a populated one asks first (shortcuts

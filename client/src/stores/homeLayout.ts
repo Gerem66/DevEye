@@ -177,12 +177,64 @@ export function setSectionOrder(ids: string[]): void {
     commit({ ...state, sections: reordered });
 }
 
-/** Move one tile within its section (after a drag). */
-export function moveSectionItem(sectionId: string, from: number, to: number): void {
+/**
+ * L'identité d'une tuile, quel que soit le genre de sa section.
+ *
+ * Un raccourci porte son `id`, un appareil et une fonctionnalité **sont** leur
+ * id. Une seule définition, ici, parce que c'est le vocabulaire du déplacement :
+ * l'organiseur s'en sert pour ses identifiants de glissé, le store pour retrouver
+ * une tuile. Deux copies auraient divergé au premier genre ajouté.
+ */
+export function sectionTileIds(section: HomeSection): string[] {
+    return section.kind === 'shortcut' ? section.items.map((s) => s.id) : [...section.items];
+}
+
+/**
+ * Où insérer, sachant devant quelle tuile on lâche.
+ *
+ * `null` = à la fin (on a lâché sur la section elle-même, pas sur une tuile).
+ * Une tuile inconnue vaut la fin aussi : mieux vaut un rang inattendu qu'un
+ * indice négatif qui déplacerait la mauvaise chose.
+ */
+function insertIndex(section: HomeSection, beforeId: string | null): number {
+    if (beforeId === null) return section.items.length;
+    const at = sectionTileIds(section).indexOf(beforeId);
+    return at < 0 ? section.items.length : at;
+}
+
+/**
+ * Déplace une tuile dans sa section.
+ *
+ * ## Une tuile se désigne par son identité, jamais par son rang
+ *
+ * Ces deux fonctions étaient appelées avec des indices lus dans l'instantané de
+ * rendu de l'organiseur. Or un glissé émet des dizaines d'événements par seconde
+ * quand React n'a rendu qu'une fois : l'indice décrivait alors une liste qui
+ * n'existait plus, et l'on découpait **une autre tuile** — ou rien du tout, ce
+ * qui insérait un `undefined` dans `items`. Une disposition portant un trou ne
+ * passe plus le schéma : elle est rejetée par le serveur, et relue vide au
+ * démarrage suivant. C'est-à-dire un accueil effacé, sans rien pour le dire.
+ *
+ * Une identité, elle, ne périme pas. Les deux bouts du déplacement — la tuile et
+ * le point d'insertion — sont donc résolus **ici**, sur l'état courant, au moment
+ * où l'écriture a lieu. Un appelant en retard ne peut plus au pire que demander
+ * un déplacement sans objet, qui ne fait rien.
+ */
+export function moveSectionItem(sectionId: string, tileId: string, beforeId: string | null): void {
     const section = findSection(state, sectionId);
-    if (!section || from === to) return;
+    if (!section) return;
+    const from = sectionTileIds(section).indexOf(tileId);
+    if (from < 0) return;
+    const to = insertIndex(section, beforeId);
+    if (from === to) return;
+
     // The item type varies per kind and a permutation can't change it, so an
     // untyped copy is safe here — and it keeps callers free of per-kind branches.
+    //
+    // `to` est un rang de la liste **d'avant le retrait** : c'est la convention
+    // d'`arrayMove`, celle que dnd-kit anime à l'écran. Le corriger du décalage
+    // du retrait décalerait le résultat d'un cran par rapport à ce que le glissé
+    // vient de montrer.
     const items = section.items.slice() as unknown[];
     const [moved] = items.splice(from, 1);
     items.splice(to, 0, moved);
@@ -190,22 +242,28 @@ export function moveSectionItem(sectionId: string, from: number, to: number): vo
 }
 
 /**
- * Move one tile to another section of the same kind (a drag across sections).
- * Kinds must match — a feature tile has no meaning in a device section — and a
- * feature/device stays unique, so the move never duplicates it.
+ * Déplace une tuile vers une autre section du même genre (un glissé entre deux).
+ *
+ * Les genres doivent correspondre — une fonctionnalité n'a aucun sens dans une
+ * section d'appareils — et la tuile est retirée avant d'être posée, donc le
+ * déplacement ne peut pas la dupliquer. Mêmes garanties d'identité que
+ * {@link moveSectionItem}.
  */
-export function transferSectionItem(fromId: string, toId: string, from: number, to: number): void {
+export function transferSectionItem(fromId: string, toId: string, tileId: string, beforeId: string | null): void {
     const source = findSection(state, fromId);
     const target = findSection(state, toId);
     if (!source || !target || source.id === target.id || source.kind !== target.kind) return;
+
+    const from = sectionTileIds(source).indexOf(tileId);
+    if (from < 0) return;
+    const to = insertIndex(target, beforeId);
 
     // Same reasoning as moveSectionItem: the item keeps its type, only its home
     // changes, so both lists are spliced untyped and re-typed on the way out.
     const sourceItems = source.items.slice() as unknown[];
     const [moved] = sourceItems.splice(from, 1);
-    if (moved === undefined) return;
     const targetItems = target.items.slice() as unknown[];
-    targetItems.splice(Math.min(Math.max(to, 0), targetItems.length), 0, moved);
+    targetItems.splice(to, 0, moved);
 
     commit({
         ...state,

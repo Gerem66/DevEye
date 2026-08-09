@@ -220,6 +220,15 @@ function getGreeting(): string {
 const FOLD_EASE = [0.32, 0.72, 0, 1] as const;
 
 /**
+ * À quelle distance du bas on considère qu'on **est** en bas.
+ *
+ * Quelques pixels de jeu : un défilement fluide s'arrête rarement à zéro exact,
+ * et exiger l'égalité stricte ferait rater le cas courant d'une page qu'on vient
+ * de dérouler jusqu'au bout.
+ */
+const BOTTOM_SLACK = 8;
+
+/**
  * Une section de l'accueil, repliable ou non.
  *
  * Le repli est **local et éphémère** : l'état enregistré (`section.collapsed`)
@@ -238,12 +247,40 @@ function CollapsibleSection({ section, children }: { section: HomeSection; child
     /** Le dépliage est terminé : la boîte peut cesser de découper son contenu. */
     const [settled, setSettled] = useState(true);
     const reduced = useReducedMotion() === true;
+    const groupRef = useRef<HTMLDivElement>(null);
+    /** On était au bas de la page en dépliant : il faut y rester. */
+    const pinBottom = useRef(false);
 
     // L'organiseur peut changer les deux réglages sous nos pieds : on repart de
     // l'état déclaré plutôt que de garder un repli devenu impossible.
     useEffect(() => {
         setFolded(section.collapsible === true && section.collapsed === true);
     }, [section.collapsible, section.collapsed]);
+
+    /**
+     * Déplier une section du bas de page ne doit pas laisser son contenu dessous.
+     *
+     * La section grandit *sous* le point où l'on regarde : ce qu'elle révèle
+     * naît donc hors de l'écran, et il faudrait défiler pour le voir — alors
+     * qu'on vient précisément de demander à le voir. Si l'on était déjà au bas
+     * de la page, le défilement suit la croissance, image par image, et l'on
+     * arrive à la fin de l'animation avec les tuiles sous les yeux.
+     *
+     * Seulement dans ce cas : accrocher le bas depuis le milieu de la page
+     * arracherait la lecture d'un contenu qu'on n'a pas quitté.
+     */
+    const toggle = () => {
+        const scroller = groupRef.current?.closest('main');
+        pinBottom.current =
+            folded && !!scroller && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < BOTTOM_SLACK;
+        setFolded((v) => !v);
+    };
+
+    const keepBottom = () => {
+        if (!pinBottom.current) return;
+        const scroller = groupRef.current?.closest('main');
+        if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    };
 
     if (!foldable) {
         return (
@@ -255,17 +292,12 @@ function CollapsibleSection({ section, children }: { section: HomeSection; child
     }
 
     return (
-        <div className={styles.sectionGroup}>
+        <div className={styles.sectionGroup} ref={groupRef}>
             {/* Le bouton **est** l'intitulé : une cible séparée du titre serait
                 minuscule, et le titre resterait un texte mort à côté. Une
                 section repliable sans titre reste cliquable — elle affiche
                 simplement le chevron seul. */}
-            <button
-                type='button'
-                className={styles.sectionToggle}
-                aria-expanded={!folded}
-                onClick={() => setFolded((v) => !v)}
-            >
+            <button type='button' className={styles.sectionToggle} aria-expanded={!folded} onClick={toggle}>
                 <span
                     className={`icon icon-chevron-down ${folded ? styles.chevronFolded : styles.chevron}`}
                     aria-hidden='true'
@@ -301,7 +333,12 @@ function CollapsibleSection({ section, children }: { section: HomeSection; child
                                 : { height: { duration: 0.3, ease: FOLD_EASE }, opacity: { duration: 0.18 } }
                         }
                         onAnimationStart={() => setSettled(false)}
-                        onAnimationComplete={() => setSettled(true)}
+                        onUpdate={keepBottom}
+                        onAnimationComplete={() => {
+                            setSettled(true);
+                            keepBottom();
+                            pinBottom.current = false;
+                        }}
                     >
                         {children}
                     </motion.div>
