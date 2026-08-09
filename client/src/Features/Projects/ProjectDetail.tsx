@@ -90,7 +90,7 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
      * suivent (voir `Board` et `Timeline`).
      */
     const tabTarget = useLiveSegment('l2', `tab:${tab}`);
-    useLiveSegment('l3', cardDialog?.card ? `card:${cardDialog.card.id}` : null);
+    const cardTarget = useLiveSegment('l3', cardDialog?.card ? `card:${cardDialog.card.id}` : null);
     const outlineForTab = useLiveOutlines('l2');
 
     // Rejoindre quelqu'un, c'est aussi arriver sur son onglet.
@@ -99,6 +99,32 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
         const wanted = tabTarget.value.replace(/^tab:/, '');
         if (TABS.some((t) => t.id === wanted)) setTab(wanted as TabId);
     }, [tabTarget]);
+
+    /**
+     * … et jusque dans la tâche qu'il a ouverte.
+     *
+     * Le dernier maillon de la chaîne — accueil → projet → onglet → carte.
+     * Déclarer le niveau ne suffit pas : il dit où **on** est, pas où l'on nous
+     * demande d'aller. Sans ce répondant, une téléportation s'arrêtait sur le bon
+     * onglet et laissait la carte fermée.
+     *
+     * La cible reste posée tant qu'elle n'est pas atteinte : si le tableau n'a
+     * pas fini de charger, l'effet la retrouvera au rendu suivant, quand `cards`
+     * changera — rien à acquitter.
+     */
+    useEffect(() => {
+        if (!cardTarget) return;
+        if (cardTarget.value === null) {
+            setCardDialog(null);
+            return;
+        }
+        const id = Number(cardTarget.value.replace(/^card:/, ''));
+        if (!Number.isFinite(id) || cardDialog?.card?.id === id) return;
+        const card = cards.find((c) => c.id === id);
+        if (!card) return;
+        setDialogError(null);
+        setCardDialog({ card, columnId: card.columnId });
+    }, [cardTarget, cards, cardDialog]);
 
     // La largeur de la popup n'est plus décidée ici : `Board` et `Timeline`
     // déclarent chacun celle que **leur contenu** réclame (voir
