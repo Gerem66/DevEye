@@ -42,8 +42,16 @@ import { getActiveWorkspaceId } from './workspace';
  *
  * Aucun risque de confusion entre features : les niveaux ne sont comparés
  * qu'après un préfixe commun, lequel commence toujours par `view:<feature>`.
+ *
+ * Cinq niveaux, parce que la feature la plus profonde en compte cinq : Projets
+ * descend jusqu'à l'onglet d'une tâche (`view:projects l1:project l2:tab
+ * l3:card l4:tab`). Le contrat du fil en autorise six (`livePathSchema`), il
+ * reste donc de la marge — mais en ajouter un ici a un coût réel : chaque
+ * niveau allonge le chemin diffusé à chaque déplacement, et affine le
+ * regroupement des curseurs. On n'en ajoute que pour un lieu où deux personnes
+ * peuvent réellement se croiser.
  */
-export const LIVE_SEGMENT_ORDER = ['view', 'l1', 'l2', 'l3'] as const;
+export const LIVE_SEGMENT_ORDER = ['view', 'l1', 'l2', 'l3', 'l4'] as const;
 export type LiveSegmentKind = (typeof LIVE_SEGMENT_ORDER)[number];
 
 export interface LiveCursorEntry {

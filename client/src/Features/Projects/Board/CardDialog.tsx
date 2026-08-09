@@ -16,6 +16,8 @@ import {
     PROJECT_PRIORITIES
 } from 'deveye-types';
 import { Button, Dialog, SelectInput, TextInput } from '@/Components';
+import { useLiveSegment } from '@/live/useLiveSegment';
+import { useLiveOutlines } from '@/live/useLiveOutline';
 import { Chat } from '../Chat/Chat';
 import { dateInputToSeconds, dateInputValue, PRIORITY_LABELS } from '../api';
 import styles from '../style.module.css';
@@ -180,6 +182,27 @@ export function CardDialog({
         // remplir : chacune s'ouvre là où il y a quelque chose à faire.
         setTab(card ? 'work' : 'settings');
     }, [open, cardId]);
+
+    /**
+     * Le dernier niveau de présence : l'onglet ouvert dans cette popup.
+     *
+     * Déclaré seulement quand la popup l'est **et** qu'elle porte une carte : ce
+     * composant reste monté en permanence (`open` est une prop, pas un
+     * démontage), et une création n'est pas un lieu qu'on partage.
+     *
+     * Ce qui se joue là n'est pas qu'un halo : deux personnes sur la même tâche
+     * mais l'une sur la discussion et l'autre sur les champs ne sont pas au même
+     * endroit, et n'ont pas à se voir promener leur curseur en travers de ce que
+     * l'autre regarde.
+     */
+    const tabTarget = useLiveSegment('l4', open && card ? `tab:${tab}` : null);
+    const outlineForTab = useLiveOutlines('l4');
+
+    useEffect(() => {
+        if (!tabTarget?.value) return;
+        const wanted = tabTarget.value.replace(/^tab:/, '');
+        if (wanted === 'work' || wanted === 'settings') setTab(wanted);
+    }, [tabTarget]);
 
     const patch = (next: Partial<ProjectCardDraft>) => setDraft((d) => ({ ...d, ...next }));
 
@@ -587,6 +610,7 @@ export function CardDialog({
                             className={tab === 'work' ? styles.tabActive : styles.tab}
                             aria-current={tab === 'work' ? 'page' : undefined}
                             onClick={() => setTab('work')}
+                            {...outlineForTab('tab:work')}
                         >
                             <span className='icon icon-notes' /> Suivi
                         </button>
@@ -595,6 +619,7 @@ export function CardDialog({
                             className={tab === 'settings' ? styles.tabActive : styles.tab}
                             aria-current={tab === 'settings' ? 'page' : undefined}
                             onClick={() => setTab('settings')}
+                            {...outlineForTab('tab:settings')}
                         >
                             <span className='icon icon-edit' /> Modifier
                         </button>
