@@ -271,12 +271,19 @@ export function FeatureProjects({ user, workspace }: FeatureProps) {
     }, [summaries]);
 
     /**
+     * On regarde autre chose que le portefeuille vivant — « mes tâches » ou les
+     * archives. Ces écrans se ferment par un retour en tête de page et n'ont pas
+     * d'actions à droite : un seul drapeau les décrit tous les deux.
+     */
+    const sideView = showMine || showArchived;
+
+    /**
      * Ranger n'a de sens que sur le portefeuille vivant : les archives se lisent
      * dans l'ordre où l'on y a rangé les projets (`archived_at DESC`), un ordre
      * manuel n'y survivrait pas à la restauration, qui les renvoie en fin de
      * liste.
      */
-    const canReorder = canWrite && !showArchived && !showMine;
+    const canReorder = canWrite && !sideView;
 
     // La grille compte plusieurs colonnes : le geste vise les gouttières
     // verticales, et non les interstices horizontaux des listes en colonne.
@@ -321,59 +328,60 @@ export function FeatureProjects({ user, workspace }: FeatureProps) {
     return (
         <div className={styles.root}>
             <header className={styles.header}>
-                <div>
-                    <h2 className={styles.heading}>
-                        {showMine ? 'Mes tâches' : showArchived ? 'Projets archivés' : 'Projets'}
-                    </h2>
-                    {totals && !showArchived && !showMine && (
-                        <p className={styles.subheading}>
-                            {totals.count} projet{totals.count > 1 ? 's' : ''}
-                            {totals.overdue > 0 &&
-                                ` · ${totals.overdue} tâche${totals.overdue > 1 ? 's' : ''} en retard`}
-                            {totals.unread > 0 &&
-                                ` · ${totals.unread} message${totals.unread > 1 ? 's' : ''} non lu${totals.unread > 1 ? 's' : ''}`}
-                        </p>
-                    )}
-                </div>
-                <div className={styles.actions}>
-                    {/* Bascule, pas un onglet : « mes tâches » est une lecture
-                        du même portefeuille, sous un autre angle. Une fois
-                        dedans, le bouton devient le chemin de retour — d'où la
-                        flèche posée à gauche de son icône. */}
-                    <Button
-                        variant={showMine ? 'primary' : 'secondary'}
-                        onClick={() => {
-                            setShowMine((v) => !v);
-                            setShowArchived(false);
-                        }}
-                    >
-                        {showMine && <span className='icon icon-arrow-left' />}
-                        <span className='icon icon-user' />
-                        Mes tâches
-                    </Button>
-
-                    {/* Masqué dans « mes tâches » : deux sorties concurrentes
-                        pour un même écran ne feraient qu'embrouiller. */}
-                    {!showMine && (
+                {/* « Mes tâches » et les archives sont des écrans à part
+                    entière, pas des filtres : on en sort par le même retour en
+                    tête de page que la vue détail, et non par la bascule qui y
+                    a mené. */}
+                <div className={sideView ? styles.detailHead : undefined}>
+                    {sideView && (
                         <Button
-                            variant='secondary'
+                            variant='ghost'
+                            icon='arrow-left'
                             onClick={() => {
-                                setShowArchived((v) => !v);
                                 setShowMine(false);
+                                setShowArchived(false);
                             }}
                         >
-                            {showArchived && <span className='icon icon-arrow-left' />}
-                            <span className='icon icon-archive' />
-                            {showArchived ? 'Projets' : 'Archives'}
+                            Retour
                         </Button>
                     )}
-
-                    {canWrite && !showArchived && !showMine && (
-                        <Button icon='add' onClick={openCreate}>
-                            Nouveau projet
-                        </Button>
-                    )}
+                    <div>
+                        <h2 className={styles.heading}>
+                            {showMine ? 'Mes tâches' : showArchived ? 'Projets archivés' : 'Projets'}
+                        </h2>
+                        {totals && !sideView && (
+                            <p className={styles.subheading}>
+                                {totals.count} projet{totals.count > 1 ? 's' : ''}
+                                {totals.overdue > 0 &&
+                                    ` · ${totals.overdue} tâche${totals.overdue > 1 ? 's' : ''} en retard`}
+                                {totals.unread > 0 &&
+                                    ` · ${totals.unread} message${totals.unread > 1 ? 's' : ''} non lu${totals.unread > 1 ? 's' : ''}`}
+                            </p>
+                        )}
+                    </div>
                 </div>
+
+                {/* Rien à droite sur ces écrans-là : deux sorties concurrentes
+                    pour un même écran ne feraient qu'embrouiller. */}
+                {!sideView && (
+                    <div className={styles.actions}>
+                        <Button variant='secondary' onClick={() => setShowMine(true)}>
+                            <span className='icon icon-user' />
+                            Mes tâches
+                        </Button>
+
+                        <Button variant='secondary' onClick={() => setShowArchived(true)}>
+                            <span className='icon icon-archive' />
+                            Archives
+                        </Button>
+
+                        {canWrite && (
+                            <Button icon='add' onClick={openCreate}>
+                                Nouveau projet
+                            </Button>
+                        )}
+                    </div>
+                )}
             </header>
 
             {error && <p className={styles.error}>{error}</p>}

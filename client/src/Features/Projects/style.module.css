@@ -935,6 +935,45 @@
     filter: opacity(1);
 }
 
+/*
+ * Les sous-tâches, dans leur propre encart.
+ *
+ * Empilées à la suite des autres champs, elles se lisaient comme un champ de
+ * plus alors qu'on ne les remplit pas : on les coche. L'encart les détache du
+ * formulaire, et sa largeur est bornée — une sous-tâche tient en quelques mots,
+ * la pleine largeur du dialogue la laissait seule au milieu du vide.
+ *
+ * Centré, et non calé à gauche : borné en largeur au milieu d'une colonne de
+ * champs pleine largeur, il laissait sinon toute la place vide du même côté.
+ */
+.checkPanel {
+    align-self: center;
+    width: 100%;
+    max-width: 27rem;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: var(--surface-subtle);
+}
+
+/* Intitulé à gauche, décompte calé à droite : une seule ligne sert de titre
+   d'encart et de jauge d'avancement. */
+.checkHead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.checkCount {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
 .checklist {
     display: flex;
     flex-direction: column;
@@ -942,6 +981,11 @@
     margin: 0 0 var(--space-xs);
     padding: 0;
     list-style: none;
+}
+
+/* Dans l'encart, l'espacement vient du `gap` : la marge ferait double emploi. */
+.checkPanel .checklist {
+    margin: 0;
 }
 
 .checkItem {
@@ -961,10 +1005,35 @@
     cursor: pointer;
 }
 
-.checkDone {
+/*
+ * Le seul élément élastique de la ligne : c'est lui qui pousse la croix contre
+ * le bord droit. Ce `flex` vivait sur `.checkDone`, donc ne s'appliquait qu'une
+ * fois la sous-tâche cochée — la croix sautait du texte au bord au premier
+ * clic, et deux voisines ne l'avaient pas au même endroit.
+ */
+.checkLabel {
     flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.checkDone {
     text-decoration: line-through;
     color: var(--text-muted);
+}
+
+/* Saisie + « Ajouter » sur une seule ligne : l'encart est trop étroit pour
+   qu'un retour à la ligne y soit lisible, le champ prend donc ce que le bouton
+   laisse. */
+.checkAdd {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.checkAdd > *:first-child {
+    flex: 1;
+    min-width: 0;
 }
 
 .checkRow {

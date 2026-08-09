@@ -126,12 +126,19 @@ export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
      *
      * Le plafond vit dans le CSS (`max-height`), pas ici : passé cette limite,
      * `scrollHeight` continue de croître mais la boîte, elle, défile.
+     *
+     * Les bordures se rajoutent à la mesure : `scrollHeight` ne compte que le
+     * contenu et ses marges intérieures, alors que `box-sizing: border-box` les
+     * fait tenir *dans* la hauteur qu'on pose. Sans ce rattrapage, le champ est
+     * deux pixels trop court pour sa propre ligne de texte, et la barre de
+     * défilement s'installe à demeure — sur un composeur vide.
      */
     useEffect(() => {
         const el = composerRef.current;
         if (!el) return;
         el.style.height = 'auto';
-        el.style.height = `${el.scrollHeight}px`;
+        const borders = el.offsetHeight - el.clientHeight;
+        el.style.height = `${el.scrollHeight + borders}px`;
     }, [text]);
 
     return (

@@ -79,6 +79,13 @@ export function CardDialog({
     const [draft, setDraft] = useState<ProjectCardDraft>(EMPTY);
     const [itemLabel, setItemLabel] = useState('');
     const [depPick, setDepPick] = useState('');
+    /** La sous-tâche dont on vient de demander le retrait ; `null` = personne. */
+    const [removing, setRemoving] = useState<ProjectChecklistItem | null>(null);
+    /**
+     * Son libellé, gardé à part : la popup s'efface en fondu, et lire
+     * « «  » quittera la liste » pendant sa sortie serait pire que rien.
+     */
+    const [removingLabel, setRemovingLabel] = useState('');
 
     /** Les cartes qui bloquent celle-ci. */
     const blockers = card ? deps.filter((d) => d.cardId === card.id) : [];
@@ -108,6 +115,7 @@ export function CardDialog({
                 : EMPTY
         );
         setItemLabel('');
+        setRemoving(null);
     }, [open, card]);
 
     const patch = (next: Partial<ProjectCardDraft>) => setDraft((d) => ({ ...d, ...next }));
@@ -124,8 +132,22 @@ export function CardDialog({
             checklist: draft.checklist.map((i: ProjectChecklistItem) => (i.id === id ? { ...i, done: !i.done } : i))
         });
 
-    const removeItem = (id: string) =>
-        patch({ checklist: draft.checklist.filter((i: ProjectChecklistItem) => i.id !== id) });
+    const askRemove = (item: ProjectChecklistItem) => {
+        setRemoving(item);
+        setRemovingLabel(item.label);
+    };
+
+    /**
+     * Retire la sous-tâche confirmée.
+     *
+     * Le retrait n'est pas rattrapable : la ligne quitte le brouillon, et rien
+     * dans ce dialogue ne la ramène — d'où la confirmation qui y mène.
+     */
+    const removeConfirmed = () => {
+        if (!removing) return;
+        patch({ checklist: draft.checklist.filter((i: ProjectChecklistItem) => i.id !== removing.id) });
+        setRemoving(null);
+    };
 
     const submit = () => {
         if (busy || !draft.title.trim()) return;
@@ -245,10 +267,18 @@ export function CardDialog({
                     </label>
                 </div>
 
-                <div className={styles.field}>
-                    <span className={styles.label}>
-                        Sous-tâches{draft.checklist.length > 0 && ` — ${doneCount}/${draft.checklist.length}`}
-                    </span>
+                {/* Les sous-tâches ont leur encart : c'est une liste qu'on
+                    coche, pas un champ de formulaire de plus. */}
+                <div className={styles.checkPanel}>
+                    <div className={styles.checkHead}>
+                        <span className={styles.label}>Sous-tâches</span>
+                        {draft.checklist.length > 0 && (
+                            <span className={styles.checkCount}>
+                                {doneCount}/{draft.checklist.length}
+                            </span>
+                        )}
+                    </div>
+
                     {draft.checklist.length > 0 && (
                         <ul className={styles.checklist}>
                             {draft.checklist.map((item) => (
@@ -261,12 +291,21 @@ export function CardDialog({
                                     >
                                         <span className={`icon icon-${item.done ? 'square-check' : 'square-empty'}`} />
                                     </button>
-                                    <span className={item.done ? styles.checkDone : undefined}>{item.label}</span>
+                                    {/* L'intitulé porte toujours `checkLabel` :
+                                        c'est lui qui tient la croix à droite,
+                                        cochée ou non. */}
+                                    <span
+                                        className={
+                                            item.done ? `${styles.checkLabel} ${styles.checkDone}` : styles.checkLabel
+                                        }
+                                    >
+                                        {item.label}
+                                    </span>
                                     <button
                                         type='button'
                                         className={styles.tagRemove}
                                         aria-label={`Retirer ${item.label}`}
-                                        onClick={() => removeItem(item.id)}
+                                        onClick={() => askRemove(item)}
                                     >
                                         <span className='icon icon-x' />
                                     </button>
@@ -274,7 +313,8 @@ export function CardDialog({
                             ))}
                         </ul>
                     )}
-                    <div className={styles.tagRow}>
+
+                    <div className={styles.checkAdd}>
                         <TextInput
                             value={itemLabel}
                             maxLength={PROJECT_CHECKLIST_LABEL_MAX_LENGTH}
@@ -286,6 +326,33 @@ export function CardDialog({
                         </Button>
                     </div>
                 </div>
+
+                {/* Le retrait se confirme : rien dans ce dialogue ne ramène une
+                    sous-tâche effacée. Déclarée ici, contre ce qu'elle protège —
+                    un Dialog se rend dans un portail, sa place dans l'arbre n'a
+                    donc aucun effet de mise en page, et la pile de fermeture est
+                    chronologique : Échap annule le retrait sans refermer la
+                    tâche dessous. */}
+                <Dialog
+                    open={removing !== null}
+                    onClose={() => setRemoving(null)}
+                    onSubmit={removeConfirmed}
+                    title='Retirer la sous-tâche'
+                    footer={
+                        <>
+                            <Button variant='secondary' onClick={() => setRemoving(null)}>
+                                Annuler
+                            </Button>
+                            <Button variant='danger' onClick={removeConfirmed}>
+                                Retirer
+                            </Button>
+                        </>
+                    }
+                >
+                    <p>
+                        « {removingLabel} » quittera la liste. Le retrait est définitif à l’enregistrement de la tâche.
+                    </p>
+                </Dialog>
 
                 {/* Jalon et dépendances n'existent que sur une carte déjà créée :
                     les deux se rattachent à son identifiant. */}
