@@ -1337,6 +1337,15 @@
     min-width: 0;
 }
 
+/* `TextInput` renders its <input> inside a wrapper div, so that wrapper — not
+   the input carrying `.composeRowInput` — is the row's flex child. Without this
+   it keeps its intrinsic width and the À/Cc/Cci fields end up narrower than the
+   `De` select, which is a plain <select> and stretches on its own. */
+.composeRow > div {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 .composeAdvancedToggle {
     display: inline-flex;
     align-items: center;
