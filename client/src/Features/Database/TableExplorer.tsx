@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import type {
     DatabaseCombinator,
@@ -10,6 +10,7 @@ import type {
 } from 'deveye-types';
 import { Button, Checkbox, Dialog } from '@/Components';
 import { ws } from '@/api/ws';
+import { useRequestPopupWidth } from '@/stores/popupWidth';
 import { humanizeError } from '../Projects/api';
 import { ExportDialog } from './ExportDialog';
 import { Pagination } from './Pagination';
@@ -34,6 +35,15 @@ const HIGHLIGHT_MS = 3500;
  * l'impression d'un accident, pas d'un choix.
  */
 const EXPAND_SPRING = { type: 'spring', stiffness: 260, damping: 32, mass: 0.9 } as const;
+
+/**
+ * Le temps que la disposition met à se poser après un agrandissement.
+ *
+ * Calé sur `--transition-slow` (400 ms), qui referme la colonne des tables, plus
+ * une marge : c'est le délai après lequel une mesure de largeur porte sur la
+ * disposition finale et non sur une image intermédiaire.
+ */
+const SETTLE_MS = 450;
 
 interface TableExplorerProps {
     databaseId: number;
@@ -93,6 +103,64 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    /** Le plein écran était-il déjà installé au rendu précédent ? */
+    const wasExpanded = useRef(false);
+
+    /**
+     * La largeur que la popup doit prendre pour montrer la table en entier.
+     *
+     * Seulement en plein écran : c'est le mode où l'on vient regarder *une*
+     * table, et la seule chose qui doive alors décider de la largeur de l'écran,
+     * c'est elle. Hors de ce mode, la popup garde sa largeur de lecture.
+     *
+     * `null` = aucune demande, donc la popup revient à sa largeur commune. Le
+     * store ne descend jamais sous 1240 px et écrête à la fenêtre : demander
+     * large ne peut ni rétrécir la popup ni la faire déborder.
+     */
+    const [wantedWidth, setWantedWidth] = useState<number | null>(null);
+    useRequestPopupWidth(expanded ? wantedWidth : null);
+
+    /**
+     * Mesurer ce qui manque, et le demander en une fois.
+     *
+     * La cible est **absolue** — largeur du tableau plus l'habillage — et non un
+     * ajustement relatif : la popup s'élargit par une transition CSS, donc une
+     * mesure prise en plein vol verrait une largeur intermédiaire et l'on
+     * ajouterait deux fois le même manque.
+     *
+     * L'habillage se mesure contre le cadre de la popup, et c'est là qu'il faut
+     * **attendre** : à l'entrée en plein écran, la colonne des tables est encore
+     * ouverte pendant sa transition, et ses 240 px compteraient comme de
+     * l'habillage. On demanderait alors une popup trop large, puis on la
+     * rétrécirait — deux mouvements pour un geste. Une fois installé, en
+     * revanche, plus rien ne bouge : changer de table mesure tout de suite.
+     */
+    useLayoutEffect(() => {
+        if (!expanded) {
+            wasExpanded.current = false;
+            setWantedWidth(null);
+            return;
+        }
+        const measure = () => {
+            const box = scrollRef.current;
+            const grid = box?.querySelector('table');
+            // Rendu hors d'une popup de feature (un test, un autre hôte) : on ne
+            // demande rien plutôt que de deviner un habillage.
+            const frame = box?.closest<HTMLElement>('[data-popup-frame]');
+            if (!box || !grid || !frame) return;
+            const chrome = frame.clientWidth - box.clientWidth;
+            setWantedWidth(Math.min(grid.scrollWidth + chrome, window.innerWidth));
+        };
+
+        if (wasExpanded.current) {
+            measure();
+            return;
+        }
+        wasExpanded.current = true;
+        const timer = setTimeout(measure, SETTLE_MS);
+        return () => clearTimeout(timer);
+    }, [expanded, rows, table]);
 
     // Changer de base referme tout : garder les tables d'une autre à l'écran
     // serait au mieux déroutant, au pire trompeur. Le plein écran retombe avec
@@ -293,7 +361,11 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
          * avant et après, et anime l'écart — d'où un panneau qui *monte* vers sa
          * pleine taille au lieu d'apparaître dedans.
          */
-        <motion.section layout transition={EXPAND_SPRING} className={expanded ? styles.panelExpanded : styles.panel}>
+        <motion.section
+            layout
+            transition={EXPAND_SPRING}
+            className={expanded ? styles.panelExpanded : styles.panelGrow}
+        >
             {/* En plein écran, tout ce qui parle de la base disparaît — y compris
                 cet en-tête : on est venu regarder *une* table. */}
             {!expanded && (
@@ -504,7 +576,10 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
                                     défiler la page entière. En plein écran, cette
                                     boîte prend toute la hauteur restante — c'est
                                     tout l'intérêt d'y être passé. */}
-                                <div className={expanded ? styles.rowsScrollFill : styles.rowsScroll}>
+                                <div
+                                    ref={scrollRef}
+                                    className={expanded ? styles.rowsScrollFill : styles.rowsScrollPane}
+                                >
                                     <table className={styles.dataTable}>
                                         <thead>
                                             <tr>

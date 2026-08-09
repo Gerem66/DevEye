@@ -86,6 +86,17 @@ export default function WidgetPopup({
                     <motion.div
                         layoutId={layoutId}
                         className={styles.popup}
+                        /*
+                         * Une prise pour le contenu qui doit se mesurer contre le
+                         * cadre : une vue qui demande une largeur (voir
+                         * `stores/popupWidth`) a besoin de savoir combien de
+                         * pixels séparent son tableau du bord de la popup, et elle
+                         * y arrive par un portail — aucune prop ne descend
+                         * jusqu'à elle. Un attribut plutôt qu'une classe : ce
+                         * n'est pas du style, et un nom de classe de module CSS
+                         * n'est pas un contrat stable.
+                         */
+                        data-popup-frame=''
                         style={{ maxWidth }}
                         initial={layoutId ? false : { opacity: 0, scale: 0.95 }}
                         animate={layoutId ? undefined : { opacity: 1, scale: 1 }}

@@ -6,11 +6,27 @@
  * produire (voir la note de PROJECTS.md sur `.grid`).
  */
 
+/*
+ * La racine d'une fiche, et le ressort qui remplit la popup.
+ *
+ * `min-height: 100%` est tout ce qu'il faut pour obtenir « prends la place qui
+ * reste, sinon ne bouge pas ». La zone défilante de la popup a une hauteur
+ * définie ; la racine vaut donc **au moins** cette hauteur :
+ *
+ * - contenu plus court → la racine est étirée à 100 %, il y a de l'espace libre,
+ *   et le seul enfant qui grandit (le panneau des tables) le prend. Aucune barre
+ *   de défilement n'apparaît : rien ne dépasse ;
+ * - contenu déjà plus haut → la racine suit le contenu, l'espace libre vaut zéro,
+ *   `flex-grow` ne distribue rien, et tout garde sa taille par défaut, barre de
+ *   défilement comprise.
+ *
+ * Les deux cas que demandait l'écran, sans mesurer quoi que ce soit.
+ */
 .root {
     display: flex;
     flex-direction: column;
     gap: var(--space-md);
-    min-height: 0;
+    min-height: 100%;
 }
 
 /*
@@ -379,6 +395,23 @@
 }
 
 /*
+ * Le panneau des tables hors plein écran : le seul bloc de la fiche qui grandit.
+ *
+ * `flex: 1 1 auto` — et non `flex: 1`, qui vaut `1 1 0%` : la base doit rester
+ * la hauteur naturelle du panneau, sinon il partirait de zéro et se replierait
+ * dès que la place manque. Ici il part de ce qu'il vaut, et ne fait que prendre
+ * ce qui reste.
+ *
+ * Les autres panneaux (alertes, projets) gardent leur taille : ce qu'on veut
+ * voir en plus grand, ce sont des lignes, pas une liste d'alertes espacée.
+ */
+.panelGrow {
+    composes: panel;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/*
  * Le panneau des tables quand il occupe tout.
  *
  * Il ne change ni de forme ni de couleur : il prend simplement la place que la
@@ -472,6 +505,11 @@
     grid-template-columns: 240px minmax(0, 1fr);
     gap: var(--space-md);
     min-width: 0;
+    /* Relaie au tableau la hauteur que le panneau a gagnée : la grille prend ce
+       qui reste, sa ligne unique s'étire (`align-content: stretch` par défaut),
+       et les deux colonnes avec elle. */
+    flex: 1 1 auto;
+    min-height: 0;
     /* La largeur de la colonne de gauche s'anime : c'est ce qui fait glisser la
        liste hors de l'écran au lieu de la faire disparaître d'un coup quand on
        passe en plein écran. */
@@ -648,6 +686,31 @@
     composes: rowsScroll;
     flex: 1;
     min-height: 0;
+    max-height: none;
+}
+
+/*
+ * La boîte du tableau dans l'explorateur : 360 px **de préférence**, pas 360 px
+ * au maximum.
+ *
+ * La nuance fait tout. Un `max-height` borne aussi la croissance : le panneau
+ * pouvait gagner deux cents pixels sans que le tableau en profite, et ils
+ * restaient en blanc sous lui. Une `height` sert de base à `flex-basis: auto`,
+ * que `flex-grow` dépasse librement quand il y a de la place — et qui reste
+ * exactement 360 px quand il n'y en a pas.
+ *
+ * Contrepartie assumée : une table de trois lignes occupe quand même le cadre.
+ * C'est ce que « la hauteur actuelle est un plancher » veut dire, et un cadre de
+ * taille stable d'une table à l'autre vaut mieux qu'un cadre qui saute.
+ *
+ * Les autres usages de `.rowsScroll` — la structure, l'aperçu d'un résultat —
+ * gardent le plafond : ils n'ont rien à remplir.
+ */
+.rowsScrollPane {
+    composes: rowsScroll;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 360px;
     max-height: none;
 }
 
