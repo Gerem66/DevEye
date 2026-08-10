@@ -33,6 +33,12 @@ export interface WidgetProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
      * Used by shortcut tiles instead of a JS click handler.
      */
     href?: string;
+    /**
+     * Feature réservée aux administrateurs : la carte porte un bouclier au repos,
+     * effacé au survol pour laisser place à la flèche d'ouverture. Même icône et
+     * même formulation que les entrées d'administration du menu de la topbar.
+     */
+    adminOnly?: boolean;
 }
 
 /**
@@ -40,7 +46,20 @@ export interface WidgetProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
  * into a popup. Clicking anywhere triggers `onExpand`.
  */
 const Widget = forwardRef<HTMLDivElement, WidgetProps>(function Widget(
-    { widgetId, title, icon, children, onExpand, className, compact, slim, interactive = true, href, ...motionProps },
+    {
+        widgetId,
+        title,
+        icon,
+        children,
+        onExpand,
+        className,
+        compact,
+        slim,
+        interactive = true,
+        href,
+        adminOnly,
+        ...motionProps
+    },
     ref
 ) {
     // Présence : la tuile s'entoure de la couleur de qui se trouve dans la
@@ -84,7 +103,21 @@ const Widget = forwardRef<HTMLDivElement, WidgetProps>(function Widget(
                         </span>
                     )}
                     <span className={styles.title}>{title}</span>
-                    {interactive && <span className={`icon icon-arrow ${styles.expandHint}`} aria-hidden='true' />}
+                    {/* Les deux icônes se superposent dans une case de largeur
+                        fixe : elles s'échangent au survol sans que le titre ne
+                        bouge d'un pixel. */}
+                    {interactive && (
+                        <span className={styles.headerMark}>
+                            {adminOnly && (
+                                <span
+                                    className={`icon icon-shield ${styles.adminBadge}`}
+                                    title='Réservé aux administrateurs'
+                                    aria-label='Réservé aux administrateurs'
+                                />
+                            )}
+                            <span className={`icon icon-arrow ${styles.expandHint}`} aria-hidden='true' />
+                        </span>
+                    )}
                 </div>
             )}
             <div className={styles.body}>{children}</div>

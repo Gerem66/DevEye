@@ -98,6 +98,24 @@
     white-space: nowrap;
 }
 
+/*
+ * Coin haut-droite du titre : une case de largeur fixe où le bouclier (au repos)
+ * et la flèche (au survol) se superposent. Empilés en absolu plutôt que posés
+ * l'un après l'autre — sinon la case changerait de largeur au survol et le titre
+ * sauterait.
+ */
+.headerMark {
+    position: relative;
+    flex: none;
+    width: 16px;
+    height: 16px;
+}
+
+.headerMark > * {
+    position: absolute;
+    inset: 0;
+}
+
 .expandHint {
     width: 16px;
     color: var(--text-muted);
@@ -112,6 +130,18 @@
     opacity: 1;
     transform: translateX(0);
     color: var(--accent);
+}
+
+/* Le pendant du badge des entrées admin de la topbar, mêmes teinte et opacité. */
+.adminBadge {
+    width: 16px;
+    color: var(--text-muted);
+    opacity: 0.75;
+    transition: opacity var(--transition-fast);
+}
+
+.widget:hover .adminBadge {
+    opacity: 0;
 }
 
 .body {

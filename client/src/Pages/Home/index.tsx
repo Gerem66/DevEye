@@ -48,7 +48,14 @@ import FeatureUsers from '@/Features/Users';
 // Device popup content (Monitoring panel without the sidebar)
 import MonitoringPanel from '@/Features/Monitoring/MonitoringPanel';
 
-import { FEATURE_CATALOG } from './catalog';
+import {
+    FEATURE_CATALOG,
+    featureAllowed,
+    featureCatalogEntry,
+    featureIdAllowed,
+    usableFeatureIds,
+    type FeatureAudience
+} from './catalog';
 import { isForceReload } from './forceReload';
 import {
     DEVICE_VIEW_PREFIX,
@@ -178,8 +185,13 @@ function survivesWorkspaceSwitch(
     viewId: string,
     layout: HomeLayout,
     permissions: WorkspacePermissions,
-    views: readonly ViewConfig[]
+    views: readonly ViewConfig[],
+    audience: FeatureAudience
 ): boolean {
+    // Une feature réservée à l'administration ne survit pas à l'arrivée dans un
+    // espace partagé : sa vue se referme au lieu de rester ouverte sur des
+    // données que la cible n'a pas le droit de montrer.
+    if (!featureIdAllowed(viewId, audience)) return false;
     const feature = featureBehind(viewId);
     if (feature !== null && !permissions.features.some((g) => g.feature === feature)) return false;
 
@@ -390,6 +402,15 @@ export default function HomePage() {
     // `can`, recréé à chaque rendu) pour servir de dépendances stables.
     const canAppearance = can('workspace.appearance');
     const canLayout = can('workspace.layout');
+    // Qui regarde, et depuis quel genre d'espace : ce que les widgets réservés à
+    // l'administration (Monitoring) consultent. Mémoïsé pour servir de
+    // dépendance stable aux gardes ci-dessous.
+    const isAdmin = user?.role === 'admin';
+    const workspaceKind = currentWorkspace?.kind;
+    const audience = useMemo<FeatureAudience>(
+        () => ({ kind: workspaceKind, isAdmin: !!isAdmin }),
+        [workspaceKind, isAdmin]
+    );
 
     const [expandedWidget, setExpandedWidget] = useState<string | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -488,13 +509,22 @@ export default function HomePage() {
         setExpandedWidget(widgetId);
     }, []);
 
-    /** Le rôle courant ouvre-t-il cette vue ? La lecture suffit à l'ouvrir. */
+    /**
+     * Le rôle courant ouvre-t-il cette vue ? La lecture suffit à l'ouvrir.
+     *
+     * Deux règles s'y superposent : les droits de feature du rôle, et la
+     * restriction « administrateur, dans son espace personnel » que porte le
+     * catalogue. Cette fonction est le passage unique de `handleExpand`, donc du
+     * clic sur une tuile, du menu de la topbar et de la navigation
+     * inter-features : la poser ici les couvre toutes.
+     */
     const allowedToOpen = useCallback(
         (viewId: string): boolean => {
+            if (!featureIdAllowed(viewId, audience)) return false;
             const feature = featureBehind(viewId);
             return feature === null || canFeature(feature);
         },
-        [canFeature]
+        [canFeature, audience]
     );
 
     const viewTitleOf = useCallback(
@@ -550,7 +580,10 @@ export default function HomePage() {
     const reconcileOpenView = useCallback(
         (permissions: WorkspacePermissions) => {
             const open = expandedWidgetRef.current;
-            if (open && !survivesWorkspaceSwitch(open, getHomeLayout(), permissions, viewsRef.current)) {
+            if (
+                open &&
+                !survivesWorkspaceSwitch(open, getHomeLayout(), permissions, viewsRef.current, audienceRef.current)
+            ) {
                 handleClose();
             }
         },
@@ -692,6 +725,10 @@ export default function HomePage() {
     const views = useMemo(() => [...STATIC_VIEWS, ...deviceViews], [deviceViews]);
     const viewsRef = useRef(views);
     viewsRef.current = views;
+    // Même motif : lu depuis des effets qui ne doivent pas se relancer sur un
+    // simple changement de contexte.
+    const audienceRef = useRef(audience);
+    audienceRef.current = audience;
 
     const handleExitComplete = useCallback(() => {
         const featureId = closingFeatureRef.current;
@@ -743,7 +780,13 @@ export default function HomePage() {
         const mountPreloads = () => {
             if (preloadedRef.current || ws.state !== 'open') return;
             preloadedRef.current = true;
-            const gridFeatureIds = new Set<string>(placedFeatureIds(getHomeLayout()));
+            // Filtré par la même règle que la grille : sans ça, un widget
+            // réservé aux administrateurs serait *monté* — et enverrait ses
+            // requêtes — chez qui n'a pas le droit de le voir, simplement parce
+            // qu'il figure encore dans une disposition héritée.
+            const gridFeatureIds = new Set<string>(
+                usableFeatureIds(placedFeatureIds(getHomeLayout()), audienceRef.current)
+            );
             for (const config of viewsRef.current) {
                 const duration = config.cacheDurationMinutes;
                 if (!config.preload || duration === 0 || !gridFeatureIds.has(config.id)) continue;
@@ -848,7 +891,15 @@ export default function HomePage() {
                 if (!openView) return;
                 // `doExpand` avec remontage forcé : la vue reparaît vierge, sur
                 // les données de l'espace d'arrivée.
-                if (survivesWorkspaceSwitch(openView, getHomeLayout(), res.permissions, viewsRef.current)) {
+                if (
+                    survivesWorkspaceSwitch(
+                        openView,
+                        getHomeLayout(),
+                        res.permissions,
+                        viewsRef.current,
+                        audienceRef.current
+                    )
+                ) {
                     remountFeature(openView);
                 } else handleClose();
             } catch {
@@ -892,6 +943,11 @@ export default function HomePage() {
         const tiles: ReactNode[] = [];
         if (section.kind === 'feature') {
             for (const fid of section.items) {
+                // Retirée, et non grisée : « pas accessible » n'est pas « visible
+                // mais verrouillé ». Une disposition héritée d'un contexte où le
+                // widget était offert ne doit pas le faire réapparaître.
+                const entry = featureCatalogEntry(fid);
+                if (entry && !featureAllowed(entry, audience)) continue;
                 const v = featureTileVisual(fid);
                 if (!v) continue;
                 // La tuile reste posée, en retrait : la retirer déplacerait les
@@ -905,6 +961,7 @@ export default function HomePage() {
                         widgetId={v.widgetId}
                         title={v.title}
                         icon={v.icon}
+                        adminOnly={entry?.adminOnly}
                         className={locked ? styles.lockedTile : undefined}
                         // Hidden while its popup is open so frequent re-renders can't
                         // make the source card flash behind the morphed popup.

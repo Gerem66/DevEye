@@ -1,8 +1,10 @@
 import { Dialog } from '@/Components/Dialog';
+import { useAuth } from '@/auth/AuthProvider';
 import { useDevices } from '@/stores/devices';
+import { useActiveWorkspace } from '@/stores/workspace';
 import { addDevice, addFeature, placedDeviceIds, placedFeatureIds, useHomeLayout } from '@/stores/homeLayout';
 import type { HomeSection, ShortcutItem } from 'deveye-types';
-import { FEATURE_CATALOG } from '../catalog';
+import { availableFeatures } from '../catalog';
 import { PickerList, type PickerEntry } from './PickerList';
 import { ADD_TILE_TITLE } from './sectionKinds';
 import { ShortcutForm } from './ShortcutForm';
@@ -12,16 +14,24 @@ import styles from './organize.module.css';
  *  one section, so the filter spans every feature section, not just the target. */
 function FeaturePicker({ sectionId, onAdded }: { sectionId: string; onAdded: () => void }) {
     const layout = useHomeLayout();
+    const { user } = useAuth();
+    const workspace = useActiveWorkspace();
     const used = new Set(placedFeatureIds(layout));
-    const entries: PickerEntry[] = FEATURE_CATALOG.filter((f) => !used.has(f.id)).map((f) => ({
-        key: f.id,
-        icon: f.icon,
-        label: f.title,
-        onPick: () => {
-            addFeature(sectionId, f.id);
-            onAdded();
-        }
-    }));
+    // Un widget qu'on n'a pas le droit d'ouvrir ici n'est pas non plus
+    // *proposé* : le montrer dans le sélecteur reviendrait à laisser poser une
+    // tuile que la grille refuserait ensuite de rendre.
+    const catalog = availableFeatures({ kind: workspace?.kind, isAdmin: user?.role === 'admin' });
+    const entries: PickerEntry[] = catalog
+        .filter((f) => !used.has(f.id))
+        .map((f) => ({
+            key: f.id,
+            icon: f.icon,
+            label: f.title,
+            onPick: () => {
+                addFeature(sectionId, f.id);
+                onAdded();
+            }
+        }));
     return <PickerList entries={entries} empty='Toutes les fonctionnalités sont déjà affichées.' />;
 }
 

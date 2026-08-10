@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import type { HomeFeatureId } from 'deveye-types';
+import type { HomeFeatureId, WorkspaceKind } from 'deveye-types';
 
 import { MonitoringWidget } from '@/Features/Monitoring';
 import { WeatherWidget } from '@/Features/Weather';
@@ -49,6 +49,14 @@ export interface FeatureCatalogEntry {
      * `holdSecrecy`). Left unset for non-encrypted views (monitoring, weather).
      */
     holdSecrecy?: boolean;
+    /**
+     * Réservée à l'administrateur global, et à son espace **personnel** seul.
+     *
+     * Pas un droit d'espace : aucun rôle ne l'accorde et aucun espace partagé ne
+     * la propose. La carte porte alors le bouclier des entrées d'administration
+     * de la topbar, pour que la restriction se voie sans avoir à cliquer.
+     */
+    adminOnly?: true;
 }
 
 export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
@@ -59,7 +67,8 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         WidgetContent: MonitoringWidget,
         FullComponent: Monitoring,
         cacheDurationMinutes: 5,
-        preload: true
+        preload: true,
+        adminOnly: true
     },
     {
         id: 'weather',
@@ -158,4 +167,42 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
 
 export function featureCatalogEntry(id: HomeFeatureId): FeatureCatalogEntry | undefined {
     return FEATURE_CATALOG.find((f) => f.id === id);
+}
+
+/** Qui regarde, et depuis quel genre d'espace. */
+export interface FeatureAudience {
+    kind: WorkspaceKind | undefined;
+    isAdmin: boolean;
+}
+
+/**
+ * Les widgets offerts à ce contexte.
+ *
+ * Une seule définition de la règle, sur le modèle de `availableTopbarWidgets` :
+ * elle sert le rendu de la grille, le sélecteur d'ajout, la garde de navigation
+ * et le préchargement. En avoir plusieurs, c'est en oublier une — et une seule
+ * suffit à rouvrir la porte.
+ */
+export function availableFeatures({ kind, isAdmin }: FeatureAudience): FeatureCatalogEntry[] {
+    return FEATURE_CATALOG.filter((f) => featureAllowed(f, { kind, isAdmin }));
+}
+
+/** La même règle, appliquée à une entrée déjà connue. */
+export function featureAllowed(entry: FeatureCatalogEntry, { kind, isAdmin }: FeatureAudience): boolean {
+    return !entry.adminOnly || (isAdmin && kind === 'personal');
+}
+
+/** La même règle encore, appliquée à des identifiants déjà épinglés (disposition héritée). */
+export function usableFeatureIds(ids: readonly HomeFeatureId[], audience: FeatureAudience): HomeFeatureId[] {
+    const allowed = new Set(availableFeatures(audience).map((f) => f.id));
+    return ids.filter((id) => allowed.has(id));
+}
+
+/**
+ * Ce widget est-il ouvrable ici ? Réponse par identifiant, pour les appelants
+ * qui n'ont qu'une vue (`allowedToOpen`, la garde unique de navigation).
+ */
+export function featureIdAllowed(id: string, audience: FeatureAudience): boolean {
+    const entry = FEATURE_CATALOG.find((f) => f.id === id);
+    return !entry || featureAllowed(entry, audience);
 }
