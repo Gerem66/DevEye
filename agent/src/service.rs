@@ -151,7 +151,10 @@ mod imp {
     fn user_plists() -> Vec<PathBuf> {
         let mut paths = vec![user_plist()];
         if let Some(home) = invoking_home() {
-            paths.push(home.join("Library/LaunchAgents").join(format!("{LABEL}.plist")));
+            paths.push(
+                home.join("Library/LaunchAgents")
+                    .join(format!("{LABEL}.plist")),
+            );
         }
         paths
     }
@@ -367,7 +370,16 @@ mod imp {
             match sudo_user().filter(|_| is_root()) {
                 Some(user) => {
                     let _ = Command::new("runuser")
-                        .args(["-u", &user, "--", "systemctl", "--user", "disable", "--now", UNIT])
+                        .args([
+                            "-u",
+                            &user,
+                            "--",
+                            "systemctl",
+                            "--user",
+                            "disable",
+                            "--now",
+                            UNIT,
+                        ])
                         .output();
                 }
                 None => {
