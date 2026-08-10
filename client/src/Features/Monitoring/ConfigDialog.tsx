@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ws } from '@/api/ws';
 import { Dialog } from '@/Components/Dialog';
 import Button from '@/Components/Button';
@@ -29,8 +29,10 @@ function estimateDailyBytes(intervalSec: number, capture: ProcessCapture): numbe
     return (86400 / intervalSec) * perSample;
 }
 
-function formatMb(bytes: number): string {
-    return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} Mo` : `${Math.round(bytes / 1024)} Ko`;
+function formatBytes(bytes: number): string {
+    if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} Go`;
+    if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} Mo`;
+    return `${Math.round(bytes / 1024)} Ko`;
 }
 
 function clamp(v: number, lo: number, hi: number): number {
@@ -81,13 +83,15 @@ export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogPro
         // would wipe an in-progress "Personnalisé…" entry).
     }, [open, device?.id]);
 
-    // Cadence currently selected, for the live storage estimate below.
-    const estimateSec = Number(metricSel === CUSTOM ? metricCustom : metricSel) || DEFAULT_METRIC_INTERVAL_SECONDS;
-
     const resolve = (sel: string, custom: string): number | null => {
         const raw = sel === CUSTOM ? Number(custom) : Number(sel);
         return Number.isFinite(raw) && raw > 0 ? raw : null;
     };
+
+    // Cadence et conservation retenues, pour l'estimation vivante ci-dessous.
+    const estimateSec = resolve(metricSel, metricCustom) ?? DEFAULT_METRIC_INTERVAL_SECONDS;
+    const estimateDays = resolve(retSel, retCustom) ?? DEFAULT_RETENTION_DAYS;
+    const dailyBytes = estimateDailyBytes(estimateSec, capture);
 
     const save = async () => {
         if (!device) return;
@@ -122,6 +126,9 @@ export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogPro
             onClose={onClose}
             title={device ? `Configuration — ${device.name}` : 'Configuration'}
             description='Cadence de collecte et durée de conservation. Chaque relevé enregistre les métriques et les processus au même instant, et les conserve aussi longtemps. Appliqué dès le prochain relevé, que l’agent soit connecté ou non.'
+            // Plus large que le défaut : à 460 px, une ligne « libellé + select +
+            // valeur personnalisée + unité » ne tenait pas et débordait.
+            width={520}
             onSubmit={() => void save()}
             footer={
                 <>
@@ -147,25 +154,24 @@ export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogPro
                     onSel={setMetricSel}
                     onCustom={setMetricCustom}
                 />
-                <label className={styles.configRow}>
-                    <span className={styles.configLabel}>Processus capturés</span>
-                    <div className={styles.configField}>
-                        <SelectInput
-                            value={capture}
-                            onChange={(e) => setCapture(e.target.value as ProcessCapture)}
-                            aria-label='Processus capturés'
-                        >
-                            <option value='all'>Tous</option>
-                            <option value='top'>Top 20 (CPU + mémoire)</option>
-                            <option value='off'>Désactivé</option>
-                        </SelectInput>
-                        <span className={styles.configHint}>
-                            {capture === 'off'
-                                ? 'Aucun historique de processus enregistré.'
-                                : `≈ ${formatMb(estimateDailyBytes(estimateSec, capture))} par jour et par appareil.`}
-                        </span>
-                    </div>
-                </label>
+                <ConfigRow
+                    label='Processus capturés'
+                    hint={
+                        capture === 'off'
+                            ? 'Aucun historique de processus enregistré.'
+                            : `≈ ${formatBytes(dailyBytes)} par jour, soit ~${formatBytes(dailyBytes * estimateDays)} conservés par appareil.`
+                    }
+                >
+                    <SelectInput
+                        value={capture}
+                        onChange={(e) => setCapture(e.target.value as ProcessCapture)}
+                        aria-label='Processus capturés'
+                    >
+                        <option value='all'>Tous</option>
+                        <option value='top'>Top 20 (CPU + mémoire)</option>
+                        <option value='off'>Désactivé</option>
+                    </SelectInput>
+                </ConfigRow>
                 <ConfigChoice
                     label='Conservation de l’historique'
                     unit='j'
@@ -181,6 +187,24 @@ export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogPro
     );
 }
 
+/**
+ * Une ligne du formulaire : libellé à gauche, champ à droite, et une précision
+ * facultative sur toute la largeur en dessous.
+ *
+ * Le complément est un **frère** du champ et non son enfant : posé dedans, il
+ * devenait un élément de la rangée flex et se rangeait *à côté* du select au
+ * lieu d'en dessous, poussant la ligne hors de la popup.
+ */
+function ConfigRow({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
+    return (
+        <label className={styles.configRow}>
+            <span className={styles.configLabel}>{label}</span>
+            <div className={styles.configField}>{children}</div>
+            {hint && <span className={styles.configHint}>{hint}</span>}
+        </label>
+    );
+}
+
 interface ConfigChoiceProps {
     label: string;
     unit: string;
@@ -193,31 +217,28 @@ interface ConfigChoiceProps {
 
 function ConfigChoice({ label, unit, presets, sel, custom, onSel, onCustom }: ConfigChoiceProps) {
     return (
-        <label className={styles.configRow}>
-            <span className={styles.configLabel}>{label}</span>
-            <div className={styles.configField}>
-                <SelectInput value={sel} onChange={(e) => onSel(e.target.value)} aria-label={label}>
-                    {presets.map((p) => (
-                        <option key={p.value} value={String(p.value)}>
-                            {p.label}
-                        </option>
-                    ))}
-                    <option value={CUSTOM}>Personnalisé…</option>
-                </SelectInput>
-                {sel === CUSTOM && (
-                    <span className={styles.configCustom}>
-                        <TextInput
-                            type='text'
-                            inputMode='decimal'
-                            value={custom}
-                            onChange={(e) => onCustom(e.target.value)}
-                            className={styles.configCustomInput}
-                            aria-label={`${label} (valeur personnalisée)`}
-                        />
-                        <span className={styles.configUnit}>{unit}</span>
-                    </span>
-                )}
-            </div>
-        </label>
+        <ConfigRow label={label}>
+            <SelectInput value={sel} onChange={(e) => onSel(e.target.value)} aria-label={label}>
+                {presets.map((p) => (
+                    <option key={p.value} value={String(p.value)}>
+                        {p.label}
+                    </option>
+                ))}
+                <option value={CUSTOM}>Personnalisé…</option>
+            </SelectInput>
+            {sel === CUSTOM && (
+                <span className={styles.configCustom}>
+                    <TextInput
+                        type='text'
+                        inputMode='decimal'
+                        value={custom}
+                        onChange={(e) => onCustom(e.target.value)}
+                        className={styles.configCustomInput}
+                        aria-label={`${label} (valeur personnalisée)`}
+                    />
+                    <span className={styles.configUnit}>{unit}</span>
+                </span>
+            )}
+        </ConfigRow>
     );
 }

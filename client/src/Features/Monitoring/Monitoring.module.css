@@ -475,23 +475,40 @@
     gap: var(--space-md);
 }
 
+/*
+ * Grille et non rangée flex : le libellé prend la place restante, le champ
+ * exactement la sienne, et la précision occupe une seconde ligne sur toute la
+ * largeur. En flex, elle se rangeait à côté du champ et sortait de la popup.
+ *
+ * `minmax(0, …)` des deux côtés : sans lui, `min-width: auto` empêche une
+ * colonne de descendre sous son contenu le plus large, et le débordement
+ * reprend dès que la fenêtre se resserre.
+ */
 .configRow {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, auto);
     align-items: center;
-    justify-content: space-between;
-    gap: var(--space-md);
+    gap: var(--space-xs) var(--space-md);
 }
 
 .configLabel {
     font-size: 0.85rem;
     color: var(--text);
+    min-width: 0;
 }
 
+/*
+ * Compressible, et à la ligne au besoin : figé (`flex-shrink: 0`), ce bloc ne
+ * cédait jamais un pixel — tout ce qui dépassait la largeur utile de la popup
+ * en sortait et se faisait rogner par son `overflow-x: hidden`.
+ */
 .configField {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
+    justify-content: flex-end;
     gap: var(--space-sm);
-    flex-shrink: 0;
+    min-width: 0;
 }
 
 .configField > select {
@@ -505,7 +522,19 @@
 }
 
 .configCustomInput {
-    width: 80px;
+    width: 72px;
+}
+
+/* Précision sous un champ (coût de stockage projeté…), alignée à droite sur
+   toute la largeur de la ligne pour ne pas élargir la colonne du champ. */
+.configHint {
+    grid-column: 1 / -1;
+    justify-self: end;
+    text-align: right;
+    max-width: 100%;
+    margin: 0;
+    font-size: 0.68rem;
+    color: var(--text-muted);
 }
 
 .configUnit {
@@ -2523,13 +2552,6 @@
     white-space: nowrap;
 }
 
-/* Inline hint under a config field (e.g. projected storage cost). */
-.configHint {
-    display: block;
-    margin-top: 4px;
-    font-size: 0.68rem;
-    color: var(--text-muted);
-}
 
 /* "×3" marker: a program aggregating several PIDs (browsers, editors). */
 .procInstances {
