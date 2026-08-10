@@ -63,6 +63,38 @@ const REPORT_INTERVAL: Duration = Duration::from_secs(60 * 60);
 /// Default used until the server pushes `agent.config` (≈immediately on
 /// connect). Mirrors the server default (`DEFAULT_PROCESS_CAPTURE`).
 const DEFAULT_CAPTURE: &str = "all";
+/// Cadence du ping émis par l'agent, et délai au-delà duquel il considère le
+/// serveur perdu.
+///
+/// Symétrique du battement de cœur côté serveur : sans lui, l'agent reste bloqué
+/// dans `stream.next()` indéfiniment quand le serveur disparaît sans fermer la
+/// socket — jusqu'au keepalive TCP du noyau, plus de deux heures. Il ne se
+/// reconnectait donc pas, et se croyait supervisé.
+const AGENT_PING_INTERVAL: Duration = Duration::from_secs(30);
+
+/// Attend un ordre d'arrêt du système (SIGTERM) ou du terminal (Ctrl-C).
+///
+/// SIGTERM est celui que systemd et launchd envoient : sans le traiter, un arrêt
+/// propre de la machine tuait l'agent avant qu'il n'ait pu fermer sa socket, et
+/// le serveur ne l'apprenait que bien plus tard.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut term = match signal(SignalKind::terminate()) {
+            Ok(s) => s,
+            Err(_) => return std::future::pending().await,
+        };
+        tokio::select! {
+            _ = term.recv() => {}
+            _ = tokio::signal::ctrl_c() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
+}
 
 /// Tunables for a run, set from the CLI.
 pub struct RunOptions {
@@ -266,11 +298,20 @@ async fn stream_session(
     } else {
         sockets::read_sockets(true)
     };
-    send_report(&mut sink, device_id, &sockets).await?;
+    // Les métriques partent **avant** le rapport : elles sont ce que l'interface
+    // attend, et le rapport peut être lent (voir `spawn_report`).
     flush_queue(&mut sink, device_id, queue).await?;
+
+    // Le rapport voyage par ce canal, construit hors de la boucle.
+    let (report_tx, mut report_rx) = tokio::sync::mpsc::channel::<DeviceReport>(4);
+    spawn_report(&report_tx, &sockets);
 
     let mut ticker = new_ticker(interval);
     let mut report_ticker = new_ticker(REPORT_INTERVAL);
+    let mut ping_ticker = new_ticker(AGENT_PING_INTERVAL);
+    // Remis à `true` par chaque `Pong` ; deux tours sans réponse ferment la
+    // session, qui se rétablit par la boucle de reconnexion habituelle.
+    let mut server_alive = true;
     // The socket map of the latest tick, reused by the next report so a report
     // never re-probes what a tick just enumerated.
     let mut last_sockets = sockets;
@@ -295,6 +336,9 @@ async fn stream_session(
 
     loop {
         tokio::select! {
+            Some(report) = report_rx.recv() => {
+                send_built_report(&mut sink, device_id, report).await?;
+            }
             Some(ev) = pkg_rx.recv() => {
                 commands::send_pkg_event(&mut sink, device_id, ev).await;
             }
@@ -322,6 +366,26 @@ async fn stream_session(
                 *last_collect = Some(Instant::now());
                 flush_queue(&mut sink, device_id, queue).await?;
             }
+            _ = shutdown_signal() => {
+                // Arrêt demandé (systemd, Ctrl-C) : on ferme proprement pour que
+                // le serveur enregistre le départ tout de suite. Sans ça l'agent
+                // mourait sans trame de fermeture, et l'appareil restait affiché
+                // « en ligne » jusqu'à expiration.
+                info!("shutdown signal — closing the session");
+                let _ = sink.send(Message::Close(None)).await;
+                let _ = sink.flush().await;
+                return Ok(SessionOutcome::Stop);
+            }
+            _ = ping_ticker.tick() => {
+                if !server_alive {
+                    warn!("no pong from the server — reconnecting");
+                    return Ok(SessionOutcome::Established);
+                }
+                server_alive = false;
+                if sink.send(Message::Ping(Vec::new().into())).await.is_err() {
+                    return Ok(SessionOutcome::Established);
+                }
+            }
             _ = report_ticker.tick() => {
                 // The last tick's socket map already has everything — except on
                 // macOS, where owner attribution needs the slower `lsof` that a
@@ -329,7 +393,7 @@ async fn stream_session(
                 if cfg!(target_os = "macos") {
                     last_sockets = tokio::task::spawn_blocking(|| sockets::read_sockets(true)).await?;
                 }
-                send_report(&mut sink, device_id, &last_sockets).await?;
+                spawn_report(&report_tx, &last_sockets);
             }
             incoming = stream.next() => {
                 match incoming {
@@ -341,7 +405,7 @@ async fn stream_session(
                                 push_bounded(queue, snapshot);
                                 *last_collect = Some(Instant::now());
                                 flush_queue(&mut sink, device_id, queue).await?;
-                                send_report(&mut sink, device_id, &sockets).await?;
+                                spawn_report(&report_tx, &sockets);
                                 last_sockets = sockets;
                             }
                             Ok(ServerMessage::Config {
@@ -553,6 +617,9 @@ async fn stream_session(
                     Some(Ok(Message::Ping(payload))) => {
                         sink.send(Message::Pong(payload)).await.ok();
                     }
+                    Some(Ok(Message::Pong(_))) => {
+                        server_alive = true;
+                    }
                     Some(Ok(Message::Close(_))) | None => return Ok(SessionOutcome::Established),
                     Some(Ok(_)) => {}
                     Some(Err(e)) => return Err(e).context("WebSocket stream error"),
@@ -591,6 +658,29 @@ where
     Ok(())
 }
 
+/// Lance la construction du rapport **sans l'attendre**, et l'achemine par le
+/// canal à la boucle, qui l'enverra.
+///
+/// Les sondes de sécurité sortent du processus, et l'une d'elles peut être très
+/// lente : `apt-get -s upgrade` attend le verrou dpkg, ce qui se compte en
+/// minutes sur une carte SD. Tant que le rapport était *attendu* avant d'entrer
+/// dans la boucle, une telle machine ne remontait rien du tout — pas de
+/// métriques, aucune commande traitée — tout en restant affichée « en ligne ».
+///
+/// Même schéma que les paquets, les journaux et les fichiers : la tâche vit
+/// hors de la boucle, qui reste disponible pendant ce temps.
+fn spawn_report(tx: &tokio::sync::mpsc::Sender<DeviceReport>, sockets: &SocketMap) {
+    let listening = sockets.listening.clone();
+    let established = sockets.established.clone();
+    let tx = tx.clone();
+    tokio::task::spawn_blocking(move || {
+        let report = report::collect(listening, established);
+        // `blocking_send` et non `send` : on est hors du runtime. Un canal plein
+        // ou fermé signifie une session finie — rien à rattraper.
+        let _ = tx.blocking_send(report);
+    });
+}
+
 async fn send_report<S>(sink: &mut S, device_id: &str, sockets: &SocketMap) -> Result<()>
 where
     S: SinkExt<Message> + Unpin,
@@ -604,6 +694,15 @@ where
         tokio::task::spawn_blocking(move || report::collect(listening, established))
             .await
             .context("collecting device report")?;
+    send_built_report(sink, device_id, report).await
+}
+
+/// Envoie un rapport déjà construit.
+async fn send_built_report<S>(sink: &mut S, device_id: &str, report: DeviceReport) -> Result<()>
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
     let msg = serde_json::to_string(&ClientMessage::Report {
         device_id: device_id.to_string(),
         report: Box::new(report),

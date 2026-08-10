@@ -6,8 +6,11 @@
 //! `Err` the server relays to the UI — we never fail silently or pretend success.
 //!
 //! Shutdown / reboot take the machine (and therefore this process) down moments
-//! after the command returns; `runner` sends the `agent.powerResult` first so the
-//! UI gets its confirmation before the host disappears.
+//! after the command returns. L'ordre réel est donc : exécuter — il faut savoir
+//! si ça a échoué pour le dire —, puis envoyer `agent.powerResult` **et** une
+//! trame de fermeture, puis laisser un court instant au serveur pour les
+//! recevoir. Cela tient parce que `systemctl poweroff` rend la main dès que
+//! systemd a pris l'ordre en compte.
 
 use std::process::Command;
 

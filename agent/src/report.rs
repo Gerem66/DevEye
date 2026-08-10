@@ -11,7 +11,7 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use sysinfo::{Networks, System};
 
@@ -709,7 +709,7 @@ fn per_process_io(raw: &[RawProcess]) -> Option<ProcessIo> {
 /// Enumerate every process, once. Unix parses `ps`; Windows reads `sysinfo`
 /// (hence the `System`, unused here but needed by the Windows arm).
 #[cfg(not(target_os = "windows"))]
-fn scan_processes(_sys: &mut System) -> Vec<RawProcess> {
+fn scan_processes(sys: &mut System) -> Vec<RawProcess> {
     // Linux lit `/proc` directement : pas de binaire externe, donc rien à
     // trouver dans le `PATH` et aucune dépendance au `ps` du système. Le `ps`
     // d'origine partait du principe que celui de procps-ng était installé — un
@@ -726,28 +726,94 @@ fn scan_processes(_sys: &mut System) -> Vec<RawProcess> {
 
     // macOS uses `ucomm` (short accounting name) and `etime` (formatted); Linux
     // uses `comm`, `etimes` (plain seconds) and exposes a thread count (`nlwp`).
+    //
+    // Deux détails propres à BSD, et les deux vidaient la liste :
+    //
+    // - `%cpu`/`%mem` et non leurs alias `pcpu`/`pmem`. Le `ps` de Darwin refuse
+    //   un en-tête personnalisé sur un alias : il écrit « illegal keyword
+    //   specification », **sort en non-zéro**, et interrompt là le parcours du
+    //   format. procps n'a pas cette restriction, d'où un format qui ne
+    //   fonctionnait que du côté Linux.
+    // - `-ww` : sans lui, BSD tronque chaque ligne à la largeur du terminal —
+    //   79 colonnes quand aucun tty n'est attaché, c'est-à-dire sous launchd. La
+    //   colonne du nom se vidait, et `parse_ps_line` rejette une ligne sans nom.
     #[cfg(target_os = "macos")]
-    let args: [&str; 2] = ["-Ao", "pid=,pcpu=,pmem=,rss=,etime=,user=,ucomm="];
+    let args: [&str; 2] = ["-Awwo", "pid=,%cpu=,%mem=,rss=,etime=,user=,ucomm="];
     #[cfg(not(target_os = "macos"))]
     let args: [&str; 2] = ["-eo", "pid=,pcpu=,pmem=,rss=,etimes=,nlwp=,user=,comm="];
 
-    let out = match run("ps", &args) {
-        Some(o) => o,
+    // Lecture même sur statut non nul : un `ps` qui se plaint d'une colonne peut
+    // répondre utilement sur les autres, et jeter sa sortie transformait un
+    // succès partiel en perte totale.
+    let procs = match run_unchecked("ps", &args) {
+        Some(out) => {
+            let procs: Vec<RawProcess> = out.lines().filter_map(parse_ps_line).collect();
+            if procs.is_empty() {
+                tracing::warn!(
+                    lines = out.lines().count(),
+                    "`ps` returned output but no line could be parsed — unexpected column layout"
+                );
+            }
+            procs
+        }
         None => {
             // Ne pas rendre un vide muet : c'est indiscernable d'une machine au
             // repos, et c'est ce qui rendait le diagnostic impossible.
             tracing::warn!("`ps` unavailable or failed — no process list this tick");
-            return Vec::new();
+            Vec::new()
         }
     };
-    let procs: Vec<RawProcess> = out.lines().filter_map(parse_ps_line).collect();
-    if procs.is_empty() {
-        tracing::warn!(
-            lines = out.lines().count(),
-            "`ps` returned output but no line could be parsed — unexpected column layout"
-        );
+    if !procs.is_empty() {
+        return procs;
     }
-    procs
+
+    // Dernier recours : `sysinfo`, déjà en dépendance et déjà la source de la
+    // branche Windows. Il n'a besoin d'aucun binaire externe, donc quelle que
+    // soit la version de `ps` de l'hôte, la liste ne peut plus être vide en
+    // silence — c'est exactement ce qui a laissé macOS muet.
+    tracing::warn!("falling back to sysinfo for the process list");
+    scan_processes_sysinfo(sys)
+}
+
+/// Énumération par `sysinfo`, sans aucun binaire externe.
+///
+/// Sert de source unique à Windows et de filet aux Unix. `%cpu` y est la charge
+/// mesurée **depuis le rafraîchissement précédent** et non la moyenne sur la vie
+/// du processus : `System` vit d'un tick à l'autre, donc l'écart tombe juste
+/// pour un collecteur périodique.
+fn scan_processes_sysinfo(sys: &mut System) -> Vec<RawProcess> {
+    use sysinfo::{ProcessesToUpdate, Users};
+    sys.refresh_processes(ProcessesToUpdate::All, true);
+    // `Process::user_id()` rend un SID sous Windows, illisible dans une colonne
+    // « utilisateur » — on le résout en nom de compte. Énumérer les comptes
+    // locaux est bon marché et n'a lieu qu'une fois par balayage.
+    let users = Users::new_with_refreshed_list();
+    let total_mem = sys.total_memory().max(1) as f64;
+    sys.processes()
+        .iter()
+        .filter_map(|(pid, proc)| {
+            let name = proc.name().to_string_lossy().to_string();
+            if name.is_empty() {
+                return None;
+            }
+            let rss = proc.memory();
+            let usage = proc.disk_usage();
+            Some(RawProcess {
+                pid: pid.as_u32(),
+                name,
+                cpu_percent: proc.cpu_usage() as f64,
+                mem_percent: (rss as f64 / total_mem) * 100.0,
+                rss_bytes: rss,
+                threads: None,
+                user: proc
+                    .user_id()
+                    .and_then(|uid| users.get_user_by_id(uid))
+                    .map(|u| u.name().to_string()),
+                uptime_seconds: Some(proc.run_time()),
+                disk_io: Some((usage.total_read_bytes, usage.total_written_bytes)),
+            })
+        })
+        .collect()
 }
 
 /// Énumère les processus depuis `/proc`, sans passer par `ps`.
@@ -915,56 +981,52 @@ fn passwd_names() -> HashMap<u32, String> {
 /// old one-shot scan needed.
 #[cfg(target_os = "windows")]
 fn scan_processes(sys: &mut System) -> Vec<RawProcess> {
-    use sysinfo::{ProcessesToUpdate, Users};
-    sys.refresh_processes(ProcessesToUpdate::All, true);
-    // `Process::user_id()` yields a SID on Windows, which is unreadable in a
-    // "user" column — resolve it to the account name. Enumerating local users is
-    // cheap and only done once per scan.
-    let users = Users::new_with_refreshed_list();
-    let total_mem = sys.total_memory().max(1) as f64;
-    sys.processes()
-        .iter()
-        .filter_map(|(pid, proc)| {
-            let name = proc.name().to_string_lossy().to_string();
-            if name.is_empty() {
-                return None;
-            }
-            let rss = proc.memory();
-            let usage = proc.disk_usage();
-            Some(RawProcess {
-                pid: pid.as_u32(),
-                name,
-                cpu_percent: proc.cpu_usage() as f64,
-                mem_percent: (rss as f64 / total_mem) * 100.0,
-                rss_bytes: rss,
-                threads: None,
-                user: proc
-                    .user_id()
-                    .and_then(|uid| users.get_user_by_id(uid))
-                    .map(|u| u.name().to_string()),
-                uptime_seconds: Some(proc.run_time()),
-                disk_io: Some((usage.total_read_bytes, usage.total_written_bytes)),
-            })
-        })
-        .collect()
+    scan_processes_sysinfo(sys)
 }
+
+/// Disposition des colonnes demandées à `ps`, qui diffère d'un Unix à l'autre.
+///
+/// Portée par une valeur et non par un `cfg` à l'intérieur du parseur : celui-ci
+/// est pur, et la variante BSD n'était couverte par aucun test — elle ne pouvait
+/// pas l'être, la compilation choisissant l'autre branche. C'est précisément la
+/// disposition qui s'était cassée.
+#[cfg(not(target_os = "windows"))]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum PsLayout {
+    /// `pid pcpu pmem rss etimes nlwp user comm` — `etimes` en secondes brutes.
+    Linux,
+    /// `pid %cpu %mem rss etime user ucomm` — `etime` formaté, pas de fils.
+    Bsd,
+}
+
+#[cfg(not(target_os = "windows"))]
+const PS_LAYOUT: PsLayout = if cfg!(target_os = "macos") {
+    PsLayout::Bsd
+} else {
+    PsLayout::Linux
+};
 
 /// Parse one `ps` line into a [`RawProcess`]. The command name is last so it may
 /// contain spaces; every preceding column is a fixed-position number or word.
 #[cfg(not(target_os = "windows"))]
 fn parse_ps_line(line: &str) -> Option<RawProcess> {
+    parse_ps_line_with(line, PS_LAYOUT)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn parse_ps_line_with(line: &str, layout: PsLayout) -> Option<RawProcess> {
     let mut parts = line.split_whitespace();
     let pid: u32 = parts.next()?.parse().ok()?;
     let cpu_percent: f64 = parts.next()?.parse().ok()?;
     let mem_percent: f64 = parts.next()?.parse().ok()?;
     let rss_kb: u64 = parts.next()?.parse().ok()?;
-    #[cfg(target_os = "macos")]
-    let (uptime_seconds, threads) = (parse_etime(parts.next()?), None);
-    #[cfg(not(target_os = "macos"))]
-    let (uptime_seconds, threads) = (
-        parts.next()?.parse::<u64>().ok(),
-        parts.next()?.parse::<u32>().ok(),
-    );
+    let (uptime_seconds, threads) = match layout {
+        PsLayout::Bsd => (parse_etime(parts.next()?), None),
+        PsLayout::Linux => (
+            parts.next()?.parse::<u64>().ok(),
+            parts.next()?.parse::<u32>().ok(),
+        ),
+    };
     let user = parts.next()?.to_string();
     let name = parts.collect::<Vec<_>>().join(" ");
     if name.is_empty() {
@@ -985,7 +1047,7 @@ fn parse_ps_line(line: &str) -> Option<RawProcess> {
 
 /// Parse BSD `ps` elapsed time — `[[dd-]hh:]mm:ss` — into seconds. Linux is
 /// spared this by asking for `etimes` (already a plain second count).
-#[cfg(target_os = "macos")]
+#[cfg(not(target_os = "windows"))]
 fn parse_etime(s: &str) -> Option<u64> {
     let (days, rest) = match s.split_once('-') {
         Some((d, rest)) => (d.parse::<u64>().ok()?, rest),
@@ -1009,22 +1071,95 @@ fn security() -> Security {
     }
 }
 
+/// Délai au-delà duquel une sonde est abandonnée et son processus tué.
+///
+/// Aucune sonde d'un agent de supervision ne doit pouvoir attendre sans fin.
+/// `Command::output()` le permettait pourtant : il attend la fin du fils, quoi
+/// qu'il arrive. Une seule commande lente — `apt-get -s upgrade` bloqué sur le
+/// verrou dpkg, sur une carte SD — suffisait à figer la session entière avant
+/// même qu'elle n'entre dans sa boucle : ni métriques, ni commandes traitées, et
+/// une machine qui restait affichée « en ligne » sans jamais rien envoyer.
+///
+/// Cinq secondes couvrent très largement toute sonde saine ; celles qu'on sait
+/// lentes demandent explicitement plus (voir `run_timeout`).
+const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Échéance de la sonde de mises à jour, la seule qu'on sache légitimement lente.
+#[cfg(target_os = "linux")]
+const APT_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// Sortie d'une sonde : ce qu'elle a écrit, et si elle a réussi.
+struct ProbeOutput {
+    stdout: String,
+    success: bool,
+}
+
+/// Lance une commande sous échéance et rend sa sortie.
+///
+/// La sortie est drainée par un fil dédié plutôt que lue après coup : un tuyau
+/// plein bloque le fils, et l'attendre en le sondant se serait mordu la queue.
+/// Passé l'échéance, le fils est tué — sans quoi l'abandonner le laisserait
+/// vivre et tenir ses verrous.
+fn run_timeout(cmd: &str, args: &[&str], timeout: Duration) -> Option<ProbeOutput> {
+    use std::io::Read;
+    use std::process::Stdio;
+    use std::sync::mpsc;
+
+    let mut child = Command::new(cmd)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+
+    let mut stdout = child.stdout.take()?;
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = stdout.read_to_end(&mut buf);
+        let _ = tx.send(buf);
+    });
+
+    match rx.recv_timeout(timeout) {
+        Ok(buf) => {
+            // Le tuyau s'est fermé : le fils a fini, `wait` rend aussitôt.
+            let success = child.wait().map(|s| s.success()).unwrap_or(false);
+            Some(ProbeOutput {
+                stdout: String::from_utf8_lossy(&buf).to_string(),
+                success,
+            })
+        }
+        Err(_) => {
+            tracing::warn!(
+                command = cmd,
+                timeout_s = timeout.as_secs(),
+                "probe timed out — killed"
+            );
+            let _ = child.kill();
+            let _ = child.wait();
+            None
+        }
+    }
+}
+
 /// Run a command and return its stdout as a lossy string on success.
 pub fn run(cmd: &str, args: &[&str]) -> Option<String> {
-    let out = Command::new(cmd).args(args).output().ok()?;
-    if !out.status.success() {
+    let out = run_timeout(cmd, args, PROBE_TIMEOUT)?;
+    if !out.success {
         return None;
     }
-    Some(String::from_utf8_lossy(&out.stdout).to_string())
+    Some(out.stdout)
 }
 
 /// Like `run`, but returns stdout even on a non-zero exit. Some tools print the
 /// answer we want yet exit non-zero (`systemctl is-active` exits 3 when a unit is
 /// inactive but still prints "inactive"). `None` only when the binary is absent.
-#[cfg(target_os = "linux")]
+///
+/// Également le bon choix quand un outil se plaint d'une partie de sa demande
+/// tout en répondant utilement au reste — le `ps` de BSD sur un alias de mot-clé.
 fn run_unchecked(cmd: &str, args: &[&str]) -> Option<String> {
-    let out = Command::new(cmd).args(args).output().ok()?;
-    Some(String::from_utf8_lossy(&out.stdout).to_string())
+    run_timeout(cmd, args, PROBE_TIMEOUT).map(|o| o.stdout)
 }
 
 // ── macOS collectors ────────────────────────────────────────────────────────
@@ -1135,8 +1270,21 @@ fn sip_enabled() -> Option<bool> {
 #[cfg(target_os = "linux")]
 fn pending_updates() -> Option<u32> {
     // Debian/Ubuntu: simulate an upgrade and count "Inst" lines.
-    if let Some(out) = run("apt-get", &["-s", "upgrade"]) {
-        let n = out.lines().filter(|l| l.starts_with("Inst ")).count();
+    //
+    // La sonde la plus lente de toutes : elle relit les listes d'apt et attend
+    // le verrou dpkg dès qu'`apt-daily` tourne. Sur une carte SD cela se compte
+    // en minutes. D'où une échéance propre, plus large que le défaut mais bien
+    // finie — « inconnu » est une réponse que l'interface sait afficher, une
+    // attente sans fin ne l'est pas.
+    if let Some(out) = run_timeout("apt-get", &["-s", "upgrade"], APT_TIMEOUT) {
+        if !out.success {
+            return None;
+        }
+        let n = out
+            .stdout
+            .lines()
+            .filter(|l| l.starts_with("Inst "))
+            .count();
         return Some(n as u32);
     }
     // Fedora/RHEL: dnf exits non-zero when updates exist, so use a checked call.
@@ -1203,11 +1351,14 @@ fn pending_updates() -> Option<u32> {
 mod tests {
     use super::*;
 
-    #[cfg(target_os = "linux")]
     #[test]
     fn parse_ps_line_reads_every_column() {
         // pid pcpu pmem rss etimes nlwp user comm
-        let p = parse_ps_line("1234 12.5 3.2 524288 86400 14 gerem firefox").unwrap();
+        let p = parse_ps_line_with(
+            "1234 12.5 3.2 524288 86400 14 gerem firefox",
+            PsLayout::Linux,
+        )
+        .unwrap();
         assert_eq!(p.pid, 1234);
         assert_eq!(p.cpu_percent, 12.5);
         assert_eq!(p.mem_percent, 3.2);
@@ -1218,31 +1369,72 @@ mod tests {
         assert_eq!(p.name, "firefox");
     }
 
-    #[cfg(target_os = "linux")]
     #[test]
     fn parse_ps_line_keeps_names_containing_spaces() {
         // `comm` is last, so anything after the user column belongs to the name.
-        let p = parse_ps_line("7 0.0 0.0 0 10 1 root kworker/0:1 -events").unwrap();
+        let p = parse_ps_line_with("7 0.0 0.0 0 10 1 root kworker/0:1 -events", PsLayout::Linux)
+            .unwrap();
         assert_eq!(p.name, "kworker/0:1 -events");
         assert_eq!(p.rss_bytes, 0);
     }
 
-    #[cfg(target_os = "linux")]
     #[test]
     fn parse_ps_line_rejects_malformed_rows() {
-        assert!(parse_ps_line("").is_none());
-        assert!(parse_ps_line("header garbage").is_none());
+        assert!(parse_ps_line_with("", PsLayout::Linux).is_none());
+        assert!(parse_ps_line_with("header garbage", PsLayout::Linux).is_none());
         // Every column present but the command name.
-        assert!(parse_ps_line("1234 12.5 3.2 524288 86400 14 gerem").is_none());
+        assert!(
+            parse_ps_line_with("1234 12.5 3.2 524288 86400 14 gerem", PsLayout::Linux).is_none()
+        );
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
     fn parse_etime_handles_every_bsd_form() {
         assert_eq!(parse_etime("05:30"), Some(330)); // mm:ss
         assert_eq!(parse_etime("02:05:30"), Some(7530)); // hh:mm:ss
         assert_eq!(parse_etime("3-02:05:30"), Some(266_730)); // dd-hh:mm:ss
         assert_eq!(parse_etime("garbage"), Some(0));
+    }
+
+    /// Disposition macOS réelle : sept colonnes, `etime` formaté, pas de `nlwp`.
+    #[test]
+    fn parse_ps_line_reads_the_bsd_layout() {
+        // pid %cpu %mem rss etime user ucomm
+        let p =
+            parse_ps_line_with("501 4.2 1.8 131072 02:05:30 gerem Finder", PsLayout::Bsd).unwrap();
+        assert_eq!(p.pid, 501);
+        assert_eq!(p.cpu_percent, 4.2);
+        assert_eq!(p.mem_percent, 1.8);
+        assert_eq!(p.rss_bytes, 131072 * 1024);
+        assert_eq!(p.uptime_seconds, Some(7530));
+        // BSD n'expose pas de compte de fils dans ce format.
+        assert_eq!(p.threads, None);
+        assert_eq!(p.user.as_deref(), Some("gerem"));
+        assert_eq!(p.name, "Finder");
+    }
+
+    /// Les noms macOS contiennent couramment des espaces, et `ucomm` est en
+    /// dernier — tout ce qui suit l'utilisateur lui appartient.
+    #[test]
+    fn parse_ps_line_bsd_keeps_names_containing_spaces() {
+        let p = parse_ps_line_with(
+            "823 0.1 0.4 65536 3-02:05:30 _windowserver Google Chrome Helper",
+            PsLayout::Bsd,
+        )
+        .unwrap();
+        assert_eq!(p.name, "Google Chrome Helper");
+        assert_eq!(p.uptime_seconds, Some(266_730));
+        assert_eq!(p.user.as_deref(), Some("_windowserver"));
+    }
+
+    /// La troncature BSD à 79 colonnes (aucun tty attaché, cas launchd) vide la
+    /// colonne du nom. La ligne doit être rejetée, pas produire un processus
+    /// anonyme — c'est `-ww` qui empêche le cas de se produire.
+    #[test]
+    fn parse_ps_line_bsd_rejects_a_truncated_row() {
+        assert!(
+            parse_ps_line_with("823 0.1 0.4 65536 02:05:30 _windowserver", PsLayout::Bsd).is_none()
+        );
     }
 
     #[test]

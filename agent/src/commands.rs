@@ -319,8 +319,17 @@ where
         warn!(%action, error = ?error, "power action failed");
     }
     let _ = send_power_result(sink, device_id, action, ok, error).await;
+    if ok && matches!(action, "shutdown" | "reboot") {
+        // Adieu explicite, comme le fait la mise à jour : la machine s'en va, et
+        // sans trame de fermeture le serveur ne l'apprend que par expiration —
+        // la socket d'une machine éteinte n'est jamais refermée par le réseau,
+        // et l'appareil restait affiché « en ligne » très longtemps.
+        let _ = sink.send(Message::Close(None)).await;
+    }
     let _ = sink.flush().await;
     if ok && matches!(action, "shutdown" | "reboot") {
+        // Laisser le résultat et la fermeture atteindre le serveur avant que
+        // l'hôte (et donc ce processus) ne disparaisse.
         tokio::time::sleep(Duration::from_millis(300)).await;
     }
 }
