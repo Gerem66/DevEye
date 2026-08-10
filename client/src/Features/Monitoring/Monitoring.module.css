@@ -1288,11 +1288,13 @@
 
 /* ─── Top processes table ─────────────────────────────────────────────────── */
 
+/* Disposition automatique : chaque colonne de données se dimensionne sur son
+   contenu (cf. .procNum) et le nom absorbe ce qui reste (cf. .procName). Une
+   disposition fixe donnait l'inverse — un nom démesuré, des chiffres repliés. */
 .procTable {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.82rem;
-    table-layout: fixed;
 }
 
 .procTable th {
@@ -1310,11 +1312,23 @@
     border-top: 1px solid var(--glass-border);
 }
 
-/* Numeric columns: right-aligned, fixed width, tabular figures. */
+/* Numeric columns: right-aligned, tabular figures. `width: 1%` les réduit à
+   leur contenu, `nowrap` garantit qu'une valeur composée comme
+   « 923.5 MB / 22.5 MB » tienne sur une seule ligne. */
 .procNum {
     text-align: right;
-    width: 84px;
+    width: 1%;
+    white-space: nowrap;
     font-variant-numeric: tabular-nums;
+}
+
+/* Seule cellule au contenu non borné : une liste de ports peut être longue. On
+   la plafonne pour qu'elle n'élargisse pas le tableau au-delà du panneau, la
+   liste complète restant lisible au survol. */
+.procPorts {
+    max-width: 28ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* CPU column (2nd cell) in accent. */
@@ -1323,7 +1337,12 @@
     font-weight: 600;
 }
 
+/* Le nom prend toute la largeur restante ; `max-width: 0` est ce qui autorise
+   l'ellipse dans un tableau en disposition automatique. */
 .procName {
+    width: 100%;
+    min-width: 12ch;
+    max-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

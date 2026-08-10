@@ -1330,7 +1330,12 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                                                 </td>
                                             )}
                                             {procCols.ports && (
-                                                <td className={styles.procNum}>
+                                                <td
+                                                    className={`${styles.procNum} ${styles.procPorts}`}
+                                                    title={
+                                                        p.listenPorts.length > 0 ? p.listenPorts.join(', ') : undefined
+                                                    }
+                                                >
                                                     {p.listenPorts.length > 0 ? p.listenPorts.join(', ') : '—'}
                                                 </td>
                                             )}
