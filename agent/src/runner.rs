@@ -382,7 +382,7 @@ async fn stream_session(
                     return Ok(SessionOutcome::Established);
                 }
                 server_alive = false;
-                if sink.send(Message::Ping(Vec::new().into())).await.is_err() {
+                if sink.send(Message::Ping(Vec::new())).await.is_err() {
                     return Ok(SessionOutcome::Established);
                 }
             }
