@@ -12,9 +12,34 @@ import { ack, reply, type AgentSession, type PayloadOf } from './session';
  * failure replies `agent.error`.
  */
 
-/** True (and acks an empty receipt) when the device isn't yet allowed to persist. */
-function gated(s: AgentSession): boolean {
+/**
+ * True (and acks an empty receipt) when the device isn't yet allowed to persist.
+ *
+ * `s.device` est l'instantané pris à la connexion, et un agent reste connecté
+ * des semaines : s'y fier seul faisait qu'un appareil approuvé *pendant* que son
+ * agent était en ligne restait à jamais « pending » pour cette session. Tout ce
+ * qu'il envoyait était accusé — donc jamais réémis — puis jeté. De l'extérieur :
+ * une machine en ligne, sa version d'agent affichée (`agent.hello`, lui, n'est
+ * pas filtré), et pas un seul relevé ni rapport. Silencieux des deux côtés.
+ *
+ * On relit donc le statut avant de refuser, et **seulement** dans ce cas : le
+ * chemin normal (déjà `active`) ne coûte rien. Une fois relu actif, l'instantané
+ * est corrigé pour de bon, la requête ne se repose plus.
+ */
+async function gated(s: AgentSession): Promise<boolean> {
     if (s.device.status === 'active') return false;
+
+    const fresh = await s.db.devices.findById(s.device.id);
+    if (fresh) s.device = fresh;
+    if (s.device.status === 'active') {
+        s.logger.info('Device approved while its agent was connected — telemetry resumes');
+        return false;
+    }
+
+    // Dire pourquoi on jette. Sans cette trace, un appareil jamais approuvé se
+    // diagnostique à l'aveugle : rien ne distingue « pas encore autorisé » de
+    // « l'agent ne collecte pas ».
+    s.logger.warn({ status: s.device.status }, 'Telemetry dropped: device is not active');
     ack(s, 0);
     return true;
 }
@@ -38,7 +63,7 @@ function persistFailed(s: AgentSession, e: unknown, what: string): void {
 }
 
 export async function handleReport(s: AgentSession, payload: PayloadOf<typeof AGENT_REPORT>): Promise<void> {
-    if (gated(s)) return;
+    if (await gated(s)) return;
     try {
         await s.db.devices.setReport(s.device.id, JSON.stringify(payload.report));
         s.hub.publishReport(s.device.id, payload.report);
@@ -53,7 +78,7 @@ export async function handleMetricsBatch(
     s: AgentSession,
     payload: PayloadOf<typeof AGENT_METRICS_BATCH>
 ): Promise<void> {
-    if (gated(s)) return;
+    if (await gated(s)) return;
     const { snapshots } = payload;
     try {
         await s.db.metrics.insertBatch(s.device.id, snapshots);

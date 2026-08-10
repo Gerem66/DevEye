@@ -10,8 +10,9 @@ import type { MonitorHub } from '../hub';
 /**
  * Everything an agent-message handler needs, captured once at connection time and
  * shared by every handler in this folder. `device` is the snapshot taken at
- * connect (its `status` gates telemetry persistence, its `name` feeds audit
- * descriptions) — handlers that change persisted device state re-read it themselves.
+ * connect (son `status` est relu à la volée quand il refuse — voir `gated` —,
+ * son `name` alimente les descriptions d.audit) ; les handlers qui écrivent la
+ * ligne appareil la relisent eux-mêmes.
  */
 export interface AgentSession {
     socket: WebSocket;
@@ -24,6 +25,7 @@ export interface AgentSession {
     ownerId: number;
     /** Client IP of the agent connection, recorded on audited actions. */
     ip: string;
+    /** Mis à jour sur place quand le statut change sous la session (cf. `gated`). */
     device: DeviceRow;
 }
 
