@@ -35,8 +35,21 @@ export const deviceUpgradePackagesFeature: FeatureDefinition<
     access: { admin: true },
     handler: async (ctx, input) => {
         const row = await authorizeOnlineDevice(ctx, input.deviceId);
-        const ok = ctx.monitor?.requestPkgUpgrade(row.id, { manager: input.manager }) ?? false;
-        if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
+        const monitor = ctx.monitor;
+        if (!monitor) throw new FeatureError('conflict', 'Agent hors ligne');
+        // Le verrou d'abord : c'est la seule barrière qui tienne quels que soient
+        // l'écran, l'onglet ou la personne à l'origine du second clic. Il est
+        // relâché par `pkg.done`, ou d'autorité si l'agent s'en va.
+        if (!monitor.beginUpgrade(row.id, input.manager)) {
+            throw new FeatureError('conflict', `Une mise à jour « ${input.manager} » est déjà en cours`);
+        }
+        if (!monitor.requestPkgUpgrade(row.id, { manager: input.manager })) {
+            monitor.endUpgrade(row.id, input.manager);
+            throw new FeatureError('conflict', 'Agent hors ligne');
+        }
+        // Annoncé sans attendre la première ligne de l'outil : les autres écrans
+        // doivent griser le bouton dès maintenant.
+        monitor.publishPackageStarted({ deviceId: row.id, manager: input.manager });
         ctx.audit({
             action: 'device.upgradePackages',
             level: 'warning',

@@ -298,6 +298,10 @@ export async function registerAgentWS(
             // « offline » fantôme dans la présence : le hub reste l'autorité.
             if (!hub.isOnline(deviceId)) {
                 cloudSync.onAgentOffline(deviceId);
+                // Plus personne pour envoyer le `pkg.done` attendu : on clôt les
+                // mises à jour restées ouvertes, sans quoi leur verrou — et le
+                // bouton grisé qui va avec — survivrait à l'appareil.
+                hub.failRunningUpgrades(deviceId, 'Agent déconnecté pendant la mise à jour');
                 if (device.status !== 'pending_deletion') {
                     void recordAgentOffline(db, deviceId).catch(() => {});
                 }

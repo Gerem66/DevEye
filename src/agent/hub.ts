@@ -46,6 +46,7 @@ import {
     PACKAGE_DONE_EVENT,
     PACKAGE_LIST_EVENT,
     PACKAGE_PROGRESS_EVENT,
+    PACKAGE_STARTED_EVENT,
     type AgentConfigPayload,
     type AgentFilesAnalyzePayload,
     type AgentFilesDownloadPayload,
@@ -89,7 +90,9 @@ import {
     type MetricSnapshot,
     type PackageDonePush,
     type PackageListPush,
-    type PackageProgressPush
+    type PackageManagerId,
+    type PackageProgressPush,
+    type PackageStartedPush
 } from 'deveye-types';
 
 import { accessEpochNow } from '@/features/_access';
@@ -127,6 +130,23 @@ export class MonitorHub {
     private readonly subscribers = new Map<string, Set<WebSocket>>();
     /** subscriber socket -> set of deviceIds it watches (for cleanup). */
     private readonly socketDevices = new Map<WebSocket, Set<string>>();
+    /**
+     * Mises à jour de paquets en cours, par appareil — le verrou de la
+     * fonctionnalité.
+     *
+     * Il vit ici, et non dans l'écran qui l'a lancée, parce que « une commande
+     * tourne déjà » est un fait de la machine, pas de l'onglet : refermer la
+     * fenêtre, rouvrir la fonctionnalité ou être quelqu'un d'autre ne le change
+     * pas. Sans lui, la même mise à jour partait autant de fois qu'on cliquait,
+     * et les téléchargements se doublaient jusqu'à ce que les verrous des outils
+     * eux-mêmes fassent le tri.
+     *
+     * En mémoire du processus, comme la présence : un redémarrage du serveur
+     * relâche tout, ce qui est le bon défaut (mieux vaut un verrou perdu qu'un
+     * verrou éternel) et reste sans danger — les outils refusent les exécutions
+     * concurrentes.
+     */
+    private readonly upgrades = new Map<string, Set<PackageManagerId>>();
     /** shareId (CloudSync) -> set of subscriber (user) sockets. */
     private readonly syncSubscribers = new Map<number, Set<WebSocket>>();
     /** subscriber socket -> set of shareIds it watches (for cleanup). */
@@ -301,6 +321,63 @@ export class MonitorHub {
     /** Ask a connected agent to apply a manager's updates. No-op if offline. */
     requestPkgUpgrade(deviceId: string, payload: AgentPkgUpgradePayload): boolean {
         return this.sendToAgent(deviceId, AGENT_PKG_UPGRADE, payload);
+    }
+
+    /**
+     * Re-demande l'inventaire des paquets après une mise à jour aboutie, pour
+     * que les compteurs cessent d'annoncer des mises à jour déjà appliquées.
+     *
+     * Ici, et une seule fois : si chaque écran ouvert le demandait de son côté,
+     * une machine regardée par trois personnes subirait trois détections — soit,
+     * sur certains gestionnaires, plusieurs minutes de sondes redondantes. Le
+     * résultat part de toute façon à tous les abonnés. Rien n'est demandé quand
+     * personne ne regarde.
+     */
+    refreshPackagesIfWatched(deviceId: string): void {
+        if ((this.subscribers.get(deviceId)?.size ?? 0) === 0) return;
+        this.requestPkgList(deviceId);
+    }
+
+    /** Les gestionnaires dont une mise à jour tourne, pour cet appareil. */
+    runningUpgrades(deviceId: string): PackageManagerId[] {
+        return [...(this.upgrades.get(deviceId) ?? [])];
+    }
+
+    /**
+     * Prend le verrou pour ce gestionnaire. `false` — et rien n'est modifié —
+     * quand une mise à jour y tourne déjà : c'est la réponse qu'attend
+     * l'appelant pour refuser la commande plutôt que d'en lancer une seconde.
+     */
+    beginUpgrade(deviceId: string, manager: PackageManagerId): boolean {
+        const set = this.upgrades.get(deviceId) ?? new Set<PackageManagerId>();
+        if (set.has(manager)) return false;
+        set.add(manager);
+        this.upgrades.set(deviceId, set);
+        return true;
+    }
+
+    /** Relâche le verrou (fin de la commande, ou échec de son envoi). */
+    endUpgrade(deviceId: string, manager: PackageManagerId): void {
+        const set = this.upgrades.get(deviceId);
+        if (!set) return;
+        set.delete(manager);
+        if (set.size === 0) this.upgrades.delete(deviceId);
+    }
+
+    /**
+     * Clôt d'autorité les mises à jour d'un appareil devenu injoignable.
+     *
+     * L'agent parti, aucun `pkg.done` n'arrivera plus : sans ça le verrou
+     * resterait pour la durée du processus, et le bouton grisé pour toujours. On
+     * diffuse un échec explicite, parce qu'un bouton qui se réactive sans un mot
+     * laisserait croire que la mise à jour a abouti — elle continue peut-être
+     * sur la machine, mais plus personne ne la suit.
+     */
+    failRunningUpgrades(deviceId: string, error: string): void {
+        for (const manager of this.runningUpgrades(deviceId)) {
+            this.endUpgrade(deviceId, manager);
+            this.publishPackageDone({ deviceId, manager, ok: false, error });
+        }
     }
 
     /** Ask a connected agent to run a system power action (shutdown/reboot…). No-op if offline. */
@@ -504,9 +581,19 @@ export class MonitorHub {
         for (const socket of set) socket.send(frame);
     }
 
-    /** Fan out a package-manager inventory to the device's subscribers. */
-    publishPackageList(payload: PackageListPush): void {
-        this.publishToSubscribers(payload.deviceId, PACKAGE_LIST_EVENT, payload);
+    /**
+     * Fan out a package-manager inventory to the device's subscribers, **enrichi**
+     * des mises à jour déjà en cours : l'agent énumère ses gestionnaires sans
+     * savoir lesquels le serveur a déjà lancés.
+     */
+    publishPackageList(payload: Omit<PackageListPush, 'running'>): void {
+        const running = this.runningUpgrades(payload.deviceId);
+        this.publishToSubscribers(payload.deviceId, PACKAGE_LIST_EVENT, { ...payload, running });
+    }
+
+    /** Annonce qu'une mise à jour vient d'être acceptée pour ce gestionnaire. */
+    publishPackageStarted(payload: PackageStartedPush): void {
+        this.publishToSubscribers(payload.deviceId, PACKAGE_STARTED_EVENT, payload);
     }
 
     /** Fan out one live upgrade-progress line to the device's subscribers. */
@@ -712,6 +799,12 @@ export interface MonitorTransport {
     requestPkgList(deviceId: string): boolean;
     /** Ask the device's agent to apply a manager's updates; false if offline. */
     requestPkgUpgrade(deviceId: string, payload: AgentPkgUpgradePayload): boolean;
+    /** Prend le verrou de mise à jour ; `false` s'il en tourne déjà une. */
+    beginUpgrade(deviceId: string, manager: PackageManagerId): boolean;
+    /** Relâche le verrou (échec de l'envoi ; la fin normale passe par `pkg.done`). */
+    endUpgrade(deviceId: string, manager: PackageManagerId): void;
+    /** Annonce aux abonnés qu'une mise à jour vient d'être acceptée. */
+    publishPackageStarted(payload: PackageStartedPush): void;
     /** Ask the device's agent to run a system power action; false if offline. */
     requestPower(deviceId: string, payload: AgentPowerPayload): boolean;
     /** Ask the device's agent to stop/restart its own process; false if offline. */
@@ -763,6 +856,9 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         requestService: (deviceId, payload) => hub.requestService(deviceId, payload),
         requestPkgList: (deviceId) => hub.requestPkgList(deviceId),
         requestPkgUpgrade: (deviceId, payload) => hub.requestPkgUpgrade(deviceId, payload),
+        beginUpgrade: (deviceId, manager) => hub.beginUpgrade(deviceId, manager),
+        endUpgrade: (deviceId, manager) => hub.endUpgrade(deviceId, manager),
+        publishPackageStarted: (payload) => hub.publishPackageStarted(payload),
         requestPower: (deviceId, payload) => hub.requestPower(deviceId, payload),
         requestLifecycle: (deviceId, payload) => hub.requestLifecycle(deviceId, payload),
         requestLogSources: (deviceId) => hub.requestLogSources(deviceId),

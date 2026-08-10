@@ -19,6 +19,10 @@ export function handlePkgProgress(s: AgentSession, payload: PayloadOf<typeof AGE
 }
 
 export function handlePkgDone(s: AgentSession, payload: PayloadOf<typeof AGENT_PKG_DONE>): void {
+    // Le verrou tombe avant la diffusion : les écrans qui reçoivent la fin
+    // ré-interrogent la liste dans la foulée, et elle doit déjà dire « plus rien
+    // en cours » — sinon le bouton resterait grisé jusqu'au prochain passage.
+    s.hub.endUpgrade(s.device.id, payload.manager);
     s.hub.publishPackageDone(payload);
     s.audit.record({
         source: 'agent',
@@ -32,5 +36,8 @@ export function handlePkgDone(s: AgentSession, payload: PayloadOf<typeof AGENT_P
             : `Échec des mises à jour (${payload.manager}) : « ${s.device.name} »${payload.error ? ` — ${payload.error}` : ''}`,
         metadata: { deviceId: s.device.id, manager: payload.manager, ok: payload.ok }
     });
+    // Les compteurs viennent de changer sur la machine : on relance l'inventaire
+    // pour tout le monde d'un seul coup (voir `refreshPackagesIfWatched`).
+    if (payload.ok) s.hub.refreshPackagesIfWatched(s.device.id);
     ack(s, 1);
 }
