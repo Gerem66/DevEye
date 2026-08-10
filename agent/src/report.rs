@@ -1089,9 +1089,9 @@ const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 const APT_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Sortie d'une sonde : ce qu'elle a écrit, et si elle a réussi.
-struct ProbeOutput {
-    stdout: String,
-    success: bool,
+pub(crate) struct ProbeOutput {
+    pub stdout: String,
+    pub success: bool,
 }
 
 /// Lance une commande sous échéance et rend sa sortie.
@@ -1100,7 +1100,7 @@ struct ProbeOutput {
 /// plein bloque le fils, et l'attendre en le sondant se serait mordu la queue.
 /// Passé l'échéance, le fils est tué — sans quoi l'abandonner le laisserait
 /// vivre et tenir ses verrous.
-fn run_timeout(cmd: &str, args: &[&str], timeout: Duration) -> Option<ProbeOutput> {
+pub(crate) fn run_timeout(cmd: &str, args: &[&str], timeout: Duration) -> Option<ProbeOutput> {
     use std::io::Read;
     use std::process::Stdio;
     use std::sync::mpsc;

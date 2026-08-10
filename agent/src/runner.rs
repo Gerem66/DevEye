@@ -13,7 +13,7 @@
 //! the tick already ran. The first instant is collected immediately on connect so
 //! the dashboard isn't blank.
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -320,6 +320,8 @@ async fn stream_session(
     // stream their results back through this channel, so the loop stays responsive
     // (pings, metrics) and forwards each event to the server as it arrives.
     let (pkg_tx, mut pkg_rx) = tokio::sync::mpsc::channel::<crate::packages::PkgEvent>(256);
+    // Gestionnaires dont une mise à jour tourne, pour ne jamais en lancer deux.
+    let mut pkg_running: HashSet<String> = HashSet::new();
     // Log source/query tasks (a query shells out to journalctl/docker and can return
     // many lines) stream their results back through this channel, same as packages.
     let (log_tx, mut log_rx) = tokio::sync::mpsc::channel::<crate::logs::LogEvent>(256);
@@ -340,6 +342,9 @@ async fn stream_session(
                 send_built_report(&mut sink, device_id, report).await?;
             }
             Some(ev) = pkg_rx.recv() => {
+                if let crate::packages::PkgEvent::Done { manager, .. } = &ev {
+                    pkg_running.remove(manager);
+                }
                 commands::send_pkg_event(&mut sink, device_id, ev).await;
             }
             Some(ev) = log_rx.recv() => {
@@ -604,8 +609,22 @@ async fn stream_session(
                                 });
                             }
                             // Apply a manager's updates (off-loop; streams via pkg_rx).
+                            //
+                            // Dernière barrière contre les exécutions doublées :
+                            // le serveur tient le verrou, mais il le perd s'il
+                            // redémarre pendant une mise à jour. Une demande en
+                            // double est ignorée plutôt que refusée, et surtout
+                            // pas terminée par un `Done` — celui-ci relâcherait
+                            // le verrou de la mise à jour qui, elle, tourne.
                             Ok(ServerMessage::PkgUpgrade { manager }) => {
-                                tokio::spawn(crate::packages::run_upgrade(manager, pkg_tx.clone()));
+                                if pkg_running.insert(manager.clone()) {
+                                    tokio::spawn(crate::packages::run_upgrade(
+                                        manager,
+                                        pkg_tx.clone(),
+                                    ));
+                                } else {
+                                    warn!(%manager, "upgrade already running — request ignored");
+                                }
                             }
                             Ok(ServerMessage::Ack { received }) => debug!(received, "ack"),
                             Ok(ServerMessage::Error { code, message }) => {

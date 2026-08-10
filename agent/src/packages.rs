@@ -7,6 +7,7 @@
 //! service/privilege flow). Per-user managers (brew, flatpak --user) apply directly.
 
 use std::process::Stdio;
+use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -32,18 +33,21 @@ pub enum PkgEvent {
     },
 }
 
-/// Run a detection command; `None` when the binary is absent (spawn error), else
-/// `(exit_success, stdout)`. Non-zero exits are still returned (some tools signal
-/// "updates available" via the exit code).
+/// Échéance d'une sonde de détection.
+///
+/// Large — `softwareupdate -l` interroge les serveurs d'Apple, `apt-get -s
+/// upgrade` attend le verrou dpkg — mais finie. `Command::output()`, qu'on
+/// utilisait, attend son fils sans limite : un gestionnaire bloqué figeait la
+/// détection entière, et l'écran restait sur « détection en cours… » sans que
+/// rien n'arrive jamais.
+const DETECT_TIMEOUT: Duration = Duration::from_secs(45);
+
+/// Run a detection command; `None` when the binary is absent (spawn error) or the
+/// probe timed out, else `(exit_success, stdout)`. Non-zero exits are still
+/// returned (some tools signal "updates available" via the exit code).
 fn probe(program: &str, args: &[&str]) -> Option<(bool, String)> {
-    let out = std::process::Command::new(program)
-        .args(args)
-        .output()
-        .ok()?;
-    Some((
-        out.status.success(),
-        String::from_utf8_lossy(&out.stdout).into_owned(),
-    ))
+    let out = crate::report::run_timeout(program, args, DETECT_TIMEOUT)?;
+    Some((out.success, out.stdout))
 }
 
 /// Count non-blank lines — the pending-update heuristic for managers that print
