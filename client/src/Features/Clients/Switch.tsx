@@ -5,18 +5,22 @@ export function Switch({
     checked,
     onChange,
     label,
-    hint
+    hint,
+    disabled
 }: {
     checked: boolean;
     onChange: (v: boolean) => void;
     label: string;
     hint?: string;
+    /** Choix imposé (ex. l'espace d'appairage d'un appareil) : affiché, non modifiable. */
+    disabled?: boolean;
 }) {
     return (
         <button
             type='button'
             role='switch'
             aria-checked={checked}
+            disabled={disabled}
             className={`${styles.switch} ${checked ? styles.switchOn : ''}`}
             onClick={() => onChange(!checked)}
         >

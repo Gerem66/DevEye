@@ -834,3 +834,42 @@
     flex-direction: column;
     gap: var(--space-sm);
 }
+
+/* ── Partage d'un appareil entre espaces (popup depuis la carte) ── */
+
+/* Le compte d'espaces, collé à l'icône du bouton de partage. Le bouton s'élargit
+   de lui-même (largeur fixe → auto) plutôt que de comprimer son icône. */
+.actionBtn:has(.actionCount) {
+    width: auto;
+    padding: 0 var(--space-sm);
+}
+
+.actionCount {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.72rem;
+}
+
+/* Les interrupteurs portent déjà leur propre marge basse ; la liste ne fait que
+   les empiler et absorber la dernière. */
+.shareList > *:last-child {
+    margin-bottom: 0;
+}
+
+.switch:disabled {
+    cursor: default;
+    /* framer-motion n'entre pas ici, mais on reste sur `filter` comme ailleurs :
+       l'opacité est une propriété qu'un parent animé s'approprie volontiers. */
+    filter: opacity(0.65);
+}
+
+.shareEmpty {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.shareError {
+    margin: var(--space-sm) 0 0;
+    color: var(--danger);
+    font-size: 0.82rem;
+}

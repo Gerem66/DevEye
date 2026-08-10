@@ -1,5 +1,6 @@
 import type { DeviceRow } from 'deveye-types';
 
+import type { LiveHub } from '@/live/hub';
 import type { Database } from '@/db';
 
 /**
@@ -42,4 +43,18 @@ export async function recordAgentOnline(db: Database, device: DeviceRow, wasOnli
  */
 export async function recordAgentOffline(db: Database, deviceId: string): Promise<void> {
     await db.presence.record(deviceId, Date.now(), false);
+}
+
+/**
+ * Avertit **tous** les espaces qui voient cet appareil qu'il vient de changer.
+ *
+ * Un appareil est partageable : ne prévenir que son espace d'appairage
+ * laisserait tous les autres destinataires sur une présence figée jusqu'à leur
+ * prochain rechargement. La liste vient de la table de jonction, seule autorité
+ * sur « qui voit cette machine ».
+ */
+export async function notifyDeviceWorkspaces(db: Database, live: LiveHub, deviceId: string): Promise<void> {
+    for (const workspaceId of await db.devices.workspaceIdsOf(deviceId)) {
+        live.changed(workspaceId, ['devices'], null);
+    }
 }

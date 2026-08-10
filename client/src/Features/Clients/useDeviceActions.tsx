@@ -47,6 +47,9 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
     const [stopTarget, setStopTarget] = useState<Target>(null);
     const [stopping, setStopping] = useState(false);
     const [restartingId, setRestartingId] = useState<string | null>(null);
+    // Partage entre espaces : la popup charge et enregistre elle-même, on ne
+    // retient ici que l'appareil visé.
+    const [shareTarget, setShareTarget] = useState<Target>(null);
 
     const confirmDevice = async (id: string) => {
         setActionError(null);
@@ -295,6 +298,8 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
         stopTarget,
         setStopTarget,
         stopping,
+        shareTarget,
+        setShareTarget,
         confirmStopAgent,
         restartAgent,
         restartingId,

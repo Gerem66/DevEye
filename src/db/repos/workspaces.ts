@@ -8,6 +8,13 @@ export interface WorkspacesRepo {
     /** Espaces dont l'utilisateur est membre, personnel d'abord puis par ancienneté. */
     findAccessibleByUser(userId: number): Promise<WorkspaceRow[]>;
     /**
+     * Tous les espaces, appartenance ignorée. Réservé à l'administration de la
+     * flotte (`device.workspaceList`), qui doit pouvoir proposer le partage d'un
+     * appareil vers un espace dont l'administrateur n'est pas membre. Aucune
+     * autre commande n'a de raison de franchir cette frontière.
+     */
+    listAll(): Promise<WorkspaceRow[]>;
+    /**
      * Crée l'espace personnel d'un compte et y inscrit son propriétaire.
      * Appelé une seule fois, à l'inscription : tout compte a exactement un espace
      * personnel (contrainte `users.uniq_personal_workspace`).
@@ -43,6 +50,13 @@ export function workspacesRepo(pool: Q): WorkspacesRepo {
                  WHERE m.user_id = ?
                  ORDER BY w.kind = 'personal' DESC, w.created ASC, w.id ASC`,
                 [userId]
+            );
+            return r.rows;
+        },
+        async listAll() {
+            const r = await pool.query<WorkspaceRow>(
+                `SELECT ${LIST_COLUMNS} FROM workspaces w
+                 ORDER BY w.kind = 'personal' DESC, w.name ASC, w.id ASC`
             );
             return r.rows;
         },

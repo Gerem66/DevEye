@@ -58,6 +58,22 @@ export interface DevicesRepo {
      * indice. Ne touche aucun état d'agent.
      */
     reorder(workspaceId: number, ids: string[]): Promise<void>;
+
+    // ─────────────────────────── partage entre espaces ───────────────────────
+    /** Les espaces ayant accès à cet appareil. */
+    workspaceIdsOf(deviceId: string): Promise<number[]>;
+    /**
+     * Idem pour plusieurs appareils d'un coup — la page Appareils affiche la
+     * flotte entière, et une requête par carte serait un N+1 pur.
+     */
+    workspaceIdsFor(deviceIds: string[]): Promise<Map<string, number[]>>;
+    /** Cet espace a-t-il accès à cet appareil ? La frontière, en une question. */
+    hasWorkspace(deviceId: string, workspaceId: number): Promise<boolean>;
+    /**
+     * Fixe l'ensemble des espaces ayant accès. La liste est complète : un espace
+     * absent perd l'accès. Les rangs des espaces conservés ne bougent pas.
+     */
+    setWorkspaces(deviceId: string, workspaceIds: number[]): Promise<void>;
 }
 
 export function devicesRepo(pool: Q): DevicesRepo {
@@ -74,24 +90,36 @@ export function devicesRepo(pool: Q): DevicesRepo {
             return r.rows[0] ?? null;
         },
         async listByWorkspace(workspaceId) {
+            // La jonction est la frontière : un appareil apparaît dans chaque
+            // espace avec lequel il est partagé, rangé selon *ce* rang-là.
             // L'ordre de l'utilisateur ; la date ne fait que départager.
             const r = await pool.query<DeviceRow>(
-                'SELECT * FROM devices WHERE workspace_id = ? ORDER BY sort_order ASC, created DESC',
+                `SELECT d.* FROM devices d
+                 JOIN device_workspaces dw ON dw.device_id = d.id
+                 WHERE dw.workspace_id = ?
+                 ORDER BY dw.sort_order ASC, d.created DESC`,
                 [workspaceId]
             );
             return r.rows;
         },
         async reorder(workspaceId, ids) {
-            // Rang = indice ; un appareil d'un autre espace est ignoré en
-            // silence, la clause `workspace_id` s'en charge. Rien d'autre n'est
-            // touché : ranger n'est pas administrer une machine.
-            for (let i = 0; i < ids.length; i++) {
-                await pool.query('UPDATE devices SET sort_order = ? WHERE id = ? AND workspace_id = ?', [
-                    i,
-                    ids[i],
-                    workspaceId
-                ]);
-            }
+            // Rang = indice ; un appareil que cet espace ne voit pas est ignoré
+            // en silence, la clause `workspace_id` s'en charge. Rien d'autre
+            // n'est touché : ranger n'est pas administrer une machine.
+            //
+            // Un seul UPDATE, dans une transaction : la boucle d'origine laissait
+            // un rangement à moitié appliqué si une requête échouait, et deux
+            // rangements simultanés s'entrelaçaient.
+            if (ids.length === 0) return;
+            const cases = ids.map(() => 'WHEN ? THEN ?').join(' ');
+            const params: (string | number)[] = [];
+            for (let i = 0; i < ids.length; i++) params.push(ids[i], i);
+            await pool.query(
+                `UPDATE device_workspaces
+                    SET sort_order = CASE device_id ${cases} ELSE sort_order END
+                  WHERE workspace_id = ? AND device_id IN (${ids.map(() => '?').join(',')})`,
+                [...params, workspaceId, ...ids]
+            );
         },
         async listAll() {
             const r = await pool.query<DeviceRow>('SELECT * FROM devices ORDER BY created DESC');
@@ -99,26 +127,18 @@ export function devicesRepo(pool: Q): DevicesRepo {
         },
         async create({ ownerId, workspaceId, name, fingerprint, platform, publicKey, tokenHash }) {
             const id = randomUUID();
-            // Un nouvel appareil atterrit à la fin de la liste, jamais au
-            // milieu : l'ordre appartient à l'utilisateur.
-            const posRow = await pool.query<{ next: number }>(
-                'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next FROM devices WHERE workspace_id = ?',
-                [workspaceId]
-            );
             await pool.query(
-                `INSERT INTO devices (id, owner_id, workspace_id, name, fingerprint, platform, status, public_key, token_hash, sort_order)
-                 VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
-                [
-                    id,
-                    ownerId,
-                    workspaceId,
-                    name,
-                    fingerprint,
-                    platform,
-                    publicKey,
-                    tokenHash,
-                    Number(posRow.rows[0]?.next ?? 0)
-                ]
+                `INSERT INTO devices (id, owner_id, workspace_id, name, fingerprint, platform, status, public_key, token_hash)
+                 VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+                [id, ownerId, workspaceId, name, fingerprint, platform, publicKey, tokenHash]
+            );
+            // L'espace d'appairage est le premier à y avoir accès. Un nouvel
+            // appareil atterrit à la fin de sa liste, jamais au milieu :
+            // l'ordre appartient à l'utilisateur.
+            await pool.query(
+                `INSERT INTO device_workspaces (device_id, workspace_id, sort_order)
+                 SELECT ?, ?, COALESCE(MAX(sort_order) + 1, 0) FROM device_workspaces WHERE workspace_id = ?`,
+                [id, workspaceId, workspaceId]
             );
             const r = await pool.query<DeviceRow>('SELECT * FROM devices WHERE id = ?', [id]);
             return r.rows[0];
@@ -208,6 +228,57 @@ export function devicesRepo(pool: Q): DevicesRepo {
         async delete(id) {
             const r = await pool.query('DELETE FROM devices WHERE id = ?', [id]);
             return r.rowCount > 0;
+        },
+
+        async workspaceIdsOf(deviceId) {
+            const r = await pool.query<{ workspace_id: number }>(
+                'SELECT workspace_id FROM device_workspaces WHERE device_id = ?',
+                [deviceId]
+            );
+            return r.rows.map((row) => Number(row.workspace_id));
+        },
+        async workspaceIdsFor(deviceIds) {
+            const out = new Map<string, number[]>();
+            if (deviceIds.length === 0) return out;
+            const r = await pool.query<{ device_id: string; workspace_id: number }>(
+                `SELECT device_id, workspace_id FROM device_workspaces
+                 WHERE device_id IN (${deviceIds.map(() => '?').join(',')})`,
+                deviceIds
+            );
+            for (const row of r.rows) {
+                const list = out.get(row.device_id);
+                if (list) list.push(Number(row.workspace_id));
+                else out.set(row.device_id, [Number(row.workspace_id)]);
+            }
+            return out;
+        },
+        async hasWorkspace(deviceId, workspaceId) {
+            const r = await pool.query<{ n: number }>(
+                'SELECT 1 AS n FROM device_workspaces WHERE device_id = ? AND workspace_id = ? LIMIT 1',
+                [deviceId, workspaceId]
+            );
+            return r.rows.length > 0;
+        },
+        async setWorkspaces(deviceId, workspaceIds) {
+            // Retirer d'abord, ajouter ensuite : les espaces conservés ne sont
+            // pas touchés, donc leur rang survit au partage.
+            if (workspaceIds.length === 0) {
+                await pool.query('DELETE FROM device_workspaces WHERE device_id = ?', [deviceId]);
+                return;
+            }
+            await pool.query(
+                `DELETE FROM device_workspaces
+                  WHERE device_id = ? AND workspace_id NOT IN (${workspaceIds.map(() => '?').join(',')})`,
+                [deviceId, ...workspaceIds]
+            );
+            // Un espace qui gagne l'accès reçoit le dernier rang de *sa* liste.
+            for (const workspaceId of workspaceIds) {
+                await pool.query(
+                    `INSERT IGNORE INTO device_workspaces (device_id, workspace_id, sort_order)
+                     SELECT ?, ?, COALESCE(MAX(sort_order) + 1, 0) FROM device_workspaces WHERE workspace_id = ?`,
+                    [deviceId, workspaceId, workspaceId]
+                );
+            }
         }
     };
 }

@@ -7,10 +7,10 @@ import { useFleetDevices } from '@/stores/devices';
 import { DownloadAgent } from './DownloadAgent';
 import { DeviceCard } from './DeviceCard';
 import { LinkCodesDialog } from './LinkCodesDialog';
+import { WorkspaceShareDialog } from './WorkspaceShareDialog';
 import { useLinkCodes } from './useLinkCodes';
 import { useDeviceActions } from './useDeviceActions';
 import { agentUpdatable } from '../agentVersion';
-import type { FeatureProps } from '../types';
 import styles from './Clients.module.css';
 
 /**
@@ -19,7 +19,7 @@ import styles from './Clients.module.css';
  * device actions ({@link useDeviceActions}); the heavy logic lives in those
  * modules so this stays a thin shell.
  */
-export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
+export default function Clients() {
     // La page Appareils administre la flotte entière, tous espaces confondus —
     // contrairement à l'accueil et à Monitoring, qui ne voient que l'espace actif.
     const { devices, loading, error, refresh } = useFleetDevices();
@@ -238,6 +238,13 @@ export default function Clients({ user: _user, workspace: _ws }: FeatureProps) {
                         : 'Démarrage auto inactif : l’appareil restera hors ligne et ne pourra plus être administré à distance (configuration, mises à jour, terminal, fichiers…) jusqu’à un relancement manuel de l’agent sur la machine.'}
                 </p>
             </Dialog>
+
+            <WorkspaceShareDialog
+                open={actions.shareTarget !== null}
+                target={actions.shareTarget}
+                onClose={() => actions.setShareTarget(null)}
+                onSaved={() => void refresh()}
+            />
 
             <DownloadAgent open={showDownloadModal} onClose={() => setShowDownloadModal(false)} />
         </div>

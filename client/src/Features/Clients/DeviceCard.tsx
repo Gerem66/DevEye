@@ -17,6 +17,10 @@ export function DeviceCard({ device, actions }: { device: Device; actions: Devic
     // An update is worth offering when the agent runs an older build than this
     // interface (or the server advertises a newer signed binary).
     const updatable = device.online && agentUpdatable(device);
+    // Combien d'espaces voient cette machine. Toujours au moins un (l'espace
+    // d'appairage) : le compte ne s'affiche donc qu'à partir de deux, où il
+    // apprend quelque chose.
+    const shareCount = device.workspaceIds.length;
 
     return (
         <>
@@ -234,6 +238,14 @@ export function DeviceCard({ device, actions }: { device: Device; actions: Devic
                             <span className='icon icon-x-circle' />
                         </button>
                     )}
+                    <button
+                        className={styles.actionBtn}
+                        onClick={() => actions.setShareTarget({ id: device.id, name: device.name })}
+                        title={shareCount > 1 ? `Espaces ayant accès (${shareCount})` : 'Espaces ayant accès'}
+                    >
+                        <span className='icon icon-users' />
+                        {shareCount > 1 && <span className={styles.actionCount}>{shareCount}</span>}
+                    </button>
                     <button
                         className={`${styles.actionBtn} ${styles.actionDanger}`}
                         onClick={() => actions.setDeleteTarget({ id: device.id, name: device.name })}

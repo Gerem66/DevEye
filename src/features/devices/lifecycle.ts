@@ -9,7 +9,9 @@ import {
     deviceReorder,
     deviceRequestDelete,
     deviceRevoke,
-    deviceSetConfig
+    deviceSetConfig,
+    deviceSetWorkspaces,
+    deviceWorkspaceList
 } from 'deveye-types';
 
 import { computeAgentUpdate, deviceAgentConfig, deviceRowToDevice } from '@/agent/mappers';
@@ -26,26 +28,38 @@ export const deviceListFeature: FeatureDefinition<
 > = defineFeature({
     ...deviceList,
     handler: async (ctx, input) => {
-        // Deux ensembles distincts : le plan de données (les appareils de
-        // l'espace actif, ce que voient l'accueil, la topbar et Monitoring) et la
-        // flotte entière, qui n'a de sens que pour la page d'administration.
-        // La portée est explicite plutôt que déduite du rôle : un administrateur
-        // travaille lui aussi dans un espace, et son accueil ne doit pas afficher
-        // les machines de tous les autres.
+        // Deux ensembles distincts : le plan de données (les appareils que
+        // l'espace actif voit, ce qu'affichent l'accueil, la topbar et
+        // Monitoring) et la flotte entière, qui n'a de sens que pour la page
+        // d'administration. La portée est explicite plutôt que déduite du rôle :
+        // un administrateur travaille lui aussi dans un espace partagé, et son
+        // accueil n'y doit pas afficher les machines de tous les autres.
+        //
+        // Une exception, et une seule : son espace **personnel**, où toute la
+        // flotte est disponible en permanence sans partage explicite. C'est là
+        // qu'un administrateur surveille ses machines, et l'y obliger à se
+        // partager à lui-même chaque appareil n'aurait rien protégé.
         let rows;
         if (input.scope === 'fleet') {
             ctx.assertAdmin();
             rows = await ctx.db.devices.listAll();
+        } else if (ctx.isAdmin && ctx.workspace.kind === 'personal') {
+            rows = await ctx.db.devices.listAll();
         } else {
             rows = await ctx.db.devices.listByWorkspace(ctx.workspaceId);
         }
-        const presence = online(
-            ctx,
-            rows.map((r) => r.id)
-        );
-        const manifest = await readServedManifestCached(agentDistDir());
+        const ids = rows.map((r) => r.id);
+        const presence = online(ctx, ids);
+        // Chargement groupé : une requête par carte serait un N+1 sur la page
+        // Appareils, qui affiche la flotte entière.
+        const [manifest, shares] = await Promise.all([
+            readServedManifestCached(agentDistDir()),
+            ctx.db.devices.workspaceIdsFor(ids)
+        ]);
         return {
-            devices: rows.map((r) => deviceRowToDevice(r, presence[r.id] ?? false, computeAgentUpdate(r, manifest)))
+            devices: rows.map((r) =>
+                deviceRowToDevice(r, presence[r.id] ?? false, computeAgentUpdate(r, manifest), shares.get(r.id) ?? [])
+            )
         };
     }
 });
@@ -285,5 +299,80 @@ export const deviceDeleteFeature: FeatureDefinition<
             metadata: { deviceId: row.id, ownerId: row.owner_id }
         });
         return { deviceId: row.id };
+    }
+});
+
+/**
+ * Les espaces avec lesquels un appareil peut être partagé, et lesquels le sont.
+ *
+ * Seuls les espaces **partagés** sont proposés : ranger la machine d'autrui dans
+ * l'espace personnel d'un tiers n'aurait pas de sens, et l'accueil personnel
+ * d'un administrateur voit déjà toute la flotte sans partage (`device.list`).
+ *
+ * C'est la seule commande qui énumère des espaces dont l'appelant n'est pas
+ * membre — d'où `admin: true`, et rien de plus que l'identité et le nom.
+ */
+export const deviceWorkspaceListFeature: FeatureDefinition<
+    typeof deviceWorkspaceList.command,
+    typeof deviceWorkspaceList.input,
+    typeof deviceWorkspaceList.output
+> = defineFeature({
+    ...deviceWorkspaceList,
+    access: { admin: true },
+    handler: async (ctx, input) => {
+        const row = await authorizeDevice(ctx, input.deviceId);
+        const [all, shared] = await Promise.all([ctx.db.workspaces.listAll(), ctx.db.devices.workspaceIdsOf(row.id)]);
+        const sharedSet = new Set(shared);
+        return {
+            originWorkspaceId: row.workspace_id === null ? null : Number(row.workspace_id),
+            workspaces: all
+                .filter((w) => w.kind === 'shared' || w.id === row.workspace_id)
+                .map((w) => ({
+                    id: w.id,
+                    name: w.name,
+                    kind: w.kind,
+                    shared: sharedSet.has(w.id)
+                }))
+        };
+    }
+});
+
+/**
+ * Ouvre (ou ferme) l'accès à un appareil, espace par espace.
+ *
+ * Journalisé en avertissement : donner accès à une machine, c'est donner à ses
+ * membres de quoi ouvrir un terminal dessus. L'espace d'appairage est réintégré
+ * d'office — le retirer laisserait un appareil dont plus personne ne répond de
+ * l'origine, alors qu'il porte encore l'unicité de son empreinte.
+ */
+export const deviceSetWorkspacesFeature: FeatureDefinition<
+    typeof deviceSetWorkspaces.command,
+    typeof deviceSetWorkspaces.input,
+    typeof deviceSetWorkspaces.output
+> = defineFeature({
+    ...deviceSetWorkspaces,
+    mutates: true,
+    access: { admin: true },
+    handler: async (ctx, input) => {
+        const row = await authorizeDevice(ctx, input.deviceId);
+        const known = new Set((await ctx.db.workspaces.listAll()).map((w) => w.id));
+        const wanted = new Set(input.workspaceIds.filter((id) => known.has(id)));
+        if (row.workspace_id !== null) wanted.add(Number(row.workspace_id));
+
+        const before = new Set(await ctx.db.devices.workspaceIdsOf(row.id));
+        await ctx.db.devices.setWorkspaces(row.id, [...wanted]);
+
+        const added = [...wanted].filter((id) => !before.has(id));
+        const removed = [...before].filter((id) => !wanted.has(id));
+        if (added.length > 0 || removed.length > 0) {
+            ctx.audit({
+                action: 'device.setWorkspaces',
+                level: 'warning',
+                description: `Partage modifié : « ${row.name} » — ${wanted.size} espace(s)`,
+                metadata: { deviceId: row.id, added, removed, workspaceIds: [...wanted] }
+            });
+        }
+        const updated = (await ctx.db.devices.findById(row.id)) ?? row;
+        return { device: await toDevice(ctx, updated) };
     }
 });

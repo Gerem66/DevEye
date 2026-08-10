@@ -12,7 +12,9 @@ import {
     deviceReorderFeature,
     deviceRequestDeleteFeature,
     deviceRevokeFeature,
-    deviceSetConfigFeature
+    deviceSetConfigFeature,
+    deviceSetWorkspacesFeature,
+    deviceWorkspaceListFeature
 } from './lifecycle';
 import {
     deviceFilesAnalyzeFeature,
@@ -36,6 +38,7 @@ import { deviceDropPrivilegesFeature, deviceElevateFeature, deviceSetAutostartFe
 /**
  * The device (Appareils + Monitoring) feature handlers, grouped by concern:
  * - `lifecycle`  — enrollment/status (list, confirm, revoke, rename, delete…)
+ *                 et le partage entre espaces (workspaceList, setWorkspaces)
  * - `agentUpdate` — signed self-update push
  * - `agentLifecycle` — stop / clean restart of the agent process
  * - `service`    — persistence/privileges (autostart, elevate, drop)
@@ -54,6 +57,8 @@ export const deviceFeatures: FeatureDefinition<string, any, any>[] = [
     deviceRenameFeature,
     deviceReorderFeature,
     deviceSetConfigFeature,
+    deviceWorkspaceListFeature,
+    deviceSetWorkspacesFeature,
     deviceUpdateAgentFeature,
     deviceSetAutostartFeature,
     deviceElevateFeature,

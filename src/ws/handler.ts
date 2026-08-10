@@ -57,6 +57,25 @@ function send(socket: WebSocket, msg: ServerMessage): void {
     socket.send(JSON.stringify(msg));
 }
 
+/**
+ * Les espaces qui voient l'appareil visé par cette commande, s'il y en a un.
+ *
+ * Lu sur la charge brute plutôt que sur l'entrée validée : l'appel doit pouvoir
+ * se faire *avant* que le handler ne tourne, et un `deviceId` qui ne serait pas
+ * un identifiant valide ne rend simplement rien. Vide pour toute commande qui ne
+ * parle pas d'un appareil, donc pour l'immense majorité d'entre elles.
+ */
+async function deviceWorkspacesOf(db: Database, command: string, payload: unknown): Promise<number[]> {
+    if (!command.startsWith('device.') && !command.startsWith('metrics.')) return [];
+    const deviceId = (payload as { deviceId?: unknown } | null)?.deviceId;
+    if (typeof deviceId !== 'string' || deviceId.length === 0) return [];
+    return db.devices.workspaceIdsOf(deviceId);
+}
+
+function unionWorkspaces(a: readonly number[], b: readonly number[]): number[] {
+    return [...new Set([...a, ...b])];
+}
+
 export async function registerWS(
     app: FastifyInstance,
     { db, crypt, hub, live: liveHub, cloudSync, uptime, integrations, databases, audit }: WSDeps
@@ -197,6 +216,10 @@ export async function registerWS(
                 });
             };
 
+            // Les espaces qui voient cet appareil *avant* que la commande ne
+            // tourne — la seule occasion de les connaître quand elle les efface.
+            const sharedBefore = await deviceWorkspacesOf(db, command, payload);
+
             // Bracket the call for single-use DEK accounting ("validate on every
             // action"): the unlocked DEK is wiped as soon as this command — and
             // any concurrent siblings unlocked alongside it — finish.
@@ -296,7 +319,22 @@ export async function registerWS(
                 //
                 // L'émetteur est exclu : il tient déjà sa propre réponse.
                 const topics = topicsOf(command);
-                if (topics) liveHub.changed(auditWorkspaceId, topics, session!.userId, socket);
+                if (topics) {
+                    liveHub.changed(auditWorkspaceId, topics, session!.userId, socket);
+                    // Un appareil est partageable entre plusieurs espaces, et le
+                    // dispatcheur ne connaît que celui de l'enveloppe : sans cet
+                    // éventail, les autres destinataires resteraient sur une
+                    // liste figée — présence, renommage, configuration, tout
+                    // leur échapperait jusqu'au rechargement.
+                    //
+                    // L'union avant/après est nécessaire dans les deux sens :
+                    // `device.delete` efface les rattachements (seul « avant »
+                    // les connaît), `device.setWorkspaces` en crée (seul
+                    // « après » les voit).
+                    for (const wid of unionWorkspaces(sharedBefore, await deviceWorkspacesOf(db, command, payload))) {
+                        if (wid !== auditWorkspaceId) liveHub.changed(wid, topics, session!.userId);
+                    }
+                }
             } catch (e) {
                 if (e instanceof FeatureError) {
                     reqLogger.warn({ command, code: e.code, msg: e.message }, 'Feature error');

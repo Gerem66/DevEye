@@ -64,7 +64,7 @@ import {
     type AgentSession
 } from './handlers';
 import { deviceAgentConfig } from './mappers';
-import { recordAgentOffline, recordAgentOnline } from './presence';
+import { notifyDeviceWorkspaces, recordAgentOffline, recordAgentOnline } from './presence';
 import type { LiveHub } from '@/live/hub';
 import type { MonitorHub } from './hub';
 
@@ -221,7 +221,7 @@ export async function registerAgentWS(
             // sondage de la liste d'appareils côté client. `device.presence`
             // existe déjà, mais ne part qu'aux abonnés d'un appareil précis —
             // l'accueil, lui, n'est abonné à rien.
-            if (device.workspace_id !== null) live.changed(device.workspace_id, ['devices'], null);
+            await notifyDeviceWorkspaces(db, live, deviceId);
             audit.record({
                 source: 'agent',
                 category: 'device',
@@ -289,7 +289,7 @@ export async function registerAgentWS(
                 if (device.status !== 'pending_deletion') {
                     void recordAgentOffline(db, deviceId).catch(() => {});
                 }
-                if (device.workspace_id !== null) live.changed(device.workspace_id, ['devices'], null);
+                void notifyDeviceWorkspaces(db, live, deviceId).catch(() => {});
             }
             reqLogger.info('Agent disconnected');
         });
