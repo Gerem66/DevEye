@@ -96,6 +96,15 @@ export interface MailMessageEnvelopeInput {
     hasAttachments: boolean;
 }
 
+/** Les drapeaux tels qu'ils sont en cache — assez pour décider quoi réécrire, sans toucher à l'enveloppe chiffrée. */
+export interface MailMessageFlagsRow {
+    id: number;
+    uid: number;
+    seen: number;
+    flagged: number;
+    answered: number;
+}
+
 export interface MailMessagesRepo {
     /** Counts from the cache, used to keep `mail_folders.unread_count/total_count` in step after a sync. */
     countByFolder(folderId: number): Promise<{ total: number; unseen: number }>;
@@ -123,6 +132,14 @@ export interface MailMessagesRepo {
     listForSearch(folderId: number, limit: number): Promise<MailMessageRow[]>;
     /** Cached rows for specific UIDs — how a remote search finds which of its hits it already holds. */
     listByFolderUids(folderId: number, uids: number[]): Promise<MailMessageRow[]>;
+    /**
+     * Les `limit` UID les plus hauts du cache d'un dossier, avec leurs drapeaux :
+     * la fenêtre que la synchro va redemander au serveur pour la réconcilier.
+     *
+     * Trié par UID et non par date, parce que c'est en UID que se formule la
+     * plage IMAP à relire — et rendu sans l'enveloppe, qui pèse et n'apprend rien.
+     */
+    listFlagsWindow(folderId: number, limit: number): Promise<MailMessageFlagsRow[]>;
     /** Re-key one cached envelope, for a tier switch. */
     updateEnvelopeEnc(id: number, envelopeEnc: string): Promise<void>;
     /** Create or refresh the cached envelope for `(folderId, uid)`. */
@@ -131,10 +148,20 @@ export interface MailMessagesRepo {
         id: number,
         flags: Partial<{ seen: boolean; flagged: boolean; answered: boolean }>
     ): Promise<MailMessageRow | null>;
+    /**
+     * Écrit les trois drapeaux d'un coup, sans relire la ligne — contrairement à
+     * {@link setFlags}, qui rend la ligne parce que son appelant la renvoie au
+     * client. La réconciliation, elle, connaît déjà l'état qu'elle pose et tourne
+     * à chaque tick sur chaque dossier : la relecture y serait une requête sur
+     * deux, pour rapatrier une enveloppe chiffrée dont elle ne fait rien.
+     */
+    updateFlags(id: number, flags: { seen: boolean; flagged: boolean; answered: boolean }): Promise<void>;
     moveFolder(id: number, toFolderId: number, newUid: number): Promise<void>;
     delete(id: number): Promise<boolean>;
     /** Drops every cached message of a folder — used when UIDVALIDITY changes. */
     deleteByFolder(folderId: number): Promise<void>;
+    /** Supprime les lignes dont l'UID a disparu côté serveur. Rend le nombre effacé. */
+    deleteByFolderUids(folderId: number, uids: number[]): Promise<number>;
 }
 
 export interface MailSettingsRepo {
@@ -389,6 +416,13 @@ export function mailMessagesRepo(pool: Q): MailMessagesRepo {
             );
             return r.rows;
         },
+        async listFlagsWindow(folderId, limit) {
+            const r = await pool.query<MailMessageFlagsRow>(
+                'SELECT id, uid, seen, flagged, answered FROM mail_messages WHERE folder_id = ? ORDER BY uid DESC LIMIT ?',
+                [folderId, limit]
+            );
+            return r.rows;
+        },
         async updateEnvelopeEnc(id, envelopeEnc) {
             await pool.query('UPDATE mail_messages SET envelope_enc = ? WHERE id = ?', [envelopeEnc, id]);
         },
@@ -440,6 +474,14 @@ export function mailMessagesRepo(pool: Q): MailMessagesRepo {
             await pool.query(`UPDATE mail_messages SET ${sets.join(', ')} WHERE id = ?`, params);
             return this.findById(id);
         },
+        async updateFlags(id, { seen, flagged, answered }) {
+            await pool.query('UPDATE mail_messages SET seen = ?, flagged = ?, answered = ? WHERE id = ?', [
+                seen ? 1 : 0,
+                flagged ? 1 : 0,
+                answered ? 1 : 0,
+                id
+            ]);
+        },
         async moveFolder(id, toFolderId, newUid) {
             await pool.query('UPDATE mail_messages SET folder_id = ?, uid = ? WHERE id = ?', [toFolderId, newUid, id]);
         },
@@ -449,6 +491,14 @@ export function mailMessagesRepo(pool: Q): MailMessagesRepo {
         },
         async deleteByFolder(folderId) {
             await pool.query('DELETE FROM mail_messages WHERE folder_id = ?', [folderId]);
+        },
+        async deleteByFolderUids(folderId, uids) {
+            if (uids.length === 0) return 0;
+            const r = await pool.query(
+                `DELETE FROM mail_messages WHERE folder_id = ? AND uid IN (${uids.map(() => '?').join(',')})`,
+                [folderId, ...uids]
+            );
+            return r.rowCount;
         }
     };
 }

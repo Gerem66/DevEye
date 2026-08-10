@@ -1,19 +1,34 @@
-import type { MailAccountRow, MailFolderRow } from 'deveye-types';
+import { MAIL_MESSAGE_PAGE_SIZE, type MailAccountRow, type MailFolderRow } from 'deveye-types';
 import * as mailClient from '@/Services/MailAccountClient';
 import type { Cipher } from '@/Services/SecureStore';
 import type { Database } from '@/db';
 import { encryptEnvelope, persistRefreshedToken } from './_shared';
 
 /**
- * Sync logic shared between the on-demand `mail.folderList`/`mail.folderSync`
- * commands (live WS session) and {@link MailSyncService}'s background tick for
- * "open"-tier accounts (no session). Both sides already hold the right cipher
- * for the account's tier and its decrypted credentials — this module only
- * talks to IMAP and writes the metadata cache, nothing about auth/gating.
+ * Sync logic shared between the on-demand commands (live WS session) and
+ * {@link MailSyncService}'s background tick for "open"-tier accounts (no
+ * session). Both sides already hold the right cipher for the account's tier and
+ * its decrypted credentials — this module only talks to IMAP and writes the
+ * metadata cache, nothing about auth/gating.
+ *
+ * Côté commandes, trois appelants : `mail.folderSync` (le bouton de relève),
+ * `mail.messageList` et `mail.folderList` (qui synchronisent à l'ouverture pour
+ * les comptes « guarded », lesquels n'ont aucune relève de fond).
  */
 
 /** First-sync cap: how many of a folder's most recent messages to backfill. */
 export const INITIAL_SYNC_LIMIT = 200;
+
+/**
+ * Ce qu'une relève a appris d'un dossier : des arrivées, des drapeaux corrigés,
+ * des lignes retirées. La somme des trois est ce qui décide si le contenu a
+ * bougé — et donc s'il faut prévenir les clients connectés.
+ */
+export interface SyncFolderOutcome {
+    newCount: number;
+    changedCount: number;
+    removedCount: number;
+}
 
 /** Cache one folder's worth of fetched envelopes — identical for a forward sync, a backfill and a remote search. */
 export async function cacheEnvelopes(
@@ -85,10 +100,17 @@ export async function syncAccountFolders(
 }
 
 /**
- * Pull new envelopes for one folder and refresh its counts. Detects a
- * `UIDVALIDITY` change (mailbox recreated server-side) by re-checking after
- * the first fetch and, if it moved, drops the stale cache and re-fetches
- * fresh — a folder never ends up mixing two UID spaces.
+ * Pull new envelopes for one folder, reconcile the recent window already
+ * cached, and refresh the folder's counts. Detects a `UIDVALIDITY` change
+ * (mailbox recreated server-side) by re-checking after the first fetch and, if
+ * it moved, drops the stale cache and re-fetches fresh — a folder never ends up
+ * mixing two UID spaces.
+ *
+ * Le fetch avant n'apprend que les arrivées : un message déjà connu n'y
+ * réapparaît jamais, quoi qu'il lui soit arrivé ailleurs. La réconciliation est
+ * l'autre moitié du travail — elle relit les drapeaux de la fenêtre récente et
+ * retire ce que le serveur n'a plus, ce qui est la seule façon d'apprendre
+ * qu'un mail a été lu, marqué ou supprimé depuis un autre client.
  */
 export async function syncOneFolder(
     db: Database,
@@ -98,44 +120,93 @@ export async function syncOneFolder(
     folder: MailFolderRow,
     /** Message-level progress within this one folder — see `MailSyncService`/`_syncStatus`. */
     onProgress?: (done: number, estimatedTotal: number) => void
-): Promise<{ newCount: number }> {
+): Promise<SyncFolderOutcome> {
     const refresh = persistRefreshedToken(db, account.id, credentials, cipher);
     let sinceUid = folder.last_seen_uid;
-    let result = await mailClient.syncFolder(
+
+    // Fenêtre à réconcilier, lue avant tout fetch : elle porte sur ce qui est
+    // déjà en cache. Bornée par le plus haut UID **du cache** et non par
+    // `last_seen_uid`, parce qu'une recherche distante (`mail.messageSearch`)
+    // peut avoir inséré des lignes au-dessus de ce repère sans le faire bouger.
+    let window =
+        folder.uid_validity === null ? [] : await db.mailMessages.listFlagsWindow(folder.id, MAIL_MESSAGE_PAGE_SIZE);
+    const reconcile = window.length > 0 ? { fromUid: window[window.length - 1].uid, toUid: window[0].uid } : null;
+
+    let result = await mailClient.syncFolder({
         credentials,
-        folder.imap_path,
+        imapPath: folder.imap_path,
         sinceUid,
-        INITIAL_SYNC_LIMIT,
-        refresh,
+        initialLimit: INITIAL_SYNC_LIMIT,
+        reconcile,
+        onTokenRefreshed: refresh,
         onProgress
-    );
+    });
 
     const validityKnown = folder.uid_validity !== null;
     if (validityKnown && folder.uid_validity !== result.uidValidity) {
         // The mailbox was recreated: our cached UIDs no longer mean anything.
         await db.mailMessages.deleteByFolder(folder.id);
         sinceUid = null;
-        result = await mailClient.syncFolder(
+        // Le cache vient d'être détruit et l'ancien espace d'UID ne veut plus
+        // rien dire : il n'y a plus rien à réconcilier, ni ici ni au retour.
+        window = [];
+        result = await mailClient.syncFolder({
             credentials,
-            folder.imap_path,
+            imapPath: folder.imap_path,
             sinceUid,
-            INITIAL_SYNC_LIMIT,
-            refresh,
+            initialLimit: INITIAL_SYNC_LIMIT,
+            reconcile: null,
+            onTokenRefreshed: refresh,
             onProgress
-        );
+        });
     }
 
     await cacheEnvelopes(db, cipher, folder.id, result.messages);
 
+    // Sur la fenêtre relue, la réponse du serveur fait foi.
+    let changedCount = 0;
+    let removedCount = 0;
+    if (result.reconciled) {
+        const remote = new Map(result.reconciled.map((m) => [m.uid, m]));
+        for (const row of window) {
+            const live = remote.get(row.uid);
+            if (!live) continue;
+            if (
+                (row.seen === 1) !== live.seen ||
+                (row.flagged === 1) !== live.flagged ||
+                (row.answered === 1) !== live.answered
+            ) {
+                await db.mailMessages.updateFlags(row.id, live);
+                changedCount++;
+            }
+        }
+        // Un UID de la fenêtre que le serveur ne rend plus n'existe plus là-bas :
+        // supprimé, ou déplacé ailleurs (un MOVE lui donne un UID neuf dans le
+        // dossier d'arrivée). Le garder, c'est afficher un mail fantôme jusqu'au
+        // prochain rechargement complet.
+        removedCount = await db.mailMessages.deleteByFolderUids(
+            folder.id,
+            window.filter((row) => !remote.has(row.uid)).map((row) => row.uid)
+        );
+    }
+
     const counts = await db.mailMessages.countByFolder(folder.id);
+    // Repère haut, et non « le plus récent qui existe » : une suppression en tête
+    // ne le fait pas redescendre, sans quoi les mêmes UID rentreraient au tick
+    // suivant, précisément ceux que la réconciliation vient de retirer.
     const lastSeenUid =
         result.messages.length > 0 ? Math.max(...result.messages.map((m) => m.uid)) : folder.last_seen_uid;
     // `first_seen_uid` never needs moving on a normal incremental sync — only
     // set when unknown (a brand new folder, or a UIDVALIDITY reset that just
     // wiped the cache), backstopped by what's actually in the DB so a folder
-    // synced before this column existed still gets a correct floor.
+    // synced before this column existed still gets a correct floor. Une
+    // réconciliation qui a supprimé des lignes fait exception : elle a pu
+    // emporter le plancher lui-même.
     const firstSeenUid =
-        validityKnown && folder.uid_validity === result.uidValidity && folder.first_seen_uid !== null
+        removedCount === 0 &&
+        validityKnown &&
+        folder.uid_validity === result.uidValidity &&
+        folder.first_seen_uid !== null
             ? folder.first_seen_uid
             : await db.mailMessages.minUidByFolder(folder.id);
     await db.mailFolders.updateCounts(folder.id, {
@@ -146,7 +217,7 @@ export async function syncOneFolder(
         totalCount: counts.total
     });
 
-    return { newCount: result.messages.length };
+    return { newCount: result.messages.length, changedCount, removedCount };
 }
 
 /**
@@ -155,6 +226,12 @@ export async function syncOneFolder(
  * same path as a brand new folder — the newest `INITIAL_SYNC_LIMIT` messages —
  * rather than trying to reconcile against marks that are, by assumption, the
  * reason the caller is here. Nothing on the IMAP server is touched.
+ *
+ * La réparation de dernier recours, depuis que {@link syncOneFolder} réconcilie
+ * la fenêtre récente à chaque passage : elle reste la seule à pouvoir remettre
+ * d'aplomb ce qui a dérivé **au-delà** de cette fenêtre, au prix de tout
+ * reprendre. Le cache vidé d'abord, `syncOneFolder` n'a rien à réconcilier et
+ * repart du chemin d'un dossier neuf.
  */
 export async function resetFolder(
     db: Database,

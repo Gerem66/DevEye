@@ -468,8 +468,8 @@ export const mailFolderSyncFeature: FeatureDefinition<
         await assertMailUnlocked(ctx, account.security_tier);
         const cipher = cipherFor(ctx, account.security_tier);
         const credentials = await credentialsFor(ctx, account);
-        const { newCount } = await syncOneFolder(ctx.db, cipher, account, credentials, folder);
-        return { ok: true, newCount };
+        const outcome = await syncOneFolder(ctx.db, cipher, account, credentials, folder);
+        return { ok: true, ...outcome };
     }
 });
 
@@ -775,6 +775,7 @@ export const mailAttachmentDownloadFeature: FeatureDefinition<
             messageId: input.messageId,
             attachmentId: input.attachmentId,
             userId: ctx.userId,
+            workspaceId: ctx.workspaceId,
             sessionId: ctx.sessionId
         });
         return { downloadUrl: `/api/mail/attachment?token=${encodeURIComponent(token)}` };

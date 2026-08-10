@@ -70,6 +70,12 @@ export const env = {
     // tier accounts (guarded accounts sync on demand during a live session).
     MAIL_SYNC_TICK_SECONDS: getEnvVar('MAIL_SYNC_TICK_SECONDS', 'number', false) || 120,
     MAIL_SYNC_CONCURRENCY: getEnvVar('MAIL_SYNC_CONCURRENCY', 'number', false) || 4,
+    // Échéance au-delà de laquelle la relève d'un compte est abandonnée. Large,
+    // parce qu'une première synchro parcourt tous les dossiers d'une boîte : elle
+    // n'est pas là pour presser le travail, mais pour qu'un compte dont la
+    // connexion reste suspendue ne se retrouve pas retiré de la rotation pour
+    // toujours, sans erreur ni trace, jusqu'au prochain redémarrage.
+    MAIL_SYNC_ACCOUNT_TIMEOUT_SECONDS: getEnvVar('MAIL_SYNC_ACCOUNT_TIMEOUT_SECONDS', 'number', false) || 900,
 
     // Mail OAuth (Gmail/Microsoft 365). Entirely optional per provider: with no
     // client id/secret configured, that provider's "Connect with..." option is

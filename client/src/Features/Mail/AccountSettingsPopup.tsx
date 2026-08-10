@@ -2,8 +2,9 @@ import { useState } from 'react';
 
 import Button from '@/Components/Button';
 import { DialogCancelButton } from '@/Components/Dialog';
-import Popup, { ClosePopup } from '@/Components/Popup';
+import Popup, { ClosePopup, OpenPopup } from '@/Components/Popup';
 import TextInput from '@/Components/TextInput';
+import { MAIL_CONFIRM_POPUP } from './ConfirmPopup';
 import { humanizeError, ws } from './api';
 import styles from './style.module.css';
 
@@ -15,6 +16,19 @@ import {
 import type { MailAccount } from 'deveye-types';
 
 export const ACCOUNT_SETTINGS_POPUP = 'popup-mail-account-settings';
+
+/** Le dossier ouvert accompagne le compte : c'est lui que la reconstruction viserait. */
+export interface AccountSettingsInput {
+    account: MailAccount;
+    /** Nom du dossier sélectionné, ou `null` si aucun — la maintenance est alors sans objet. */
+    folderName: string | null;
+}
+
+/**
+ * Ce que la popup a fait, plutôt qu'un simple « enregistré » : la reconstruction
+ * du cache appartient à l'appelant, qui seul tient la liste des messages.
+ */
+export type AccountSettingsResult = 'saved' | 'reset' | null;
 
 /**
  * Per-mailbox settings, opened from that account's options panel. Distinct from
@@ -29,19 +43,34 @@ export const ACCOUNT_SETTINGS_POPUP = 'popup-mail-account-settings';
  */
 export function AccountSettingsPopup() {
     const [account, setAccount] = useState<MailAccount | null>(null);
+    const [folderName, setFolderName] = useState<string | null>(null);
     const [intervalMinutes, setIntervalMinutes] = useState(String(MAIL_SYNC_INTERVAL_DEFAULT_MINUTES));
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    function handleOpen(input: MailAccount | null): void {
+    function handleOpen(input: AccountSettingsInput | null): void {
         if (!input) return;
-        setAccount(input);
-        setIntervalMinutes(String(input.syncIntervalMinutes));
+        setAccount(input.account);
+        setFolderName(input.folderName);
+        setIntervalMinutes(String(input.account.syncIntervalMinutes));
         setError(null);
     }
 
-    function close(saved: boolean): void {
-        ClosePopup(ACCOUNT_SETTINGS_POPUP, saved);
+    function close(result: AccountSettingsResult): void {
+        ClosePopup(ACCOUNT_SETTINGS_POPUP, result);
+    }
+
+    /**
+     * La reconstruction elle-même est confiée à l'appelant : elle vide la liste
+     * affichée et la recharge, deux choses dont cette popup n'a pas la main.
+     */
+    async function requestReset(): Promise<void> {
+        const confirmed = await OpenPopup<boolean>(MAIL_CONFIRM_POPUP, {
+            title: 'Reconstruire le cache de ce dossier ?',
+            message: `Le cache local de « ${folderName} » sera vidé puis retéléchargé depuis le serveur. Rien n’est touché côté boîte mail, mais l’opération est plus lente qu’une relève.`,
+            confirmLabel: 'Reconstruire'
+        });
+        if (confirmed) close('reset');
     }
 
     async function save(): Promise<void> {
@@ -59,7 +88,7 @@ export function AccountSettingsPopup() {
                 securityTier: account.securityTier,
                 syncIntervalMinutes: minutes
             });
-            close(true);
+            close('saved');
         } catch (e) {
             setError(humanizeError(e, 'Enregistrement impossible.'));
         } finally {
@@ -70,12 +99,12 @@ export function AccountSettingsPopup() {
     const guarded = account?.securityTier === 'guarded';
 
     return (
-        <Popup<MailAccount | null>
+        <Popup<AccountSettingsInput | null>
             id={ACCOUNT_SETTINGS_POPUP}
             title={account ? `Paramètres — ${account.displayName}` : 'Paramètres de la boîte'}
             width={460}
             onInputChange={handleOpen}
-            onClosePopup={() => close(false)}
+            onClosePopup={() => close(null)}
             onSubmit={() => void save()}
         >
             <div className={styles.form}>
@@ -93,7 +122,19 @@ export function AccountSettingsPopup() {
                 <p className={styles.fieldHint}>
                     {guarded
                         ? 'Cette boîte est protégée : elle n’est jamais relevée en tâche de fond et se synchronise à l’ouverture, une fois déverrouillée. Ce réglage ne s’y applique pas.'
-                        : `Fréquence de relève de cette boîte en tâche de fond, en minutes (de ${MAIL_SYNC_INTERVAL_MIN_MINUTES} à ${MAIL_SYNC_INTERVAL_MAX_MINUTES}). La précision réelle dépend du rythme de vérification du serveur — une valeur plus basse ne fera pas mieux que ce rythme.`}
+                        : `Fréquence de relève de cette boîte en tâche de fond, en minutes (de ${MAIL_SYNC_INTERVAL_MIN_MINUTES} à ${MAIL_SYNC_INTERVAL_MAX_MINUTES}). Chaque relève rapatrie les nouveaux messages et met à jour les plus récents — lus ailleurs, supprimés ailleurs. La précision réelle dépend du rythme de vérification du serveur : une valeur plus basse ne fera pas mieux que ce rythme.`}
+                </p>
+
+                <p className={styles.sectionLabel}>Maintenance</p>
+                <div className={styles.formRow}>
+                    <Button variant='danger' disabled={folderName === null} onClick={() => void requestReset()}>
+                        {folderName === null ? 'Reconstruire le cache' : `Reconstruire le cache de « ${folderName} »`}
+                    </Button>
+                </div>
+                <p className={styles.fieldHint}>
+                    {folderName === null
+                        ? 'Ouvrez un dossier pour pouvoir reconstruire son cache.'
+                        : 'Vide le cache local du dossier ouvert et le retélécharge en entier. Réservé aux cas où l’affichage a durablement divergé de la boîte : la relève ordinaire suffit le reste du temps.'}
                 </p>
 
                 {error && <p className={styles.status}>{error}</p>}

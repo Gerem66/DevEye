@@ -85,7 +85,14 @@ export async function mailOAuthRoutes(app: FastifyInstance, { db, crypt, audit }
                     proxy: null
                 };
 
-                const cipher = cipherForTier(db, crypt, claims.userId, claims.sessionId, claims.securityTier);
+                const cipher = await cipherForTier(
+                    db,
+                    crypt,
+                    claims.workspaceId,
+                    claims.userId,
+                    claims.sessionId,
+                    claims.securityTier
+                );
 
                 const account = await db.mailAccounts.create({
                     userId: claims.userId,

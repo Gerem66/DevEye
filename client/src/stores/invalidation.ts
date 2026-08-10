@@ -25,6 +25,10 @@ export type ResourceKey =
     | 'cloudSync.listShares'
     | 'mail.accountCount'
     | 'mail.accountList'
+    /** L'arborescence du compte ouvert — c'est elle qui porte les compteurs de non-lus. */
+    | 'mail.folderList'
+    /** La tête de liste du dossier ouvert. Fusionnée, jamais rechargée en entier : voir `Features/Mail/index.tsx`. */
+    | 'mail.messageList'
     | 'uptime.count'
     | 'uptime.list'
     | 'device.list'
@@ -68,7 +72,11 @@ const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
     notes: ['note.count', 'note.list'],
     password: ['password.count', 'password.list'],
     cloudsync: ['cloudSync.listShares'],
-    mail: ['mail.accountCount', 'mail.accountList'],
+    // La relève de fond ne bouge pas que les cartes de comptes : elle fait entrer
+    // des messages, corrige des drapeaux et retire des lignes disparues. Sans les
+    // deux dernières clés, seule la date « il y a X min » se rafraîchissait, et
+    // une boîte laissée ouverte mentait jusqu'au prochain clic.
+    mail: ['mail.accountCount', 'mail.accountList', 'mail.folderList', 'mail.messageList'],
     uptime: ['uptime.count', 'uptime.list'],
     devices: ['device.list'],
     monitoring: ['device.list'],

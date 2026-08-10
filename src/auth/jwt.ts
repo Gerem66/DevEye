@@ -160,6 +160,8 @@ export interface MailAttachmentClaims {
     messageId: number;
     attachmentId: string;
     userId: number;
+    /** Espace qui porte le compte : c'est lui qui cloisonne la lecture et qui indexe la clé, pas l'utilisateur. */
+    workspaceId: number;
     sessionId: string;
 }
 
@@ -182,6 +184,7 @@ export async function verifyMailAttachmentToken(token: string): Promise<MailAtta
             typeof payload.messageId !== 'number' ||
             typeof payload.attachmentId !== 'string' ||
             typeof payload.userId !== 'number' ||
+            typeof payload.workspaceId !== 'number' ||
             typeof payload.sessionId !== 'string'
         ) {
             return null;
@@ -190,6 +193,7 @@ export async function verifyMailAttachmentToken(token: string): Promise<MailAtta
             messageId: payload.messageId,
             attachmentId: payload.attachmentId,
             userId: payload.userId,
+            workspaceId: payload.workspaceId,
             sessionId: payload.sessionId
         };
     } catch {

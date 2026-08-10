@@ -16,9 +16,39 @@ import type Encryption from './Encryption';
  * only ever reach "open"-tier accounts — `mail_accounts.listSyncDue` already
  * filters to those; a "guarded" account's cipher needs a live session unlock
  * and is structurally unreachable here, by design (see `Docs/SECURITY_MODEL.md`).
- * Guarded accounts sync on demand instead, via `mail.folderSync` during a live,
- * unlocked WS session.
+ * Guarded accounts sync on demand instead, during a live unlocked WS session:
+ * `mail.folderList` et `mail.messageList` relèvent à l'ouverture, et le bouton
+ * de relève appelle `mail.folderSync`.
+ *
+ * Chaque passage fait deux choses, et pas une : rapatrier les messages arrivés,
+ * et réconcilier la fenêtre récente déjà en cache (drapeaux, disparus). Sans la
+ * seconde, une boîte lue depuis un téléphone dérivait sans fin — voir
+ * {@link syncOneFolder}.
  */
+
+/**
+ * `work`, mais abandonnée si l'échéance passe avant elle.
+ *
+ * La promesse sous-jacente n'est pas annulable — IMAP continuera jusqu'à ce que
+ * ses propres délais mordent — mais on cesse de l'attendre, ce qui est tout
+ * l'objet : la place qu'elle occupait dans la rotation est rendue. Une écriture
+ * tardive de la relève abandonnée reste inoffensive, le cache s'écrivant par
+ * upsert idempotent.
+ */
+async function withDeadline<T>(work: Promise<T>, deadline: number, message: string): Promise<T> {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+        return await Promise.race([
+            work,
+            new Promise<never>((_, reject) => {
+                timer = setTimeout(() => reject(new Error(message)), Math.max(0, deadline - Date.now()));
+                timer.unref();
+            })
+        ]);
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+}
 
 interface SyncDeps {
     db: Database;
@@ -80,33 +110,60 @@ export class MailSyncService {
         }
     }
 
-    /** Sync one account's folders + each folder's new messages. Never throws. */
+    /**
+     * Sync one account's folders + each folder's new messages. Never throws.
+     *
+     * Sous échéance, parce que `inFlight` protège du double traitement mais ne
+     * rend jamais la main : une connexion suspendue retirait le compte de la
+     * rotation pour de bon, sans erreur enregistrée ni ligne de log — sa seule
+     * trace était une date de dernière relève qui vieillissait. Passé le délai,
+     * la relève est abandonnée et l'échec consigné comme n'importe quel autre,
+     * ce qui la fait simplement réessayer au tour suivant.
+     */
     async syncOne(accountId: number): Promise<void> {
         if (this.inFlight.has(accountId)) return;
         this.inFlight.add(accountId);
+        const deadline = Date.now() + env.MAIL_SYNC_ACCOUNT_TIMEOUT_SECONDS * 1000;
         try {
             const row = await this.deps.db.mailAccounts.findByIdUnscoped(accountId);
             if (!row || row.enabled !== 1 || row.security_tier !== 'open') return;
             const cipher = this.cipherFor(row.workspace_id);
             try {
                 const credentials = await decryptCredentials(cipher, row.credentials_enc);
-                const folders = await syncAccountFolders(this.deps.db, cipher, row, credentials);
+                const folders = await withDeadline(
+                    syncAccountFolders(this.deps.db, cipher, row, credentials),
+                    deadline,
+                    'Relève interrompue : la liste des dossiers n’a pas répondu à temps'
+                );
                 beginAccountSync(accountId, folders.length);
+                let moved = 0;
                 try {
                     for (const folder of folders) {
-                        await syncOneFolder(this.deps.db, cipher, row, credentials, folder, (done, estimatedTotal) =>
-                            reportFolderProgress(accountId, done / estimatedTotal)
+                        const outcome = await withDeadline(
+                            syncOneFolder(this.deps.db, cipher, row, credentials, folder, (done, estimatedTotal) =>
+                                reportFolderProgress(accountId, done / estimatedTotal)
+                            ),
+                            deadline,
+                            `Relève interrompue : le dossier « ${folder.imap_path} » n'a pas répondu à temps`
                         );
+                        moved += outcome.newCount + outcome.changedCount + outcome.removedCount;
                         markFolderSynced(accountId);
                     }
                 } finally {
                     endAccountSync(accountId);
                 }
                 await this.deps.db.mailAccounts.recordSync(row.id, Math.floor(Date.now() / 1000), null);
-                // Une synchronisation réussie a pu faire entrer de nouveaux
-                // messages : c'est le seul moment où le contenu a bougé sans
-                // qu'aucun membre n'ait rien demandé.
-                this.deps.live?.changed(row.workspace_id, ['mail'], null);
+                this.deps.logger.debug({ accountId, moved }, 'Mail account synced');
+                // Une synchronisation a pu faire entrer des messages, en corriger
+                // les drapeaux ou en retirer : c'est le seul moment où le contenu
+                // bouge sans qu'aucun membre n'ait rien demandé.
+                //
+                // Sous condition, parce que c'est la seule source de
+                // rafraîchissement de la vue ouverte : diffuser à chaque relève
+                // ferait resolliciter la liste de tout client connecté toutes les
+                // dix minutes par compte, pour rien. Le débit de l'événement doit
+                // rester celui des messages, pas celui de l'horloge.
+                if (moved > 0) this.deps.live?.changed(row.workspace_id, ['mail'], null);
             } catch (e) {
                 const message = e instanceof Error ? e.message : String(e);
                 this.deps.logger.warn({ accountId, err: message }, 'Mail account sync failed');

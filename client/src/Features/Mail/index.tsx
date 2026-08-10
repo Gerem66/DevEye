@@ -7,7 +7,7 @@ import { invalidate, onResourceChange } from '@/stores/invalidation';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import AccountPanel from './AccountPanel';
 import AccountPopup, { ACCOUNT_POPUP, type AccountPopupResult } from './AccountPopup';
-import AccountSettingsPopup, { ACCOUNT_SETTINGS_POPUP } from './AccountSettingsPopup';
+import AccountSettingsPopup, { ACCOUNT_SETTINGS_POPUP, type AccountSettingsResult } from './AccountSettingsPopup';
 import ComposePopup, { COMPOSE_POPUP, type ComposeInput } from './ComposePopup';
 import ConfirmPopup, { MAIL_CONFIRM_POPUP } from './ConfirmPopup';
 import MailSettingsPopup, { MAIL_SETTINGS_POPUP } from './MailSettingsPopup';
@@ -16,6 +16,8 @@ import MessageList from './MessageList';
 import MessagePopup from './MessagePopup';
 import { humanizeError, withSecrecy, withSettingsDefaults, ws } from './api';
 import styles from './style.module.css';
+
+import { MAIL_MESSAGE_PAGE_SIZE } from 'deveye-types';
 
 import type {
     MailAccount,
@@ -27,7 +29,11 @@ import type {
 } from 'deveye-types';
 import type { FeatureProps } from '../types';
 
-const MESSAGE_PAGE_SIZE = 50;
+/**
+ * Partagée avec le serveur, qui réconcilie exactement cette fenêtre à chaque
+ * relève : la page qu'on affiche sans défiler est celle qu'il garde honnête.
+ */
+const MESSAGE_PAGE_SIZE = MAIL_MESSAGE_PAGE_SIZE;
 /** Envelopes pulled from IMAP in one go when the local cache runs out. */
 const BACKFILL_BATCH_SIZE = 100;
 /**
@@ -42,6 +48,26 @@ const SEARCH_RESULT_LIMIT = 200;
 /** Page cursor pointing just past `message`, or null when there is no row to resume from. */
 function cursorOf(message: MailMessageSummary | undefined): MailMessageCursor | null {
     return message ? { date: message.date, id: message.id } : null;
+}
+
+/**
+ * Fusionne une première page fraîchement relue dans la liste déjà affichée.
+ *
+ * La page 0 **est** la tête de liste : elle remplace donc ce qui était là
+ * (drapeaux réconciliés, lignes disparues, messages arrivés), et tout ce qui est
+ * plus ancien que sa dernière ligne est conservé intact — c'est ce qui préserve
+ * les pages déjà déroulées et, avec elles, la position de défilement. Les lignes
+ * gardent leur `id`, donc seule celles qui ont réellement changé se repeignent.
+ */
+function mergeHead(previous: MailMessageSummary[], head: MailMessageSummary[]): MailMessageSummary[] {
+    const boundary = cursorOf(head[head.length - 1]);
+    // Une page courte veut dire que le cache tient tout entier dans cette tête :
+    // ce que `previous` a en plus n'existe plus, il n'y a rien à conserver.
+    if (boundary === null || head.length < MESSAGE_PAGE_SIZE) return head;
+    return [
+        ...head,
+        ...previous.filter((m) => m.date < boundary.date || (m.date === boundary.date && m.id < boundary.id))
+    ];
 }
 
 export default function Mail(_props: FeatureProps) {
@@ -67,13 +93,21 @@ export default function Mail(_props: FeatureProps) {
     const [folders, setFolders] = useState<MailFolder[]>([]);
     const [foldersLoading, setFoldersLoading] = useState(false);
     const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
+    const selectedFolderIdRef = useRef<number | null>(null);
+    selectedFolderIdRef.current = selectedFolderId;
 
     const [messages, setMessages] = useState<MailMessageSummary[]>([]);
     const [nextCursor, setNextCursor] = useState<MailMessageCursor | null>(null);
     /** The folder has no older mail left on the server — the scroll can stop. */
     const [reachedFolderStart, setReachedFolderStart] = useState(false);
     const [messagesLoading, setMessagesLoading] = useState(false);
-    /** A folder is being wiped and re-pulled from IMAP. */
+    // Lus par le rafraîchissement de fond, qui ne doit dépendre d'aucune closure :
+    // il est appelé par un abonnement, longtemps après le rendu qui l'a créé.
+    const messagesRef = useRef<MailMessageSummary[]>([]);
+    messagesRef.current = messages;
+    const messagesLoadingRef = useRef(false);
+    messagesLoadingRef.current = messagesLoading;
+    /** Une relève du dossier ouvert est en cours (bouton de rafraîchissement). */
     const [refreshing, setRefreshing] = useState(false);
     const messageColumnRef = useRef<HTMLDivElement>(null);
 
@@ -223,6 +257,28 @@ export default function Mail(_props: FeatureProps) {
     }, [selectedAccountId, loadFolders]);
 
     /**
+     * Relit l'arborescence sans toucher à la sélection — c'est ce qui remet les
+     * compteurs de non-lus d'aplomb après une relève de fond.
+     *
+     * Pas `loadFolders`, qui retombe d'office sur la boîte de réception et
+     * déplacerait l'utilisateur à chaque tick ; pas de `foldersLoading` non plus,
+     * un rafraîchissement de fond n'ayant pas à remplacer la liste par
+     * « Chargement… ». Et pas de `withSecrecy` : un rafraîchissement que personne
+     * n'a demandé ne doit jamais faire surgir l'invite de déverrouillage.
+     */
+    const refreshFolders = useCallback(async () => {
+        const accountId = selectedAccountIdRef.current;
+        if (accountId === null) return;
+        try {
+            const res = await ws.send('mail.folderList', { accountId });
+            if (selectedAccountIdRef.current !== accountId) return;
+            setFolders(res.folders);
+        } catch {
+            // On garde l'arborescence affichée : elle reste vraie à un tick près.
+        }
+    }, []);
+
+    /**
      * One page of the local cache. When the cache runs dry (`nextCursor` comes
      * back null) that isn't necessarily the end of the mailbox — only the end of
      * what has been pulled so far — so this reaches past it once, backfilling an
@@ -280,6 +336,64 @@ export default function Mail(_props: FeatureProps) {
     }, [selectedFolderId, loadMessages]);
 
     /**
+     * Rafraîchissement du dossier ouvert : une seule page 0, fusionnée en tête.
+     *
+     * `nextCursor` et `reachedFolderStart` ne bougent pas — ils décrivent la
+     * queue de la liste, que cette relecture ne touche pas. C'est le pendant
+     * client de la réconciliation serveur : ce qu'elle vient de corriger tient
+     * précisément dans cette page.
+     */
+    const refreshMessageHead = useCallback(async () => {
+        const folderId = selectedFolderIdRef.current;
+        if (folderId === null) return;
+        // Une page est déjà en vol : elle écrit `messages` aussi, et la fusion
+        // partirait d'un état qu'elle est en train de remplacer.
+        if (messagesLoadingRef.current) return;
+        // Rien à préserver : le chemin normal (avec son backfill) est plus juste
+        // qu'une fusion, et il remet `nextCursor` d'aplomb.
+        if (messagesRef.current.length === 0) {
+            void loadMessages(folderId, null);
+            return;
+        }
+        try {
+            const page = await ws.send('mail.messageList', { folderId, cursor: null, limit: MESSAGE_PAGE_SIZE });
+            if (selectedFolderIdRef.current !== folderId) return;
+            setMessages((prev) => mergeHead(prev, page.messages));
+            // La fiche ouverte doit porter les mêmes drapeaux que sa ligne.
+            setSelectedMessage((prev) => {
+                if (!prev) return prev;
+                const fresh = page.messages.find((m) => m.id === prev.id);
+                return fresh ? { ...prev, flags: fresh.flags } : prev;
+            });
+        } catch {
+            // Ce qui est à l'écran reste valable : pas de bandeau d'erreur pour un
+            // rafraîchissement que l'utilisateur n'a pas demandé.
+        }
+    }, [loadMessages]);
+
+    // Le signal `live.changed`, mais pour ce qu'on est en train de lire. Sans ces
+    // deux abonnements, la relève de fond ne rafraîchissait que les cartes de
+    // comptes : la liste ouverte gardait ses messages, ses drapeaux et ses
+    // compteurs jusqu'à ce qu'on change de dossier.
+    useEffect(() => onResourceChange('mail.folderList', () => void refreshFolders()), [refreshFolders]);
+    useEffect(() => onResourceChange('mail.messageList', () => void refreshMessageHead()), [refreshMessageHead]);
+
+    // Les `live.changed` émis pendant une coupure de socket ne sont annoncés à
+    // personne, et la reconnexion ne fait que rétablir le lien. Une relecture au
+    // retour, donc — sans quoi une veille de la machine laisse la vue figée sur
+    // l'état d'avant.
+    useEffect(
+        () =>
+            ws.onStateChange((state) => {
+                if (state !== 'open') return;
+                void reloadAccounts();
+                void refreshFolders();
+                void refreshMessageHead();
+            }),
+        [reloadAccounts, refreshFolders, refreshMessageHead]
+    );
+
+    /**
      * Debounced search over the whole folder cache. It has to be a server round
      * trip rather than a filter over `messages`: that array only holds the pages
      * scrolled so far, and the envelopes are encrypted at rest, so only the
@@ -332,27 +446,55 @@ export default function Mail(_props: FeatureProps) {
     }, [search, selectedFolderId]);
 
     /**
-     * A real refresh: the folder's cache is dropped server-side and rebuilt
-     * from the mailbox as it stands now, then the list is reloaded from the
-     * top. Deliberately not a reconciliation — when the cache and the mailbox
-     * have drifted, starting over is the only outcome that's predictable.
+     * Relève douce du dossier ouvert, à la demande : côté serveur, la même passe
+     * que la synchro de fond — les arrivées, plus la réconciliation des drapeaux
+     * et des disparus sur la fenêtre récente — puis la tête de liste est fusionnée
+     * ici. Rien n'est jeté : la position de défilement et les pages déjà déroulées
+     * survivent, et l'aller-retour IMAP se compte en un fetch plutôt qu'en deux
+     * cents enveloppes.
      */
-    const resetFolder = useCallback(async () => {
-        if (selectedFolderId === null || refreshing) return;
+    const syncFolder = useCallback(async () => {
+        const folderId = selectedFolderIdRef.current;
+        if (folderId === null || refreshing) return;
         setRefreshing(true);
         setError(null);
         try {
-            await withSecrecy(() => ws.send('mail.folderReset', { folderId: selectedFolderId }));
+            await withSecrecy(() => ws.send('mail.folderSync', { folderId }));
+            await refreshMessageHead();
+            await refreshFolders();
+        } catch (e) {
+            setError(humanizeError(e, 'Relève impossible.'));
+        } finally {
+            setRefreshing(false);
+        }
+    }, [refreshing, refreshMessageHead, refreshFolders]);
+
+    /**
+     * La réparation de dernier recours : le cache du dossier est jeté côté serveur
+     * et reconstruit sur la boîte telle qu'elle est, puis la liste repart du haut.
+     *
+     * Ce n'est plus le geste ordinaire — {@link syncFolder} l'est — mais il reste
+     * le seul à pouvoir remettre d'aplomb ce qui a dérivé au-delà de la fenêtre
+     * que la relève réconcilie. Les lignes changent d'`id` en repassant, donc la
+     * fusion de tête ne s'y applique pas : on recharge vraiment.
+     */
+    const resetFolder = useCallback(async () => {
+        const folderId = selectedFolderIdRef.current;
+        if (folderId === null || refreshing) return;
+        setRefreshing(true);
+        setError(null);
+        try {
+            await withSecrecy(() => ws.send('mail.folderReset', { folderId }));
             setMessages([]);
             setNextCursor(null);
             setReachedFolderStart(false);
-            await loadMessages(selectedFolderId, null);
+            await loadMessages(folderId, null);
         } catch (e) {
             setError(humanizeError(e, 'Rechargement impossible.'));
         } finally {
             setRefreshing(false);
         }
-    }, [selectedFolderId, refreshing, loadMessages]);
+    }, [refreshing, loadMessages]);
 
     /*
      * The paginated list and the search results are two views of the same rows,
@@ -477,10 +619,15 @@ export default function Mail(_props: FeatureProps) {
 
     const openAccountSettings = useCallback(
         async (account: MailAccount) => {
-            const saved = await OpenPopup<boolean>(ACCOUNT_SETTINGS_POPUP, account);
-            if (saved) await reloadAccounts();
+            const folderId = selectedFolderIdRef.current;
+            const result = await OpenPopup<AccountSettingsResult>(ACCOUNT_SETTINGS_POPUP, {
+                account,
+                folderName: folders.find((f) => f.id === folderId)?.name ?? null
+            });
+            if (result === 'saved') await reloadAccounts();
+            else if (result === 'reset') await resetFolder();
         },
-        [reloadAccounts]
+        [reloadAccounts, resetFolder, folders]
     );
 
     const toggleAccountEnabled = useCallback(
@@ -537,8 +684,6 @@ export default function Mail(_props: FeatureProps) {
     // avoid. Only `messages` and `selectedId` may move a row now.
     const openMessageIdRef = useRef<number | null>(null);
     openMessageIdRef.current = openMessageId;
-    const selectedFolderIdRef = useRef<number | null>(null);
-    selectedFolderIdRef.current = selectedFolderId;
     const nextCursorRef = useRef<MailMessageCursor | null>(null);
     nextCursorRef.current = nextCursor;
 
@@ -728,7 +873,7 @@ export default function Mail(_props: FeatureProps) {
                             showList={showAccountList}
                             onShowList={() => setShowAccountList(true)}
                             onDeleteAccount={(a) => void deleteAccount(a)}
-                            onRefreshFolder={() => void resetFolder()}
+                            onRefreshFolder={() => void syncFolder()}
                             refreshingFolder={refreshing}
                             onOpenAccountSettings={(a) => void openAccountSettings(a)}
                         />

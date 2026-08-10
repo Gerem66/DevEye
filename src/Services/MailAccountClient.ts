@@ -139,6 +139,13 @@ async function withImap<T>(auth: ResolvedAuth, fn: (client: ImapFlow) => Promise
         doSTARTTLS: implicitTls ? undefined : true,
         auth: auth.imapAuth,
         proxy: auth.imapProxy ?? undefined,
+        // Délais resserrés sur ceux d'imapflow (90 s / 16 s / 5 min). La relève de
+        // fond n'a que `MAIL_SYNC_CONCURRENCY` places : un serveur qui ne répond
+        // plus en immobilisait une cinq minutes durant, pendant lesquelles les
+        // autres boîtes attendaient leur tour pour rien.
+        connectionTimeout: 30_000,
+        greetingTimeout: 15_000,
+        socketTimeout: 60_000,
         logger: false
     };
     const client = new ImapFlow(options);
@@ -302,10 +309,48 @@ function mapFetchedMessage(msg: FetchMessageObject): RemoteEnvelope {
 
 const FETCH_QUERY = { uid: true, envelope: true, flags: true, bodyStructure: true, internalDate: true } as const;
 
+/** Réconciliation : les drapeaux et rien d'autre — l'enveloppe est déjà en cache et, elle, ne change jamais. */
+const FLAGS_QUERY = { uid: true, flags: true } as const;
+
+/** Drapeaux relus sur une fenêtre déjà en cache : ni enveloppe, ni bodyStructure. */
+export interface RemoteFlags {
+    uid: number;
+    seen: boolean;
+    flagged: boolean;
+    answered: boolean;
+}
+
+/** Fenêtre du cache à relire, bornes incluses. */
+export interface ReconcileWindow {
+    fromUid: number;
+    toUid: number;
+}
+
+export interface SyncFolderOptions {
+    credentials: MailCredentials;
+    imapPath: string;
+    sinceUid: number | null;
+    initialLimit: number;
+    /**
+     * Fenêtre déjà en cache à relire au passage. Même connexion et même verrou
+     * de boîte que le fetch avant : ouvrir la boîte est le coût dominant, la
+     * relecture des drapeaux n'ajoute qu'un aller-retour dessus.
+     */
+    reconcile?: ReconcileWindow | null;
+    onTokenRefreshed?: TokenRefreshCallback;
+    onProgress?: (done: number, estimatedTotal: number) => void;
+}
+
 export interface FolderSyncResult {
     /** Compared against the cached value by the caller; a change invalidates the whole folder cache. */
     uidValidity: number;
     messages: RemoteEnvelope[];
+    /**
+     * Ce que le serveur possède **encore** dans la fenêtre demandée. `null`
+     * quand aucune réconciliation n'a été demandée — à ne pas confondre avec
+     * `[]`, qui veut dire « plus rien de cette fenêtre n'existe ».
+     */
+    reconciled: RemoteFlags[] | null;
 }
 
 /**
@@ -320,15 +365,21 @@ export interface FolderSyncResult {
  * messages leave gaps IMAP doesn't report ahead of time), so progress can
  * jump to 1 on the last message rather than creeping up to it; still the
  * finest-grained signal available without a second round-trip just to count.
+ *
+ * Avec `reconcile`, la fenêtre déjà en cache est relue au passage : un fetch de
+ * drapeaux dans la même boîte déjà ouverte, dont le caller tire ce qui a changé
+ * et ce qui a disparu. C'est ce qui rend la relève de fond capable d'apprendre
+ * autre chose que l'arrivée d'un message.
  */
-export async function syncFolder(
-    credentials: MailCredentials,
-    imapPath: string,
-    sinceUid: number | null,
-    initialLimit: number,
-    onTokenRefreshed?: TokenRefreshCallback,
-    onProgress?: (done: number, estimatedTotal: number) => void
-): Promise<FolderSyncResult> {
+export async function syncFolder({
+    credentials,
+    imapPath,
+    sinceUid,
+    initialLimit,
+    reconcile = null,
+    onTokenRefreshed,
+    onProgress
+}: SyncFolderOptions): Promise<FolderSyncResult> {
     const auth = await resolveAuth(credentials, onTokenRefreshed);
     return withMailbox(auth, imapPath, async (client) => {
         const box = requireMailbox(client);
@@ -357,7 +408,36 @@ export async function syncFolder(
                 onProgress?.(messages.length, estimatedTotal);
             }
         }
-        return { uidValidity: Number(box.uidValidity), messages };
+
+        // Après le fetch avant, et sans recouvrement avec lui : la fenêtre à
+        // réconcilier est par construction sous `sinceUid`. `onProgress` continue
+        // donc de ne compter que les nouveaux messages, et la barre de progression
+        // garde exactement le sens qu'elle avait.
+        let reconciled: RemoteFlags[] | null = null;
+        if (reconcile) {
+            // Une boîte vidée côté serveur ne rend rien : c'est une réponse, pas
+            // une absence de réponse — le cache doit se vider avec elle.
+            reconciled = [];
+            if (box.exists > 0) {
+                // Une plage `a:b` ne rend que les UID qui existent encore
+                // (contrairement à `n:*`, qui rend toujours au moins un message) :
+                // les absents de la réponse sont exactement ceux que le serveur
+                // n'a plus.
+                for await (const msg of client.fetch(`${reconcile.fromUid}:${reconcile.toUid}`, FLAGS_QUERY, {
+                    uid: true
+                })) {
+                    const flags = msg.flags ?? new Set<string>();
+                    reconciled.push({
+                        uid: msg.uid,
+                        seen: flags.has('\\Seen'),
+                        flagged: flags.has('\\Flagged'),
+                        answered: flags.has('\\Answered')
+                    });
+                }
+            }
+        }
+
+        return { uidValidity: Number(box.uidValidity), messages, reconciled };
     });
 }
 

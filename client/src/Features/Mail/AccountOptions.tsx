@@ -20,6 +20,11 @@ interface AccountOptionsProps {
  * Actions only. Anything with a value to set goes behind the settings button,
  * into `AccountSettingsPopup` — a strip of buttons is the wrong place for a
  * field, and there will be more than one setting to hold.
+ *
+ * Le rafraîchissement est une relève, pas une reconstruction : il n'attend pas
+ * le prochain passage de la synchro de fond, mais fait le même travail qu'elle.
+ * La reconstruction du cache, elle, vit derrière le bouton de paramètres — même
+ * icône, même endroit, deux gestes trop différents pour se ressembler.
  */
 export function AccountOptions({
     canRefresh,
@@ -44,8 +49,8 @@ export function AccountOptions({
                 <button
                     type='button'
                     className={styles.iconBtn}
-                    title='Vider le cache du dossier ouvert et le recharger depuis le serveur'
-                    aria-label='Vider le cache du dossier ouvert et le recharger depuis le serveur'
+                    title='Relever le dossier ouvert maintenant'
+                    aria-label='Relever le dossier ouvert maintenant'
                     disabled={!canRefresh || refreshing}
                     onClick={onRefresh}
                 >
