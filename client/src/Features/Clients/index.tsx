@@ -25,7 +25,7 @@ export default function Clients() {
     const { devices, loading, error, refresh } = useFleetDevices();
     const [showDownloadModal, setShowDownloadModal] = useState(false);
     const links = useLinkCodes(refresh);
-    const actions = useDeviceActions(devices, refresh);
+    const actions = useDeviceActions(refresh);
 
     // Archived devices are gone from management; they live (read-only) in
     // Monitoring for browsing their frozen history.

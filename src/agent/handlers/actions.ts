@@ -99,6 +99,11 @@ export async function handleServiceResult(
         description,
         metadata: { deviceId: s.device.id, serviceAction: action, ok, needsManualCommand: needsManualCommand ?? false }
     });
+    // Le résultat repart vers l'interface, comme celui d'une action système. Ne
+    // l'écrire qu'au journal d'audit revenait à ne rien dire à qui venait de
+    // cliquer : le démarrage automatique pouvait échouer sur l'appareil, la
+    // carte se contentait de revenir à son état d'avant, sans un mot.
+    s.hub.publishService({ deviceId: s.device.id, action, ok, needsManualCommand, error });
     ack(s, 1);
 }
 

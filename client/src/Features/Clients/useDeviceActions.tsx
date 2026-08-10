@@ -1,25 +1,69 @@
 import { useRef, useState } from 'react';
-import type { Device } from 'deveye-types';
+import { DEVICE_SERVICE_EVENT, type DeviceServicePush } from 'deveye-types';
 import { ws } from '@/api/ws';
 import { openInfo } from '@/Components/InfoPopup';
 import { startAgentUpdate, useAgentUpdates } from '@/stores/agentUpdates';
+import { acquireMetrics } from '@/stores/metricsSubscription';
 import styles from './Clients.module.css';
 
 type Target = { id: string; name: string } | null;
 
+/** Ce qu'une action de service a donné *sur l'appareil*, affiché sur sa carte. */
+export type DeviceNote = { id: string; tone: 'ok' | 'error'; message: string };
+
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Délai au-delà duquel on cesse d'attendre le verdict de l'agent.
+ *
+ * Une installation de service enchaîne plusieurs commandes système (`systemctl`,
+ * `launchctl`, `loginctl`), et une élévation attend une autorisation humaine sur
+ * la machine. Large, donc — mais fini : « l'agent n'a pas répondu » est une
+ * réponse, l'attente muette n'en est pas une.
+ */
+const SERVICE_RESULT_TIMEOUT = 20_000;
+
+/**
+ * Attend le résultat que l'agent renvoie pour l'action en cours, ou `null` au
+ * bout de {@link SERVICE_RESULT_TIMEOUT}.
+ *
+ * L'abonnement est pris **avant** l'envoi de la commande : l'agent peut répondre
+ * en quelques dizaines de millisecondes, et un abonnement pris après coup
+ * manquerait la réponse — l'échec redeviendrait silencieux.
+ */
+function awaitServiceResult(deviceId: string): {
+    result: Promise<DeviceServicePush | null>;
+    /** Abandon immédiat (la commande n'est jamais partie) : libère l'abonnement. */
+    cancel: () => void;
+} {
+    let finish: (value: DeviceServicePush | null) => void = () => {};
+    const result = new Promise<DeviceServicePush | null>((resolve) => {
+        const release = acquireMetrics(deviceId);
+        let settled = false;
+        finish = (value) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            off();
+            release();
+            resolve(value);
+        };
+        const off = ws.onMessage((msg) => {
+            if (msg.command !== DEVICE_SERVICE_EVENT || !msg.payload.ok) return;
+            const data = msg.payload.data as DeviceServicePush;
+            if (data.deviceId === deviceId) finish(data);
+        });
+        const timer = setTimeout(() => finish(null), SERVICE_RESULT_TIMEOUT);
+    });
+    return { result, cancel: () => finish(null) };
+}
 
 /**
  * All device-management actions for the Appareils page (approve/revoke/rename,
  * self-update, persistence & privileges, deletion), with their in-flight state.
  * Returned as one object so `DeviceCard` and the dialogs share it.
  */
-export function useDeviceActions(devices: Device[], refresh: () => Promise<void> | void) {
-    // Live device list read inside async handlers, to tell once a privilege change
-    // has actually been confirmed by the agent's next report.
-    const devicesRef = useRef(devices);
-    devicesRef.current = devices;
-
+export function useDeviceActions(refresh: () => Promise<void> | void) {
     // Refresh now, wait for the agent to apply the change and re-report its scope,
     // then refresh again — so a toggle/privilege only settles on the *confirmed*
     // state, never the merely-requested one. Shared by the service actions below.
@@ -34,6 +78,26 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
     const { isUpdating } = useAgentUpdates();
     // Which toggle (per device) is mid-change, so only that one shows a loader.
     const [serviceBusy, setServiceBusy] = useState<{ id: string; kind: 'autostart' | 'privilege' } | null>(null);
+    // Verdict de la dernière action de service, affiché **sur la carte visée**.
+    // Le bandeau d'erreur de la page vit tout en haut : sur une flotte, celui qui
+    // clique sur la dixième carte ne le voit jamais.
+    const [deviceNote, setDeviceNote] = useState<DeviceNote | null>(null);
+    const noteTimer = useRef<number | null>(null);
+    /**
+     * Pose le verdict. Une réussite s'efface d'elle-même — l'état confirmé est
+     * déjà lisible sur les bascules ; un échec reste, parce qu'il est la seule
+     * trace de ce qui s'est passé sur la machine.
+     */
+    const showNote = (note: DeviceNote | null) => {
+        if (noteTimer.current !== null) window.clearTimeout(noteTimer.current);
+        noteTimer.current = null;
+        setDeviceNote(note);
+        if (note?.tone === 'ok') {
+            noteTimer.current = window.setTimeout(() => {
+                setDeviceNote((current) => (current === note ? null : current));
+            }, 8000);
+        }
+    };
     // Dialog targets (the confirmation dialogs live in the page).
     const [deleteTarget, setDeleteTarget] = useState<Target>(null);
     const [deleting, setDeleting] = useState(false);
@@ -103,17 +167,43 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
 
     const setAutostart = async (id: string, enabled: boolean) => {
         setActionError(null);
+        showNote(null);
         setServiceBusy({ id, kind: 'autostart' });
+        // Abonné avant d'envoyer (voir `awaitServiceResult`).
+        const verdict = awaitServiceResult(id);
         try {
             await ws.send('device.setAutostart', { deviceId: id, enabled });
-            // Keep the loader on until the agent has applied the change and
-            // re-reported its scope, so the toggle only flips once it's confirmed.
-            await settle(3000);
         } catch (e) {
-            setActionError(e instanceof Error ? e.message : 'Action impossible.');
-        } finally {
+            verdict.cancel();
             setServiceBusy(null);
+            const message = e instanceof Error ? e.message : 'Action impossible.';
+            setActionError(message);
+            showNote({ id, tone: 'error', message });
+            return;
         }
+        const result = await verdict.result;
+        if (result === null) {
+            showNote({
+                id,
+                tone: 'error',
+                message: 'L’agent n’a pas répondu ; la modification n’est pas confirmée.'
+            });
+        } else if (!result.ok) {
+            showNote({ id, tone: 'error', message: result.error ?? 'L’appareil a refusé la modification.' });
+        } else {
+            showNote({
+                id,
+                tone: 'ok',
+                message: enabled
+                    ? 'Démarrage auto activé : l’agent est relancé sous le service.'
+                    : 'Démarrage auto désactivé.'
+            });
+        }
+        // La bascule ne se fie qu'à la portée *re-rapportée* par l'agent : après
+        // une activation il redémarre sous le service, on lui laisse le temps de
+        // se reconnecter avant de relire.
+        await settle(3000);
+        setServiceBusy(null);
     };
 
     // Show the guided fallback command (hybrid elevation): if no OS prompt appears
@@ -134,30 +224,50 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
 
     /**
      * Elevate / drop privileges — behaves exactly like the autostart toggle: a
-     * loader runs until the change is confirmed by the agent's next report. The
-     * agent restarts under the new scope, so we wait, refresh, then check the
-     * reported scope. Only if it *didn't* reach the target (no interactive session
-     * on the device → hybrid elevation) do we surface the manual command to run there.
+     * loader runs until the agent has said what happened.
+     *
+     * C'est l'agent qui tranche, et non plus une déduction : il annonce
+     * lui-même `needsManualCommand` quand aucune session interactive ne lui
+     * permet d'ouvrir la fenêtre d'autorisation. On lisait auparavant la portée
+     * re-rapportée quatre secondes plus tard, ce qui confondait « l'appareil a
+     * besoin de toi » avec « ça a échoué » — et, l'agent redémarrant sous sa
+     * nouvelle portée, avec « le rapport n'est pas encore arrivé ».
      */
     const changePrivilege = async (
         id: string,
         command: 'device.elevate' | 'device.dropPrivileges',
         title: string,
-        reached: (scope: string) => boolean,
+        successLabel: string,
         errorLabel: string
     ) => {
         setActionError(null);
+        showNote(null);
         setServiceBusy({ id, kind: 'privilege' });
+        const verdict = awaitServiceResult(id);
+        let manual: string;
         try {
-            const res = await ws.send(command, { deviceId: id });
-            await settle(4000);
-            const scope = devicesRef.current.find((d) => d.id === id)?.report?.agent?.serviceScope ?? 'none';
-            if (!reached(scope)) showManualCommand(title, res.manualCommand);
+            manual = (await ws.send(command, { deviceId: id })).manualCommand;
         } catch (e) {
-            setActionError(e instanceof Error ? e.message : errorLabel);
-        } finally {
+            verdict.cancel();
             setServiceBusy(null);
+            const message = e instanceof Error ? e.message : errorLabel;
+            setActionError(message);
+            showNote({ id, tone: 'error', message });
+            return;
         }
+        const result = await verdict.result;
+        if (result === null) {
+            showNote({ id, tone: 'error', message: "L’agent n’a pas répondu ; rien n'est confirmé." });
+        } else if (result.needsManualCommand) {
+            showNote({ id, tone: 'error', message: 'À autoriser sur l’appareil — commande affichée.' });
+            showManualCommand(title, manual);
+        } else if (!result.ok) {
+            showNote({ id, tone: 'error', message: result.error ?? errorLabel });
+        } else {
+            showNote({ id, tone: 'ok', message: successLabel });
+        }
+        await settle(4000);
+        setServiceBusy(null);
     };
 
     const elevateDevice = (id: string) =>
@@ -165,7 +275,7 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
             id,
             'device.elevate',
             'Élever l’agent en root',
-            (scope) => scope === 'system',
+            'Agent élevé en service système (root).',
             'Élévation impossible.'
         );
 
@@ -174,7 +284,7 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
             id,
             'device.dropPrivileges',
             'Rétrograder l’agent',
-            (scope) => scope !== 'system',
+            'Agent rétrogradé en service utilisateur.',
             'Rétrogradation impossible.'
         );
 
@@ -284,6 +394,7 @@ export function useDeviceActions(devices: Device[], refresh: () => Promise<void>
         actionError,
         isUpdating,
         serviceBusy,
+        deviceNote,
         deleteTarget,
         setDeleteTarget,
         deleting,

@@ -14,6 +14,7 @@ export function DeviceCard({ device, actions }: { device: Device; actions: Devic
     const serviceActive = actions.serviceBusy?.id === device.id;
     const autostartBusy = serviceActive && actions.serviceBusy?.kind === 'autostart';
     const rootBusy = serviceActive && actions.serviceBusy?.kind === 'privilege';
+    const note = actions.deviceNote?.id === device.id ? actions.deviceNote : null;
     // An update is worth offering when the agent runs an older build than this
     // interface (or the server advertises a newer signed binary).
     const updatable = device.online && agentUpdatable(device);
@@ -133,6 +134,13 @@ export function DeviceCard({ device, actions }: { device: Device; actions: Devic
                     </div>
                     {!device.online && (
                         <span className={styles.serviceOfflineHint}>Hors ligne — dernière configuration connue</span>
+                    )}
+                    {/* Le verdict de l'agent, là où on vient de cliquer. */}
+                    {note && (
+                        <span className={note.tone === 'ok' ? styles.serviceNoteOk : styles.serviceNoteError}>
+                            <span className={`icon ${note.tone === 'ok' ? 'icon-check-circle' : 'icon-x-circle'}`} />{' '}
+                            {note.message}
+                        </span>
                     )}
                 </div>
             )}

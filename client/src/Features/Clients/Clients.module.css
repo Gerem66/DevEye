@@ -427,6 +427,25 @@
     font-style: italic;
 }
 
+/* Verdict de la dernière action de service, rendu sur la carte visée : le
+   bandeau de la page est trop loin du bouton pour tenir lieu de réponse. */
+.serviceNoteOk,
+.serviceNoteError {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+.serviceNoteOk {
+    color: var(--success);
+}
+
+.serviceNoteError {
+    color: var(--danger);
+}
+
 /* Discreet "a newer build is available" note next to the agent version. */
 .updateNote {
     color: var(--accent);

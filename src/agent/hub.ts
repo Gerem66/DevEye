@@ -39,6 +39,7 @@ import {
     DEVICE_POWER_EVENT,
     DEVICE_PRESENCE_EVENT,
     DEVICE_REPORT_EVENT,
+    DEVICE_SERVICE_EVENT,
     DEVICE_TERM_EXIT_EVENT,
     DEVICE_TERM_OUTPUT_EVENT,
     METRICS_PUSH_EVENT,
@@ -80,6 +81,7 @@ import {
     type DevicePowerPush,
     type DevicePresence,
     type DeviceReport,
+    type DeviceServicePush,
     type DeviceTermExitPush,
     type DeviceTermOutputPush,
     type MetricSeriesPoint,
@@ -314,6 +316,11 @@ export class MonitorHub {
     /** Fan out a system power-action outcome to the device's subscribers. */
     publishPower(payload: DevicePowerPush): void {
         this.publishToSubscribers(payload.deviceId, DEVICE_POWER_EVENT, payload);
+    }
+
+    /** Fan out a persistence/privilege change outcome to the device's subscribers. */
+    publishService(payload: DeviceServicePush): void {
+        this.publishToSubscribers(payload.deviceId, DEVICE_SERVICE_EVENT, payload);
     }
 
     /** Ask a connected agent to enumerate its log sources. No-op if offline. */
