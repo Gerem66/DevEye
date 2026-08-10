@@ -1158,6 +1158,10 @@ pub fn run(cmd: &str, args: &[&str]) -> Option<String> {
 ///
 /// Également le bon choix quand un outil se plaint d'une partie de sa demande
 /// tout en répondant utilement au reste — le `ps` de BSD sur un alias de mot-clé.
+///
+/// Hors Windows : là-bas le balayage passe par `sysinfo` et plus aucune sonde ne
+/// l'appelle.
+#[cfg(not(target_os = "windows"))]
 fn run_unchecked(cmd: &str, args: &[&str]) -> Option<String> {
     run_timeout(cmd, args, PROBE_TIMEOUT).map(|o| o.stdout)
 }
@@ -1351,90 +1355,102 @@ fn pending_updates() -> Option<u32> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn parse_ps_line_reads_every_column() {
-        // pid pcpu pmem rss etimes nlwp user comm
-        let p = parse_ps_line_with(
-            "1234 12.5 3.2 524288 86400 14 gerem firefox",
-            PsLayout::Linux,
-        )
-        .unwrap();
-        assert_eq!(p.pid, 1234);
-        assert_eq!(p.cpu_percent, 12.5);
-        assert_eq!(p.mem_percent, 3.2);
-        assert_eq!(p.rss_bytes, 524288 * 1024);
-        assert_eq!(p.uptime_seconds, Some(86400));
-        assert_eq!(p.threads, Some(14));
-        assert_eq!(p.user.as_deref(), Some("gerem"));
-        assert_eq!(p.name, "firefox");
-    }
+    /// Analyse des lignes de `ps`, donc **hors Windows** : ni `ps` ni son
+    /// parseur n'y existent, et des tests non gardés les y référençaient — ce
+    /// que seule la CI Windows voyait. La `cfg` du module est désormais la même
+    /// que celle du code testé, si bien que les deux ne peuvent plus diverger.
+    #[cfg(not(target_os = "windows"))]
+    mod ps {
+        use super::*;
 
-    #[test]
-    fn parse_ps_line_keeps_names_containing_spaces() {
-        // `comm` is last, so anything after the user column belongs to the name.
-        let p = parse_ps_line_with("7 0.0 0.0 0 10 1 root kworker/0:1 -events", PsLayout::Linux)
+        #[test]
+        fn parse_ps_line_reads_every_column() {
+            // pid pcpu pmem rss etimes nlwp user comm
+            let p = parse_ps_line_with(
+                "1234 12.5 3.2 524288 86400 14 gerem firefox",
+                PsLayout::Linux,
+            )
             .unwrap();
-        assert_eq!(p.name, "kworker/0:1 -events");
-        assert_eq!(p.rss_bytes, 0);
-    }
+            assert_eq!(p.pid, 1234);
+            assert_eq!(p.cpu_percent, 12.5);
+            assert_eq!(p.mem_percent, 3.2);
+            assert_eq!(p.rss_bytes, 524288 * 1024);
+            assert_eq!(p.uptime_seconds, Some(86400));
+            assert_eq!(p.threads, Some(14));
+            assert_eq!(p.user.as_deref(), Some("gerem"));
+            assert_eq!(p.name, "firefox");
+        }
 
-    #[test]
-    fn parse_ps_line_rejects_malformed_rows() {
-        assert!(parse_ps_line_with("", PsLayout::Linux).is_none());
-        assert!(parse_ps_line_with("header garbage", PsLayout::Linux).is_none());
-        // Every column present but the command name.
-        assert!(
-            parse_ps_line_with("1234 12.5 3.2 524288 86400 14 gerem", PsLayout::Linux).is_none()
-        );
-    }
+        #[test]
+        fn parse_ps_line_keeps_names_containing_spaces() {
+            // `comm` is last, so anything after the user column belongs to the name.
+            let p =
+                parse_ps_line_with("7 0.0 0.0 0 10 1 root kworker/0:1 -events", PsLayout::Linux)
+                    .unwrap();
+            assert_eq!(p.name, "kworker/0:1 -events");
+            assert_eq!(p.rss_bytes, 0);
+        }
 
-    #[test]
-    fn parse_etime_handles_every_bsd_form() {
-        assert_eq!(parse_etime("05:30"), Some(330)); // mm:ss
-        assert_eq!(parse_etime("02:05:30"), Some(7530)); // hh:mm:ss
-        assert_eq!(parse_etime("3-02:05:30"), Some(266_730)); // dd-hh:mm:ss
-        assert_eq!(parse_etime("garbage"), Some(0));
-    }
+        #[test]
+        fn parse_ps_line_rejects_malformed_rows() {
+            assert!(parse_ps_line_with("", PsLayout::Linux).is_none());
+            assert!(parse_ps_line_with("header garbage", PsLayout::Linux).is_none());
+            // Every column present but the command name.
+            assert!(
+                parse_ps_line_with("1234 12.5 3.2 524288 86400 14 gerem", PsLayout::Linux)
+                    .is_none()
+            );
+        }
 
-    /// Disposition macOS réelle : sept colonnes, `etime` formaté, pas de `nlwp`.
-    #[test]
-    fn parse_ps_line_reads_the_bsd_layout() {
-        // pid %cpu %mem rss etime user ucomm
-        let p =
-            parse_ps_line_with("501 4.2 1.8 131072 02:05:30 gerem Finder", PsLayout::Bsd).unwrap();
-        assert_eq!(p.pid, 501);
-        assert_eq!(p.cpu_percent, 4.2);
-        assert_eq!(p.mem_percent, 1.8);
-        assert_eq!(p.rss_bytes, 131072 * 1024);
-        assert_eq!(p.uptime_seconds, Some(7530));
-        // BSD n'expose pas de compte de fils dans ce format.
-        assert_eq!(p.threads, None);
-        assert_eq!(p.user.as_deref(), Some("gerem"));
-        assert_eq!(p.name, "Finder");
-    }
+        #[test]
+        fn parse_etime_handles_every_bsd_form() {
+            assert_eq!(parse_etime("05:30"), Some(330)); // mm:ss
+            assert_eq!(parse_etime("02:05:30"), Some(7530)); // hh:mm:ss
+            assert_eq!(parse_etime("3-02:05:30"), Some(266_730)); // dd-hh:mm:ss
+            assert_eq!(parse_etime("garbage"), Some(0));
+        }
 
-    /// Les noms macOS contiennent couramment des espaces, et `ucomm` est en
-    /// dernier — tout ce qui suit l'utilisateur lui appartient.
-    #[test]
-    fn parse_ps_line_bsd_keeps_names_containing_spaces() {
-        let p = parse_ps_line_with(
-            "823 0.1 0.4 65536 3-02:05:30 _windowserver Google Chrome Helper",
-            PsLayout::Bsd,
-        )
-        .unwrap();
-        assert_eq!(p.name, "Google Chrome Helper");
-        assert_eq!(p.uptime_seconds, Some(266_730));
-        assert_eq!(p.user.as_deref(), Some("_windowserver"));
-    }
+        /// Disposition macOS réelle : sept colonnes, `etime` formaté, pas de `nlwp`.
+        #[test]
+        fn parse_ps_line_reads_the_bsd_layout() {
+            // pid %cpu %mem rss etime user ucomm
+            let p = parse_ps_line_with("501 4.2 1.8 131072 02:05:30 gerem Finder", PsLayout::Bsd)
+                .unwrap();
+            assert_eq!(p.pid, 501);
+            assert_eq!(p.cpu_percent, 4.2);
+            assert_eq!(p.mem_percent, 1.8);
+            assert_eq!(p.rss_bytes, 131072 * 1024);
+            assert_eq!(p.uptime_seconds, Some(7530));
+            // BSD n'expose pas de compte de fils dans ce format.
+            assert_eq!(p.threads, None);
+            assert_eq!(p.user.as_deref(), Some("gerem"));
+            assert_eq!(p.name, "Finder");
+        }
 
-    /// La troncature BSD à 79 colonnes (aucun tty attaché, cas launchd) vide la
-    /// colonne du nom. La ligne doit être rejetée, pas produire un processus
-    /// anonyme — c'est `-ww` qui empêche le cas de se produire.
-    #[test]
-    fn parse_ps_line_bsd_rejects_a_truncated_row() {
-        assert!(
-            parse_ps_line_with("823 0.1 0.4 65536 02:05:30 _windowserver", PsLayout::Bsd).is_none()
-        );
+        /// Les noms macOS contiennent couramment des espaces, et `ucomm` est en
+        /// dernier — tout ce qui suit l'utilisateur lui appartient.
+        #[test]
+        fn parse_ps_line_bsd_keeps_names_containing_spaces() {
+            let p = parse_ps_line_with(
+                "823 0.1 0.4 65536 3-02:05:30 _windowserver Google Chrome Helper",
+                PsLayout::Bsd,
+            )
+            .unwrap();
+            assert_eq!(p.name, "Google Chrome Helper");
+            assert_eq!(p.uptime_seconds, Some(266_730));
+            assert_eq!(p.user.as_deref(), Some("_windowserver"));
+        }
+
+        /// La troncature BSD à 79 colonnes (aucun tty attaché, cas launchd) vide la
+        /// colonne du nom. La ligne doit être rejetée, pas produire un processus
+        /// anonyme — c'est `-ww` qui empêche le cas de se produire.
+        #[test]
+        fn parse_ps_line_bsd_rejects_a_truncated_row() {
+            assert!(
+                parse_ps_line_with("823 0.1 0.4 65536 02:05:30 _windowserver", PsLayout::Bsd)
+                    .is_none()
+            );
+        }
     }
 
     #[test]
