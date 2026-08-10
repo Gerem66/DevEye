@@ -238,7 +238,14 @@ export async function registerWS(
                 // faire re-résoudre au moment de diffuser garde la diffusion
                 // entièrement synchrone — et fait que n'importe quelle commande
                 // répare un instantané périmé.
-                liveHub.rememberGrants(socket, scope.workspace.id, scope.features, accessEpochNow());
+                const epoch = accessEpochNow();
+                liveHub.rememberGrants(socket, scope.workspace.id, scope.features, epoch);
+                // Même dépôt pour le hub de supervision, et pour la même raison :
+                // sa diffusion (métriques, rapports, sortie de terminal, morceaux
+                // de fichiers) doit pouvoir se refuser sans rien attendre. Un
+                // administrateur garde le droit — la page Appareils porte sur la
+                // flotte entière, hors de tout rôle d'espace.
+                hub.rememberGrants(socket, scope.isAdmin || scope.features.has('devices'), epoch);
 
                 const assertAdmin = (): void => {
                     if (!scope.isAdmin) throw new FeatureError('forbidden', 'Réservé aux administrateurs');

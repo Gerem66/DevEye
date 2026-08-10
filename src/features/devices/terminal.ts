@@ -16,6 +16,7 @@ export const deviceTermOpenFeature: FeatureDefinition<
     typeof deviceTermOpen.output
 > = defineFeature({
     ...deviceTermOpen,
+    access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestTermOpen(row.id, {
@@ -42,6 +43,7 @@ export const deviceTermInputFeature: FeatureDefinition<
     typeof deviceTermInput.output
 > = defineFeature({
     ...deviceTermInput,
+    access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestTermInput(row.id, { sessionId: input.sessionId, data: input.data });
@@ -57,6 +59,7 @@ export const deviceTermResizeFeature: FeatureDefinition<
     typeof deviceTermResize.output
 > = defineFeature({
     ...deviceTermResize,
+    access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestTermResize(row.id, {
@@ -76,6 +79,7 @@ export const deviceTermCloseFeature: FeatureDefinition<
     typeof deviceTermClose.output
 > = defineFeature({
     ...deviceTermClose,
+    access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         // A close is best-effort: an offline agent has already torn down its PTYs.

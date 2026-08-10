@@ -26,6 +26,7 @@ export const deviceSetAutostartFeature: FeatureDefinition<
     typeof deviceSetAutostart.output
 > = defineFeature({
     ...deviceSetAutostart,
+    access: { admin: true },
     mutates: true,
     handler: async (ctx, input) => {
         const row = await authorizeOnlineDevice(ctx, input.deviceId);
@@ -48,6 +49,7 @@ export const deviceElevateFeature: FeatureDefinition<
     typeof deviceElevate.output
 > = defineFeature({
     ...deviceElevate,
+    access: { admin: true },
     mutates: true,
     handler: async (ctx, input) => {
         const row = await authorizeOnlineDevice(ctx, input.deviceId);
@@ -69,6 +71,7 @@ export const deviceDropPrivilegesFeature: FeatureDefinition<
     typeof deviceDropPrivileges.output
 > = defineFeature({
     ...deviceDropPrivileges,
+    access: { admin: true },
     mutates: true,
     handler: async (ctx, input) => {
         const row = await authorizeOnlineDevice(ctx, input.deviceId);

@@ -24,6 +24,7 @@ export const devicePowerFeature: FeatureDefinition<
     typeof devicePower.output
 > = defineFeature({
     ...devicePower,
+    access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestPower(row.id, { action: input.action }) ?? false;

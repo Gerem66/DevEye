@@ -90,6 +90,8 @@ import {
     type PackageProgressPush
 } from 'deveye-types';
 
+import { accessEpochNow } from '@/features/_access';
+
 /**
  * In-memory hub coordinating live monitoring between agent sockets (producers)
  * and authenticated user sockets (subscribers). Metrics are also persisted by
@@ -110,6 +112,23 @@ export class MonitorHub {
     private readonly syncSubscribers = new Map<number, Set<WebSocket>>();
     /** subscriber socket -> set of shareIds it watches (for cleanup). */
     private readonly socketShares = new Map<WebSocket, Set<number>>();
+    /**
+     * Droit de voir les appareils, par socket abonnée, estampillé de l'époque
+     * d'accès sous laquelle il a été résolu.
+     *
+     * Sans ça, un abonnement était acquis une fois pour toutes : la diffusion
+     * arrosait l'ensemble des sockets inscrites, et un utilisateur retiré d'un
+     * espace — ou dont le rôle venait de perdre `devices` — continuait de
+     * recevoir métriques, rapports, **sortie de terminal** et morceaux de
+     * fichiers jusqu'à sa déconnexion.
+     *
+     * Retenu ici plutôt que ré-résolu à la diffusion, exactement comme le fait
+     * `LiveHub` : `forWorkspace()` rend une promesse qui peut rejeter, et la
+     * diffusion doit rester entièrement synchrone. Une époque divergente vaut
+     * « aucun droit », jamais « les droits d'avant » — et n'importe quelle
+     * commande de l'utilisateur répare l'instantané.
+     */
+    private readonly grants = new Map<WebSocket, { allowed: boolean; epoch: number }>();
 
     agentOnline(deviceId: string, socket: WebSocket): void {
         // One live session per device. Without this, a superseded socket (fast
@@ -162,6 +181,42 @@ export class MonitorHub {
     /** Tell a connected agent to self-destruct now. No-op if offline. */
     requestDestroy(deviceId: string): boolean {
         return this.sendToAgent(deviceId, AGENT_DESTROY);
+    }
+
+    /**
+     * Coupe la session d'un agent, sur-le-champ.
+     *
+     * La session agent capture le statut de l'appareil **à la connexion**, et le
+     * filtre d'ingestion relit cet instantané : révoquer un appareil sans fermer
+     * sa socket le laissait écrire métriques et listes de processus jusqu'à sa
+     * prochaine reconnexion, c'est-à-dire potentiellement indéfiniment. La
+     * révocation doit donc mordre sur la socket, pas seulement sur la ligne.
+     *
+     * 1008 (« policy violation ») et non 1012 : ce n'est pas un redémarrage, et
+     * l'agent ne doit pas se ruer sur une reconnexion — la suivante sera de
+     * toute façon refusée à l'authentification.
+     */
+    disconnectAgent(deviceId: string): boolean {
+        const socket = this.agents.get(deviceId);
+        if (!socket) return false;
+        socket.close(1008);
+        return true;
+    }
+
+    /**
+     * Coupe la session pour qu'elle se rétablisse avec un statut à jour.
+     *
+     * Le symétrique du problème ci-dessus : approuver un appareil dont l'agent
+     * est **déjà** connecté laissait sa session sur l'instantané « pending », et
+     * sa télémétrie continuait d'être accusée puis jetée — un appareil approuvé
+     * qui n'enregistre rien, sans le moindre message d'erreur. 1012 (« service
+     * restart »), pour que l'agent revienne au lieu de renoncer.
+     */
+    resetAgentSession(deviceId: string): boolean {
+        const socket = this.agents.get(deviceId);
+        if (!socket) return false;
+        socket.close(1012, 'Device configuration changed');
+        return true;
     }
 
     /** Order a connected agent to self-update to a newer signed binary. No-op if offline. */
@@ -395,11 +450,32 @@ export class MonitorHub {
         this.publishToSubscribers(payload.deviceId, PACKAGE_DONE_EVENT, payload);
     }
 
+    /**
+     * Instantané des droits, posé par le dispatcheur à chaque commande.
+     * Voir {@link grants}.
+     */
+    rememberGrants(socket: WebSocket, allowed: boolean, epoch: number): void {
+        this.grants.set(socket, { allowed, epoch });
+    }
+
+    /**
+     * Cette socket a-t-elle *encore* le droit de recevoir ? Refuse par défaut :
+     * une socket sans instantané, ou dont l'instantané précède la dernière
+     * mutation d'accès, ne reçoit rien tant qu'elle n'a pas prouvé le contraire.
+     */
+    private mayReceive(socket: WebSocket, epoch: number): boolean {
+        const g = this.grants.get(socket);
+        return g !== undefined && g.allowed && g.epoch === epoch;
+    }
+
     private publishToSubscribers(deviceId: string, command: string, data: unknown): void {
         const set = this.subscribers.get(deviceId);
         if (!set || set.size === 0) return;
         const frame = JSON.stringify({ command, payload: { ok: true, data } });
-        for (const socket of set) socket.send(frame);
+        const epoch = accessEpochNow();
+        for (const socket of set) {
+            if (this.mayReceive(socket, epoch)) socket.send(frame);
+        }
     }
 
     onlineDevices(deviceIds: string[]): Record<string, boolean> {
@@ -454,20 +530,27 @@ export class MonitorHub {
             }
             this.socketShares.delete(socket);
         }
+        this.grants.delete(socket);
     }
 
     publishMetric(deviceId: string, snapshot: MetricSnapshot): void {
         const set = this.subscribers.get(deviceId);
         if (!set || set.size === 0) return;
         const frame = metricFrame(deviceId, snapshot);
-        for (const socket of set) socket.send(frame);
+        const epoch = accessEpochNow();
+        for (const socket of set) {
+            if (this.mayReceive(socket, epoch)) socket.send(frame);
+        }
     }
 
     publishReport(deviceId: string, report: DeviceReport): void {
         const set = this.subscribers.get(deviceId);
         if (!set || set.size === 0) return;
         const frame = reportFrame(deviceId, report);
-        for (const socket of set) socket.send(frame);
+        const epoch = accessEpochNow();
+        for (const socket of set) {
+            if (this.mayReceive(socket, epoch)) socket.send(frame);
+        }
     }
 
     /**
@@ -509,7 +592,10 @@ export class MonitorHub {
             command: DEVICE_PRESENCE_EVENT,
             payload: { ok: true, data: presence }
         });
-        for (const socket of set) socket.send(frame);
+        const epoch = accessEpochNow();
+        for (const socket of set) {
+            if (this.mayReceive(socket, epoch)) socket.send(frame);
+        }
     }
 }
 
@@ -545,6 +631,10 @@ export interface MonitorTransport {
     pushConfig(deviceId: string, config: AgentConfigPayload): boolean;
     /** Tell the device's agent to self-destruct now; false if offline. */
     requestDestroy(deviceId: string): boolean;
+    /** Coupe la session de l'agent : la révocation doit mordre tout de suite. */
+    disconnectAgent(deviceId: string): boolean;
+    /** Coupe la session pour qu'elle revienne avec un statut à jour (approbation). */
+    resetAgentSession(deviceId: string): boolean;
     /** Order the device's agent to self-update; false if offline. */
     requestUpdate(deviceId: string, payload: AgentUpdatePayload): boolean;
     /** Ask the device's agent to change its persistence/privilege install; false if offline. */
@@ -598,6 +688,8 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         requestCollect: (deviceId) => hub.requestCollect(deviceId),
         pushConfig: (deviceId, config) => hub.pushConfig(deviceId, config),
         requestDestroy: (deviceId) => hub.requestDestroy(deviceId),
+        disconnectAgent: (deviceId) => hub.disconnectAgent(deviceId),
+        resetAgentSession: (deviceId) => hub.resetAgentSession(deviceId),
         requestUpdate: (deviceId, payload) => hub.requestUpdate(deviceId, payload),
         requestService: (deviceId, payload) => hub.requestService(deviceId, payload),
         requestPkgList: (deviceId) => hub.requestPkgList(deviceId),

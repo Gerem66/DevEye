@@ -14,6 +14,7 @@ export const deviceLogSourcesFeature: FeatureDefinition<
     typeof deviceLogSources.output
 > = defineFeature({
     ...deviceLogSources,
+    access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestLogSources(row.id) ?? false;
@@ -33,6 +34,7 @@ export const deviceLogQueryFeature: FeatureDefinition<
     typeof deviceLogQuery.output
 > = defineFeature({
     ...deviceLogQuery,
+    access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok =

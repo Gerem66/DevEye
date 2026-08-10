@@ -39,6 +39,11 @@ export const deviceListFeature: FeatureDefinition<
         // flotte est disponible en permanence sans partage explicite. C'est là
         // qu'un administrateur surveille ses machines, et l'y obliger à se
         // partager à lui-même chaque appareil n'aurait rien protégé.
+        // La garde est dans le handler et non déclarée : les deux portées
+        // n'exigent pas le même droit, et un `access` unique en écraserait une.
+        // Chaque appareil listé porte son rapport — posture de sécurité, ports
+        // en écoute, inventaire matériel — donc l'appartenance à l'espace ne
+        // suffit pas à le lire.
         let rows;
         if (input.scope === 'fleet') {
             ctx.assertAdmin();
@@ -46,6 +51,7 @@ export const deviceListFeature: FeatureDefinition<
         } else if (ctx.isAdmin && ctx.workspace.kind === 'personal') {
             rows = await ctx.db.devices.listAll();
         } else {
+            ctx.assertFeature('devices');
             rows = await ctx.db.devices.listByWorkspace(ctx.workspaceId);
         }
         const ids = rows.map((r) => r.id);
@@ -76,6 +82,10 @@ export const deviceConfirmFeature: FeatureDefinition<
         const row = await authorizeDevice(ctx, input.deviceId);
         if (row.status === 'revoked') throw new FeatureError('conflict', 'Device is revoked');
         await ctx.db.devices.setStatus(row.id, 'active');
+        // Le statut vit aussi dans la session agent, figée à la connexion : sans
+        // cette remise à zéro, un agent déjà connecté au moment de l'approbation
+        // verrait sa télémétrie accusée puis jetée, indéfiniment et en silence.
+        ctx.monitor?.resetAgentSession(row.id);
         const updated = await ctx.db.devices.findById(row.id);
         ctx.audit({
             action: 'device.confirm',
@@ -98,6 +108,11 @@ export const deviceRevokeFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         const row = await authorizeDevice(ctx, input.deviceId);
         await ctx.db.devices.setStatus(row.id, 'revoked');
+        // La session agent porte un instantané du statut pris à la connexion, et
+        // le filtre d'ingestion le relit tel quel : sans cette coupure, l'agent
+        // révoqué continuerait d'écrire jusqu'à sa prochaine reconnexion — qui
+        // peut ne jamais venir. Sa reconnexion, elle, sera refusée.
+        ctx.monitor?.disconnectAgent(row.id);
         const updated = await ctx.db.devices.findById(row.id);
         ctx.audit({
             action: 'device.revoke',
@@ -123,6 +138,7 @@ export const deviceReactivateFeature: FeatureDefinition<
             throw new FeatureError('conflict', 'Only a revoked device can be reactivated');
         }
         await ctx.db.devices.setStatus(row.id, 'active');
+        ctx.monitor?.resetAgentSession(row.id);
         const updated = (await ctx.db.devices.findById(row.id)) ?? { ...row, status: 'active' as const };
         ctx.audit({
             action: 'device.reactivate',
@@ -176,6 +192,13 @@ export const deviceReorderFeature: FeatureDefinition<
     }
 });
 
+/**
+ * Change la cadence de collecte et la conservation d'un appareil.
+ *
+ * Sous `devices: write` : régler la collecte d'une machine, c'est décider ce que
+ * le serveur enregistre d'elle et combien de temps il le garde — un membre qui
+ * ne peut pas piloter les appareils de son espace n'a pas à en décider.
+ */
 export const deviceSetConfigFeature: FeatureDefinition<
     typeof deviceSetConfig.command,
     typeof deviceSetConfig.input,
@@ -183,6 +206,7 @@ export const deviceSetConfigFeature: FeatureDefinition<
 > = defineFeature({
     ...deviceSetConfig,
     mutates: true,
+    access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeDevice(ctx, input.deviceId);
         const { deviceId: _id, ...patch } = input;
@@ -268,6 +292,9 @@ export const deviceForceDeleteFeature: FeatureDefinition<
         // for agents that no longer exist (or that we don't care about cleaning).
         // A still-running agent is simply refused on its next connection.
         await ctx.db.devices.archive(row.id);
+        // Même raison que pour la révocation : le statut est instantané côté
+        // session agent, seule la fermeture arrête vraiment le flux.
+        ctx.monitor?.disconnectAgent(row.id);
         const updated = (await ctx.db.devices.findById(row.id)) ?? row;
         ctx.audit({
             action: 'device.forceDelete',
@@ -279,6 +306,13 @@ export const deviceForceDeleteFeature: FeatureDefinition<
     }
 });
 
+/**
+ * Purge dure : la ligne appareil et, par cascade, tout son historique.
+ *
+ * Sous `admin: true` comme le reste de la gestion de flotte. Ce n'est pas une
+ * action d'espace : elle détruit une machine et sa supervision pour **tous** les
+ * espaces avec lesquels elle est partagée, définitivement.
+ */
 export const deviceDeleteFeature: FeatureDefinition<
     typeof deviceDelete.command,
     typeof deviceDelete.input,
@@ -286,6 +320,7 @@ export const deviceDeleteFeature: FeatureDefinition<
 > = defineFeature({
     ...deviceDelete,
     mutates: true,
+    access: { admin: true },
     handler: async (ctx, input) => {
         const row = await authorizeDevice(ctx, input.deviceId);
         // Hard purge (used by the Monitoring page): removes the device row and,

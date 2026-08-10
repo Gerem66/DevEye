@@ -15,16 +15,21 @@ import {
 
 import { parseDeviceReport } from '@/agent/mappers';
 import { env } from '@/Utils/Env';
-import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
+import { defineFeature, type FeatureContext, type FeatureDefinition } from '../_define';
+import { authorizeDevice } from '../devices/shared';
 
-/** Ensure the caller may read a device's metrics: same workspace, or admin. */
+/**
+ * De quel appareil parle-t-on, et m'est-il accessible ?
+ *
+ * Délègue à `authorizeDevice`, garde unique des appareils : il n'y avait aucune
+ * raison que la supervision porte sa propre copie de la règle — et le nom
+ * `authorizeRead` qu'elle portait a laissé passer deux commandes destructrices
+ * (`metrics.deleteSnapshots`, `metrics.setSnapshotsPinned`) sous une garde de
+ * lecture. Le *niveau* exigé est désormais déclaré par chaque commande dans son
+ * `access`, appliqué par le dispatcheur avant le handler.
+ */
 async function device(ctx: FeatureContext, deviceId: string): Promise<DeviceRow> {
-    const row = await ctx.db.devices.findById(deviceId);
-    if (!row) throw new FeatureError('not_found', 'Device not found');
-    if (row.workspace_id !== ctx.workspaceId && !ctx.isAdmin) {
-        throw new FeatureError('forbidden', 'Not allowed to read this device');
-    }
-    return row;
+    return authorizeDevice(ctx, deviceId);
 }
 
 export const metricsQueryFeature: FeatureDefinition<
@@ -33,6 +38,7 @@ export const metricsQueryFeature: FeatureDefinition<
     typeof metricsQuery.output
 > = defineFeature({
     ...metricsQuery,
+    access: { feature: 'devices', level: 'read' },
     handler: async (ctx, input) => {
         await device(ctx, input.deviceId);
         const points = await ctx.db.metrics.query({
@@ -51,6 +57,7 @@ export const metricsSubscribeFeature: FeatureDefinition<
     typeof metricsSubscribe.output
 > = defineFeature({
     ...metricsSubscribe,
+    access: { feature: 'devices', level: 'read' },
     handler: async (ctx, input) => {
         // Le schéma autorise 50 identifiants, et cette commande part à chaque
         // changement d'appareil et à chaque réouverture de socket : la séquence
@@ -79,6 +86,12 @@ export const metricsSubscribeFeature: FeatureDefinition<
     }
 });
 
+/**
+ * Se désabonner ne demande aucun droit, à dessein : exiger `devices: read` pour
+ * *cesser* de recevoir laisserait une souscription orpheline chez qui vient
+ * justement de perdre l'accès. La diffusion, elle, est filtrée en continu par le
+ * hub (voir `MonitorHub.rememberGrants`).
+ */
 export const metricsUnsubscribeFeature: FeatureDefinition<
     typeof metricsUnsubscribe.command,
     typeof metricsUnsubscribe.input,
@@ -97,6 +110,7 @@ export const metricsRefreshFeature: FeatureDefinition<
     typeof metricsRefresh.output
 > = defineFeature({
     ...metricsRefresh,
+    access: { feature: 'devices', level: 'read' },
     handler: async (ctx, input) => {
         await device(ctx, input.deviceId);
         const requested = ctx.monitor?.requestCollect(input.deviceId) ?? false;
@@ -110,6 +124,7 @@ export const metricsPresenceFeature: FeatureDefinition<
     typeof metricsPresence.output
 > = defineFeature({
     ...metricsPresence,
+    access: { feature: 'devices', level: 'read' },
     handler: async (ctx, input) => {
         await device(ctx, input.deviceId);
         const [onlineAtStart, events] = await Promise.all([
@@ -126,6 +141,7 @@ export const metricsProcessesAtFeature: FeatureDefinition<
     typeof metricsProcessesAt.output
 > = defineFeature({
     ...metricsProcessesAt,
+    access: { feature: 'devices', level: 'read' },
     handler: async (ctx, input) => {
         await device(ctx, input.deviceId);
         const sample = await ctx.db.processSamples.nearest(input.deviceId, input.at);
@@ -139,6 +155,7 @@ export const metricsAvailabilityFeature: FeatureDefinition<
     typeof metricsAvailability.output
 > = defineFeature({
     ...metricsAvailability,
+    access: { feature: 'devices', level: 'read' },
     handler: async (ctx, input) => {
         await device(ctx, input.deviceId);
         const days = await ctx.db.metrics.availableDays(input.deviceId, input.tzOffsetMinutes);
@@ -152,6 +169,7 @@ export const metricsSnapshotsFeature: FeatureDefinition<
     typeof metricsSnapshots.output
 > = defineFeature({
     ...metricsSnapshots,
+    access: { feature: 'devices', level: 'read' },
     handler: async (ctx, input) => {
         await device(ctx, input.deviceId);
         // The marks are the *metric* instants: process capture is optional, and
@@ -182,6 +200,7 @@ export const metricsStorageFeature: FeatureDefinition<
     typeof metricsStorage.output
 > = defineFeature({
     ...metricsStorage,
+    access: { feature: 'devices', level: 'read' },
     handler: async (ctx, input) => {
         await device(ctx, input.deviceId);
         const usage = await ctx.db.processSamples.storage(input.deviceId);
@@ -196,6 +215,11 @@ export const metricsDeleteSnapshotsFeature: FeatureDefinition<
 > = defineFeature({
     ...metricsDeleteSnapshots,
     mutates: true,
+    // Effacer définitivement l'historique d'une machine n'est pas de la lecture,
+    // et la garde qui couvrait cette commande s'appelait littéralement
+    // `authorizeRead` : tout membre de l'espace pouvait supprimer les relevés
+    // conservés par un autre.
+    access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await device(ctx, input.deviceId);
         const { snapshots } = await ctx.db.processSamples.deleteRange(input.deviceId, input.from, input.to);
@@ -221,6 +245,9 @@ export const metricsSetSnapshotsPinnedFeature: FeatureDefinition<
 > = defineFeature({
     ...metricsSetSnapshotsPinned,
     mutates: true,
+    // Épingler soustrait des relevés à la purge, désépingler les y rend — et
+    // peut en supprimer sur-le-champ. Même niveau que la suppression.
+    access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await device(ctx, input.deviceId);
         const { deviceId, from, to, pinned } = input;

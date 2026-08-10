@@ -10,10 +10,10 @@ const LIFECYCLE_LABELS: Record<AgentLifecycleAction, string> = {
 };
 
 /**
- * Stop or cleanly restart the agent *process* on a device. Owner-or-admin +
- * agent online. Fire-and-forget: the agent exits (and, supervised or on
- * `restart`, comes back) — there is no reply frame, the outcome is observed
- * through the presence stream.
+ * Stop or cleanly restart the agent *process* on a device. Exige `devices:
+ * write` sur l'espace + un agent en ligne. Fire-and-forget: the agent exits
+ * (and, supervised or on `restart`, comes back) — there is no reply frame, the
+ * outcome is observed through the presence stream.
  */
 export const deviceAgentLifecycleFeature: FeatureDefinition<
     typeof deviceAgentLifecycle.command,
@@ -21,6 +21,7 @@ export const deviceAgentLifecycleFeature: FeatureDefinition<
     typeof deviceAgentLifecycle.output
 > = defineFeature({
     ...deviceAgentLifecycle,
+    access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestLifecycle(row.id, { action: input.action }) ?? false;

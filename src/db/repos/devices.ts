@@ -1,5 +1,5 @@
 import type { DeviceRow, DeviceStatus, ProcessCapture } from 'deveye-types';
-import { randomUUID } from 'crypto';
+import { randomInt, randomUUID } from 'crypto';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
@@ -309,9 +309,15 @@ export interface LinkCodesRepo {
 
 function randomCode(): string {
     // Human-typable: 8 unambiguous base32-ish chars, grouped (XXXX-XXXX).
+    //
+    // Tiré cryptographiquement, comme tout secret ici : ce code est la seule
+    // pièce d'identité qui enrôle une machine dans un espace, et `Math.random`
+    // n'est pas imprévisible. `randomInt` fait lui-même le rejet d'échantillon,
+    // donc l'alphabet de 31 symboles reste uniforme malgré sa taille non
+    // puissance de deux.
     const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
     let raw = '';
-    for (let i = 0; i < 8; i++) raw += alphabet[Math.floor(Math.random() * alphabet.length)];
+    for (let i = 0; i < 8; i++) raw += alphabet[randomInt(alphabet.length)];
     return `${raw.slice(0, 4)}-${raw.slice(4)}`;
 }
 

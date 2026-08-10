@@ -23,6 +23,7 @@ export const deviceFilesListFeature: FeatureDefinition<
     typeof deviceFilesList.output
 > = defineFeature({
     ...deviceFilesList,
+    access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestFilesList(row.id, { opId: input.opId, path: input.path });
@@ -37,6 +38,7 @@ export const deviceFilesAnalyzeFeature: FeatureDefinition<
     typeof deviceFilesAnalyze.output
 > = defineFeature({
     ...deviceFilesAnalyze,
+    access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestFilesAnalyze(row.id, { opId: input.opId, path: input.path });
@@ -51,6 +53,7 @@ export const deviceFilesSearchFeature: FeatureDefinition<
     typeof deviceFilesSearch.output
 > = defineFeature({
     ...deviceFilesSearch,
+    access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestFilesSearch(row.id, {
@@ -76,6 +79,7 @@ export const deviceFilesMutateFeature: FeatureDefinition<
     typeof deviceFilesMutate.output
 > = defineFeature({
     ...deviceFilesMutate,
+    access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestFilesMutate(row.id, {
@@ -108,6 +112,7 @@ export const deviceFilesDownloadFeature: FeatureDefinition<
     typeof deviceFilesDownload.output
 > = defineFeature({
     ...deviceFilesDownload,
+    access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestFilesDownload(row.id, { opId: input.opId, path: input.path });
@@ -126,6 +131,7 @@ export const deviceFilesUploadFeature: FeatureDefinition<
     typeof deviceFilesUpload.output
 > = defineFeature({
     ...deviceFilesUpload,
+    access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestFilesUpload(row.id, {

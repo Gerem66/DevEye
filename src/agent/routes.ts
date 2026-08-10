@@ -246,78 +246,87 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
         return serveBinary(reply, parsed.data);
     });
 
-    app.post('/api/agent/enroll', async (req, reply) => {
-        const parsed = enrollDeviceRequestSchema.safeParse(req.body);
-        if (!parsed.success) {
-            return reply.code(400).send(err('validation', 'Invalid enrollment payload', parsed.error.flatten()));
-        }
-        const { code, name, fingerprint, platform, publicKey } = parsed.data;
+    // Seule route publique et sans session du module, et elle consomme un
+    // secret de 8 caractères sur un alphabet de 31 — la deviner tient au nombre
+    // d'essais qu'on laisse faire. Le plafond global ne suffit pas : il se
+    // mesure sur toutes les routes confondues, alors qu'ici une adresse n'a
+    // aucune raison légitime de tenter plus de quelques enrôlements d'affilée.
+    app.post(
+        '/api/agent/enroll',
+        { config: { rateLimit: { max: 10, timeWindow: '10 minutes' } } },
+        async (req, reply) => {
+            const parsed = enrollDeviceRequestSchema.safeParse(req.body);
+            if (!parsed.success) {
+                return reply.code(400).send(err('validation', 'Invalid enrollment payload', parsed.error.flatten()));
+            }
+            const { code, name, fingerprint, platform, publicKey } = parsed.data;
 
-        const consumed = await db.linkCodes.consume(code.trim().toUpperCase());
-        if (!consumed) {
-            return reply.code(401).send(err('auth_invalid', 'Invalid or expired link code'));
-        }
-        const ownerId = consumed.userId;
-        const workspaceId = consumed.workspaceId;
+            const consumed = await db.linkCodes.consume(code.trim().toUpperCase());
+            if (!consumed) {
+                return reply.code(401).send(err('auth_invalid', 'Invalid or expired link code'));
+            }
+            const ownerId = consumed.userId;
+            const workspaceId = consumed.workspaceId;
 
-        // Re-enrolling the same machine reuses its device record (new token).
-        // L'unicité se mesure par espace : la même machine peut être appairée
-        // une fois dans chacun.
-        const existing = await db.devices.findByWorkspaceFingerprint(workspaceId, fingerprint);
-        let deviceId: string;
-        if (existing) {
-            deviceId = existing.id;
-        } else {
-            const created = await db.devices.create({
-                ownerId,
-                workspaceId,
-                name,
-                fingerprint,
-                platform,
-                publicKey,
-                tokenHash: ''
+            // Re-enrolling the same machine reuses its device record (new token).
+            // L'unicité se mesure par espace : la même machine peut être appairée
+            // une fois dans chacun.
+            const existing = await db.devices.findByWorkspaceFingerprint(workspaceId, fingerprint);
+            let deviceId: string;
+            if (existing) {
+                deviceId = existing.id;
+            } else {
+                const created = await db.devices.create({
+                    ownerId,
+                    workspaceId,
+                    name,
+                    fingerprint,
+                    platform,
+                    publicKey,
+                    tokenHash: ''
+                });
+                deviceId = created.id;
+            }
+
+            const deviceToken = await signDeviceToken(deviceId, ownerId);
+            await db.devices.setTokenHash(deviceId, sha256hex(deviceToken));
+
+            // (Re)set the device to a clean enrolled state: pending by default (the
+            // owner approves it before its metrics are accepted — defence in depth),
+            // or active straight away if the code auto-approves. Doing this for the
+            // re-enrollment case too re-pairs a previously archived/revoked machine
+            // instead of leaving it stuck (and hidden) in its old state.
+            await db.devices.markEnrolled(deviceId, consumed.autoApprove ? 'active' : 'pending');
+            // Un appareil vient d'entrer dans l'espace, et son code d'appairage de
+            // disparaître : c'est ce qui remplace le sondage du dialogue « Lier un
+            // appareil ». L'appairage passe par cette route HTTP, pas par une
+            // commande WS — sans ce signal, rien n'en avertirait personne.
+            live.changed(workspaceId, ['devices'], null);
+            audit.record({
+                source: 'agent',
+                category: 'device',
+                action: 'device.enroll',
+                level: 'warning',
+                uid: ownerId,
+                ip: req.ip,
+                description: consumed.autoApprove
+                    ? `Appareil appairé et approuvé automatiquement : « ${name} »`
+                    : `Appareil appairé (en attente d'approbation) : « ${name} »`,
+                metadata: { deviceId, platform, reenrolled: Boolean(existing), autoApprove: consumed.autoApprove }
             });
-            deviceId = created.id;
+
+            const row = await db.devices.findById(deviceId);
+            if (!row) return reply.code(500).send(err('internal', 'Device not found after enrollment'));
+
+            return reply.send(
+                ok(
+                    enrollDeviceResponseSchema.parse({
+                        deviceId,
+                        deviceToken,
+                        device: deviceRowToDevice(row, hub.isOnline(deviceId))
+                    })
+                )
+            );
         }
-
-        const deviceToken = await signDeviceToken(deviceId, ownerId);
-        await db.devices.setTokenHash(deviceId, sha256hex(deviceToken));
-
-        // (Re)set the device to a clean enrolled state: pending by default (the
-        // owner approves it before its metrics are accepted — defence in depth),
-        // or active straight away if the code auto-approves. Doing this for the
-        // re-enrollment case too re-pairs a previously archived/revoked machine
-        // instead of leaving it stuck (and hidden) in its old state.
-        await db.devices.markEnrolled(deviceId, consumed.autoApprove ? 'active' : 'pending');
-        // Un appareil vient d'entrer dans l'espace, et son code d'appairage de
-        // disparaître : c'est ce qui remplace le sondage du dialogue « Lier un
-        // appareil ». L'appairage passe par cette route HTTP, pas par une
-        // commande WS — sans ce signal, rien n'en avertirait personne.
-        live.changed(workspaceId, ['devices'], null);
-        audit.record({
-            source: 'agent',
-            category: 'device',
-            action: 'device.enroll',
-            level: 'warning',
-            uid: ownerId,
-            ip: req.ip,
-            description: consumed.autoApprove
-                ? `Appareil appairé et approuvé automatiquement : « ${name} »`
-                : `Appareil appairé (en attente d'approbation) : « ${name} »`,
-            metadata: { deviceId, platform, reenrolled: Boolean(existing), autoApprove: consumed.autoApprove }
-        });
-
-        const row = await db.devices.findById(deviceId);
-        if (!row) return reply.code(500).send(err('internal', 'Device not found after enrollment'));
-
-        return reply.send(
-            ok(
-                enrollDeviceResponseSchema.parse({
-                    deviceId,
-                    deviceToken,
-                    device: deviceRowToDevice(row, hub.isOnline(deviceId))
-                })
-            )
-        );
-    });
+    );
 }

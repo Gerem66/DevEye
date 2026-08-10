@@ -13,6 +13,7 @@ export const deviceListPackagesFeature: FeatureDefinition<
     typeof deviceListPackages.output
 > = defineFeature({
     ...deviceListPackages,
+    access: { admin: true },
     handler: async (ctx, input) => {
         const row = await authorizeOnlineDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestPkgList(row.id) ?? false;
@@ -31,6 +32,7 @@ export const deviceUpgradePackagesFeature: FeatureDefinition<
     typeof deviceUpgradePackages.output
 > = defineFeature({
     ...deviceUpgradePackages,
+    access: { admin: true },
     handler: async (ctx, input) => {
         const row = await authorizeOnlineDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestPkgUpgrade(row.id, { manager: input.manager }) ?? false;
