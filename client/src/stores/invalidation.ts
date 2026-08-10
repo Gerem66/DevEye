@@ -79,7 +79,6 @@ const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
     mail: ['mail.accountCount', 'mail.accountList', 'mail.folderList', 'mail.messageList'],
     uptime: ['uptime.count', 'uptime.list'],
     devices: ['device.list'],
-    monitoring: ['device.list'],
     weather: ['weather.list'],
     // Deux sujets pour une seule feature : la structure d'un côté, les fils de
     // discussion de l'autre. Un message ne doit pas faire re-solliciter le

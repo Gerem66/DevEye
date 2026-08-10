@@ -166,7 +166,8 @@ export const metricsSnapshotsFeature: FeatureDefinition<
             deviceId: input.deviceId,
             timestamps: instants.timestamps,
             pinned,
-            withProcesses: samples.timestamps
+            withProcesses: samples.timestamps,
+            truncated: false
         };
     }
 });
@@ -232,8 +233,8 @@ export const metricsSetSnapshotsPinnedFeature: FeatureDefinition<
         let deletedSnapshots = 0;
         if (!pinned) {
             const [proc] = await Promise.all([
-                ctx.db.processSamples.deleteExpiredInRange(deviceId, from, to, env.PROCESS_RETENTION_DAYS),
-                ctx.db.metrics.deleteExpiredInRange(deviceId, from, to, env.METRICS_RETENTION_DAYS)
+                ctx.db.processSamples.deleteExpiredInRange(deviceId, from, to, env.MONITORING_RETENTION_DAYS),
+                ctx.db.metrics.deleteExpiredInRange(deviceId, from, to, env.MONITORING_RETENTION_DAYS)
             ]);
             deletedSnapshots = proc.snapshots;
         }

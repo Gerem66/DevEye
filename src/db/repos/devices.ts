@@ -8,8 +8,8 @@ type Q = Queryable;
 export interface DeviceConfigPatch {
     metricIntervalSeconds?: number | null;
     processCapture?: ProcessCapture | null;
+    /** Conservation de l'historique entier : métriques, présence et processus. */
     retentionDays?: number | null;
-    processRetentionDays?: number | null;
 }
 
 export interface CreateDeviceInput {
@@ -149,8 +149,7 @@ export function devicesRepo(pool: Q): DevicesRepo {
             const columns: Record<keyof DeviceConfigPatch, string> = {
                 metricIntervalSeconds: 'metric_interval_seconds',
                 processCapture: 'process_capture',
-                retentionDays: 'retention_days',
-                processRetentionDays: 'process_retention_days'
+                retentionDays: 'retention_days'
             };
             const sets: string[] = [];
             const params: unknown[] = [];

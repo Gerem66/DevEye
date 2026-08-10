@@ -50,14 +50,15 @@ async function main() {
     process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
     // Hourly retention sweep: drop history past each device's retention
-    // (NULL → METRICS_RETENTION_DAYS). Runs once at boot, then every hour.
+    // (NULL → MONITORING_RETENTION_DAYS). One deadline for the three tables, so
+    // an instant is never half-expired. Runs once at boot, then every hour.
     const prune = async () => {
         try {
-            const days = env.METRICS_RETENTION_DAYS;
+            const days = env.MONITORING_RETENTION_DAYS;
             const [metrics, presence, processes] = await Promise.all([
                 db.metrics.pruneByRetention(days),
                 db.presence.pruneByRetention(days),
-                db.processSamples.pruneByRetention(env.PROCESS_RETENTION_DAYS)
+                db.processSamples.pruneByRetention(days)
             ]);
             if (metrics + presence + processes > 0) {
                 logger.info({ metrics, presence, processes }, 'Pruned old monitoring history');

@@ -4,18 +4,19 @@ import { Dialog } from '@/Components/Dialog';
 import Button from '@/Components/Button';
 import SelectInput from '@/Components/SelectInput';
 import TextInput from '@/Components/TextInput';
-import type { Device, ProcessCapture } from 'deveye-types';
+import {
+    DEFAULT_METRIC_INTERVAL_SECONDS,
+    DEFAULT_PROCESS_CAPTURE,
+    DEFAULT_RETENTION_DAYS,
+    type Device,
+    type ProcessCapture
+} from 'deveye-types';
 import styles from './Monitoring.module.css';
 
 const CUSTOM = '__custom__';
 
 const METRIC_PRESETS = [10, 30, 60, 300]; // seconds
 const RET_PRESETS = [7, 30, 90, 365]; // days
-const PROC_PRESETS = [1, 3, 7, 30]; // days
-
-// Mirrors the server defaults (see `src/agent/mappers.ts` + `Env`): one
-// collection every 60 s, everything kept 30 days.
-const DEFAULTS = { metricSec: 60, retentionDays: 30, procRetentionDays: 30 };
 
 /**
  * Rough daily storage per device at a given cadence, so the cost of a fast
@@ -51,13 +52,11 @@ interface ConfigDialogProps {
  */
 export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogProps) {
     // Each numeric field = a select value (preset string or CUSTOM) + custom text.
-    const [metricSel, setMetricSel] = useState('60');
-    const [metricCustom, setMetricCustom] = useState('60');
-    const [capture, setCapture] = useState<ProcessCapture>('all');
-    const [retSel, setRetSel] = useState('30');
-    const [retCustom, setRetCustom] = useState('30');
-    const [procSel, setProcSel] = useState('1');
-    const [procCustom, setProcCustom] = useState('1');
+    const [metricSel, setMetricSel] = useState(String(DEFAULT_METRIC_INTERVAL_SECONDS));
+    const [metricCustom, setMetricCustom] = useState(String(DEFAULT_METRIC_INTERVAL_SECONDS));
+    const [capture, setCapture] = useState<ProcessCapture>(DEFAULT_PROCESS_CAPTURE);
+    const [retSel, setRetSel] = useState(String(DEFAULT_RETENTION_DAYS));
+    const [retCustom, setRetCustom] = useState(String(DEFAULT_RETENTION_DAYS));
     const [error, setError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
 
@@ -68,11 +67,14 @@ export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogPro
             setSel(presets.includes(v) ? String(v) : CUSTOM);
             setCustom(String(v));
         };
-        const metricSec = device.metricIntervalSeconds ?? DEFAULTS.metricSec;
-        init(METRIC_PRESETS, metricSec, setMetricSel, setMetricCustom);
-        init(RET_PRESETS, device.retentionDays ?? DEFAULTS.retentionDays, setRetSel, setRetCustom);
-        init(PROC_PRESETS, device.processRetentionDays ?? DEFAULTS.procRetentionDays, setProcSel, setProcCustom);
-        setCapture(device.processCapture ?? 'all');
+        init(
+            METRIC_PRESETS,
+            device.metricIntervalSeconds ?? DEFAULT_METRIC_INTERVAL_SECONDS,
+            setMetricSel,
+            setMetricCustom
+        );
+        init(RET_PRESETS, device.retentionDays ?? DEFAULT_RETENTION_DAYS, setRetSel, setRetCustom);
+        setCapture(device.processCapture ?? DEFAULT_PROCESS_CAPTURE);
         setError(null);
         // Re-init only when the dialog opens or the *selected device* changes —
         // not on every device-list poll (which replaces the object reference and
@@ -80,7 +82,7 @@ export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogPro
     }, [open, device?.id]);
 
     // Cadence currently selected, for the live storage estimate below.
-    const estimateSec = Number(metricSel === CUSTOM ? metricCustom : metricSel) || DEFAULTS.metricSec;
+    const estimateSec = Number(metricSel === CUSTOM ? metricCustom : metricSel) || DEFAULT_METRIC_INTERVAL_SECONDS;
 
     const resolve = (sel: string, custom: string): number | null => {
         const raw = sel === CUSTOM ? Number(custom) : Number(sel);
@@ -91,8 +93,7 @@ export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogPro
         if (!device) return;
         const metricSec = resolve(metricSel, metricCustom);
         const retentionDays = resolve(retSel, retCustom);
-        const procRetentionDays = resolve(procSel, procCustom);
-        if (metricSec === null || retentionDays === null || procRetentionDays === null) {
+        if (metricSec === null || retentionDays === null) {
             setError('Une valeur personnalisée est invalide.');
             return;
         }
@@ -103,8 +104,7 @@ export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogPro
                 deviceId: device.id,
                 metricIntervalSeconds: clamp(Math.round(metricSec), 5, 3600),
                 processCapture: capture,
-                retentionDays: clamp(Math.round(retentionDays), 1, 3650),
-                processRetentionDays: clamp(Math.round(procRetentionDays), 1, 3650)
+                retentionDays: clamp(Math.round(retentionDays), 1, 3650)
             });
             onSaved();
             onClose();
@@ -121,7 +121,7 @@ export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogPro
             open={open}
             onClose={onClose}
             title={device ? `Configuration — ${device.name}` : 'Configuration'}
-            description='Cadence de collecte et durées de conservation. Chaque relevé enregistre les métriques et les processus au même instant. Appliqué dès le prochain relevé, que l’agent soit connecté ou non.'
+            description='Cadence de collecte et durée de conservation. Chaque relevé enregistre les métriques et les processus au même instant, et les conserve aussi longtemps. Appliqué dès le prochain relevé, que l’agent soit connecté ou non.'
             onSubmit={() => void save()}
             footer={
                 <>
@@ -167,22 +167,13 @@ export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogPro
                     </div>
                 </label>
                 <ConfigChoice
-                    label='Conservation des données'
+                    label='Conservation de l’historique'
                     unit='j'
                     presets={RET_PRESETS.map((v) => ({ value: v, label: v === 365 ? '1 an' : `${v} j` }))}
                     sel={retSel}
                     custom={retCustom}
                     onSel={setRetSel}
                     onCustom={setRetCustom}
-                />
-                <ConfigChoice
-                    label='Conservation des processus'
-                    unit='j'
-                    presets={PROC_PRESETS.map((v) => ({ value: v, label: `${v} j` }))}
-                    sel={procSel}
-                    custom={procCustom}
-                    onSel={setProcSel}
-                    onCustom={setProcCustom}
                 />
             </div>
             {error && <p className={styles.configError}>{error}</p>}

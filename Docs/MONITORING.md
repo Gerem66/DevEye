@@ -21,11 +21,16 @@ sans les processus qui l'expliquent.
 | **Report** | 1 h (+ connexion) | OS + posture sécurité + par-disque (`disks[]`) + ports en écoute + connexions. Dernier état seulement. | `devices.report_json` |
 | **Presence** | sur transition | online/offline de l'agent (frise de disponibilité). | `device_presence` |
 
-Défauts serveur dans [`src/agent/mappers.ts`](../src/agent/mappers.ts)
-(`DEFAULT_METRIC_INTERVAL_SECONDS` = 60, `DEFAULT_PROCESS_CAPTURE` = `all`).
-Rétentions : `METRICS_RETENTION_DAYS` (métriques + presence, déf. 30 j) et
-`PROCESS_RETENTION_DAYS` (processus, déf. 30 j — la donnée la plus volumineuse),
-balayées chaque heure depuis [`index.ts`](../index.ts).
+Défauts serveur dans [`DevEye-Types/src/domain/device.ts`](../../DevEye-Types/src/domain/device.ts)
+(`DEFAULT_METRIC_INTERVAL_SECONDS` = 60, `DEFAULT_PROCESS_CAPTURE` = `all`,
+`DEFAULT_RETENTION_DAYS` = 30) — source unique, lue par le serveur *et* par le
+dialogue de configuration.
+
+Rétention : **une seule durée**, `devices.retention_days` (défaut serveur
+`MONITORING_RETENTION_DAYS`, 30 j), qui régit les métriques, la présence **et**
+les processus. Un relevé est un *instant* : les faire expirer séparément ne
+produisait que des instants à moitié lisibles. Balayée chaque heure depuis
+[`index.ts`](../index.ts) ; les instants épinglés y échappent.
 
 ### Une seule énumération par tick
 

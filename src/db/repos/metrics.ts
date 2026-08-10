@@ -39,8 +39,7 @@ export interface MetricsRepo {
 const BUCKET_SECONDS: Record<MetricsResolution, number> = {
     raw: 0,
     minute: 60,
-    hour: 3600,
-    day: 86400
+    hour: 3600
 };
 
 /** Coerce a possibly-null float column to a number or null. */

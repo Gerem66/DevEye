@@ -57,7 +57,7 @@ export interface ProcessSamplesRepo {
     /** Set the pinned flag on every instant in [from, to]; returns instants touched. */
     setPinnedRange(deviceId: string, from: number, to: number, pinned: boolean): Promise<{ snapshots: number }>;
     /**
-     * Delete unpinned instants in [from, to] already past the device's process
+     * Delete unpinned instants in [from, to] already past the device's
      * retention (used right after unpinning). Returns instants removed.
      */
     deleteExpiredInRange(
@@ -66,7 +66,7 @@ export interface ProcessSamplesRepo {
         to: number,
         defaultDays: number
     ): Promise<{ snapshots: number }>;
-    /** Delete samples past each device's process retention (NULL → default); skips pinned. */
+    /** Delete samples past each device's retention (NULL → default); skips pinned. */
     pruneByRetention(defaultDays: number): Promise<number>;
 }
 
@@ -103,11 +103,14 @@ export function processSamplesRepo(pool: Q): ProcessSamplesRepo {
         async insertSample(deviceId, ts, kind, processes) {
             if (processes.length === 0) return;
             const payload = await gzipAsync(Buffer.from(JSON.stringify(processes), 'utf8'));
+            // `payload_bytes` est mesuré ici une fois pour toutes : le calculer
+            // à la lecture obligeait `storage()` à relire chaque blob hors page.
             await pool.query(
-                `INSERT INTO device_process_samples (device_id, ts, kind, proc_count, payload)
-                 VALUES (?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE kind = VALUES(kind), proc_count = VALUES(proc_count), payload = VALUES(payload)`,
-                [deviceId, ts, kind, processes.length, payload]
+                `INSERT INTO device_process_samples (device_id, ts, kind, proc_count, payload_bytes, payload)
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE kind = VALUES(kind), proc_count = VALUES(proc_count),
+                                         payload_bytes = VALUES(payload_bytes), payload = VALUES(payload)`,
+                [deviceId, ts, kind, processes.length, payload.length, payload]
             );
         },
         async nearest(deviceId, at) {
@@ -151,7 +154,7 @@ export function processSamplesRepo(pool: Q): ProcessSamplesRepo {
             const r = await pool.query<{ snapshots: number; processes: number; bytes: number }>(
                 `SELECT COUNT(*)                          AS snapshots,
                         COALESCE(SUM(proc_count), 0)      AS processes,
-                        COALESCE(SUM(LENGTH(payload)), 0) AS bytes
+                        COALESCE(SUM(payload_bytes), 0)   AS bytes
                  FROM device_process_samples WHERE device_id = ?`,
                 [deviceId]
             );
@@ -184,20 +187,22 @@ export function processSamplesRepo(pool: Q): ProcessSamplesRepo {
                  JOIN devices d ON d.id = s.device_id
                  WHERE s.device_id = ? AND s.ts BETWEEN ? AND ?
                    AND s.pinned = 0 AND d.status <> 'archived'
-                   AND s.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.process_retention_days, ?) * 86400000`,
+                   AND s.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.retention_days, ?) * 86400000`,
                 [deviceId, from, to, defaultDays]
             );
             return { snapshots: del.rowCount };
         },
         async pruneByRetention(defaultDays) {
-            // Process history has its own (shorter) retention; it's the bulkiest data.
-            // Pinned rows are kept regardless of age.
+            // Même échéance que les métriques et la présence : un relevé est un
+            // instant, et les faire expirer séparément ne produisait que des
+            // instants à moitié lisibles. Les lignes épinglées survivent quel
+            // que soit leur âge.
             const r = await pool.query(
                 `DELETE s FROM device_process_samples s
                  JOIN devices d ON d.id = s.device_id
                  WHERE s.pinned = 0
                    AND d.status <> 'archived'
-                   AND s.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.process_retention_days, ?) * 86400000`,
+                   AND s.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.retention_days, ?) * 86400000`,
                 [defaultDays]
             );
             return r.rowCount;

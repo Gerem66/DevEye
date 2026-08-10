@@ -1,4 +1,5 @@
 import { getEnvVar } from 'dotenv-oxy';
+import { DEFAULT_RETENTION_DAYS } from 'deveye-types';
 
 export const env = {
     ENVIRONMENT: getEnvVar('ENVIRONMENT', 'enum', ['dev', 'test', 'prod']),
@@ -54,12 +55,11 @@ export const env = {
     TWOFA_ISSUER: getEnvVar('TWOFA_ISSUER', 'string', false) || 'DevEye',
     TWOFA_CHALLENGE_TTL_SECONDS: getEnvVar('TWOFA_CHALLENGE_TTL_SECONDS', 'number', false) || 60 * 5,
 
-    // Metrics/presence retention (days). A periodic job prunes older samples.
-    METRICS_RETENTION_DAYS: getEnvVar('METRICS_RETENTION_DAYS', 'number', false) || 30,
-    // Process-history retention (days). Kept separate from the metrics retention
-    // (process samples are the bulkiest data) but aligned on the same 30-day
-    // default: losing the process lists after a day made past snapshots empty.
-    PROCESS_RETENTION_DAYS: getEnvVar('PROCESS_RETENTION_DAYS', 'number', false) || 30,
+    // Conservation de l'historique de supervision (jours), pour les appareils
+    // qui n'ont rien choisi. Une seule durée : un relevé est un *instant* qui
+    // porte métriques, présence et processus ensemble, et les faire expirer
+    // séparément ne produisait que des instants à moitié lisibles.
+    MONITORING_RETENTION_DAYS: getEnvVar('MONITORING_RETENTION_DAYS', 'number', false) || DEFAULT_RETENTION_DAYS,
 
     // Uptime scheduler: how often the server looks for services due for a probe,
     // and how many it may probe at once.

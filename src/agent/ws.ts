@@ -221,7 +221,7 @@ export async function registerAgentWS(
             // sondage de la liste d'appareils côté client. `device.presence`
             // existe déjà, mais ne part qu'aux abonnés d'un appareil précis —
             // l'accueil, lui, n'est abonné à rien.
-            live.changed(device.workspace_id, ['devices'], null);
+            if (device.workspace_id !== null) live.changed(device.workspace_id, ['devices'], null);
             audit.record({
                 source: 'agent',
                 category: 'device',
@@ -289,7 +289,7 @@ export async function registerAgentWS(
                 if (device.status !== 'pending_deletion') {
                     void recordAgentOffline(db, deviceId).catch(() => {});
                 }
-                live.changed(device.workspace_id, ['devices'], null);
+                if (device.workspace_id !== null) live.changed(device.workspace_id, ['devices'], null);
             }
             reqLogger.info('Agent disconnected');
         });

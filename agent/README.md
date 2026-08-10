@@ -224,6 +224,8 @@ and token are still wiped).
 
 **Persistence & retention**: the server stores metrics, the connectivity timeline
 and process samples so the dashboard can "go back in time" and survive the agent
-going offline (last-known data is kept, live rates show 0). Both retentions are
-**per device, configurable from the Appareils page**: metric/timeline history
-(default 30 days) and the bulkier **process history** (default 1 day).
+going offline (last-known data is kept, live rates show 0). Retention is a
+**single per-device duration** (default 30 days), configurable from the device's
+"Configurer la collecte" dialog: one tick produces one *instant* carrying metrics,
+presence and the process list together, and they expire together. Pinned instants
+are kept regardless of age.

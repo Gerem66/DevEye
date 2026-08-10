@@ -1,4 +1,6 @@
 import {
+    DEFAULT_METRIC_INTERVAL_SECONDS,
+    DEFAULT_PROCESS_CAPTURE,
     deviceReportSchema,
     isNewerVersion,
     type AgentConfigPayload,
@@ -10,15 +12,6 @@ import {
     type DeviceStatus,
     type ProcessCapture
 } from 'deveye-types';
-
-/**
- * Server-side defaults applied when a device hasn't overridden a setting: one
- * collection every 60 s carrying metrics *and* all processes, everything kept 30
- * days (see `Env` for the retention defaults). Mirror any change in the client's
- * `ConfigDialog` DEFAULTS and the agent's bootstrap constants.
- */
-export const DEFAULT_METRIC_INTERVAL_SECONDS = 60;
-export const DEFAULT_PROCESS_CAPTURE: ProcessCapture = 'all';
 
 /** Build the collection config the server pushes to an agent (defaults applied). */
 export function deviceAgentConfig(row: DeviceRow): AgentConfigPayload {
@@ -68,11 +61,16 @@ export function parseDeviceReport(reportJson: string | null): DeviceReport | nul
  * Map a persisted device row to the client-facing domain shape. `update` carries
  * the self-update status (from {@link computeAgentUpdate}); it defaults to "no
  * update" for call sites that don't have the manifest at hand (e.g. enrollment).
+ *
+ * `workspaceIds` vient de la table de jonction, que la ligne ne porte pas : les
+ * appelants qui l'ont chargée la passent, les autres (enrôlement, où le partage
+ * ne fait que naître) laissent la liste vide.
  */
 export function deviceRowToDevice(
     row: DeviceRow,
     online: boolean,
-    update: AgentUpdateInfo = { latest: null, available: false }
+    update: AgentUpdateInfo = { latest: null, available: false },
+    workspaceIds: number[] = []
 ): Device {
     return {
         id: row.id,
@@ -91,7 +89,7 @@ export function deviceRowToDevice(
         metricIntervalSeconds: row.metric_interval_seconds === null ? null : Number(row.metric_interval_seconds),
         processCapture: (row.process_capture as ProcessCapture | null) ?? null,
         retentionDays: row.retention_days === null ? null : Number(row.retention_days),
-        processRetentionDays: row.process_retention_days === null ? null : Number(row.process_retention_days),
+        workspaceIds,
         deleteError: row.delete_error ?? null
     };
 }

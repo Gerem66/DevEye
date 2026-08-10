@@ -20,7 +20,6 @@ const CAPABILITY_LABELS: Record<WorkspaceCapability, string> = {
 
 const FEATURE_LABELS: Record<(typeof WORKSPACE_FEATURE_IDS)[number], string> = {
     devices: 'Appareils',
-    monitoring: 'Supervision',
     weather: 'Météo',
     password: 'Mots de passe',
     notes: 'Notes',
