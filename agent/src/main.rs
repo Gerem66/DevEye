@@ -172,8 +172,20 @@ fn service_cmd(action: ServiceCmd) -> Result<()> {
     match action {
         ServiceCmd::Install { system, user: _ } => {
             service::install(system)?;
+            // En ligne de commande, « installer » veut dire « et démarre-le » :
+            // c'est le point d'entrée autonome, notamment la commande que
+            // l'interface propose quand l'agent ne peut pas ouvrir lui-même la
+            // fenêtre d'autorisation. Le démarrage est une étape distincte pour
+            // le passage de relais interne (voir `service::install`), pas ici.
+            let started = service::start(system);
             let scope = if system { "système" } else { "utilisateur" };
-            println!("✓ Service ({scope}) installé — l'agent démarrera automatiquement.");
+            match started {
+                Ok(()) => println!("✓ Service ({scope}) installé et démarré."),
+                Err(e) => println!(
+                    "✓ Service ({scope}) installé — démarrage différé : {e}\n  \
+                     Il sera lancé au prochain démarrage de la machine."
+                ),
+            }
             Ok(())
         }
         ServiceCmd::Uninstall => {

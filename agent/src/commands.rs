@@ -164,11 +164,22 @@ where
                 let _ = sink.flush().await;
                 tokio::time::sleep(Duration::from_millis(400)).await;
                 let _ = crate::service::uninstall_user();
+                // Le service système, lancé par l'installation privilégiée, s'est
+                // heurté à notre verrou et attend sa relance. On le libère avant
+                // de partir plutôt que de compter sur le balayage du fichier :
+                // le gestionnaire réessaie dans les secondes qui suivent.
+                crate::state::clear();
+                let _ = std::fs::remove_file(crate::config::Config::pid_path());
                 std::process::exit(0);
             }
-            // install-user / drop don't restart us, so push a fresh report
-            // immediately — otherwise the UI's confirmed service scope would only
-            // refresh at the next hourly report.
+            if action == "install-user" {
+                // Le service est armé mais pas lancé : on lui passe la main.
+                let _ = sink.flush().await;
+                return handoff_to_service(sink, device_id).await;
+            }
+            // `drop` ne nous relance pas : on pousse un rapport frais tout de
+            // suite, sans quoi la portée confirmée par l'interface n'arriverait
+            // qu'au rapport horaire suivant.
             send_fresh_report(sink, device_id).await;
             let _ = sink.flush().await;
         }
@@ -181,6 +192,51 @@ where
             warn!(%action, error = %e, "service action failed");
             let _ = send_service_result(sink, device_id, action, false, None, Some(e.to_string()))
                 .await;
+            let _ = sink.flush().await;
+        }
+    }
+}
+
+/// Céder la place au service qu'on vient d'installer.
+///
+/// L'ordre arrive par l'agent en marche, et c'est lui qui tient le verrou
+/// d'instance unique : démarrer le service pendant ce temps ne produisait qu'un
+/// second agent aussitôt refusé, en boucle. On libère donc le verrou, on lance
+/// le service, on lui laisse le temps d'ouvrir sa session, puis on s'efface —
+/// exactement le mouvement inverse de [`handle_disable_autostart`].
+///
+/// En cas d'échec du démarrage, on **reste en vie** : l'autostart est bien
+/// installé (il prendra au prochain amorçage) et la machine ne doit pas
+/// disparaître de la supervision entre-temps. Le résultat déjà envoyé est alors
+/// corrigé par un second, qui porte la raison.
+async fn handoff_to_service<S>(sink: &mut S, device_id: &str)
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    crate::state::clear();
+    let _ = std::fs::remove_file(crate::config::Config::pid_path());
+    match crate::service::start(false) {
+        Ok(()) => {
+            info!("autostart installed; handing over to the supervised agent");
+            let _ = sink.flush().await;
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            std::process::exit(0);
+        }
+        Err(e) => {
+            warn!(error = %e, "the installed service refused to start; staying alive");
+            // On reprend le verrou : nous sommes toujours l'agent en place.
+            crate::state::write_running();
+            let _ = send_service_result(
+                sink,
+                device_id,
+                "install-user",
+                false,
+                None,
+                Some(format!("service installé mais non démarré : {e}")),
+            )
+            .await;
+            send_fresh_report(sink, device_id).await;
             let _ = sink.flush().await;
         }
     }
