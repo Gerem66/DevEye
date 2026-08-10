@@ -977,9 +977,15 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         ...(!archived
             ? [{ icon: 'icon-settings', label: 'Configurer la collecte', onClick: () => setConfigOpen(true) }]
             : []),
+        // Les mises à jour système sont la seule entrée réservée à
+        // l'administrateur (`device.listPackages`/`upgradePackages`) : sans cette
+        // garde, tout titulaire du droit « appareils » l'ouvrait pour se heurter
+        // à un refus du serveur.
+        ...(online && !archived && user?.role === 'admin'
+            ? [{ icon: 'icon-database', label: 'Mises à jour système', onClick: () => setPackagesOpen(true) }]
+            : []),
         ...(online && !archived
             ? [
-                  { icon: 'icon-database', label: 'Mises à jour système', onClick: () => setPackagesOpen(true) },
                   { icon: 'icon-folder', label: 'Explorateur de fichiers', onClick: () => setFilesOpen(true) },
                   { icon: 'icon-terminal', label: 'Terminal distant', onClick: () => setTerminalOpen(true) },
                   { icon: 'icon-logs', label: 'Logs de l’appareil', onClick: () => setLogsOpen(true) },
@@ -1442,7 +1448,9 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 title={`Mises à jour — « ${selected.name} »`}
                 description='Gestionnaires détectés sur l’appareil et application des mises à jour en direct.'
             >
-                {packagesOpen && <PackagesPanel deviceId={selected.id} />}
+                {packagesOpen && (
+                    <PackagesPanel deviceId={selected.id} privileged={report?.agent?.privileged ?? null} />
+                )}
             </Dialog>
 
             <Dialog
