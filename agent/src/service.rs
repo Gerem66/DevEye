@@ -43,6 +43,35 @@ fn config_path() -> String {
     Config::path().to_string_lossy().into_owned()
 }
 
+/// Le foyer de l'utilisateur **derrière** un éventuel `sudo`.
+///
+/// `dirs::home_dir()` suit `$HOME`, que `sudo` réécrit en `/root` sur une bonne
+/// partie des distributions (`always_set_home`) — et pas sur les autres, d'où un
+/// comportement qui change d'une machine à l'autre. Conséquence : un agent lancé
+/// avec `sudo` cherchait l'unité *utilisateur* dans le foyer de root, ne l'y
+/// trouvait pas, et annonçait `serviceScope = none` alors qu'un service
+/// utilisateur était bel et bien installé — le bouton « Démarrage auto » de
+/// l'interface s'en trouvait décoché, et l'élévation partait d'un état faux.
+///
+/// `SUDO_USER` nomme l'appelant d'origine ; on résout son foyer par `getent`, qui
+/// interroge la vraie base de comptes (y compris LDAP), et on retombe sur
+/// `/home/<user>` puis sur `$HOME` si rien ne répond.
+#[cfg(unix)]
+fn sudo_user() -> Option<String> {
+    std::env::var("SUDO_USER").ok().filter(|s| !s.is_empty())
+}
+
+#[cfg(unix)]
+fn invoking_home() -> Option<std::path::PathBuf> {
+    let sudo_user = sudo_user()?;
+    let home = crate::report::run("getent", &["passwd", &sudo_user])
+        .and_then(|line| line.split(':').nth(5).map(|h| h.trim().to_string()))
+        .filter(|h| !h.is_empty())
+        .unwrap_or_else(|| format!("/home/{sudo_user}"));
+    let path = std::path::PathBuf::from(home);
+    path.is_dir().then_some(path)
+}
+
 /// Run a command, turning a non-zero exit into an error carrying stderr.
 fn run_checked(cmd: &mut Command, what: &str) -> Result<()> {
     let out = cmd.output().with_context(|| format!("running {what}"))?;
@@ -53,15 +82,13 @@ fn run_checked(cmd: &mut Command, what: &str) -> Result<()> {
     Ok(())
 }
 
+/// Une seule définition de « suis-je root », partagée avec ce que le rapport
+/// annonce à l'interface. En avoir deux, c'était pouvoir refuser une installation
+/// système en se disant non privilégié pendant que l'interface affichait root —
+/// ou l'inverse.
 #[cfg(unix)]
 fn is_root() -> bool {
-    Command::new("id")
-        .arg("-u")
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim() == "0")
-        .unwrap_or(false)
+    crate::report::is_privileged()
 }
 
 /// Install (or reinstall) the autostart service. `system` requires privilege.
@@ -112,11 +139,21 @@ mod imp {
 
     const LABEL: &str = "com.deveye.agent";
 
+    /// Emplacement d'écriture du plist utilisateur : toujours le foyer courant.
     fn user_plist() -> PathBuf {
         dirs::home_dir()
             .unwrap_or_default()
             .join("Library/LaunchAgents")
             .join(format!("{LABEL}.plist"))
+    }
+
+    /// Emplacements où un plist utilisateur peut *déjà* exister (cf. `invoking_home`).
+    fn user_plists() -> Vec<PathBuf> {
+        let mut paths = vec![user_plist()];
+        if let Some(home) = invoking_home() {
+            paths.push(home.join("Library/LaunchAgents").join(format!("{LABEL}.plist")));
+        }
+        paths
     }
     fn system_plist() -> PathBuf {
         PathBuf::from("/Library/LaunchDaemons").join(format!("{LABEL}.plist"))
@@ -202,7 +239,7 @@ mod imp {
     pub fn installed_scope_impl() -> ServiceScope {
         if system_plist().exists() {
             ServiceScope::System
-        } else if user_plist().exists() {
+        } else if user_plists().iter().any(|p| p.exists()) {
             ServiceScope::User
         } else {
             ServiceScope::None
@@ -218,11 +255,22 @@ mod imp {
 
     const UNIT: &str = "deveye-agent.service";
 
+    /// Emplacement d'écriture de l'unité utilisateur : toujours le foyer courant.
     fn user_unit() -> PathBuf {
         dirs::config_dir()
             .unwrap_or_default()
             .join("systemd/user")
             .join(UNIT)
+    }
+
+    /// Emplacements où une unité utilisateur peut *déjà* exister — le foyer
+    /// courant, et celui de l'appelant quand on tourne sous `sudo`.
+    fn user_units() -> Vec<PathBuf> {
+        let mut paths = vec![user_unit()];
+        if let Some(home) = invoking_home() {
+            paths.push(home.join(".config/systemd/user").join(UNIT));
+        }
+        paths
     }
     fn system_unit() -> PathBuf {
         PathBuf::from("/etc/systemd/system").join(UNIT)
@@ -299,12 +347,36 @@ mod imp {
         uninstall_user_impl()
     }
 
+    /// Retire l'autostart utilisateur, **où qu'il soit**.
+    ///
+    /// Ne regarder que le foyer courant laissait, après une élévation lancée sous
+    /// `sudo`, l'unité de l'appelant en place : le service système et le service
+    /// utilisateur tournaient alors tous les deux sur le même enrôlement, et le
+    /// hub ne garde qu'une session par appareil — les deux se chassaient l'un
+    /// l'autre en boucle. D'où une élévation qui « ne prend pas », par
+    /// intermittence, selon celui des deux qui s'était reconnecté en dernier.
     pub fn uninstall_user_impl() -> Result<()> {
-        if user_unit().exists() {
-            let _ = Command::new("systemctl")
-                .args(["--user", "disable", "--now", UNIT])
-                .output();
-            std::fs::remove_file(user_unit()).ok();
+        for path in user_units() {
+            if !path.exists() {
+                continue;
+            }
+            // Arrêter l'unité demande de viser le bus de *son* utilisateur : en
+            // root, `systemctl --user` parle au bus de root, qui ne la connaît
+            // pas. `runuser` rebascule sur le bon. Au pire l'arrêt échoue, mais
+            // le fichier part et l'unité ne reviendra pas au redémarrage.
+            match sudo_user().filter(|_| is_root()) {
+                Some(user) => {
+                    let _ = Command::new("runuser")
+                        .args(["-u", &user, "--", "systemctl", "--user", "disable", "--now", UNIT])
+                        .output();
+                }
+                None => {
+                    let _ = Command::new("systemctl")
+                        .args(["--user", "disable", "--now", UNIT])
+                        .output();
+                }
+            }
+            std::fs::remove_file(&path).ok();
             let _ = Command::new("systemctl")
                 .args(["--user", "daemon-reload"])
                 .output();
@@ -315,7 +387,7 @@ mod imp {
     pub fn installed_scope_impl() -> ServiceScope {
         if system_unit().exists() {
             ServiceScope::System
-        } else if user_unit().exists() {
+        } else if user_units().iter().any(|p| p.exists()) {
             ServiceScope::User
         } else {
             ServiceScope::None

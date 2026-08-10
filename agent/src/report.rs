@@ -365,10 +365,32 @@ fn agent_info() -> AgentInfo {
     }
 }
 
+/// Effective uid 0 ⇒ root.
+///
+/// Sur Linux la réponse vient du noyau (`/proc/self/status`), pas d'un binaire
+/// externe : `id` doit être trouvé dans le `PATH`, et sur une racine minimale —
+/// image de conteneur, système embarqué sans coreutils — il ne l'est pas. Le
+/// `run(...).unwrap_or(false)` d'origine ne distinguait pas « je ne suis pas
+/// root » de « je n'ai pas pu le savoir » : un agent lancé sous `sudo` se
+/// déclarait alors non privilégié, et l'interface le croyait.
+///
+/// La ligne `Uid:` donne quatre entiers — réel, effectif, sauvegardé, système de
+/// fichiers ; c'est l'**effectif**, le deuxième, qui décide de ce qu'on a le
+/// droit de lire. `id -u` reste le repli des autres Unix.
 #[cfg(unix)]
 pub fn is_privileged() -> bool {
-    // Effective uid 0 ⇒ root. Shelling out keeps us libc-free (matches the rest).
+    #[cfg(target_os = "linux")]
+    if let Some(euid) = proc_effective_uid() {
+        return euid == 0;
+    }
     run("id", &["-u"]).map(|s| s.trim() == "0").unwrap_or(false)
+}
+
+#[cfg(target_os = "linux")]
+fn proc_effective_uid() -> Option<u32> {
+    let status = std::fs::read_to_string("/proc/self/status").ok()?;
+    let line = status.lines().find(|l| l.starts_with("Uid:"))?;
+    line.split_whitespace().nth(2)?.parse().ok()
 }
 
 #[cfg(windows)]
