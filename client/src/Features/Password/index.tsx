@@ -11,7 +11,7 @@ import { ws, WsError } from '@/api/ws';
 import TextInput from '@/Components/TextInput';
 import Button from '@/Components/Button';
 import { ensureUnlocked as ensureSecrecyUnlocked, touchSecrecy, UnlockCancelledError } from '@/stores/secrecy';
-import { invalidate } from '@/stores/invalidation';
+import { invalidate, useResourceVersion } from '@/stores/invalidation';
 
 import type { FeatureProps } from '@/Features/types';
 import type { PasswordEntry, PasswordEntryMasked } from 'deveye-types';
@@ -89,6 +89,33 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
         setActionError(null);
         void reload();
     }, [reload]);
+
+    /**
+     * Une entrée ajoutée ou modifiée par quelqu'un d'autre apparaît sans
+     * recharger. Le sujet `password` était déjà diffusé et la clé invalidée ;
+     * il manquait l'abonnement.
+     *
+     * **Sans `withSecrecy`, délibérément.** Le coffre est gardé : relire la
+     * liste sur une session reverrouillée renverrait `locked`, et passer par
+     * `withSecrecy` ferait alors surgir une demande de mot de passe déclenchée
+     * par le geste de quelqu'un d'autre. On garde donc simplement ce qui est à
+     * l'écran — la prochaine action de l'utilisateur redemandera le
+     * déverrouillage, au moment où il l'aura lui-même provoqué.
+     */
+    const listVersion = useResourceVersion('password.list');
+    useEffect(() => {
+        if (listVersion === 0) return;
+        let cancelled = false;
+        void ws
+            .send('password.list', {})
+            .then((res) => {
+                if (!cancelled) setAllPasswords(res.entries as PasswordEntryMasked[]);
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [listVersion]);
 
     /** Replace a single revealed entry inside the cache (used by reveal). */
     const replaceEntry = useCallback((entry: PasswordEntry) => {

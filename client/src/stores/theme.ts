@@ -211,12 +211,16 @@ function persist(): void {
 
 // Debounced server sync: coalesce rapid changes (slider drag, etc.) into one WS call.
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
-function scheduleSyncToServer(s: ThemeState): void {
+function scheduleSyncToServer(): void {
     if (syncTimer) clearTimeout(syncTimer);
     syncTimer = setTimeout(() => {
         syncTimer = null;
         if (ws.state !== 'open') return;
-        void ws.send('user.setTheme', s).catch(() => {});
+        // `state` est lu au **déclenchement**, pas à la programmation : maintenant
+        // que l'apparence est partagée, celle d'un autre membre peut arriver
+        // pendant la seconde d'attente. Envoyer l'instantané capturé à l'appel
+        // réécrirait par-dessus un changement qu'on vient tout juste d'appliquer.
+        void ws.send('user.setTheme', state).catch(() => {});
     }, 1000);
 }
 
@@ -228,7 +232,7 @@ export function setTheme(patch: Partial<ThemeState>): void {
     state = { ...state, ...patch };
     persist();
     applyTheme(state);
-    scheduleSyncToServer(state);
+    scheduleSyncToServer();
     for (const fn of listeners) fn();
 }
 

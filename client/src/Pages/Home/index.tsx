@@ -384,8 +384,12 @@ export default function HomePage() {
     const { epoch: workspaceEpoch } = useWorkspaceState();
     const currentWorkspace = useActiveWorkspace();
     const layout = useHomeLayout();
-    const { devices, loading: devicesLoading } = useDevices();
-    const { canFeature } = useWorkspacePermissions();
+    const { devices, loading: devicesLoading, error: devicesError } = useDevices();
+    const { canFeature, can } = useWorkspacePermissions();
+    // Deux réglages de l'espace, deux capacités. Lues en booléens (et non via
+    // `can`, recréé à chaque rendu) pour servir de dépendances stables.
+    const canAppearance = can('workspace.appearance');
+    const canLayout = can('workspace.layout');
 
     const [expandedWidget, setExpandedWidget] = useState<string | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -539,30 +543,50 @@ export default function HomePage() {
     expandedWidgetRef.current = expandedWidget;
 
     /**
-     * Les droits viennent de bouger dans l'espace : on les relit.
+     * La vue ouverte a-t-elle encore lieu d'être avec ces droits-là ? Sinon on
+     * la referme. Appelé après chaque relecture de l'état de l'espace, quelle
+     * qu'en soit la voie.
+     */
+    const reconcileOpenView = useCallback(
+        (permissions: WorkspacePermissions) => {
+            const open = expandedWidgetRef.current;
+            if (open && !survivesWorkspaceSwitch(open, getHomeLayout(), permissions, viewsRef.current)) {
+                handleClose();
+            }
+        },
+        [handleClose]
+    );
+
+    /**
+     * L'accueil de l'espace a bougé sous nos pieds : on le relit.
      *
-     * Quelqu'un a modifié un rôle ou une adhésion, et le serveur l'a diffusé
-     * (sujet `workspace`). Les tuiles se grisent ou se dégrisent d'elles-mêmes —
-     * elles lisent le store — mais une vue **ouverte** sur une feature qu'on
-     * vient de perdre resterait affichée : on la referme.
+     * Quelqu'un a réorganisé les tuiles ou changé l'apparence, et le serveur l'a
+     * diffusé (sujet `home`). `workspace.activate` rend l'état complet de
+     * l'espace d'un seul appel — thème, disposition **et** droits — donc une
+     * relecture suffit à remettre l'écran d'aplomb : le fond change, les tuiles
+     * se recomposent, les features se grisent ou se dégrisent. Une vue
+     * **ouverte** sur une feature devenue interdite, elle, resterait affichée :
+     * `reconcile` la referme.
+     *
+     * L'auteur du changement est exclu de sa propre diffusion : ce chemin ne
+     * repasse donc jamais par-dessus l'édition qu'il est en train de faire.
      *
      * Le serveur, lui, n'attend pas cette relecture pour refuser : toute commande
      * re-résout les droits dès que l'époque d'accès a changé (`invalidateAccess`).
      * Ce qui se joue ici est l'écran, pas la sûreté — une écriture partie juste
      * avant la révocation est rejetée quoi qu'il arrive.
      */
-    const accessVersion = useResourceVersion('workspace.permissions');
+    const stateVersion = useResourceVersion('workspace.activate');
     useEffect(() => {
-        // Rien à relire au premier rendu : la session vient de les livrer.
-        if (accessVersion === 0) return;
+        // Rien à relire au premier rendu : la session vient de tout livrer.
+        if (stateVersion === 0) return;
         void (async () => {
             try {
                 const res = await ws.send('workspace.activate', {});
                 setPermissions(res.permissions);
-                const open = expandedWidgetRef.current;
-                if (open && !survivesWorkspaceSwitch(open, getHomeLayout(), res.permissions, viewsRef.current)) {
-                    handleClose();
-                }
+                syncThemeFromServer(res.theme);
+                syncHomeLayoutFromServer(res.homeLayout);
+                reconcileOpenView(res.permissions);
             } catch {
                 // Plus d'accès du tout à cet espace : la session sait où nous
                 // remettre, et referme ce qui était ouvert en chemin.
@@ -570,7 +594,47 @@ export default function HomePage() {
                 void refresh();
             }
         })();
-    }, [accessVersion, handleClose, refresh]);
+    }, [stateVersion, handleClose, refresh, reconcileOpenView]);
+
+    /**
+     * Ce que seule la session porte : le nom de l'espace, son logo, ses membres.
+     *
+     * Aucune commande ne les relit — ils n'existent que dans le bundle de `/me` —
+     * donc un renommage ou une arrivée de membre resterait invisible chez les
+     * autres jusqu'au rechargement. Ce chemin est le plus lourd des deux (il
+     * rapatrie les avatars de tous les membres), d'où son sujet dédié : il ne
+     * part que sur un changement d'espace, pas sur un glisser-déposer de tuile.
+     *
+     * Il rapporte au passage droits, thème et disposition — `applyBundle` les
+     * pose tous les trois — ce qui rend la voie légère inutile en plus de
+     * celle-ci.
+     */
+    const sessionVersion = useResourceVersion('workspace.session');
+    useEffect(() => {
+        if (sessionVersion === 0) return;
+        void (async () => {
+            await refresh();
+            reconcileOpenView(getWorkspaceState().permissions);
+        })();
+    }, [sessionVersion, refresh, reconcileOpenView]);
+
+    /**
+     * Même règle pour les deux réglages d'espace : le droit tombe, ce qu'il
+     * ouvrait se referme.
+     *
+     * Les entrées du menu disparaissent d'elles-mêmes — elles lisent le store —
+     * mais l'organiseur ou le panneau d'apparence déjà ouverts resteraient sous
+     * les yeux, à proposer des gestes que le serveur refuse désormais. Aucune
+     * dépendance sur `editing`/`settingsOpen` : les fermer *parce qu'ils sont
+     * ouverts* relancerait l'effet à chaque ouverture, alors que ce qu'on
+     * surveille est la perte du droit.
+     */
+    useEffect(() => {
+        if (!canLayout) setEditing(false);
+    }, [canLayout]);
+    useEffect(() => {
+        if (!canAppearance) setSettingsOpen(false);
+    }, [canAppearance]);
 
     // Cross-feature navigation: a feature can ask to open another view (e.g.
     // Monitoring's "Gérer les appareils" → the Appareils page).
@@ -653,12 +717,23 @@ export default function HomePage() {
         }
     }, [unmountFeature, doExpand]);
 
-    // Drop device tiles whose device no longer exists (deleted). Only once devices
-    // have actually loaded, so a transient empty list can't wipe the layout.
+    /**
+     * Drop device tiles whose device no longer exists (deleted). Only once devices
+     * have actually loaded, so a transient empty list can't wipe the layout.
+     *
+     * `error` compte autant que `loading` : une liste qui a **échoué** est vide
+     * elle aussi, et l'élaguer contre elle effacerait toutes les tuiles
+     * d'appareils — de la disposition partagée, pour tout l'espace. Une coupure
+     * réseau y suffisait ; un membre dont le rôle n'ouvre pas `devices` le ferait
+     * à chaque chargement.
+     *
+     * Et l'élagage n'est de toute façon pas le sien : sans `workspace.layout` il
+     * n'a pas à toucher à la composition de l'accueil, fût-ce pour la nettoyer.
+     */
     useEffect(() => {
-        if (devicesLoading) return;
+        if (devicesLoading || devicesError !== null || !canLayout) return;
         pruneMissingDevices(new Set(devices.map((d) => d.id)));
-    }, [devices, devicesLoading]);
+    }, [devices, devicesLoading, devicesError, canLayout]);
 
     // Eagerly warm preload feature views that are on the grid, at idle, once the
     // home is ready — so the first open is instant without stealing the opening
@@ -896,8 +971,8 @@ export default function HomePage() {
                     onOpenDevices={user.role === 'admin' ? (e) => handleExpand('clients', isForceReload(e)) : undefined}
                     onOpenLogs={user.role === 'admin' ? (e) => handleExpand('logs', isForceReload(e)) : undefined}
                     onOpenUsers={user.role === 'admin' ? (e) => handleExpand('users', isForceReload(e)) : undefined}
-                    onOpenSettings={() => setSettingsOpen(true)}
-                    onOrganize={() => startOrganizing()}
+                    onOpenSettings={canAppearance ? () => setSettingsOpen(true) : undefined}
+                    onOrganize={canLayout ? () => startOrganizing() : undefined}
                     organizing={editing}
                     onDoneOrganizing={() => setEditing(false)}
                     onManageWorkspace={(e) => handleExpand('workspace', isForceReload(e))}
@@ -918,14 +993,30 @@ export default function HomePage() {
                             <EditableHome autoOpenAdd={autoAddSection} />
                         ) : layout.sections.length === 0 ? (
                             // A fresh home has no section at all: point the way in
-                            // rather than showing a bare greeting.
-                            <button type='button' className={styles.emptyHome} onClick={() => startOrganizing(true)}>
-                                <span className={`icon icon-plus ${styles.emptyHomeIcon}`} />
-                                <span className={styles.emptyHomeTitle}>Votre accueil est vide</span>
-                                <span className={styles.emptyHomeHint}>
-                                    Ajoutez une section d’appareils, de fonctionnalités ou de raccourcis.
-                                </span>
-                            </button>
+                            // rather than showing a bare greeting. Sans le droit de
+                            // composer, le même bloc dit seulement pourquoi c'est
+                            // vide — inviter à un geste refusé serait pire que rien.
+                            canLayout ? (
+                                <button
+                                    type='button'
+                                    className={styles.emptyHome}
+                                    onClick={() => startOrganizing(true)}
+                                >
+                                    <span className={`icon icon-plus ${styles.emptyHomeIcon}`} />
+                                    <span className={styles.emptyHomeTitle}>Votre accueil est vide</span>
+                                    <span className={styles.emptyHomeHint}>
+                                        Ajoutez une section d’appareils, de fonctionnalités ou de raccourcis.
+                                    </span>
+                                </button>
+                            ) : (
+                                <div className={styles.emptyHome}>
+                                    <span className={`icon icon-plus ${styles.emptyHomeIcon}`} />
+                                    <span className={styles.emptyHomeTitle}>L’accueil de cet espace est vide</span>
+                                    <span className={styles.emptyHomeHint}>
+                                        Votre rôle ne permet pas d’en modifier la disposition.
+                                    </span>
+                                </div>
+                            )
                         ) : (
                             <div className={styles.sections}>{layout.sections.map(renderSection)}</div>
                         )}

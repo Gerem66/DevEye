@@ -36,9 +36,9 @@ export interface TopNavbarProps {
     onOpenDevices?: (e: ReactMouseEvent) => void;
     /** Open the logs feature (admins only). Click carries the force-reload modifier. */
     onOpenLogs?: (e: ReactMouseEvent) => void;
-    /** Open the settings panel. */
+    /** Open the settings panel. Absent = pas le droit de changer l'apparence. */
     onOpenSettings?: () => void;
-    /** Enter the home grid organization (edit) mode. */
+    /** Enter the home grid organization (edit) mode. Absent = pas le droit. */
     onOrganize?: () => void;
     /** When true, the navbar carries the home-organization banner + a "Terminer"
      *  exit button (replacing the inline edit-mode toolbar). */
@@ -286,15 +286,22 @@ export default function TopNavbar({
                             >
                                 <span className='icon icon-shield' /> Sécurité
                             </button>
-                            <button
-                                className={styles.menuItem}
-                                onClick={() => {
-                                    onOpenSettings?.();
-                                    setMenuOpen(false);
-                                }}
-                            >
-                                <span className='icon icon-appearance' /> Apparence
-                            </button>
+                            {/* Apparence et disposition sont des réglages de
+                                l'**espace**, pas du compte : sans le droit
+                                correspondant l'entrée disparaît, comme pour les
+                                features. La popup ouverte, elle, est refermée par
+                                l'accueil quand le droit tombe en cours de route. */}
+                            {onOpenSettings && (
+                                <button
+                                    className={styles.menuItem}
+                                    onClick={() => {
+                                        onOpenSettings();
+                                        setMenuOpen(false);
+                                    }}
+                                >
+                                    <span className='icon icon-appearance' /> Apparence
+                                </button>
+                            )}
                             {onOrganize && (
                                 <button
                                     className={styles.menuItem}

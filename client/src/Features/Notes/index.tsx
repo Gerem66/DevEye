@@ -19,7 +19,7 @@ import { ws } from '@/api/ws';
 import TextInput from '@/Components/TextInput';
 import Button from '@/Components/Button';
 import { ensureUnlocked as ensureSecrecyUnlocked, useSecrecy } from '@/stores/secrecy';
-import { invalidate } from '@/stores/invalidation';
+import { invalidate, useResourceVersion } from '@/stores/invalidation';
 
 import type { FeatureProps } from '@/Features/types';
 import type { Note, NoteFolder, NoteSummary } from 'deveye-types';
@@ -92,6 +92,20 @@ function FeatureNotes({ workspace }: FeatureProps) {
         wasUnlocked.current = unlocked;
         void reload();
     }, [unlocked, reload]);
+
+    /**
+     * Une note écrite par quelqu'un d'autre apparaît sans recharger.
+     *
+     * Le serveur diffusait déjà le sujet `notes` après chaque écriture, et la
+     * clé était bien invalidée — personne ne l'écoutait. Sans danger pour le
+     * verrou : `note.list` ne lit que la clé ouverte (voir `withSecrecy`), donc
+     * cette relecture ne peut pas faire surgir une demande de mot de passe.
+     */
+    const listVersion = useResourceVersion('note.list');
+    useEffect(() => {
+        if (listVersion === 0) return;
+        void reload();
+    }, [listVersion, reload]);
 
     const upsert = useCallback((note: Note) => {
         const summary = toSummary(note);

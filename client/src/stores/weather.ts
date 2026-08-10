@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { ws } from '@/api/ws';
+import { onResourceChange } from '@/stores/invalidation';
 import type { WeatherLocation, WeatherReport } from 'deveye-types';
 
 /**
@@ -26,6 +27,7 @@ let state: WeatherStoreState = { locations: [], report: null, loading: true };
 const listeners = new Set<() => void>();
 let timer: ReturnType<typeof setInterval> | null = null;
 let unsubState: (() => void) | null = null;
+let unsubInvalidate: (() => void) | null = null;
 let refCount = 0;
 let inFlight = false;
 // A refresh requested while one was already running: we run exactly one more
@@ -99,6 +101,10 @@ function start(): void {
     unsubState = ws.onStateChange((s) => {
         if (s === 'open') void refreshWeather();
     });
+    // Une ville ajoutée, retirée ou repassée en principale par un autre membre
+    // de l'espace : le sujet `weather` l'annonce, et la barre comme la tuile
+    // suivent sans attendre le relevé des dix minutes.
+    unsubInvalidate = onResourceChange('weather.list', () => void refreshWeather());
     if (ws.state === 'open') void refreshWeather();
 }
 
@@ -113,6 +119,8 @@ function stop(): void {
     pending = false;
     unsubState?.();
     unsubState = null;
+    unsubInvalidate?.();
+    unsubInvalidate = null;
 }
 
 function subscribe(cb: () => void): () => void {

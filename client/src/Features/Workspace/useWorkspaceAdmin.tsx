@@ -3,6 +3,7 @@ import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole } from '
 
 import { ws, WsError } from '@/api/ws';
 import { useAuth } from '@/auth/AuthProvider';
+import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { resetWorkspace, upsertWorkspace, useActiveWorkspace } from '@/stores/workspace';
 
 /**
@@ -28,6 +29,25 @@ export function useWorkspaceAdmin() {
 
     const fail = (e: unknown, fallback: string): void => setError(e instanceof WsError ? e.message : fallback);
 
+    /**
+     * Les droits de quelqu'un viennent de changer — **le nôtre y compris**.
+     *
+     * Le serveur diffuse bien le changement, mais il en exclut son auteur : il a
+     * déjà la réponse de sa propre commande. Sauf que cette réponse ne dit rien
+     * de *ses* droits à lui, alors qu'il vient peut-être de se retirer une
+     * capacité en modifiant son propre rôle. Sans ce rappel, l'onglet Rôles
+     * restait ouvert sous les pieds de qui venait de s'en retirer l'accès —
+     * alors que la même révocation venue d'ailleurs le faisait disparaître aussitôt.
+     *
+     * On repasse donc par la **même** clé que la voie distante plutôt que
+     * d'appliquer les droits à la main : un seul chemin à garder juste, et
+     * l'auteur voit exactement ce que voient les autres.
+     *
+     * Miroir de l'`invalidateAccess()` du serveur : ces deux commandes-là, et
+     * elles seules, peuvent redéfinir les droits d'un membre déjà en place.
+     */
+    const grantsChanged = (): void => invalidate('workspace.activate');
+
     const loadSharedKey = useCallback(async () => {
         try {
             setSharedKey(await ws.send('workspace.sharedKeyStatus', {}));
@@ -47,10 +67,23 @@ export function useWorkspaceAdmin() {
         }
     }, []);
 
+    /**
+     * Les rôles se relisent aussi quand **quelqu'un d'autre** y touche : deux
+     * personnes ouvrent volontiers cette page en même temps, et celle qui
+     * regarde ne doit pas rester sur une liste périmée. La clé est déjà
+     * invalidée par le sujet `workspace` ; il ne manquait que l'abonnement.
+     *
+     * La clé d'espace, elle, ne suit pas : sa conversion est un geste unique du
+     * propriétaire, qui recharge lui-même l'état juste après.
+     */
+    const rolesVersion = useResourceVersion('workspace.roleList');
+    useEffect(() => {
+        void loadRoles();
+    }, [loadRoles, rolesVersion]);
+
     useEffect(() => {
         void loadSharedKey();
-        void loadRoles();
-    }, [loadSharedKey, loadRoles]);
+    }, [loadSharedKey]);
 
     /**
      * Exécute une action, en portant l'erreur et l'état occupé.
@@ -118,6 +151,7 @@ export function useWorkspaceAdmin() {
             run(async () => {
                 await ws.send('workspace.roleUpdate', { roleId, ...draft });
                 await loadRoles();
+                grantsChanged();
             }, 'Modification du rôle impossible.'),
 
         deleteRole: (roleId: number) =>
@@ -136,6 +170,7 @@ export function useWorkspaceAdmin() {
             run(async () => {
                 await ws.send('workspace.assignRole', { userId, roleId });
                 await loadRoles();
+                grantsChanged();
             }, 'Attribution du rôle impossible.'),
 
         rename: (name: string) =>
