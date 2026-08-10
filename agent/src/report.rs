@@ -710,6 +710,20 @@ fn per_process_io(raw: &[RawProcess]) -> Option<ProcessIo> {
 /// (hence the `System`, unused here but needed by the Windows arm).
 #[cfg(not(target_os = "windows"))]
 fn scan_processes(_sys: &mut System) -> Vec<RawProcess> {
+    // Linux lit `/proc` directement : pas de binaire externe, donc rien à
+    // trouver dans le `PATH` et aucune dépendance au `ps` du système. Le `ps`
+    // d'origine partait du principe que celui de procps-ng était installé — un
+    // BusyBox, une racine minimale ou un `PATH` réduit rendaient une liste vide,
+    // en silence, et la machine paraissait n'exécuter aucun processus.
+    #[cfg(target_os = "linux")]
+    {
+        let procs = scan_processes_proc();
+        if !procs.is_empty() {
+            return procs;
+        }
+        tracing::warn!("/proc yielded no process — falling back to ps");
+    }
+
     // macOS uses `ucomm` (short accounting name) and `etime` (formatted); Linux
     // uses `comm`, `etimes` (plain seconds) and exposes a thread count (`nlwp`).
     #[cfg(target_os = "macos")]
@@ -719,9 +733,180 @@ fn scan_processes(_sys: &mut System) -> Vec<RawProcess> {
 
     let out = match run("ps", &args) {
         Some(o) => o,
-        None => return Vec::new(),
+        None => {
+            // Ne pas rendre un vide muet : c'est indiscernable d'une machine au
+            // repos, et c'est ce qui rendait le diagnostic impossible.
+            tracing::warn!("`ps` unavailable or failed — no process list this tick");
+            return Vec::new();
+        }
     };
-    out.lines().filter_map(parse_ps_line).collect()
+    let procs: Vec<RawProcess> = out.lines().filter_map(parse_ps_line).collect();
+    if procs.is_empty() {
+        tracing::warn!(
+            lines = out.lines().count(),
+            "`ps` returned output but no line could be parsed — unexpected column layout"
+        );
+    }
+    procs
+}
+
+/// Énumère les processus depuis `/proc`, sans passer par `ps`.
+///
+/// Reproduit les mêmes colonnes, avec les mêmes sémantiques : `%cpu` y est la
+/// moyenne sur la vie du processus — temps CPU cumulé rapporté à son âge —, ce
+/// que rend aussi `ps -o pcpu`, et non une mesure instantanée.
+#[cfg(target_os = "linux")]
+fn scan_processes_proc() -> Vec<RawProcess> {
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return Vec::new();
+    };
+    let uptime = proc_uptime_seconds().unwrap_or(0.0);
+    let total_mem_kb = proc_mem_total_kb().unwrap_or(0);
+    let users = passwd_names();
+
+    let mut out = Vec::new();
+    for entry in entries.flatten() {
+        let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() else {
+            continue; // `/proc` mêle ses répertoires de pid à ses fichiers.
+        };
+        // Un processus peut disparaître entre l'énumération et la lecture : ce
+        // n'est pas une erreur, on l'ignore simplement.
+        let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+            continue;
+        };
+        if let Some(p) = parse_proc_stat(pid, &stat, uptime, total_mem_kb, &users) {
+            out.push(p);
+        }
+    }
+    out
+}
+
+/// USER_HZ, l'unité des compteurs de `/proc/<pid>/stat`. Vaut 100 sur toutes les
+/// architectures Linux courantes ; le lire demanderait `sysconf`, donc la libc.
+#[cfg(target_os = "linux")]
+const USER_HZ: f64 = 100.0;
+
+#[cfg(target_os = "linux")]
+fn parse_proc_stat(
+    pid: u32,
+    stat: &str,
+    uptime: f64,
+    total_mem_kb: u64,
+    users: &HashMap<u32, String>,
+) -> Option<RawProcess> {
+    // `comm` est entre parenthèses et peut contenir espaces ET parenthèses :
+    // on coupe sur la **dernière**, seule borne fiable.
+    let open = stat.find('(')?;
+    let close = stat.rfind(')')?;
+    let name = stat.get(open + 1..close)?.to_string();
+    if name.is_empty() {
+        return None;
+    }
+    // Après la parenthèse fermante, le premier champ est `state` (le 3ᵉ de la
+    // page de manuel) : l'indice i vaut donc le champ i+3.
+    let f: Vec<&str> = stat.get(close + 1..)?.split_whitespace().collect();
+    let num = |i: usize| -> Option<u64> { f.get(i)?.parse().ok() };
+    let utime = num(11)?; // champ 14
+    let stime = num(12)?; // champ 15
+    let threads = num(17).map(|t| t as u32); // champ 20
+    let starttime = num(19)?; // champ 22
+    let rss_pages = num(21)?; // champ 24
+
+    let age = (uptime - starttime as f64 / USER_HZ).max(0.0);
+    let cpu_percent = if age > 0.0 {
+        ((utime + stime) as f64 / USER_HZ / age) * 100.0
+    } else {
+        0.0
+    };
+    let rss_bytes = rss_pages.saturating_mul(page_size());
+    let mem_percent = if total_mem_kb > 0 {
+        (rss_bytes as f64 / (total_mem_kb as f64 * 1024.0)) * 100.0
+    } else {
+        0.0
+    };
+
+    Some(RawProcess {
+        pid,
+        name,
+        cpu_percent,
+        mem_percent,
+        rss_bytes,
+        threads,
+        user: proc_uid(pid).and_then(|uid| users.get(&uid).cloned()),
+        uptime_seconds: Some(age as u64),
+        disk_io: None,
+    })
+}
+
+/// Taille de page, en octets. 4 Kio partout sauf sur certains noyaux ARM64
+/// configurés en 16 ou 64 Kio — d'où la lecture du vrai chiffre quand `getconf`
+/// répond, plutôt qu'une constante qui fausserait la mémoire d'un facteur 16.
+#[cfg(target_os = "linux")]
+fn page_size() -> u64 {
+    use std::sync::OnceLock;
+    static SIZE: OnceLock<u64> = OnceLock::new();
+    *SIZE.get_or_init(|| {
+        run("getconf", &["PAGESIZE"])
+            .and_then(|s| s.trim().parse::<u64>().ok())
+            .filter(|v| v.is_power_of_two())
+            .unwrap_or(4096)
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn proc_uptime_seconds() -> Option<f64> {
+    std::fs::read_to_string("/proc/uptime")
+        .ok()?
+        .split_whitespace()
+        .next()?
+        .parse()
+        .ok()
+}
+
+#[cfg(target_os = "linux")]
+fn proc_mem_total_kb() -> Option<u64> {
+    let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
+    meminfo
+        .lines()
+        .find(|l| l.starts_with("MemTotal:"))?
+        .split_whitespace()
+        .nth(1)?
+        .parse()
+        .ok()
+}
+
+/// L'uid **effectif** du processus (2ᵉ entier de la ligne `Uid:`).
+#[cfg(target_os = "linux")]
+fn proc_uid(pid: u32) -> Option<u32> {
+    let status = std::fs::read_to_string(format!("/proc/{pid}/status")).ok()?;
+    status
+        .lines()
+        .find(|l| l.starts_with("Uid:"))?
+        .split_whitespace()
+        .nth(2)?
+        .parse()
+        .ok()
+}
+
+/// uid → nom, lu une fois par balayage. `/etc/passwd` ne couvre pas les comptes
+/// d'un annuaire distant ; un uid non résolu reste simplement sans nom, comme le
+/// faisait déjà `ps` sur une colonne trop étroite.
+#[cfg(target_os = "linux")]
+fn passwd_names() -> HashMap<u32, String> {
+    let mut map = HashMap::new();
+    let Ok(passwd) = std::fs::read_to_string("/etc/passwd") else {
+        return map;
+    };
+    for line in passwd.lines() {
+        let mut f = line.split(':');
+        let (Some(name), Some(_), Some(uid)) = (f.next(), f.next(), f.next()) else {
+            continue;
+        };
+        if let Ok(uid) = uid.parse::<u32>() {
+            map.insert(uid, name.to_string());
+        }
+    }
+    map
 }
 
 /// Windows scan via `sysinfo`. The `System` lives across ticks, so the CPU delta
@@ -1119,5 +1304,53 @@ mod tests {
         assert_eq!(info.conn_in, Some(12));
         assert_eq!(info.conn_out, Some(2));
         assert_eq!(info.listen_ports, vec![80, 443], "sorted and deduped");
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod proc_scan_tests {
+    use super::*;
+
+    /// Le lecteur `/proc` doit voir la même réalité que `ps`, à la course près
+    /// (des processus naissent et meurent entre les deux relevés).
+    #[test]
+    fn proc_scan_agrees_with_ps() {
+        let mine = scan_processes_proc();
+        assert!(!mine.is_empty(), "/proc n'a rendu aucun processus");
+
+        // `ps` n'est pas garanti présent — c'est précisément la raison d'être de
+        // ce lecteur. Sans lui, il n'y a rien à comparer : on s'arrête là.
+        let Some(ps) = run(
+            "ps",
+            &["-eo", "pid=,pcpu=,pmem=,rss=,etimes=,nlwp=,user=,comm="],
+        ) else {
+            return;
+        };
+        let ps: Vec<RawProcess> = ps.lines().filter_map(parse_ps_line).collect();
+        assert!(!ps.is_empty(), "ps n'a rendu aucun processus");
+
+        // Les deux ensembles doivent très largement se recouvrir.
+        let ps_pids: std::collections::HashSet<u32> = ps.iter().map(|p| p.pid).collect();
+        let common = mine.iter().filter(|p| ps_pids.contains(&p.pid)).count();
+        assert!(
+            common * 10 >= ps.len() * 8,
+            "recouvrement trop faible : {common} communs pour {} vus par ps",
+            ps.len()
+        );
+
+        // Et sur un processus commun, les colonnes doivent concorder.
+        let self_pid = std::process::id();
+        if let (Some(a), Some(b)) = (
+            mine.iter().find(|p| p.pid == self_pid),
+            ps.iter().find(|p| p.pid == self_pid),
+        ) {
+            assert_eq!(a.name, b.name, "nom divergent");
+            assert_eq!(a.user, b.user, "utilisateur divergent");
+            let (ra, rb) = (a.rss_bytes as f64, b.rss_bytes as f64);
+            assert!(
+                (ra - rb).abs() <= rb.max(1.0) * 0.25,
+                "RSS divergent : /proc {ra} vs ps {rb}"
+            );
+        }
     }
 }

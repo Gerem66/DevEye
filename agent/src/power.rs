@@ -46,7 +46,11 @@ fn run(program: &str, args: &[&str]) -> Result<()> {
 /// Try each candidate in order, returning on the first success and the last error
 /// if all fail. Lets us prefer logind (`systemctl`) and fall back to the classic
 /// tools without giving up on the first missing binary.
-#[cfg(not(target_os = "windows"))]
+///
+/// Linux seul : macOS choisit désormais sa commande sur le privilège plutôt que
+/// d'enchaîner les tentatives — un `osascript` qui rend 0 sans rien faire n'est
+/// pas un échec dont on peut se rattraper.
+#[cfg(target_os = "linux")]
 fn run_first(candidates: &[(&str, &[&str])]) -> Result<()> {
     let mut last: Option<anyhow::Error> = None;
     for (program, args) in candidates {
@@ -77,29 +81,50 @@ fn hibernate() -> Result<()> {
 }
 #[cfg(target_os = "linux")]
 fn lock() -> Result<()> {
-    run("loginctl", &["lock-sessions"])
+    // `lock-sessions` verrouille *toutes* les sessions et demande le privilège ;
+    // un agent utilisateur ne l'a pas, et échouait là où verrouiller sa propre
+    // session aurait suffi. `lock-session` sans argument vise celle de l'appelant.
+    run_first(&[
+        ("loginctl", &["lock-sessions"]),
+        ("loginctl", &["lock-session"]),
+    ])
 }
 
 // ───────────────────────────────── macOS ──────────────────────────────────
+//
+// L'ordre des candidats compte, et il était inversé.
+//
+// `osascript ... to shut down` envoie un Apple Event à System Events. Hors
+// session graphique — un agent lancé en démon launchd — l'événement n'atteint
+// personne ; dans une session, il déclenche l'extinction *interactive*, qu'une
+// application refusant de quitter suffit à bloquer. Dans les deux cas la
+// commande rend **0**, donc `run_first` s'arrêtait sur ce premier « succès » et
+// n'essayait jamais `shutdown`. De l'extérieur : un bouton sans effet, et aucune
+// erreur — alors que « Verrouiller » et « Veille », qui passent par `pmset`,
+// fonctionnaient.
+//
+// `shutdown(8)` est la voie autoritaire, non interactive… et réservée à root.
+// On la prend donc en premier quand on en a le droit, et l'Apple Event ne reste
+// que le recours d'un agent non privilégié, seul cas où il a une chance d'agir.
 #[cfg(target_os = "macos")]
 fn shutdown() -> Result<()> {
-    run_first(&[
-        (
-            "osascript",
-            &["-e", "tell application \"System Events\" to shut down"],
-        ),
-        ("shutdown", &["-h", "now"]),
-    ])
+    if crate::report::is_privileged() {
+        return run("shutdown", &["-h", "now"]);
+    }
+    run(
+        "osascript",
+        &["-e", "tell application \"System Events\" to shut down"],
+    )
 }
 #[cfg(target_os = "macos")]
 fn reboot() -> Result<()> {
-    run_first(&[
-        (
-            "osascript",
-            &["-e", "tell application \"System Events\" to restart"],
-        ),
-        ("shutdown", &["-r", "now"]),
-    ])
+    if crate::report::is_privileged() {
+        return run("shutdown", &["-r", "now"]);
+    }
+    run(
+        "osascript",
+        &["-e", "tell application \"System Events\" to restart"],
+    )
 }
 #[cfg(target_os = "macos")]
 fn suspend() -> Result<()> {
