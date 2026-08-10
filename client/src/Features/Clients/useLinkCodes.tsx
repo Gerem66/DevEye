@@ -17,6 +17,8 @@ import { LinkInfo } from './LinkInfo';
  */
 export function useLinkCodes(refresh: () => Promise<void> | void) {
     const [codes, setCodes] = useState<LinkCodeResponse[]>([]);
+    /** La liste n'a pas pu être relue : à dire, plutôt que d'afficher « aucun code ». */
+    const [codesError, setCodesError] = useState<string | null>(null);
     const [showLinkModal, setShowLinkModal] = useState(false);
     const [generatingCode, setGeneratingCode] = useState(false);
     const [genError, setGenError] = useState<string | null>(null);
@@ -31,8 +33,13 @@ export function useLinkCodes(refresh: () => Promise<void> | void) {
         try {
             const res = await get('/api/devices/link-codes', linkCodesListResponseSchema);
             setCodes(res.codes);
+            setCodesError(null);
             return res.codes;
-        } catch {
+        } catch (e) {
+            // Ne PAS retomber sur une liste vide en silence : « Aucun code
+            // actif » se lit comme une certitude, et c'est trompeur dans un
+            // dialogue de sécurité — un code encore valide peut circuler.
+            setCodesError(e instanceof Error ? e.message : 'Codes actifs indisponibles.');
             return [];
         }
     };
@@ -126,6 +133,7 @@ export function useLinkCodes(refresh: () => Promise<void> | void) {
 
     return {
         codes,
+        codesError,
         showLinkModal,
         generatingCode,
         genError,

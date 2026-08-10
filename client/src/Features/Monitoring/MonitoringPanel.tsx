@@ -51,6 +51,7 @@ import {
     formatDuration,
     formatRate,
     formatUptime,
+    nearestBy,
     pct
 } from './utils';
 import styles from './Monitoring.module.css';
@@ -118,20 +119,6 @@ function mergeSnapshot(prev: MetricSeriesPoint | null, next: MetricSeriesPoint):
         if (out[k] == null && prev[k] != null) (out[k] as number | null) = prev[k] as number | null;
     }
     return out;
-}
-
-/** The point closest to `at` within a series. */
-function nearestPoint(points: MetricSeriesPoint[], at: number): MetricSeriesPoint | null {
-    let best: MetricSeriesPoint | null = null;
-    let bestDist = Infinity;
-    for (const p of points) {
-        const d = Math.abs(p.timestamp - at);
-        if (d < bestDist) {
-            bestDist = d;
-            best = p;
-        }
-    }
-    return best;
 }
 
 /** A synthetic snapshot whose gauges/counters are averaged over `points`. */
@@ -298,6 +285,22 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     // query, so we show loaders for them until it lands — everything else (KPIs,
     // security, online state) is seeded instantly by the subscribe push.
     const [metricsReady, setMetricsReady] = useState(false);
+    /**
+     * Une lecture de supervision a échoué.
+     *
+     * Sans état, les neuf `.catch(() => {})` de ce panneau rendaient un échec
+     * réseau indiscernable d'une machine sans données : les cartes affichaient
+     * « — » et l'utilisateur concluait à une perte d'historique. On ne retient
+     * qu'un drapeau — la panne est la même pour toutes les lectures, c'est la
+     * socket — et il se lève dès que l'une d'elles repasse.
+     */
+    const [readError, setReadError] = useState(false);
+    /**
+     * La fenêtre contenait plus d'instants que le serveur n'en rend : seuls les
+     * plus récents sont là. Dit plutôt que tu, sinon la frise s'arrête au milieu
+     * de la journée et la navigation par ‹ › bute sans raison apparente.
+     */
+    const [timelineTruncated, setTimelineTruncated] = useState(false);
 
     const baseDevice = baseDevices.find((d) => d.id === deviceId) ?? null;
     const selected = baseDevice ? { ...baseDevice, ...override } : null;
@@ -326,6 +329,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     // loaders instead of stale or empty cards.
     useEffect(() => {
         setMetricsReady(false);
+        setReadError(false);
+        setTimelineTruncated(false);
         setOverride({});
         setPoints([]);
         setLiveSnapshot(null);
@@ -345,7 +350,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             .then((res) => {
                 if (idRef.current === id) setDataDays(res.days);
             })
-            .catch(() => {});
+            .catch(() => setReadError(true));
     }, [deviceId]);
 
     // Storage footprint of the device's stored snapshots (count + DB bytes).
@@ -356,7 +361,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 if (idRef.current === id)
                     setStorage({ snapshots: res.snapshots, processes: res.processes, bytes: res.bytes });
             })
-            .catch(() => {});
+            .catch(() => setReadError(true));
     }, [deviceId]);
 
     // Subscribe live to this device through the shared ref-counted store, so it
@@ -381,16 +386,17 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             .then((res) => {
                 if (idRef.current === id) setPresence({ onlineAtStart: res.onlineAtStart, events: res.events });
             })
-            .catch(() => {});
+            .catch(() => setReadError(true));
         ws.send('metrics.snapshots', { deviceId: id, from: start, to: end })
             .then((res) => {
                 if (idRef.current === id) {
                     setSnapshotTimes(res.timestamps);
                     setPinnedTimes(res.pinned);
                     setProcTimes(res.withProcesses);
+                    setTimelineTruncated(res.truncated);
                 }
             })
-            .catch(() => {});
+            .catch(() => setReadError(true));
     }, [deviceId, dayStart, spanMs]);
 
     // Fetch the series + processes for the current graph window / focus.
@@ -398,9 +404,12 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         const id = deviceId;
         ws.send('metrics.query', { deviceId: id, from: graphWindow.start, to: graphWindow.end, resolution })
             .then((res) => {
-                if (idRef.current === id) setPoints(res.points);
+                if (idRef.current === id) {
+                    setPoints(res.points);
+                    setReadError(false);
+                }
             })
-            .catch(() => {})
+            .catch(() => setReadError(true))
             // Reveal the graphs once the first attempt lands (success or failure),
             // so a transient error shows "no data" rather than an endless loader.
             .finally(() => {
@@ -413,7 +422,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             .then((res) => {
                 if (idRef.current === id) setHistProc(res.sample);
             })
-            .catch(() => {});
+            .catch(() => setReadError(true));
     }, [deviceId, graphWindow.start, graphWindow.end, resolution, processAt]);
 
     const liveTail = focus.kind === 'live' && dayStart === null;
@@ -434,9 +443,17 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     setLiveProc({ ts: push.snapshot.timestamp, kind: processKind ?? 'all', processes });
                 }
                 if (liveTail) {
-                    setPoints((prev) =>
-                        prev.length && point.timestamp <= prev[prev.length - 1].timestamp ? prev : [...prev, point]
-                    );
+                    setPoints((prev) => {
+                        if (prev.length && point.timestamp <= prev[prev.length - 1].timestamp) return prev;
+                        // Rogné à la fenêtre affichée : sans ça, un panneau laissé
+                        // ouvert en direct accumulait indéfiniment des points hors
+                        // champ — ~17 000 par jour à la cadence la plus rapide,
+                        // recalculés à chaque poussée et jamais dessinés.
+                        const floor = point.timestamp - spanMs;
+                        const next = [...prev, point];
+                        const from = next.findIndex((p) => p.timestamp >= floor);
+                        return from <= 0 ? next : next.slice(from);
+                    });
                 }
             }
             if (msg.command === DEVICE_REPORT_EVENT && msg.payload.ok) {
@@ -451,7 +468,18 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 setOverride((p) => ({ ...p, online: pres.online }));
                 const seen = pres.lastSeen;
                 if (seen) {
-                    setPresence((pr) => ({ ...pr, events: [...pr.events, { ts: seen * 1000, online: pres.online }] }));
+                    setPresence((pr) => {
+                        // Seules les vraies **transitions** entrent : la frise
+                        // dessine ses lignes en alternant les segments, et un
+                        // doublon s'y lit comme un rayage arbitraire. Le serveur
+                        // horodate à la publication, y compris sur le front
+                        // « hors ligne » — d'où le repli sur l'instant courant
+                        // plutôt qu'un `lastSeen` qui dirait « vu à l'instant ».
+                        const last = pr.events[pr.events.length - 1];
+                        if (last && last.online === pres.online) return pr;
+                        const ts = Math.min(seen * 1000, Date.now());
+                        return { ...pr, events: [...pr.events, { ts, online: pres.online }] };
+                    });
                 }
             }
         });
@@ -503,9 +531,10 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     setSnapshotTimes(res.timestamps);
                     setPinnedTimes(res.pinned);
                     setProcTimes(res.withProcesses);
+                    setTimelineTruncated(res.truncated);
                 }
             })
-            .catch(() => {});
+            .catch(() => setReadError(true));
     }, [windowRange]);
 
     // Re-fetch the stored-snapshot footprint (count + DB bytes).
@@ -516,7 +545,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 if (idRef.current === id)
                     setStorage({ snapshots: res.snapshots, processes: res.processes, bytes: res.bytes });
             })
-            .catch(() => {});
+            .catch(() => setReadError(true));
     }, []);
 
     // Delete the targeted snapshot(s), then drop back to live and refresh marks.
@@ -569,51 +598,65 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         if (refreshing) return;
         setRefreshing(true);
         ws.send('metrics.refresh', { deviceId: id })
-            .catch(() => {})
+            .catch(() => setReadError(true))
             .finally(() => setTimeout(() => setRefreshing(false), 1200));
     }, [refreshing]);
 
     // ── Derived series for the graphs ──
-    const cpuS = points.map((p) => ({ t: p.timestamp, v: p.cpuPercent }));
-    const ramS = points.map((p) => ({ t: p.timestamp, v: pct(p.memUsedBytes, p.memTotalBytes) }));
-    const diskS = points.map((p) => ({ t: p.timestamp, v: pct(p.diskUsedBytes, p.diskTotalBytes) }));
-    const netRx: { t: number; v: number }[] = [];
-    const netTx: { t: number; v: number }[] = [];
-    for (let i = 1; i < points.length; i++) {
-        const dt = (points[i].timestamp - points[i - 1].timestamp) / 1000;
-        if (dt <= 0) continue;
-        netRx.push({ t: points[i].timestamp, v: Math.max(0, (points[i].netRxBytes - points[i - 1].netRxBytes) / dt) });
-        netTx.push({ t: points[i].timestamp, v: Math.max(0, (points[i].netTxBytes - points[i - 1].netTxBytes) / dt) });
-    }
-    // Disk I/O rates (counters present only on snapshot rows; skip the null gaps).
-    const diskRead: { t: number; v: number }[] = [];
-    const diskWrite: { t: number; v: number }[] = [];
-    let prevIO: { t: number; r: number | null; w: number | null } | null = null;
-    for (const p of points) {
-        if (p.diskReadBytes == null && p.diskWriteBytes == null) continue;
-        if (prevIO) {
-            const dt = (p.timestamp - prevIO.t) / 1000;
-            if (dt > 0) {
-                if (p.diskReadBytes != null && prevIO.r != null)
-                    diskRead.push({ t: p.timestamp, v: Math.max(0, (p.diskReadBytes - prevIO.r) / dt) });
-                if (p.diskWriteBytes != null && prevIO.w != null)
-                    diskWrite.push({ t: p.timestamp, v: Math.max(0, (p.diskWriteBytes - prevIO.w) / dt) });
-            }
+    //
+    // Toutes mémoïsées ensemble, sur la seule dépendance qui les gouverne. Nues,
+    // elles se recalculaient à *chaque* rendu — soit au moins une fois par
+    // relevé poussé, sur toute la fenêtre — alors que leurs voisines (`display`,
+    // `procCols`, `portGroups`) l'étaient déjà.
+    const { cpuS, ramS, diskS, netRx, netTx, diskRead, diskWrite, tempS, gpuS, batteryS } = useMemo(() => {
+        const netRx: { t: number; v: number }[] = [];
+        const netTx: { t: number; v: number }[] = [];
+        for (let i = 1; i < points.length; i++) {
+            const dt = (points[i].timestamp - points[i - 1].timestamp) / 1000;
+            if (dt <= 0) continue;
+            const t = points[i].timestamp;
+            netRx.push({ t, v: Math.max(0, (points[i].netRxBytes - points[i - 1].netRxBytes) / dt) });
+            netTx.push({ t, v: Math.max(0, (points[i].netTxBytes - points[i - 1].netTxBytes) / dt) });
         }
-        prevIO = { t: p.timestamp, r: p.diskReadBytes, w: p.diskWriteBytes };
-    }
-    const tempS = points.filter((p) => p.cpuTempC !== null).map((p) => ({ t: p.timestamp, v: p.cpuTempC as number }));
-    const gpuS = points
-        .filter((p) => p.gpuPercent !== null)
-        .map((p) => ({ t: p.timestamp, v: p.gpuPercent as number }));
-    const batteryS = points
-        .filter((p) => p.batteryPercent !== null)
-        .map((p) => ({ t: p.timestamp, v: p.batteryPercent as number }));
+        // Disk I/O rates (counters present only on snapshot rows; skip the null gaps).
+        const diskRead: { t: number; v: number }[] = [];
+        const diskWrite: { t: number; v: number }[] = [];
+        let prevIO: { t: number; r: number | null; w: number | null } | null = null;
+        for (const p of points) {
+            if (p.diskReadBytes == null && p.diskWriteBytes == null) continue;
+            if (prevIO) {
+                const dt = (p.timestamp - prevIO.t) / 1000;
+                if (dt > 0) {
+                    if (p.diskReadBytes != null && prevIO.r != null)
+                        diskRead.push({ t: p.timestamp, v: Math.max(0, (p.diskReadBytes - prevIO.r) / dt) });
+                    if (p.diskWriteBytes != null && prevIO.w != null)
+                        diskWrite.push({ t: p.timestamp, v: Math.max(0, (p.diskWriteBytes - prevIO.w) / dt) });
+                }
+            }
+            prevIO = { t: p.timestamp, r: p.diskReadBytes, w: p.diskWriteBytes };
+        }
+        return {
+            cpuS: points.map((p) => ({ t: p.timestamp, v: p.cpuPercent })),
+            ramS: points.map((p) => ({ t: p.timestamp, v: pct(p.memUsedBytes, p.memTotalBytes) })),
+            diskS: points.map((p) => ({ t: p.timestamp, v: pct(p.diskUsedBytes, p.diskTotalBytes) })),
+            netRx,
+            netTx,
+            diskRead,
+            diskWrite,
+            tempS: points.filter((p) => p.cpuTempC !== null).map((p) => ({ t: p.timestamp, v: p.cpuTempC as number })),
+            gpuS: points
+                .filter((p) => p.gpuPercent !== null)
+                .map((p) => ({ t: p.timestamp, v: p.gpuPercent as number })),
+            batteryS: points
+                .filter((p) => p.batteryPercent !== null)
+                .map((p) => ({ t: p.timestamp, v: p.batteryPercent as number }))
+        };
+    }, [points]);
 
     // Value to show in the KPI cards, per focus.
     const display = useMemo<MetricSeriesPoint | null>(() => {
         if (focus.kind === 'range') return averageSnapshot(points);
-        if (focus.kind === 'snapshot') return nearestPoint(points, focus.at);
+        if (focus.kind === 'snapshot') return nearestBy(points, focus.at, (p) => p.timestamp);
         return liveSnapshot ?? (points.length ? points[points.length - 1] : null);
     }, [focus, points, liveSnapshot]);
     const averaged = focus.kind === 'range';
@@ -1015,6 +1058,22 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     {lastKnown
                         ? ` · dernières données le ${new Date(lastKnown.timestamp).toLocaleString('fr-FR')}`
                         : ''}
+                </div>
+            )}
+
+            {readError && (
+                <div className={styles.offlineBanner}>
+                    <span className='icon icon-error' />
+                    Certaines données n’ont pas pu être chargées. Les cartes vides ne signifient pas forcément une
+                    absence de relevés.
+                </div>
+            )}
+
+            {timelineTruncated && (
+                <div className={styles.offlineBanner}>
+                    <span className='icon icon-info' />
+                    Trop de relevés sur cette période : la frise n’affiche que les plus récents. Réduisez la fenêtre
+                    pour tous les parcourir.
                 </div>
             )}
 

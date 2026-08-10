@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PresenceEvent } from 'deveye-types';
 import { MonthPicker } from './MonthPicker';
+import { nearestBy } from './utils';
+
+/** L'instant stocké le plus proche d'une position sur la frise. */
+const nearestValue = (values: number[], target: number) => nearestBy(values, target, (v) => v);
 import styles from './Monitoring.module.css';
 
 interface TimelineProps {
@@ -122,19 +126,6 @@ function parseDayKey(key: string): number {
     return new Date(y, m - 1, d).getTime();
 }
 
-function nearest(values: number[], target: number): number | null {
-    let best: number | null = null;
-    let bestDist = Infinity;
-    for (const v of values) {
-        const d = Math.abs(v - target);
-        if (d < bestDist) {
-            bestDist = d;
-            best = v;
-        }
-    }
-    return best;
-}
-
 function buildSegments(
     windowStart: number,
     windowEnd: number,
@@ -176,6 +167,9 @@ export function Timeline({
     onSpanChange
 }: TimelineProps) {
     const trackRef = useRef<HTMLDivElement>(null);
+    // Racine de la frise : sert à savoir si ce panneau est bien celui qu'on voit
+    // (voir la garde du raccourci clavier plus bas).
+    const rootRef = useRef<HTMLDivElement>(null);
     const [drag, setDrag] = useState<{ a: number; b: number; downX: number } | null>(null);
     const [calOpen, setCalOpen] = useState(false);
 
@@ -236,7 +230,7 @@ export function Timeline({
         if (movedPx < CLICK_SLOP_PX) {
             // A click: snap to the nearest snapshot mark when there is one.
             const t = timeAt(e.clientX);
-            onPickSnapshot(nearest(snapshotTimes, t) ?? t);
+            onPickSnapshot(nearestValue(snapshotTimes, t) ?? t);
         } else if (end - start > 60_000) {
             onSelectRange({ start, end });
         }
@@ -274,6 +268,12 @@ export function Timeline({
         const onKey = (e: KeyboardEvent) => {
             if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
             if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+            // Un panneau **garé** garde son DOM monté (`FeatureKeepAlive` le
+            // range dans un conteneur `display: none`) : sans ce contrôle, la
+            // popup d'appareil de l'accueil et la vue Monitoring pilotaient
+            // toutes deux leur frise sur la même flèche. `offsetParent` est nul
+            // exactement dans ce cas.
+            if (rootRef.current?.offsetParent === null) return;
             const el = e.target as HTMLElement | null;
             if (
                 el &&
@@ -295,7 +295,7 @@ export function Timeline({
     const showLive = dayStart !== null || selection !== null || pointAt !== null;
 
     return (
-        <div className={styles.timeline}>
+        <div className={styles.timeline} ref={rootRef}>
             <div className={styles.timelineNav}>
                 <button
                     className={styles.navBtn}

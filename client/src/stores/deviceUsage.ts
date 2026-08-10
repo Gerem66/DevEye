@@ -53,7 +53,13 @@ async function seed(deviceId: string): Promise<void> {
         // de vraies mesures existent. Seul un point plus récent remplace.
         if (res.points.length === 0) return;
         const last = res.points[res.points.length - 1];
-        if (last !== latest.get(deviceId)) {
+        // Comparé sur l'horodatage et non sur l'identité de l'objet : `last`
+        // sort d'une désérialisation, il n'est jamais celui qu'on a rangé, donc
+        // le test précédent était toujours vrai et rendait un rendu à chaque
+        // amorçage. Ne remplace que par un point strictement plus récent — une
+        // relecture ne doit pas faire reculer une poussée arrivée entre-temps.
+        const known = latest.get(deviceId);
+        if (!known || last.timestamp > known.timestamp) {
             latest.set(deviceId, last);
             emit();
         }

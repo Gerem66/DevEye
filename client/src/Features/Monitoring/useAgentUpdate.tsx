@@ -23,9 +23,23 @@ export function useAgentUpdate() {
         }
     };
 
-    /** Update several agents sequentially (used by "tout mettre à jour"). */
+    /**
+     * Met à jour plusieurs agents (le bouton « tout mettre à jour »).
+     *
+     * En parallèle, et **un seul** message d'échec : la boucle séquentielle
+     * d'origine ouvrait une popup bloquante par appareil en défaut — sur une
+     * flotte qui vient de repartir, c'était une dizaine de popups à fermer une
+     * par une. Même comportement que la page Appareils, qui procédait déjà ainsi.
+     */
     const updateAll = async (deviceIds: string[]) => {
-        for (const id of deviceIds) await update(id);
+        const results = await Promise.allSettled(deviceIds.map((id) => startAgentUpdate(id)));
+        const failed = results.filter((r) => r.status === 'rejected').length;
+        if (failed === 0) return;
+        void openInfo({
+            title: 'Mise à jour impossible',
+            body: <p>{`Mise à jour impossible pour ${failed} appareil${failed > 1 ? 's' : ''}.`}</p>,
+            width: 420
+        });
     };
 
     return { update, updateAll, isBusy: isUpdating, anyBusy: anyUpdating };

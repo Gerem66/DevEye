@@ -18,7 +18,7 @@ import { env } from '@/Utils/Env';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
 /** Ensure the caller may read a device's metrics: same workspace, or admin. */
-async function authorizeRead(ctx: FeatureContext, deviceId: string): Promise<DeviceRow> {
+async function device(ctx: FeatureContext, deviceId: string): Promise<DeviceRow> {
     const row = await ctx.db.devices.findById(deviceId);
     if (!row) throw new FeatureError('not_found', 'Device not found');
     if (row.workspace_id !== ctx.workspaceId && !ctx.isAdmin) {
@@ -34,7 +34,7 @@ export const metricsQueryFeature: FeatureDefinition<
 > = defineFeature({
     ...metricsQuery,
     handler: async (ctx, input) => {
-        await authorizeRead(ctx, input.deviceId);
+        await device(ctx, input.deviceId);
         const points = await ctx.db.metrics.query({
             deviceId: input.deviceId,
             from: input.from,
@@ -52,11 +52,14 @@ export const metricsSubscribeFeature: FeatureDefinition<
 > = defineFeature({
     ...metricsSubscribe,
     handler: async (ctx, input) => {
-        const allowed: { id: string; row: DeviceRow }[] = [];
-        for (const deviceId of input.deviceIds) {
-            const row = await authorizeRead(ctx, deviceId);
-            allowed.push({ id: deviceId, row });
-        }
+        // Le schéma autorise 50 identifiants, et cette commande part à chaque
+        // changement d'appareil et à chaque réouverture de socket : la séquence
+        // d'origine (une autorisation, puis un `latest` + un `nearest` — trois
+        // requêtes à lui seul — par appareil, l'un après l'autre) valait jusqu'à
+        // deux cents allers-retours pour un seul appel. Tout est parallèle.
+        const allowed: { id: string; row: DeviceRow }[] = await Promise.all(
+            input.deviceIds.map(async (deviceId) => ({ id: deviceId, row: await device(ctx, deviceId) }))
+        );
         const ids = allowed.map((a) => a.id);
         ctx.monitor?.subscribe(ids);
 
@@ -65,11 +68,13 @@ export const metricsSubscribeFeature: FeatureDefinition<
         // instant's process list is seeded too: it now travels with the metric
         // stream, so without it the process table would stay empty for a whole
         // collection cadence.
-        for (const { id, row } of allowed) {
-            const point = await ctx.db.metrics.latest(id);
-            const sample = point ? await ctx.db.processSamples.nearest(id, point.timestamp) : null;
-            ctx.monitor?.sendInitial(id, point, sample, parseDeviceReport(row.report_json));
-        }
+        await Promise.all(
+            allowed.map(async ({ id, row }) => {
+                const point = await ctx.db.metrics.latest(id);
+                const sample = point ? await ctx.db.processSamples.nearest(id, point.timestamp) : null;
+                ctx.monitor?.sendInitial(id, point, sample, parseDeviceReport(row.report_json));
+            })
+        );
         return { deviceIds: ids };
     }
 });
@@ -93,7 +98,7 @@ export const metricsRefreshFeature: FeatureDefinition<
 > = defineFeature({
     ...metricsRefresh,
     handler: async (ctx, input) => {
-        await authorizeRead(ctx, input.deviceId);
+        await device(ctx, input.deviceId);
         const requested = ctx.monitor?.requestCollect(input.deviceId) ?? false;
         return { deviceId: input.deviceId, requested };
     }
@@ -106,7 +111,7 @@ export const metricsPresenceFeature: FeatureDefinition<
 > = defineFeature({
     ...metricsPresence,
     handler: async (ctx, input) => {
-        await authorizeRead(ctx, input.deviceId);
+        await device(ctx, input.deviceId);
         const [onlineAtStart, events] = await Promise.all([
             ctx.db.presence.onlineAt(input.deviceId, input.from),
             ctx.db.presence.query(input.deviceId, input.from, input.to)
@@ -122,7 +127,7 @@ export const metricsProcessesAtFeature: FeatureDefinition<
 > = defineFeature({
     ...metricsProcessesAt,
     handler: async (ctx, input) => {
-        await authorizeRead(ctx, input.deviceId);
+        await device(ctx, input.deviceId);
         const sample = await ctx.db.processSamples.nearest(input.deviceId, input.at);
         return { deviceId: input.deviceId, sample };
     }
@@ -135,7 +140,7 @@ export const metricsAvailabilityFeature: FeatureDefinition<
 > = defineFeature({
     ...metricsAvailability,
     handler: async (ctx, input) => {
-        await authorizeRead(ctx, input.deviceId);
+        await device(ctx, input.deviceId);
         const days = await ctx.db.metrics.availableDays(input.deviceId, input.tzOffsetMinutes);
         return { deviceId: input.deviceId, days };
     }
@@ -148,7 +153,7 @@ export const metricsSnapshotsFeature: FeatureDefinition<
 > = defineFeature({
     ...metricsSnapshots,
     handler: async (ctx, input) => {
-        await authorizeRead(ctx, input.deviceId);
+        await device(ctx, input.deviceId);
         // The marks are the *metric* instants: process capture is optional, and
         // keying them on the process blob left a `processCapture: 'off'` device
         // with an empty timeline — no marks, and the ‹ › / arrow-key stepping
@@ -158,16 +163,15 @@ export const metricsSnapshotsFeature: FeatureDefinition<
             ctx.db.metrics.instantTimes(input.deviceId, input.from, input.to),
             ctx.db.processSamples.snapshotTimes(input.deviceId, input.from, input.to)
         ]);
-        // Pins are applied to both tables together (`metrics.setSnapshotsPinned`),
-        // so either side is authoritative; union them so a row that only got one
-        // half of a past pin still reads as pinned.
-        const pinned = [...new Set([...instants.pinned, ...samples.pinned])].sort((a, b) => a - b);
+        // Les épingles sont posées sur les deux tables dans une seule
+        // transaction (`metrics.setSnapshotsPinned`) : les instants métriques
+        // font foi, et il n'y a plus de moitié d'épingle à rattraper.
         return {
             deviceId: input.deviceId,
             timestamps: instants.timestamps,
-            pinned,
+            pinned: instants.pinned,
             withProcesses: samples.timestamps,
-            truncated: false
+            truncated: instants.truncated
         };
     }
 });
@@ -179,7 +183,7 @@ export const metricsStorageFeature: FeatureDefinition<
 > = defineFeature({
     ...metricsStorage,
     handler: async (ctx, input) => {
-        await authorizeRead(ctx, input.deviceId);
+        await device(ctx, input.deviceId);
         const usage = await ctx.db.processSamples.storage(input.deviceId);
         return { deviceId: input.deviceId, ...usage };
     }
@@ -193,7 +197,7 @@ export const metricsDeleteSnapshotsFeature: FeatureDefinition<
     ...metricsDeleteSnapshots,
     mutates: true,
     handler: async (ctx, input) => {
-        const row = await authorizeRead(ctx, input.deviceId);
+        const row = await device(ctx, input.deviceId);
         const { snapshots } = await ctx.db.processSamples.deleteRange(input.deviceId, input.from, input.to);
         if (snapshots > 0) {
             const single = input.from === input.to;
@@ -218,15 +222,16 @@ export const metricsSetSnapshotsPinnedFeature: FeatureDefinition<
     ...metricsSetSnapshotsPinned,
     mutates: true,
     handler: async (ctx, input) => {
-        const row = await authorizeRead(ctx, input.deviceId);
+        const row = await device(ctx, input.deviceId);
         const { deviceId, from, to, pinned } = input;
 
         // Pin/unpin the whole instant (process list + metric point) so a saved
-        // moment stays fully consultable past the device's retention.
-        const [{ snapshots }] = await Promise.all([
-            ctx.db.processSamples.setPinnedRange(deviceId, from, to, pinned),
-            ctx.db.metrics.setPinnedRange(deviceId, from, to, pinned)
-        ]);
+        // moment stays fully consultable past the device's retention. Le compte
+        // porte sur les instants **métriques** : une machine en
+        // `processCapture: 'off'` n'a aucune liste de processus, et le compter
+        // sur elles rendait « 0 épinglé » — sans la moindre ligne de journal —
+        // alors que les relevés venaient bien d'être conservés.
+        const snapshots = await ctx.db.metrics.setInstantsPinned(deviceId, from, to, pinned);
 
         // On unpin, the rows revert to normal retention: drop those already past
         // their deadline right now; the rest expire at the next hourly sweep.

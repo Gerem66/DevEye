@@ -24,9 +24,17 @@ export interface MetricsRepo {
      * optional: a device with `processCapture: 'off'` still has instants to
      * navigate.
      */
-    instantTimes(deviceId: string, from: number, to: number): Promise<{ timestamps: number[]; pinned: number[] }>;
-    /** Set the pinned flag on every metric row in [from, to] for a device. */
-    setPinnedRange(deviceId: string, from: number, to: number, pinned: boolean): Promise<void>;
+    instantTimes(
+        deviceId: string,
+        from: number,
+        to: number
+    ): Promise<{ timestamps: number[]; pinned: number[]; truncated: boolean }>;
+    /**
+     * Épingle (ou désépingle) les **instants** de [from, to] : la ligne métrique
+     * et, quand elle existe, la liste de processus du même horodatage. Rend le
+     * nombre d'instants concernés.
+     */
+    setInstantsPinned(deviceId: string, from: number, to: number, pinned: boolean): Promise<number>;
     /**
      * Delete unpinned metric rows in [from, to] already past the device's
      * retention (used right after unpinning). Returns rows removed.
@@ -41,6 +49,21 @@ const BUCKET_SECONDS: Record<MetricsResolution, number> = {
     minute: 60,
     hour: 3600
 };
+
+/**
+ * Plafonds de lecture, et pourquoi ils diffèrent.
+ *
+ * Un relevé toutes les 5 s (la cadence la plus rapide configurable) produit
+ * 17 280 instants par jour. Les marques de la frise doivent donc pouvoir
+ * couvrir une journée entière, sinon la navigation par ‹ › s'arrête au milieu
+ * sans le dire. Les points de graphe, eux, sont déjà réduits par la résolution
+ * choisie selon la largeur de fenêtre : leur plafond n'est qu'un garde-fou.
+ *
+ * Dans les deux cas la sélection prend les plus **récents** : tronquer par le
+ * début rendait la queue de la fenêtre — celle qu'on regarde — invisible.
+ */
+const MAX_INSTANT_MARKS = 20_000;
+const MAX_SERIES_POINTS = 5_000;
 
 /** Coerce a possibly-null float column to a number or null. */
 function num(v: number | null): number | null {
@@ -112,26 +135,54 @@ export function metricsRepo(pool: Q): MetricsRepo {
                     s.batteryCharging === null || s.batteryCharging === undefined ? null : s.batteryCharging ? 1 : 0
                 );
             }
+            // Idempotent, comme l'insertion des processus : un agent qui rejoue
+            // un lot après un accusé perdu réécrit l'instant au lieu de le
+            // dédoubler. Sans ça, le même relevé apparaissait deux fois dans le
+            // graphe et comptait double dans la moyenne d'un intervalle.
+            // `pinned` est délibérément absent de la clause de mise à jour :
+            // un réenvoi ne doit pas désépingler un instant conservé.
             await pool.query(
                 `INSERT INTO device_metrics
                     (device_id, ts, cpu_percent, mem_used_bytes, mem_total_bytes,
                      disk_used_bytes, disk_total_bytes, net_rx_bytes, net_tx_bytes, users_count,
                      load_avg_1, cpu_temp_c, uptime_seconds, process_count, active_connections, gpu_percent,
                      disk_read_bytes, disk_write_bytes, battery_percent, battery_charging)
-                 VALUES ${values}`,
+                 VALUES ${values}
+                 ON DUPLICATE KEY UPDATE
+                     cpu_percent = VALUES(cpu_percent),
+                     mem_used_bytes = VALUES(mem_used_bytes),
+                     mem_total_bytes = VALUES(mem_total_bytes),
+                     disk_used_bytes = VALUES(disk_used_bytes),
+                     disk_total_bytes = VALUES(disk_total_bytes),
+                     net_rx_bytes = VALUES(net_rx_bytes),
+                     net_tx_bytes = VALUES(net_tx_bytes),
+                     users_count = VALUES(users_count),
+                     load_avg_1 = VALUES(load_avg_1),
+                     cpu_temp_c = VALUES(cpu_temp_c),
+                     uptime_seconds = VALUES(uptime_seconds),
+                     process_count = VALUES(process_count),
+                     active_connections = VALUES(active_connections),
+                     gpu_percent = VALUES(gpu_percent),
+                     disk_read_bytes = VALUES(disk_read_bytes),
+                     disk_write_bytes = VALUES(disk_write_bytes),
+                     battery_percent = VALUES(battery_percent),
+                     battery_charging = VALUES(battery_charging)`,
                 params
             );
         },
         async query({ deviceId, from, to, resolution }) {
             if (resolution === 'raw') {
+                // Les plus récents, puis remis dans l'ordre : au-delà du
+                // plafond, c'est le début de la fenêtre qui doit manquer, pas
+                // sa fin.
                 const r = await pool.query<MetricRow>(
                     `SELECT * FROM device_metrics
                      WHERE device_id = ? AND ts BETWEEN ? AND ?
-                     ORDER BY ts ASC
-                     LIMIT 5000`,
+                     ORDER BY ts DESC
+                     LIMIT ${MAX_SERIES_POINTS}`,
                     [deviceId, from, to]
                 );
-                return r.rows.map(rowToSnapshot);
+                return r.rows.reverse().map(rowToSnapshot);
             }
 
             // Downsample by time bucket (averages for gauges, max for counters).
@@ -160,11 +211,11 @@ export function metricsRepo(pool: Q): MetricsRepo {
                  FROM device_metrics
                  WHERE device_id = ? AND ts BETWEEN ? AND ?
                  GROUP BY (FLOOR(ts / ?) * ?)
-                 ORDER BY ts ASC
-                 LIMIT 5000`,
+                 ORDER BY ts DESC
+                 LIMIT ${MAX_SERIES_POINTS}`,
                 [bucketMs, bucketMs, deviceId, from, to, bucketMs, bucketMs]
             );
-            return r.rows.map(rowToSnapshot);
+            return r.rows.reverse().map(rowToSnapshot);
         },
         async latest(deviceId) {
             const r = await pool.query<MetricRow>(
@@ -179,6 +230,12 @@ export function metricsRepo(pool: Q): MetricsRepo {
             // is (UTC - local) in minutes, so local-ms = ts - offset*60000.
             const offsetMs = tzOffsetMinutes * 60000;
             const dayMs = 86400000;
+            // Volontairement sans borne temporelle. Un plancher à la rétention
+            // ferait disparaître du calendrier les journées ne contenant plus
+            // que des instants **épinglés**, dont tout l'objet est justement de
+            // survivre à la rétention — la navigation ne pourrait plus les
+            // atteindre. Le coût reste un parcours d'index seul sur
+            // `uq_metrics_device_ts`, borné à un appareil.
             const r = await pool.query<{ d: number }>(
                 `SELECT DISTINCT FLOOR((ts - ?) / ?) AS d
                  FROM device_metrics WHERE device_id = ?
@@ -195,25 +252,49 @@ export function metricsRepo(pool: Q): MetricsRepo {
             const r = await pool.query<{ ts: number; pinned: number }>(
                 `SELECT ts, pinned FROM device_metrics
                  WHERE device_id = ? AND ts BETWEEN ? AND ?
-                 ORDER BY ts ASC
-                 LIMIT 5000`,
+                 ORDER BY ts DESC
+                 LIMIT ${MAX_INSTANT_MARKS + 1}`,
                 [deviceId, from, to]
             );
+            // Une ligne de plus que le plafond a été demandée : si elle existe,
+            // la fenêtre en contenait davantage, et on le dit au lieu de rendre
+            // une frise silencieusement amputée.
+            const truncated = r.rows.length > MAX_INSTANT_MARKS;
+            const rows = truncated ? r.rows.slice(0, MAX_INSTANT_MARKS) : r.rows;
             const timestamps: number[] = [];
             const pinned: number[] = [];
-            for (const row of r.rows) {
+            for (const row of rows.reverse()) {
                 const ts = Number(row.ts);
                 timestamps.push(ts);
                 if (Number(row.pinned) === 1) pinned.push(ts);
             }
-            return { timestamps, pinned };
+            return { timestamps, pinned, truncated };
         },
-        async setPinnedRange(deviceId, from, to, pinned) {
-            await pool.query(
-                `UPDATE device_metrics SET pinned = ?
-                 WHERE device_id = ? AND ts BETWEEN ? AND ?`,
-                [pinned ? 1 : 0, deviceId, from, to]
+        async setInstantsPinned(deviceId, from, to, pinned) {
+            // Les deux tables en **une seule instruction**, et non deux requêtes
+            // parallèles : un instant à moitié épinglé est un instant dont la
+            // moitié disparaît à la purge suivante, et rien ne rattraperait
+            // l'échec d'une des deux moitiés. La jointure est extérieure parce
+            // que la capture des processus est facultative — un appareil en
+            // `processCapture: 'off'` a des instants sans liste, et ils doivent
+            // s'épingler quand même.
+            //
+            // Le compte porte sur les lignes *concernées* et non modifiées :
+            // ré-épingler un intervalle déjà épinglé reste une action, et
+            // l'appelant s'en sert pour son journal.
+            const count = await pool.query<{ n: number }>(
+                'SELECT COUNT(*) AS n FROM device_metrics WHERE device_id = ? AND ts BETWEEN ? AND ?',
+                [deviceId, from, to]
             );
+            const flag = pinned ? 1 : 0;
+            await pool.query(
+                `UPDATE device_metrics m
+                 LEFT JOIN device_process_samples s ON s.device_id = m.device_id AND s.ts = m.ts
+                 SET m.pinned = ?, s.pinned = ?
+                 WHERE m.device_id = ? AND m.ts BETWEEN ? AND ?`,
+                [flag, flag, deviceId, from, to]
+            );
+            return Number(count.rows[0]?.n ?? 0);
         },
         async deleteExpiredInRange(deviceId, from, to, defaultDays) {
             const r = await pool.query(

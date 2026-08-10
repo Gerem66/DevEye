@@ -17,6 +17,9 @@ const gunzipAsync = promisify(gunzip);
  */
 const NEAREST_TOLERANCE_MS = 5 * 60 * 1000;
 
+/** Aligné sur `MAX_INSTANT_MARKS` du dépôt des métriques (voir son commentaire). */
+const MAX_SNAPSHOT_MARKS = 20_000;
+
 /** One stored instant: the process list lives in `payload` as gzipped JSON. */
 interface ProcessSampleRow {
     ts: number;
@@ -54,8 +57,6 @@ export interface ProcessSamplesRepo {
     storage(deviceId: string): Promise<SnapshotStorage>;
     /** Delete snapshots whose `ts` falls in [from, to] (inclusive). */
     deleteRange(deviceId: string, from: number, to: number): Promise<{ snapshots: number }>;
-    /** Set the pinned flag on every instant in [from, to]; returns instants touched. */
-    setPinnedRange(deviceId: string, from: number, to: number, pinned: boolean): Promise<{ snapshots: number }>;
     /**
      * Delete unpinned instants in [from, to] already past the device's
      * retention (used right after unpinning). Returns instants removed.
@@ -87,16 +88,6 @@ export function processSamplesRepo(pool: Q): ProcessSamplesRepo {
         if (b === null) return a;
         if (a === null) return b;
         return at - b <= a - at ? b : a;
-    }
-
-    /** Count instants in [from, to] — a pin/unpin reports how many it touched. */
-    async function countRange(deviceId: string, from: number, to: number): Promise<number> {
-        const r = await pool.query<{ snapshots: number }>(
-            `SELECT COUNT(*) AS snapshots FROM device_process_samples
-             WHERE device_id = ? AND ts BETWEEN ? AND ?`,
-            [deviceId, from, to]
-        );
-        return Number(r.rows[0]?.snapshots ?? 0);
     }
 
     return {
@@ -134,16 +125,19 @@ export function processSamplesRepo(pool: Q): ProcessSamplesRepo {
             return { ts, kind: row.kind, processes };
         },
         async snapshotTimes(deviceId, from, to) {
+            // Même plafond et même sens que `metrics.instantTimes`, pour que les
+            // deux sources fusionnent sans qu'un côté ait à gérer une autre
+            // borne : les plus récents d'abord, remis dans l'ordre ensuite.
             const r = await pool.query<{ ts: number; pinned: number }>(
                 `SELECT ts, pinned FROM device_process_samples
                  WHERE device_id = ? AND ts BETWEEN ? AND ?
-                 ORDER BY ts ASC
-                 LIMIT 5000`,
+                 ORDER BY ts DESC
+                 LIMIT ${MAX_SNAPSHOT_MARKS}`,
                 [deviceId, from, to]
             );
             const timestamps: number[] = [];
             const pinned: number[] = [];
-            for (const row of r.rows) {
+            for (const row of r.rows.reverse()) {
                 const ts = Number(row.ts);
                 timestamps.push(ts);
                 if (Number(row.pinned) === 1) pinned.push(ts);
@@ -171,15 +165,6 @@ export function processSamplesRepo(pool: Q): ProcessSamplesRepo {
                 [deviceId, from, to]
             );
             return { snapshots: del.rowCount };
-        },
-        async setPinnedRange(deviceId, from, to, pinned) {
-            const snapshots = await countRange(deviceId, from, to);
-            await pool.query(
-                `UPDATE device_process_samples SET pinned = ?
-                 WHERE device_id = ? AND ts BETWEEN ? AND ?`,
-                [pinned ? 1 : 0, deviceId, from, to]
-            );
-            return { snapshots };
         },
         async deleteExpiredInRange(deviceId, from, to, defaultDays) {
             const del = await pool.query(

@@ -1,5 +1,5 @@
 import { type ReactNode, useId, useRef, useState } from 'react';
-import { niceTimeTicks } from './utils';
+import { maxOf, minOf, nearestBy, niceTimeTicks } from './utils';
 import styles from './Monitoring.module.css';
 
 export interface Series {
@@ -31,20 +31,6 @@ const fmtTick = (t: number) => new Date(t).toLocaleTimeString('fr-FR', { hour: '
 const fmtExact = (t: number) =>
     new Date(t).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-/** The point of a series closest to time `t`. */
-function nearestPoint(points: { t: number; v: number }[], t: number): { t: number; v: number } | null {
-    let best: { t: number; v: number } | null = null;
-    let bestDist = Infinity;
-    for (const p of points) {
-        const d = Math.abs(p.t - t);
-        if (d < bestDist) {
-            bestDist = d;
-            best = p;
-        }
-    }
-    return best;
-}
-
 /**
  * Small time-aware line chart. The x-axis spans the real timestamp range across
  * all series, so irregular sample gaps are drawn to scale. Filled area under the
@@ -58,8 +44,11 @@ export function MiniGraph({ title, series, yMax, stat, onClick, tall, format }: 
 
     const all = series.flatMap((s) => s.points);
     const hasData = all.length >= 2;
-    const tMin = hasData ? Math.min(...all.map((p) => p.t)) : 0;
-    const tMax = hasData ? Math.max(...all.map((p) => p.t)) : 0;
+    // Réductions et non `Math.min(...tableau)` : l'étalement passe chaque point
+    // en argument, et au-delà de ~100 000 arguments l'appel lève un
+    // `RangeError` — atteignable sur un panneau laissé ouvert en direct.
+    const tMin = hasData ? minOf(all, (p) => p.t) : 0;
+    const tMax = hasData ? maxOf(all, (p) => p.t) : 0;
     const tSpan = Math.max(1, tMax - tMin);
 
     const onMove = (e: React.PointerEvent) => {
@@ -74,7 +63,7 @@ export function MiniGraph({ title, series, yMax, stat, onClick, tall, format }: 
     if (!hasData) {
         body = <div className={styles.graphEmpty}>—</div>;
     } else {
-        const dataMax = Math.max(...all.map((p) => p.v));
+        const dataMax = maxOf(all, (p) => p.v);
         const yTop = yMax ?? Math.max(1, dataMax * 1.15);
 
         const xPct = (t: number) => ((t - tMin) / tSpan) * 100;
@@ -92,7 +81,7 @@ export function MiniGraph({ title, series, yMax, stat, onClick, tall, format }: 
         const hoverHits =
             tall && hoverT !== null
                 ? series.flatMap((s) => {
-                      const p = nearestPoint(s.points, hoverT);
+                      const p = nearestBy(s.points, hoverT, (p) => p.t);
                       return p ? [{ color: s.color, label: s.label, p }] : [];
                   })
                 : [];

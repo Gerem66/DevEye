@@ -1,8 +1,15 @@
 import type { Device, DeviceReport, NetInterfaceKind } from 'deveye-types';
 import { agentUpdatable } from '../agentVersion';
+import { pct } from './utils';
 import styles from './Monitoring.module.css';
 
-/** Human-readable bytes (binary units), used for RAM and disks. */
+/**
+ * Human-readable bytes (binary units), used for RAM and disks.
+ *
+ * Distinct de `utils.formatBytes` par un palier : l'inventaire matériel affiche
+ * des capacités de disque, où le téraoctet est courant. Les graphes, eux, ne
+ * dépassent jamais le gigaoctet et s'arrêtent là.
+ */
 function formatBytes(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -14,10 +21,6 @@ function formatBytes(bytes: number): string {
 /** Frequency in MHz → "x.xx GHz" (or "n MHz" below 1 GHz). */
 function formatFreq(mhz: number): string {
     return mhz >= 1000 ? `${(mhz / 1000).toFixed(2)} GHz` : `${mhz} MHz`;
-}
-
-function pct(used: number, total: number): number {
-    return total > 0 ? (used / total) * 100 : 0;
 }
 
 /** French label + display order for each inferred network interface class. */

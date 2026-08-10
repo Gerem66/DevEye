@@ -5,7 +5,6 @@ import { useDragReorder } from '@/dragReorder';
 import { useDevices } from '@/stores/devices';
 import { useWorkspacePermissions } from '@/stores/workspace';
 import { openInfo } from '@/Components/InfoPopup';
-import type { FeatureProps } from '../types';
 import { MonitoringInfo } from './MonitoringInfo';
 import MonitoringPanel from './MonitoringPanel';
 import { useAgentUpdate } from './useAgentUpdate';
@@ -98,7 +97,7 @@ function MonitoringTitle({
     );
 }
 
-export default function Monitoring({ user: _user, workspace: _ws }: FeatureProps) {
+export default function Monitoring() {
     const { devices: stored, loading } = useDevices();
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const updater = useAgentUpdate();

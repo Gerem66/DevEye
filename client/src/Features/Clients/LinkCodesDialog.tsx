@@ -75,7 +75,11 @@ export function LinkCodesDialog({ links, onDownload }: { links: LinkCodes; onDow
             {links.genError && <p className={styles.genError}>{links.genError}</p>}
 
             {/* Table of active (pending) codes. */}
-            {links.codes.length === 0 ? (
+            {links.codesError ? (
+                // « Aucun code actif » se lit comme une certitude : ne l'affirmer
+                // que quand le serveur a répondu.
+                <p className={styles.genError}>{links.codesError}</p>
+            ) : links.codes.length === 0 ? (
                 <p className={styles.noCodes}>Aucun code actif. Générez-en un ci-dessus.</p>
             ) : (
                 <table className={styles.codeTable}>

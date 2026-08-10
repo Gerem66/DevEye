@@ -18,6 +18,16 @@ import {
 } from 'deveye-types';
 import styles from './Monitoring.module.css';
 
+/**
+ * Plafond du tampon d'un flux de journaux.
+ *
+ * Le tampon n'est vidé que par la trame `done` : un agent qui disparaît en
+ * plein flux ne l'envoie jamais, et le mode direct relance une interrogation
+ * toutes les trois secondes. Assez large pour couvrir la plus grande fenêtre
+ * qu'on demande, assez bas pour qu'une panne ne remplisse pas la mémoire.
+ */
+const MAX_BUFFERED_LINES = 20_000;
+
 const LEVEL_LABELS: Record<DeviceLogLevel, string> = {
     debug: 'Debug',
     info: 'Info',
@@ -103,7 +113,11 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
             } else if (msg.command === DEVICE_LOG_LINES_EVENT && msg.payload.ok) {
                 const d = msg.payload.data as DeviceLogLinesPush;
                 if (d.deviceId !== deviceId || d.queryId !== queryIdRef.current) return;
-                bufferRef.current = bufferRef.current.concat(d.lines);
+                // Borné : sans `done` — un agent qui meurt en plein flux — le
+                // tampon grossissait à chaque interrogation du mode direct, qui
+                // repart toutes les 3 s. On garde la queue, c'est ce qu'on lit.
+                const merged = bufferRef.current.concat(d.lines);
+                bufferRef.current = merged.length > MAX_BUFFERED_LINES ? merged.slice(-MAX_BUFFERED_LINES) : merged;
                 if (d.done) {
                     setLines(bufferRef.current);
                     setLoading(false);

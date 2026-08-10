@@ -29,9 +29,10 @@ function Metric({ label, value }: { label: string; value: number | null }) {
  * Compact home-grid tile for a single device. When online, the whole card is
  * subtly tinted by its current activity level (idle / normal / intensive — same
  * effect as the Monitoring hero) and shows CPU / RAM / Disk as small equal
- * metrics. Status sits in the top-right corner. Usage comes from the poll-based
- * {@link useDeviceUsage} store (no live subscription). Clicking opens the device
- * popup (wired in the home grid).
+ * metrics. Status sits in the top-right corner. Usage comes from the shared,
+ * ref-counted {@link useDeviceUsage} store: it seeds from one query then follows
+ * the live metric stream (the polling it once did is gone). Clicking opens the
+ * device popup (wired in the home grid).
  */
 export function DeviceWidget({ deviceId, hideStatus }: DeviceWidgetProps) {
     const { devices } = useDevices();

@@ -96,6 +96,52 @@ export function pct(used: number, total: number): number {
     return total > 0 ? (used / total) * 100 : 0;
 }
 
+/**
+ * Extremums d'une collection, par réduction.
+ *
+ * `Math.min(...tableau)` passe chaque élément en argument et lève un
+ * `RangeError` au-delà de ~100 000 — une limite que les séries d'un panneau
+ * laissé ouvert en direct peuvent atteindre. Rendent 0 sur une collection vide,
+ * les appelants ne s'en servant qu'après avoir vérifié qu'elle ne l'est pas.
+ */
+export function minOf<T>(items: readonly T[], of: (item: T) => number): number {
+    let min = Infinity;
+    for (const item of items) {
+        const v = of(item);
+        if (v < min) min = v;
+    }
+    return Number.isFinite(min) ? min : 0;
+}
+
+export function maxOf<T>(items: readonly T[], of: (item: T) => number): number {
+    let max = -Infinity;
+    for (const item of items) {
+        const v = of(item);
+        if (v > max) max = v;
+    }
+    return Number.isFinite(max) ? max : 0;
+}
+
+/**
+ * L'élément dont la date est la plus proche de `target`, ou `null` si vide.
+ *
+ * L'horodatage est lu par `at` plutôt qu'imposé sous un nom fixe : les séries de
+ * graphe le portent en `t`, les relevés en `timestamp`, et les faire converger
+ * obligerait un appelant à recopier toute sa collection à chaque appel.
+ */
+export function nearestBy<T>(items: readonly T[], target: number, at: (item: T) => number): T | null {
+    let best: T | null = null;
+    let bestDist = Infinity;
+    for (const item of items) {
+        const d = Math.abs(at(item) - target);
+        if (d < bestDist) {
+            bestDist = d;
+            best = item;
+        }
+    }
+    return best;
+}
+
 /** Coarse activity level derived from a snapshot. */
 export type Activity = 'idle' | 'normal' | 'intensive';
 
