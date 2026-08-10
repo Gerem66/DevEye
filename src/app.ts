@@ -111,6 +111,9 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // (ils écrivent sans commande utilisateur, donc sans socket pour diffuser).
     const live = new LiveHub();
     live.startHeartbeat();
+    // Même battement pour les sockets agent : une machine éteinte ne referme
+    // jamais la sienne, et restait « en ligne » jusqu'au keepalive TCP du noyau.
+    hub.startHeartbeat();
     // Résout « quelle commande touche à quoi » une fois pour toutes, et signale
     // les commandes mutantes qui auraient oublié de le déclarer.
     buildTopicIndex();

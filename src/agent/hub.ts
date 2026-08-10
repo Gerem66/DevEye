@@ -93,6 +93,12 @@ import {
 import { accessEpochNow } from '@/features/_access';
 
 /**
+ * Période du balayage de vivacité des agents. Deux tours sans `pong` ferment la
+ * socket. Aligné sur celui de `LiveHub`, pour une seule cadence à retenir.
+ */
+const AGENT_HEARTBEAT_MS = 30_000;
+
+/**
  * In-memory hub coordinating live monitoring between agent sockets (producers)
  * and authenticated user sockets (subscribers). Metrics are also persisted by
  * the agent WS handler; this hub only fans out the real-time stream.
@@ -104,6 +110,17 @@ import { accessEpochNow } from '@/features/_access';
 export class MonitorHub {
     /** deviceId -> connected agent socket. */
     private readonly agents = new Map<string, WebSocket>();
+    /**
+     * Vivacité par socket agent, remise à `true` par l'événement `pong`.
+     *
+     * Sans elle, `online` valait « il y a une socket dans la Map », et rien ne
+     * l'en retirait qu'un `close`. Or une machine qu'on éteint n'en envoie
+     * jamais : la socket restait à moitié ouverte jusqu'au keepalive TCP du
+     * noyau — plus de deux heures — pendant lesquelles l'appareil s'affichait
+     * en ligne, acceptait des commandes et les perdait en silence.
+     */
+    private readonly agentAlive = new Map<WebSocket, boolean>();
+    private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
     /** deviceId -> set of subscriber (user) sockets. */
     private readonly subscribers = new Map<string, Set<WebSocket>>();
     /** subscriber socket -> set of deviceIds it watches (for cleanup). */
@@ -139,7 +156,51 @@ export class MonitorHub {
         const prev = this.agents.get(deviceId);
         if (prev && prev !== socket) prev.close(1012, 'Session replaced by a newer agent connection');
         this.agents.set(deviceId, socket);
+        this.agentAlive.set(socket, true);
+        socket.on('pong', () => this.agentAlive.set(socket, true));
         this.publishPresence(deviceId, true);
+    }
+
+    /**
+     * Démarre le balayage de vivacité. Appelé une fois au démarrage, à côté de
+     * celui de `LiveHub`.
+     */
+    startHeartbeat(): void {
+        if (this.heartbeatTimer) return;
+        this.heartbeatTimer = setInterval(() => this.sweepAgents(), AGENT_HEARTBEAT_MS);
+        this.heartbeatTimer.unref?.();
+    }
+
+    stopHeartbeat(): void {
+        if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+        this.heartbeatTimer = null;
+    }
+
+    private sweepAgents(): void {
+        for (const [deviceId, socket] of this.agents) {
+            if (this.agentAlive.get(socket) === false) {
+                // `terminate()` et non `close()` : une pile TCP morte ne verra
+                // jamais la poignée de fermeture, et la socket resterait un
+                // fantôme. `terminate()` émet malgré tout `close`, donc toute la
+                // comptabilité de présence existante s'applique sans être
+                // dupliquée ici.
+                try {
+                    socket.terminate();
+                } catch {
+                    /* déjà partie */
+                }
+                this.agents.delete(deviceId);
+                this.agentAlive.delete(socket);
+                continue;
+            }
+            this.agentAlive.set(socket, false);
+            try {
+                socket.ping();
+            } catch {
+                this.agents.delete(deviceId);
+                this.agentAlive.delete(socket);
+            }
+        }
     }
 
     agentOffline(deviceId: string, socket: WebSocket): void {
@@ -149,6 +210,7 @@ export class MonitorHub {
         // would leave a live agent wrongly marked offline until its next reconnect).
         if (this.agents.get(deviceId) !== socket) return;
         this.agents.delete(deviceId);
+        this.agentAlive.delete(socket);
         this.publishPresence(deviceId, false);
     }
 

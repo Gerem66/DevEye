@@ -40,9 +40,20 @@ export async function recordAgentOnline(db: Database, device: DeviceRow, wasOnli
 /**
  * Record the "agent offline" edge. Call only once the hub confirms no live
  * socket remains for the device (see module doc).
+ *
+ * Le front est daté sur la **dernière preuve de vie** et non sur l'instant de la
+ * découverte. Les deux coïncidaient tant qu'une déconnexion propre était le seul
+ * chemin ; depuis que le balayage de vivacité rattrape les machines éteintes
+ * sans un mot, dater sur `Date.now()` sur-déclarerait la disponibilité de tout
+ * l'intervalle de balayage — jusqu'à une minute de vert qui n'a pas existé.
+ * `devices.last_seen` est rafraîchi à chaque relevé : la donnée était là, rien
+ * ne la lisait.
  */
 export async function recordAgentOffline(db: Database, deviceId: string): Promise<void> {
-    await db.presence.record(deviceId, Date.now(), false);
+    const now = Date.now();
+    const row = await db.devices.findById(deviceId);
+    const lastSeenMs = row?.last_seen === null || row?.last_seen === undefined ? now : Number(row.last_seen) * 1000;
+    await db.presence.record(deviceId, Math.min(lastSeenMs, now), false);
 }
 
 /**

@@ -251,10 +251,22 @@ export async function registerAgentWS(
             try {
                 parsed = agentClientMessageSchema.safeParse(JSON.parse(raw.toString()));
             } catch {
+                reqLogger.warn({ bytes: raw.length }, 'Agent sent malformed JSON');
                 send(socket, { command: AGENT_ERROR, payload: { code: 'validation', message: 'Malformed JSON' } });
                 return;
             }
             if (!parsed.success) {
+                // Journalisé, et pas seulement renvoyé à l'agent : un agent dont
+                // les trames ne valident plus n'apparaissait nulle part côté
+                // serveur. De l'extérieur, la machine était « en ligne » et
+                // muette, sans le moindre indice de la cause.
+                reqLogger.warn(
+                    {
+                        command: (parsed.error.flatten().fieldErrors as { command?: string[] })?.command,
+                        err: parsed.error.flatten()
+                    },
+                    'Agent frame rejected by validation'
+                );
                 send(socket, {
                     command: AGENT_ERROR,
                     payload: { code: 'validation', message: 'Invalid agent message' }
