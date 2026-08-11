@@ -8,12 +8,14 @@
 //!   - `status`       Print the local enrollment + running state.
 //!   - `unlink`       Forget the local enrollment (config + token).
 
+mod authlog;
 mod commands;
 mod config;
 mod elevate;
 mod enroll;
 mod files;
 mod identity;
+mod integrity;
 mod logs;
 mod metrics;
 mod packages;

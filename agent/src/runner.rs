@@ -72,6 +72,16 @@ const DEFAULT_CAPTURE: &str = "all";
 /// reconnectait donc pas, et se croyait supervisé.
 const AGENT_PING_INTERVAL: Duration = Duration::from_secs(30);
 
+/// Cadence par défaut du manifeste de persistance, jusqu'à ce que le serveur
+/// pousse la sienne. Six heures : empreinter cinq cents fichiers ne se fait pas
+/// au rythme d'un relevé CPU, et une porte dérobée installée reste installée.
+const DEFAULT_INTEGRITY_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+
+/// Cadence du relevé d'authentification. Plus serrée que la persistance : une
+/// campagne de tentatives se compte en minutes, pas en heures — mais la fenêtre
+/// étant glissante, rien n'est perdu entre deux relevés.
+const AUTH_INTERVAL: Duration = Duration::from_secs(60 * 60);
+
 /// Attend un ordre d'arrêt du système (SIGTERM) ou du terminal (Ctrl-C).
 ///
 /// SIGTERM est celui que systemd et launchd envoient : sans le traiter, un arrêt
@@ -241,6 +251,17 @@ async fn stream_session(
     // connect, almost immediately) and on any later change.
     let mut interval = initial_interval;
     let mut capture = DEFAULT_CAPTURE.to_string();
+    // Sentinelle : éteinte tant que le serveur ne l'a pas demandée. Un agent qui
+    // relèverait « par défaut » lirait les journaux d'une machine que personne
+    // n'a choisi de surveiller.
+    let mut sentinel = false;
+    let mut integrity_interval = DEFAULT_INTEGRITY_INTERVAL;
+    let mut auth_enabled = true;
+    // Fin du dernier relevé d'authentification, en unix ms. La fenêtre suivante
+    // repart d'ici : additive, donc aucune tentative n'est comptée deux fois ni
+    // perdue. `0` au premier passage — `authlog::collect` se limite alors à la
+    // dernière heure plutôt que de rejouer un journal entier.
+    let mut auth_cursor: i64 = 0;
 
     // Briefly wait for the server's pushed config so the very first instant
     // already reflects the saved per-device settings (capture mode + cadence),
@@ -257,9 +278,17 @@ async fn stream_session(
                     Ok(ServerMessage::Config {
                         metric_interval_ms,
                         process_capture,
+                        sentinel_enabled,
+                        integrity_interval_ms,
+                        auth_events_enabled,
                     }) => {
                         capture = process_capture;
                         interval = Duration::from_millis(metric_interval_ms.max(1000));
+                        sentinel = sentinel_enabled.unwrap_or(false);
+                        if let Some(ms) = integrity_interval_ms {
+                            integrity_interval = Duration::from_millis(ms.max(60_000));
+                        }
+                        auth_enabled = auth_events_enabled.unwrap_or(true);
                         break;
                     }
                     // The server may greet a pending-deletion device with destroy
@@ -306,8 +335,21 @@ async fn stream_session(
     let (report_tx, mut report_rx) = tokio::sync::mpsc::channel::<DeviceReport>(4);
     spawn_report(&report_tx, &sockets);
 
+    // Les relevés Sentinelle voyagent par ce canal, comme le rapport : ils
+    // empreintent des centaines de fichiers et lisent des journaux, donc ils
+    // tournent hors de la boucle, qui reste disponible pour les pings et les
+    // métriques.
+    let (scan_tx, mut scan_rx) = tokio::sync::mpsc::channel::<ScanResult>(4);
+    if sentinel {
+        // À la connexion : une machine qu'on vient d'allumer doit rendre son
+        // état sans attendre le premier tour d'horloge.
+        spawn_scan(&scan_tx, auth_enabled, auth_cursor);
+    }
+
     let mut ticker = new_ticker(interval);
     let mut report_ticker = new_ticker(REPORT_INTERVAL);
+    let mut integrity_ticker = new_ticker(integrity_interval);
+    let mut auth_ticker = new_ticker(AUTH_INTERVAL);
     let mut ping_ticker = new_ticker(AGENT_PING_INTERVAL);
     // Remis à `true` par chaque `Pong` ; deux tours sans réponse ferment la
     // session, qui se rétablit par la boucle de reconnexion habituelle.
@@ -340,6 +382,19 @@ async fn stream_session(
         tokio::select! {
             Some(report) = report_rx.recv() => {
                 send_built_report(&mut sink, device_id, report).await?;
+            }
+            Some(result) = scan_rx.recv() => {
+                if let Some(integrity) = result.integrity {
+                    send_integrity(&mut sink, device_id, integrity).await?;
+                }
+                if let Some(auth) = result.auth {
+                    // Le curseur n'avance qu'une fois la fenêtre **envoyée** :
+                    // avancer à la collecte perdrait la fenêtre si la session
+                    // tombait entre les deux, et avec elle les tentatives
+                    // qu'elle comptait.
+                    auth_cursor = auth.to;
+                    send_auth(&mut sink, device_id, auth).await?;
+                }
             }
             Some(ev) = pkg_rx.recv() => {
                 if let crate::packages::PkgEvent::Done { manager, .. } = &ev {
@@ -391,6 +446,12 @@ async fn stream_session(
                     return Ok(SessionOutcome::Established);
                 }
             }
+            _ = integrity_ticker.tick(), if sentinel => {
+                spawn_scan(&scan_tx, false, auth_cursor);
+            }
+            _ = auth_ticker.tick(), if sentinel && auth_enabled => {
+                spawn_scan_auth_only(&scan_tx, auth_cursor);
+            }
             _ = report_ticker.tick() => {
                 // The last tick's socket map already has everything — except on
                 // macOS, where owner attribution needs the slower `lsof` that a
@@ -416,6 +477,9 @@ async fn stream_session(
                             Ok(ServerMessage::Config {
                                 metric_interval_ms,
                                 process_capture,
+                                sentinel_enabled,
+                                integrity_interval_ms,
+                                auth_events_enabled,
                             }) => {
                                 capture = process_capture;
                                 let new_interval = Duration::from_millis(metric_interval_ms.max(1000));
@@ -423,11 +487,40 @@ async fn stream_session(
                                     interval = new_interval;
                                     ticker = new_ticker(interval);
                                 }
+                                let was_on = sentinel;
+                                sentinel = sentinel_enabled.unwrap_or(false);
+                                auth_enabled = auth_events_enabled.unwrap_or(true);
+                                if let Some(ms) = integrity_interval_ms {
+                                    let next = Duration::from_millis(ms.max(60_000));
+                                    if next != integrity_interval {
+                                        integrity_interval = next;
+                                        // Un changement d'intervalle **recrée** le
+                                        // ticker : sans cela le nouveau réglage
+                                        // n'aurait d'effet qu'au tour suivant, qui
+                                        // peut être dans six heures.
+                                        integrity_ticker = new_ticker(integrity_interval);
+                                    }
+                                }
+                                // Vient d'être allumée : on relève tout de suite,
+                                // sinon la première mesure attendrait six heures et
+                                // l'utilisateur croirait la sonde en panne.
+                                if sentinel && !was_on {
+                                    spawn_scan(&scan_tx, auth_enabled, auth_cursor);
+                                }
                                 info!(
                                     interval_secs = interval.as_secs(),
                                     capture = %capture,
+                                    sentinel,
                                     "applied server config"
                                 );
+                            }
+                            // Relevé Sentinelle à la demande.
+                            Ok(ServerMessage::Scan {}) => {
+                                if sentinel {
+                                    spawn_scan(&scan_tx, auth_enabled, auth_cursor);
+                                } else {
+                                    warn!("scan requested while Sentinel is off — ignored");
+                                }
                             }
                             // Device deleted while we're online: wipe and exit.
                             Ok(ServerMessage::Destroy {}) => {
@@ -688,6 +781,86 @@ where
 ///
 /// Même schéma que les paquets, les journaux et les fichiers : la tâche vit
 /// hors de la boucle, qui reste disponible pendant ce temps.
+/// Ce qu'un relevé Sentinelle rapporte. Les deux sondes voyagent ensemble parce
+/// qu'elles partent souvent ensemble (connexion, ordre `agent.scan`), mais
+/// chacune peut manquer : la persistance est sautée par le relevé horaire
+/// d'authentification, et l'authentification l'est quand elle est désactivée.
+struct ScanResult {
+    integrity: Option<crate::integrity::IntegrityReport>,
+    auth: Option<crate::authlog::AuthWindow>,
+}
+
+/// Lance un relevé complet hors de la boucle.
+///
+/// `spawn_blocking` et non une tâche async : les deux sondes lisent des fichiers
+/// et attendent des commandes externes. Les laisser sur le runtime bloquerait
+/// les pings et les métriques pendant plusieurs secondes.
+fn spawn_scan(tx: &tokio::sync::mpsc::Sender<ScanResult>, with_auth: bool, auth_from: i64) {
+    let tx = tx.clone();
+    tokio::task::spawn_blocking(move || {
+        let result = ScanResult {
+            integrity: Some(crate::integrity::collect()),
+            auth: with_auth.then(|| crate::authlog::collect(auth_from)),
+        };
+        // Canal plein ou fermé = session finie : rien à rattraper.
+        let _ = tx.blocking_send(result);
+    });
+}
+
+/// Le relevé d'authentification seul, à sa propre cadence.
+///
+/// Séparé parce que les deux sondes n'ont pas le même prix : lire une fenêtre de
+/// journal coûte quelques dizaines de millisecondes, empreinter les surfaces de
+/// persistance en coûte cent fois plus. Les faire battre ensemble reviendrait à
+/// payer la seconde toutes les heures pour rien.
+fn spawn_scan_auth_only(tx: &tokio::sync::mpsc::Sender<ScanResult>, auth_from: i64) {
+    let tx = tx.clone();
+    tokio::task::spawn_blocking(move || {
+        let _ = tx.blocking_send(ScanResult {
+            integrity: None,
+            auth: Some(crate::authlog::collect(auth_from)),
+        });
+    });
+}
+
+async fn send_integrity<S>(
+    sink: &mut S,
+    device_id: &str,
+    integrity: crate::integrity::IntegrityReport,
+) -> Result<()>
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let entries = integrity.entries.len();
+    let msg = serde_json::to_string(&ClientMessage::Integrity {
+        device_id: device_id.to_string(),
+        integrity: Box::new(integrity),
+    })?;
+    sink.send(Message::Text(msg))
+        .await
+        .context("sending integrity manifest")?;
+    debug!(entries, "integrity manifest sent");
+    Ok(())
+}
+
+async fn send_auth<S>(sink: &mut S, device_id: &str, auth: crate::authlog::AuthWindow) -> Result<()>
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let (failed, accepted) = (auth.failed, auth.accepted);
+    let msg = serde_json::to_string(&ClientMessage::AuthEvents {
+        device_id: device_id.to_string(),
+        auth: Box::new(auth),
+    })?;
+    sink.send(Message::Text(msg))
+        .await
+        .context("sending auth window")?;
+    debug!(failed, accepted, "auth window sent");
+    Ok(())
+}
+
 fn spawn_report(tx: &tokio::sync::mpsc::Sender<DeviceReport>, sockets: &SocketMap) {
     let listening = sockets.listening.clone();
     let established = sockets.established.clone();
