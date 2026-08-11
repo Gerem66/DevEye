@@ -60,6 +60,7 @@ export default defineConfig(({ command }) => {
         build: {
             outDir: 'build',
             sourcemap: true,
+            chunkSizeWarningLimit: 1024,
             rollupOptions: {
                 output: {
                     // Split heavy third-party libs into their own long-lived chunks so the
