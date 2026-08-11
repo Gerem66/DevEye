@@ -574,13 +574,16 @@
     text-overflow: ellipsis;
 }
 
-/* Blocks editor */
+/* Blocks editor. The list itself is the contentEditable host (see BlockEditor),
+   so the caret and a selection run over the whole note; its focus ring would
+   frame the entire body, hence `outline: none`. */
 .blocks {
     display: flex;
     flex-direction: column;
     gap: 2px;
     max-height: 42vh;
     overflow: auto;
+    outline: none;
 }
 
 /* Large editor layout: the block list fills the available height and is the
@@ -613,6 +616,19 @@
 .dragging .block:hover .blockGrip,
 .dragging .block:hover .blockRemove {
     opacity: 0;
+}
+
+/* Row chrome (grip, checkbox, markers, delete) lives inside the editable host
+   but is none of the note's text: `user-select: none` — with the elements'
+   `contentEditable={false}` — keeps it out of any selection, so dragging across
+   rows selects the text alone and copying it never picks up an affordance. */
+.blockGrip,
+.checkButton,
+.blockBullet,
+.blockNumber,
+.blockRemove,
+.dividerHit {
+    user-select: none;
 }
 
 /* Drag-to-reorder grip: hidden until the row is hovered, à la native editors.
@@ -759,7 +775,6 @@
     font-size: 0.92rem;
     line-height: 1.5;
     font-variant-numeric: tabular-nums;
-    user-select: none;
 }
 
 .blockText {
@@ -783,7 +798,7 @@
     color: var(--text-muted);
 }
 
-/* Placeholder for the (contentEditable) block surface when it's empty. */
+/* Placeholder for a block's text surface when it's empty. */
 .blockText[data-empty='true']::before {
     content: attr(data-placeholder);
     color: var(--text-muted);
@@ -846,7 +861,7 @@
     border-top: 1px solid var(--glass-border);
 }
 
-/* Inline emphasis rendered live by RichText: dimmed markers, styled content. */
+/* Inline emphasis rendered live by BlockText: dimmed markers, styled content. */
 .mdMarker {
     opacity: 0.35;
 }

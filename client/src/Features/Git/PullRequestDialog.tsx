@@ -25,7 +25,7 @@ interface PullRequestDialogProps {
  * `useDismissLayer` fait qu'Échap le ferme d'abord, la popup de feature ensuite.
  *
  * La description reste du **texte brut préformaté** : le rendu Markdown du dépôt
- * (`Features/Notes/RichText`) est une surface éditable, pas un afficheur, et en
+ * (`Features/Notes/BlockText`) est une surface éditable, pas un afficheur, et en
  * écrire un pour l'occasion reviendrait à embarquer un analyseur complet —
  * listes, tableaux, blocs de code, cases à cocher — pour un écran de
  * consultation. Retours à la ligne et indentation sont préservés, ce qui suffit

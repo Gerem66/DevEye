@@ -1,7 +1,7 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import styles from './style.module.css';
-import RichText, { type RichTextHandle } from './RichText';
+import BlockText from './BlockText';
 import {
     stripInline,
     MARK_DELIMITERS,
@@ -12,6 +12,32 @@ import {
     type InlineMark
 } from './markdown';
 import { NOTE_COLOR_OPTIONS, colorVar } from './noteColors';
+import {
+    applyTrigger,
+    demote,
+    isEditable,
+    mergeBackward,
+    mergeForward,
+    removeBlock,
+    replaceRange,
+    setText,
+    splitBlock,
+    textOf,
+    type Edit
+} from './blockOps';
+import {
+    applySelection,
+    blockRow,
+    blockTextElement,
+    caretRange,
+    isCollapsed,
+    readSelection,
+    selectionInText,
+    snapCaret,
+    spansBlocks,
+    type BlockPoint,
+    type BlockRange
+} from './selection';
 
 import type {
     NoteBlock,
@@ -48,6 +74,12 @@ function markerColorLabel(type: NoteBlock['type']): string {
     }
 }
 
+/** Keyboard shortcuts that would otherwise let the browser style the DOM itself. */
+const MARK_SHORTCUTS: Record<string, InlineMark> = { b: 'bold', i: 'italic', u: 'underline' };
+
+/** How long a run of keystrokes keeps folding into a single undo step. */
+const TYPING_MERGE_MS = 700;
+
 interface BlockEditorProps {
     blocks: NoteBlock[];
     onChange: (blocks: NoteBlock[]) => void;
@@ -65,51 +97,12 @@ interface BlockEditorProps {
 }
 
 /**
- * Markdown-ish prefix that turns a paragraph into a checklist item as soon as
- * it is typed at the very start of a line: `[]`, `[ ]`, `- []`, `- [ ]`
- * (optionally followed by a space). Only the prefix is stripped — any text
- * already on the line is preserved as the item's content.
- */
-const CHECK_TRIGGER = /^(?:- )?\[ ?\] ?/;
-
-/** `- ` (or `* `) at the very start turns a paragraph into a bullet list item. */
-const BULLET_TRIGGER = /^[-*] /;
-
-/** `1. ` / `1) ` (any number) at the start turns it into a numbered list item. */
-const NUMBER_TRIGGER = /^\d+[.)] /;
-
-/** `# `…`##### ` at the start turns a paragraph into a heading of that level. */
-const HEADING_TRIGGER = /^(#{1,5}) /;
-
-/** A whole-line `---` turns the paragraph into a horizontal divider. */
-const DIVIDER_TRIGGER = '---';
-
-/** Whether a block kind carries editable text (i.e. renders a RichText surface). */
-/**
  * Heading size class for a block. `level` is 1–5 per the note schema but typed
  * as a plain `number`, so it can't index the stylesheet directly.
  */
 function headingClass(level: number): string {
     const classes = [styles.heading1, styles.heading2, styles.heading3, styles.heading4, styles.heading5];
     return classes[level - 1] ?? styles.heading1;
-}
-
-function isEditable(block: NoteBlock): boolean {
-    return block.type !== 'divider';
-}
-
-/** A fresh block to follow `b` when Enter splits it (a heading yields a paragraph). */
-function siblingBlock(b: NoteBlock, text: string): NoteBlock {
-    switch (b.type) {
-        case 'check':
-            return { type: 'check', text, done: false };
-        case 'bullet':
-            return { type: 'bullet', text };
-        case 'number':
-            return { type: 'number', text };
-        default:
-            return { type: 'text', text };
-    }
 }
 
 interface DragState {
@@ -130,22 +123,41 @@ interface DragState {
     thresholds: number[];
 }
 
+/** A state the editor can go back to: the blocks, and where the user was. */
+interface Snapshot {
+    blocks: NoteBlock[];
+    selection: BlockRange | null;
+}
+
 /**
  * The modular note body: an ordered list of typed blocks (paragraph, heading,
- * checklist / list item, divider). One clean surface that reads like a native
- * notes editor:
+ * checklist / list item, divider), rendered inside **one** contentEditable host.
+ *
+ * That single host is the whole design. The caret and a selection move over the
+ * list exactly as they would over a plain document — within a wrapped line, from
+ * one block to the next, across several of them — so navigation, selection and
+ * copy are the browser's, not ours. What the browser cannot be trusted with is
+ * *structure*: an edit reaching across blocks would merge the elements
+ * themselves and desynchronise the model. Those are intercepted and replayed on
+ * the model instead (see {@link blockOps}):
  *  - Enter splits the block at the caret into a sibling of the same kind (a
- *    heading yields a paragraph).
- *  - Ctrl/⌘+Enter inserts a literal line break inside the current block.
- *  - Up/Down cross block boundaries from the edge lines, skipping dividers.
- *  - Backspace at the start of a typed item / heading demotes it to a paragraph;
- *    on an empty paragraph it removes the row.
+ *    heading yields a paragraph); Ctrl/⌘+Enter and Shift+Enter insert a line
+ *    break in place.
+ *  - Backspace at the start of a typed item / heading demotes it to a paragraph,
+ *    then merges it into the block above; Delete at the end pulls the next one in.
+ *  - Anything typed, pasted or deleted over a multi-block selection stitches the
+ *    partial ends into a single block.
  *  - Start-of-line prefixes convert a paragraph: `[]` → checklist, `- ` → bullet,
  *    `1. ` → numbered, `# `…`##### ` → heading, a lone `---` → divider.
  *
+ * Undo/redo is ours too: the blocks are re-rendered from the model, which wipes
+ * the browser's own edit history, so every change is committed through
+ * {@link commit} with the previous state pushed on a stack (runs of keystrokes
+ * folding into one step).
+ *
  * Inline emphasis (bold/italic/underline/strike) is typed as markdown markers
- * and rendered live by {@link RichText}; the "Aa" menu wraps the selection.
- * New blocks are added through the discreet "+" menu.
+ * and rendered live by {@link BlockText}; Ctrl+B/I/U and the "Aa" menu wrap the
+ * selection. New blocks are added through the discreet "+" menu.
  *
  * Rows reorder by dragging the grip on the left (see {@link DragState}).
  */
@@ -158,13 +170,21 @@ export default function BlockEditor({
     footerButtons,
     notice
 }: BlockEditorProps) {
-    const refs = useRef<(RichTextHandle | null)[]>([]);
-    const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
-    const focusIndex = useRef<number | null>(null);
-    /** Where to drop the caret in the focused block; null = end of its value. */
-    const caretPos = useRef<number | null>(null);
-    /** The block currently targeted by the format menu — the RichText that holds
-     *  focus, or a divider the user clicked. Drives the contextual colour picker. */
+    const rootRef = useRef<HTMLDivElement>(null);
+    /** The last selection seen inside the list. Kept because clicking a menu
+     *  button moves focus out, yet the format tools act on what was selected. */
+    const selectionRef = useRef<BlockRange | null>(null);
+    /** Where the selection must land once the pending change has rendered. */
+    const pending = useRef<BlockRange | null>(null);
+    const past = useRef<Snapshot[]>([]);
+    const future = useRef<Snapshot[]>([]);
+    /** Until when consecutive typing keeps folding into the same undo step. */
+    const coalesceUntil = useRef(0);
+    /** The last list this editor produced; anything else came from the outside
+     *  (another note opened), which makes the history moot. */
+    const owned = useRef(blocks);
+    /** The block the format menu targets — where the caret is, or a divider the
+     *  user clicked. Drives the contextual colour picker. */
     const [active, setActive] = useState<number | null>(null);
     const [drag, setDrag] = useState<DragState | null>(null);
     const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -172,19 +192,42 @@ export default function BlockEditor({
     const addMenuRef = useRef<HTMLDivElement | null>(null);
     const formatMenuRef = useRef<HTMLDivElement | null>(null);
 
-    // After a structural change we may want to move focus to a specific block.
+    // A list this editor did not produce means another note was opened: its
+    // history is not ours to undo.
     useEffect(() => {
-        if (focusIndex.current === null) return;
-        const handle = refs.current[focusIndex.current];
-        const block = blocks[focusIndex.current];
-        if (handle && block) {
-            handle.focus();
-            const len = 'text' in block ? block.text.length : 0;
-            handle.setCaret(caretPos.current ?? len);
-        }
-        focusIndex.current = null;
-        caretPos.current = null;
+        if (blocks === owned.current) return;
+        owned.current = blocks;
+        past.current = [];
+        future.current = [];
+        coalesceUntil.current = 0;
     });
+
+    // Restore the selection a change asked for, once that change has rendered
+    // (the blocks' own HTML is written in their layout effect, i.e. before this).
+    useLayoutEffect(() => {
+        const root = rootRef.current;
+        const target = pending.current;
+        pending.current = null;
+        if (!root || !target) return;
+        root.focus({ preventScroll: true });
+        applySelection(root, target);
+        selectionRef.current = target;
+        setActive(target.start.index);
+    });
+
+    // Follow the caret wherever it goes — keeping it out of the rows' chrome —
+    // so the format menu stays contextual.
+    useEffect(() => {
+        const onSelectionChange = () => {
+            const root = rootRef.current;
+            const selection = root && (snapCaret(root) ?? readSelection(root));
+            if (!selection) return;
+            selectionRef.current = selection;
+            setActive(selection.start.index);
+        };
+        document.addEventListener('selectionchange', onSelectionChange);
+        return () => document.removeEventListener('selectionchange', onSelectionChange);
+    }, []);
 
     // Close the menus on an outside click (same lightweight pattern as the
     // per-card move menu).
@@ -198,21 +241,58 @@ export default function BlockEditor({
         return () => document.removeEventListener('mousedown', onDocClick);
     }, [addMenuOpen, formatMenuOpen]);
 
-    const update = useCallback(
-        (index: number, patch: Partial<NoteBlock>) => {
-            onChange(blocks.map((b, i) => (i === index ? ({ ...b, ...patch } as NoteBlock) : b)));
+    /** Hand `next` to the parent, remembering where the selection must land
+     *  (null leaves it wherever it is). */
+    const apply = useCallback(
+        (next: NoteBlock[], caret: BlockPoint | BlockRange | null) => {
+            owned.current = next;
+            pending.current = caret === null ? null : 'index' in caret ? caretRange(caret) : caret;
+            onChange(next);
         },
-        [blocks, onChange]
+        [onChange]
     );
 
-    /** Replace a whole block (used to switch its type), focusing it at `caret`. */
-    const replaceBlock = useCallback(
-        (index: number, block: NoteBlock, caret: number | null = null) => {
-            focusIndex.current = index;
-            caretPos.current = caret;
-            onChange(blocks.map((b, i) => (i === index ? block : b)));
+    /** Apply a change and make it undoable. `typing` folds a run of keystrokes
+     *  into the step already on the stack, so undo goes back by words, not
+     *  characters. */
+    const commit = useCallback(
+        (next: NoteBlock[], caret: BlockPoint | BlockRange | null, typing = false) => {
+            const now = Date.now();
+            if (!typing || now > coalesceUntil.current) {
+                past.current.push({ blocks, selection: selectionRef.current });
+                future.current = [];
+            }
+            coalesceUntil.current = typing ? now + TYPING_MERGE_MS : 0;
+            apply(next, caret);
         },
-        [blocks, onChange]
+        [blocks, apply]
+    );
+
+    const commitEdit = useCallback((edit: Edit, typing = false) => commit(edit.blocks, edit.caret, typing), [commit]);
+
+    /** Pop one state off `from`, pushing the current one onto `to`. */
+    const travel = useCallback(
+        (from: Snapshot[], to: Snapshot[]) => {
+            const snapshot = from.pop();
+            if (!snapshot) return;
+            to.push({ blocks, selection: selectionRef.current });
+            coalesceUntil.current = 0;
+            apply(snapshot.blocks, snapshot.selection);
+        },
+        [blocks, apply]
+    );
+
+    const undo = useCallback(() => travel(past.current, future.current), [travel]);
+    const redo = useCallback(() => travel(future.current, past.current), [travel]);
+
+    const update = useCallback(
+        (index: number, patch: Partial<NoteBlock>) => {
+            commit(
+                blocks.map((b, i) => (i === index ? ({ ...b, ...patch } as NoteBlock) : b)),
+                null
+            );
+        },
+        [blocks, commit]
     );
 
     const toggleDone = useCallback(
@@ -224,255 +304,259 @@ export default function BlockEditor({
         [blocks, update]
     );
 
-    const insertAfter = useCallback(
-        (index: number, block: NoteBlock) => {
-            const next = [...blocks.slice(0, index + 1), block, ...blocks.slice(index + 1)];
-            focusIndex.current = index + 1;
-            onChange(next);
-        },
-        [blocks, onChange]
-    );
+    /**
+     * Pull the model back in line with the DOM after an edit the browser was
+     * left to make. Only text can have changed — everything structural was
+     * intercepted before it happened — so the blocks' surfaces are read back and
+     * the ones that moved are committed. Reading them all rather than the one
+     * under the caret costs a handful of microseconds and cannot drift.
+     */
+    const onInput = useCallback(() => {
+        const root = rootRef.current;
+        if (!root) return;
+        const next = blocks.map((b, i) => {
+            if (!isEditable(b)) return b;
+            const text = blockTextElement(root, i)?.textContent ?? textOf(b);
+            return text === textOf(b) ? b : ({ ...b, text } as NoteBlock);
+        });
+        const changed = next.findIndex((b, i) => b !== blocks[i]);
+        if (changed === -1) return;
+        const selection = readSelection(root);
+        const converted = selection && applyTrigger(next, changed, selection.start.offset);
+        if (converted) commitEdit(converted);
+        else commit(next, selection, true);
+    }, [blocks, commit, commitEdit]);
 
-    /** Split block `index` at the caret: it keeps `before`, `next` follows it. */
-    const splitAt = useCallback(
-        (index: number, before: string, next: NoteBlock) => {
-            const blocksNext = blocks.map((b, i) => (i === index ? ({ ...b, text: before } as NoteBlock) : b));
-            blocksNext.splice(index + 1, 0, next);
-            focusIndex.current = index + 1;
-            caretPos.current = 0;
-            onChange(blocksNext);
-        },
-        [blocks, onChange]
-    );
-
-    const removeAt = useCallback(
-        (index: number) => {
-            const next = blocks.filter((_, i) => i !== index);
-            focusIndex.current = Math.max(0, index - 1);
-            onChange(next);
-        },
-        [blocks, onChange]
-    );
-
-    /** Nearest editable block index from `from` walking in `dir` (±1), or -1. */
-    const editableNeighbor = useCallback(
-        (from: number, dir: 1 | -1) => {
-            for (let i = from + dir; i >= 0 && i < blocks.length; i += dir) {
-                if (isEditable(blocks[i])) return i;
-            }
-            return -1;
-        },
-        [blocks]
-    );
-
-    /** Move focus to block `index`, dropping the caret at `caret` (clamped). */
-    const focusBlock = useCallback((index: number, caret: number) => {
-        const handle = refs.current[index];
-        if (!handle) return;
-        handle.focus();
-        handle.setCaret(Math.max(0, caret));
-    }, []);
-
-    const onKeyDown = useCallback(
-        (e: React.KeyboardEvent<HTMLDivElement>, index: number) => {
-            const b = blocks[index];
-            if (!('text' in b)) return;
-            const handle = refs.current[index];
-            if (!handle) return;
-            const { start, end } = handle.getCaret();
-
-            // Up/Down cross block boundaries only from the edge lines, skipping
-            // dividers: on the first text line, Up moves to the previous editable
-            // block; on the last line, Down moves to the next. The caret column is
-            // carried over.
-            if (e.key === 'ArrowUp' && start === end) {
-                const lineStart = b.text.lastIndexOf('\n', start - 1) + 1;
-                const prevIndex = editableNeighbor(index, -1);
-                if (lineStart === 0 && prevIndex !== -1) {
-                    e.preventDefault();
-                    const prev = blocks[prevIndex];
-                    const prevText = 'text' in prev ? prev.text : '';
-                    const prevLineStart = prevText.lastIndexOf('\n') + 1;
-                    focusBlock(prevIndex, prevLineStart + start);
-                    return;
-                }
-            }
-            if (e.key === 'ArrowDown' && start === end) {
-                const nextIndex = editableNeighbor(index, 1);
-                if (b.text.indexOf('\n', start) === -1 && nextIndex !== -1) {
-                    e.preventDefault();
-                    const lineStart = b.text.lastIndexOf('\n', start - 1) + 1;
-                    const column = start - lineStart;
-                    const next = blocks[nextIndex];
-                    const nextText = 'text' in next ? next.text : '';
-                    const nextLineEnd = nextText.indexOf('\n');
-                    const firstLineLen = nextLineEnd === -1 ? nextText.length : nextLineEnd;
-                    focusBlock(nextIndex, Math.min(column, firstLineLen));
-                    return;
-                }
-            }
-            if (e.key === 'Enter') {
-                if (e.ctrlKey || e.metaKey) {
-                    // Ctrl+Enter (or ⌘+Enter on Mac) inserts a line break in place.
-                    e.preventDefault();
-                    const text = b.text.slice(0, start) + '\n' + b.text.slice(end);
-                    replaceBlock(index, { ...b, text } as NoteBlock, start + 1);
-                    return;
-                }
-                // Plain Enter splits into a sibling of the same kind.
+    /**
+     * The browser may only edit *inside* a block. Anything reaching across two
+     * of them — typing or deleting over a multi-block selection — is replayed on
+     * the model, as is its own undo (whose stack our re-rendering has wiped) and
+     * its own styling commands (which would inject tags into the source text).
+     *
+     * Listened to natively: React's `onBeforeInput` is a legacy polyfill built
+     * on keypress/textInput, which knows neither `inputType` nor deletions.
+     */
+    useEffect(() => {
+        const root = rootRef.current;
+        if (!root) return;
+        const onBeforeInput = (e: InputEvent) => {
+            const { inputType, data } = e;
+            if (inputType === 'historyUndo' || inputType === 'historyRedo') {
                 e.preventDefault();
-                splitAt(index, b.text.slice(0, start), siblingBlock(b, b.text.slice(end)));
+                if (inputType === 'historyUndo') undo();
+                else redo();
                 return;
             }
-            if (e.key === 'Backspace' && start === 0 && end === 0) {
-                // At the start of a typed item / heading, demote it to a plain
-                // paragraph (keeping its text) before it can be removed.
-                if (b.type !== 'text') {
-                    e.preventDefault();
-                    replaceBlock(index, { type: 'text', text: b.text }, 0);
-                    return;
-                }
-                if (b.text === '' && blocks.length > 1) {
-                    e.preventDefault();
-                    removeAt(index);
-                }
+            if (inputType.startsWith('format')) {
+                e.preventDefault();
+                return;
             }
-        },
-        [blocks, replaceBlock, splitAt, removeAt, focusBlock, editableNeighbor]
-    );
+            // Left to the browser only within one block's text; from anywhere
+            // else (across blocks, or from a caret beside a row's chrome) the
+            // edit is replayed on the model at the position it maps to.
+            const selection = readSelection(root);
+            if (!selection || (!spansBlocks(selection) && selectionInText(root))) return;
+            e.preventDefault();
+            commitEdit(replaceRange(blocks, selection, data ?? ''), inputType === 'insertText');
+        };
+        root.addEventListener('beforeinput', onBeforeInput);
+        return () => root.removeEventListener('beforeinput', onBeforeInput);
+    }, [blocks, commitEdit, undo, redo]);
 
-    const handleBlockChange = useCallback(
-        (index: number, value: string) => {
-            const block = blocks[index];
-            // Start-of-line prefixes convert a paragraph to another kind, keeping
-            // any text that already followed.
-            if (block.type === 'text') {
-                const check = CHECK_TRIGGER.exec(value);
-                if (check)
-                    return replaceBlock(index, { type: 'check', text: value.slice(check[0].length), done: false }, 0);
-                const bullet = BULLET_TRIGGER.exec(value);
-                if (bullet) return replaceBlock(index, { type: 'bullet', text: value.slice(bullet[0].length) }, 0);
-                const number = NUMBER_TRIGGER.exec(value);
-                if (number) return replaceBlock(index, { type: 'number', text: value.slice(number[0].length) }, 0);
-                const heading = HEADING_TRIGGER.exec(value);
-                if (heading) {
-                    return replaceBlock(
-                        index,
-                        { type: 'heading', text: value.slice(heading[0].length), level: heading[1].length },
-                        0
-                    );
-                }
-                if (value === DIVIDER_TRIGGER) {
-                    // Turn the paragraph into a divider and continue typing below it.
-                    const next = blocks.map((b, i) => (i === index ? ({ type: 'divider' } as NoteBlock) : b));
-                    next.splice(index + 1, 0, { type: 'text', text: '' });
-                    focusIndex.current = index + 1;
-                    caretPos.current = 0;
-                    onChange(next);
-                    return;
-                }
-            }
-            update(index, { text: value });
-        },
-        [blocks, replaceBlock, update, onChange]
-    );
-
-    /** Wrap the active block's selection (or insert an empty pair) with a mark. */
+    /** Wrap the current selection (or insert an empty pair) with a mark. */
     const applyMark = useCallback(
         (mark: InlineMark) => {
             setFormatMenuOpen(false);
-            const index = active;
-            if (index === null) return;
-            const handle = refs.current[index];
+            const selection = selectionRef.current;
+            if (!selection || spansBlocks(selection)) return;
+            const index = selection.start.index;
             const b = blocks[index];
-            if (!handle || !b || b.type === 'divider') return;
-            const { start, end } = handle.getCaret();
+            if (!b || !isEditable(b)) return;
+            const { offset: start } = selection.start;
+            const { offset: end } = selection.end;
             const delim = MARK_DELIMITERS[mark];
-            const text = b.text;
-            if (start === end) {
-                const next = text.slice(0, start) + delim + delim + text.slice(start);
-                replaceBlock(index, { ...b, text: next }, start + delim.length);
-            } else {
-                const next = text.slice(0, start) + delim + text.slice(start, end) + delim + text.slice(end);
-                replaceBlock(index, { ...b, text: next }, end + 2 * delim.length);
-            }
+            const text = textOf(b);
+            const wrapped = text.slice(0, start) + delim + text.slice(start, end) + delim + text.slice(end);
+            // An empty selection drops the caret between the markers, so what is
+            // typed next is marked; a real one keeps hold of the wrapped text.
+            const caret = start === end ? start + delim.length : end + 2 * delim.length;
+            commit(setText(blocks, index, wrapped), { index, offset: caret });
         },
-        [active, blocks, replaceBlock]
+        [blocks, commit]
     );
 
-    /** Colour the active block's selection with `color` (wrap in `{c:…}{/c}`). An
-     *  empty selection inserts the pair and drops the caret inside it, so what's
-     *  typed next is coloured — mirroring {@link applyMark}. */
+    /** Colour the current selection (wrap in `{c:…}{/c}`), mirroring applyMark. */
     const applyColor = useCallback(
         (color: NoteColor) => {
             setFormatMenuOpen(false);
-            const index = active;
-            if (index === null) return;
-            const handle = refs.current[index];
+            const selection = selectionRef.current;
+            if (!selection || spansBlocks(selection)) return;
+            const index = selection.start.index;
             const b = blocks[index];
-            if (!handle || !b || b.type === 'divider') return;
-            const { start, end } = handle.getCaret();
+            if (!b || !isEditable(b)) return;
+            const { offset: start } = selection.start;
+            const { offset: end } = selection.end;
             const open = colorOpen(color);
-            const text = b.text;
-            if (start === end) {
-                const next = text.slice(0, start) + open + COLOR_CLOSE + text.slice(start);
-                replaceBlock(index, { ...b, text: next }, start + open.length);
-            } else {
-                const inner = text.slice(start, end);
-                const next = text.slice(0, start) + open + inner + COLOR_CLOSE + text.slice(end);
-                replaceBlock(index, { ...b, text: next }, end + open.length);
-            }
+            const text = textOf(b);
+            const wrapped = text.slice(0, start) + open + text.slice(start, end) + COLOR_CLOSE + text.slice(end);
+            commit(setText(blocks, index, wrapped), { index, offset: (start === end ? start : end) + open.length });
         },
-        [active, blocks, replaceBlock]
+        [blocks, commit]
     );
 
     /** Clear text colour: strip colour markers within the selection, or — with a
      *  collapsed caret — from the coloured run under it. */
     const clearColor = useCallback(() => {
         setFormatMenuOpen(false);
-        const index = active;
-        if (index === null) return;
-        const handle = refs.current[index];
+        const selection = selectionRef.current;
+        if (!selection || spansBlocks(selection)) return;
+        const index = selection.start.index;
         const b = blocks[index];
-        if (!handle || !b || b.type === 'divider') return;
-        const { start, end } = handle.getCaret();
-        const text = b.text;
+        if (!b || !isEditable(b)) return;
+        const { offset: start } = selection.start;
+        const { offset: end } = selection.end;
+        const text = textOf(b);
         if (start !== end) {
             const inner = stripColorMarkers(text.slice(start, end));
-            const next = text.slice(0, start) + inner + text.slice(end);
-            replaceBlock(index, { ...b, text: next }, start + inner.length);
+            commit(setText(blocks, index, text.slice(0, start) + inner + text.slice(end)), {
+                index,
+                offset: start + inner.length
+            });
             return;
         }
         const cleared = removeEnclosingColor(text, start);
-        if (cleared) replaceBlock(index, { ...b, text: cleared.text }, cleared.caret);
-    }, [active, blocks, replaceBlock]);
+        if (cleared) commit(setText(blocks, index, cleared.text), { index, offset: cleared.caret });
+    }, [blocks, commit]);
 
     /** Set (or clear, with `undefined`) the marker colour of the active marker
      *  block — the bullet dot, ordinal, checkbox or divider rule. */
     const setBlockColor = useCallback(
         (color: NoteColor | undefined) => {
             setFormatMenuOpen(false);
-            const index = active;
-            if (index === null) return;
-            const b = blocks[index];
+            if (active === null) return;
+            const b = blocks[active];
             if (!b || !MARKER_TYPES.has(b.type)) return;
-            onChange(blocks.map((bb, i) => (i === index ? ({ ...bb, color } as NoteBlock) : bb)));
+            commit(
+                blocks.map((bb, i) => (i === active ? ({ ...bb, color } as NoteBlock) : bb)),
+                null
+            );
         },
-        [active, blocks, onChange]
+        [active, blocks, commit]
     );
 
     const addBlock = useCallback(
         (block: NoteBlock) => {
             setAddMenuOpen(false);
-            insertAfter(blocks.length - 1, block);
+            commit([...blocks, block], { index: blocks.length, offset: 0 });
         },
-        [blocks.length, insertAfter]
+        [blocks, commit]
+    );
+
+    const onKeyDown = useCallback(
+        (e: React.KeyboardEvent<HTMLDivElement>) => {
+            const root = rootRef.current;
+            if (!root) return;
+            const mod = e.ctrlKey || e.metaKey;
+            const key = e.key.toLowerCase();
+
+            if (mod && key === 'z') {
+                e.preventDefault();
+                if (e.shiftKey) redo();
+                else undo();
+                return;
+            }
+            if (mod && key === 'y') {
+                e.preventDefault();
+                redo();
+                return;
+            }
+            // Keys pressed on a row's own buttons (grip, checkbox, delete) are
+            // theirs: only a caret in the text calls for block editing.
+            if (document.activeElement !== root) return;
+            if (mod && MARK_SHORTCUTS[key]) {
+                e.preventDefault();
+                applyMark(MARK_SHORTCUTS[key]);
+                return;
+            }
+
+            const selection = readSelection(root);
+            if (!selection) return;
+            const { index, offset } = selection.start;
+            const block = blocks[index];
+
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                // Ctrl/⌘+Enter and Shift+Enter are a line break in place; plain
+                // Enter splits the block. Either way what the selection covered
+                // goes first.
+                const lineBreak = mod || e.shiftKey;
+                const cleared = replaceRange(blocks, selection, lineBreak ? '\n' : '');
+                commitEdit(lineBreak ? cleared : splitBlock(cleared.blocks, cleared.caret));
+                return;
+            }
+
+            if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+
+            if (!isCollapsed(selection)) {
+                // Within one block the browser deletes correctly by itself.
+                if (!spansBlocks(selection)) return;
+                e.preventDefault();
+                commitEdit(replaceRange(blocks, selection, ''));
+                return;
+            }
+            if (e.key === 'Backspace' && offset === 0) {
+                e.preventDefault();
+                // A typed item / heading first falls back to a plain paragraph,
+                // keeping its text; only then does it join the block above.
+                if (isEditable(block) && block.type !== 'text') {
+                    commitEdit(demote(blocks, index));
+                    return;
+                }
+                const merged = mergeBackward(blocks, index);
+                if (merged) commitEdit(merged);
+                return;
+            }
+            if (e.key === 'Delete' && offset === textOf(block).length) {
+                e.preventDefault();
+                const merged = mergeForward(blocks, index);
+                if (merged) commitEdit(merged);
+            }
+        },
+        [blocks, commitEdit, applyMark, undo, redo]
+    );
+
+    /** Paste as plain text: line breaks stay line breaks (as Ctrl+Enter makes
+     *  them), and no foreign markup ever reaches a block's source. */
+    const onPaste = useCallback(
+        (e: React.ClipboardEvent<HTMLDivElement>) => {
+            const root = rootRef.current;
+            const selection = root && readSelection(root);
+            if (!selection) return;
+            e.preventDefault();
+            commitEdit(replaceRange(blocks, selection, e.clipboardData.getData('text/plain')));
+        },
+        [blocks, commitEdit]
+    );
+
+    /** Cutting across blocks is a copy plus a model-level delete — the browser's
+     *  own would take the block elements with it. */
+    const onCut = useCallback(
+        (e: React.ClipboardEvent<HTMLDivElement>) => {
+            const root = rootRef.current;
+            const selection = root && readSelection(root);
+            if (!selection || !spansBlocks(selection)) return;
+            e.preventDefault();
+            e.clipboardData.setData('text/plain', window.getSelection()?.toString() ?? '');
+            commitEdit(replaceRange(blocks, selection, ''));
+        },
+        [blocks, commitEdit]
     );
 
     const onGripDragStart = useCallback(
         (e: React.DragEvent, index: number) => {
-            const row = rowRefs.current[index];
-            if (!row) return;
+            const root = rootRef.current;
+            const row = root && blockRow(root, index);
+            if (!root || !row) return;
             const rect = row.getBoundingClientRect();
             // Where the centre of the row sits relative to the cursor, so the
             // target follows the element's middle rather than the grab point.
@@ -495,7 +579,7 @@ export default function BlockEditor({
             // Boundaries between consecutive rows = midpoints of adjacent row
             // centres (see DragState.thresholds).
             const mids = blocks.map((_, i) => {
-                const r = rowRefs.current[i]?.getBoundingClientRect();
+                const r = blockRow(root, i)?.getBoundingClientRect();
                 return r ? r.top + r.height / 2 : Number.POSITIVE_INFINITY;
             });
             const thresholds: number[] = [];
@@ -530,20 +614,20 @@ export default function BlockEditor({
 
     const finishDrag = useCallback(
         (e: React.DragEvent) => {
-            // Block the browser's native drop handling: dropping over a block's
-            // contentEditable would otherwise insert the drag's text/plain payload
-            // (the row index) straight into the text.
+            // Block the browser's native drop handling: dropping over the editable
+            // surface would otherwise insert the drag's text/plain payload (the
+            // row index) straight into the text.
             e.preventDefault();
             setDrag((d) => {
                 if (d && d.to !== d.from) {
                     const next = blocks.filter((_, i) => i !== d.from);
                     next.splice(d.to, 0, blocks[d.from]);
-                    onChange(next);
+                    commit(next, null);
                 }
                 return null;
             });
         },
-        [blocks, onChange]
+        [blocks, commit]
     );
 
     // Render order, with the placeholder injected among the remaining rows.
@@ -561,16 +645,18 @@ export default function BlockEditor({
         numbering[i] = run;
     }
 
+    // Everything that isn't the block's own text is chrome: kept out of the
+    // editing host so the caret never lands in it and a selection never drags it
+    // along (`contentEditable={false}` plus `user-select: none` in the CSS).
     const renderRow = (block: NoteBlock, index: number) => (
         <div
             key={index}
-            ref={(el) => {
-                rowRefs.current[index] = el;
-            }}
+            data-block={index}
             className={`${styles.block} ${drag?.from === index ? styles.blockHidden : ''}`}
         >
             <button
                 type='button'
+                contentEditable={false}
                 className={`${styles.blockGrip} ${blocks.length > 1 ? '' : styles.blockGripHidden}`}
                 aria-label='Réordonner la ligne'
                 draggable={blocks.length > 1}
@@ -582,9 +668,11 @@ export default function BlockEditor({
             {block.type === 'check' && (
                 <button
                     type='button'
+                    contentEditable={false}
                     className={`${styles.checkButton} ${block.done ? styles.checkButtonDone : ''}`}
                     style={block.color ? { color: colorVar(block.color) } : undefined}
                     aria-label={block.done ? 'Décocher' : 'Cocher'}
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => toggleDone(index)}
                 >
                     <span className={`icon ${styles.badge} icon-${block.done ? 'square-check' : 'square-empty'}`} />
@@ -592,6 +680,7 @@ export default function BlockEditor({
             )}
             {block.type === 'bullet' && (
                 <span
+                    contentEditable={false}
                     className={styles.blockBullet}
                     style={block.color ? { background: colorVar(block.color) } : undefined}
                     aria-hidden='true'
@@ -599,6 +688,7 @@ export default function BlockEditor({
             )}
             {block.type === 'number' && (
                 <span
+                    contentEditable={false}
                     className={styles.blockNumber}
                     style={block.color ? { color: colorVar(block.color) } : undefined}
                     aria-hidden='true'
@@ -608,11 +698,17 @@ export default function BlockEditor({
             )}
             {block.type === 'divider' ? (
                 <div
+                    contentEditable={false}
                     className={`${styles.dividerHit} ${active === index ? styles.dividerSelected : ''}`}
                     role='separator'
-                    tabIndex={-1}
                     title='Cliquer pour le sélectionner, puis choisir sa couleur dans le menu de mise en forme'
-                    onMouseDown={() => setActive(index)}
+                    onMouseDown={(e) => {
+                        // Keep the caret where it was: the rule is a target for
+                        // the format menu, not a place to type.
+                        e.preventDefault();
+                        selectionRef.current = null;
+                        setActive(index);
+                    }}
                 >
                     <div
                         className={styles.dividerLine}
@@ -620,26 +716,22 @@ export default function BlockEditor({
                     />
                 </div>
             ) : (
-                <RichText
-                    ref={(handle) => {
-                        refs.current[index] = handle;
-                    }}
+                <BlockText
                     className={`${styles.blockText} ${block.type === 'heading' ? headingClass(block.level) : ''} ${
                         block.type === 'check' && block.done ? styles.blockTextDone : ''
                     }`}
                     value={block.text}
                     placeholder={block.type === 'text' ? 'Écrivez quelque chose…' : 'Élément…'}
-                    onChange={(v) => handleBlockChange(index, v)}
-                    onKeyDown={(e) => onKeyDown(e, index)}
-                    onFocus={() => setActive(index)}
                 />
             )}
             {blocks.length > 1 && (
                 <button
                     type='button'
+                    contentEditable={false}
                     className={styles.blockRemove}
                     aria-label='Supprimer la ligne'
-                    onClick={() => removeAt(index)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => commitEdit(removeBlock(blocks, index))}
                 >
                     <span className={`icon ${styles.badge} icon-trash`} />
                 </button>
@@ -655,7 +747,7 @@ export default function BlockEditor({
         (() => {
             const b = blocks[drag.from];
             return (
-                <div className={styles.blockGhost} aria-hidden='true'>
+                <div className={styles.blockGhost} contentEditable={false} aria-hidden='true'>
                     <span className={`icon ${styles.badge} ${styles.ghostGrip} icon-drag`} />
                     {b.type === 'check' && (
                         <span
@@ -865,7 +957,17 @@ export default function BlockEditor({
     return (
         <>
             <div
+                ref={rootRef}
                 className={`${styles.blocks} ${fill ? styles.blocksFill : ''} ${drag !== null ? styles.dragging : ''}`}
+                contentEditable
+                suppressContentEditableWarning
+                role='textbox'
+                aria-multiline='true'
+                aria-label='Contenu de la note'
+                onInput={onInput}
+                onKeyDown={onKeyDown}
+                onPaste={onPaste}
+                onCut={onCut}
                 onDragOver={onContainerDragOver}
                 onDrop={finishDrag}
             >
