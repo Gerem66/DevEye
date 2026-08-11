@@ -2,14 +2,18 @@ import { useCallback, useEffect, useState } from 'react';
 import type { AllowScope, DevicePosture, DeviceSentinelState, Finding, FindingSeverity } from 'deveye-types';
 
 import { ws } from '@/api/ws';
+import { useLiveSegment } from '@/live/useLiveSegment';
 import { onResourceChange } from '@/stores/invalidation';
 import { refreshSentinel } from '@/stores/sentinel';
 
-import BaselinePanel from './BaselinePanel';
+import AllowlistSection from './AllowlistSection';
+import BaselineSection from './BaselineSection';
+import DeviceHeader from './DeviceHeader';
 import FindingDetail from './FindingDetail';
 import FindingsList from './FindingsList';
+import FleetHeader from './FleetHeader';
 import PostureGrid from './PostureGrid';
-import SentinelSettings from './SentinelSettings';
+import SentinelDialog from './SentinelDialog';
 import styles from './style.module.css';
 
 import type { FeatureProps } from '../types';
@@ -17,25 +21,23 @@ import type { FeatureProps } from '../types';
 export { SentinelWidget } from './SentinelWidget';
 
 /**
- * Sentinelle : la vue de flotte, puis le détail d'une machine.
+ * Sentinelle : la flotte, puis une machine.
  *
- * Deux niveaux et pas trois. On entre par « qu'est-ce qui ne va pas, et où » —
- * la liste des constats de tout l'espace, au pire d'abord. On descend sur une
- * machine pour sa posture, sa ligne de base et ses réglages. Un troisième niveau
- * n'aurait fait qu'éloigner la seule action qui compte : juger un constat.
+ * **Deux niveaux, et aucun onglet.** On entre par « qu'est-ce qui ne va pas, et
+ * où » — les constats de tout l'espace, au pire d'abord — et on descend sur une
+ * machine, qui se lit alors d'une seule traite : ce qu'on lui reproche, sa
+ * posture, puis ce qu'on a appris d'elle.
+ *
+ * Les onglets d'une première version rangeaient ces trois choses derrière trois
+ * clics, alors qu'elles se lisent ensemble et dans cet ordre : on ne consulte
+ * pas la posture d'une machine *ou* ses constats, on regarde les constats et on
+ * se demande aussitôt si sa configuration les explique. Les réglages, eux, sont
+ * une action et non une lecture — d'où un dialogue.
  *
  * Aucun sondage : la vue se relit quand le sujet `sentinel` bouge, c'est-à-dire
  * quand le moteur ouvre un constat. Elle est donc muette tant que rien ne se
  * passe, ce qui est l'état normal d'un détecteur.
  */
-
-type Tab = 'findings' | 'posture' | 'baseline' | 'settings';
-
-const SEVERITY_FILTERS: { id: FindingSeverity | null; label: string }[] = [
-    { id: null, label: 'Tout' },
-    { id: 'high', label: 'Élevé et plus' },
-    { id: 'critical', label: 'Critique' }
-];
 
 export default function Sentinel({ workspace }: FeatureProps) {
     const [devices, setDevices] = useState<DeviceSentinelState[]>([]);
@@ -43,15 +45,29 @@ export default function Sentinel({ workspace }: FeatureProps) {
     const [findings, setFindings] = useState<Finding[]>([]);
     const [selected, setSelected] = useState<Finding | null>(null);
     const [deviceId, setDeviceId] = useState<string | null>(null);
-    const [tab, setTab] = useState<Tab>('findings');
     const [posture, setPosture] = useState<DevicePosture | null>(null);
     const [minSeverity, setMinSeverity] = useState<FindingSeverity | null>(null);
-    const [showResolved, setShowResolved] = useState(false);
+    const [showSettled, setShowSettled] = useState(false);
+    const [settingsFor, setSettingsFor] = useState<DeviceSentinelState | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     const workspaceId = workspace.id;
     const device = devices.find((d) => d.deviceId === deviceId) ?? null;
+
+    // Le niveau profond de Sentinelle : la machine ouverte. La racine
+    // `view:sentinel` vient de l'accueil ; cette feature n'annonce que le sien.
+    const liveTarget = useLiveSegment('l1', deviceId);
+    useEffect(() => {
+        if (!liveTarget) return;
+        if (liveTarget.value === null) {
+            setDeviceId(null);
+            return;
+        }
+        // Redonné à chaque rendu tant qu'il n'est pas atteint : il suffit
+        // d'attendre que la liste soit là.
+        if (devices.some((d) => d.deviceId === liveTarget.value)) setDeviceId(liveTarget.value);
+    }, [liveTarget, devices]);
 
     const reload = useCallback(async () => {
         try {
@@ -59,7 +75,7 @@ export default function Sentinel({ workspace }: FeatureProps) {
                 ws.send('sentinel.overview', {}),
                 ws.send('sentinel.findings', {
                     deviceId: null,
-                    state: showResolved ? null : 'open',
+                    state: showSettled ? null : 'open',
                     minSeverity,
                     rule: null,
                     limit: 200,
@@ -69,13 +85,19 @@ export default function Sentinel({ workspace }: FeatureProps) {
             setDevices(overview.devices);
             setFleetScore(overview.fleetScore);
             setFindings(list.findings);
+            // Le constat ouvert se resynchronise sur la liste fraîche : sans
+            // cela le panneau garderait l'objet capté au clic, et afficherait
+            // « ouvert » sur un constat qu'un collègue vient d'acquitter. Il
+            // disparaît du filtre courant ⇒ on referme, plutôt que de laisser un
+            // détail orphelin de sa liste.
+            setSelected((cur) => (cur ? (list.findings.find((f) => f.id === cur.id) ?? null) : null));
             setError(null);
         } catch {
             setError('Chargement impossible.');
         } finally {
             setLoading(false);
         }
-    }, [workspaceId, minSeverity, showResolved]);
+    }, [workspaceId, minSeverity, showSettled]);
 
     useEffect(() => {
         void reload();
@@ -90,24 +112,27 @@ export default function Sentinel({ workspace }: FeatureProps) {
     }, [reload]);
 
     // La posture se charge à la demande : c'est une lecture par appareil, et la
-    // vue de flotte n'en a pas besoin pour s'afficher (elle porte déjà le score).
+    // vue de flotte n'en a pas besoin pour s'afficher — elle porte déjà le score.
     useEffect(() => {
-        if (tab !== 'posture' || !deviceId) return;
+        if (!deviceId) {
+            setPosture(null);
+            return;
+        }
         let cancelled = false;
         void (async () => {
             try {
                 const res = await ws.send('sentinel.posture', { deviceId });
                 if (!cancelled) setPosture(res.posture);
             } catch {
-                if (!cancelled) setError('Posture indisponible.');
+                if (!cancelled) setPosture(null);
             }
         })();
         return () => {
             cancelled = true;
         };
-    }, [tab, deviceId]);
+    }, [deviceId, devices]);
 
-    /** Après une écriture : la vue **et** le compteur partagé, que le serveur ne nous renvoie pas. */
+    /** Après une écriture : la vue **et** le compteur partagé, dont le serveur ne renvoie pas l'écho. */
     const afterWrite = useCallback(async () => {
         await reload();
         await refreshSentinel();
@@ -130,26 +155,41 @@ export default function Sentinel({ workspace }: FeatureProps) {
         await afterWrite();
     }, [selected, afterWrite]);
 
+    const resetBaseline = useCallback(
+        async (id: string) => {
+            await ws.send('sentinel.resetBaseline', { deviceId: id });
+            await afterWrite();
+        },
+        [afterWrite]
+    );
+
+    const scanNow = useCallback(async (id: string): Promise<boolean> => {
+        const res = await ws.send('sentinel.scanNow', { deviceId: id });
+        return res.requested;
+    }, []);
+
     const visible = deviceId ? findings.filter((f) => f.deviceId === deviceId) : findings;
 
     return (
         <div className={styles.root}>
             <aside className={styles.sidebar}>
-                <header className={styles.fleetHead}>
-                    <span className={styles.fleetLabel}>Posture de la flotte</span>
-                    <span className={styles.fleetScore}>{fleetScore === null ? '—' : fleetScore}</span>
-                </header>
-
                 <button
                     type='button'
-                    className={`${styles.deviceRow} ${deviceId === null ? styles.deviceRowActive : ''}`}
+                    className={`${styles.navRow} ${deviceId === null ? styles.navRowActive : ''}`}
                     onClick={() => {
                         setDeviceId(null);
-                        setTab('findings');
+                        setSelected(null);
                     }}
                 >
-                    <span className={styles.deviceName}>Tous les appareils</span>
+                    <span className={`icon icon-shield ${styles.navIcon}`} />
+                    <span className={styles.navName}>Vue d’ensemble</span>
                 </button>
+
+                <p className={styles.sidebarLabel}>Appareils</p>
+
+                {devices.length === 0 && !loading && (
+                    <p className={styles.sidebarEmpty}>Aucun appareil dans cet espace.</p>
+                )}
 
                 {devices.map((d) => {
                     const open = d.open.critical + d.open.high + d.open.low + d.open.info;
@@ -157,90 +197,76 @@ export default function Sentinel({ workspace }: FeatureProps) {
                         <button
                             key={d.deviceId}
                             type='button'
-                            className={`${styles.deviceRow} ${
-                                d.deviceId === deviceId ? styles.deviceRowActive : ''
-                            } ${d.enabled ? '' : styles.deviceRowOff}`}
+                            className={`${styles.navRow} ${d.deviceId === deviceId ? styles.navRowActive : ''} ${
+                                d.enabled ? '' : styles.navRowOff
+                            }`}
                             onClick={() => {
+                                // Toujours la lecture, jamais les réglages : arriver
+                                // dans un formulaire parce que la machine n'est pas
+                                // encore surveillée était le contraire de ce qu'on
+                                // attend d'un clic sur son nom.
                                 setDeviceId(d.deviceId);
-                                setTab(d.enabled ? 'findings' : 'settings');
+                                setSelected(null);
                             }}
                         >
-                            <span className={styles.deviceName}>{d.deviceName}</span>
-                            <span className={styles.deviceMeta}>
-                                {!d.enabled ? (
-                                    <span className={styles.deviceOff}>non surveillé</span>
-                                ) : d.learning ? (
-                                    <span className={styles.deviceLearning}>apprentissage</span>
-                                ) : open > 0 ? (
-                                    <span
-                                        className={
-                                            d.open.critical > 0
-                                                ? styles.sevCritical
-                                                : d.open.high > 0
-                                                  ? styles.sevHigh
-                                                  : styles.sevLow
-                                        }
-                                    >
-                                        {open}
-                                    </span>
-                                ) : (
-                                    <span className={styles.deviceClear}>ok</span>
-                                )}
-                            </span>
+                            <span
+                                className={`${styles.navDot} ${
+                                    !d.enabled
+                                        ? styles.dotOff
+                                        : d.open.critical > 0
+                                          ? styles.sevCritical
+                                          : d.open.high > 0
+                                            ? styles.sevHigh
+                                            : d.learning
+                                              ? styles.dotLearning
+                                              : styles.dotClear
+                                }`}
+                            />
+                            <span className={styles.navName}>{d.deviceName}</span>
+                            {d.enabled && open > 0 && <span className={styles.navCount}>{open}</span>}
                         </button>
                     );
                 })}
             </aside>
 
             <main className={styles.main}>
-                {device && (
-                    <nav className={styles.tabs}>
-                        {(['findings', 'posture', 'baseline', 'settings'] as Tab[]).map((t) => (
-                            <button
-                                key={t}
-                                type='button'
-                                className={`${styles.tab} ${t === tab ? styles.tabActive : ''}`}
-                                onClick={() => setTab(t)}
-                            >
-                                {t === 'findings'
-                                    ? 'Constats'
-                                    : t === 'posture'
-                                      ? 'Posture'
-                                      : t === 'baseline'
-                                        ? 'Ligne de base'
-                                        : 'Réglages'}
-                            </button>
-                        ))}
-                    </nav>
-                )}
-
                 {error && <p className={styles.error}>{error}</p>}
 
-                {tab === 'findings' && (
-                    <>
-                        <div className={styles.filters}>
-                            {SEVERITY_FILTERS.map((f) => (
-                                <button
-                                    key={f.label}
-                                    type='button'
-                                    className={`${styles.filter} ${f.id === minSeverity ? styles.filterActive : ''}`}
-                                    onClick={() => setMinSeverity(f.id)}
-                                >
-                                    {f.label}
-                                </button>
-                            ))}
-                            <label className={styles.filterCheck}>
-                                <input
-                                    type='checkbox'
-                                    checked={showResolved}
-                                    onChange={(e) => setShowResolved(e.target.checked)}
-                                />
-                                Inclure acquittés et résolus
-                            </label>
-                        </div>
+                {device ? (
+                    <DeviceHeader device={device} onOpenSettings={() => setSettingsFor(device)} onScanNow={scanNow} />
+                ) : (
+                    <FleetHeader
+                        score={fleetScore}
+                        devices={devices}
+                        minSeverity={minSeverity}
+                        onMinSeverity={setMinSeverity}
+                        showSettled={showSettled}
+                        onShowSettled={setShowSettled}
+                    />
+                )}
 
-                        <div className={styles.split}>
-                            <div className={styles.listPane}>
+                {device && !device.enabled ? (
+                    <div className={styles.callout}>
+                        <span className={`icon icon-shield ${styles.calloutIcon}`} />
+                        <div>
+                            <p className={styles.calloutTitle}>Cette machine n’est pas surveillée</p>
+                            <p className={styles.calloutBody}>
+                                Rien n’est relevé sur « {device.deviceName} », et ses journaux ne sont pas lus.
+                                L’activation démarre une fenêtre d’apprentissage pendant laquelle Sentinelle observe
+                                sans rien reprocher.
+                            </p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className={styles.split}>
+                        <div className={styles.listPane}>
+                            <section className={styles.section}>
+                                <h3 className={styles.sectionTitle}>
+                                    Constats
+                                    {visible.length > 0 && (
+                                        <span className={styles.sectionCount}>{visible.length}</span>
+                                    )}
+                                </h3>
                                 {loading ? (
                                     <p className={styles.empty}>Chargement…</p>
                                 ) : (
@@ -249,47 +275,53 @@ export default function Sentinel({ workspace }: FeatureProps) {
                                         selectedId={selected?.id ?? null}
                                         onSelect={setSelected}
                                         showDevice={deviceId === null}
+                                        learning={device?.learning ?? false}
                                     />
                                 )}
-                            </div>
-                            <div className={styles.detailPane}>
-                                {selected ? (
-                                    <FindingDetail
-                                        finding={selected}
-                                        onAcknowledge={acknowledge}
-                                        onReopen={reopen}
-                                        onOpenSnapshot={null}
-                                    />
-                                ) : (
-                                    <p className={styles.empty}>
-                                        Sélectionnez un constat pour voir ce qui a été observé.
-                                    </p>
-                                )}
-                            </div>
+                            </section>
+
+                            {device && posture && (
+                                <section className={styles.section}>
+                                    <h3 className={styles.sectionTitle}>Posture</h3>
+                                    <PostureGrid posture={posture} probes={device.probes} />
+                                </section>
+                            )}
+
+                            {device && <BaselineSection device={device} />}
+
+                            <AllowlistSection deviceId={deviceId} onChanged={() => void afterWrite()} />
                         </div>
-                    </>
-                )}
 
-                {tab === 'posture' && device && posture && <PostureGrid posture={posture} />}
-
-                {tab === 'baseline' && device && (
-                    <BaselinePanel
-                        deviceId={device.deviceId}
-                        deviceName={device.deviceName}
-                        onChanged={() => void afterWrite()}
-                    />
-                )}
-
-                {tab === 'settings' && device && (
-                    <SentinelSettings
-                        device={device}
-                        onChanged={(next) => {
-                            setDevices((prev) => prev.map((d) => (d.deviceId === next.deviceId ? next : d)));
-                            void refreshSentinel();
-                        }}
-                    />
+                        <div className={styles.detailPane}>
+                            {selected ? (
+                                <FindingDetail
+                                    finding={selected}
+                                    onAcknowledge={acknowledge}
+                                    onReopen={reopen}
+                                    onClose={() => setSelected(null)}
+                                />
+                            ) : (
+                                <div className={styles.detailEmpty}>
+                                    <span className={`icon icon-search ${styles.detailEmptyIcon}`} />
+                                    <p>Choisissez un constat pour voir ce qui a été observé.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 )}
             </main>
+
+            <SentinelDialog
+                open={settingsFor !== null}
+                device={settingsFor}
+                onClose={() => setSettingsFor(null)}
+                onSaved={(next) => {
+                    setDevices((prev) => prev.map((d) => (d.deviceId === next.deviceId ? next : d)));
+                    setSettingsFor(next);
+                    void refreshSentinel();
+                }}
+                onReset={resetBaseline}
+            />
         </div>
     );
 }

@@ -1,11 +1,15 @@
 /*
- * Sentinelle.
+ * Feature « Sentinelle ».
  *
- * Aucune couleur en dur : tout passe par les variables de thème, pour que la
- * feature suive l'apparence de l'espace comme les autres. Les quatre gravités
- * réutilisent `--danger` et `--warning` plutôt que d'introduire une échelle
- * chromatique de plus — un rouge qui ne serait pas le rouge du reste de
- * l'application se lirait comme un état différent.
+ * Module à part, comme Git et Bases de données : une feature, une feuille.
+ *
+ * Aucune couleur en dur — les quatre gravités réutilisent `--danger` et
+ * `--warning` plutôt que d'introduire une échelle chromatique de plus. Un rouge
+ * qui ne serait pas le rouge du reste de l'application se lirait comme un état
+ * différent, alors que c'est le même : « ça ne va pas ».
+ *
+ * `filter: opacity()` et jamais `opacity` pour atténuer : la propriété est
+ * revendiquée par les surfaces animées de l'application.
  */
 
 /* ── carte de grille ─────────────────────────────────────────────────────── */
@@ -39,10 +43,6 @@
     color: var(--warning);
 }
 
-.widgetCalm {
-    color: var(--text-primary);
-}
-
 .widgetLabel {
     font-size: 0.85rem;
     color: var(--text-secondary);
@@ -57,8 +57,7 @@
 
 .root {
     display: flex;
-    height: 100%;
-    min-height: 0;
+    min-height: 100%;
     gap: var(--space-md);
 }
 
@@ -66,10 +65,9 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    width: 240px;
+    width: 232px;
     flex-shrink: 0;
-    overflow-y: auto;
-    padding-right: var(--space-sm);
+    padding-right: var(--space-md);
     border-right: 1px solid var(--glass-border);
 }
 
@@ -78,7 +76,6 @@
     flex-direction: column;
     flex: 1;
     min-width: 0;
-    min-height: 0;
     gap: var(--space-md);
 }
 
@@ -87,141 +84,280 @@
     flex: 1;
     min-height: 0;
     gap: var(--space-md);
+    align-items: flex-start;
 }
 
 .listPane {
     flex: 1;
     min-width: 0;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
 }
 
+/*
+ * Le détail suit le défilement : la liste peut être longue, et devoir remonter
+ * pour lire ce qu'on vient de sélectionner annulerait tout l'intérêt d'avoir
+ * deux colonnes.
+ */
 .detailPane {
-    width: 380px;
+    position: sticky;
+    top: 0;
+    width: 360px;
     flex-shrink: 0;
-    overflow-y: auto;
-    border-left: 1px solid var(--glass-border);
-    padding-left: var(--space-md);
 }
 
-/* Sous 900 px la colonne de détail passe sous la liste : deux colonnes de
-   380 px minimum ne tiennent pas, et rétrécir la liste rendrait les sujets
-   (souvent des chemins) illisibles. */
-@media (max-width: 900px) {
+/* Sous 1000 px la colonne de détail passe sous la liste : deux colonnes ne
+   tiennent pas, et rétrécir la liste rendrait les sujets — souvent des
+   chemins — illisibles. */
+@media (max-width: 1000px) {
     .split {
         flex-direction: column;
     }
 
     .detailPane {
-        width: auto;
-        border-left: none;
-        border-top: 1px solid var(--glass-border);
-        padding-left: 0;
-        padding-top: var(--space-md);
+        position: static;
+        width: 100%;
     }
 }
 
-/* ── flotte ──────────────────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+    .root {
+        flex-direction: column;
+    }
 
-.fleetHead {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    padding: var(--space-sm);
-    margin-bottom: var(--space-sm);
+    .sidebar {
+        width: auto;
+        flex-direction: row;
+        flex-wrap: wrap;
+        padding-right: 0;
+        padding-bottom: var(--space-md);
+        border-right: none;
+        border-bottom: 1px solid var(--glass-border);
+    }
+
+    .sidebarLabel,
+    .sidebarEmpty {
+        display: none;
+    }
 }
 
-.fleetLabel {
+/* ── barre latérale ──────────────────────────────────────────────────────── */
+
+.sidebarLabel {
+    margin: var(--space-md) 0 4px var(--space-sm);
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+}
+
+.sidebarEmpty {
+    margin: 0 var(--space-sm);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.navRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: 7px var(--space-sm);
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.88rem;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.navRow:hover {
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+}
+
+.navRow:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+.navRowActive {
+    background: var(--accent-bg);
+    color: var(--text-primary);
+}
+
+.navRowOff {
+    filter: opacity(0.6);
+}
+
+.navIcon {
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.navName {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.navDot {
+    flex-shrink: 0;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.navCount {
+    flex-shrink: 0;
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    line-height: 18px;
+    text-align: center;
+}
+
+.dotOff {
+    color: var(--text-muted);
+}
+
+.dotClear {
+    color: var(--success);
+}
+
+.dotLearning {
+    color: var(--accent);
+}
+
+/* ── en-têtes ────────────────────────────────────────────────────────────── */
+
+.header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.headerTop {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.headerIdentity {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.headerBadges {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.headerActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.heading {
+    margin: 0;
+    font-size: 1.25rem;
+    color: var(--text-primary);
+}
+
+.subheading {
+    margin: 2px 0 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.headerNote {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-left: 2px solid var(--glass-border-strong);
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+/* Le score de flotte, seul chiffre de l'écran qui mérite d'être gros. */
+.scoreBlock {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.scoreValue {
+    font-size: 2rem;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.scoreLabel {
     font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--text-muted);
 }
 
-.fleetScore {
-    font-size: 1.4rem;
-    font-weight: 600;
-    color: var(--text-primary);
+.scoreOk {
+    color: var(--success);
 }
 
-.deviceRow {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-sm);
-    width: 100%;
-    padding: var(--space-sm);
-    border: none;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text-primary);
-    font-size: 0.9rem;
-    text-align: left;
-    cursor: pointer;
-    transition: background var(--transition-fast);
+.scoreWarn {
+    color: var(--warning);
 }
 
-.deviceRow:hover {
-    background: var(--glass-bg-light);
+.scoreBad {
+    color: var(--danger);
 }
 
-.deviceRowActive {
-    background: var(--accent-bg);
-}
-
-/* framer-motion possède l'`opacity` sur les éléments animés : on atténue via un
-   filtre, jamais via la propriété elle-même. */
-.deviceRowOff {
-    filter: opacity(0.55);
-}
-
-.deviceName {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.deviceMeta {
-    font-size: 0.75rem;
-    flex-shrink: 0;
-}
-
-.deviceOff,
-.deviceLearning {
+.scoreUnknown {
     color: var(--text-muted);
 }
 
-.deviceClear {
-    color: var(--text-muted);
-}
-
-/* ── onglets et filtres ──────────────────────────────────────────────────── */
-
-.tabs {
+/* Décomptes par gravité — la lecture d'un coup d'œil de « à quel point ». */
+.tallies {
     display: flex;
-    gap: 2px;
+    gap: var(--space-lg);
     flex-wrap: wrap;
 }
 
-.tab {
-    padding: var(--space-sm) var(--space-md);
-    border: none;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: all var(--transition-fast);
+.tally {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
 }
 
-.tab:hover {
-    background: var(--glass-bg-light);
-    color: var(--text-primary);
+.tallyValue {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: currentColor;
 }
 
-.tabActive {
-    background: var(--accent-bg);
-    color: var(--text-primary);
-}
+/* ── filtres ─────────────────────────────────────────────────────────────── */
 
 .filters {
     display: flex;
@@ -231,28 +367,88 @@
 }
 
 .filter {
-    padding: 4px 10px;
+    padding: 4px 11px;
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-pill);
     background: transparent;
     color: var(--text-secondary);
-    font-size: 0.78rem;
+    font: inherit;
+    font-size: 0.76rem;
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition:
+        border-color var(--transition-fast),
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.filter:hover {
+    border-color: var(--glass-border-strong);
+    color: var(--text-primary);
 }
 
 .filterActive {
-    border-color: var(--accent);
+    border-color: transparent;
+    background: var(--accent-bg);
     color: var(--text-primary);
 }
 
 .filterCheck {
+    font-size: 0.76rem;
+}
+
+/* ── sections ────────────────────────────────────────────────────────────── */
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.sectionTitle {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-sm);
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.sectionCount {
+    padding: 1px 7px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 400;
+}
+
+.sectionHint {
+    margin: 0;
     font-size: 0.78rem;
-    color: var(--text-secondary);
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+.sectionToggle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 0;
+    border: none;
+    background: transparent;
+    font: inherit;
+    text-align: left;
     cursor: pointer;
+}
+
+.sectionChevron {
+    color: var(--text-muted);
+    transition: transform var(--transition-fast);
+}
+
+.sectionChevronOpen {
+    transform: rotate(90deg);
 }
 
 /* ── constats ────────────────────────────────────────────────────────────── */
@@ -266,7 +462,7 @@
 .findingGroup {
     display: flex;
     flex-direction: column;
-    gap: var(--space-sm);
+    gap: 6px;
 }
 
 .groupTitle {
@@ -274,10 +470,10 @@
     align-items: center;
     gap: var(--space-sm);
     margin: 0;
-    font-size: 0.78rem;
+    font-size: 0.72rem;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.05em;
     color: var(--text-secondary);
 }
 
@@ -289,38 +485,63 @@
 .findingRows {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
     margin: 0;
     padding: 0;
     list-style: none;
 }
 
+/* La carte d'un constat : même grammaire que les cartes de Bases de données —
+   surface de widget, bordure de verre, léger soulèvement au survol. */
 .findingRow {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-md);
     width: 100%;
     padding: var(--space-sm) var(--space-md);
-    border: none;
-    border-radius: var(--radius-sm);
-    background: var(--glass-bg-light);
+    padding-left: calc(var(--space-md) + 3px);
+    overflow: hidden;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-widget);
     color: var(--text-primary);
+    font: inherit;
     text-align: left;
     cursor: pointer;
-    transition: background var(--transition-fast);
+    transition:
+        border-color var(--transition-fast),
+        transform var(--transition-fast);
 }
 
 .findingRow:hover {
-    background: var(--glass-bg);
+    border-color: var(--glass-border-strong);
+    transform: translateY(-1px);
+}
+
+.findingRow:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
 }
 
 .findingRowActive {
-    background: var(--accent-bg);
+    border-color: var(--accent);
 }
 
 .findingRowMuted {
-    filter: opacity(0.6);
+    filter: opacity(0.55);
+}
+
+/* Le liseré de gravité : lisible sans lire, et sans ajouter une pastille de
+   plus dans une ligne déjà dense. */
+.findingBar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 3px;
+    background: currentColor;
 }
 
 .findingMain {
@@ -337,7 +558,7 @@
 
 .findingSubject {
     font-family: var(--font-mono);
-    font-size: 0.75rem;
+    font-size: 0.73rem;
     color: var(--text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -357,24 +578,24 @@
     color: var(--text-secondary);
 }
 
-.findingAgo,
-.findingCount {
+.findingAgo {
     white-space: nowrap;
 }
 
-.findingBadge {
-    padding: 1px 6px;
+.chip {
+    padding: 1px 7px;
     border-radius: var(--radius-pill);
-    background: var(--glass-bg);
+    background: var(--surface-subtle);
     color: var(--text-secondary);
     font-size: 0.68rem;
+    white-space: nowrap;
 }
 
 /* ── gravités ────────────────────────────────────────────────────────────── */
 
 .sevDot {
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     flex-shrink: 0;
     background: currentColor;
@@ -396,18 +617,39 @@
     color: var(--text-muted);
 }
 
-/* ── détail ──────────────────────────────────────────────────────────────── */
+/* ── détail d'un constat ─────────────────────────────────────────────────── */
 
 .detail {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--space-md);
+    padding: var(--space-md);
+    padding-left: calc(var(--space-md) + 3px);
+    overflow: hidden;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-widget);
+}
+
+.detailBar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 3px;
+    background: currentColor;
 }
 
 .detailHead {
     display: flex;
     align-items: flex-start;
     gap: var(--space-sm);
+}
+
+.detailTitles {
+    flex: 1;
+    min-width: 0;
 }
 
 .detailTitle {
@@ -417,23 +659,61 @@
 }
 
 .detailSubject {
-    margin: 2px 0 0;
+    margin: 3px 0 0;
     font-family: var(--font-mono);
-    font-size: 0.75rem;
+    font-size: 0.73rem;
     color: var(--text-secondary);
     overflow-wrap: anywhere;
 }
 
+.detailClose {
+    flex-shrink: 0;
+    padding: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.detailClose:hover {
+    color: var(--text-primary);
+}
+
 .detailDescription {
     margin: 0;
-    font-size: 0.85rem;
+    font-size: 0.83rem;
+    line-height: 1.5;
     color: var(--text-secondary);
+}
+
+.detailEmpty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-lg) var(--space-md);
+    border: 1px dashed var(--glass-border);
+    border-radius: var(--radius-lg);
+    text-align: center;
+}
+
+.detailEmpty p {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.detailEmptyIcon {
+    font-size: 1.3rem;
+    color: var(--text-muted);
+    filter: opacity(0.6);
 }
 
 .evidence {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 5px;
     margin: 0;
 }
 
@@ -444,28 +724,38 @@
 }
 
 .evidenceRow dt {
-    width: 130px;
+    width: 120px;
     flex-shrink: 0;
     color: var(--text-muted);
 }
 
 .evidenceRow dd {
     margin: 0;
+    min-width: 0;
     color: var(--text-primary);
     overflow-wrap: anywhere;
 }
 
+.evidenceNote {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+/* La conduite à tenir : le seul bloc teinté de l'écran, parce que c'est la
+   seule ligne qui demande une action. */
 .remediation {
     display: flex;
     gap: var(--space-sm);
     padding: var(--space-sm) var(--space-md);
-    border-radius: var(--radius-sm);
-    background: var(--glass-bg-light);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
 }
 
 .remediation p {
     margin: 0;
-    font-size: 0.8rem;
+    font-size: 0.79rem;
+    line-height: 1.5;
     color: var(--text-secondary);
 }
 
@@ -489,29 +779,40 @@
 .ackNote {
     margin: 0;
     font-size: 0.78rem;
+    line-height: 1.5;
     color: var(--text-muted);
 }
 
-.reasonLabel {
+/* ── appel à l'action (machine non surveillée) ───────────────────────────── */
+
+.callout {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-size: 0.78rem;
-    color: var(--text-secondary);
+    gap: var(--space-md);
+    padding: var(--space-lg);
+    border: 1px dashed var(--glass-border);
+    border-radius: var(--radius-lg);
 }
 
-.reasonInput {
-    padding: 6px 10px;
-    border: 1px solid var(--input-border);
-    border-radius: var(--radius-sm);
-    background: var(--input-bg);
+.calloutIcon {
+    flex-shrink: 0;
+    font-size: 1.5rem;
+    color: var(--text-muted);
+    filter: opacity(0.6);
+}
+
+.calloutTitle {
+    margin: 0 0 4px;
+    font-size: 0.95rem;
+    font-weight: 600;
     color: var(--text-primary);
-    font-size: 0.82rem;
 }
 
-.reasonInput:focus {
-    outline: none;
-    border-color: var(--input-focus);
+.calloutBody {
+    margin: 0;
+    max-width: 64ch;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--text-muted);
 }
 
 /* ── posture ─────────────────────────────────────────────────────────────── */
@@ -519,39 +820,13 @@
 .posture {
     display: flex;
     flex-direction: column;
-    gap: var(--space-md);
-    overflow-y: auto;
-}
-
-.postureHead {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--space-md);
-}
-
-.postureTitle {
-    margin: 0;
-    font-size: 1rem;
-}
-
-.postureHint {
-    margin: 4px 0 0;
-    font-size: 0.78rem;
-    color: var(--text-muted);
-    max-width: 60ch;
-}
-
-.postureScore {
-    font-size: 2rem;
-    font-weight: 600;
-    line-height: 1;
+    gap: var(--space-sm);
 }
 
 .postureList {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -559,28 +834,36 @@
 
 .postureRow {
     display: grid;
-    grid-template-columns: 10px 200px 160px 1fr;
+    grid-template-columns: 8px 190px 150px 1fr;
     align-items: baseline;
     gap: var(--space-sm);
-    padding: var(--space-sm);
-    border-radius: var(--radius-sm);
-    background: var(--glass-bg-light);
-    font-size: 0.82rem;
+    padding: 7px var(--space-md);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    font-size: 0.8rem;
 }
 
-@media (max-width: 760px) {
+/* Seuls les contrôles à corriger portent une bordure : le reste est du contexte,
+   et tout encadrer reviendrait à ne rien souligner. */
+.postureRowFail {
+    border-color: var(--glass-border-strong);
+}
+
+@media (max-width: 820px) {
     .postureRow {
-        grid-template-columns: 10px 1fr;
+        grid-template-columns: 8px 1fr;
     }
 
+    .postureStatus,
     .postureFix {
         grid-column: 2;
     }
 }
 
 .postureDot {
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     background: currentColor;
 }
@@ -590,24 +873,21 @@
 }
 
 .postureStatus {
-    font-size: 0.78rem;
+    font-size: 0.76rem;
 }
 
 .postureFix {
-    font-size: 0.75rem;
+    font-size: 0.74rem;
+    line-height: 1.45;
     color: var(--text-muted);
 }
 
 .postureOk {
-    color: var(--accent);
+    color: var(--success);
 }
 
 .postureFail {
     color: var(--danger);
-}
-
-.postureWarn {
-    color: var(--warning);
 }
 
 .postureUnknown {
@@ -616,7 +896,7 @@
 
 .postureNa {
     color: var(--text-muted);
-    filter: opacity(0.6);
+    filter: opacity(0.55);
 }
 
 /* ── ligne de base ───────────────────────────────────────────────────────── */
@@ -624,28 +904,12 @@
 .baseline {
     display: flex;
     flex-direction: column;
-    gap: var(--space-md);
-    min-height: 0;
-}
-
-.baselineHead {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-md);
-    flex-wrap: wrap;
-}
-
-.baselineHint {
-    margin: 0;
-    font-size: 0.78rem;
-    color: var(--text-muted);
-    max-width: 70ch;
+    gap: var(--space-sm);
 }
 
 .baselineCount {
     margin: 0;
-    font-size: 0.75rem;
+    font-size: 0.74rem;
     color: var(--text-muted);
 }
 
@@ -656,6 +920,7 @@
     margin: 0;
     padding: 0;
     list-style: none;
+    max-height: 340px;
     overflow-y: auto;
 }
 
@@ -664,14 +929,17 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--space-md);
-    padding: 6px var(--space-sm);
+    padding: 5px var(--space-sm);
     border-radius: var(--radius-sm);
-    background: var(--glass-bg-light);
+}
+
+.baselineRow:nth-child(odd) {
+    background: var(--surface-subtle);
 }
 
 .baselineKey {
     font-family: var(--font-mono);
-    font-size: 0.75rem;
+    font-size: 0.73rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -679,73 +947,117 @@
 
 .baselineMeta {
     display: flex;
+    align-items: center;
     gap: var(--space-sm);
     flex-shrink: 0;
-    font-size: 0.72rem;
+    font-size: 0.71rem;
     color: var(--text-muted);
 }
 
-/* ── réglages ────────────────────────────────────────────────────────────── */
+/* ── décisions (autorisations) ───────────────────────────────────────────── */
 
-.settings {
+.allowRows {
     display: flex;
     flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.allowRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: var(--space-md);
-    max-width: 60ch;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-widget);
 }
 
-.settingsTitle {
-    margin: 0;
-    font-size: 1rem;
+.allowMain {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
 }
 
-.settingsState {
-    margin: 0;
-    font-size: 0.82rem;
+.allowRule {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.allowSubject {
+    font-family: var(--font-mono);
+    font-size: 0.73rem;
     color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.allowReason {
+    font-size: 0.75rem;
+    font-style: italic;
+    color: var(--text-muted);
+}
+
+/* ── dialogue de réglages ────────────────────────────────────────────────── */
+
+.dialogBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+.dialogFooter {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-sm);
 }
 
 .field {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    font-size: 0.82rem;
-    color: var(--text-secondary);
+    gap: 5px;
 }
 
-.checkField {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-sm);
-    font-size: 0.82rem;
-    color: var(--text-secondary);
-    cursor: pointer;
-}
-
-.checkField > span {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+.fieldLabel {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-primary);
 }
 
 .fieldHint {
-    font-size: 0.75rem;
+    font-size: 0.76rem;
+    line-height: 1.5;
     color: var(--text-muted);
 }
 
-.numberInput {
-    width: 120px;
-    padding: 6px 10px;
-    border: 1px solid var(--input-border);
-    border-radius: var(--radius-sm);
-    background: var(--input-bg);
-    color: var(--text-primary);
-    font-size: 0.85rem;
+.fieldCheck {
+    align-items: flex-start;
 }
 
-.numberInput:focus {
-    outline: none;
-    border-color: var(--input-focus);
+.dangerZone {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+.dangerZone > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
 }
 
 /* ── états ───────────────────────────────────────────────────────────────── */
@@ -753,18 +1065,21 @@
 .empty {
     margin: 0;
     padding: var(--space-md);
-    font-size: 0.85rem;
+    border: 1px dashed var(--glass-border);
+    border-radius: var(--radius-lg);
+    font-size: 0.82rem;
+    line-height: 1.5;
     color: var(--text-muted);
 }
 
 .error {
     margin: 0;
-    font-size: 0.82rem;
+    font-size: 0.8rem;
     color: var(--danger);
 }
 
 .notice {
     margin: 0;
-    font-size: 0.82rem;
+    font-size: 0.8rem;
     color: var(--text-secondary);
 }

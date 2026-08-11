@@ -7,8 +7,8 @@ import styles from './style.module.css';
  *
  * Le tri vient du serveur (`severity DESC, last_seen DESC`) ; on ne fait que le
  * découper en sections. Regrouper côté client sur une liste déjà triée évite de
- * refaire le tri et garantit que l'ordre affiché est bien celui que la commande
- * a produit — deux tris qui se croiseraient finiraient par diverger.
+ * refaire le tri et garantit que l'ordre affiché est celui que la commande a
+ * produit — deux tris qui se croiseraient finiraient par diverger.
  */
 
 const SEVERITY_ORDER: FindingSeverity[] = ['critical', 'high', 'low', 'info'];
@@ -51,11 +51,19 @@ interface Props {
     onSelect: (finding: Finding) => void;
     /** Affiche le nom de l'appareil (vue de flotte ; inutile en vue d'appareil). */
     showDevice: boolean;
+    /** La machine apprend encore : le vide veut dire autre chose. */
+    learning: boolean;
 }
 
-export default function FindingsList({ findings, selectedId, onSelect, showDevice }: Props) {
+export default function FindingsList({ findings, selectedId, onSelect, showDevice, learning }: Props) {
     if (findings.length === 0) {
-        return <p className={styles.empty}>Aucun constat ne correspond à ce filtre.</p>;
+        return (
+            <p className={styles.empty}>
+                {learning
+                    ? 'Rien à signaler pour l’instant — et l’apprentissage court encore, donc les écarts de comportement ne sont pas encore jugés.'
+                    : 'Rien à signaler.'}
+            </p>
+        );
     }
 
     return (
@@ -65,11 +73,11 @@ export default function FindingsList({ findings, selectedId, onSelect, showDevic
                 if (group.length === 0) return null;
                 return (
                     <section key={severity} className={styles.findingGroup}>
-                        <h3 className={styles.groupTitle}>
+                        <h4 className={styles.groupTitle}>
                             <span className={`${styles.sevDot} ${severityClass(severity)}`} />
                             {SEVERITY_LABEL[severity]}
                             <span className={styles.groupCount}>{group.length}</span>
-                        </h3>
+                        </h4>
                         <ul className={styles.findingRows}>
                             {group.map((finding) => (
                                 <li key={finding.id}>
@@ -80,6 +88,10 @@ export default function FindingsList({ findings, selectedId, onSelect, showDevic
                                         } ${finding.state !== 'open' ? styles.findingRowMuted : ''}`}
                                         onClick={() => onSelect(finding)}
                                     >
+                                        <span
+                                            className={`${styles.findingBar} ${severityClass(finding.severity)}`}
+                                            aria-hidden='true'
+                                        />
                                         <span className={styles.findingMain}>
                                             <span className={styles.findingRule}>
                                                 {SENTINEL_RULES[finding.rule].label}
@@ -87,19 +99,19 @@ export default function FindingsList({ findings, selectedId, onSelect, showDevic
                                             <span className={styles.findingSubject}>{finding.subject}</span>
                                         </span>
                                         <span className={styles.findingMeta}>
+                                            {finding.state === 'acknowledged' && (
+                                                <span className={styles.chip}>légitime</span>
+                                            )}
+                                            {finding.state === 'resolved' && (
+                                                <span className={styles.chip}>résolu</span>
+                                            )}
+                                            {finding.occurrences > 1 && (
+                                                <span className={styles.chip}>×{finding.occurrences}</span>
+                                            )}
                                             {showDevice && (
                                                 <span className={styles.findingDevice}>{finding.deviceName}</span>
                                             )}
                                             <span className={styles.findingAgo}>{ago(finding.lastSeen)}</span>
-                                            {finding.occurrences > 1 && (
-                                                <span className={styles.findingCount}>×{finding.occurrences}</span>
-                                            )}
-                                            {finding.state === 'acknowledged' && (
-                                                <span className={styles.findingBadge}>légitime</span>
-                                            )}
-                                            {finding.state === 'resolved' && (
-                                                <span className={styles.findingBadge}>résolu</span>
-                                            )}
                                         </span>
                                     </button>
                                 </li>

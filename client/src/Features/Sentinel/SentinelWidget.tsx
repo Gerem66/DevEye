@@ -19,8 +19,9 @@ export function SentinelWidget() {
     const total = totalOpen(open);
     const worst = worstSeverity(open);
 
-    const tone =
-        worst === 'critical' || worst === 'high' ? styles.widgetAlert : worst ? styles.widgetWarn : styles.widgetCalm;
+    // Rien d'ouvert ne se teinte pas : la couleur du texte primaire *est* l'état
+    // calme, et lui inventer une classe ferait croire à une troisième nuance.
+    const tone = worst === 'critical' || worst === 'high' ? styles.widgetAlert : worst ? styles.widgetWarn : '';
 
     return (
         <div className={styles.widget}>
