@@ -81,6 +81,12 @@ struct Surface {
     suffixes: &'static [&'static str],
 }
 
+// Les deux fabriques ne servent qu'aux tables de surfaces, qui sont propres à
+// chaque plateforme : `s` sur Linux et macOS, `s_ext` sur Linux seul (les
+// suffixes ne filtrent que les unités systemd). Ailleurs — Windows, où la table
+// est vide et les surfaces viennent du registre — elles seraient du code mort,
+// et la CI compile l'agent sur les trois.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 const fn s(name: &'static str, path: &'static str) -> Surface {
     Surface {
         name,
@@ -89,6 +95,7 @@ const fn s(name: &'static str, path: &'static str) -> Surface {
     }
 }
 
+#[cfg(target_os = "linux")]
 const fn s_ext(
     name: &'static str,
     path: &'static str,

@@ -330,7 +330,7 @@ fn read_lines(from: i64) -> Option<Vec<String>> {
     use std::time::Duration;
 
     // `log show` veut une durée, pas une date : on la dérive de la fenêtre.
-    let minutes = (((now_millis() - from) / 60_000).max(1)).min(1440);
+    let minutes = ((now_millis() - from) / 60_000).clamp(1, 1440);
     let last = format!("{minutes}m");
     let out = run_timeout(
         "log",
@@ -355,7 +355,7 @@ fn read_lines(from: i64) -> Option<Vec<String>> {
     use std::time::Duration;
 
     // 4625 échec, 4624 réussite, 4720 création de compte, 4728 ajout à un groupe.
-    let minutes = (((now_millis() - from) / 60_000).max(1)).min(1440);
+    let minutes = ((now_millis() - from) / 60_000).clamp(1, 1440);
     let script = format!(
         "Get-WinEvent -FilterHashtable @{{LogName='Security'; Id=4624,4625,4720,4728; \
          StartTime=(Get-Date).AddMinutes(-{minutes})}} -ErrorAction SilentlyContinue | \
