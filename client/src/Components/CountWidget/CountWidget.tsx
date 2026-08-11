@@ -11,8 +11,10 @@ import { useActiveWorkspace } from '@/stores/workspace';
  *
  *  `uptime.count` porte le même suffixe mais rend `{ total, up, down }`, et a
  *  son propre store partagé (`stores/uptime`) : l'exclure ici est ce qui garde
- *  ce composant sur une seule forme de réponse. */
-type CountCommand = Exclude<Extract<ResourceKey, `${string}.count`>, 'uptime.count'>;
+ *  ce composant sur une seule forme de réponse. `sentinel.count` est dans le
+ *  même cas — il rend un décompte **par gravité**, parce que « trois constats »
+ *  ne veut rien dire tant qu'on ne sait pas si l'un d'eux est critique. */
+type CountCommand = Exclude<Extract<ResourceKey, `${string}.count`>, 'uptime.count' | 'sentinel.count'>;
 
 export type CountState = { kind: 'loading' } | { kind: 'ready'; count: number };
 

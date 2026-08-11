@@ -7,6 +7,7 @@ import { NotesWidget } from '@/Features/Notes/NotesWidget';
 import { PasswordWidget } from '@/Features/Password/PasswordWidget';
 import { CloudSyncWidget } from '@/Features/CloudSync';
 import { UptimeWidget } from '@/Features/Uptime/UptimeWidget';
+import { SentinelWidget } from '@/Features/Sentinel/SentinelWidget';
 import { MailWidget } from '@/Features/Mail/MailWidget';
 import { ProjectsWidget } from '@/Features/Projects/ProjectsWidget';
 import { GitWidget } from '@/Features/Git/GitWidget';
@@ -18,6 +19,7 @@ import FeaturePassword from '@/Features/Password';
 import FeatureNotes from '@/Features/Notes';
 import CloudSync from '@/Features/CloudSync';
 import Uptime from '@/Features/Uptime';
+import Sentinel from '@/Features/Sentinel';
 import Mail from '@/Features/Mail';
 import FeatureProjects from '@/Features/Projects';
 import FeatureGit from '@/Features/Git';
@@ -106,6 +108,18 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         // Unmounted as soon as it closes: the panel polls while it lives, and a
         // cached (or preloaded) instance would keep querying unseen. The home
         // card and navbar widget stay live through the shared count store.
+        cacheDurationMinutes: 0
+    },
+    {
+        id: 'sentinel',
+        title: 'Sentinelle',
+        icon: 'shield',
+        WidgetContent: SentinelWidget,
+        FullComponent: Sentinel,
+        // Démontée à la fermeture : la vue relit constats et posture à
+        // l'ouverture, et une instance en cache resterait branchée sur le sujet
+        // `sentinel` sans que personne la regarde. La carte de l'accueil reste
+        // vivante par le compteur partagé, comme celle d'Uptime.
         cacheDurationMinutes: 0
     },
     {

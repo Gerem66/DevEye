@@ -32,6 +32,10 @@ export type ResourceKey =
     | 'uptime.count'
     | 'uptime.list'
     | 'device.list'
+    | 'sentinel.count'
+    | 'sentinel.overview'
+    | 'sentinel.findings'
+    | 'sentinel.baseline'
     | 'weather.list'
     | 'workspace.roleList'
     /**
@@ -79,6 +83,15 @@ const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
     mail: ['mail.accountCount', 'mail.accountList', 'mail.folderList', 'mail.messageList'],
     uptime: ['uptime.count', 'uptime.list'],
     devices: ['device.list'],
+    /*
+     * Sujet distinct de `devices`, et non un alias : les constats bougent à
+     * chaque tour du moteur, la liste d'appareils presque jamais. Les confondre
+     * ferait re-solliciter toute la flotte à chaque évaluation.
+     *
+     * `sentinel.count` en tête : c'est la seule clé que la carte de l'accueil et
+     * la pastille de Monitoring écoutent, et celle qui doit bouger le plus vite.
+     */
+    sentinel: ['sentinel.count', 'sentinel.overview', 'sentinel.findings', 'sentinel.baseline'],
     weather: ['weather.list'],
     // Deux sujets pour une seule feature : la structure d'un côté, les fils de
     // discussion de l'autre. Un message ne doit pas faire re-solliciter le

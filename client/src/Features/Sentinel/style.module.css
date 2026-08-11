@@ -1,0 +1,770 @@
+/*
+ * Sentinelle.
+ *
+ * Aucune couleur en dur : tout passe par les variables de thème, pour que la
+ * feature suive l'apparence de l'espace comme les autres. Les quatre gravités
+ * réutilisent `--danger` et `--warning` plutôt que d'introduire une échelle
+ * chromatique de plus — un rouge qui ne serait pas le rouge du reste de
+ * l'application se lirait comme un état différent.
+ */
+
+/* ── carte de grille ─────────────────────────────────────────────────────── */
+
+.widget {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+    gap: var(--space-sm);
+}
+
+.widgetStat {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+}
+
+.widgetValue {
+    font-size: 2.2rem;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--text-primary);
+}
+
+.widgetAlert {
+    color: var(--danger);
+}
+
+.widgetWarn {
+    color: var(--warning);
+}
+
+.widgetCalm {
+    color: var(--text-primary);
+}
+
+.widgetLabel {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.widgetFoot {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+/* ── mise en page ────────────────────────────────────────────────────────── */
+
+.root {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    gap: var(--space-md);
+}
+
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 240px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    padding-right: var(--space-sm);
+    border-right: 1px solid var(--glass-border);
+}
+
+.main {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    gap: var(--space-md);
+}
+
+.split {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    gap: var(--space-md);
+}
+
+.listPane {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+}
+
+.detailPane {
+    width: 380px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    border-left: 1px solid var(--glass-border);
+    padding-left: var(--space-md);
+}
+
+/* Sous 900 px la colonne de détail passe sous la liste : deux colonnes de
+   380 px minimum ne tiennent pas, et rétrécir la liste rendrait les sujets
+   (souvent des chemins) illisibles. */
+@media (max-width: 900px) {
+    .split {
+        flex-direction: column;
+    }
+
+    .detailPane {
+        width: auto;
+        border-left: none;
+        border-top: 1px solid var(--glass-border);
+        padding-left: 0;
+        padding-top: var(--space-md);
+    }
+}
+
+/* ── flotte ──────────────────────────────────────────────────────────────── */
+
+.fleetHead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: var(--space-sm);
+    margin-bottom: var(--space-sm);
+}
+
+.fleetLabel {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.fleetScore {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.deviceRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-sm);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.deviceRow:hover {
+    background: var(--glass-bg-light);
+}
+
+.deviceRowActive {
+    background: var(--accent-bg);
+}
+
+/* framer-motion possède l'`opacity` sur les éléments animés : on atténue via un
+   filtre, jamais via la propriété elle-même. */
+.deviceRowOff {
+    filter: opacity(0.55);
+}
+
+.deviceName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.deviceMeta {
+    font-size: 0.75rem;
+    flex-shrink: 0;
+}
+
+.deviceOff,
+.deviceLearning {
+    color: var(--text-muted);
+}
+
+.deviceClear {
+    color: var(--text-muted);
+}
+
+/* ── onglets et filtres ──────────────────────────────────────────────────── */
+
+.tabs {
+    display: flex;
+    gap: 2px;
+    flex-wrap: wrap;
+}
+
+.tab {
+    padding: var(--space-sm) var(--space-md);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.tab:hover {
+    background: var(--glass-bg-light);
+    color: var(--text-primary);
+}
+
+.tabActive {
+    background: var(--accent-bg);
+    color: var(--text-primary);
+}
+
+.filters {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.filter {
+    padding: 4px 10px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.filterActive {
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.filterCheck {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+/* ── constats ────────────────────────────────────────────────────────────── */
+
+.findings {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.findingGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.groupTitle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+}
+
+.groupCount {
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+.findingRows {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.findingRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg-light);
+    color: var(--text-primary);
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.findingRow:hover {
+    background: var(--glass-bg);
+}
+
+.findingRowActive {
+    background: var(--accent-bg);
+}
+
+.findingRowMuted {
+    filter: opacity(0.6);
+}
+
+.findingMain {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.findingRule {
+    font-size: 0.88rem;
+    font-weight: 500;
+}
+
+.findingSubject {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.findingMeta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-shrink: 0;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.findingDevice {
+    color: var(--text-secondary);
+}
+
+.findingAgo,
+.findingCount {
+    white-space: nowrap;
+}
+
+.findingBadge {
+    padding: 1px 6px;
+    border-radius: var(--radius-pill);
+    background: var(--glass-bg);
+    color: var(--text-secondary);
+    font-size: 0.68rem;
+}
+
+/* ── gravités ────────────────────────────────────────────────────────────── */
+
+.sevDot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: currentColor;
+}
+
+.sevCritical {
+    color: var(--danger);
+}
+
+.sevHigh {
+    color: var(--warning);
+}
+
+.sevLow {
+    color: var(--text-secondary);
+}
+
+.sevInfo {
+    color: var(--text-muted);
+}
+
+/* ── détail ──────────────────────────────────────────────────────────────── */
+
+.detail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.detailHead {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+}
+
+.detailTitle {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.detailSubject {
+    margin: 2px 0 0;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+}
+
+.detailDescription {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.evidence {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+}
+
+.evidenceRow {
+    display: flex;
+    gap: var(--space-sm);
+    font-size: 0.78rem;
+}
+
+.evidenceRow dt {
+    width: 130px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.evidenceRow dd {
+    margin: 0;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.remediation {
+    display: flex;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg-light);
+}
+
+.remediation p {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.remediationIcon {
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.actionRow {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.ackNote {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.reasonLabel {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.reasonInput {
+    padding: 6px 10px;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-size: 0.82rem;
+}
+
+.reasonInput:focus {
+    outline: none;
+    border-color: var(--input-focus);
+}
+
+/* ── posture ─────────────────────────────────────────────────────────────── */
+
+.posture {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    overflow-y: auto;
+}
+
+.postureHead {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+}
+
+.postureTitle {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.postureHint {
+    margin: 4px 0 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    max-width: 60ch;
+}
+
+.postureScore {
+    font-size: 2rem;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.postureList {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.postureRow {
+    display: grid;
+    grid-template-columns: 10px 200px 160px 1fr;
+    align-items: baseline;
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg-light);
+    font-size: 0.82rem;
+}
+
+@media (max-width: 760px) {
+    .postureRow {
+        grid-template-columns: 10px 1fr;
+    }
+
+    .postureFix {
+        grid-column: 2;
+    }
+}
+
+.postureDot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.postureLabel {
+    color: var(--text-primary);
+}
+
+.postureStatus {
+    font-size: 0.78rem;
+}
+
+.postureFix {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.postureOk {
+    color: var(--accent);
+}
+
+.postureFail {
+    color: var(--danger);
+}
+
+.postureWarn {
+    color: var(--warning);
+}
+
+.postureUnknown {
+    color: var(--text-muted);
+}
+
+.postureNa {
+    color: var(--text-muted);
+    filter: opacity(0.6);
+}
+
+/* ── ligne de base ───────────────────────────────────────────────────────── */
+
+.baseline {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-height: 0;
+}
+
+.baselineHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.baselineHint {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    max-width: 70ch;
+}
+
+.baselineCount {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.baselineRows {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    overflow-y: auto;
+}
+
+.baselineRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    padding: 6px var(--space-sm);
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg-light);
+}
+
+.baselineKey {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.baselineMeta {
+    display: flex;
+    gap: var(--space-sm);
+    flex-shrink: 0;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+/* ── réglages ────────────────────────────────────────────────────────────── */
+
+.settings {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    max-width: 60ch;
+}
+
+.settingsTitle {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.settingsState {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.checkField {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.checkField > span {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.fieldHint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.numberInput {
+    width: 120px;
+    padding: 6px 10px;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+}
+
+.numberInput:focus {
+    outline: none;
+    border-color: var(--input-focus);
+}
+
+/* ── états ───────────────────────────────────────────────────────────────── */
+
+.empty {
+    margin: 0;
+    padding: var(--space-md);
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.error {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--danger);
+}
+
+.notice {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
