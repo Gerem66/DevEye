@@ -68,6 +68,10 @@ export async function handleReport(s: AgentSession, payload: PayloadOf<typeof AG
         await s.db.devices.setReport(s.device.id, JSON.stringify(payload.report));
         s.hub.publishReport(s.device.id, payload.report);
         await s.db.devices.touchSeen(s.device.id, Math.floor(Date.now() / 1000));
+        // On empile, on n'évalue pas : c'est l'invariant de `SecurityMonitor`.
+        // Le moteur relira le rapport depuis `devices.report_json`, qu'on vient
+        // justement d'écrire — d'où l'ordre.
+        if (s.device.sentinel_enabled === 1) s.sentinel?.enqueueReport(s.device.id);
         ack(s, 1);
     } catch (e) {
         persistFailed(s, e, 'Failed to persist device report');
@@ -89,6 +93,14 @@ export async function handleMetricsBatch(
             s.hub.publishMetric(s.device.id, snapshot);
         }
         await s.db.devices.touchSeen(s.device.id, Math.floor(Date.now() / 1000));
+        // Un lot peut porter cent instants (agent revenu après une coupure) :
+        // seul le dernier est signalé au moteur, et lui-même n'en garde que le
+        // plus récent. Évaluer les cent produirait des constats sur des états
+        // qui n'existent plus, au prix fort et sur le chemin le plus chaud.
+        if (s.device.sentinel_enabled === 1) {
+            const latest = snapshots[snapshots.length - 1];
+            if (latest) s.sentinel?.enqueueSnapshot(s.device.id, latest.timestamp);
+        }
         ack(s, snapshots.length);
     } catch (e) {
         persistFailed(s, e, 'Failed to persist metrics batch');

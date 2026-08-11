@@ -5,6 +5,7 @@ import type { Logger } from 'pino';
 import type { CloudSyncEngine } from '@/cloudSync/engine';
 import type { Database } from '@/db';
 import type { AuditLog } from '@/Services/AuditLog';
+import type { SecurityMonitor } from '@/Services/SecurityMonitor';
 import type { MonitorHub } from '../hub';
 
 /**
@@ -19,6 +20,12 @@ export interface AgentSession {
     db: Database;
     hub: MonitorHub;
     cloudSync: CloudSyncEngine;
+    /**
+     * Moteur Sentinelle. Les handlers ne lui adressent que des `enqueue*` : ils
+     * empilent, il évalue à son tour de boucle. Optionnel pour que les chemins
+     * qui construisent une session sans moteur (tests) restent possibles.
+     */
+    sentinel?: SecurityMonitor;
     audit: AuditLog;
     logger: Logger;
     /** Owner user id (from the device-token claims); the audit actor. */

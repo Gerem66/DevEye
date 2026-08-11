@@ -12,6 +12,8 @@ import {
     AGENT_HELLO,
     AGENT_LOG_LINES,
     AGENT_LOG_SOURCES_RESULT,
+    AGENT_AUTH_EVENTS,
+    AGENT_INTEGRITY,
     AGENT_METRICS_BATCH,
     AGENT_PKG_DONE,
     AGENT_PKG_LIST_RESULT,
@@ -37,8 +39,10 @@ import { verifyDeviceToken } from '@/auth/jwt';
 import { sha256hex } from '@/Utils/hash';
 import { logger } from '@/logger';
 import {
+    handleAuthEvents,
     handleDestroyed,
     handleHello,
+    handleIntegrity,
     handleFilesChunk,
     handleFilesListing,
     handleFilesMatches,
@@ -71,6 +75,7 @@ import type { MonitorHub } from './hub';
 import type { CloudSyncEngine } from '@/cloudSync/engine';
 import type { Database } from '@/db';
 import type { AuditLog } from '@/Services/AuditLog';
+import type { SecurityMonitor } from '@/Services/SecurityMonitor';
 
 interface AgentWSDeps {
     db: Database;
@@ -78,6 +83,8 @@ interface AgentWSDeps {
     /** Présence en direct : un agent qui arrive ou part change la liste d'appareils. */
     live: LiveHub;
     cloudSync: CloudSyncEngine;
+    /** Moteur Sentinelle : les handlers lui empilent leurs relevés. */
+    sentinel?: SecurityMonitor;
     audit: AuditLog;
 }
 
@@ -145,6 +152,10 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
             return handleReport(session, msg.payload);
         case AGENT_METRICS_BATCH:
             return handleMetricsBatch(session, msg.payload);
+        case AGENT_INTEGRITY:
+            return handleIntegrity(session, msg.payload);
+        case AGENT_AUTH_EVENTS:
+            return handleAuthEvents(session, msg.payload);
     }
 }
 
@@ -156,7 +167,7 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
  */
 export async function registerAgentWS(
     app: FastifyInstance,
-    { db, hub, live, cloudSync, audit }: AgentWSDeps
+    { db, hub, live, cloudSync, sentinel, audit }: AgentWSDeps
 ): Promise<void> {
     app.get('/agent', { websocket: true }, async (socket, req) => {
         // Stealth: every authentication/authorization failure ends the connection
@@ -239,6 +250,7 @@ export async function registerAgentWS(
             db,
             hub,
             cloudSync,
+            sentinel,
             audit,
             logger: reqLogger,
             ownerId: claims.oid,

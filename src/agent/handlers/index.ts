@@ -12,4 +12,5 @@ export { handleSyncAck, handleSyncChanged, handleSyncChunk, handleSyncIndex, han
 export { handlePkgDone, handlePkgListResult, handlePkgProgress } from './packages';
 export { handleTermExit, handleTermOutput } from './terminal';
 export { handleMetricsBatch, handleReport } from './telemetry';
+export { handleAuthEvents, handleIntegrity } from './security';
 export { type AgentSession } from './session';
