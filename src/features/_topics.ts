@@ -39,6 +39,10 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     // message ne doit pas faire re-solliciter le tableau et la frise entiers.
     project: 'projects',
     secrecy: 'account',
+    // Sentinelle a son propre sujet, distinct de `devices` : ses constats
+    // changent à une tout autre cadence que la liste d'appareils, et les
+    // confondre ferait re-solliciter toute la flotte à chaque évaluation.
+    sentinel: 'sentinel',
     twofa: 'account',
     uptime: 'uptime',
     user: 'account',
@@ -70,6 +74,9 @@ const NON_MUTATING = new Set([
     'secrecy.touch',
     'secrecy.lock',
     'metrics.subscribe',
+    // Relaie un ordre à l'agent, n'écrit rien côté serveur — même nature que
+    // `metrics.refresh`.
+    'sentinel.scanNow',
     'metrics.unsubscribe',
     'metrics.refresh',
     'cloudSync.subscribe',

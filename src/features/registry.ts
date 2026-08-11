@@ -22,6 +22,7 @@ import {
 } from './password';
 import { secrecyFeatures } from './secrecy';
 import { twoFactorFeatures } from './twofa';
+import { sentinelFeatures } from './sentinel';
 import { uptimeFeatures } from './uptime';
 import { userSetAvatarFeature } from './user/setAvatar';
 import { userSetColorFeature } from './user/setColor';
@@ -84,6 +85,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...twoFactorFeatures,
     ...secrecyFeatures,
     ...weatherFeatures,
+    ...sentinelFeatures,
     ...uptimeFeatures,
     ...logsFeatures,
     ...adminFeatures,
