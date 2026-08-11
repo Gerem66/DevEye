@@ -28,7 +28,7 @@ async function main() {
     const db = createDatabase(getQueryable(pool));
     const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
 
-    const { app, cloudSync, uptime, mailSync, integrations, databases } = await buildApp({ db, crypt });
+    const { app, cloudSync, uptime, mailSync, integrations, databases, sentinel } = await buildApp({ db, crypt });
     const audit = createAuditLog(db);
 
     const shutdown = async (signal: string) => {
@@ -38,6 +38,7 @@ async function main() {
             mailSync.stop();
             integrations.stop();
             databases.stop();
+            sentinel.stop();
             await app.close();
             await pool.end();
             process.exit(0);
@@ -88,6 +89,7 @@ async function main() {
     mailSync.start();
     integrations.start();
     databases.start();
+    sentinel.start();
 
     await app.listen({ port: env.LISTEN_PORT, host: '0.0.0.0' });
     logger.info({ port: env.LISTEN_PORT }, 'DevEye server ready');

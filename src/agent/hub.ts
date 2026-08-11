@@ -15,6 +15,7 @@ import {
     AGENT_PKG_LIST,
     AGENT_PKG_UPGRADE,
     AGENT_POWER,
+    AGENT_SCAN,
     AGENT_SERVICE,
     AGENT_SYNC_APPLY_CHUNK,
     AGENT_SYNC_CONFIG,
@@ -255,6 +256,17 @@ export class MonitorHub {
     /** Ask a connected agent to push a fresh sample + report now. No-op if offline. */
     requestCollect(deviceId: string): boolean {
         return this.sendToAgent(deviceId, AGENT_COLLECT);
+    }
+
+    /**
+     * Demande un relevé Sentinelle immédiat (persistance + authentification).
+     *
+     * Distinct de `requestCollect` exprès : celui-là coûte quelques
+     * millisecondes, celui-ci empreinte des centaines de fichiers. Les confondre
+     * ferait payer ce prix à chaque « rafraîchir » de la page Monitoring.
+     */
+    requestScan(deviceId: string): boolean {
+        return this.sendToAgent(deviceId, AGENT_SCAN);
     }
 
     /** Push updated collection config to a connected agent. No-op if offline. */
@@ -783,6 +795,8 @@ export interface MonitorTransport {
     ): void;
     /** Ask the device's agent to push fresh data now; false if it's offline. */
     requestCollect(deviceId: string): boolean;
+    /** Demande un relevé Sentinelle (persistance + auth) ; false si hors ligne. */
+    requestScan(deviceId: string): boolean;
     /** Push updated collection config to the device's agent; false if offline. */
     pushConfig(deviceId: string, config: AgentConfigPayload): boolean;
     /** Tell the device's agent to self-destruct now; false if offline. */
@@ -848,6 +862,7 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         isOnline: (deviceIds) => hub.onlineDevices(deviceIds),
         sendInitial: (deviceId, point, sample, report) => hub.sendInitial(socket, deviceId, point, sample, report),
         requestCollect: (deviceId) => hub.requestCollect(deviceId),
+        requestScan: (deviceId) => hub.requestScan(deviceId),
         pushConfig: (deviceId, config) => hub.pushConfig(deviceId, config),
         requestDestroy: (deviceId) => hub.requestDestroy(deviceId),
         disconnectAgent: (deviceId) => hub.disconnectAgent(deviceId),

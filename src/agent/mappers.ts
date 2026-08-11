@@ -1,6 +1,7 @@
 import {
     DEFAULT_METRIC_INTERVAL_SECONDS,
     DEFAULT_PROCESS_CAPTURE,
+    DEFAULT_SENTINEL_INTEGRITY_MINUTES,
     deviceReportSchema,
     isNewerVersion,
     type AgentConfigPayload,
@@ -19,7 +20,13 @@ export function deviceAgentConfig(row: DeviceRow): AgentConfigPayload {
     const capture = (row.process_capture as ProcessCapture | null) ?? DEFAULT_PROCESS_CAPTURE;
     return {
         metricIntervalMs: metricSeconds * 1000,
-        processCapture: capture
+        processCapture: capture,
+        // Sentinelle éteinte, l'agent ne relève ni persistance ni
+        // authentification. Ces deux sondes ne coûtent rien à qui ne les demande
+        // pas, et une machine non surveillée ne doit pas voir ses journaux lus.
+        sentinelEnabled: row.sentinel_enabled === 1,
+        integrityIntervalMs: (row.sentinel_integrity_minutes ?? DEFAULT_SENTINEL_INTEGRITY_MINUTES) * 60_000,
+        authEventsEnabled: row.sentinel_auth_events === 1
     };
 }
 

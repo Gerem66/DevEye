@@ -8,6 +8,7 @@ import type { LiveTransport } from '@/live/hub';
 import type { UptimeMonitor } from '@/Services/UptimeMonitor';
 import type { IntegrationSyncService } from '@/Services/IntegrationSyncService';
 import type { DatabaseMonitor } from '@/Services/DatabaseMonitor';
+import type { SecurityMonitor } from '@/Services/SecurityMonitor';
 import type { ErrorCode, LiveTopic, LogLevelName } from 'deveye-types';
 import type { Logger } from 'pino';
 import type { FeatureAccess, WorkspaceCapability, WorkspaceFeatureId } from 'deveye-types';
@@ -119,6 +120,15 @@ export interface FeatureContext {
      * relevé manuel et un relevé automatique ne puissent pas diverger.
      */
     databases?: DatabaseMonitor;
+    /**
+     * Moteur Sentinelle.
+     *
+     * Sert à deux choses seulement : oublier la ligne de base en mémoire après
+     * une remise à zéro (`sentinel.resetBaseline`), et rien d'autre — les
+     * commandes de lecture passent par les dépôts, jamais par le moteur, de
+     * sorte qu'une réponse ne dépende jamais de l'état d'un tour de boucle.
+     */
+    sentinel?: SecurityMonitor;
 }
 
 /**

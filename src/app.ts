@@ -25,6 +25,7 @@ import { MailSyncService } from '@/Services/MailSyncService';
 import { UptimeMonitor } from '@/Services/UptimeMonitor';
 import { IntegrationSyncService } from '@/Services/IntegrationSyncService';
 import { DatabaseMonitor } from '@/Services/DatabaseMonitor';
+import { SecurityMonitor } from '@/Services/SecurityMonitor';
 import { mailAttachmentRoutes } from '@/mail/attachmentRoutes';
 import { mailOAuthRoutes } from '@/mail/oauthRoutes';
 import { status } from '@/status';
@@ -45,6 +46,8 @@ export interface BuiltApp {
     uptime: UptimeMonitor;
     integrations: IntegrationSyncService;
     databases: DatabaseMonitor;
+    /** Moteur Sentinelle — démarré/arrêté par index.ts. */
+    sentinel: SecurityMonitor;
     /** Synchro Mail en tâche de fond (comptes « open » uniquement) — démarrée/arrêtée par index.ts. */
     mailSync: MailSyncService;
 }
@@ -127,6 +130,10 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // Les canaux de notification sont ceux d'Uptime : mêmes destinataires, une
     // seule configuration à tenir à jour.
     const databases = new DatabaseMonitor({ db: deps.db, crypt: deps.crypt, logger, live, uptime });
+    // Sentinelle emprunte à Uptime les mêmes canaux, pour la même raison que
+    // `DatabaseMonitor` : ce sont les mêmes destinataires, et deux jeux de
+    // réglages à tenir à jour seraient une source d'erreur de plus.
+    const sentinel = new SecurityMonitor({ db: deps.db, logger, audit, live, uptime });
 
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await agentRoutes(app, { db: deps.db, hub, live, audit });
@@ -141,9 +148,12 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         uptime,
         integrations,
         databases,
+        sentinel,
         audit
     });
-    await registerAgentWS(app, { db: deps.db, hub, live, cloudSync, audit });
+    // Le moteur reçoit ce que les agents envoient — mais il n'évalue rien ici :
+    // les handlers empilent, le tour de boucle évalue (voir `SecurityMonitor`).
+    await registerAgentWS(app, { db: deps.db, hub, live, cloudSync, sentinel, audit });
 
     // Serve the built web client from the same origin as the API whenever a
     // build is present (production, or the dockerised dev stack). On the host
@@ -172,5 +182,5 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         app.log.debug({ clientDir }, 'No client build found; static serving disabled (host dev uses Vite)');
     }
 
-    return { app, cloudSync, uptime, mailSync, integrations, databases };
+    return { app, cloudSync, uptime, mailSync, integrations, databases, sentinel };
 }
