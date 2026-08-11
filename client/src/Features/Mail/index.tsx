@@ -14,6 +14,7 @@ import MailSettingsPopup, { MAIL_SETTINGS_POPUP } from './MailSettingsPopup';
 import MessageInfoPopup, { MESSAGE_INFO_POPUP } from './MessageInfoPopup';
 import MessageList from './MessageList';
 import MessagePopup from './MessagePopup';
+import { describeAccountStatus } from './accountStatus';
 import { humanizeError, withSecrecy, withSettingsDefaults, ws } from './api';
 import styles from './style.module.css';
 
@@ -243,6 +244,10 @@ export default function Mail(_props: FeatureProps) {
             setFolders([]);
             setSelectedFolderId(null);
             setError(humanizeError(e, 'Chargement des dossiers impossible.'));
+            // Le serveur vient d'inscrire l'échec sur le compte : relire la
+            // liste fait apparaître la pastille et le bandeau sans que
+            // l'utilisateur ait à redemander quoi que ce soit.
+            invalidate('mail.accountList');
         } finally {
             setFoldersLoading(false);
         }
@@ -321,6 +326,7 @@ export default function Mail(_props: FeatureProps) {
             setError(null);
         } catch (e) {
             setError(humanizeError(e, 'Chargement des messages impossible.'));
+            invalidate('mail.accountList');
         } finally {
             setMessagesLoading(false);
         }
@@ -534,6 +540,7 @@ export default function Mail(_props: FeatureProps) {
                 patchMessage(message.id, { seen: true });
             } catch (e) {
                 setError(humanizeError(e, 'Ouverture du message impossible.'));
+                invalidate('mail.accountList');
             } finally {
                 setMessageLoading(false);
             }
@@ -542,6 +549,7 @@ export default function Mail(_props: FeatureProps) {
     );
 
     const selectedAccount = accounts.find((a) => a.id === selectedAccountId) ?? null;
+    const accountStatus = selectedAccount ? describeAccountStatus(selectedAccount) : null;
     selectedAccountIdRef.current = selectedAccountId;
     const selectedFolder = folders.find((f) => f.id === selectedFolderId) ?? null;
 
@@ -826,6 +834,22 @@ export default function Mail(_props: FeatureProps) {
                     </Button>
                 </div>
             </div>
+
+            {/* L'état de la boîte ouverte, avant même qu'on ait tenté quoi que ce
+                soit : il est porté par le compte, écrit par la dernière opération
+                d'où qu'elle vienne, et donc déjà là au premier affichage. C'est ce
+                qui remplace le « la liste est vide, allez savoir pourquoi ». */}
+            {accountStatus && (
+                <div className={styles.accountAlert} data-tone={accountStatus.tone} role='status'>
+                    <span className='icon icon-alert-triangle' />
+                    <span>
+                        {accountStatus.headline}
+                        {selectedAccount?.lastSyncError && (
+                            <span className={styles.accountAlertDetail}>{selectedAccount.lastSyncError}</span>
+                        )}
+                    </span>
+                </div>
+            )}
 
             {error && <p className={styles.error}>{error}</p>}
 

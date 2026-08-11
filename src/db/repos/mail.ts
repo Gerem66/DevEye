@@ -1,5 +1,6 @@
 import type {
     MailAccountRow,
+    MailAccountStatus,
     MailAuthMethod,
     MailBodyRenderMode,
     MailFolderRow,
@@ -40,8 +41,23 @@ export interface MailAccountsRepo {
     /** Lay out the user's accounts in the given order — same convention as `uptime.reorder`. */
     reorder(workspaceId: number, ids: number[]): Promise<void>;
     count(workspaceId: number): Promise<number>;
-    /** Write back a sync outcome (background loop or on-demand). */
-    recordSync(id: number, lastSyncAt: number, lastSyncErrorEnc: string | null): Promise<void>;
+    /**
+     * Write back a sync outcome (background loop or on-demand), horodatage de
+     * relève compris — c'est ce qui remet le compte dans la rotation.
+     */
+    recordSync(
+        id: number,
+        lastSyncAt: number,
+        lastSyncErrorEnc: string | null,
+        status: MailAccountStatus
+    ): Promise<void>;
+    /**
+     * Même écriture d'état, mais **sans** toucher `last_sync_at` : l'issue d'une
+     * commande de l'utilisateur dit ce que vaut l'accès à la boîte, pas quand
+     * elle a été relevée. Les confondre ferait passer un simple clic pour une
+     * relève et repousserait d'autant le prochain passage de fond.
+     */
+    recordStatus(id: number, at: number, lastSyncErrorEnc: string | null, status: MailAccountStatus): Promise<void>;
     /** Persist a refreshed OAuth token blob without touching anything else. */
     updateCredentials(id: number, credentialsEnc: string): Promise<void>;
     /** Re-key the cached error alone, when a tier switch changes which cipher it must be under. */
@@ -269,12 +285,23 @@ export function mailAccountsRepo(pool: Q): MailAccountsRepo {
             );
             return Number(r.rows[0]?.total ?? 0);
         },
-        async recordSync(id, lastSyncAt, lastSyncErrorEnc) {
-            await pool.query('UPDATE mail_accounts SET last_sync_at = ?, last_sync_error_enc = ? WHERE id = ?', [
-                lastSyncAt,
-                lastSyncErrorEnc,
-                id
-            ]);
+        async recordSync(id, lastSyncAt, lastSyncErrorEnc, status) {
+            await pool.query(
+                `UPDATE mail_accounts
+                 SET last_sync_at = ?, last_sync_error_enc = ?, last_sync_status = ?,
+                     last_error_at = IF(? = 'ok', NULL, COALESCE(last_error_at, ?))
+                 WHERE id = ?`,
+                [lastSyncAt, lastSyncErrorEnc, status, status, lastSyncAt, id]
+            );
+        },
+        async recordStatus(id, at, lastSyncErrorEnc, status) {
+            await pool.query(
+                `UPDATE mail_accounts
+                 SET last_sync_error_enc = ?, last_sync_status = ?,
+                     last_error_at = IF(? = 'ok', NULL, COALESCE(last_error_at, ?))
+                 WHERE id = ?`,
+                [lastSyncErrorEnc, status, status, at, id]
+            );
         },
         async updateCredentials(id, credentialsEnc) {
             await pool.query('UPDATE mail_accounts SET credentials_enc = ? WHERE id = ?', [credentialsEnc, id]);

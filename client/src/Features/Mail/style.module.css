@@ -211,6 +211,37 @@
     font-size: 0.875rem;
 }
 
+/* L'état de la boîte ouverte, distinct de `.error` : celui-ci ne dit pas
+   qu'une action vient d'échouer, mais que la boîte est en panne depuis un
+   moment — il reste affiché tant que rien n'a réussi, d'où le ton porté par
+   `data-tone` (une boîte injoignable se répare seule, un accès refusé non). */
+.accountAlert {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    background: var(--warning-bg);
+    color: var(--warning);
+    font-size: 0.875rem;
+}
+
+.accountAlert[data-tone='danger'] {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+/* Le message brut du serveur, à la ligne : il est précis mais souvent aride,
+   et n'a pas à concurrencer la phrase qui dit quoi faire. */
+.accountAlertDetail {
+    display: block;
+    margin-top: 2px;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    overflow-wrap: anywhere;
+}
+
 .empty {
     margin: 0;
     color: var(--text-muted);

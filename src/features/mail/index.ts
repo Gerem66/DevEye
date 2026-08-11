@@ -53,6 +53,7 @@ import {
 } from './_sync';
 import {
     assertMailUnlocked,
+    runWithAccountStatus,
     cipherFor,
     decryptCredentials,
     encryptCredentials,
@@ -120,6 +121,30 @@ function mergeEndpoint(next: ServerEndpoint, stored: ServerEndpoint | undefined)
 
 async function credentialsFor(ctx: FeatureContext, account: MailAccountRow): Promise<MailCredentials> {
     return decryptCredentials(cipherFor(ctx, account.security_tier), account.credentials_enc);
+}
+
+/**
+ * Toute opération de commande qui parle à IMAP, avec l'état du compte tenu à
+ * jour au passage — le pendant, côté session, de ce que `MailSyncService` fait
+ * pour la relève de fond.
+ *
+ * Passer par ici plutôt que par `credentialsFor` seul est ce qui rend l'état
+ * fiable : un accès qui tombe se voit dès l'ouverture de la boîte, sans
+ * attendre qu'un tour de relève le constate, et un accès qui revient efface la
+ * mention d'erreur sans que personne ait à y penser. Le déchiffrement des
+ * identifiants est dedans à dessein — une DEK qui ne se déballe pas est, du
+ * point de vue de l'utilisateur, une boîte inaccessible comme une autre.
+ */
+async function imapFor<T>(
+    ctx: FeatureContext,
+    account: MailAccountRow,
+    work: (credentials: MailCredentials) => Promise<T>
+): Promise<T> {
+    const cipher = cipherFor(ctx, account.security_tier);
+    // Rien à diffuser d'ici : les commandes qui écrivent le font déjà par
+    // `mutates`, et celles qui lisent rendent l'échec à leur propre appelant,
+    // qui relit la liste des comptes dans la foulée (voir `Features/Mail`).
+    return runWithAccountStatus(ctx.db, cipher, account, async () => work(await credentialsFor(ctx, account)));
 }
 
 /**
@@ -379,8 +404,9 @@ export const mailAccountTestConnectionFeature: FeatureDefinition<
         if (input.id === undefined) throw new FeatureError('validation', 'Fournir soit id, soit draft');
         const account = await loadAccount(ctx, input.id);
         await assertMailUnlocked(ctx, account.security_tier);
-        const credentials = await credentialsFor(ctx, account);
-        return mailClient.testConnection(credentials, refreshCallback(ctx, account, credentials));
+        return imapFor(ctx, account, (credentials) =>
+            mailClient.testConnection(credentials, refreshCallback(ctx, account, credentials))
+        );
     }
 });
 
@@ -423,9 +449,10 @@ export const mailFolderListFeature: FeatureDefinition<
         // to refresh (same discipline as mail.messageList).
         let rows = account.security_tier === 'guarded' ? [] : await ctx.db.mailFolders.listByAccount(account.id);
         if (rows.length === 0) {
-            const credentials = await credentialsFor(ctx, account);
             try {
-                rows = await syncAccountFolders(ctx.db, cipher, account, credentials);
+                rows = await imapFor(ctx, account, (credentials) =>
+                    syncAccountFolders(ctx.db, cipher, account, credentials)
+                );
             } catch (e) {
                 if (account.security_tier === 'guarded') throw e;
                 // Open account, first-ever load, sync unreachable right now — fall
@@ -467,8 +494,9 @@ export const mailFolderSyncFeature: FeatureDefinition<
         const { folder, account } = await loadFolderWithAccount(ctx, input.folderId);
         await assertMailUnlocked(ctx, account.security_tier);
         const cipher = cipherFor(ctx, account.security_tier);
-        const credentials = await credentialsFor(ctx, account);
-        const outcome = await syncOneFolder(ctx.db, cipher, account, credentials, folder);
+        const outcome = await imapFor(ctx, account, (credentials) =>
+            syncOneFolder(ctx.db, cipher, account, credentials, folder)
+        );
         return { ok: true, ...outcome };
     }
 });
@@ -484,8 +512,9 @@ export const mailFolderBackfillFeature: FeatureDefinition<
         const { folder, account } = await loadFolderWithAccount(ctx, input.folderId);
         await assertMailUnlocked(ctx, account.security_tier);
         const cipher = cipherFor(ctx, account.security_tier);
-        const credentials = await credentialsFor(ctx, account);
-        return backfillFolder(ctx.db, cipher, account, credentials, folder, input.limit);
+        return imapFor(ctx, account, (credentials) =>
+            backfillFolder(ctx.db, cipher, account, credentials, folder, input.limit)
+        );
     }
 });
 
@@ -500,8 +529,7 @@ export const mailFolderResetFeature: FeatureDefinition<
         const { folder, account } = await loadFolderWithAccount(ctx, input.folderId);
         await assertMailUnlocked(ctx, account.security_tier);
         const cipher = cipherFor(ctx, account.security_tier);
-        const credentials = await credentialsFor(ctx, account);
-        return resetFolder(ctx.db, cipher, account, credentials, folder);
+        return imapFor(ctx, account, (credentials) => resetFolder(ctx.db, cipher, account, credentials, folder));
     }
 });
 
@@ -519,9 +547,10 @@ export const mailMessageListFeature: FeatureDefinition<
         // to refresh, so the list is synced on every open. Best-effort: a sync
         // failure (offline, bad creds) still serves whatever is already cached.
         if (account.security_tier === 'guarded') {
-            const credentials = await credentialsFor(ctx, account);
             try {
-                await syncOneFolder(ctx.db, cipher, account, credentials, folder);
+                await imapFor(ctx, account, (credentials) =>
+                    syncOneFolder(ctx.db, cipher, account, credentials, folder)
+                );
             } catch (e) {
                 ctx.logger.warn(
                     { folderId: folder.id, err: e instanceof Error ? e.message : String(e) },
@@ -588,31 +617,32 @@ export const mailMessageSearchFeature: FeatureDefinition<
         let remote = false;
         let remoteError: string | null = null;
         try {
-            const credentials = await credentialsFor(ctx, account);
-            const refresh = refreshCallback(ctx, account, credentials, cipher);
-            const uids = await mailClient.searchMessageUids(credentials, folder.imap_path, terms, refresh);
+            await imapFor(ctx, account, async (credentials) => {
+                const refresh = refreshCallback(ctx, account, credentials, cipher);
+                const uids = await mailClient.searchMessageUids(credentials, folder.imap_path, terms, refresh);
 
-            const cached = await ctx.db.mailMessages.listByFolderUids(folder.id, uids);
-            const known = new Set(cached.map((r) => r.uid));
-            const missing = uids.filter((uid) => !known.has(uid)).slice(0, REMOTE_FETCH_LIMIT);
-            if (missing.length > 0) {
-                // Caching them is what makes a remote hit usable: every later
-                // action (open, flag, delete) addresses a message by its row id.
-                const envelopes = await mailClient.fetchEnvelopesByUids(
-                    credentials,
-                    folder.imap_path,
-                    missing,
-                    refresh
-                );
-                await cacheEnvelopes(ctx.db, cipher, folder.id, envelopes);
-                // Those rows are now part of the folder, so its unread badge
-                // and totals have to account for them.
-                await refreshFolderCounts(ctx.db, folder);
-            }
-            for (const row of await ctx.db.mailMessages.listByFolderUids(folder.id, uids)) {
-                const summary = await toMessageSummaryDTO(cipher, row, account.id);
-                found.set(summary.id, summary);
-            }
+                const cached = await ctx.db.mailMessages.listByFolderUids(folder.id, uids);
+                const known = new Set(cached.map((r) => r.uid));
+                const missing = uids.filter((uid) => !known.has(uid)).slice(0, REMOTE_FETCH_LIMIT);
+                if (missing.length > 0) {
+                    // Caching them is what makes a remote hit usable: every later
+                    // action (open, flag, delete) addresses a message by its row id.
+                    const envelopes = await mailClient.fetchEnvelopesByUids(
+                        credentials,
+                        folder.imap_path,
+                        missing,
+                        refresh
+                    );
+                    await cacheEnvelopes(ctx.db, cipher, folder.id, envelopes);
+                    // Those rows are now part of the folder, so its unread badge
+                    // and totals have to account for them.
+                    await refreshFolderCounts(ctx.db, folder);
+                }
+                for (const row of await ctx.db.mailMessages.listByFolderUids(folder.id, uids)) {
+                    const summary = await toMessageSummaryDTO(cipher, row, account.id);
+                    found.set(summary.id, summary);
+                }
+            });
             remote = true;
         } catch (e) {
             remoteError = e instanceof Error ? e.message : String(e);
@@ -641,10 +671,14 @@ export const mailMessageGetFeature: FeatureDefinition<
         const { message, folder, account } = await loadMessageChain(ctx, input.messageId);
         await assertMailUnlocked(ctx, account.security_tier);
         const cipher = cipherFor(ctx, account.security_tier);
-        const credentials = await credentialsFor(ctx, account);
-        const refresh = refreshCallback(ctx, account, credentials, cipher);
-
-        const raw = await mailClient.fetchMessageRaw(credentials, folder.imap_path, message.uid, refresh);
+        const { credentials, refresh, raw } = await imapFor(ctx, account, async (creds) => {
+            const refreshCb = refreshCallback(ctx, account, creds, cipher);
+            return {
+                credentials: creds,
+                refresh: refreshCb,
+                raw: await mailClient.fetchMessageRaw(creds, folder.imap_path, message.uid, refreshCb)
+            };
+        });
         const settings = await ctx.db.mailSettings.get(ctx.workspaceId);
         const body = await parseAndSanitize(raw, {
             allowRemoteImages: input.allowRemoteImages,
@@ -688,13 +722,14 @@ export const mailMessageSetFlagsFeature: FeatureDefinition<
         const { message, folder, account } = await loadMessageChain(ctx, input.messageId);
         await assertMailUnlocked(ctx, account.security_tier);
         const cipher = cipherFor(ctx, account.security_tier);
-        const credentials = await credentialsFor(ctx, account);
-        await mailClient.setFlags(
-            credentials,
-            folder.imap_path,
-            message.uid,
-            input.flags,
-            refreshCallback(ctx, account, credentials, cipher)
+        await imapFor(ctx, account, (credentials) =>
+            mailClient.setFlags(
+                credentials,
+                folder.imap_path,
+                message.uid,
+                input.flags,
+                refreshCallback(ctx, account, credentials, cipher)
+            )
         );
         const row = await ctx.db.mailMessages.setFlags(message.id, input.flags);
         if (!row) throw new FeatureError('not_found', 'Message introuvable');
@@ -716,13 +751,14 @@ export const mailMessageMoveFeature: FeatureDefinition<
             throw new FeatureError('not_found', 'Dossier cible introuvable');
         await assertMailUnlocked(ctx, account.security_tier);
         const cipher = cipherFor(ctx, account.security_tier);
-        const credentials = await credentialsFor(ctx, account);
-        const newUid = await mailClient.moveMessage(
-            credentials,
-            folder.imap_path,
-            message.uid,
-            target.imap_path,
-            refreshCallback(ctx, account, credentials, cipher)
+        const newUid = await imapFor(ctx, account, (credentials) =>
+            mailClient.moveMessage(
+                credentials,
+                folder.imap_path,
+                message.uid,
+                target.imap_path,
+                refreshCallback(ctx, account, credentials, cipher)
+            )
         );
         await ctx.db.mailMessages.moveFolder(message.id, target.id, newUid);
         return { id: message.id };
@@ -740,25 +776,25 @@ export const mailMessageDeleteFeature: FeatureDefinition<
         const { message, folder, account } = await loadMessageChain(ctx, input.messageId);
         await assertMailUnlocked(ctx, account.security_tier);
         const cipher = cipherFor(ctx, account.security_tier);
-        const credentials = await credentialsFor(ctx, account);
-        const refresh = refreshCallback(ctx, account, credentials, cipher);
-
         const folders = await ctx.db.mailFolders.listByAccount(account.id);
         const trash = folders.find((f) => f.special_use === 'trash');
 
-        if (trash && trash.id !== folder.id) {
-            const newUid = await mailClient.moveMessage(
-                credentials,
-                folder.imap_path,
-                message.uid,
-                trash.imap_path,
-                refresh
-            );
-            await ctx.db.mailMessages.moveFolder(message.id, trash.id, newUid);
-        } else {
-            await mailClient.deleteMessage(credentials, folder.imap_path, message.uid, refresh);
-            await ctx.db.mailMessages.delete(message.id);
-        }
+        await imapFor(ctx, account, async (credentials) => {
+            const refresh = refreshCallback(ctx, account, credentials, cipher);
+            if (trash && trash.id !== folder.id) {
+                const newUid = await mailClient.moveMessage(
+                    credentials,
+                    folder.imap_path,
+                    message.uid,
+                    trash.imap_path,
+                    refresh
+                );
+                await ctx.db.mailMessages.moveFolder(message.id, trash.id, newUid);
+            } else {
+                await mailClient.deleteMessage(credentials, folder.imap_path, message.uid, refresh);
+                await ctx.db.mailMessages.delete(message.id);
+            }
+        });
         return { id: input.messageId };
     }
 });
@@ -815,27 +851,28 @@ export const mailSendFeature: FeatureDefinition<
         const account = await loadAccount(ctx, input.accountId);
         await assertMailUnlocked(ctx, account.security_tier);
         const cipher = cipherFor(ctx, account.security_tier);
-        const credentials = await credentialsFor(ctx, account);
         const fromEmail = (await cipher.tryDecrypt(account.email_address_enc)) ?? '';
 
-        const result = await mailClient.sendMail(
-            credentials,
-            {
-                from: fromEmail,
-                to: input.to,
-                cc: input.cc,
-                bcc: input.bcc,
-                subject: input.subject,
-                text: input.bodyText,
-                html: input.bodyHtml,
-                attachments: input.attachments?.map((a) => ({
-                    filename: a.filename,
-                    contentType: a.mimeType,
-                    content: Buffer.from(a.contentBase64, 'base64')
-                })),
-                inReplyTo: input.inReplyTo
-            },
-            refreshCallback(ctx, account, credentials, cipher)
+        const result = await imapFor(ctx, account, (credentials) =>
+            mailClient.sendMail(
+                credentials,
+                {
+                    from: fromEmail,
+                    to: input.to,
+                    cc: input.cc,
+                    bcc: input.bcc,
+                    subject: input.subject,
+                    text: input.bodyText,
+                    html: input.bodyHtml,
+                    attachments: input.attachments?.map((a) => ({
+                        filename: a.filename,
+                        contentType: a.mimeType,
+                        content: Buffer.from(a.contentBase64, 'base64')
+                    })),
+                    inReplyTo: input.inReplyTo
+                },
+                refreshCallback(ctx, account, credentials, cipher)
+            )
         );
 
         ctx.audit({

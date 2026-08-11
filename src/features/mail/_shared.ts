@@ -1,6 +1,7 @@
 import type {
     MailAccount,
     MailAccountRow,
+    MailAccountStatus,
     MailAddress,
     MailFolder,
     MailFolderRow,
@@ -22,6 +23,80 @@ import { getAccountSyncStatus } from './_syncStatus';
 /** Pick the cipher an account's data is encrypted with, per its own tier. */
 export function cipherFor(ctx: FeatureContext, tier: MailSecurityTier): Cipher {
     return tier === 'open' ? ctx.secure.open : ctx.secure;
+}
+
+/**
+ * Range un échec dans l'une des trois familles d'{@link MailAccountStatus}.
+ *
+ * Sur le message, faute de mieux : IMAP n'a pas de code d'erreur exploitable —
+ * imapflow lève `Error('Command failed')` et laisse la vraie raison dans
+ * `responseText`, que `describeError` a déjà repliée dans le message. La
+ * classification n'a donc pas à être exhaustive : elle sert à choisir ce que
+ * l'interface propose (reconnecter, patienter, lire), et `error` est un défaut
+ * honnête pour tout ce qu'on ne reconnaît pas.
+ */
+export function classifyMailError(message: string): Exclude<MailAccountStatus, 'ok'> {
+    const m = message.toLowerCase();
+    if (
+        /authenticationfailed|invalid credentials|invalid_grant|authentication failed|login failed/.test(m) ||
+        // Formulation de Google quand le consentement a été retiré ou a expiré.
+        /token has been expired or revoked|invalid[_ ]token|unauthorized|permission denied/.test(m) ||
+        // Gmail et Outlook renvoient ceci quand l'accès IMAP est simplement coupé.
+        /application-specific password|imap access|authenticate/.test(m)
+    ) {
+        return 'auth';
+    }
+    if (
+        /econnrefused|enotfound|etimedout|econnreset|ehostunreach|enetunreach|epipe/.test(m) ||
+        /timed? ?out|timeout|socket closed|connection closed|n'a pas répondu à temps/.test(m) ||
+        // Le refus de chiffrer la connexion est un problème de lien, pas d'identité.
+        /tls|starttls|certificate/.test(m)
+    ) {
+        return 'unreachable';
+    }
+    return 'error';
+}
+
+/**
+ * Exécute une opération IMAP au nom d'un compte et **en retient l'issue**.
+ *
+ * Tout ce qui touche au serveur de mail passe par ici, relève de fond comprise
+ * (voir `MailSyncService`), parce qu'un état qui ne s'écrirait que sur un
+ * chemin ne vaudrait rien : une boîte dont l'accès a changé doit s'annoncer
+ * qu'on l'ouvre, qu'on la relève à la main ou qu'on la laisse tourner seule.
+ *
+ * L'écriture est faite pour être bon marché sur le cas courant : une réussite
+ * qui suit une réussite ne touche pas la base. Seules les transitions écrivent,
+ * et ce sont elles que le caller diffuse.
+ *
+ * L'erreur est toujours relancée : c'est un observateur, pas un filet.
+ */
+export async function runWithAccountStatus<T>(
+    db: Database,
+    cipher: Cipher,
+    account: MailAccountRow,
+    work: () => Promise<T>,
+    /** Appelé quand l'état visible du compte a changé, pour prévenir les clients. */
+    onStatusChanged?: () => void
+): Promise<T> {
+    const now = Math.floor(Date.now() / 1000);
+    try {
+        const result = await work();
+        if (account.last_sync_status !== 'ok' || account.last_sync_error_enc !== null) {
+            await db.mailAccounts.recordStatus(account.id, now, null, 'ok');
+            onStatusChanged?.();
+        }
+        return result;
+    } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        const status = classifyMailError(message);
+        const encrypted = await cipher.encrypt(message);
+        await db.mailAccounts.recordStatus(account.id, now, encrypted, status);
+        // Le message chiffré diffère à chaque écriture (nonce), donc on compare
+        // ce qui se voit : l'état, et la présence d'une erreur.
+        if (account.last_sync_status !== status || account.last_sync_error_enc === null) onStatusChanged?.();
+        throw e;
+    }
 }
 
 /**
@@ -195,6 +270,8 @@ export async function toAccountDTO(cipher: Cipher, row: MailAccountRow): Promise
         enabled: row.enabled === 1,
         lastSyncAt: row.last_sync_at,
         lastSyncError,
+        status: row.last_sync_status,
+        lastErrorAt: row.last_error_at,
         needsReauth,
         syncIntervalMinutes: Math.max(1, Math.round(row.sync_interval_seconds / 60)),
         syncing: syncStatus.syncing,

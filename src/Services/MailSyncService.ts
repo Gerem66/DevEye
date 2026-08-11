@@ -1,6 +1,6 @@
 import type { Logger } from 'pino';
 
-import { decryptCredentials } from '@/features/mail/_shared';
+import { classifyMailError, decryptCredentials } from '@/features/mail/_shared';
 import { syncAccountFolders, syncOneFolder } from '@/features/mail/_sync';
 import { beginAccountSync, endAccountSync, markFolderSynced, reportFolderProgress } from '@/features/mail/_syncStatus';
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
@@ -152,26 +152,36 @@ export class MailSyncService {
                 } finally {
                     endAccountSync(accountId);
                 }
-                await this.deps.db.mailAccounts.recordSync(row.id, Math.floor(Date.now() / 1000), null);
+                await this.deps.db.mailAccounts.recordSync(row.id, Math.floor(Date.now() / 1000), null, 'ok');
                 this.deps.logger.debug({ accountId, moved }, 'Mail account synced');
                 // Une synchronisation a pu faire entrer des messages, en corriger
                 // les drapeaux ou en retirer : c'est le seul moment où le contenu
-                // bouge sans qu'aucun membre n'ait rien demandé.
+                // bouge sans qu'aucun membre n'ait rien demandé. La boîte a pu
+                // aussi, tout simplement, se remettre à répondre — un retour au
+                // vert vaut d'être annoncé même quand rien n'est arrivé.
                 //
                 // Sous condition, parce que c'est la seule source de
                 // rafraîchissement de la vue ouverte : diffuser à chaque relève
                 // ferait resolliciter la liste de tout client connecté toutes les
                 // dix minutes par compte, pour rien. Le débit de l'événement doit
                 // rester celui des messages, pas celui de l'horloge.
-                if (moved > 0) this.deps.live?.changed(row.workspace_id, ['mail'], null);
+                if (moved > 0 || row.last_sync_status !== 'ok') {
+                    this.deps.live?.changed(row.workspace_id, ['mail'], null);
+                }
             } catch (e) {
                 const message = e instanceof Error ? e.message : String(e);
-                this.deps.logger.warn({ accountId, err: message }, 'Mail account sync failed');
+                const status = classifyMailError(message);
+                this.deps.logger.warn({ accountId, status, err: message }, 'Mail account sync failed');
                 await this.deps.db.mailAccounts.recordSync(
                     row.id,
                     Math.floor(Date.now() / 1000),
-                    await cipher.encrypt(message)
+                    await cipher.encrypt(message),
+                    status
                 );
+                // Une boîte qui tombe en panne doit se signaler tout de suite :
+                // c'est le seul moment où quelqu'un peut l'apprendre sans avoir
+                // lui-même buté dessus.
+                if (row.last_sync_status !== status) this.deps.live?.changed(row.workspace_id, ['mail'], null);
             }
         } finally {
             this.inFlight.delete(accountId);

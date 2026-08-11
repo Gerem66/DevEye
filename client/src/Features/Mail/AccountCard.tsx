@@ -1,4 +1,5 @@
 import { StatusBadge } from '@/Components/StatusBadge';
+import { describeAccountStatus } from './accountStatus';
 import SyncProgressBar from './SyncProgressBar';
 import styles from './style.module.css';
 
@@ -58,6 +59,7 @@ export function AccountCard({
 
     // Quelqu'un travaille dans ce compte, plus bas que moi : sa couleur ici.
     const outline = useLiveOutline('l1', String(account.id));
+    const status = describeAccountStatus(account);
 
     return (
         <div
@@ -112,7 +114,7 @@ export function AccountCard({
             <h4 className={styles.accountCardName}>{account.displayName}</h4>
             <p className={styles.accountCardEmail}>{account.emailAddress}</p>
             <span className={styles.accountCardBadgeSlot}>
-                {account.needsReauth && <StatusBadge tone='danger'>reconnexion requise</StatusBadge>}
+                {status && <StatusBadge tone={status.tone}>{status.badge}</StatusBadge>}
             </span>
             <p className={styles.accountCardMeta}>
                 {formatAgo(account.lastSyncAt)}
