@@ -256,15 +256,22 @@ export function Timeline({
     }, [dense, sortedSnaps]);
     // Adjacent snapshots around the focused instant, to step through with the
     // ‹ › buttons or the keyboard arrows (binary search on the sorted marks).
-    const prevSnap = pointAt === null ? null : (sortedSnaps[lowerBound(sortedSnaps, pointAt) - 1] ?? null);
+    //
+    // En direct, la vue montre déjà le dernier relevé : on la traite donc comme
+    // un point posé sur la marque la plus récente, et ← recule d'un cran à
+    // partir de là. Sans quoi les flèches ne faisaient rien tant qu'on n'avait
+    // pas d'abord cliqué un instant, alors que l'écran en affichait un.
+    const stepFrom = pointAt ?? sortedSnaps[sortedSnaps.length - 1] ?? null;
+    const prevSnap = stepFrom === null ? null : (sortedSnaps[lowerBound(sortedSnaps, stepFrom) - 1] ?? null);
     const nextSnap = pointAt === null ? null : (sortedSnaps[lowerBound(sortedSnaps, pointAt + 1)] ?? null);
+    /** Sur la marque la plus récente, → ramène au direct : le pas suivant, c'est lui. */
+    const nextIsLive = pointAt !== null && nextSnap === null && dayStart === null;
 
     // Keyboard stepping (← previous / → next) while an instant is focused. A
     // window listener (not a focus-bound onKeyDown) because the timeline is never
     // focused in normal use; scoped to the arrow keys and skipped when the user is
     // typing in a field, so it can't hijack inputs or other shortcuts.
     useEffect(() => {
-        if (pointAt === null) return;
         const onKey = (e: KeyboardEvent) => {
             if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
             if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
@@ -281,6 +288,11 @@ export function Timeline({
             ) {
                 return;
             }
+            if (e.key === 'ArrowRight' && nextIsLive) {
+                e.preventDefault();
+                onLive();
+                return;
+            }
             const step = e.key === 'ArrowLeft' ? prevSnap : nextSnap;
             if (step !== null) {
                 e.preventDefault();
@@ -289,7 +301,7 @@ export function Timeline({
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [pointAt, prevSnap, nextSnap, onPickSnapshot]);
+    }, [prevSnap, nextSnap, nextIsLive, onPickSnapshot, onLive]);
 
     const fmtTime = (t: number) => new Date(t).toLocaleString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     const showLive = dayStart !== null || selection !== null || pointAt !== null;
@@ -433,9 +445,13 @@ export function Timeline({
                         </button>
                         <button
                             className={styles.instantArrow}
-                            onClick={() => nextSnap !== null && onPickSnapshot(nextSnap)}
-                            disabled={nextSnap === null}
-                            title='Snapshot suivant (flèche droite)'
+                            onClick={() => (nextSnap !== null ? onPickSnapshot(nextSnap) : nextIsLive && onLive())}
+                            disabled={nextSnap === null && !nextIsLive}
+                            title={
+                                nextSnap === null && nextIsLive
+                                    ? 'Retour au direct (flèche droite)'
+                                    : 'Snapshot suivant (flèche droite)'
+                            }
                         >
                             <span className='icon icon-arrow-left' style={{ transform: 'rotate(180deg)' }} />
                         </button>
@@ -443,7 +459,19 @@ export function Timeline({
                 ) : sortedSnaps.length === 0 ? (
                     <span className={styles.dragHint}>Aucun instant enregistré sur cette fenêtre</span>
                 ) : (
-                    <span className={styles.dragHint}>Cliquez un instant · glissez pour une période</span>
+                    // En direct, ‹ recule à partir du dernier relevé — celui que
+                    // la vue montre déjà. Le bouton dit ce que la flèche fait.
+                    <span className={styles.instantNav}>
+                        <button
+                            className={styles.instantArrow}
+                            onClick={() => prevSnap !== null && onPickSnapshot(prevSnap)}
+                            disabled={prevSnap === null}
+                            title='Snapshot précédent (flèche gauche)'
+                        >
+                            <span className='icon icon-arrow-left' />
+                        </button>
+                        <span className={styles.dragHint}>Cliquez un instant · glissez pour une période</span>
+                    </span>
                 )}
                 <span>{fmtTime(windowEnd)}</span>
             </div>

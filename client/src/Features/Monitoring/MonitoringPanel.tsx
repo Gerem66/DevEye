@@ -306,6 +306,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const selected = baseDevice ? { ...baseDevice, ...override } : null;
     const idRef = useRef<string>(deviceId);
     idRef.current = deviceId;
+    /** Dernier instant pour lequel on a déjà tenté d'amorcer la liste en direct. */
+    const seededProcTs = useRef<number | null>(null);
 
     const intervalMs = (selected?.metricIntervalSeconds ?? DEFAULT_INTERVAL_S) * 1000;
 
@@ -341,6 +343,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         setProcTimes([]);
         setStorage(null);
         setPresence({ onlineAtStart: false, events: [] });
+        seededProcTs.current = null;
     }, [deviceId]);
 
     // Which days have data (for the calendar + day arrows).
@@ -373,6 +376,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     // device or the chosen day changes.
     useEffect(() => {
         const id = deviceId;
+        let cancelled = false;
         const now = Date.now();
         // Window ends at "now" (live) or the chosen day's end, and spans `spanMs`
         // (zoom). For a past day, don't run before that day's 00:00.
@@ -382,48 +386,111 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         setWindowRange({ start, end });
         setFocus({ kind: 'live' });
         setReport(baseDevices.find((d) => d.id === id)?.report ?? null);
+        // Même garde que pour la série : deux changements de zoom rapprochés
+        // pouvaient laisser les marques d'une fenêtre sur une autre, et la frise
+        // cessait alors de correspondre aux graphes.
         ws.send('metrics.presence', { deviceId: id, from: start, to: end })
             .then((res) => {
-                if (idRef.current === id) setPresence({ onlineAtStart: res.onlineAtStart, events: res.events });
+                if (!cancelled && idRef.current === id)
+                    setPresence({ onlineAtStart: res.onlineAtStart, events: res.events });
             })
-            .catch(() => setReadError(true));
+            .catch(() => {
+                if (!cancelled) setReadError(true);
+            });
         ws.send('metrics.snapshots', { deviceId: id, from: start, to: end })
             .then((res) => {
-                if (idRef.current === id) {
-                    setSnapshotTimes(res.timestamps);
-                    setPinnedTimes(res.pinned);
-                    setProcTimes(res.withProcesses);
-                    setTimelineTruncated(res.truncated);
-                }
+                if (cancelled || idRef.current !== id) return;
+                setSnapshotTimes(res.timestamps);
+                setPinnedTimes(res.pinned);
+                setProcTimes(res.withProcesses);
+                setTimelineTruncated(res.truncated);
             })
-            .catch(() => setReadError(true));
+            .catch(() => {
+                if (!cancelled) setReadError(true);
+            });
+        return () => {
+            cancelled = true;
+        };
     }, [deviceId, dayStart, spanMs]);
 
     // Fetch the series + processes for the current graph window / focus.
+    //
+    // Chaque changement de fenêtre lance une requête sans annuler la précédente,
+    // et rien ne garantissait leur ordre d'arrivée : une réponse plus ancienne
+    // écrasait la plus récente, et les graphes affichaient une autre plage que
+    // celle visée — voire, quand ses points tombaient tous hors champ, des
+    // cartes vides. Intermittent par nature, donc, selon la latence du moment.
+    // Le jeton d'annulation fait qu'une réponse périmée n'écrit plus rien.
     useEffect(() => {
         const id = deviceId;
+        let cancelled = false;
+        // Les graphes couvrent désormais *cette* fenêtre-ci : tant que sa
+        // réponse n'est pas là, on montre le squelette plutôt que les points de
+        // la précédente, qui ne veulent plus rien dire sur ce cadre.
+        setMetricsReady(false);
         ws.send('metrics.query', { deviceId: id, from: graphWindow.start, to: graphWindow.end, resolution })
             .then((res) => {
-                if (idRef.current === id) {
-                    setPoints(res.points);
-                    setReadError(false);
-                }
+                if (cancelled || idRef.current !== id) return;
+                setPoints(res.points);
+                setReadError(false);
             })
-            .catch(() => setReadError(true))
-            // Reveal the graphs once the first attempt lands (success or failure),
-            // so a transient error shows "no data" rather than an endless loader.
+            .catch(() => {
+                if (!cancelled) setReadError(true);
+            })
+            // Reveal the graphs once the attempt lands (success or failure), so a
+            // transient error shows "no data" rather than an endless loader.
             .finally(() => {
-                if (idRef.current === id) setMetricsReady(true);
+                if (!cancelled && idRef.current === id) setMetricsReady(true);
             });
         // Historical focus only: in live focus the process list rides along with
         // each pushed snapshot, so there is nothing to fetch.
-        if (processAt === null) return;
-        ws.send('metrics.processesAt', { deviceId: id, at: processAt })
-            .then((res) => {
-                if (idRef.current === id) setHistProc(res.sample);
-            })
-            .catch(() => setReadError(true));
+        if (processAt !== null) {
+            ws.send('metrics.processesAt', { deviceId: id, at: processAt })
+                .then((res) => {
+                    if (!cancelled && idRef.current === id) setHistProc(res.sample);
+                })
+                .catch(() => {
+                    if (!cancelled) setReadError(true);
+                });
+        }
+        return () => {
+            cancelled = true;
+        };
     }, [deviceId, graphWindow.start, graphWindow.end, resolution, processAt]);
+
+    /**
+     * En direct, la liste de processus arrive avec les poussées. Tant qu'aucune
+     * n'est passée, on va chercher celle du dernier instant connu.
+     *
+     * Sans ça la table restait vide toute une cadence — jusqu'à cinq minutes —
+     * alors même qu'un relevé venait d'être enregistré. Deux chemins y menaient :
+     * l'instantané initial n'est envoyé qu'au *premier* abonné d'un appareil (la
+     * souscription est comptée par référence, un autre écran déjà ouvert la
+     * tenait donc), et il n'emporte sa liste que si un relevé de processus porte
+     * exactement l'horodatage du dernier point.
+     *
+     * On interroge à l'horodatage du dernier point plutôt qu'à « maintenant » :
+     * c'est un instant qui existe, là où `nearest` refuse au-delà de quelques
+     * minutes — ce qui priverait de liste toute machine hors ligne.
+     */
+    const latestTs = liveSnapshot?.timestamp ?? (points.length ? points[points.length - 1].timestamp : null);
+    useEffect(() => {
+        if (focus.kind !== 'live' || liveProc !== null || latestTs === null) return;
+        if (seededProcTs.current === latestTs) return;
+        seededProcTs.current = latestTs;
+        const id = deviceId;
+        let cancelled = false;
+        ws.send('metrics.processesAt', { deviceId: id, at: latestTs })
+            .then((res) => {
+                if (!cancelled && idRef.current === id && res.sample) setLiveProc(res.sample);
+            })
+            .catch(() => {
+                if (!cancelled) setReadError(true);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [deviceId, focus.kind, liveProc, latestTs]);
 
     const liveTail = focus.kind === 'live' && dayStart === null;
 
@@ -443,6 +510,17 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     setLiveProc({ ts: push.snapshot.timestamp, kind: processKind ?? 'all', processes });
                 }
                 if (liveTail) {
+                    // La frise apprend le nouvel instant en même temps que les
+                    // graphes. Sans ça elle se figeait à l'ouverture du panneau :
+                    // les marques n'avançaient plus, et reculer d'un cran depuis
+                    // le direct sautait tout ce qui était arrivé entre-temps.
+                    const floor = point.timestamp - spanMs;
+                    const appendTs = (prev: number[]) =>
+                        prev.length && point.timestamp <= prev[prev.length - 1]
+                            ? prev
+                            : [...prev, point.timestamp].filter((t) => t >= floor);
+                    setSnapshotTimes(appendTs);
+                    if (processes !== null) setProcTimes(appendTs);
                     setPoints((prev) => {
                         if (prev.length && point.timestamp <= prev[prev.length - 1].timestamp) return prev;
                         // Rogné à la fenêtre affichée : sans ça, un panneau laissé
@@ -484,7 +562,10 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             }
         });
         return off;
-    }, [deviceId, liveTail]);
+        // `spanMs` en dépendance : la fermeture rogne points et marques à la fenêtre
+        // visible, et un zoom élargi avec l'ancienne valeur en mémoire aurait retaillé
+        // à chaque poussée ce que la requête venait justement d'aller chercher.
+    }, [deviceId, liveTail, spanMs]);
 
     // What a delete action would remove, per the current focus. Counted on the
     // *process* instants only: `metrics.deleteSnapshots` removes process lists and
@@ -1165,9 +1246,22 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 <span className='icon icon-clock' />
                 <span>{formatDuration(graphWindow.end - graphWindow.start)}</span>
             </div>
+            {/* Une plage sans le moindre relevé donnait une grille de cartes
+                grises et muettes — un tracé vide se dessine comme une absence de
+                données, sans dire laquelle. On l'énonce. */}
+            {metricsReady && points.length === 0 ? (
+                <p className={styles.waitingMsg}>
+                    Aucun relevé sur cette période
+                    {focus.kind === 'range' || focus.kind === 'snapshot'
+                        ? ' — sélectionnez une autre plage ou revenez au direct.'
+                        : '.'}
+                </p>
+            ) : null}
             <div className={styles.graphsGrid}>
                 {metricsReady
-                    ? shownGraphs.map((g) => g.node)
+                    ? points.length === 0
+                        ? null
+                        : shownGraphs.map((g) => g.node)
                     : Array.from({ length: COLLAPSED_GRAPHS }).map((_, i) => (
                           <div key={`graph-skeleton-${i}`} className={styles.graphCard} aria-hidden>
                               <div className={styles.graphHead}>
@@ -1178,7 +1272,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                           </div>
                       ))}
             </div>
-            {metricsReady && allGraphs.length > COLLAPSED_GRAPHS && (
+            {metricsReady && points.length > 0 && allGraphs.length > COLLAPSED_GRAPHS && (
                 <button className={styles.expandGraphsBtn} onClick={() => setGraphsExpanded((v) => !v)}>
                     {graphsExpanded
                         ? 'Réduire les graphiques'
