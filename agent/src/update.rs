@@ -92,6 +92,14 @@ pub async fn apply(
 
 /// Parse the embedded base64 public key into a verifier; `None` when no key was
 /// baked in (a dev build that predates `deveye-sign keygen`).
+///
+/// `const_is_empty` voit une constante et conclut « toujours faux ». C'est vrai
+/// **de ce build-là** : `UPDATE_PUBKEY_B64` vient d'`env!`, donc sa valeur est
+/// figée à la compilation. Mais le garde protège l'autre configuration — celle
+/// d'un build sans clé signée —, et l'écart entre les deux est exactement ce que
+/// la fonction est censée absorber. Clippy 1.97 ne le signale plus ; 1.91, celui
+/// des paquets Fedora, si.
+#[allow(clippy::const_is_empty)]
 fn embedded_key() -> Option<VerifyingKey> {
     if UPDATE_PUBKEY_B64.is_empty() {
         return None;
