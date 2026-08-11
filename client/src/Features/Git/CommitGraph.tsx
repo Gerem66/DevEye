@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import type { GitCommitAuthor, GitCommitPoints, MinimalUser, UserColor } from 'deveye-types';
 import { GIT_GRAPH_SHA_LEN } from 'deveye-types';
 import { userColorVar } from '@/Features/Profile/userColors';
-import { DAY_MS, startOfDay, timelineTicks } from '../Projects/Timeline/scale';
+import { DAY_MS, labelWidth, startOfDay, timelineTicks } from '../Projects/Timeline/scale';
 import { useElementWidth } from './useElementWidth';
 import styles from './style.module.css';
 
@@ -395,25 +395,37 @@ export function CommitGraph({
                             </g>
                         ))}
 
-                        {ticks.map((tick) => (
-                            <g key={tick.t}>
-                                <line
-                                    x1={x(tick.t)}
-                                    x2={x(tick.t)}
-                                    y1={PAD.top}
-                                    y2={HEIGHT - PAD.bottom}
-                                    className={tick.major ? styles.graphGridMajor : styles.graphGrid}
-                                />
-                                <text
-                                    x={x(tick.t)}
-                                    y={HEIGHT - PAD.bottom + 15}
-                                    className={styles.graphLabel}
-                                    textAnchor='middle'
-                                >
-                                    {tick.label}
-                                </text>
-                            </g>
-                        ))}
+                        {ticks.map((tick) => {
+                            const tx = x(tick.t);
+                            // Les étiquettes des bords sont ramenées dans le
+                            // cadre — celle de droite se ferait couper par le
+                            // bord du SVG. Un décalage de quelques pixels, et
+                            // seulement quand il le faut : l'échelle les a
+                            // espacées en les supposant centrées sur leur trait,
+                            // et les recaler du côté intérieur les ferait se
+                            // chevaucher pour de bon.
+                            const half = labelWidth(tick.label) / 2;
+                            const lx = Math.min(Math.max(tx, half), width - half);
+                            return (
+                                <g key={tick.t}>
+                                    <line
+                                        x1={tx}
+                                        x2={tx}
+                                        y1={PAD.top}
+                                        y2={HEIGHT - PAD.bottom}
+                                        className={tick.major ? styles.graphGridMajor : styles.graphGrid}
+                                    />
+                                    <text
+                                        x={lx}
+                                        y={HEIGHT - PAD.bottom + 15}
+                                        className={styles.graphLabel}
+                                        textAnchor='middle'
+                                    >
+                                        {tick.label}
+                                    </text>
+                                </g>
+                            );
+                        })}
 
                         {hover && <circle cx={hover.x} cy={hover.y} r={DOT_R + 3} className={styles.graphHalo} />}
                     </svg>
