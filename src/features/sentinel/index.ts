@@ -5,7 +5,6 @@ import {
     sentinelAllowlist,
     sentinelBaseline,
     sentinelCount,
-    sentinelFinding,
     sentinelFindings,
     sentinelOverview,
     sentinelPosture,
@@ -146,23 +145,6 @@ export const sentinelFindingsFeature: FeatureDefinition<
             offset: input.offset
         });
         return { findings: rows.map(toFinding), total };
-    }
-});
-
-export const sentinelFindingFeature: FeatureDefinition<
-    typeof sentinelFinding.command,
-    typeof sentinelFinding.input,
-    typeof sentinelFinding.output
-> = defineFeature({
-    ...sentinelFinding,
-    access: { feature: 'sentinel', level: 'read' },
-    handler: async (ctx, input) => {
-        const row = await ctx.db.findings.find(input.findingId);
-        if (!row) throw new FeatureError('not_found', 'Constat introuvable');
-        // L'appartenance se vérifie sur l'appareil, jamais sur le constat : c'est
-        // la machine qui porte le droit, et une seule fonction sait le dire.
-        await authorizeDevice(ctx, row.device_id);
-        return { finding: toFinding(row) };
     }
 });
 
@@ -437,7 +419,6 @@ export const sentinelFeatures: FeatureDefinition<string, any, any>[] = [
     sentinelOverviewFeature,
     sentinelCountFeature,
     sentinelFindingsFeature,
-    sentinelFindingFeature,
     sentinelBaselineFeature,
     sentinelPostureFeature,
     sentinelAcknowledgeFeature,

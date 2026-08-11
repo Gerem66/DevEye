@@ -287,8 +287,6 @@ export interface FindingsRepo {
     list(filter: FindingsFilter): Promise<{ rows: FindingRow[]; total: number }>;
     /** Décompte par gravité des constats ouverts d'un ensemble d'appareils. */
     openCounts(deviceIds: string[]): Promise<Record<FindingSeverity, number>>;
-    /** Les constats ouverts d'un appareil pour un préfixe de règle (posture, etc.). */
-    openByRulePrefix(deviceId: string, prefix: string): Promise<FindingRow[]>;
     acknowledge(findingId: number, userId: number, at: number): Promise<void>;
     reopen(findingId: number, at: number): Promise<void>;
     markNotified(ids: number[]): Promise<void>;
@@ -458,14 +456,6 @@ export function findingsRepo(pool: Q): FindingsRepo {
                 if (name) empty[name] = Number(row.n);
             }
             return empty;
-        },
-
-        async openByRulePrefix(deviceId, prefix) {
-            const r = await pool.query<FindingRow>(
-                `${FINDING_SELECT} WHERE f.device_id = ? AND f.state = 'open' AND f.rule LIKE ?`,
-                [deviceId, `${prefix}%`]
-            );
-            return r.rows.map(hydrateFinding);
         },
 
         async acknowledge(findingId, userId, at) {
