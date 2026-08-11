@@ -153,6 +153,14 @@ pub struct AgentInfo {
     pub service_scope: &'static str,
     /// `true` when launched under a service manager (so a self-update just exits).
     pub managed: bool,
+    /// Ce que cet agent sait relever, déclaré par lui-même.
+    ///
+    /// Sans cette liste, rien ne distingue « la sonde a échoué » d'« un agent
+    /// trop ancien pour l'avoir » : les deux rendent `null`, et l'interface
+    /// afficherait le même vide pour deux situations qui n'appellent pas la
+    /// même réaction. La version ne peut pas servir — elle est injectée à la
+    /// compilation et vaut `0.0.0` sur une construction locale.
+    pub probes: Vec<&'static str>,
 }
 
 /// One detected package manager + its pending state (mirrors deveye-types
@@ -324,6 +332,29 @@ pub struct Security {
     pub sip: Option<bool>,
     #[serde(rename = "pendingUpdates")]
     pub pending_updates: Option<u32>,
+    /// Correctifs de **sécurité** en attente, distingués du total.
+    ///
+    /// C'est la distinction qui porte le signal : quarante mises à jour dont
+    /// aucune de sécurité n'est qu'un retard d'entretien, tandis qu'une seule
+    /// faille non corrigée est une porte.
+    #[serde(rename = "pendingSecurityUpdates")]
+    pub pending_security_updates: Option<u32>,
+    /// Unix ms du dernier contrôle des mises à jour — c'est son **ancienneté**
+    /// qui fait le constat, pas le nombre.
+    #[serde(rename = "updatesCheckedAt")]
+    pub updates_checked_at: Option<i64>,
+    /// `PermitRootLogin` du serveur SSH.
+    #[serde(rename = "sshRootLogin")]
+    pub ssh_root_login: Option<bool>,
+    /// `PasswordAuthentication` du serveur SSH.
+    #[serde(rename = "sshPasswordAuth")]
+    pub ssh_password_auth: Option<bool>,
+    /// `selinux-enforcing` | `selinux-permissive` | `apparmor` | `none`.
+    #[serde(rename = "mandatoryAccessControl")]
+    pub mandatory_access_control: Option<&'static str>,
+    /// Des correctifs installés attendent un redémarrage pour prendre effet.
+    #[serde(rename = "rebootRequired")]
+    pub reboot_required: Option<bool>,
 }
 
 /// One *program* at sample time, aggregated across every PID sharing its name.
@@ -332,6 +363,20 @@ pub struct Security {
 #[derive(Debug, Clone, Serialize)]
 pub struct ProcessInfo {
     pub name: String,
+    /// Chemin de l'exécutable, et **seconde moitié de la clé d'agrégation**.
+    ///
+    /// Agréger sur le seul nom fusionnait deux binaires homonymes rangés à des
+    /// endroits différents — exactement ce derrière quoi un imposteur se cache.
+    /// `None` quand la plateforme ou les droits ne l'exposent pas : la règle
+    /// serveur qui en dépend reste alors muette plutôt que de conclure à vide.
+    #[serde(rename = "execPath")]
+    pub exec_path: Option<String>,
+    /// L'exécutable a été effacé du disque mais le processus tourne toujours.
+    ///
+    /// Un des indicateurs les plus francs d'un implant résident en mémoire, et
+    /// il ne coûte rien : le lien `/proc/<pid>/exe` est déjà lu pour `exec_path`.
+    /// `None` là où la plateforme ne l'expose pas.
+    pub deleted: Option<bool>,
     /// Number of PIDs aggregated under this name.
     pub instances: u32,
     #[serde(rename = "cpuPercent")]
@@ -412,6 +457,22 @@ pub enum ClientMessage {
         #[serde(rename = "deviceId")]
         device_id: String,
         snapshots: Vec<MetricSnapshot>,
+    },
+    /// Manifeste des surfaces de persistance (Sentinelle).
+    #[serde(rename = "agent.integrity")]
+    Integrity {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        // Boxé comme `Report` : c'est l'une des plus grosses variantes, et la
+        // laisser en ligne gonflerait l'enum entier (clippy::large_enum_variant).
+        integrity: Box<crate::integrity::IntegrityReport>,
+    },
+    /// Fenêtre d'issues d'authentification (Sentinelle).
+    #[serde(rename = "agent.authEvents")]
+    AuthEvents {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        auth: Box<crate::authlog::AuthWindow>,
     },
     #[serde(rename = "agent.report")]
     Report {
@@ -668,6 +729,13 @@ pub enum ServerMessage {
     /// Push a fresh sample + report immediately (user clicked "refresh").
     #[serde(rename = "agent.collect")]
     Collect {},
+    /// Relevé Sentinelle immédiat (persistance + authentification).
+    ///
+    /// Distinct de `Collect` exprès : celui-là coûte quelques millisecondes,
+    /// celui-ci empreinte des centaines de fichiers. Les confondre ferait payer
+    /// ce prix à chaque « rafraîchir » de la page Monitoring.
+    #[serde(rename = "agent.scan")]
+    Scan {},
     /// Self-destruct: wipe local config + binary and exit (device being deleted).
     #[serde(rename = "agent.destroy")]
     Destroy {},
@@ -855,6 +923,20 @@ pub enum ServerMessage {
         metric_interval_ms: u64,
         #[serde(rename = "processCapture")]
         process_capture: String,
+        /// Sentinelle est-elle active sur cet appareil ?
+        ///
+        /// Éteinte, l'agent ne relève ni persistance ni authentification. Ces
+        /// deux sondes ne coûtent rien à qui ne les demande pas, et une machine
+        /// non surveillée ne doit pas voir ses journaux lus « au cas où ».
+        ///
+        /// `Option` avec défaut : un serveur antérieur à Sentinelle n'envoie pas
+        /// le champ, et l'agent se comporte alors comme avant.
+        #[serde(rename = "sentinelEnabled", default)]
+        sentinel_enabled: Option<bool>,
+        #[serde(rename = "integrityIntervalMs", default)]
+        integrity_interval_ms: Option<u64>,
+        #[serde(rename = "authEventsEnabled", default)]
+        auth_events_enabled: Option<bool>,
     },
 }
 
