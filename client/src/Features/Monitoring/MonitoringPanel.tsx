@@ -306,8 +306,6 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const selected = baseDevice ? { ...baseDevice, ...override } : null;
     const idRef = useRef<string>(deviceId);
     idRef.current = deviceId;
-    /** Dernier instant pour lequel on a déjà tenté d'amorcer la liste en direct. */
-    const seededProcTs = useRef<number | null>(null);
 
     const intervalMs = (selected?.metricIntervalSeconds ?? DEFAULT_INTERVAL_S) * 1000;
 
@@ -343,7 +341,6 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         setProcTimes([]);
         setStorage(null);
         setPresence({ onlineAtStart: false, events: [] });
-        seededProcTs.current = null;
     }, [deviceId]);
 
     // Which days have data (for the calendar + day arrows).
@@ -457,40 +454,6 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             cancelled = true;
         };
     }, [deviceId, graphWindow.start, graphWindow.end, resolution, processAt]);
-
-    /**
-     * En direct, la liste de processus arrive avec les poussées. Tant qu'aucune
-     * n'est passée, on va chercher celle du dernier instant connu.
-     *
-     * Sans ça la table restait vide toute une cadence — jusqu'à cinq minutes —
-     * alors même qu'un relevé venait d'être enregistré. Deux chemins y menaient :
-     * l'instantané initial n'est envoyé qu'au *premier* abonné d'un appareil (la
-     * souscription est comptée par référence, un autre écran déjà ouvert la
-     * tenait donc), et il n'emporte sa liste que si un relevé de processus porte
-     * exactement l'horodatage du dernier point.
-     *
-     * On interroge à l'horodatage du dernier point plutôt qu'à « maintenant » :
-     * c'est un instant qui existe, là où `nearest` refuse au-delà de quelques
-     * minutes — ce qui priverait de liste toute machine hors ligne.
-     */
-    const latestTs = liveSnapshot?.timestamp ?? (points.length ? points[points.length - 1].timestamp : null);
-    useEffect(() => {
-        if (focus.kind !== 'live' || liveProc !== null || latestTs === null) return;
-        if (seededProcTs.current === latestTs) return;
-        seededProcTs.current = latestTs;
-        const id = deviceId;
-        let cancelled = false;
-        ws.send('metrics.processesAt', { deviceId: id, at: latestTs })
-            .then((res) => {
-                if (!cancelled && idRef.current === id && res.sample) setLiveProc(res.sample);
-            })
-            .catch(() => {
-                if (!cancelled) setReadError(true);
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [deviceId, focus.kind, liveProc, latestTs]);
 
     const liveTail = focus.kind === 'live' && dayStart === null;
 
@@ -735,14 +698,23 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     }, [points]);
 
     // Value to show in the KPI cards, per focus.
+    //
+    // En direct, **uniquement** le dernier instant reçu. Le repli sur le dernier
+    // point de la série disait « en direct » en montrant un agrégat : au-delà
+    // d'une heure de fenêtre les points sont des moyennes horaires, si bien que
+    // l'écran affichait une valeur moyennée vieille d'une heure pendant que
+    // vingt relevés étaient arrivés depuis. Un instant n'est pas un seau.
     const display = useMemo<MetricSeriesPoint | null>(() => {
         if (focus.kind === 'range') return averageSnapshot(points);
         if (focus.kind === 'snapshot') return nearestBy(points, focus.at, (p) => p.timestamp);
-        return liveSnapshot ?? (points.length ? points[points.length - 1] : null);
+        return liveSnapshot;
     }, [focus, points, liveSnapshot]);
     const averaged = focus.kind === 'range';
 
-    const lastKnown = liveSnapshot ?? (points.length ? points[points.length - 1] : null);
+    // Bannière « hors ligne » seulement : la date du dernier instant reçu, dont
+    // l'ancienneté est justement l'information. Rien d'autre ne s'en sert — un
+    // seau de la série ne serait pas un instant (voir `display`).
+    const lastKnown = liveSnapshot;
     const online = selected?.online ?? false;
     const archived = selected?.status === 'archived';
     const cores = report?.os.cores ?? 0;

@@ -43,7 +43,16 @@ export function MiniGraph({ title, series, yMax, stat, onClick, tall, format }: 
     const [hoverT, setHoverT] = useState<number | null>(null);
 
     const all = series.flatMap((s) => s.points);
-    const hasData = all.length >= 2;
+    /**
+     * Un seul relevé reste un relevé.
+     *
+     * Le seuil était à deux points, faute de quoi il n'y a pas de ligne à
+     * tracer — mais une sélection étroite, ou large sur une cadence lente, n'en
+     * contient parfois qu'un : toutes les cartes affichaient alors « — » sur
+     * fond gris, indiscernables d'une absence de données, alors que la valeur
+     * était bien là et que la frise montrait sa marque. On dessine le point.
+     */
+    const hasData = all.length >= 1;
     // Réductions et non `Math.min(...tableau)` : l'étalement passe chaque point
     // en argument, et au-delà de ~100 000 arguments l'appel lève un
     // `RangeError` — atteignable sur un panneau laissé ouvert en direct.
@@ -66,12 +75,14 @@ export function MiniGraph({ title, series, yMax, stat, onClick, tall, format }: 
         const dataMax = maxOf(all, (p) => p.v);
         const yTop = yMax ?? Math.max(1, dataMax * 1.15);
 
-        const xPct = (t: number) => ((t - tMin) / tSpan) * 100;
+        // Tous les points au même instant (un seul relevé) : la fraction serait
+        // 0/1 et les collerait au bord gauche. On les centre.
+        const flat = tMax === tMin;
+        const xPct = (t: number) => (flat ? 50 : ((t - tMin) / tSpan) * 100);
         const yPct = (v: number) => (1 - Math.max(0, Math.min(1, v / yTop))) * 100;
         const toXY = (p: { t: number; v: number }) => {
-            const x = ((p.t - tMin) / tSpan) * W;
             const y = H - Math.max(0, Math.min(1, p.v / yTop)) * H;
-            return [x, y] as const;
+            return [(xPct(p.t) / 100) * W, y] as const;
         };
 
         const gridTicks = tall ? niceTimeTicks(tMin, tMax) : [];
@@ -105,7 +116,26 @@ export function MiniGraph({ title, series, yMax, stat, onClick, tall, format }: 
                         );
                     })}
                     {series.map((s, si) => {
-                        if (s.points.length < 2) return null;
+                        if (s.points.length === 0) return null;
+                        // Un point isolé : un marqueur, pas une ligne. Le viewBox
+                        // est étiré (`preserveAspectRatio='none'`), donc un rect
+                        // large-de-rien plutôt qu'un cercle, qui s'ovaliserait.
+                        if (s.points.length === 1) {
+                            const [x, y] = toXY(s.points[0]);
+                            return (
+                                <line
+                                    key={si}
+                                    x1={x}
+                                    x2={x}
+                                    y1={y}
+                                    y2={H}
+                                    stroke={s.color}
+                                    strokeWidth='2'
+                                    strokeLinecap='round'
+                                    vectorEffect='non-scaling-stroke'
+                                />
+                            );
+                        }
                         const pts = s.points.map(toXY);
                         const line = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
                         const area = `0,${H} ${line} ${pts[pts.length - 1][0].toFixed(1)},${H}`;
