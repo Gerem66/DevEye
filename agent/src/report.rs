@@ -1993,7 +1993,7 @@ mod proc_scan_tests {
         let stable = mine
             .iter()
             .find(|p| p.pid == 1)
-            .and_then(|a| ps.iter().find(|b| b.pid == 1).map(|b| (a, b)));
+            .zip(ps.iter().find(|b| b.pid == 1));
         if let Some((a, b)) = stable {
             let (ra, rb) = (a.rss_bytes as f64, b.rss_bytes as f64);
             assert!(
