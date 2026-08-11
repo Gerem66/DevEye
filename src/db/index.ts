@@ -14,6 +14,14 @@ import {
 import { metricsRepo, type MetricsRepo } from './repos/metrics';
 import { presenceRepo, type PresenceRepo } from './repos/presence';
 import { processSamplesRepo, type ProcessSamplesRepo } from './repos/processSamples';
+import {
+    allowRepo,
+    baselineRepo,
+    findingsRepo,
+    type AllowRepo,
+    type BaselineRepo,
+    type FindingsRepo
+} from './repos/sentinel';
 import { noteFoldersRepo, type NoteFoldersRepo } from './repos/noteFolders';
 import { notesRepo, type NotesRepo } from './repos/notes';
 import { projectsRepo, type ProjectsRepo } from './repos/projects';
@@ -85,6 +93,10 @@ export interface Database {
     metrics: MetricsRepo;
     presence: PresenceRepo;
     processSamples: ProcessSamplesRepo;
+    /** Sentinelle : ce qui a été observé, ce qui en a été jugé, ce qu'un humain a décidé. */
+    baseline: BaselineRepo;
+    findings: FindingsRepo;
+    sentinelAllow: AllowRepo;
     twoFactor: TwoFactorRepo;
     userSecretKeys: UserSecretKeysRepo;
     weather: WeatherRepo;
@@ -132,6 +144,9 @@ export function createDatabase(q: Queryable): Database {
         metrics: metricsRepo(q),
         presence: presenceRepo(q),
         processSamples: processSamplesRepo(q),
+        baseline: baselineRepo(q),
+        findings: findingsRepo(q),
+        sentinelAllow: allowRepo(q),
         twoFactor: twoFactorRepo(q),
         userSecretKeys: userSecretKeysRepo(q),
         weather: weatherRepo(q),
