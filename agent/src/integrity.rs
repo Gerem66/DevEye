@@ -444,12 +444,12 @@ fn collect_windows(scan: &mut Scan) -> bool {
             return true;
         }
     }
-    if let Some(text) = crate::report::run("schtasks", &["/query", "/fo", "csv"]) {
-        if push_synthetic(scan, "scheduled_task", "schtasks", &text) {
-            return true;
-        }
-    }
-    false
+    // Même forme que la boucle ci-dessus : `schtasks` absent n'est pas une
+    // erreur, c'est une surface qu'on ne peut pas lire.
+    let Some(text) = crate::report::run("schtasks", &["/query", "/fo", "csv"]) else {
+        return false;
+    };
+    push_synthetic(scan, "scheduled_task", "schtasks", &text)
 }
 
 /// Entrée dont la « source » n'est pas un fichier (registre, sortie de commande).

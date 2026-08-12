@@ -1659,13 +1659,11 @@ fn reboot_required() -> Option<bool> {
         r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired",
     ];
     for key in KEYS {
-        if let Some(out) = run_timeout("reg", &["query", key], PROBE_TIMEOUT) {
-            if out.success {
-                return Some(true);
-            }
-        } else {
-            // `reg` lui-même est introuvable : on ne peut rien affirmer.
-            return None;
+        // `?` porte le cas « `reg` introuvable » : on ne peut alors rien
+        // affirmer, ni la présence ni l'absence de redémarrage en attente.
+        let out = run_timeout("reg", &["query", key], PROBE_TIMEOUT)?;
+        if out.success {
+            return Some(true);
         }
     }
     Some(false)
