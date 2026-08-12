@@ -195,8 +195,12 @@
 }
 
 .overviewIcon {
-    font-size: 1.6rem;
     color: var(--text-muted);
+}
+
+/* Même raison que le chevron : c'est `width` qui dimensionne un masque. */
+.overviewButton .overviewIcon {
+    width: 30px;
 }
 
 .overviewButtonActive .overviewIcon {
@@ -494,10 +498,17 @@
 }
 
 .sectionChevron {
-    /* Un cran sous la taille héritée : il indique un pli, il ne l'annonce pas. */
-    font-size: 0.78rem;
     color: var(--text-muted);
     transition: transform var(--transition-fast);
+}
+
+/* Les icônes du projet sont des **masques CSS** dimensionnés par
+   `.icon { width: 18px }` : `font-size` n'a aucune prise dessus. Double
+   sélecteur pour battre ce global quel que soit l'ordre d'injection des
+   feuilles (spécificité 0,2,0), comme dans Projects et CloudSync.
+   14 px : le chevron indique un pli, il ne l'annonce pas. */
+.sectionToggle .sectionChevron {
+    width: 14px;
 }
 
 .sectionChevronOpen {
@@ -831,9 +842,12 @@
 
 .calloutIcon {
     flex-shrink: 0;
-    font-size: 1.5rem;
     color: var(--text-muted);
     filter: opacity(0.6);
+}
+
+.callout .calloutIcon {
+    width: 28px;
 }
 
 .calloutTitle {
