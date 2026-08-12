@@ -12,6 +12,7 @@ import {
     type MailSettingsRepo
 } from './repos/mail';
 import { metricsRepo, type MetricsRepo } from './repos/metrics';
+import { notificationSettingsRepo, type NotificationSettingsRepo } from './repos/notificationSettings';
 import { presenceRepo, type PresenceRepo } from './repos/presence';
 import { processSamplesRepo, type ProcessSamplesRepo } from './repos/processSamples';
 import {
@@ -44,14 +45,7 @@ import { syncSessionsRepo, type SyncSessionsRepo } from './repos/syncSessions';
 import { syncSharesRepo, type SyncSharesRepo } from './repos/syncShares';
 import { syncVersionsRepo, type SyncVersionsRepo } from './repos/syncVersions';
 import { twoFactorRepo, type TwoFactorRepo } from './repos/twoFactor';
-import {
-    uptimeHistoryRepo,
-    uptimeServicesRepo,
-    uptimeSettingsRepo,
-    type UptimeHistoryRepo,
-    type UptimeServicesRepo,
-    type UptimeSettingsRepo
-} from './repos/uptime';
+import { uptimeHistoryRepo, uptimeServicesRepo, type UptimeHistoryRepo, type UptimeServicesRepo } from './repos/uptime';
 import { userSecretKeysRepo, type UserSecretKeysRepo } from './repos/userSecretKeys';
 import { usersRepo, type UsersRepo } from './repos/users';
 import { weatherRepo, type WeatherRepo } from './repos/weather';
@@ -104,7 +98,8 @@ export interface Database {
     osint: OsintRepo;
     uptimeServices: UptimeServicesRepo;
     uptimeHistory: UptimeHistoryRepo;
-    uptimeSettings: UptimeSettingsRepo;
+    /** Canaux d'alerte, par espace **et par feature** (voir `Services/notifications.ts`). */
+    notificationSettings: NotificationSettingsRepo;
     mailAccounts: MailAccountsRepo;
     mailFolders: MailFoldersRepo;
     mailMessages: MailMessagesRepo;
@@ -155,7 +150,7 @@ export function createDatabase(q: Queryable): Database {
         osint: osintRepo(q),
         uptimeServices: uptimeServicesRepo(q),
         uptimeHistory: uptimeHistoryRepo(q),
-        uptimeSettings: uptimeSettingsRepo(q),
+        notificationSettings: notificationSettingsRepo(q),
         mailAccounts: mailAccountsRepo(q),
         mailFolders: mailFoldersRepo(q),
         mailMessages: mailMessagesRepo(q),

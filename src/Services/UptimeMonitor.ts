@@ -2,9 +2,9 @@ import type { UptimeServiceRow, UptimeStatus } from 'deveye-types';
 import type { Logger } from 'pino';
 
 import { decryptError, decryptService, encryptError, type ServicePayload } from '@/features/uptime/_shared';
-import { decryptCredentials } from '@/features/mail/_shared';
 import * as mailClient from '@/Services/MailAccountClient';
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
+import { resolveChannels, type Channels } from '@/Services/notifications';
 import { env } from '@/Utils/Env';
 
 import type { LiveHub } from '@/live/hub';
@@ -465,47 +465,17 @@ export class UptimeMonitor {
      * "open"-tier account is configured — the caller must skip mail delivery
      * (never a hard failure: the webhook channel is independent).
      */
-    async resolveChannels(workspaceId: number): Promise<{
-        email: string | null;
-        sendAccount: { credentials: mailClient.MailCredentials; fromEmail: string } | null;
-        webhook: string | null;
-    }> {
-        const { db } = this.deps;
-        const settings = await db.uptimeSettings.get(workspaceId);
-        const emailEnabled = settings ? settings.email_enabled === 1 : true;
-        const cipher = this.cipherFor(workspaceId);
-
-        let email: string | null = null;
-        let sendAccount: { credentials: mailClient.MailCredentials; fromEmail: string } | null = null;
-        if (emailEnabled && settings?.mail_account_id) {
-            // Scopé à l'espace : aucune FK ne peut exprimer « le compte mail doit
-            // être du même espace que ces réglages ». Un pointeur devenu
-            // inter-espaces doit donc rendre « pas de canal mail », jamais ouvrir
-            // les identifiants SMTP d'un compte étranger.
-            const account = await db.mailAccounts.findById(settings.mail_account_id, workspaceId);
-            if (account && account.enabled === 1 && account.security_tier === 'open') {
-                const accountEmail = await cipher.tryDecrypt(account.email_address_enc);
-                const custom = settings.email_enc ? await cipher.tryDecrypt(settings.email_enc) : null;
-                email = custom || accountEmail;
-                if (email && accountEmail) {
-                    try {
-                        sendAccount = {
-                            credentials: await decryptCredentials(cipher, account.credentials_enc),
-                            fromEmail: accountEmail
-                        };
-                    } catch {
-                        // Undecryptable credentials — leave sendAccount null, no sender available.
-                    }
-                }
-            }
-        }
-
-        const webhook =
-            settings?.webhook_enabled === 1 && settings.webhook_enc
-                ? await cipher.tryDecrypt(settings.webhook_enc)
-                : null;
-
-        return { email, sendAccount, webhook };
+    /**
+     * Les canaux d'Uptime pour cet espace.
+     *
+     * La résolution vit dans `Services/notifications.ts` : Uptime et Sentinelle
+     * lisent la même table à des lignes différentes, et deux implémentations
+     * jumelles auraient dérivé. Cette méthode reste exposée parce que
+     * `DatabaseMonitor` s'en sert délibérément — les alertes de base partagent
+     * les destinataires d'Uptime, ce qui est un choix, pas un oubli.
+     */
+    async resolveChannels(workspaceId: number): Promise<Channels> {
+        return resolveChannels(this.deps.db, this.cipherFor(workspaceId), workspaceId, 'uptime');
     }
 
     /** Send a sample alert on every configured channel (settings "Tester"). */

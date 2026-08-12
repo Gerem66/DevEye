@@ -4,7 +4,6 @@ import type {
     UptimeMethod,
     UptimePoint,
     UptimeServiceRow,
-    UptimeSettingsRow,
     UptimeStatus
 } from 'deveye-types';
 import type { UptimeCheckStats } from 'deveye-types';
@@ -136,23 +135,6 @@ export interface UptimeHistoryRepo {
      * with no retention keep everything; the daily rollup is never touched.
      */
     pruneByRetention(now: number): Promise<number>;
-}
-
-export interface UptimeSettingsRepo {
-    get(workspaceId: number): Promise<UptimeSettingsRow | null>;
-    set(
-        workspaceId: number,
-        input: {
-            emailEnabled: boolean;
-            /** Encrypted recipient, or null to fall back to the sending mail account's own address. */
-            emailEnc: string | null;
-            /** FK to `mail_accounts.id` (must be "open" tier, enforced by the feature handler, not here). */
-            mailAccountId: number | null;
-            webhookEnabled: boolean;
-            /** Encrypted webhook URL, or null. */
-            webhookEnc: string | null;
-        }
-    ): Promise<UptimeSettingsRow>;
 }
 
 const SERVICE_COLUMNS = `content = ?, method = ?, expected_status = ?, interval_seconds = ?,
@@ -547,33 +529,6 @@ export function uptimeHistoryRepo(pool: Q): UptimeHistoryRepo {
                 [now]
             );
             return r.rowCount;
-        }
-    };
-}
-
-export function uptimeSettingsRepo(pool: Q): UptimeSettingsRepo {
-    return {
-        async get(workspaceId) {
-            const r = await pool.query<UptimeSettingsRow>('SELECT * FROM uptime_settings WHERE workspace_id = ?', [
-                workspaceId
-            ]);
-            return r.rows[0] ?? null;
-        },
-        async set(workspaceId, { emailEnabled, emailEnc, mailAccountId, webhookEnabled, webhookEnc }) {
-            await pool.query(
-                `INSERT INTO uptime_settings (workspace_id, email_enabled, email_enc, mail_account_id, webhook_enabled, webhook_enc)
-                 VALUES (?, ?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE
-                     email_enabled   = VALUES(email_enabled),
-                     email_enc       = VALUES(email_enc),
-                     mail_account_id = VALUES(mail_account_id),
-                     webhook_enabled = VALUES(webhook_enabled),
-                     webhook_enc     = VALUES(webhook_enc)`,
-                [workspaceId, emailEnabled ? 1 : 0, emailEnc, mailAccountId, webhookEnabled ? 1 : 0, webhookEnc]
-            );
-            const row = await this.get(workspaceId);
-            if (!row) throw new Error('Failed to persist uptime settings');
-            return row;
         }
     };
 }
