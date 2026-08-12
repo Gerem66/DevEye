@@ -370,27 +370,7 @@
     color: var(--text-muted);
 }
 
-/* Le score de flotte, seul chiffre de l'écran qui mérite d'être gros. */
-.scoreBlock {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    flex-shrink: 0;
-}
-
-.scoreValue {
-    font-size: 2rem;
-    font-weight: 600;
-    line-height: 1;
-}
-
-.scoreLabel {
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--text-muted);
-}
-
+/* Teintes du score, portées par le bouton de tête (voir `.overviewScore`). */
 .scoreOk {
     color: var(--success);
 }
@@ -514,6 +494,8 @@
 }
 
 .sectionChevron {
+    /* Un cran sous la taille héritée : il indique un pli, il ne l'annonce pas. */
+    font-size: 0.78rem;
     color: var(--text-muted);
     transition: transform var(--transition-fast);
 }

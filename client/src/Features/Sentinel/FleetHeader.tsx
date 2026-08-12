@@ -8,10 +8,9 @@ import styles from './style.module.css';
 /**
  * L'en-tête de la vue de flotte : où en est l'espace, et de quoi filtrer.
  *
- * Le score et les décomptes sont **les filtres eux-mêmes** plutôt que deux
- * rangées séparées : le geste naturel devant « 3 critiques » est de cliquer
- * dessus, et une barre de filtres posée à côté ferait lire deux fois la même
- * information.
+ * Le score n'y figure pas — il est porté par le bouton de tête, dans la barre
+ * latérale, qui sert à la fois de résumé et de retour à l'accueil de la feature.
+ * L'afficher aux deux endroits faisait lire deux fois le même chiffre.
  */
 
 const FILTERS: { id: FindingSeverity | null; label: string }[] = [
@@ -22,7 +21,6 @@ const FILTERS: { id: FindingSeverity | null; label: string }[] = [
 ];
 
 interface Props {
-    score: number | null;
     devices: DeviceSentinelState[];
     minSeverity: FindingSeverity | null;
     onMinSeverity: (s: FindingSeverity | null) => void;
@@ -32,7 +30,6 @@ interface Props {
 }
 
 export default function FleetHeader({
-    score,
     devices,
     minSeverity,
     onMinSeverity,
@@ -64,26 +61,16 @@ export default function FleetHeader({
                     </p>
                 </div>
 
+                {/*
+                 * Le score vit dans le bouton de tête, à gauche : le répéter ici
+                 * faisait lire deux fois le même chiffre à deux endroits de
+                 * l'écran. La place revient donc à l'action qui gouverne la
+                 * flotte, qui n'en avait aucune.
+                 */}
                 <div className={styles.headerActions}>
                     <Button variant='ghost' icon='settings' onClick={onOpenNotifications}>
                         Notifications
                     </Button>
-                </div>
-                <div className={styles.scoreBlock}>
-                    <span
-                        className={`${styles.scoreValue} ${
-                            score === null
-                                ? styles.scoreUnknown
-                                : score >= 80
-                                  ? styles.scoreOk
-                                  : score >= 50
-                                    ? styles.scoreWarn
-                                    : styles.scoreBad
-                        }`}
-                    >
-                        {score === null ? '—' : score}
-                    </span>
-                    <span className={styles.scoreLabel}>posture</span>
                 </div>
             </div>
 

@@ -260,7 +260,6 @@ export default function Sentinel({ workspace }: FeatureProps) {
                 ) : (
                     <FleetHeader
                         onOpenNotifications={() => setNotificationsOpen(true)}
-                        score={fleetScore}
                         devices={devices}
                         minSeverity={minSeverity}
                         onMinSeverity={setMinSeverity}
