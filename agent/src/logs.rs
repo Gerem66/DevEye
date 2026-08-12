@@ -10,6 +10,7 @@
 //! behaves the same across every source kind.
 
 use std::process::Command;
+use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use tokio::sync::mpsc::Sender;
@@ -22,6 +23,10 @@ pub const MAX_LIMIT: usize = 1000;
 /// How many raw lines to scan when a search/severity filter is active (so matches
 /// older than the last page can still surface), bounded to keep memory in check.
 const MAX_RAW: usize = 10_000;
+/// Same, for a container. Lower on purpose: the engine hands the whole block over
+/// at once before anything can be shown, and a container's lines are raw
+/// application output — far heavier than a journald record.
+const MAX_RAW_CONTAINER: usize = 2_000;
 /// Per-line message cap, so a pathological line can't bloat a frame.
 const MAX_MSG: usize = 8192;
 
@@ -116,13 +121,91 @@ fn truncate_msg(s: String) -> String {
 }
 
 // ───────────────────────────── command helpers ────────────────────────────
+/// Deadline for reading a source. None of these tools is naturally bounded — a
+/// container holding several GB of logs, a journal that has never been vacuumed —
+/// and their output only becomes visible once the process exits. Without a
+/// deadline, one fat source leaves the panel spinning with nothing to show and no
+/// reason given; with it, the query comes back as an error one can act on.
+const READ_TIMEOUT: Duration = Duration::from_secs(45);
+/// Same, for the inventory: detection has to feel immediate, and a wedged engine
+/// daemon must cost a listing, not the whole panel.
+const DETECT_TIMEOUT: Duration = Duration::from_secs(10);
+/// How often the deadline is checked while the child runs.
+const POLL_INTERVAL: Duration = Duration::from_millis(50);
+
+/// Run a command under a deadline and hand back its `(stdout, stderr)`, killing it
+/// if it overruns. `label` is what the error blames (`docker logs`, `journalctl`…).
+///
+/// Both streams come back because both can be log content: a container engine
+/// forwards the container's stderr to ours, and dropping it would lose half of
+/// what a service writes. On failure stderr is the diagnostic instead.
+///
+/// Each pipe is drained by its own thread rather than after the wait: a child
+/// filling a pipe nobody reads blocks on it, and the deadline would then be
+/// watching a process that can no longer make progress — the very hang this is
+/// meant to break.
+fn run_bounded<S: AsRef<std::ffi::OsStr>>(
+    label: &str,
+    program: &str,
+    args: &[S],
+    timeout: Duration,
+) -> Result<(Vec<u8>, Vec<u8>)> {
+    use std::io::Read;
+    use std::process::Stdio;
+
+    let mut child = Command::new(program)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("lancement de {label}"))?;
+
+    let mut out_pipe = child.stdout.take().expect("stdout demandé au spawn");
+    let mut err_pipe = child.stderr.take().expect("stderr demandé au spawn");
+    let drain = |pipe: &mut dyn Read| {
+        let mut buf = Vec::new();
+        let _ = pipe.read_to_end(&mut buf);
+        buf
+    };
+    let out_reader = std::thread::spawn(move || drain(&mut out_pipe));
+    let err_reader = std::thread::spawn(move || drain(&mut err_pipe));
+
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        match child
+            .try_wait()
+            .with_context(|| format!("attente de {label}"))?
+        {
+            Some(status) => break status,
+            None if Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                bail!(
+                    "{label} : abandon après {} s — source trop volumineuse, resserrez la fenêtre de temps ou le filtre",
+                    timeout.as_secs()
+                );
+            }
+            None => std::thread::sleep(POLL_INTERVAL),
+        }
+    };
+
+    // Le processus est terminé : les tuyaux sont fermés, les lecteurs rendent
+    // la main tout seuls.
+    let stdout = out_reader.join().unwrap_or_default();
+    let stderr = err_reader.join().unwrap_or_default();
+    if !status.success() {
+        bail!("{label}: {}", String::from_utf8_lossy(&stderr).trim());
+    }
+    Ok((stdout, stderr))
+}
+
 /// Run a command and return its stdout when it succeeds, else `None` (missing
-/// binary or non-zero exit). Used for best-effort detection.
+/// binary, non-zero exit, or a daemon that didn't answer in time). Used for
+/// best-effort detection.
 fn run_capture(program: &str, args: &[&str]) -> Option<String> {
-    let out = Command::new(program).args(args).output().ok()?;
-    out.status
-        .success()
-        .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+    let (stdout, _) = run_bounded(program, program, args, DETECT_TIMEOUT).ok()?;
+    Some(String::from_utf8_lossy(&stdout).into_owned())
 }
 
 #[cfg(target_os = "linux")]
@@ -250,11 +333,22 @@ pub fn run_query(source_id: &str, filter: &LogFilter, limit: usize) -> Result<Ve
     let limit = limit.clamp(1, MAX_LIMIT);
     let searching =
         filter.search.as_deref().is_some_and(|s| !s.is_empty()) || filter.level_min.is_some();
-    let raw_cap = if searching { MAX_RAW.max(limit) } else { limit };
 
     let container = source_id
         .split_once(':')
         .filter(|(bin, _)| CONTAINER_RUNTIMES.contains(bin));
+
+    // Le plafond de balayage dépend de la source : une ligne de conteneur coûte
+    // bien plus cher qu'une ligne de journal — c'est la sortie applicative brute,
+    // jusqu'à `MAX_MSG` chacune, et le moteur la rend d'un bloc avant que quoi que
+    // ce soit ne s'affiche. Chercher y remonte donc moins loin dans le passé, ce
+    // qui est le prix d'une recherche qui revient.
+    let max_raw = if container.is_some() {
+        MAX_RAW_CONTAINER
+    } else {
+        MAX_RAW
+    };
+    let raw_cap = if searching { max_raw.max(limit) } else { limit };
 
     let raw = if source_id == "journald" {
         read_journald(filter, raw_cap)?
@@ -371,17 +465,8 @@ fn read_journald(filter: &LogFilter, raw_cap: usize) -> Result<Vec<LogLine>> {
         args.push(level_to_journald_priority(min).to_string());
     }
 
-    let out = Command::new("journalctl")
-        .args(&args)
-        .output()
-        .context("lancement de journalctl")?;
-    if !out.status.success() {
-        bail!(
-            "journalctl: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        );
-    }
-    let text = String::from_utf8_lossy(&out.stdout);
+    let (stdout, _) = run_bounded("journalctl", "journalctl", &args, READ_TIMEOUT)?;
+    let text = String::from_utf8_lossy(&stdout);
     let mut lines = Vec::new();
     for raw in text.lines() {
         if raw.is_empty() {
@@ -457,22 +542,12 @@ fn read_container(bin: &str, id: &str, filter: &LogFilter, raw_cap: usize) -> Re
     }
     args.push(id.to_string());
 
-    let out = Command::new(bin)
-        .args(&args)
-        .output()
-        .with_context(|| format!("lancement de {bin} logs"))?;
-    if !out.status.success() {
-        bail!(
-            "{bin} logs: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        );
-    }
-
     // The engine sends the container's stdout to our stdout and its stderr to our
     // stderr; both are real log output. Parse the leading RFC3339 timestamp added
     // by --timestamps, then merge the two streams chronologically.
+    let (stdout, stderr) = run_bounded(&format!("{bin} logs"), bin, &args, READ_TIMEOUT)?;
     let mut lines = Vec::new();
-    for data in [&out.stdout, &out.stderr] {
+    for data in [&stdout, &stderr] {
         for raw in String::from_utf8_lossy(data).lines() {
             if raw.is_empty() {
                 continue;
@@ -524,14 +599,13 @@ fn read_oslog(raw_cap: usize) -> Result<Vec<LogLine>> {
     // `log show` is time-based, not line-bounded; default to the last hour and cap
     // the lines afterwards (precise time windows are applied in post_filter only
     // when the source carries timestamps — best-effort on macOS).
-    let out = Command::new("log")
-        .args(["show", "--style", "syslog", "--no-pager", "--last", "1h"])
-        .output()
-        .context("lancement de log show")?;
-    if !out.status.success() {
-        bail!("log show: {}", String::from_utf8_lossy(&out.stderr).trim());
-    }
-    let text = String::from_utf8_lossy(&out.stdout);
+    let (stdout, _) = run_bounded(
+        "log show",
+        "log",
+        &["show", "--style", "syslog", "--no-pager", "--last", "1h"],
+        READ_TIMEOUT,
+    )?;
+    let text = String::from_utf8_lossy(&stdout);
     let mut lines: Vec<LogLine> = text
         .lines()
         .filter(|l| !l.is_empty())
@@ -558,17 +632,13 @@ fn read_eventlog(channel: &str, raw_cap: usize) -> Result<Vec<LogLine>> {
         channel.replace('\'', "''"),
         max
     );
-    let out = Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
-        .output()
-        .context("lancement de Get-WinEvent")?;
-    if !out.status.success() {
-        bail!(
-            "Get-WinEvent: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        );
-    }
-    let text = String::from_utf8_lossy(&out.stdout);
+    let (stdout, _) = run_bounded(
+        "Get-WinEvent",
+        "powershell",
+        &["-NoProfile", "-NonInteractive", "-Command", &script],
+        READ_TIMEOUT,
+    )?;
+    let text = String::from_utf8_lossy(&stdout);
     let parsed: serde_json::Value =
         serde_json::from_str(text.trim()).unwrap_or(serde_json::Value::Null);
     let arr = match parsed {
@@ -757,5 +827,34 @@ mod tests {
         let out = post_filter(lines, &filter, 100).unwrap();
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].message, "hello world");
+    }
+
+    /// La raison d'être du helper : un outil qui ne rend jamais la main doit
+    /// devenir une erreur, pas une attente sans fin.
+    #[cfg(unix)]
+    #[test]
+    fn run_bounded_kills_a_command_that_overruns() {
+        let started = Instant::now();
+        let err = run_bounded("sleep", "sleep", &["30"], Duration::from_millis(200))
+            .expect_err("le dépassement doit être une erreur");
+        assert!(err.to_string().contains("abandon"));
+        // Sans le kill, ce test durerait trente secondes.
+        assert!(started.elapsed() < Duration::from_secs(5));
+    }
+
+    /// Les deux flux reviennent : pour un conteneur, stderr est du log, pas un
+    /// diagnostic.
+    #[cfg(unix)]
+    #[test]
+    fn run_bounded_returns_both_streams() {
+        let (stdout, stderr) = run_bounded(
+            "sh",
+            "sh",
+            &["-c", "echo dessus; echo dedans 1>&2"],
+            Duration::from_secs(5),
+        )
+        .unwrap();
+        assert_eq!(String::from_utf8_lossy(&stdout).trim(), "dessus");
+        assert_eq!(String::from_utf8_lossy(&stderr).trim(), "dedans");
     }
 }
