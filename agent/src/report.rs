@@ -903,9 +903,24 @@ fn scan_processes_proc() -> Vec<RawProcess> {
 /// coût est négligeable devant le reste du tick, et il débloque les règles les
 /// plus franches du détecteur (exécution depuis /tmp, implant résident).
 ///
-/// Le noyau suffixe le lien de « (deleted) » quand l'inode a disparu du disque.
-/// On coupe ce suffixe du chemin — il n'en fait pas partie — et on le rend
-/// séparément, ce qui évite à l'appelant de refaire l'analyse de la chaîne.
+/// Le noyau suffixe le lien de « (deleted) » quand l'inode a été délié — mais il
+/// le fait pour **deux situations opposées**, et les confondre rend la sonde
+/// inutilisable :
+///
+/// - l'exécutable a disparu et rien ne l'a remplacé. C'est la forme d'un implant
+///   résident en mémoire, et c'est ce qu'on cherche ;
+/// - l'exécutable a été **remplacé**, ce que fait tout gestionnaire de paquets
+///   (un `rename()` par-dessus délie l'ancien inode). Après un `dnf update`, la
+///   moitié des processus au long cours d'un serveur portent ce suffixe.
+///
+/// Le discriminant est le chemin lui-même : s'il pointe encore sur un fichier,
+/// le binaire a été remplacé, pas effacé. On ne rend donc `true` que lorsque le
+/// chemin est réellement vide.
+///
+/// Un attaquant pourrait déposer un leurre à l'emplacement pour se cacher — mais
+/// alerter sur chaque mise à jour de paquet aurait noyé la règle bien avant
+/// qu'elle serve, et les autres règles (chemin suspect, persistance) couvrent ce
+/// cas-là.
 ///
 /// `None` sur échec : un processus qui s'éteint entre l'énumération et la
 /// lecture, ou un `/proc/<pid>/exe` d'un autre compte sans les droits. Ce n'est
@@ -917,7 +932,10 @@ fn proc_exe(pid: u32) -> (Option<String>, Option<bool>) {
         Ok(path) => {
             let raw = path.to_string_lossy();
             match raw.strip_suffix(DELETED) {
-                Some(clean) => (Some(clean.to_string()), Some(true)),
+                Some(clean) => (
+                    Some(clean.to_string()),
+                    Some(!std::path::Path::new(clean).exists()),
+                ),
                 None => (Some(raw.to_string()), Some(false)),
             }
         }
@@ -1864,6 +1882,64 @@ mod tests {
             path_after.as_deref(),
             Some(bin.to_string_lossy().as_ref()),
             "le suffixe « (deleted) » est retiré du chemin, jamais laissé dedans"
+        );
+
+        child.kill().ok();
+        child.wait().ok();
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Le pendant du test précédent, et celui qui compte le plus en pratique :
+    /// un binaire **remplacé** — ce que fait tout gestionnaire de paquets — ne
+    /// doit pas être signalé comme supprimé.
+    ///
+    /// Sans cette distinction, chaque `dnf update` faisait sonner la moitié des
+    /// processus au long cours d'un serveur, en `critical`.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn proc_exe_does_not_flag_a_replaced_binary() {
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!("deveye-repl-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bin = dir.join("prog");
+        let Ok(src) = std::fs::read("/bin/sleep") else {
+            eprintln!("/bin/sleep absent — vérification sautée");
+            return;
+        };
+        std::fs::File::create(&bin)
+            .unwrap()
+            .write_all(&src)
+            .unwrap();
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let Ok(mut child) = std::process::Command::new(&bin).arg("30").spawn() else {
+            eprintln!("exécution refusée depuis le répertoire temporaire — vérification sautée");
+            std::fs::remove_dir_all(&dir).ok();
+            return;
+        };
+
+        // Le geste d'un gestionnaire de paquets : écrire à côté puis renommer
+        // par-dessus. L'ancien inode est délié, le chemin reste peuplé.
+        let staged = dir.join("prog.new");
+        std::fs::File::create(&staged)
+            .unwrap()
+            .write_all(&src)
+            .unwrap();
+        std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::rename(&staged, &bin).unwrap();
+
+        let (path, deleted) = proc_exe(child.id());
+        assert_eq!(
+            path.as_deref(),
+            Some(bin.to_string_lossy().as_ref()),
+            "le chemin reste celui du binaire"
+        );
+        assert_eq!(
+            deleted,
+            Some(false),
+            "un binaire remplacé n'est pas un binaire disparu"
         );
 
         child.kill().ok();
