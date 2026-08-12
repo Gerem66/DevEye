@@ -25,18 +25,19 @@
 -- Une ligne par (appareil, nature, élément). Alimentée à chaque instant, elle
 -- ne grandit plus une fois la machine connue : ~300 programmes, ~30 écoutes et
 -- ~500 entrées de persistance par appareil, puis c'est stable.
--- ⚠️ La collation de `device_id` est **déclarée**, pas héritée.
+-- ⚠️ La collation de `device_id` est **héritée**, jamais déclarée.
 --
 -- Une clé étrangère exige que les deux colonnes partagent jeu de caractères
--- *et* collation. `devices.id` est en `utf8mb4_general_ci` (collation par défaut
--- de cette base) ; un `CHAR(36)` nu hérite de la collation par défaut de la base
--- **cible**, qui vaut `utf8mb4_0900_ai_ci` sur toute installation MySQL 8
--- récente. La migration passerait donc ici et échouerait sur une base restaurée
--- ailleurs — au démarrage, hors transaction, à moitié appliquée. La déclarer
--- rend le fichier indépendant de son hôte.
+-- *et* collation. `devices.id` (migration 004) est un `CHAR(36)` nu : il porte
+-- la collation par défaut de la base, quelle qu'elle soit. Nommer une collation
+-- ici reviendrait à parier sur cette valeur — et le pari est perdu dès que la
+-- base a été créée avec le défaut de MySQL 8 (`utf8mb4_0900_ai_ci`) au lieu de
+-- `utf8mb4_general_ci`. Un `CHAR(36)` nu hérite du même défaut que la colonne
+-- référencée : les deux bougent ensemble, sur n'importe quel hôte. C'est ce que
+-- font les treize autres clés étrangères vers `devices`.
 CREATE TABLE IF NOT EXISTS device_baseline (
     id         BIGINT AUTO_INCREMENT PRIMARY KEY,
-    device_id  CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+    device_id  CHAR(36) NOT NULL,
     -- 'process' | 'listener' | 'persistence' | 'account'
     kind       VARCHAR(24)  NOT NULL,
     -- Clé lisible de l'élément : 'nginx|/usr/sbin/nginx', 'tcp/0.0.0.0:22',
@@ -73,8 +74,8 @@ CREATE TABLE IF NOT EXISTS device_baseline (
 -- rendrait le canal inutilisable dès la première nuit.
 CREATE TABLE IF NOT EXISTS device_findings (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY,
-    -- Collation déclarée pour la même raison que sur `device_baseline`.
-    device_id   CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+    -- Collation héritée pour la même raison que sur `device_baseline`.
+    device_id   CHAR(36) NOT NULL,
     -- Identifiant de règle du catalogue figé (`sentinelRuleIdSchema`).
     rule        VARCHAR(48)  NOT NULL,
     -- sha256(rule + subject). Un constat par situation, pas un par tour : c'est
@@ -126,8 +127,8 @@ CREATE TABLE IF NOT EXISTS sentinel_allowlist (
     -- NULL = toute la flotte de l'espace, y compris les machines qui le
     -- rejoindront plus tard. C'est la portée qu'on veut pour « ce programme est
     -- notre agent de sauvegarde », qu'on ne souhaite pas rejuger huit fois.
-    -- Collation déclarée pour la même raison que sur `device_baseline`.
-    device_id    CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL,
+    -- Collation héritée pour la même raison que sur `device_baseline`.
+    device_id    CHAR(36) NULL,
     rule         VARCHAR(48)  NOT NULL,
     subject      VARCHAR(512) NOT NULL,
     -- Même raison que `device_baseline.item_hash` : l'unicité porte sur
