@@ -76,6 +76,17 @@ const TIME_PRESETS: { label: string; seconds: number | null }[] = [
 const LIVE_INTERVAL_MS = 3000;
 
 /**
+ * Délai au-delà duquel on cesse d'attendre une interrogation.
+ *
+ * Filet de sécurité, pas la vraie limite : l'agent abandonne une lecture trop
+ * longue au bout de 45 s et rend une erreur qui dit quoi faire, laquelle arrive
+ * donc la première. Celui-ci ne sert qu'au cas où l'agent disparaît en plein vol
+ * — sans lui, plus aucune trame terminale ne vient et le panneau tourne
+ * indéfiniment.
+ */
+const QUERY_TIMEOUT_MS = 60_000;
+
+/**
  * On-device log viewer for one device. Lists the device's log sources (system
  * journal, one entry per Docker/Podman container, files…), runs filtered queries
  * against the selected one, and renders the matched lines. Advanced search: free
@@ -102,6 +113,21 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
     const queryIdRef = useRef('');
     const bufferRef = useRef<DeviceLogLine[]>([]);
     const scrollRef = useRef<HTMLDivElement>(null);
+    /** Lu par le minuteur du mode direct, qui ne doit pas dépendre du rendu. */
+    const loadingRef = useRef(false);
+    loadingRef.current = loading;
+    const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const clearWatchdog = useCallback(() => {
+        if (watchdogRef.current !== null) {
+            clearTimeout(watchdogRef.current);
+            watchdogRef.current = null;
+        }
+    }, []);
+
+    // Le chien de garde survivrait au démontage du panneau et écrirait dans un
+    // composant parti.
+    useEffect(() => clearWatchdog, [clearWatchdog]);
 
     useEffect(() => acquireMetrics(deviceId), [deviceId]);
 
@@ -150,6 +176,7 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
                 const merged = bufferRef.current.concat(d.lines);
                 bufferRef.current = merged.length > MAX_BUFFERED_LINES ? merged.slice(-MAX_BUFFERED_LINES) : merged;
                 if (d.done) {
+                    clearWatchdog();
                     setLines(bufferRef.current);
                     setLoading(false);
                     setError(d.error ?? null);
@@ -158,7 +185,7 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
         });
         requestSources();
         return off;
-    }, [deviceId, requestSources]);
+    }, [deviceId, requestSources, clearWatchdog]);
 
     const runQuery = useCallback(() => {
         if (!sourceId) return;
@@ -167,6 +194,14 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
         bufferRef.current = [];
         setLoading(true);
         setError(null);
+        clearWatchdog();
+        watchdogRef.current = setTimeout(() => {
+            // Une interrogation plus récente est passée devant : c'est elle qui
+            // porte l'attente maintenant, et son propre chien de garde.
+            if (queryIdRef.current !== queryId) return;
+            setLoading(false);
+            setError("L'appareil n'a pas répondu. Resserrez la fenêtre de temps ou le filtre, puis réessayez.");
+        }, QUERY_TIMEOUT_MS);
         const filter: DeviceLogFilter = {};
         if (search.trim()) {
             filter.search = search.trim();
@@ -181,10 +216,11 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
             queryId,
             filter: Object.keys(filter).length ? filter : undefined
         }).catch((e) => {
+            clearWatchdog();
             setLoading(false);
             setError(e instanceof Error ? e.message : 'Échec de la requête');
         });
-    }, [deviceId, sourceId, search, regex, levelMin, unit, sinceSec, selectedSource]);
+    }, [deviceId, sourceId, search, regex, levelMin, unit, sinceSec, selectedSource, clearWatchdog]);
 
     // Debounced auto-run on any filter/source change.
     useEffect(() => {
@@ -193,10 +229,22 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
         return () => clearTimeout(t);
     }, [runQuery, sourceId]);
 
-    // Live mode: re-run the query on a timer.
+    /**
+     * Mode direct : réinterroger périodiquement, mais **jamais par-dessus** une
+     * interrogation encore en vol.
+     *
+     * Chaque relance change l'identifiant courant, et le routeur de push jette
+     * tout ce qui ne le porte pas. Sur une source qui met plus de trois secondes à
+     * répondre — un gros conteneur — chaque tic condamnait donc le résultat du
+     * précédent : plus une ligne ne s'affichait, l'attente ne se terminait jamais,
+     * et l'appareil accumulait une lecture de plus toutes les trois secondes.
+     */
     useEffect(() => {
         if (!live || !sourceId) return;
-        const iv = setInterval(runQuery, LIVE_INTERVAL_MS);
+        const iv = setInterval(() => {
+            if (loadingRef.current) return;
+            runQuery();
+        }, LIVE_INTERVAL_MS);
         return () => clearInterval(iv);
     }, [live, sourceId, runQuery]);
 
