@@ -18,7 +18,8 @@
     "lint": "eslint index.ts src",
     "lint:fix": "eslint index.ts src --fix",
     "typecheck": "tsc --noEmit",
-    "ci": "npm run lint && npm run typecheck",
+    "ci": "npm run lint && npm run typecheck && npm run ci:rules",
+    "ci:rules": "tsx scripts/check-rules.ts",
     "ci:agent": "cd agent; /usr/bin/cargo fmt --check && cargo clippy --all-targets -- -D warnings",
     "clean": "rm -rf node_modules client/node_modules client/build package-lock.json",
     "test": "echo \"Error: no test specified\" && exit 1"

@@ -34,7 +34,7 @@ type Q = Queryable;
  * dépasserait la limite InnoDB de 3072. L'empreinte fixe le coût à 32 octets
  * quelle que soit la longueur, et la colonne lisible reste là pour l'affichage.
  */
-export function hashKey(key: string): Buffer {
+function hashKey(key: string): Buffer {
     return createHash('sha256').update(key, 'utf8').digest();
 }
 

@@ -20,6 +20,14 @@ import type { BaselineRow } from '@/db/repos/sentinel';
  * pureté qui rend les règles vérifiables quand même : on leur fabrique un
  * instant, on regarde ce qu'elles rendent (voir `scripts/check-rules.ts`).
  *
+ * ## Ce que ce module expose
+ *
+ * `evaluateSnapshot` pour l'instant, `persistenceRules` et `authRules` pour les
+ * deux relevés qui ont leur propre cadence, plus les clés d'éléments. Les règles
+ * qu'`evaluateSnapshot` compose ne sortent pas : ce sont des détails de
+ * composition, et les exposer aurait invité à les appeler dans le désordre — or
+ * l'ordre et le regroupement font partie de ce que le moteur attend.
+ *
  * ## Ce qu'une règle rend
  *
  * Un `FindingDraft`, jamais un effet. C'est le moteur qui décide s'il faut
@@ -209,7 +217,7 @@ export function isWorldBound(address: string): boolean {
  * qui tourne depuis `/tmp` est anormal le jour 1 comme le jour 100, et attendre
  * sept jours pour le dire n'aurait aucun sens.
  */
-export function execRules(ctx: EvalContext): FindingDraft[] {
+function execRules(ctx: EvalContext): FindingDraft[] {
     if (!ctx.snapshot) return [];
     const out: FindingDraft[] = [];
     const ts = ctx.snapshot.ts;
@@ -267,7 +275,7 @@ export function execRules(ctx: EvalContext): FindingDraft[] {
 /**
  * Ce que le trafic révèle. Comme `execRules`, indépendant de la ligne de base.
  */
-export function netRules(ctx: EvalContext): FindingDraft[] {
+function netRules(ctx: EvalContext): FindingDraft[] {
     const out: FindingDraft[] = [];
     const ts = ctx.snapshot?.ts ?? null;
 
@@ -321,7 +329,7 @@ export function netRules(ctx: EvalContext): FindingDraft[] {
  * l'agent ait eu les droits de chercher — sans privilèges, l'absence de `pid`
  * est la normale et n'apprend rien.
  */
-export function listenerRules(ctx: EvalContext): FindingDraft[] {
+function listenerRules(ctx: EvalContext): FindingDraft[] {
     const ports = ctx.report?.openPorts;
     if (!ports) return [];
     const out: FindingDraft[] = [];
@@ -374,7 +382,7 @@ export function listenerRules(ctx: EvalContext): FindingDraft[] {
  * Entièrement muette pendant l'apprentissage — c'est là toute la différence
  * entre un détecteur utilisable et une liste de trois cents lignes le jour 1.
  */
-export function processRules(ctx: EvalContext): FindingDraft[] {
+function processRules(ctx: EvalContext): FindingDraft[] {
     if (ctx.learning || !ctx.snapshot) return [];
     const out: FindingDraft[] = [];
     const ts = ctx.snapshot.ts;
@@ -493,7 +501,7 @@ export function processRules(ctx: EvalContext): FindingDraft[] {
  * pu savoir si le pare-feu est allumé », deux phrases qu'un tableau de bord ne
  * doit jamais confondre.
  */
-export function postureRules(ctx: EvalContext): FindingDraft[] {
+function postureRules(ctx: EvalContext): FindingDraft[] {
     const security = ctx.report?.security;
     if (!security) return [];
     const out: FindingDraft[] = [];
@@ -665,14 +673,14 @@ export function persistenceRules(ctx: EvalContext, entries: PersistenceEntry[], 
 }
 
 /** Échecs d'une même adresse au-delà desquels on parle de tentatives répétées. */
-export const BRUTEFORCE_THRESHOLD = 10;
+const BRUTEFORCE_THRESHOLD = 10;
 
 /**
  * Combien d'échecs, depuis une adresse, rendent une réussite ultérieure
  * suspecte. Volontairement plus bas que le seuil de tentatives répétées : ce
  * n'est pas le volume qui compte ici, c'est l'enchaînement.
  */
-export const SUCCESS_AFTER_FAILURES_THRESHOLD = 5;
+const SUCCESS_AFTER_FAILURES_THRESHOLD = 5;
 
 /**
  * Les issues d'authentification.
