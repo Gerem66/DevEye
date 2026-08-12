@@ -52,8 +52,18 @@ const KIND_GROUP: Record<DeviceLogSourceKind, string> = {
     oslog: 'Système',
     eventlog: 'Système',
     syslog: 'Fichiers',
-    docker: 'Conteneurs Docker'
+    docker: 'Conteneurs'
 };
+
+/**
+ * Ce qu'on dit quand aucun conteneur n'est listé. L'agent ne peut pas distinguer
+ * « pas de moteur installé » de « socket refusée » sans se plaindre à tort sur une
+ * machine qui n'en a tout simplement pas : la note dit donc la condition, une fois,
+ * et seulement là où elle manque.
+ */
+const NO_CONTAINERS_HINT =
+    'Aucun conteneur listé. L’agent les énumère avec « docker ps » / « podman ps » : il lui faut ' +
+    'donc accès au démon — service installé en root, ou son utilisateur dans le groupe « docker ».';
 
 const TIME_PRESETS: { label: string; seconds: number | null }[] = [
     { label: 'Tout', seconds: null },
@@ -67,14 +77,17 @@ const LIVE_INTERVAL_MS = 3000;
 
 /**
  * On-device log viewer for one device. Lists the device's log sources (system
- * journal, Docker containers, files…), runs filtered queries against the selected
- * one, and renders the matched lines. Advanced search: free text or regex, a
- * severity floor, a journald unit, and a time window — plus a live (auto-refresh)
- * mode. Everything streams over the device's push channel (`device.logSources` /
- * `device.logLines`), so the panel acquires the shared live subscription.
+ * journal, one entry per Docker/Podman container, files…), runs filtered queries
+ * against the selected one, and renders the matched lines. Advanced search: free
+ * text or regex, a severity floor, a journald unit, and a time window — plus a live
+ * (auto-refresh) mode. The inventory itself is re-askable, containers being the
+ * moving part. Everything streams over the device's push channel
+ * (`device.logSources` / `device.logLines`), so the panel acquires the shared live
+ * subscription.
  */
 export function LogsPanel({ deviceId }: { deviceId: string }) {
     const [sources, setSources] = useState<DeviceLogSource[] | null>(null);
+    const [sourcesLoading, setSourcesLoading] = useState(false);
     const [sourceId, setSourceId] = useState('');
     const [search, setSearch] = useState('');
     const [regex, setRegex] = useState(false);
@@ -102,6 +115,19 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
         setError(null);
     }, [deviceId]);
 
+    /**
+     * (Re)demande l'inventaire des sources. Rejouable à la demande : les conteneurs
+     * vont et viennent, et une liste figée à l'ouverture du panneau ne montre jamais
+     * celui qu'on vient de démarrer.
+     */
+    const requestSources = useCallback(() => {
+        setSourcesLoading(true);
+        void ws.send('device.logSources', { deviceId }).catch(() => {
+            setSources([]);
+            setSourcesLoading(false);
+        });
+    }, [deviceId]);
+
     // Subscribe to the source/line pushes and ask for the source inventory.
     useEffect(() => {
         const off = ws.onMessage((msg) => {
@@ -109,7 +135,12 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
                 const d = msg.payload.data as DeviceLogSourcesPush;
                 if (d.deviceId !== deviceId) return;
                 setSources(d.sources);
-                setSourceId((cur) => cur || d.sources[0]?.id || '');
+                setSourcesLoading(false);
+                // Une source qui a disparu entre deux inventaires (conteneur
+                // supprimé) ne doit pas rester sélectionnée : la requête
+                // suivante échouerait sur un identifiant que l'agent ne
+                // reconnaît plus.
+                setSourceId((cur) => (d.sources.some((s) => s.id === cur) ? cur : (d.sources[0]?.id ?? '')));
             } else if (msg.command === DEVICE_LOG_LINES_EVENT && msg.payload.ok) {
                 const d = msg.payload.data as DeviceLogLinesPush;
                 if (d.deviceId !== deviceId || d.queryId !== queryIdRef.current) return;
@@ -125,9 +156,9 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
                 }
             }
         });
-        void ws.send('device.logSources', { deviceId }).catch(() => setSources([]));
+        requestSources();
         return off;
-    }, [deviceId]);
+    }, [deviceId, requestSources]);
 
     const runQuery = useCallback(() => {
         if (!sourceId) return;
@@ -190,7 +221,17 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
         return <p className={styles.logHint}>Détection des sources de logs…</p>;
     }
     if (sources.length === 0) {
-        return <p className={styles.logHint}>Aucune source de logs détectée sur cet appareil.</p>;
+        return (
+            <div className={styles.logsPanel}>
+                <p className={styles.logHint}>Aucune source de logs détectée sur cet appareil.</p>
+                <p className={styles.logHint}>{NO_CONTAINERS_HINT}</p>
+                <div className={styles.logToolbar}>
+                    <Button variant='secondary' onClick={requestSources} disabled={sourcesLoading}>
+                        {sourcesLoading ? '…' : 'Réessayer'}
+                    </Button>
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -213,6 +254,16 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
                         </optgroup>
                     ))}
                 </SelectInput>
+                <button
+                    type='button'
+                    className={styles.logToggle}
+                    onClick={requestSources}
+                    disabled={sourcesLoading}
+                    title='Réinventorier les sources (conteneurs démarrés depuis, nouveaux fichiers…)'
+                    aria-label='Réinventorier les sources'
+                >
+                    <span className={`icon icon-refresh ${sourcesLoading ? styles.spinning : ''}`} />
+                </button>
 
                 <TextInput
                     value={search}
@@ -281,6 +332,8 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
                     {loading ? 'Chargement…' : `${lines.length} ligne${lines.length > 1 ? 's' : ''}`}
                 </span>
             </div>
+
+            {!sources.some((s) => s.kind === 'docker') && <p className={styles.logHint}>{NO_CONTAINERS_HINT}</p>}
 
             <div className={styles.logView} ref={scrollRef}>
                 {error ? (

@@ -1,11 +1,11 @@
 //! On-device log reading: enumerate the host's log sources and answer queries
-//! against them (system journal, Docker containers, plain log files, the macOS
-//! unified log, the Windows event log).
+//! against them (system journal, Docker/Podman containers, plain log files, the
+//! macOS unified log, the Windows event log).
 //!
 //! Everything is **read-only** and **best-effort**: a source is offered only when
 //! its backing tool/file is present, and a query that the platform can't satisfy
 //! returns a clear error the UI surfaces. Native time/unit/priority filters are
-//! pushed into the tool where cheap (journalctl, docker logs); free-text/regex and
+//! pushed into the tool where cheap (journalctl, container logs); free-text/regex and
 //! the severity floor are then applied uniformly in `post_filter`, so search
 //! behaves the same across every source kind.
 
@@ -146,6 +146,11 @@ fn file_label(path: &str) -> String {
 }
 
 // ───────────────────────────── source detection ───────────────────────────
+/// Container engines whose logs we can list and read. Both expose the same `ps`
+/// and `logs` surface, so one reader serves them; the source id carries which one
+/// (`docker:<id>` / `podman:<id>`) because a host can perfectly well run both.
+const CONTAINER_RUNTIMES: [&str; 2] = ["docker", "podman"];
+
 /// Enumerate the host's log sources. Synchronous (shells out); callers run it off
 /// the runtime via `spawn_blocking`.
 pub fn detect_sources() -> Vec<LogSource> {
@@ -180,27 +185,32 @@ pub fn detect_sources() -> Vec<LogSource> {
         }
     }
 
-    // Docker — any OS, when the daemon answers.
-    if let Some(list) = run_capture(
-        "docker",
-        &[
-            "ps",
-            "-a",
-            "--no-trunc",
-            "--format",
-            "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.State}}",
-        ],
-    ) {
+    // Conteneurs — quel que soit l'OS, pour chaque moteur qui répond. Un `ps` qui
+    // échoue (binaire absent, démon arrêté, socket interdite à l'utilisateur du
+    // service) ne donne simplement aucune source : l'interface le dit à sa façon.
+    for bin in CONTAINER_RUNTIMES {
+        let Some(list) = run_capture(
+            bin,
+            &[
+                "ps",
+                "-a",
+                "--no-trunc",
+                "--format",
+                "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.State}}",
+            ],
+        ) else {
+            continue;
+        };
         for line in list.lines() {
             let parts: Vec<&str> = line.splitn(4, '\t').collect();
             if parts.len() < 2 || parts[0].is_empty() {
                 continue;
             }
             out.push(LogSource {
-                id: format!("docker:{}", parts[0]),
+                id: format!("{bin}:{}", parts[0]),
                 kind: "docker",
                 label: parts[1].to_string(),
-                detail: parts.get(2).map(|s| s.to_string()),
+                detail: parts.get(2).map(|image| format!("{bin} · {image}")),
                 running: parts.get(3).map(|s| s.eq_ignore_ascii_case("running")),
             });
         }
@@ -242,10 +252,14 @@ pub fn run_query(source_id: &str, filter: &LogFilter, limit: usize) -> Result<Ve
         filter.search.as_deref().is_some_and(|s| !s.is_empty()) || filter.level_min.is_some();
     let raw_cap = if searching { MAX_RAW.max(limit) } else { limit };
 
+    let container = source_id
+        .split_once(':')
+        .filter(|(bin, _)| CONTAINER_RUNTIMES.contains(bin));
+
     let raw = if source_id == "journald" {
         read_journald(filter, raw_cap)?
-    } else if let Some(id) = source_id.strip_prefix("docker:") {
-        read_docker(id, filter, raw_cap)?
+    } else if let Some((bin, id)) = container {
+        read_container(bin, id, filter, raw_cap)?
     } else if let Some(path) = source_id.strip_prefix("file:") {
         read_file(path, raw_cap)?
     } else if source_id == "oslog" {
@@ -424,7 +438,9 @@ fn journald_line(v: &serde_json::Value) -> LogLine {
     }
 }
 
-fn read_docker(id: &str, filter: &LogFilter, raw_cap: usize) -> Result<Vec<LogLine>> {
+/// Read one container's logs through its engine's CLI (`bin` is `docker`/`podman`,
+/// both taking the same flags).
+fn read_container(bin: &str, id: &str, filter: &LogFilter, raw_cap: usize) -> Result<Vec<LogLine>> {
     let mut args: Vec<String> = vec![
         "logs".into(),
         "--timestamps".into(),
@@ -441,18 +457,18 @@ fn read_docker(id: &str, filter: &LogFilter, raw_cap: usize) -> Result<Vec<LogLi
     }
     args.push(id.to_string());
 
-    let out = Command::new("docker")
+    let out = Command::new(bin)
         .args(&args)
         .output()
-        .context("lancement de docker logs")?;
+        .with_context(|| format!("lancement de {bin} logs"))?;
     if !out.status.success() {
         bail!(
-            "docker logs: {}",
+            "{bin} logs: {}",
             String::from_utf8_lossy(&out.stderr).trim()
         );
     }
 
-    // docker sends the container's stdout to our stdout and its stderr to our
+    // The engine sends the container's stdout to our stdout and its stderr to our
     // stderr; both are real log output. Parse the leading RFC3339 timestamp added
     // by --timestamps, then merge the two streams chronologically.
     let mut lines = Vec::new();
