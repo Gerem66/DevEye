@@ -1,5 +1,6 @@
 import type { DeviceSentinelState, FindingSeverity } from 'deveye-types';
 
+import Button from '@/Components/Button';
 import Checkbox from '@/Components/Checkbox';
 
 import styles from './style.module.css';
@@ -27,9 +28,18 @@ interface Props {
     onMinSeverity: (s: FindingSeverity | null) => void;
     showSettled: boolean;
     onShowSettled: (v: boolean) => void;
+    onOpenNotifications: () => void;
 }
 
-export default function FleetHeader({ score, devices, minSeverity, onMinSeverity, showSettled, onShowSettled }: Props) {
+export default function FleetHeader({
+    score,
+    devices,
+    minSeverity,
+    onMinSeverity,
+    showSettled,
+    onShowSettled,
+    onOpenNotifications
+}: Props) {
     const watched = devices.filter((d) => d.enabled).length;
     const learning = devices.filter((d) => d.enabled && d.learning).length;
     const totals = devices.reduce(
@@ -54,6 +64,11 @@ export default function FleetHeader({ score, devices, minSeverity, onMinSeverity
                     </p>
                 </div>
 
+                <div className={styles.headerActions}>
+                    <Button variant='ghost' icon='settings' onClick={onOpenNotifications}>
+                        Notifications
+                    </Button>
+                </div>
                 <div className={styles.scoreBlock}>
                     <span
                         className={`${styles.scoreValue} ${

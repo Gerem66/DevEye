@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import type { AllowScope, DevicePosture, DeviceSentinelState, Finding, FindingSeverity } from 'deveye-types';
 
 import { ws } from '@/api/ws';
@@ -12,6 +13,7 @@ import DeviceHeader from './DeviceHeader';
 import FindingDetail from './FindingDetail';
 import FindingsList from './FindingsList';
 import FleetHeader from './FleetHeader';
+import NotificationsDialog from './NotificationsDialog';
 import PostureGrid from './PostureGrid';
 import SentinelDialog from './SentinelDialog';
 import styles from './style.module.css';
@@ -49,6 +51,7 @@ export default function Sentinel({ workspace }: FeatureProps) {
     const [minSeverity, setMinSeverity] = useState<FindingSeverity | null>(null);
     const [showSettled, setShowSettled] = useState(false);
     const [settingsFor, setSettingsFor] = useState<DeviceSentinelState | null>(null);
+    const [notificationsOpen, setNotificationsOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -175,14 +178,34 @@ export default function Sentinel({ workspace }: FeatureProps) {
             <aside className={styles.sidebar}>
                 <button
                     type='button'
-                    className={`${styles.navRow} ${deviceId === null ? styles.navRowActive : ''}`}
+                    className={`${styles.overviewButton} ${deviceId === null ? styles.overviewButtonActive : ''}`}
                     onClick={() => {
                         setDeviceId(null);
                         setSelected(null);
                     }}
                 >
-                    <span className={`icon icon-shield ${styles.navIcon}`} />
-                    <span className={styles.navName}>Vue d’ensemble</span>
+                    <span className={styles.overviewTop}>
+                        <span className={`icon icon-shield ${styles.overviewIcon}`} aria-hidden='true' />
+                        <span
+                            className={`${styles.overviewScore} ${
+                                fleetScore === null
+                                    ? styles.scoreUnknown
+                                    : fleetScore >= 80
+                                      ? styles.scoreOk
+                                      : fleetScore >= 50
+                                        ? styles.scoreWarn
+                                        : styles.scoreBad
+                            }`}
+                            aria-label={
+                                fleetScore === null
+                                    ? 'Score de posture de la flotte : pas encore mesurable'
+                                    : `Score de posture de la flotte : ${fleetScore} sur 100`
+                            }
+                        >
+                            {fleetScore === null ? '—' : fleetScore}
+                        </span>
+                    </span>
+                    <span className={styles.overviewLabel}>Vue d’ensemble</span>
                 </button>
 
                 <p className={styles.sidebarLabel}>Appareils</p>
@@ -236,6 +259,7 @@ export default function Sentinel({ workspace }: FeatureProps) {
                     <DeviceHeader device={device} onOpenSettings={() => setSettingsFor(device)} onScanNow={scanNow} />
                 ) : (
                     <FleetHeader
+                        onOpenNotifications={() => setNotificationsOpen(true)}
                         score={fleetScore}
                         devices={devices}
                         minSeverity={minSeverity}
@@ -292,32 +316,48 @@ export default function Sentinel({ workspace }: FeatureProps) {
                             <AllowlistSection deviceId={deviceId} onChanged={() => void afterWrite()} />
                         </div>
 
-                        <div className={styles.detailPane}>
-                            {selected ? (
-                                <FindingDetail
-                                    finding={selected}
-                                    onAcknowledge={acknowledge}
-                                    onReopen={reopen}
-                                    onClose={() => setSelected(null)}
-                                />
-                            ) : (
-                                <div className={styles.detailEmpty}>
-                                    <span className={`icon icon-search ${styles.detailEmptyIcon}`} />
-                                    <p>Choisissez un constat pour voir ce qui a été observé.</p>
-                                </div>
+                        {/*
+                         * Le détail n'occupe la droite **que lorsqu'on en veut un**.
+                         * Une colonne vide en permanence prenait un tiers de
+                         * l'écran pour n'y afficher qu'une invitation, alors que
+                         * la liste est ce qu'on vient lire. Il entre et sort par
+                         * la droite, comme le reste des surfaces de l'application.
+                         */}
+                        <AnimatePresence>
+                            {selected && (
+                                <motion.aside
+                                    key='detail'
+                                    className={styles.detailPane}
+                                    initial={{ x: 24, width: 0, opacity: 0 }}
+                                    animate={{ x: 0, width: 360, opacity: 1 }}
+                                    exit={{ x: 24, width: 0, opacity: 0 }}
+                                    transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+                                >
+                                    <FindingDetail
+                                        finding={selected}
+                                        onAcknowledge={acknowledge}
+                                        onReopen={reopen}
+                                        onClose={() => setSelected(null)}
+                                    />
+                                </motion.aside>
                             )}
-                        </div>
+                        </AnimatePresence>
                     </div>
                 )}
             </main>
+
+            <NotificationsDialog open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
 
             <SentinelDialog
                 open={settingsFor !== null}
                 device={settingsFor}
                 onClose={() => setSettingsFor(null)}
-                onSaved={(next) => {
+                onSaved={(next, keepOpen) => {
                     setDevices((prev) => prev.map((d) => (d.deviceId === next.deviceId ? next : d)));
-                    setSettingsFor(next);
+                    // Activer est une action qui se termine : la laisser ouverte
+                    // sur un arrière-plan qui se recharge donne l'impression que
+                    // rien n'a abouti. Seul un enregistrement de cadences reste.
+                    setSettingsFor(keepOpen ? next : null);
                     void refreshSentinel();
                 }}
                 onReset={resetBaseline}

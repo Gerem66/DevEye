@@ -81,7 +81,7 @@ export default function AllowlistSection({ deviceId, onChanged }: Props) {
                 aria-expanded={open}
             >
                 <span
-                    className={`icon icon-expand ${styles.sectionChevron} ${open ? styles.sectionChevronOpen : ''}`}
+                    className={`icon icon-chevron ${styles.sectionChevron} ${open ? styles.sectionChevronOpen : ''}`}
                 />
                 <h3 className={styles.sectionTitle}>Décisions</h3>
                 <span className={styles.sectionHint}>

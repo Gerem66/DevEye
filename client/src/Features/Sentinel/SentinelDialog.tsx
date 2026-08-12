@@ -42,8 +42,12 @@ interface Props {
     open: boolean;
     device: DeviceSentinelState | null;
     onClose: () => void;
-    /** Appelé après un enregistrement réussi, avec l'état renvoyé par le serveur. */
-    onSaved: (next: DeviceSentinelState) => void;
+    /**
+     * Appelé après un enregistrement réussi. `keepOpen` distingue les deux gestes
+     * que ce dialogue porte : régler des cadences (on reste, pour en régler
+     * d'autres) et **activer** la surveillance, qui est une action qui se termine.
+     */
+    onSaved: (next: DeviceSentinelState, keepOpen: boolean) => void;
     /** Remise à zéro de la ligne de base ; le parent recharge derrière. */
     onReset: (deviceId: string) => Promise<void>;
 }
@@ -84,9 +88,11 @@ export function SentinelDialog({ open, device, onClose, onSaved, onReset }: Prop
                 integrityMinutes,
                 authEvents
             });
-            onSaved(res.device);
-            if (!enabled) onClose();
-            else setNotice('Réglages appliqués.');
+            // On reste ouvert uniquement quand il s'agissait d'ajuster une
+            // machine déjà surveillée : activer ou désactiver se conclut.
+            const keepOpen = enabled && device.enabled;
+            onSaved(res.device, keepOpen);
+            if (keepOpen) setNotice('Réglages appliqués.');
         } catch {
             setError("Le réglage n'a pas pu être appliqué.");
         } finally {
@@ -183,7 +189,7 @@ export function SentinelDialog({ open, device, onClose, onSaved, onReset }: Prop
 
                 {device.enabled && (
                     <div className={styles.dangerZone}>
-                        <div>
+                        <div className={styles.dangerText}>
                             <span className={styles.fieldLabel}>Réapprendre</span>
                             <span className={styles.fieldHint}>
                                 Efface ce qui a été observé et relance une fenêtre d’apprentissage. À faire après une

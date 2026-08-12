@@ -78,7 +78,11 @@ export default function FindingDetail({ finding, onAcknowledge, onReopen, onClos
                     <dt>Dernière fois</dt>
                     <dd>
                         {ago(finding.lastSeen)}
-                        {finding.occurrences > 1 && ` — ${finding.occurrences} fois`}
+                        {finding.occurrences > 1 && (
+                            <span className={styles.evidenceNote}>
+                                situation constatée {finding.occurrences} fois depuis le premier signalement
+                            </span>
+                        )}
                     </dd>
                 </div>
                 {finding.snapshotTs !== null && (

@@ -78,7 +78,7 @@ export default function BaselineSection({ device }: { device: DeviceSentinelStat
                 aria-expanded={open}
             >
                 <span
-                    className={`icon icon-expand ${styles.sectionChevron} ${open ? styles.sectionChevronOpen : ''}`}
+                    className={`icon icon-chevron ${styles.sectionChevron} ${open ? styles.sectionChevronOpen : ''}`}
                 />
                 <h3 className={styles.sectionTitle}>Ligne de base</h3>
                 <span className={styles.sectionHint}>

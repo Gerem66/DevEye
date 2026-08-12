@@ -99,12 +99,18 @@
  * Le détail suit le défilement : la liste peut être longue, et devoir remonter
  * pour lire ce qu'on vient de sélectionner annulerait tout l'intérêt d'avoir
  * deux colonnes.
+ *
+ * Ni largeur ni marge ici : framer-motion les anime à l'ouverture et à la
+ * fermeture (voir `index.tsx`). Les déclarer aussi en CSS ferait deux sources
+ * pour une même valeur, et l'animation se battrait contre la feuille de style.
+ * `overflow: hidden` est ce qui rend la largeur animable sans que le contenu
+ * déborde pendant la transition.
  */
 .detailPane {
     position: sticky;
     top: 0;
-    width: 360px;
     flex-shrink: 0;
+    overflow: hidden;
 }
 
 /* Sous 1000 px la colonne de détail passe sous la liste : deux colonnes ne
@@ -117,7 +123,6 @@
 
     .detailPane {
         position: static;
-        width: 100%;
     }
 }
 
@@ -140,6 +145,72 @@
     .sidebarEmpty {
         display: none;
     }
+}
+
+/* ── bouton de tête : l'état de la flotte, et le retour à son accueil ─────── */
+
+/*
+ * Volontairement gros, et porteur du seul chiffre qui résume tout. C'est à la
+ * fois l'information principale et le chemin de retour : une simple ligne de
+ * menu ne disait ni l'un ni l'autre.
+ */
+.overviewButton {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: var(--space-md) var(--space-sm);
+    margin-bottom: var(--space-sm);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-widget);
+    color: var(--text-secondary);
+    font: inherit;
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.overviewButton:hover {
+    border-color: var(--glass-border-strong);
+}
+
+.overviewButton:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+.overviewButtonActive {
+    border-color: transparent;
+    background: var(--accent-bg);
+    color: var(--text-primary);
+}
+
+.overviewTop {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.overviewIcon {
+    font-size: 1.6rem;
+    color: var(--text-muted);
+}
+
+.overviewButtonActive .overviewIcon {
+    color: var(--accent);
+}
+
+.overviewScore {
+    font-size: 1.9rem;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.overviewLabel {
+    font-size: 0.82rem;
 }
 
 /* ── barre latérale ──────────────────────────────────────────────────────── */
@@ -504,7 +575,12 @@
     padding-left: calc(var(--space-md) + 3px);
     overflow: hidden;
     border: 1px solid var(--glass-border);
-    border-radius: var(--radius-lg);
+    /*
+     * Rayon volontairement court : le liseré de gravité court sur toute la
+     * hauteur du bord gauche, et un grand rayon lui rogne les deux extrémités —
+     * on ne voyait plus qu'un trait central, qui avait l'air inachevé.
+     */
+    border-radius: var(--radius-sm);
     background: var(--surface-widget);
     color: var(--text-primary);
     font: inherit;
@@ -628,7 +704,8 @@
     padding-left: calc(var(--space-md) + 3px);
     overflow: hidden;
     border: 1px solid var(--glass-border);
-    border-radius: var(--radius-lg);
+    /* Même raison que les cartes de constat : le liseré doit filer d'un bord à l'autre. */
+    border-radius: var(--radius-sm);
     background: var(--surface-widget);
 }
 
@@ -685,29 +762,6 @@
     font-size: 0.83rem;
     line-height: 1.5;
     color: var(--text-secondary);
-}
-
-.detailEmpty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-sm);
-    padding: var(--space-lg) var(--space-md);
-    border: 1px dashed var(--glass-border);
-    border-radius: var(--radius-lg);
-    text-align: center;
-}
-
-.detailEmpty p {
-    margin: 0;
-    font-size: 0.8rem;
-    color: var(--text-muted);
-}
-
-.detailEmptyIcon {
-    font-size: 1.3rem;
-    color: var(--text-muted);
-    filter: opacity(0.6);
 }
 
 .evidence {
@@ -1045,7 +1099,9 @@
 
 .dangerZone {
     display: flex;
-    align-items: flex-start;
+    /* Le bouton se centre en face de son explication plutôt que de coller en
+       haut : sur trois lignes de texte, l'alignement haut le laissait orphelin. */
+    align-items: center;
     justify-content: space-between;
     gap: var(--space-md);
     padding: var(--space-md);
@@ -1053,7 +1109,7 @@
     border-radius: var(--radius-md);
 }
 
-.dangerZone > div {
+.dangerText {
     display: flex;
     flex-direction: column;
     gap: 4px;

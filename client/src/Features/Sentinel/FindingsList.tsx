@@ -106,7 +106,16 @@ export default function FindingsList({ findings, selectedId, onSelect, showDevic
                                                 <span className={styles.chip}>résolu</span>
                                             )}
                                             {finding.occurrences > 1 && (
-                                                <span className={styles.chip}>×{finding.occurrences}</span>
+                                                <span
+                                                    className={styles.chip}
+                                                    // Le « ×10 » ne se devine pas : c'est le nombre de
+                                                    // relevés où la situation a été revue, pas dix
+                                                    // problèmes distincts.
+                                                    title={`Situation constatée ${finding.occurrences} fois depuis le premier signalement`}
+                                                    aria-label={`Constatée ${finding.occurrences} fois`}
+                                                >
+                                                    ×{finding.occurrences}
+                                                </span>
                                             )}
                                             {showDevice && (
                                                 <span className={styles.findingDevice}>{finding.deviceName}</span>
