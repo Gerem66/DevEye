@@ -130,10 +130,11 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // Les canaux de notification sont ceux d'Uptime : mêmes destinataires, une
     // seule configuration à tenir à jour.
     const databases = new DatabaseMonitor({ db: deps.db, crypt: deps.crypt, logger, live, uptime });
-    // Sentinelle emprunte à Uptime les mêmes canaux, pour la même raison que
-    // `DatabaseMonitor` : ce sont les mêmes destinataires, et deux jeux de
-    // réglages à tenir à jour seraient une source d'erreur de plus.
-    const sentinel = new SecurityMonitor({ db: deps.db, logger, audit, live, uptime });
+    // Sentinelle a **ses propres** canaux (`notification_settings`, ligne
+    // `sentinel`). Elle empruntait ceux d'Uptime : une alerte de sécurité
+    // arrivait alors sur un salon désigné pour la disponibilité, sans que rien
+    // ne l'ait annoncé ni ne permette de l'éteindre séparément.
+    const sentinel = new SecurityMonitor({ db: deps.db, crypt: deps.crypt, logger, audit, live });
 
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await agentRoutes(app, { db: deps.db, hub, live, audit });

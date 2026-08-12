@@ -3,8 +3,9 @@ import type { Logger } from 'pino';
 import type { Database as Db } from '@/db';
 import type { LiveHub } from '@/live/hub';
 import type { AuditLog } from '@/Services/AuditLog';
-import type { UptimeMonitor } from '@/Services/UptimeMonitor';
-import * as mailClient from '@/Services/MailAccountClient';
+import type Encryption from '@/Services/Encryption';
+import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
+import { deliver, hasChannel, resolveChannels } from '@/Services/notifications';
 import { env } from '@/Utils/Env';
 import { allowKey, type BaselineObservation, type BaselineRow, findingDedup } from '@/db/repos/sentinel';
 import {
@@ -29,7 +30,8 @@ import {
     processKey,
     SNAPSHOT_RULES,
     type EvalContext,
-    type FindingDraft
+    type FindingDraft,
+    type SnapshotView
 } from './security/rules';
 
 /**
@@ -88,11 +90,11 @@ interface Pending {
 
 export interface SecurityMonitorDeps {
     db: Db;
+    /** Pour le chiffre « open » de l'espace : les canaux d'alerte y sont chiffrés. */
+    crypt: Encryption;
     logger: Logger;
     audit: AuditLog;
     live?: LiveHub;
-    /** Pour les canaux de notification de l'espace — et rien d'autre, comme `DatabaseMonitor`. */
-    uptime?: UptimeMonitor;
 }
 
 /** La ligne de base d'un appareil, telle que le moteur la tient en mémoire. */
@@ -143,6 +145,8 @@ function attrsOf(row: BaselineRow | undefined): BaselineAttrs {
 
 export class SecurityMonitor {
     private timer: ReturnType<typeof setInterval> | null = null;
+    /** Chiffres « open » par espace : le moteur n'a ni session ni mot de passe. */
+    private readonly ciphers = new Map<number, Cipher>();
     private ticking = false;
     private lastSlowPass = 0;
     private readonly queue = new Map<string, Pending>();
@@ -169,6 +173,15 @@ export class SecurityMonitor {
     stop(): void {
         if (this.timer) clearInterval(this.timer);
         this.timer = null;
+    }
+
+    private cipherFor(workspaceId: number): Cipher {
+        let cipher = this.ciphers.get(workspaceId);
+        if (!cipher) {
+            cipher = createOpenCipher(this.deps.db, this.deps.crypt, workspaceId);
+            this.ciphers.set(workspaceId, cipher);
+        }
+        return cipher;
     }
 
     /** Oublie la ligne de base en mémoire d'un appareil (après une remise à zéro). */
@@ -313,10 +326,7 @@ export class SecurityMonitor {
     }
 
     /** L'instant, tel que les règles le veulent : métriques + liste des processus. */
-    private async loadSnapshot(
-        deviceId: string,
-        ts: number
-    ): Promise<{ ts: number; processes: ReportProcess[]; activeConnections: number | null } | null> {
+    private async loadSnapshot(deviceId: string, ts: number): Promise<SnapshotView | null> {
         const sample = await this.deps.db.processSamples.nearest(deviceId, ts);
         const points = await this.deps.db.metrics.query({
             deviceId,
@@ -599,7 +609,7 @@ export class SecurityMonitor {
         if (device.workspace_id) this.deps.live?.changed(device.workspace_id, ['sentinel'], null);
 
         const notifiable = opened.filter(({ draft }) => SEVERITY_RANK[draft.severity] >= SEVERITY_RANK.high);
-        if (notifiable.length === 0 || !device.workspace_id || !this.deps.uptime) return;
+        if (notifiable.length === 0 || !device.workspace_id) return;
 
         const worst = notifiable.reduce(
             (acc, { draft }) => (SEVERITY_RANK[draft.severity] > SEVERITY_RANK[acc] ? draft.severity : acc),
@@ -632,58 +642,36 @@ export class SecurityMonitor {
      * Toute erreur est journalisée puis avalée : un webhook en panne ne doit ni
      * supprimer le mail, ni arrêter la boucle.
      */
+    /**
+     * Délivre sur les canaux **de Sentinelle**.
+     *
+     * Ses propres réglages, et non ceux d'Uptime : une alerte de sécurité n'a ni
+     * les mêmes destinataires ni la même urgence qu'une alerte de disponibilité,
+     * et emprunter un canal qu'on n'a pas désigné pour ça revient à écrire à des
+     * gens sans le leur avoir demandé. Sans réglage enregistré, rien ne part.
+     */
     private async notify(
         workspaceId: number,
         alert: { deviceName: string; severity: FindingSeverity; count: number; body: string; at: number }
     ): Promise<void> {
-        const channels = await this.deps.uptime!.resolveChannels(workspaceId);
-        const subject = `[DevEye] Sentinelle ${alert.severity} — ${alert.deviceName}`;
+        const channels = await resolveChannels(this.deps.db, this.cipherFor(workspaceId), workspaceId, 'sentinel');
+        if (!hasChannel(channels)) return;
 
-        if (channels.email && channels.sendAccount) {
-            try {
-                await mailClient.sendMail(channels.sendAccount.credentials, {
-                    from: channels.sendAccount.fromEmail,
-                    to: [{ name: null, address: channels.email }],
-                    subject,
-                    text: alert.body
-                });
-            } catch (e) {
-                this.deps.logger.error(
-                    { workspaceId, err: e instanceof Error ? e.message : String(e) },
-                    'Sentinel alert mail failed'
-                );
-            }
-        }
-
-        if (channels.webhook) {
-            try {
-                const response = await fetch(channels.webhook, {
-                    method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    signal: AbortSignal.timeout(10_000),
-                    // Même charge utile à trois têtes que les alertes Uptime et
-                    // Database : `content` pour Discord, `text` pour Slack, les
-                    // champs structurés pour un point d'entrée maison.
-                    body: JSON.stringify({
-                        content: alert.body.slice(0, 1900),
-                        text: alert.body.slice(0, 1900),
-                        event: 'sentinel_finding',
-                        device: alert.deviceName,
-                        severity: alert.severity,
-                        count: alert.count,
-                        at: alert.at
-                    })
-                });
-                if (!response.ok) {
-                    this.deps.logger.warn({ workspaceId, status: response.status }, 'Sentinel webhook rejected');
+        await deliver(
+            channels,
+            {
+                subject: `[DevEye] Sentinelle ${alert.severity} — ${alert.deviceName}`,
+                body: alert.body,
+                payload: {
+                    event: 'sentinel_finding',
+                    device: alert.deviceName,
+                    severity: alert.severity,
+                    count: alert.count,
+                    at: alert.at
                 }
-            } catch (e) {
-                this.deps.logger.error(
-                    { workspaceId, err: e instanceof Error ? e.message : String(e) },
-                    'Sentinel webhook failed'
-                );
-            }
-        }
+            },
+            this.deps.logger
+        );
     }
 }
 
