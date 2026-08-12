@@ -26,7 +26,8 @@ import type {
     MailFolder,
     MailMessage,
     MailMessageCursor,
-    MailMessageSummary
+    MailMessageSummary,
+    MailSecurityTier
 } from 'deveye-types';
 import type { FeatureProps } from '../types';
 
@@ -96,6 +97,20 @@ export default function Mail(_props: FeatureProps) {
     const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
     const selectedFolderIdRef = useRef<number | null>(null);
     selectedFolderIdRef.current = selectedFolderId;
+    /**
+     * Jeton du dossier ouvert, incrémenté à chaque changement de sélection.
+     *
+     * Ouvrir un dossier lance une suite d'allers-retours (la page en cache, puis la
+     * relève IMAP, puis la fusion de tête) qui dure bien plus qu'un clic. Chaque
+     * étape se compare à ce jeton : celle qui appartient au dossier précédent
+     * s'arrête là où elle en est, sans lancer la suivante et sans rien écrire —
+     * c'est ce qui empêche les messages d'un dossier d'atterrir dans un autre.
+     */
+    const folderRunRef = useRef(0);
+    /** Jeton de la relève en vol, s'il y en a une (`null` sinon). */
+    const syncRunRef = useRef<number | null>(null);
+    /** Palier du compte ouvert, lu par l'ouverture d'un dossier (voir `openFolder`). */
+    const selectedAccountTierRef = useRef<MailSecurityTier | null>(null);
 
     const [messages, setMessages] = useState<MailMessageSummary[]>([]);
     const [nextCursor, setNextCursor] = useState<MailMessageCursor | null>(null);
@@ -291,11 +306,18 @@ export default function Mail(_props: FeatureProps) {
      * end of the folder, and the only thing that stops the scroll for good.
      */
     const loadMessages = useCallback(async (folderId: number, cursor: MailMessageCursor | null) => {
+        // La lecture appartient au dossier ouvert au moment où elle part ; passé
+        // ce point, plus rien ne s'écrit si la sélection a bougé (voir
+        // `folderRunRef`). L'indicateur de chargement, lui, appartient déjà à la
+        // nouvelle lecture : c'est elle qui l'éteindra.
+        const run = folderRunRef.current;
+        const stale = () => folderRunRef.current !== run;
         setMessagesLoading(true);
         try {
             const page = await withSecrecy(() =>
                 ws.send('mail.messageList', { folderId, cursor, limit: MESSAGE_PAGE_SIZE })
             );
+            if (stale()) return;
             let messages = page.messages;
             let nextCursor = page.nextCursor;
 
@@ -303,6 +325,7 @@ export default function Mail(_props: FeatureProps) {
                 const older = await withSecrecy(() =>
                     ws.send('mail.folderBackfill', { folderId, limit: BACKFILL_BATCH_SIZE })
                 );
+                if (stale()) return;
                 setReachedFolderStart(older.reachedStart);
                 if (older.addedCount > 0) {
                     // The batch landed below everything already cached, so the
@@ -314,6 +337,7 @@ export default function Mail(_props: FeatureProps) {
                             limit: MESSAGE_PAGE_SIZE
                         })
                     );
+                    if (stale()) return;
                     messages = [...messages, ...refetched.messages];
                     nextCursor = refetched.nextCursor;
                 }
@@ -325,21 +349,13 @@ export default function Mail(_props: FeatureProps) {
             setNextCursor(nextCursor);
             setError(null);
         } catch (e) {
+            if (stale()) return;
             setError(humanizeError(e, 'Chargement des messages impossible.'));
             invalidate('mail.accountList');
         } finally {
-            setMessagesLoading(false);
+            if (!stale()) setMessagesLoading(false);
         }
     }, []);
-
-    useEffect(() => {
-        setSelectedMessage(null);
-        setReachedFolderStart(false);
-        // A query only ever means something for the folder it was typed in.
-        setSearch('');
-        if (selectedFolderId !== null) void loadMessages(selectedFolderId, null);
-        else setMessages([]);
-    }, [selectedFolderId, loadMessages]);
 
     /**
      * Rafraîchissement du dossier ouvert : une seule page 0, fusionnée en tête.
@@ -458,22 +474,66 @@ export default function Mail(_props: FeatureProps) {
      * ici. Rien n'est jeté : la position de défilement et les pages déjà déroulées
      * survivent, et l'aller-retour IMAP se compte en un fetch plutôt qu'en deux
      * cents enveloppes.
+     *
+     * Une relève déjà en vol **pour le même dossier** n'est pas relancée — c'est la
+     * garde du double-clic. Changer de dossier, en revanche, la périme : la
+     * nouvelle prend la main sur l'indicateur, et l'ancienne, en revenant, ne
+     * touche plus à rien.
      */
     const syncFolder = useCallback(async () => {
         const folderId = selectedFolderIdRef.current;
-        if (folderId === null || refreshing) return;
+        const run = folderRunRef.current;
+        if (folderId === null || syncRunRef.current === run) return;
+        syncRunRef.current = run;
         setRefreshing(true);
         setError(null);
         try {
             await withSecrecy(() => ws.send('mail.folderSync', { folderId }));
+            if (folderRunRef.current !== run) return;
             await refreshMessageHead();
             await refreshFolders();
         } catch (e) {
-            setError(humanizeError(e, 'Relève impossible.'));
+            if (folderRunRef.current === run) setError(humanizeError(e, 'Relève impossible.'));
         } finally {
-            setRefreshing(false);
+            if (syncRunRef.current === run) {
+                syncRunRef.current = null;
+                setRefreshing(false);
+            }
         }
-    }, [refreshing, refreshMessageHead, refreshFolders]);
+    }, [refreshMessageHead, refreshFolders]);
+
+    /**
+     * Ouvrir un dossier : la page la plus récente d'abord — c'est le cache local,
+     * donc c'est immédiat — puis une relève IMAP dont seule la tête de liste est
+     * refusionnée. Avant, la sélection s'arrêtait au cache : ce qui était arrivé
+     * depuis le dernier tour de relève de fond n'apparaissait qu'au tour suivant,
+     * ou après un clic sur « Actualiser ».
+     *
+     * La relève est sautée pour les comptes « guarded » : n'ayant pas de relève de
+     * fond, `mail.messageList` vient déjà de synchroniser le dossier côté serveur,
+     * et en redemander une ouvrirait une seconde connexion IMAP pour rien.
+     */
+    const openFolder = useCallback(
+        async (folderId: number) => {
+            const run = folderRunRef.current;
+            await loadMessages(folderId, null);
+            if (folderRunRef.current !== run || selectedAccountTierRef.current === 'guarded') return;
+            await syncFolder();
+        },
+        [loadMessages, syncFolder]
+    );
+
+    useEffect(() => {
+        // Tout ce qui est encore en vol appartient au dossier qu'on quitte : ce
+        // jeton le périme d'un coup, y compris les étapes pas encore parties.
+        folderRunRef.current += 1;
+        setSelectedMessage(null);
+        setReachedFolderStart(false);
+        // A query only ever means something for the folder it was typed in.
+        setSearch('');
+        if (selectedFolderId !== null) void openFolder(selectedFolderId);
+        else setMessages([]);
+    }, [selectedFolderId, openFolder]);
 
     /**
      * La réparation de dernier recours : le cache du dossier est jeté côté serveur
@@ -551,6 +611,7 @@ export default function Mail(_props: FeatureProps) {
     const selectedAccount = accounts.find((a) => a.id === selectedAccountId) ?? null;
     const accountStatus = selectedAccount ? describeAccountStatus(selectedAccount) : null;
     selectedAccountIdRef.current = selectedAccountId;
+    selectedAccountTierRef.current = selectedAccount?.securityTier ?? null;
     const selectedFolder = folders.find((f) => f.id === selectedFolderId) ?? null;
 
     // Reads the selection through the ref, like `deleteAccount` below, so the
