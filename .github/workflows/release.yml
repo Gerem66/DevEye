@@ -172,7 +172,7 @@ jobs:
           ls -la dist
 
       - name: Upload binaries
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: agent-${{ matrix.os_label }}
           path: agent/dist/*
@@ -188,7 +188,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Download all agent binaries
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           pattern: agent-*
           path: dist
@@ -254,7 +254,7 @@ jobs:
       # "Latest" (prerelease) so it doesn't shadow the human release flow; the
       # server fetches it by tag name, not via /releases/latest.
       - name: Publish rolling release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: agent-latest
           name: Agent (rolling)
