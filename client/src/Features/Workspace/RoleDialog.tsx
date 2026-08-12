@@ -29,7 +29,8 @@ const FEATURE_LABELS: Record<(typeof WORKSPACE_FEATURE_IDS)[number], string> = {
     mail: 'Mail',
     projects: 'Projets',
     git: 'Git',
-    database: 'Bases de données'
+    database: 'Bases de données',
+    osint: 'OSINT'
 };
 
 export interface RoleDraft {

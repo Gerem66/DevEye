@@ -24,6 +24,7 @@ import {
 } from './repos/sentinel';
 import { noteFoldersRepo, type NoteFoldersRepo } from './repos/noteFolders';
 import { notesRepo, type NotesRepo } from './repos/notes';
+import { osintRepo, type OsintRepo } from './repos/osint';
 import { projectsRepo, type ProjectsRepo } from './repos/projects';
 import { projectRekeyRepo, type ProjectRekeyRepo } from './repos/projectRekey';
 import { projectBoardRepo, type ProjectBoardRepo } from './repos/projectBoard';
@@ -100,6 +101,7 @@ export interface Database {
     twoFactor: TwoFactorRepo;
     userSecretKeys: UserSecretKeysRepo;
     weather: WeatherRepo;
+    osint: OsintRepo;
     uptimeServices: UptimeServicesRepo;
     uptimeHistory: UptimeHistoryRepo;
     uptimeSettings: UptimeSettingsRepo;
@@ -150,6 +152,7 @@ export function createDatabase(q: Queryable): Database {
         twoFactor: twoFactorRepo(q),
         userSecretKeys: userSecretKeysRepo(q),
         weather: weatherRepo(q),
+        osint: osintRepo(q),
         uptimeServices: uptimeServicesRepo(q),
         uptimeHistory: uptimeHistoryRepo(q),
         uptimeSettings: uptimeSettingsRepo(q),

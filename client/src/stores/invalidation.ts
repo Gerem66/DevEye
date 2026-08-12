@@ -37,6 +37,8 @@ export type ResourceKey =
     | 'sentinel.findings'
     | 'sentinel.baseline'
     | 'weather.list'
+    /** L'historique des recherches OSINT — lu par l'écran et par la carte d'accueil. */
+    | 'osint.history'
     | 'workspace.roleList'
     /**
      * L'état de l'espace actif tel que `workspace.activate` le rend : droits de
@@ -93,6 +95,10 @@ const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
      */
     sentinel: ['sentinel.count', 'sentinel.overview', 'sentinel.findings', 'sentinel.baseline'],
     weather: ['weather.list'],
+    // Une seule clé : les résultats de sonde ne sont pas une ressource partagée
+    // (ils se relisent à la demande, depuis le cache du serveur). Seul
+    // l'historique est un état d'espace, donc seul lui se diffuse.
+    osint: ['osint.history'],
     // Deux sujets pour une seule feature : la structure d'un côté, les fils de
     // discussion de l'autre. Un message ne doit pas faire re-solliciter le
     // portefeuille entier — d'où la coupure côté serveur (`domain/live.ts`).

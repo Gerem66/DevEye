@@ -1,0 +1,768 @@
+/* OSINT — un champ, une grille de cartes, un historique.
+   Aucune couleur en dur : tout passe par les variables du thème. */
+
+/* `relative` + `overflow: hidden` : c'est ce bloc qui borne le tiroir
+   d'historique. Sans lui, le panneau se positionnerait sur le premier ancêtre
+   positionné venu (le popup de feature) et déborderait de l'écran pendant sa
+   translation d'entrée. */
+.root {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* -------------------------------- Recherche ------------------------------- */
+
+.searchBar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-lg);
+    transition: border-color var(--transition-fast);
+}
+
+.searchBar:focus-within {
+    border-color: var(--input-focus);
+}
+
+.searchIcon {
+    flex: none;
+    opacity: 0.6;
+}
+
+.searchInput {
+    flex: 1 1 auto;
+    min-width: 0;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+}
+
+.searchInput::placeholder {
+    color: var(--input-placeholder);
+}
+
+.kindChip {
+    flex: none;
+    padding: 2px 10px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.searchGo {
+    flex: none;
+    padding: 6px 16px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--accent);
+    color: var(--on-accent);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.searchGo:hover:not(:disabled) {
+    background: var(--accent-hover);
+}
+
+/* framer-motion pilote `opacity` sur les éléments animés : on atténue par
+   `filter` pour que l'état désactivé survive à une animation en cours. */
+.searchGo:disabled {
+    cursor: default;
+    filter: opacity(0.45);
+}
+
+.iconButton {
+    position: relative;
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.iconButton:hover {
+    background: var(--glass-bg-light);
+    color: var(--text-primary);
+}
+
+.banner {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--danger-bg);
+    color: var(--danger);
+    font-size: 0.875rem;
+}
+
+/* ---------------------------------- Corps --------------------------------- */
+
+/* Le conteneur de la grille occupe toute la largeur : l'historique n'est plus
+   une colonne mais un tiroir, il ne prend donc plus de place au repos. */
+.results {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: var(--space-xs);
+}
+
+.targetLine {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+}
+
+.targetValue {
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: var(--space-md);
+    align-items: start;
+}
+
+/* -------------------------------- Vide / aide ----------------------------- */
+
+.empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    height: 100%;
+    padding: var(--space-xl);
+    text-align: center;
+}
+
+.emptyTitle {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.emptyHint {
+    margin: 0;
+    max-width: 46ch;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.examples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    justify-content: center;
+    margin-top: var(--space-sm);
+}
+
+/* --------------------------------- Cartes --------------------------------- */
+
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    background: var(--surface-widget);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    min-width: 0;
+}
+
+.cardHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.cardTitle {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.timing {
+    flex: none;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+.spinner {
+    animation: spin 0.9s linear infinite;
+    opacity: 0.6;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.skeleton span {
+    height: 10px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+    animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton span:nth-child(2) {
+    width: 80%;
+}
+.skeleton span:nth-child(3) {
+    width: 55%;
+}
+
+@keyframes pulse {
+    0%,
+    100% {
+        filter: opacity(0.45);
+    }
+    50% {
+        filter: opacity(0.85);
+    }
+}
+
+.summary {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.muted {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.errorText {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--danger);
+}
+
+.retry {
+    align-self: flex-start;
+    padding: 4px 12px;
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-md);
+    background: none;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.retry:hover {
+    color: var(--text-primary);
+    border-color: var(--accent);
+}
+
+/* --------------------------------- Étiquettes ------------------------------ */
+
+.tagRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.tag {
+    padding: 2px 9px;
+    border-radius: var(--radius-pill);
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.toneNeutral {
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+}
+.toneGood {
+    background: var(--success-bg);
+    color: var(--success);
+}
+.toneWarn {
+    background: var(--warning-bg);
+    color: var(--warning);
+}
+.toneBad {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+/* ----------------------------------- Score --------------------------------- */
+
+.score {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-sm);
+    border-radius: var(--radius-md);
+}
+
+.scoreHead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-xs);
+}
+
+.scoreValue {
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.scoreLabel {
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.signals {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.signals li {
+    display: flex;
+    gap: var(--space-xs);
+    font-size: 0.78rem;
+    line-height: 1.4;
+}
+
+.deltaUp,
+.deltaDown {
+    flex: none;
+    min-width: 3ch;
+    text-align: right;
+    font-family: var(--font-mono);
+    font-weight: 700;
+}
+
+.deltaUp {
+    color: var(--success);
+}
+.deltaDown {
+    color: var(--danger);
+}
+
+/* --------------------------------- Champs ---------------------------------- */
+
+.fields {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+}
+
+.fieldRow {
+    display: grid;
+    grid-template-columns: minmax(90px, 34%) 1fr;
+    gap: var(--space-sm);
+    align-items: start;
+}
+
+.fieldRow dt {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+}
+
+.fieldRow dd {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.fieldRow dd a {
+    color: var(--accent);
+}
+
+.mono {
+    font-family: var(--font-mono);
+    font-size: 0.78rem !important;
+}
+
+/* ---------------------------------- Liens ---------------------------------- */
+
+.linkRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.chip {
+    display: inline-block;
+    padding: 4px 11px;
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-pill);
+    background: none;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.chip:hover {
+    color: var(--text-primary);
+    border-color: var(--accent);
+}
+
+/* Un pivot relance une recherche dans DevEye ; un lien ordinaire sort vers le
+   navigateur. La distinction est portée par la couleur, pas seulement par le
+   comportement. */
+.chipPivot {
+    color: var(--accent);
+    border-color: var(--accent-bg);
+    background: var(--accent-bg);
+}
+
+/* ---------------------------------- Brut ----------------------------------- */
+
+.cardFoot {
+    display: flex;
+    gap: var(--space-sm);
+    margin-top: auto;
+    padding-top: var(--space-xs);
+}
+
+.rawToggle {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.rawToggle:hover {
+    color: var(--text-secondary);
+}
+
+.raw {
+    max-height: 320px;
+    overflow: auto;
+    margin: 0;
+    padding: var(--space-sm);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* -------------------------- Historique (tiroir droit) ---------------------- */
+
+/* Voile : même opacité et même durée que celui de SettingsPanel, pour que les
+   deux tiroirs de l'application s'ouvrent exactement de la même façon. */
+.panelScrim {
+    position: absolute;
+    inset: 0;
+    z-index: var(--z-popup-overlay);
+    background: rgb(0 0 0 / 28%);
+    backdrop-filter: blur(2px);
+}
+
+.panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: var(--z-popup);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    width: min(320px, 86%);
+    padding: var(--space-md);
+    overflow-y: auto;
+    background: var(--surface-popup);
+    backdrop-filter: blur(var(--glass-blur));
+    border-left: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+}
+
+.panelHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.panelHead h4 {
+    margin: 0;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.panelActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.unlockRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm);
+    border: 1px solid var(--warning);
+    border-radius: var(--radius-md);
+    background: var(--warning-bg);
+    color: var(--warning);
+    font-family: var(--font-sans);
+    font-size: 0.78rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+.unlockRow:hover {
+    filter: brightness(1.08);
+}
+
+/* Pastille sur le bouton d'historique quand des entrées restent chiffrées. */
+.iconBadge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--warning);
+}
+
+.historyList {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.historyList li {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.historyItem {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 5px 8px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: none;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.historyItem:hover:not(:disabled) {
+    background: var(--surface-subtle);
+}
+
+.historyItem:disabled {
+    cursor: default;
+    filter: opacity(0.5);
+}
+
+.historyKind {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.historyQuery {
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.historyRemove {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    filter: opacity(0);
+    transition: filter var(--transition-fast);
+}
+
+.historyList li:hover .historyRemove {
+    filter: opacity(1);
+}
+
+.historyRemove:hover {
+    color: var(--danger);
+}
+
+/* -------------------------------- Fournisseurs ----------------------------- */
+
+.providerList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.provider {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+.providerHead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    font-size: 0.9rem;
+}
+
+.providerHead span {
+    padding: 2px 9px;
+    border-radius: var(--radius-pill);
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.providerWhat {
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+
+.providerRow {
+    display: flex;
+    gap: var(--space-xs);
+    align-items: center;
+}
+
+.providerRow > :first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.providerLink {
+    align-self: flex-start;
+    font-size: 0.72rem;
+    color: var(--accent);
+}
+
+/* ---------------------------------- Widget --------------------------------- */
+
+.widget {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    justify-content: center;
+    height: 100%;
+}
+
+.widgetTarget {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.widgetMuted {
+    display: flex;
+    align-items: center;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* --------------------------------- Étroit ---------------------------------- */
+
+@media (max-width: 860px) {
+    .grid {
+        grid-template-columns: 1fr;
+    }
+
+    /* Le tiroir prend presque tout l'écran : à cette largeur, une bande de
+       320 px laisserait la grille illisible derrière. */
+    .panel {
+        width: min(320px, 92%);
+    }
+
+    .searchBar {
+        flex-wrap: wrap;
+    }
+}

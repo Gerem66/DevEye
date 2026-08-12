@@ -33,6 +33,10 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     mail: 'mail',
     metrics: 'devices',
     note: 'notes',
+    // Même forme que `git` et `database` : préfixe unique, verbes en camelCase
+    // derrière le point. Le filet `MUTATION_VERB` n'en voit donc presque aucune
+    // — les `mutates` de cette feature se relisent à la main.
+    osint: 'osint',
     password: 'password',
     // Un seul préfixe pour tout le module, donc un seul sujet par défaut. Les
     // commandes de discussion déclarent explicitement `['projectsChat']` : un

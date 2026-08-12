@@ -12,6 +12,7 @@ import { MailWidget } from '@/Features/Mail/MailWidget';
 import { ProjectsWidget } from '@/Features/Projects/ProjectsWidget';
 import { GitWidget } from '@/Features/Git/GitWidget';
 import { DatabaseWidget } from '@/Features/Database/DatabaseWidget';
+import { OsintWidget } from '@/Features/Osint/OsintWidget';
 
 import Monitoring from '@/Features/Monitoring';
 import Weather from '@/Features/Weather';
@@ -24,6 +25,7 @@ import Mail from '@/Features/Mail';
 import FeatureProjects from '@/Features/Projects';
 import FeatureGit from '@/Features/Git';
 import FeatureDatabase from '@/Features/Database';
+import FeatureOsint from '@/Features/Osint';
 
 import type { FeatureProps } from '@/Features/types';
 
@@ -165,6 +167,22 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         // survivre à la fermeture de l'écran. Pas de `holdSecrecy` : rien n'y
         // est chiffré à l'étage gardé.
         cacheDurationMinutes: 0
+    },
+    {
+        id: 'osint',
+        title: 'OSINT',
+        icon: 'search',
+        WidgetContent: OsintWidget,
+        FullComponent: FeatureOsint,
+        // Démonté dès la fermeture, comme Git et Database : les cartes tiennent
+        // des résultats lus chez des tiers, qui n'ont aucune raison de survivre
+        // à la fermeture de l'écran — le cache TTL du serveur les resert de
+        // toute façon instantanément si on rouvre.
+        cacheDurationMinutes: 0,
+        // L'historique est chiffré par mot de passe : garder la DEK vivante
+        // pendant que l'écran est ouvert évite l'invite au milieu d'une session
+        // de recherche.
+        holdSecrecy: true
     },
     {
         id: 'mail',

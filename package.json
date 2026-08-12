@@ -40,6 +40,7 @@
     "fastify": "^5.8.5",
     "imapflow": "^1.6.5",
     "jose": "^6.2.3",
+    "libphonenumber-js": "^1.13.10",
     "mailparser": "^3.9.14",
     "mysql2": "^3.22.5",
     "nodemailer": "^9.0.3",
