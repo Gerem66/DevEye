@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useRef, type ReactNode } from 're
 import { ws } from '@/api/ws';
 import { refreshLive } from '@/stores/live';
 import { cursorKindAt } from './cursorKind';
+import { useHideLiveCursors } from './hideCursors';
 import { useWorkspaceState } from '@/stores/workspace';
 
 /**
@@ -41,6 +42,7 @@ const EMIT_FLOOR_MS = 50;
 
 export function LiveProvider({ surface, children }: { surface: HTMLElement | null; children: ReactNode }) {
     const { epoch } = useWorkspaceState();
+    const hidden = useHideLiveCursors();
 
     useEffect(() => {
         // La reconnexion est prise en charge par le store lui-même ; ce qu'il ne
@@ -60,8 +62,13 @@ export function LiveProvider({ surface, children }: { surface: HTMLElement | nul
     const lastPoint = useRef<{ x: number; y: number; buttons: number } | null>(null);
     const hadCursor = useRef(false);
 
+    // La coupure est **réciproque** : qui masque les curseurs des autres cesse
+    // aussi d'émettre le sien. C'est la sortie de cet effet qui la rend
+    // immédiate — au moment où le drapeau passe à vrai, React démonte l'exécution
+    // précédente, dont le nettoyage envoie déjà `cursor: null`. Les pairs nous
+    // perdent donc dans le même tic, sans une ligne de plus.
     useEffect(() => {
-        if (!surface) return;
+        if (!surface || hidden) return;
 
         const flush = (): void => {
             frame.current = null;
@@ -125,7 +132,7 @@ export function LiveProvider({ surface, children }: { surface: HTMLElement | nul
             if (hadCursor.current) ws.post(LIVE_CURSOR_COMMAND, { cursor: null });
             hadCursor.current = false;
         };
-    }, [surface]);
+    }, [surface, hidden]);
 
     return <SurfaceContext.Provider value={surface}>{children}</SurfaceContext.Provider>;
 }

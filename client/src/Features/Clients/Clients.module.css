@@ -539,72 +539,6 @@
     margin: 0 0 var(--space-md) 0;
 }
 
-/* DA on/off switch (generation row) */
-.switch {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-sm);
-    width: 100%;
-    background: none;
-    border: none;
-    padding: 0;
-    margin: 0 0 var(--space-md) 0;
-    text-align: left;
-    cursor: pointer;
-    color: var(--text-secondary);
-    font: inherit;
-}
-
-.switchTrack {
-    position: relative;
-    flex-shrink: 0;
-    width: 38px;
-    height: 22px;
-    margin-top: 1px;
-    border-radius: 999px;
-    background: var(--glass-bg, rgba(255, 255, 255, 0.08));
-    border: 1px solid var(--glass-border);
-    transition:
-        background var(--transition-fast),
-        border-color var(--transition-fast);
-}
-
-.switchThumb {
-    position: absolute;
-    top: 50%;
-    left: 3px;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: var(--text-muted);
-    transform: translate(0, -50%);
-    transition:
-        transform var(--transition-fast),
-        background var(--transition-fast);
-}
-
-.switchOn .switchTrack {
-    background: var(--accent-bg);
-    border-color: var(--accent);
-}
-
-.switchOn .switchThumb {
-    background: var(--accent);
-    transform: translate(16px, -50%);
-}
-
-.switchText {
-    font-size: 0.85rem;
-    line-height: 1.3;
-}
-
-.switchHint {
-    display: block;
-    font-size: 0.78rem;
-    color: var(--text-muted);
-    margin-top: 2px;
-}
-
 /* ── "Télécharger l'agent" picker (OS step, then arch step) ─────────────── */
 .osGrid {
     display: flex;
@@ -872,13 +806,6 @@
    les empiler et absorber la dernière. */
 .shareList > *:last-child {
     margin-bottom: 0;
-}
-
-.switch:disabled {
-    cursor: default;
-    /* framer-motion n'entre pas ici, mais on reste sur `filter` comme ailleurs :
-       l'opacité est une propriété qu'un parent animé s'approprie volontiers. */
-    filter: opacity(0.65);
 }
 
 .shareEmpty {

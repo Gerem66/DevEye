@@ -27,6 +27,7 @@ import { sentinelFeatures } from './sentinel';
 import { uptimeFeatures } from './uptime';
 import { userSetAvatarFeature } from './user/setAvatar';
 import { userSetColorFeature } from './user/setColor';
+import { userSetSettingFeature } from './user/setSetting';
 import { userSetThemeFeature } from './user/setTheme';
 import { weatherFeatures } from './weather';
 import { workspaceActivateFeature, workspaceSetFavoriteFeature } from './workspace/activate';
@@ -69,6 +70,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     userSetAvatarFeature,
     userSetThemeFeature,
     userSetColorFeature,
+    userSetSettingFeature,
     passwordListFeature,
     passwordCountFeature,
     passwordGetFeature,

@@ -1,0 +1,86 @@
+/* Interrupteur on/off aux couleurs du projet. Le bouton entier est la cible du
+   clic : la piste seule ferait une zone de 38 px de large, et le libellé — quand
+   il y en a un — est l'endroit où l'on vise naturellement. */
+.switch {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    text-align: left;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font: inherit;
+}
+
+/* Avec libellé, l'interrupteur occupe sa colonne — c'est le cas des dialogues,
+   où plusieurs s'empilent et doivent s'aligner. Sans libellé, il se réduit à sa
+   piste, pour tenir dans une ligne de valeurs. */
+.labelled {
+    width: 100%;
+    margin-bottom: var(--space-md);
+}
+
+.switchTrack {
+    position: relative;
+    flex-shrink: 0;
+    width: 38px;
+    height: 22px;
+    margin-top: 1px;
+    border-radius: 999px;
+    background: var(--glass-bg, rgba(255, 255, 255, 0.08));
+    border: 1px solid var(--glass-border);
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.switchThumb {
+    position: absolute;
+    top: 50%;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transform: translate(0, -50%);
+    transition:
+        transform var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.switchOn .switchTrack {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+}
+
+.switchOn .switchThumb {
+    background: var(--accent);
+    transform: translate(16px, -50%);
+}
+
+.switchText {
+    font-size: 0.85rem;
+    line-height: 1.3;
+}
+
+.switchHint {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.switch:focus-visible .switchTrack {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.switch:disabled {
+    cursor: default;
+    /* framer-motion n'entre pas ici, mais on reste sur `filter` comme ailleurs :
+       l'opacité est une propriété qu'un parent animé s'approprie volontiers. */
+    filter: opacity(0.65);
+}

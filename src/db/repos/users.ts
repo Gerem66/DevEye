@@ -18,6 +18,8 @@ export interface UsersRepo {
     updateAvatar(id: number, avatar: string): Promise<void>;
     /** Couleur d'identité du compte, montrée aux autres membres en direct. */
     updateColor(id: number, color: UserColor): Promise<void>;
+    /** Remplace le sac de drapeaux du compte (`userSettingFlagSchema`). */
+    updateSettings(id: number, settings: string[]): Promise<void>;
     setRole(id: number, role: 'user' | 'admin'): Promise<void>;
     setStatus(id: number, status: 'active' | 'suspended'): Promise<void>;
     /** Supprime le compte ; les FK CASCADE emportent ses espaces et leur contenu. */
@@ -85,6 +87,9 @@ export function usersRepo(pool: Q): UsersRepo {
         },
         async updateColor(id, color) {
             await pool.query('UPDATE users SET color = ? WHERE id = ?', [color, id]);
+        },
+        async updateSettings(id, settings) {
+            await pool.query('UPDATE users SET settings = ? WHERE id = ?', [JSON.stringify(settings), id]);
         },
         async setRole(id, role) {
             await pool.query('UPDATE users SET role = ? WHERE id = ?', [role, id]);

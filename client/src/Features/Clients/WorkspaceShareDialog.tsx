@@ -5,7 +5,7 @@ import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
 import type { DeviceShareTarget } from 'deveye-types';
 
-import { Switch } from './Switch';
+import { Switch } from '@/Components/Switch';
 import styles from './Clients.module.css';
 
 interface WorkspaceShareDialogProps {

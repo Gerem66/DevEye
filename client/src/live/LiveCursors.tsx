@@ -7,6 +7,7 @@ import { userColorVar } from '@/Features/Profile/userColors';
 import { useLive } from '@/stores/live';
 import { useActiveWorkspace } from '@/stores/workspace';
 import { CURSOR_GLYPHS } from './cursorGlyphs';
+import { useHideLiveCursors } from './hideCursors';
 import { useLiveSurface } from './LiveProvider';
 import styles from './LiveCursors.module.css';
 
@@ -70,9 +71,12 @@ export function LiveCursors() {
     const workspace = useActiveWorkspace();
     const surface = useLiveSurface();
     const geometry = useSurfaceGeometry(surface);
+    const hidden = useHideLiveCursors();
 
-    // Un espace personnel est une salle d'une personne : rien à afficher.
-    if (!geometry || !workspace || workspace.kind === 'personal' || cursors.length === 0) return null;
+    // Un espace personnel est une salle d'une personne : rien à afficher. Le
+    // réglage de compte s'ajoute ici, après les hooks — sortir plus haut les
+    // rendrait conditionnels, ce que React n'admet pas.
+    if (!geometry || !workspace || workspace.kind === 'personal' || hidden || cursors.length === 0) return null;
 
     const members = new Map((workspace.users ?? []).map((u) => [u.id, u]));
     // La couleur n'est pas répétée dans la trame de curseur : elle est déjà dans

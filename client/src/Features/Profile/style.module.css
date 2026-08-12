@@ -125,9 +125,45 @@
     padding-bottom: var(--space-sm);
 }
 
-/* "Sécurité → x / 2" score: orange below max, green at max. */
+/* Une précision sous l'intitulé d'une ligne, quand la valeur seule ne dit pas
+   tout — la réciprocité de la coupure des curseurs, par exemple. */
+.rowHint {
+    display: block;
+    font-weight: 400;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* "Sécurité → x / 3" score: orange below max, green at max. */
 .securityScore {
     font-weight: 700;
+}
+
+/* Le score est un bouton : il ouvre la feature Sécurité. Rien ne doit le faire
+   ressembler à un bouton au repos — c'est une valeur dans une liste de valeurs,
+   et seule sa réaction au survol trahit qu'on peut cliquer : une pastille se
+   pose derrière, comme un bouton-texte ou un onglet. Le fond est là dès le repos
+   mais transparent, pour que la ligne ne se décale pas au survol. */
+.securityScoreBtn {
+    background: transparent;
+    border: 0;
+    padding: 2px var(--space-sm);
+    margin: -2px calc(var(--space-sm) * -1);
+    border-radius: var(--radius-sm);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.securityScoreBtn:hover {
+    background: var(--glass-bg-light);
+}
+
+.securityScoreBtn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 .securityScore.partial {

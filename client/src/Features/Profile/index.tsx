@@ -4,12 +4,15 @@ import { useAuth } from '@/auth/AuthProvider';
 import { ws } from '@/api/ws';
 import { Dialog } from '@/Components/Dialog';
 import Button from '@/Components/Button';
+import Switch from '@/Components/Switch';
 
 import type { FeatureProps } from '@/Features/types';
 import { ACCEPTED_TYPES, avatarSrc, fileToAvatarDataUrl } from './avatar';
 import { PasswordDialog } from './PasswordDialog';
 import { USER_COLOR_OPTIONS, userColorVar } from './userColors';
 import styles from './style.module.css';
+import { HIDE_LIVE_CURSORS } from '@/live/hideCursors';
+import { requestOpenView } from '@/stores/viewRequest';
 import { useWorkspaceState } from '@/stores/workspace';
 
 import type { CSSProperties } from 'react';
@@ -42,7 +45,10 @@ export default function FeatureProfile({ user, workspace }: FeatureProps) {
     const [uploading, setUploading] = useState(false);
     const [avatarError, setAvatarError] = useState<string | null>(null);
     const [savingColor, setSavingColor] = useState(false);
+    const [savingCursors, setSavingCursors] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const showCursors = !user.settings.includes(HIDE_LIVE_CURSORS);
 
     // La couleur est appliquée localement d'abord : c'est un réglage cosmétique
     // dont l'effet doit se voir à l'instant du clic. En cas d'échec on la remet
@@ -58,6 +64,30 @@ export default function FeatureProfile({ user, workspace }: FeatureProps) {
             updateUser({ color: previous });
         } finally {
             setSavingColor(false);
+        }
+    };
+
+    // Même conduite que la couleur, et pour la même raison : l'effet du clic est
+    // immédiat à l'écran (les curseurs des pairs disparaissent, le nôtre cesse
+    // d'être émis), donc l'état local part devant et ne revient en arrière que si
+    // le serveur refuse.
+    const onToggleCursors = async (visible: boolean) => {
+        if (savingCursors) return;
+        const previous = user.settings;
+        setSavingCursors(true);
+        updateUser({
+            settings: visible ? previous.filter((s) => s !== HIDE_LIVE_CURSORS) : [...previous, HIDE_LIVE_CURSORS]
+        });
+        try {
+            // Le serveur renvoie le sac tel qu'il vient de l'écrire : s'aligner
+            // dessus plutôt que sur notre calcul évite de diverger d'un onglet à
+            // l'autre si un drapeau a bougé ailleurs entre-temps.
+            const res = await ws.send('user.setSetting', { flag: HIDE_LIVE_CURSORS, enabled: !visible });
+            updateUser({ settings: res.settings });
+        } catch {
+            updateUser({ settings: previous });
+        } finally {
+            setSavingCursors(false);
         }
     };
 
@@ -140,12 +170,37 @@ export default function FeatureProfile({ user, workspace }: FeatureProps) {
                             ))}
                         </dd>
                     </div>
+                    <div className={`${styles.row} ${styles.rowAction}`}>
+                        <dt>
+                            Curseurs des autres
+                            <span className={styles.rowHint}>Masqués, votre curseur disparaît aussi</span>
+                        </dt>
+                        <dd>
+                            <Switch
+                                checked={showCursors}
+                                onChange={(visible) => void onToggleCursors(visible)}
+                                disabled={savingCursors}
+                                aria-label='Afficher les curseurs des autres membres'
+                            />
+                        </dd>
+                    </div>
                     <div className={styles.row}>
                         <dt>Sécurité</dt>
                         <dd>
-                            <span className={`${styles.securityScore} ${securityFull ? styles.full : styles.partial}`}>
+                            {/* Un score incomplet sans porte de sortie est un
+                                cul-de-sac : le compteur ouvre la feature qui le
+                                fait bouger. */}
+                            <button
+                                type='button'
+                                className={`${styles.securityScore} ${styles.securityScoreBtn} ${
+                                    securityFull ? styles.full : styles.partial
+                                }`}
+                                onClick={() => requestOpenView('security')}
+                                title='Ouvrir la sécurité'
+                                aria-label={`Sécurité ${securityScore} sur ${SECURITY_MAX} — ouvrir la sécurité`}
+                            >
                                 {securityScore} / {SECURITY_MAX}
-                            </span>
+                            </button>
                         </dd>
                     </div>
                     <div className={`${styles.row} ${styles.rowAction}`}>

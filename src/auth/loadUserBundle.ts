@@ -134,7 +134,14 @@ function parseHomeLayout(raw: string | null | undefined): HomeLayout | null {
     }
 }
 
-function parseStringArray(raw: unknown): string[] {
+/**
+ * Une colonne `JSON` tenant un tableau de chaînes, lue sans supposer ce que le
+ * driver en a fait : selon la configuration du pool, mysql2 rend soit la valeur
+ * déjà désérialisée, soit la chaîne brute. Les deux sont acceptées, et tout le
+ * reste vaut « rien » — une colonne illisible ne doit pas faire échouer une
+ * session ni une écriture de drapeau.
+ */
+export function parseStringArray(raw: unknown): string[] {
     if (Array.isArray(raw)) return raw.map(String);
     if (typeof raw === 'string') {
         try {

@@ -2,7 +2,7 @@ import { Dialog } from '@/Components/Dialog';
 import Button from '@/Components/Button';
 import SelectInput from '@/Components/SelectInput';
 import TextInput from '@/Components/TextInput';
-import { Switch } from './Switch';
+import { Switch } from '@/Components/Switch';
 import { formatExpiry } from './format';
 import type { LinkCodes } from './useLinkCodes';
 import styles from './Clients.module.css';
