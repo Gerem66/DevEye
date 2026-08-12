@@ -59,6 +59,13 @@ pub enum FilesEvent {
 
 /// Bytes per download chunk (base64 keeps each frame well under the wire cap).
 const DOWNLOAD_CHUNK: usize = 256 * 1024;
+/// Entries a folder archive may walk before giving up (mirrors the analysis budget:
+/// a mistaken « télécharger / » must fail fast rather than crawl the whole disk).
+const ARCHIVE_MAX_ENTRIES: u64 = 200_000;
+/// Ceiling on the **uncompressed** file bytes a folder archive may carry. The
+/// browser rebuilds the whole stream in memory before saving it, so this is really
+/// the client's limit, not the device's.
+const ARCHIVE_MAX_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
 // ───────────────────────────── metadata helpers ───────────────────────────
 fn kind_of(ft: &std::fs::FileType) -> &'static str {
@@ -432,9 +439,147 @@ pub fn upload_chunk(path: &str, offset: u64, data: &[u8]) -> Result<()> {
     Ok(())
 }
 
-/// Stream a file back to the server in chunks on a dedicated OS thread (blocking
-/// reads, back-pressured by the bounded channel). The final frame carries `done`,
-/// or an `error` if the file couldn't be opened/read.
+/// `Write` sink that cuts what it is given into `DOWNLOAD_CHUNK` frames and pushes
+/// them on the files channel. Used to stream an archive that is never materialised
+/// anywhere: back-pressure comes from the bounded channel, which blocks the writer
+/// (and with it the whole walk) instead of letting the archive pile up in memory.
+struct ChunkSink {
+    op_id: String,
+    tx: Sender<FilesEvent>,
+    buf: Vec<u8>,
+}
+
+impl ChunkSink {
+    fn emit(&mut self, data: Vec<u8>) -> std::io::Result<()> {
+        self.tx
+            .blocking_send(FilesEvent::Chunk {
+                op_id: self.op_id.clone(),
+                data,
+                done: false,
+                error: None,
+            })
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::BrokenPipe, "session fermée"))
+    }
+
+    /// Push whatever is left, however short — called once the archive is complete.
+    fn emit_tail(&mut self) -> std::io::Result<()> {
+        if self.buf.is_empty() {
+            return Ok(());
+        }
+        let tail = std::mem::take(&mut self.buf);
+        self.emit(tail)
+    }
+}
+
+impl std::io::Write for ChunkSink {
+    fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+        self.buf.extend_from_slice(data);
+        while self.buf.len() >= DOWNLOAD_CHUNK {
+            let rest = self.buf.split_off(DOWNLOAD_CHUNK);
+            let frame = std::mem::replace(&mut self.buf, rest);
+            self.emit(frame)?;
+        }
+        Ok(data.len())
+    }
+
+    /// Frames are cut by size, not by flush: an early flush would emit a short one
+    /// for nothing. The tail goes out through {@link ChunkSink::emit_tail}.
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Write `root` into `sink` as a gzipped tar, entries prefixed with the folder's
+/// own name so extracting never scatters files into the current directory.
+///
+/// Iterative DFS with the same discipline as {@link dir_size}: symlinks are stored
+/// as symlinks (never followed, so no loop), kernel filesystems are skipped, and an
+/// entry the agent can't read is skipped rather than failing the whole archive —
+/// a single root-owned file in a home directory would otherwise sink it.
+fn archive_dir(root: &Path, sink: &mut ChunkSink) -> Result<()> {
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+
+    let base = Path::new(root.file_name().unwrap_or_else(|| "archive".as_ref()));
+    // `fast` rather than the default: the archive is produced live on a monitored
+    // machine, and the extra ratio isn't worth the CPU it costs there.
+    let mut builder = tar::Builder::new(GzEncoder::new(sink, Compression::fast()));
+    builder.follow_symlinks(false);
+
+    let mut budget = ARCHIVE_MAX_ENTRIES;
+    let mut bytes = 0u64;
+    let mut skipped = 0u64;
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&dir) else {
+            skipped += 1;
+            continue;
+        };
+        for entry in rd.flatten() {
+            if budget == 0 {
+                bail!("dossier trop volumineux : plus de {ARCHIVE_MAX_ENTRIES} éléments");
+            }
+            budget -= 1;
+            let Ok(ft) = entry.file_type() else { continue };
+            let path = entry.path();
+            let Ok(rel) = path.strip_prefix(root) else {
+                continue;
+            };
+            let name = base.join(rel);
+            if ft.is_dir() {
+                if is_virtual_fs(&path) {
+                    continue;
+                }
+                if builder.append_dir(&name, &path).is_err() {
+                    skipped += 1;
+                    continue;
+                }
+                stack.push(path);
+            } else if ft.is_file() {
+                let Ok(meta) = entry.metadata() else {
+                    skipped += 1;
+                    continue;
+                };
+                bytes += meta.len();
+                if bytes > ARCHIVE_MAX_BYTES {
+                    bail!(
+                        "dossier trop volumineux : plus de {} Go",
+                        ARCHIVE_MAX_BYTES / (1024 * 1024 * 1024)
+                    );
+                }
+                if builder.append_path_with_name(&path, &name).is_err() {
+                    skipped += 1;
+                }
+            } else if ft.is_symlink() && builder.append_path_with_name(&path, &name).is_err() {
+                skipped += 1;
+            }
+            // Anything else (socket, fifo, device) has no content to archive.
+        }
+    }
+
+    // `into_inner` writes the tar trailer, `finish` the gzip one; then whatever is
+    // left in the sink is short by definition and goes out as the last frame.
+    let sink = builder
+        .into_inner()
+        .context("écriture de l'archive")?
+        .finish()
+        .context("compression de l'archive")?;
+    sink.emit_tail().context("envoi de l'archive")?;
+    if skipped > 0 {
+        tracing::warn!(
+            skipped,
+            root = %root.display(),
+            "archive de dossier : éléments illisibles ignorés"
+        );
+    }
+    Ok(())
+}
+
+/// Stream a path back to the server in chunks on a dedicated OS thread (blocking
+/// reads, back-pressured by the bounded channel). A file is streamed as-is; a
+/// **directory** is streamed as a `.tar.gz` built on the fly (nothing is written to
+/// the device's disk). The final frame carries `done`, or an `error` if the path
+/// couldn't be read.
 pub fn spawn_download(op_id: String, path: String, tx: Sender<FilesEvent>) {
     std::thread::spawn(move || {
         use std::io::Read;
@@ -451,7 +596,22 @@ pub fn spawn_download(op_id: String, path: String, tx: Sender<FilesEvent>) {
             Err(e) => return fail(&tx, e.to_string()),
         };
         if meta.is_dir() {
-            return fail(&tx, "C'est un dossier, pas un fichier".to_string());
+            let mut sink = ChunkSink {
+                op_id: op_id.clone(),
+                tx: tx.clone(),
+                buf: Vec::with_capacity(DOWNLOAD_CHUNK),
+            };
+            return match archive_dir(Path::new(&path), &mut sink) {
+                Ok(()) => {
+                    let _ = tx.blocking_send(FilesEvent::Chunk {
+                        op_id: op_id.clone(),
+                        data: vec![],
+                        done: true,
+                        error: None,
+                    });
+                }
+                Err(e) => fail(&tx, e.to_string()),
+            };
         }
         let mut file = match std::fs::File::open(&path) {
             Ok(f) => f,
@@ -619,5 +779,60 @@ mod tests {
         let m = build_matcher(&f).unwrap().unwrap();
         assert!(m.is_match("error.log"));
         assert!(!m.is_match("readme.md"));
+    }
+
+    /// The archive is only ever seen as a stream of chunks, so this walks the
+    /// whole path: build a small tree, archive it into the channel, reassemble the
+    /// frames and read the result back as a real `.tar.gz`.
+    #[test]
+    fn archive_dir_streams_a_readable_targz() {
+        use std::io::Read;
+
+        let root = std::env::temp_dir().join(format!("deveye-archive-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("nested")).unwrap();
+        std::fs::write(root.join("top.txt"), b"dessus").unwrap();
+        std::fs::write(root.join("nested/deep.txt"), b"dedans").unwrap();
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel(16);
+        let walked = root.clone();
+        let writer = std::thread::spawn(move || {
+            let mut sink = ChunkSink {
+                op_id: "op".to_string(),
+                tx,
+                buf: Vec::new(),
+            };
+            archive_dir(&walked, &mut sink)
+        });
+
+        let mut bytes = Vec::new();
+        while let Some(FilesEvent::Chunk { data, error, .. }) = rx.blocking_recv() {
+            assert!(error.is_none(), "chunk en erreur : {error:?}");
+            bytes.extend_from_slice(&data);
+        }
+        writer.join().unwrap().unwrap();
+        let _ = std::fs::remove_dir_all(&root);
+
+        let mut gz = flate2::read::GzDecoder::new(&bytes[..]);
+        let mut tar_bytes = Vec::new();
+        gz.read_to_end(&mut tar_bytes).unwrap();
+
+        let base = root.file_name().unwrap().to_string_lossy().into_owned();
+        let mut names: Vec<String> = tar::Archive::new(&tar_bytes[..])
+            .entries()
+            .unwrap()
+            .map(|e| e.unwrap().path().unwrap().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        // Everything is prefixed by the folder's own name, so extracting it never
+        // scatters files into the current directory.
+        assert_eq!(
+            names,
+            vec![
+                format!("{base}/nested"),
+                format!("{base}/nested/deep.txt"),
+                format!("{base}/top.txt"),
+            ]
+        );
     }
 }

@@ -281,12 +281,18 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
         return off;
     }, [deviceId, analyze, navigate, invalidateUsage, path]);
 
+    /**
+     * Télécharge une entrée. Un dossier arrive sous forme d'archive `.tar.gz`
+     * construite à la volée par l'agent (rien n'est écrit sur l'appareil) : seul
+     * le nom du fichier enregistré change ici, le flux est le même que pour un
+     * fichier — mêmes chunks, même réassemblage.
+     */
     const download = useCallback(
         (entry: FileEntry) => {
             const opId = crypto.randomUUID();
             downloadOp.current = opId;
             dlBuf.current = [];
-            dlName.current = entry.name;
+            dlName.current = entry.kind === 'dir' ? `${entry.name}.tar.gz` : entry.name;
             setDownloading(entry.name);
             setError(null);
             void ws.send('device.filesDownload', { deviceId, opId, path: joinPath(path, entry.name) }).catch((e) => {
@@ -599,19 +605,17 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                                         <span className={styles.filesPerm}>{permString(entry.mode)}</span>
                                     </div>
                                     <div className={styles.filesRowActions}>
-                                        {!isDir && (
-                                            <button
-                                                type='button'
-                                                title='Télécharger'
-                                                disabled={downloading !== null}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    download(entry);
-                                                }}
-                                            >
-                                                <span className='icon icon-download' />
-                                            </button>
-                                        )}
+                                        <button
+                                            type='button'
+                                            title={isDir ? 'Télécharger (archive .tar.gz)' : 'Télécharger'}
+                                            disabled={downloading !== null}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                download(entry);
+                                            }}
+                                        >
+                                            <span className={`icon ${isDir ? 'icon-archive' : 'icon-download'}`} />
+                                        </button>
                                         <button
                                             type='button'
                                             title='Renommer'
