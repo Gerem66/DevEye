@@ -10,6 +10,7 @@ import { metricsFeatures } from './metrics';
 import { noteFeatures } from './note';
 import { osintFeatures } from './osint';
 import { databaseFeatures } from './database';
+import { audienceFeatures } from './audience';
 import { gitFeatures } from './git';
 import { projectFeatures } from './project';
 import {
@@ -82,6 +83,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...projectFeatures,
     ...gitFeatures,
     ...databaseFeatures,
+    ...audienceFeatures,
     ...deviceFeatures,
     ...cloudSyncFeatures,
     ...metricsFeatures,

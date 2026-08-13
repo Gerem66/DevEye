@@ -16,13 +16,32 @@ type Q = Queryable;
  *  - CloudSync — une BMK globale, indépendante des espaces ;
  *  - les tables filles du mail (dossiers, messages) — voir la garde préalable.
  */
+/**
+ * Comment retrouver les lignes de l'espace.
+ *
+ * `workspace_id` — la table le porte elle-même, ce qui est le cas courant.
+ * `audience_site` — la table ne connaît que son site, et c'est le site qui
+ * porte l'espace. Plutôt que de dupliquer `workspace_id` sur une table qui
+ * grandit vite (les libellés d'audience), on remonte par sous-requête : la
+ * colonne dupliquée aurait été un second endroit où la vérité peut diverger.
+ *
+ * ⚠️ Ces clauses sont **interpolées** dans le SQL. Elles sont donc écrites ici,
+ * une fois, et jamais construites depuis une donnée reçue.
+ */
+const SCOPE_WHERE = {
+    workspace_id: 'workspace_id = ?',
+    audience_site: 'site_id IN (SELECT id FROM audience_sites WHERE workspace_id = ?)'
+} as const;
+
+type EncryptedScope = keyof typeof SCOPE_WHERE;
+
 interface EncryptedColumn {
     table: string;
     /** Colonne identifiante, pour cibler la mise à jour ligne par ligne. */
     id: string;
     column: string;
     /** Comment retrouver les lignes de l'espace. */
-    scope: 'workspace_id';
+    scope: EncryptedScope;
     /**
      * Étage sous lequel la colonne a été écrite, donc celui qui sait la relire.
      * Se tromper ici ne corrompt rien — la relecture échoue et la conversion est
@@ -85,7 +104,25 @@ const COLUMNS: EncryptedColumn[] = [
     { table: 'database_connections', id: 'id', column: 'secret_enc', scope: 'workspace_id', tier: 'open' },
     { table: 'database_connections', id: 'id', column: 'access_content', scope: 'workspace_id', tier: 'open' },
     { table: 'database_connections', id: 'id', column: 'access_secret_enc', scope: 'workspace_id', tier: 'open' },
-    { table: 'database_alerts', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' }
+    { table: 'database_alerts', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    // Audience (migration `076`). Même famille que les dépôts et les bases : le
+    // site appartient à l'espace et vit toujours à l'étage ouvert, parce que
+    // l'ingestion publique le lit sans session.
+    //
+    // ⚠️ `audience_labels` n'a **pas** de `workspace_id` : un libellé pend à son
+    // site, qui seul porte l'espace. La conversion le rejoint donc par jointure
+    // (voir `scope: 'site'` plus bas). L'oublier ne casserait rien de visible
+    // tout de suite — les nombres continueraient d'être justes — mais chaque
+    // classement se viderait de ses intitulés, ce qui est la pire des deux
+    // pannes : silencieuse, et découverte des semaines plus tard.
+    { table: 'audience_sites', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'audience_labels', id: 'id', column: 'content', scope: 'audience_site', tier: 'open' },
+    // Les entonnoirs (migration `078`). Même portée : ils pendent à leur site.
+    // Les oublier ne ferait perdre aucune mesure — un entonnoir n'est qu'une
+    // lecture — mais laisserait un écran de marches sans intitulés, ce qui est
+    // exactement aussi inutilisable.
+    { table: 'audience_funnels', id: 'id', column: 'content', scope: 'audience_site', tier: 'open' },
+    { table: 'audience_funnel_steps', id: 'id', column: 'content', scope: 'audience_site', tier: 'open' }
 ];
 
 export interface EncryptedCell {
@@ -113,7 +150,7 @@ export function workspaceRekeyRepo(pool: Q): WorkspaceRekeyRepo {
             const cells: EncryptedCell[] = [];
             for (const c of COLUMNS) {
                 const r = await pool.query<Record<string, string | number | null>>(
-                    `SELECT ${c.id} AS row_id, ${c.column} AS value FROM ${c.table} WHERE ${c.scope} = ? AND ${c.column} IS NOT NULL AND ${c.column} <> ''`,
+                    `SELECT ${c.id} AS row_id, ${c.column} AS value FROM ${c.table} WHERE ${SCOPE_WHERE[c.scope]} AND ${c.column} IS NOT NULL AND ${c.column} <> ''`,
                     [workspaceId]
                 );
                 for (const row of r.rows) {

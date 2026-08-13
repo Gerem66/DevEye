@@ -31,6 +31,7 @@ import type { CloudSyncEngine } from '@/cloudSync/engine';
 import type { UptimeMonitor } from '@/Services/UptimeMonitor';
 import type { IntegrationSyncService } from '@/Services/IntegrationSyncService';
 import type { DatabaseMonitor } from '@/Services/DatabaseMonitor';
+import type { AudienceIngest } from '@/Services/AudienceIngest';
 import type { SecurityMonitor } from '@/Services/SecurityMonitor';
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
@@ -46,6 +47,7 @@ interface WSDeps {
     uptime: UptimeMonitor;
     integrations: IntegrationSyncService;
     databases: DatabaseMonitor;
+    audience: AudienceIngest;
     sentinel: SecurityMonitor;
     audit: AuditLog;
 }
@@ -80,7 +82,7 @@ function unionWorkspaces(a: readonly number[], b: readonly number[]): number[] {
 
 export async function registerWS(
     app: FastifyInstance,
-    { db, crypt, hub, live: liveHub, cloudSync, uptime, integrations, databases, sentinel, audit }: WSDeps
+    { db, crypt, hub, live: liveHub, cloudSync, uptime, integrations, databases, audience, sentinel, audit }: WSDeps
 ): Promise<void> {
     app.get('/ws', { websocket: true }, async (socket, req) => {
         const accessToken = req.cookies[ACCESS_COOKIE];
@@ -301,6 +303,7 @@ export async function registerWS(
                         uptime,
                         integrations,
                         databases,
+                        audience,
                         sentinel
                     },
                     inputParse.data

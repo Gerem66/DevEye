@@ -16,6 +16,14 @@ import { featureHandlers } from './registry';
  */
 const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     admin: 'workspace',
+    // Même forme que `git` et `database` : préfixe unique, verbes en camelCase
+    // derrière le point. Le filet `MUTATION_VERB` n'en voit donc **aucune** —
+    // les `mutates` de cette feature se relisent à la main.
+    //
+    // ⚠️ Le gros du trafic de ce sujet ne passe pas par une commande du tout :
+    // l'ingestion publique écrit sans socket et diffuse elle-même, coalescée à
+    // une fois par minute et par espace (voir `Services/AudienceIngest.ts`).
+    audience: 'audience',
     cloudSync: 'cloudsync',
     // Même forme que `git` : préfixe unique, verbes en camelCase derrière le
     // point. Le filet `MUTATION_VERB` n'en voit donc presque aucune — les

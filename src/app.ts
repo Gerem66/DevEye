@@ -2,15 +2,16 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import fastifyCookie from '@fastify/cookie';
-import fastifyCors from '@fastify/cors';
+import fastifyCors, { type FastifyCorsOptions } from '@fastify/cors';
 import fastifyHelmet from '@fastify/helmet';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
-import Fastify, { type FastifyBaseLogger, type FastifyError, type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyBaseLogger, type FastifyError, type FastifyInstance, type FastifyRequest } from 'fastify';
 import { err, ok, serverStatusSchema, type ErrorCode } from 'deveye-types';
 
 import { agentRoutes } from '@/agent/routes';
+import { audienceRoutes } from '@/audience/routes';
 import { registerAgentWS } from '@/agent/ws';
 import { MonitorHub } from '@/agent/hub';
 import { LiveHub } from '@/live/hub';
@@ -25,6 +26,7 @@ import { MailSyncService } from '@/Services/MailSyncService';
 import { UptimeMonitor } from '@/Services/UptimeMonitor';
 import { IntegrationSyncService } from '@/Services/IntegrationSyncService';
 import { DatabaseMonitor } from '@/Services/DatabaseMonitor';
+import { AudienceIngest } from '@/Services/AudienceIngest';
 import { SecurityMonitor } from '@/Services/SecurityMonitor';
 import { mailAttachmentRoutes } from '@/mail/attachmentRoutes';
 import { mailOAuthRoutes } from '@/mail/oauthRoutes';
@@ -32,6 +34,9 @@ import { status } from '@/status';
 
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
+
+/** Ce que le délégateur CORS rend pour une requête donnée. */
+type FastifyCorsDelegateCallback = (error: Error | null, options: FastifyCorsOptions) => void;
 
 export interface AppDeps {
     db: Database;
@@ -46,6 +51,8 @@ export interface BuiltApp {
     uptime: UptimeMonitor;
     integrations: IntegrationSyncService;
     databases: DatabaseMonitor;
+    /** Ingestion d'audience — démarrée/arrêtée par index.ts. */
+    audience: AudienceIngest;
     /** Moteur Sentinelle — démarré/arrêté par index.ts. */
     sentinel: SecurityMonitor;
     /** Synchro Mail en tâche de fond (comptes « open » uniquement) — démarrée/arrêtée par index.ts. */
@@ -59,10 +66,28 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     });
 
     await app.register(fastifyHelmet, { contentSecurityPolicy: false });
-    await app.register(fastifyCors, {
-        origin: env.PUBLIC_ORIGIN,
-        credentials: true,
-        methods: ['GET', 'POST']
+
+    // CORS **délégué par requête**, et non fixé une fois pour toutes.
+    //
+    // Tout DevEye n'accepte que `PUBLIC_ORIGIN`, avec les cookies de session.
+    // L'ingestion d'audience, elle, est appelée depuis des sites tiers qu'on ne
+    // connaît pas d'avance : elle doit accepter n'importe quelle origine, et
+    // surtout **sans** identifiants — il n'y a aucune session à y transporter.
+    //
+    // Le délégateur est la seule forme qui reçoive la requête ; `origin` seul ne
+    // voit pas le chemin, et une instance encapsulée aurait fait vivre les
+    // routes publiques dans un contexte Fastify séparé pour un seul en-tête.
+    //
+    // ⚠️ Ce n'est pas la protection de l'ingestion. Le CORS est un mécanisme
+    // que le navigateur applique à lui-même ; ce qui filtre réellement, c'est la
+    // liste d'origines **par site** vérifiée côté serveur (`originAllowed`).
+    await app.register(fastifyCors, () => (req: FastifyRequest, callback: FastifyCorsDelegateCallback) => {
+        const url = req.url ?? '';
+        if (url.startsWith('/api/t/') || url === '/t.js' || url.startsWith('/t.js?')) {
+            callback(null, { origin: '*', credentials: false, methods: ['GET', 'POST'] });
+            return;
+        }
+        callback(null, { origin: env.PUBLIC_ORIGIN, credentials: true, methods: ['GET', 'POST'] });
     });
     await app.register(fastifyCookie);
     await app.register(fastifyRateLimit, {
@@ -103,6 +128,23 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         return reply.code(status).send(err(code, message));
     });
 
+    // `text/plain` porteur de JSON : c'est ce que `navigator.sendBeacon` sait
+    // envoyer sans déclencher de requête préalable OPTIONS, et donc la seule
+    // forme qui traverse une page tierce en un aller simple. Aucune autre route
+    // n'accepte ce type ; un corps illisible rend `undefined`, que la validation
+    // zod de l'ingestion écarte comme le reste.
+    app.addContentTypeParser('text/plain', { parseAs: 'string' }, (_req, body, done) => {
+        if (!body) {
+            done(null, undefined);
+            return;
+        }
+        try {
+            done(null, JSON.parse(body as string));
+        } catch {
+            done(null, undefined);
+        }
+    });
+
     app.get('/api/health', { logLevel: 'silent' }, async () => ({ ok: true }));
 
     // Boot/deployment readiness (agent sync + future steps). Public + cheap so
@@ -130,6 +172,10 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // Les canaux de notification sont ceux d'Uptime : mêmes destinataires, une
     // seule configuration à tenir à jour.
     const databases = new DatabaseMonitor({ db: deps.db, crypt: deps.crypt, logger, live, uptime });
+    // L'ingestion d'audience. Rien à joindre au-dehors : contrairement aux
+    // quatre services ci-dessus, celui-ci ne sonde rien — il **reçoit**, et son
+    // seul travail périodique est de vider ce qu'on lui a déposé.
+    const audience = new AudienceIngest({ db: deps.db, crypt: deps.crypt, logger, live });
     // Sentinelle a **ses propres** canaux (`notification_settings`, ligne
     // `sentinel`). Elle empruntait ceux d'Uptime : une alerte de sécurité
     // arrivait alors sur un salon désigné pour la disponibilité, sans que rien
@@ -138,6 +184,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
 
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await agentRoutes(app, { db: deps.db, hub, live, audit });
+    await audienceRoutes(app, { ingest: audience });
     await mailOAuthRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await mailAttachmentRoutes(app, { db: deps.db, crypt: deps.crypt });
     await registerWS(app, {
@@ -149,6 +196,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         uptime,
         integrations,
         databases,
+        audience,
         sentinel,
         audit
     });
@@ -183,5 +231,5 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         app.log.debug({ clientDir }, 'No client build found; static serving disabled (host dev uses Vite)');
     }
 
-    return { app, cloudSync, uptime, mailSync, integrations, databases, sentinel };
+    return { app, cloudSync, uptime, mailSync, integrations, databases, audience, sentinel };
 }

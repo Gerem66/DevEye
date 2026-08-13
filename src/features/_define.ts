@@ -8,6 +8,7 @@ import type { LiveTransport } from '@/live/hub';
 import type { UptimeMonitor } from '@/Services/UptimeMonitor';
 import type { IntegrationSyncService } from '@/Services/IntegrationSyncService';
 import type { DatabaseMonitor } from '@/Services/DatabaseMonitor';
+import type { AudienceIngest } from '@/Services/AudienceIngest';
 import type { SecurityMonitor } from '@/Services/SecurityMonitor';
 import type { ErrorCode, LiveTopic, LogLevelName } from 'deveye-types';
 import type { Logger } from 'pino';
@@ -120,6 +121,19 @@ export interface FeatureContext {
      * relevé manuel et un relevé automatique ne puissent pas diverger.
      */
     databases?: DatabaseMonitor;
+    /**
+     * Ingestion d'audience.
+     *
+     * Sert à **une** chose : lui faire oublier ce qu'elle sait des sites après
+     * une mutation (`invalidate`). Elle tient un cache `clé publique → site`
+     * pour ne pas interroger la base à chaque visite ; sans cet appel, un site
+     * qu'on vient d'éteindre continuerait d'accepter des mesures, et une clé
+     * qu'on vient de renouveler laisserait l'ancienne entrer.
+     *
+     * Aucune lecture ne passe par elle : les statistiques viennent des dépôts,
+     * pour qu'une réponse ne dépende jamais de l'état d'une file en mémoire.
+     */
+    audience?: AudienceIngest;
     /**
      * Moteur Sentinelle.
      *

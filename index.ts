@@ -28,7 +28,10 @@ async function main() {
     const db = createDatabase(getQueryable(pool));
     const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
 
-    const { app, cloudSync, uptime, mailSync, integrations, databases, sentinel } = await buildApp({ db, crypt });
+    const { app, cloudSync, uptime, mailSync, integrations, databases, audience, sentinel } = await buildApp({
+        db,
+        crypt
+    });
     const audit = createAuditLog(db);
 
     const shutdown = async (signal: string) => {
@@ -38,6 +41,7 @@ async function main() {
             mailSync.stop();
             integrations.stop();
             databases.stop();
+            audience.stop();
             sentinel.stop();
             await app.close();
             await pool.end();
@@ -89,6 +93,9 @@ async function main() {
     mailSync.start();
     integrations.start();
     databases.start();
+    // Audience : la seule qui ne sonde rien. Elle vide ce que l'ingestion
+    // publique a déposé, et tient l'agrégat journalier + la rétention par site.
+    audience.start();
     sentinel.start();
 
     await app.listen({ port: env.LISTEN_PORT, host: '0.0.0.0' });

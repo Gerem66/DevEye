@@ -19,6 +19,7 @@ import { projectChatFeatures } from './chat';
 import { projectTimelineFeatures } from './timeline';
 import { projectHistoryFeatures } from './history';
 import { projectDatabaseLinkFeatures } from './databaseLink';
+import { projectAudienceLinkFeatures } from './audienceLink';
 import { projectRepoLinkFeatures } from './repoLink';
 import { projectDeployFeatures } from './deploy';
 import { projectLinkFeatures } from './links';
@@ -384,6 +385,21 @@ export const projectSetSecurityTierFeature: FeatureDefinition<
             }
         }
 
+        // Et pour les sites suivis, troisième fois la même règle. Elle vaut
+        // pour tout objet **d'espace** qu'un projet ne fait que pointer : la
+        // liaison est en clair, l'objet vit à l'étage ouvert, et un service
+        // sans session y travaille. Les sites et leur historique survivent.
+        if (input.securityTier === 'guarded') {
+            const sites = await ctx.db.audience.listLinkedIds(input.projectId, ctx.workspaceId);
+            if (sites.length > 0) {
+                await ctx.db.audience.unlinkAll(input.projectId, ctx.workspaceId);
+                await recordEvent(ctx, existing, {
+                    kind: 'project.audienceUnlink',
+                    label: `${sites.length} site${sites.length > 1 ? 's' : ''} de suivi délié${sites.length > 1 ? 's' : ''} (projet passé en confidentiel)`
+                });
+            }
+        }
+
         const from = cipherFor(ctx, existing.security_tier);
         const to = cipherFor(ctx, input.securityTier);
         const content = await reencryptProjectTree(ctx, existing, from, to);
@@ -499,6 +515,7 @@ export const projectFeatures: FeatureDefinition<string, any, any>[] = [
     ...projectHistoryFeatures,
     ...projectRepoLinkFeatures,
     ...projectDatabaseLinkFeatures,
+    ...projectAudienceLinkFeatures,
     ...projectDeployFeatures,
     ...projectLinkFeatures
 ];

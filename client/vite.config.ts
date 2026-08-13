@@ -54,7 +54,13 @@ export default defineConfig(({ command }) => {
             // browser only ever talks to localhost:5173 (no CORS, cookies just work).
             proxy: {
                 '/api': { target: serverOrigin, changeOrigin: true },
-                '/ws': { target: serverOrigin, ws: true, changeOrigin: true }
+                '/ws': { target: serverOrigin, ws: true, changeOrigin: true },
+                // Le script de mesure d'audience vit **hors de `/api`** : c'est
+                // l'adresse qu'on colle dans une page, et `/t.js` se retient.
+                // Sans cette entrée, Vite le cherche parmi ses propres fichiers
+                // et rend un 404 — la balise semble alors cassée alors que le
+                // serveur la sert parfaitement sur le port 3000.
+                '/t.js': { target: serverOrigin, changeOrigin: true }
             }
         },
         build: {

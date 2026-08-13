@@ -63,7 +63,20 @@ export type ResourceKey =
     | 'git.repo'
     | 'database.count'
     | 'database.list'
-    | 'database.detail';
+    | 'database.detail'
+    | 'audience.count'
+    | 'audience.list'
+    /** La fiche d'un site : ses réglages, sa clé, les projets qui le suivent. */
+    | 'audience.detail'
+    /**
+     * Les chiffres eux-mêmes, séparés de la fiche exprès.
+     *
+     * Ils ne changent pas au même rythme : la fiche bouge quand un humain règle
+     * quelque chose, les chiffres à chaque minute d'ingestion. Les confondre
+     * aurait fait relire les réglages — et rouvrir la liste des projets liés —
+     * à chaque battement de l'audience.
+     */
+    | 'audience.stats';
 
 /**
  * Ce qu'un sujet du serveur invalide chez nous.
@@ -112,6 +125,21 @@ const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
     // Un relevé qui aboutit touche la liste (état, taille, alertes franchies) et
     // la fiche ouverte. `database.count` suit pour la tuile de l'accueil.
     database: ['database.count', 'database.list', 'database.detail'],
+    /*
+     * **Les quatre clés ensemble, et c'est le sujet.**
+     *
+     * Ce battement vient presque toujours de l'ingestion publique, qui le
+     * coalesce à une fois par minute et par espace. Il doit donc rafraîchir d'un
+     * seul coup tout ce qui montre de l'audience, où que ce soit : la tuile de
+     * l'accueil, la liste des sites, la fiche ouverte et l'onglet Audience d'un
+     * projet. N'en invalider qu'une partie ferait diverger deux écrans de la
+     * même donnée à la même seconde, chez la même personne.
+     *
+     * `audience.stats` est distincte de `audience.detail` pour la raison
+     * inverse : une mutation humaine (réglage, rotation de clé) n'a aucune
+     * raison de faire relire six requêtes d'agrégat.
+     */
+    audience: ['audience.count', 'audience.list', 'audience.detail', 'audience.stats'],
     /*
      * Un rôle modifié, un membre ajouté ou retiré, l'espace renommé : la liste
      * des rôles bouge, mais **les droits de chacun aussi** — y compris ceux de

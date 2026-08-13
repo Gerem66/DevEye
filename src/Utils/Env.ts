@@ -11,6 +11,19 @@ export const env = {
     LISTEN_PORT: getEnvVar('LISTEN_PORT', 'number'),
     PUBLIC_ORIGIN: getEnvVar('PUBLIC_ORIGIN', 'string'),
 
+    // Origine par laquelle les sites suivis atteignent l'ingestion d'audience,
+    // et donc celle qui figure dans la balise donnée à copier.
+    //
+    // **Distincte de `PUBLIC_ORIGIN` par nature** : l'application est derrière
+    // le VPN, l'ingestion doit être joignable sans lui. C'est en général un
+    // sous-domaine dédié rangé sur le même conteneur (`https://t.exemple.fr`),
+    // exempté du filtre côté proxy — exempter un hôte entier se relit d'un coup
+    // d'œil, là où un `PathPrefix` mal écrit exposerait toute l'application.
+    //
+    // Vide, on retombe sur `PUBLIC_ORIGIN` : c'est ce qui fait marcher le
+    // développement local sans rien configurer.
+    AUDIENCE_ORIGIN: getEnvVar('AUDIENCE_ORIGIN', 'string', false),
+
     LOG_LEVEL: getEnvVar('LOG_LEVEL', 'enum', ['fatal', 'error', 'warn', 'info', 'debug', 'trace']),
     LOG_PATH: getEnvVar('LOG_PATH', 'string', false) || './logs',
 
