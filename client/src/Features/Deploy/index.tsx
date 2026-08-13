@@ -6,8 +6,7 @@ import { ws } from '@/api/ws';
 import { useLiveOutlines } from '@/live/useLiveOutline';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
-import { startTeleport } from '@/stores/live';
-import { getActiveWorkspaceId, useWorkspacePermissions } from '@/stores/workspace';
+import { useWorkspacePermissions } from '@/stores/workspace';
 import type { FeatureProps } from '@/Features/types';
 import { humanizeError } from '@/Features/Projects/api';
 import TargetDialog from './TargetDialog';
@@ -213,22 +212,6 @@ export function FeatureDeploy({ workspace }: FeatureProps) {
                         members={workspace.users}
                         canWrite={canWrite}
                         onEdit={() => setDialog({ target: opened.target })}
-                        after={
-                            // Le sens qui manquerait sinon : la fiche sait qu'un
-                            // projet la déploie, elle doit savoir y mener. Par la
-                            // téléportation, comme partout — garde d'accès
-                            // comprise. Offert même sans droit d'écriture, c'est
-                            // une navigation.
-                            opened.target.projectCount > 0 ? (
-                                <Button
-                                    variant='secondary'
-                                    icon='expand'
-                                    onClick={() => startTeleport(getActiveWorkspaceId() ?? 0, ['view:projects'])}
-                                >
-                                    Voir les projets
-                                </Button>
-                            ) : undefined
-                        }
                     />
                 </>
             )}
