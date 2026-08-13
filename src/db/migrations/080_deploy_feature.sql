@@ -180,13 +180,21 @@ PREPARE stmt FROM @copy_targets; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 -- `NULL = NULL` est faux. `MIN(t.id)` tranche le cas résiduel où deux cibles
 -- sans jeton auraient échappé à la clé d'unicité (MySQL y admet les NULL
 -- multiples) : le projet se rattache alors à la première, pas aux deux.
+--
+-- ⚠️ `COLLATE` sur la comparaison, et pas seulement sur les tables créées plus
+-- haut. Déclarer la collation des nouvelles ne suffit pas : c'est **l'ancienne**
+-- qui diverge sur une installation neuve, où `061` la crée sans clause et lui
+-- fait donc hériter du défaut de la base. Les deux cas sont symétriques et se
+-- produisent pour de bon — base de développement d'un côté, premier démarrage
+-- d'une instance de l'autre. Seule une comparaison explicite les couvre tous
+-- les deux.
 SET @copy_links = IF(@has_old_targets = 1,
     'INSERT IGNORE INTO project_deploy_links (project_id, target_id, workspace_id)
      SELECT o.project_id, MIN(t.id), o.workspace_id
        FROM project_deploy_targets o
        JOIN deploy_targets t
          ON t.workspace_id = o.workspace_id
-        AND t.external_id = o.external_id
+        AND t.external_id = o.external_id COLLATE utf8mb4_general_ci
         AND t.credential_id <=> o.credential_id
       GROUP BY o.project_id, o.workspace_id',
     'SELECT 1'
