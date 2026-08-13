@@ -616,7 +616,17 @@
  */
 .tableListPane {
     position: relative;
-    min-height: 240px;
+    /*
+     * Le plancher de la colonne, et non son plafond : elle s'étire au-delà dès
+     * que sa voisine est plus haute.
+     *
+     * 240 px n'en montraient que cinq, ce qui est trop peu pour choisir dans un
+     * inventaire — et c'est le cas courant dans l'onglet d'un projet, où aucune
+     * table n'est encore ouverte et où la voisine ne tire donc rien vers le bas.
+     * 360 px en montrent une dizaine, assez pour parcourir sans faire défiler
+     * dès la première seconde.
+     */
+    min-height: 360px;
     min-width: 0;
     overflow: hidden;
 }

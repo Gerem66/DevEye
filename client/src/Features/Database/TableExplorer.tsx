@@ -411,7 +411,15 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
             {/* En plein écran, tout ce qui parle de la base disparaît — y compris
                 cet en-tête : on est venu regarder *une* table. */}
             {!expanded && (
-                <header className={styles.panelHead}>
+                /*
+                 * `layout` ici aussi, et pour la raison écrite plus bas : une
+                 * animation de disposition redimensionne par une échelle, et une
+                 * échelle déforme ce qu'elle contient. Cet en-tête ne le portait
+                 * pas, il encaissait donc l'étirement vertical en entier —
+                 * titre et boutons compris, ce qui est précisément ce qui se
+                 * voyait. Le porter lui donne l'échelle inverse.
+                 */
+                <motion.header layout transition={EXPAND_SPRING} className={styles.panelHead}>
                     <h3 className={styles.panelTitle}>Tables</h3>
                     <div className={styles.actions}>
                         <Button
@@ -434,7 +442,7 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
                             {tables === null ? 'Charger les tables' : 'Recharger'}
                         </Button>
                     </div>
-                </header>
+                </motion.header>
             )}
 
             {error && <p className={styles.error}>{error}</p>}
