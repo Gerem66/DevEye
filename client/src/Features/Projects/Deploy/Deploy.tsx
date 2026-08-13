@@ -113,78 +113,83 @@ export function Deploy({ project, members, canWrite }: DeployProps) {
                 les services déjà rattachés. */}
             <UptimeLinks projectId={project.id} canWrite={canWrite} />
 
-            {guarded && (
-                <p className={styles.empty}>
-                    Ce projet est confidentiel : il ne peut pas être relié à un déploiement, car le suivi tourne sans
-                    session et n’a pas accès à sa clé.
-                </p>
-            )}
+            <section className={styles.deployLinks}>
+                <h3 className={styles.sectionTitle}>Déploiements</h3>
 
-            {!guarded && targetIds.length === 0 && <p className={styles.empty}>Aucune cible reliée à ce projet.</p>}
+                {guarded && (
+                    <p className={styles.empty}>
+                        Ce projet est confidentiel : il ne peut pas être relié à un déploiement, car le suivi tourne
+                        sans session et n’a pas accès à sa clé.
+                    </p>
+                )}
 
-            {targetIds.length > 0 && !canReadDeploy && (
-                <p className={styles.empty}>
-                    Ce projet déploie {targetIds.length} cible{targetIds.length > 1 ? 's' : ''}, mais votre rôle n’ouvre
-                    pas la feature « Déploiement ».
-                </p>
-            )}
+                {!guarded && targetIds.length === 0 && <p className={styles.empty}>Aucune cible reliée à ce projet.</p>}
 
-            {linked.map((item) => (
-                <TargetView
-                    key={item.target.id}
-                    target={item.target}
-                    deployments={item.deployments}
-                    members={members}
-                    canWrite={canWrite && canWriteDeploy}
-                    // C'est bien de **ce** projet que part le geste : le
-                    // déclenchement s'inscrira dans sa frise.
-                    projectId={project.id}
-                    onEdit={canWriteDeploy ? () => setEditing(item.target) : undefined}
-                    after={
-                        <>
-                            {/* Le sens qui manquerait sinon : la feature sait
-                                mener aux projets d'une cible, l'onglet d'un
-                                projet doit savoir mener à la cible. Par la
-                                téléportation, comme partout — garde d'accès
-                                comprise. Offert même sans droit d'écriture,
-                                c'est une navigation. */}
-                            <Button
-                                variant='secondary'
-                                icon='expand'
-                                onClick={() =>
-                                    startTeleport(getActiveWorkspaceId() ?? 0, [
-                                        'view:deploy',
-                                        `l1:target:${item.target.id}`
-                                    ])
-                                }
-                            >
-                                Ouvrir dans Déploiement
-                            </Button>
-                            {canWrite && canWriteDeploy && (
-                                <Button variant='ghost' onClick={() => setUnlinking(item.target)} disabled={busy}>
-                                    Délier
+                {targetIds.length > 0 && !canReadDeploy && (
+                    <p className={styles.empty}>
+                        Ce projet déploie {targetIds.length} cible{targetIds.length > 1 ? 's' : ''}, mais votre rôle
+                        n’ouvre pas la feature « Déploiement ».
+                    </p>
+                )}
+
+                {linked.map((item) => (
+                    <TargetView
+                        key={item.target.id}
+                        target={item.target}
+                        deployments={item.deployments}
+                        members={members}
+                        canWrite={canWrite && canWriteDeploy}
+                        // C'est bien de **ce** projet que part le geste : le
+                        // déclenchement s'inscrira dans sa frise.
+                        projectId={project.id}
+                        onEdit={canWriteDeploy ? () => setEditing(item.target) : undefined}
+                        after={
+                            <>
+                                {/* Le sens qui manquerait sinon : la feature sait
+                                    mener aux projets d'une cible, l'onglet d'un
+                                    projet doit savoir mener à la cible. Par la
+                                    téléportation, comme partout — garde d'accès
+                                    comprise. Offert même sans droit d'écriture,
+                                    c'est une navigation. */}
+                                <Button
+                                    variant='secondary'
+                                    icon='chevrons-right'
+                                    onClick={() =>
+                                        startTeleport(getActiveWorkspaceId() ?? 0, [
+                                            'view:deploy',
+                                            `l1:target:${item.target.id}`
+                                        ])
+                                    }
+                                >
+                                    Ouvrir le Déploiement
                                 </Button>
-                            )}
-                        </>
-                    }
-                />
-            ))}
+                                {canWrite && canWriteDeploy && (
+                                    <Button variant='ghost' onClick={() => setUnlinking(item.target)} disabled={busy}>
+                                        Délier
+                                    </Button>
+                                )}
+                            </>
+                        }
+                    />
+                ))}
 
-            {/* Toujours en bas, même quand une cible est déjà reliée : un projet
-                en déploie parfois deux (une application et sa base). */}
-            {!guarded && canWrite && canWriteDeploy && (
-                <div className={styles.addRow}>
-                    <Button icon='add' onClick={() => setLinkOpen(true)}>
-                        Ajouter une cible
-                    </Button>
-                </div>
-            )}
+                {/* Toujours en bas, même quand une cible est déjà reliée : un
+                    projet en déploie parfois deux (une application et sa
+                    base). */}
+                {!guarded && canWrite && canWriteDeploy && (
+                    <div className={styles.addRow}>
+                        <Button icon='add' onClick={() => setLinkOpen(true)}>
+                            Ajouter une cible
+                        </Button>
+                    </div>
+                )}
 
-            {!guarded && canWrite && !canWriteDeploy && (
-                <span className={styles.hint}>
-                    Votre rôle ne permet pas de modifier les déploiements de cet espace.
-                </span>
-            )}
+                {!guarded && canWrite && !canWriteDeploy && (
+                    <span className={styles.hint}>
+                        Votre rôle ne permet pas de modifier les déploiements de cet espace.
+                    </span>
+                )}
+            </section>
 
             <LinkTargetDialog
                 open={linkOpen}

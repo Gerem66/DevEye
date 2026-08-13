@@ -2309,13 +2309,30 @@
 
 /* ----------------------------------------------------------- liens DevEye */
 
-/* Les services surveillés rattachés au projet, dans l'onglet Déploiement. */
+/*
+ * Les services surveillés rattachés au projet, dans l'onglet Déploiement.
+ *
+ * `padding-bottom` égale le `gap` du conteneur qui suit (`.feature` de la
+ * feature Déploiement, `--space-md`) : sans ça, la ligne du bas se retrouvait
+ * deux fois plus près des uptimes que des déploiements.
+ */
 .uptimeLinks {
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
-    padding-bottom: var(--space-sm);
+    padding-bottom: var(--space-md);
     border-bottom: 1px solid var(--glass-border);
+}
+
+/*
+ * Les cibles de déploiement reliées au projet, juste en dessous — même forme
+ * que `.uptimeLinks` (titre, puis contenu), sans le trait du bas : rien ne la
+ * sépare plus de ce qui suit, c'est la dernière section de l'onglet.
+ */
+.deployLinks {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
 }
 
 /* L'état d'un service, avec la même sémantique que dans Uptime : en ligne,

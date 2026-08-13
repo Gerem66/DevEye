@@ -25,7 +25,7 @@ interface TargetViewProps {
      */
     projectId?: number;
     onEdit?: () => void;
-    /** Actions propres à l'appelant : « Délier », « Ouvrir dans Déploiement ». */
+    /** Actions propres à l'appelant : « Délier », « Ouvrir le Déploiement ». */
     after?: ReactNode;
 }
 

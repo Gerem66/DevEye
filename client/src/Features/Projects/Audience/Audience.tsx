@@ -138,7 +138,7 @@ export function Audience({ project, canWrite }: AudienceProps) {
                                     d'écriture, c'est une navigation. */}
                                 <Button
                                     variant='secondary'
-                                    icon='expand'
+                                    icon='chevrons-right'
                                     onClick={() =>
                                         startTeleport(getActiveWorkspaceId() ?? 0, [
                                             'view:audience',
@@ -146,7 +146,7 @@ export function Audience({ project, canWrite }: AudienceProps) {
                                         ])
                                     }
                                 >
-                                    Ouvrir dans Audience
+                                    Ouvrir l’Audience
                                 </Button>
                                 {canWrite && canWriteAudience && (
                                     <Button variant='ghost' onClick={() => setUnlinking(site)} disabled={busy}>

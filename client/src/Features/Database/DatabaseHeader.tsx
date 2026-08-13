@@ -75,7 +75,7 @@ interface DatabaseHeaderProps {
      * titre cliquable. Un titre qui navigue ne s'annonce pas : rien ne le
      * distingue d'un intitulé, et il fallait le survoler pour le découvrir. Les
      * trois onglets d'un projet portent désormais la même barre, dans le même
-     * ordre : actions de la feature, « Ouvrir dans… », puis « Délier ».
+     * ordre : actions de la feature, « Ouvrir… », puis « Délier ».
      */
     onOpenInFeature?: () => void;
     /** Posé avant l'identité — un retour à la liste, par exemple. */
@@ -126,7 +126,7 @@ export function DatabaseHeader({
                 </div>
             </div>
             {/* La barre est rendue dès qu'elle a quelque chose à porter, et non
-                sous la seule condition d'écriture : « Ouvrir dans… » est une
+                sous la seule condition d'écriture : « Ouvrir… » est une
                 navigation, un lecteur y a droit. */}
             {(canWrite || onOpenInFeature || after) && (
                 <div className={styles.actions}>
@@ -156,10 +156,10 @@ export function DatabaseHeader({
                     )}
                     {/* Toujours l'avant-dernier : les trois onglets d'un projet
                         rangent leur barre dans le même ordre, actions de la
-                        feature puis « Ouvrir dans… » puis « Délier ». */}
+                        feature puis « Ouvrir… » puis « Délier ». */}
                     {onOpenInFeature && (
-                        <Button variant='secondary' icon='expand' onClick={onOpenInFeature}>
-                            Ouvrir dans Bases de données
+                        <Button variant='secondary' icon='chevrons-right' onClick={onOpenInFeature}>
+                            Ouvrir la Base de données
                         </Button>
                     )}
                     {after}

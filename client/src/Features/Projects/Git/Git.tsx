@@ -286,10 +286,10 @@ function RepoBlock({ repo, members, canWrite, canWriteGit, onUnlink }: RepoBlock
                         droit d'écriture : c'est une navigation. */}
                     <Button
                         variant='secondary'
-                        icon='expand'
+                        icon='chevrons-right'
                         onClick={() => startTeleport(getActiveWorkspaceId() ?? 0, ['view:git', `l1:repo:${repo.id}`])}
                     >
-                        Ouvrir dans Git
+                        Ouvrir le Git
                     </Button>
 
                     {/* Destructeur, donc en bout de barre et confirmé : il ne

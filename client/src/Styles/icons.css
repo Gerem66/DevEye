@@ -234,6 +234,10 @@
     -webkit-mask-image: url(/icons/chevron-down.svg);
     mask-image: url(/icons/chevron-down.svg);
 }
+.icon.icon-chevrons-right {
+    -webkit-mask-image: url(/icons/chevrons-right.svg);
+    mask-image: url(/icons/chevrons-right.svg);
+}
 .icon.icon-activity {
     -webkit-mask-image: url(/icons/activity.svg);
     mask-image: url(/icons/activity.svg);
