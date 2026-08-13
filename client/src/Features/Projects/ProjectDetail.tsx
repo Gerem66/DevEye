@@ -14,6 +14,7 @@ import { ws } from '@/api/ws';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import { useLiveOutlines } from '@/live/useLiveOutline';
+import { useStickyOffset } from '@/stickyOffset';
 import { humanizeError, STATUS_LABELS, withSecrecy } from './api';
 import { Board } from './Board/Board';
 import { CardDialog } from './Board/CardDialog';
@@ -24,17 +25,19 @@ import { History } from './History/History';
 import { ArchivedCardDialog } from './History/ArchivedCardDialog';
 import { Git } from './Git/Git';
 import { Databases } from './Database/Databases';
+import { Audience } from './Audience/Audience';
 import { Deploy } from './Deploy/Deploy';
 import styles from './style.module.css';
 
 /** Les onglets du projet. Les suivants arrivent avec leurs phases. */
-type TabId = 'board' | 'timeline' | 'git' | 'database' | 'deploy' | 'history';
+type TabId = 'board' | 'timeline' | 'git' | 'database' | 'audience' | 'deploy' | 'history';
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
     { id: 'board', label: 'Tableau', icon: 'projects' },
     { id: 'timeline', label: 'Frise', icon: 'clock' },
     { id: 'git', label: 'Git', icon: 'branch' },
     { id: 'database', label: 'Bases de données', icon: 'database' },
+    { id: 'audience', label: 'Audience', icon: 'eye-open' },
     { id: 'deploy', label: 'Déploiement', icon: 'rocket' },
     // Dernier et discret : on l'ouvre rarement, pour une question précise.
     { id: 'history', label: 'Historique', icon: 'archive' }
@@ -59,6 +62,12 @@ interface ProjectDetailProps {
  */
 export function ProjectDetail({ project, members, meUserId, canWrite, onBack, onEditProfile }: ProjectDetailProps) {
     const [tab, setTab] = useState<TabId>('board');
+
+    // Ce que les onglets rendent peut porter son propre bandeau collant : c'est
+    // le cas de l'onglet Audience et de sa barre de période. Elle doit se poser
+    // **sous** l'en-tête du projet, dont la hauteur varie avec le titre et les
+    // retours à la ligne de la barre d'onglets. On la mesure donc.
+    const sticky = useStickyOffset<HTMLDivElement>();
     const [columns, setColumns] = useState<ProjectColumn[]>([]);
     const [cards, setCards] = useState<ProjectCard[]>([]);
     const [loaded, setLoaded] = useState(false);
@@ -425,48 +434,54 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
     };
 
     return (
-        <div className={styles.root}>
-            <header className={styles.header}>
-                <div className={styles.detailHead}>
-                    <Button variant='ghost' icon='arrow-left' onClick={onBack}>
-                        Projets
-                    </Button>
-                    {/* Titre et qualificatifs sur une seule ligne : le statut est
+        <div className={styles.root} style={sticky.style}>
+            {/* En-tête et onglets dans **un seul** bloc collant, et non deux
+                superposés : l'un glisserait sous l'autre au défilement, ou
+                obligerait à connaître la hauteur du premier pour caler le
+                second. Un conteneur unique n'a pas ce problème. */}
+            <div ref={sticky.ref} className={styles.detailSticky}>
+                <header className={styles.header}>
+                    <div className={styles.detailHead}>
+                        <Button variant='ghost' icon='arrow-left' onClick={onBack}>
+                            Projets
+                        </Button>
+                        {/* Titre et qualificatifs sur une seule ligne : le statut est
                         une propriété du titre, pas une légende sous celui-ci. */}
-                    <div className={styles.detailTitle}>
-                        <h2 className={styles.heading}>{project.title || 'Sans titre'}</h2>
-                        <span className={styles.status} data-status={project.status}>
-                            {STATUS_LABELS[project.status]}
-                        </span>
-                        {project.version && <span className={styles.version}>v{project.version}</span>}
-                        {project.securityTier === 'guarded' && (
-                            <span className={styles.lock} title='Projet confidentiel'>
-                                <span className='icon icon-lock' />
+                        <div className={styles.detailTitle}>
+                            <h2 className={styles.heading}>{project.title || 'Sans titre'}</h2>
+                            <span className={styles.status} data-status={project.status}>
+                                {STATUS_LABELS[project.status]}
                             </span>
-                        )}
+                            {project.version && <span className={styles.version}>v{project.version}</span>}
+                            {project.securityTier === 'guarded' && (
+                                <span className={styles.lock} title='Projet confidentiel'>
+                                    <span className='icon icon-lock' />
+                                </span>
+                            )}
+                        </div>
                     </div>
-                </div>
-                {canWrite && (
-                    <Button variant='secondary' icon='edit' onClick={onEditProfile}>
-                        Modifier le projet
-                    </Button>
-                )}
-            </header>
+                    {canWrite && (
+                        <Button variant='secondary' icon='edit' onClick={onEditProfile}>
+                            Modifier le projet
+                        </Button>
+                    )}
+                </header>
 
-            <nav className={styles.tabs}>
-                {TABS.map((t) => (
-                    <button
-                        key={t.id}
-                        type='button'
-                        className={t.id === tab ? styles.tabActive : styles.tab}
-                        aria-current={t.id === tab ? 'page' : undefined}
-                        onClick={() => setTab(t.id)}
-                        {...outlineForTab(`tab:${t.id}`)}
-                    >
-                        <span className={`icon icon-${t.icon}`} /> {t.label}
-                    </button>
-                ))}
-            </nav>
+                <nav className={styles.tabs}>
+                    {TABS.map((t) => (
+                        <button
+                            key={t.id}
+                            type='button'
+                            className={t.id === tab ? styles.tabActive : styles.tab}
+                            aria-current={t.id === tab ? 'page' : undefined}
+                            onClick={() => setTab(t.id)}
+                            {...outlineForTab(`tab:${t.id}`)}
+                        >
+                            <span className={`icon icon-${t.icon}`} /> {t.label}
+                        </button>
+                    ))}
+                </nav>
+            </div>
 
             {/* Métadonnée de projet, donc hors des onglets : elle vaut quel que
                 soit ce qu'on regarde. En repli, car c'est du contexte. */}
@@ -528,6 +543,7 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
 
             {loaded && tab === 'git' && <Git project={project} members={members} canWrite={canWrite} />}
             {loaded && tab === 'database' && <Databases project={project} canWrite={canWrite} />}
+            {loaded && tab === 'audience' && <Audience project={project} canWrite={canWrite} />}
 
             {loaded && tab === 'deploy' && <Deploy project={project} members={members} canWrite={canWrite} />}
 

@@ -132,9 +132,6 @@ export function Databases({ project, canWrite }: DatabasesProps) {
                     database={item.database}
                     alerts={item.alerts}
                     canWrite={canWrite && canWriteDb}
-                    // Le cadre n'apparaît qu'à partir de deux : sur une base
-                    // unique il n'aurait rien à séparer.
-                    framed={linked.length > 1}
                     onUnlink={() => setUnlinking(item.database)}
                 />
             ))}
@@ -199,12 +196,11 @@ interface DatabaseBlockProps {
     database: Database;
     alerts: DatabaseAlert[];
     canWrite: boolean;
-    framed: boolean;
     onUnlink: () => void;
 }
 
 /** Une base du projet : son en-tête, et le contenu partagé avec la feature. */
-function DatabaseBlock({ database, alerts, canWrite, framed, onUnlink }: DatabaseBlockProps) {
+function DatabaseBlock({ database, alerts, canWrite, onUnlink }: DatabaseBlockProps) {
     const [probe, setProbe] = useState<DatabaseProbe | null>(null);
     const [testing, setTesting] = useState(false);
     const [busy, setBusy] = useState(false);
@@ -244,8 +240,12 @@ function DatabaseBlock({ database, alerts, canWrite, framed, onUnlink }: Databas
         invalidate('database.detail', 'database.list');
     };
 
+    // Toujours encadré, y compris sur une base unique : le cadre ne fait pas
+    // que séparer deux blocs, il dit où finit ce que l'onglet montre. Seul
+    // l'explorateur en plein écran le retire, parce qu'il prend toute la place
+    // et qu'un cadre autour n'aurait plus rien à délimiter.
     return (
-        <section className={framed && !expanded ? dbStyles.linkedBlockFramed : dbStyles.linkedBlock}>
+        <section className={expanded ? dbStyles.linkedBlock : dbStyles.linkedBlockFramed}>
             {!expanded && (
                 <DatabaseHeader
                     database={database}

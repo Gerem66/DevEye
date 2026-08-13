@@ -599,6 +599,23 @@
     color: var(--text-muted);
 }
 
+/* Collant sur le corps défilant de la popup, comme la fiche d'un site suivi.
+   Il porte l'en-tête **et** les onglets : deux blocs collants distincts se
+   seraient recouverts au défilement, faute de savoir la hauteur du premier.
+   Le fond doit être opaque, sans quoi le contenu défilerait visiblement
+   dessous ; l'espacement vertical remplace le `gap` de `.root`, que ce
+   conteneur intermédiaire interrompt. */
+.detailSticky {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    padding: var(--space-sm) 0 0;
+    background: var(--surface-popup-solid);
+}
+
 .tabs {
     display: flex;
     gap: var(--space-xs);

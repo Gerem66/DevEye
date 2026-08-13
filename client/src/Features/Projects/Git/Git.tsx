@@ -135,10 +135,6 @@ export function Git({ project, members, canWrite }: GitProps) {
                     members={members}
                     canWrite={canWrite}
                     canWriteGit={canWriteGit}
-                    // Le cadre n'apparaît qu'à partir de deux : sur un dépôt
-                    // unique il n'aurait rien à séparer, et ajouterait une boîte
-                    // dans une boîte.
-                    framed={repos.length > 1}
                     onUnlink={() => setUnlinking(repo)}
                 />
             ))}
@@ -202,12 +198,11 @@ interface RepoBlockProps {
     members: MinimalUser[];
     canWrite: boolean;
     canWriteGit: boolean;
-    framed: boolean;
     onUnlink: () => void;
 }
 
 /** Un dépôt du projet : son en-tête, et le contenu partagé avec la feature Git. */
-function RepoBlock({ repo, members, canWrite, canWriteGit, framed, onUnlink }: RepoBlockProps) {
+function RepoBlock({ repo, members, canWrite, canWriteGit, onUnlink }: RepoBlockProps) {
     // `RepoView` sonde l'avancement ; l'en-tête, lui, porte les boutons. Tant
     // qu'une synchronisation tourne, ni « Synchroniser » ni « Modifier » n'ont
     // de sens : le contenu est déjà voilé et va être remplacé.
@@ -223,8 +218,15 @@ function RepoBlock({ repo, members, canWrite, canWriteGit, framed, onUnlink }: R
         void ws.send('git.credentialList', {}).then((res) => setCredentials(res.credentials));
     }, [dialogOpen]);
 
+    // Toujours encadré, y compris sur un dépôt unique.
+    //
+    // Le cadre ne servait qu'à *séparer* deux blocs, d'où la règle précédente
+    // qui l'omettait quand il n'y avait rien à séparer. Mais il fait aussi
+    // autre chose : il dit où finit ce que l'onglet montre. Sans lui, un dépôt
+    // seul se confondait avec le fond de la popup, et l'onglet ne ressemblait
+    // plus aux autres du même projet.
     return (
-        <section className={framed ? gitStyles.repoBlockFramed : gitStyles.repoBlock}>
+        <section className={gitStyles.repoBlockFramed}>
             <header className={gitStyles.repoHead}>
                 <div className={gitStyles.repoIdent}>
                     {/*
