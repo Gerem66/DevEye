@@ -1,9 +1,9 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
+import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
 import Checkbox from '@/Components/Checkbox';
-import { DialogCancelButton } from '@/Components/Dialog';
-import Popup, { ClosePopup } from '@/Components/Popup';
+import { Dialog, DialogCancelButton } from '@/Components/Dialog';
 import SelectInput from '@/Components/SelectInput';
 import TextInput from '@/Components/TextInput';
 
@@ -17,15 +17,8 @@ import {
     type UptimeService
 } from 'deveye-types';
 
-export const SERVICE_POPUP = 'popup-uptime-service';
-
-/** Keep a typed number inside its contract bounds (empty / NaN → `min`). */
-function clamp(raw: string, min: number, max: number): number {
-    return Math.min(max, Math.max(min, Number(raw) || min));
-}
-
-/** The service configuration a submit resolves with (`delete` on removal). */
-export interface ServiceDraft {
+/** Everything the user sets on a service. */
+interface ServiceDraft {
     name: string;
     url: string;
     method: UptimeMethod;
@@ -39,7 +32,20 @@ export interface ServiceDraft {
     enabled: boolean;
 }
 
-export type ServicePopupResult = ServiceDraft | 'delete' | null;
+interface ServiceDialogProps {
+    open: boolean;
+    /** Le service modifié, ou `null` pour un ajout. */
+    service: UptimeService | null;
+    onClose: () => void;
+    onSaved: (service: UptimeService) => void;
+    /** Absent = pas de suppression proposée (on ajoute depuis un projet). */
+    onRemoved?: () => void;
+}
+
+/** Keep a typed number inside its contract bounds (empty / NaN → `min`). */
+function clamp(raw: string, min: number, max: number): number {
+    return Math.min(max, Math.max(min, Number(raw) || min));
+}
 
 /** Cadences offered, in seconds — from "nearly live" to a daily heartbeat. */
 const INTERVALS: { value: number; label: string }[] = [
@@ -80,49 +86,58 @@ const DEFAULTS: ServiceDraft = {
     enabled: true
 };
 
-/** Add / edit form for one monitored service. Driven by `OpenPopup`. */
-export function ServicePopup() {
-    const [mode, setMode] = useState<'add' | 'edit'>('add');
+/**
+ * Ajouter / régler un service surveillé.
+ *
+ * **Contrôlé, pas impérative.** Cette feature a longtemps vécu derrière
+ * `OpenPopup`/`ClosePopup` — un registre global à clé unique, qu'un deuxième
+ * montage écrase (`FeatureKeepAlive` en garde plusieurs à la fois vivants).
+ * Cela suffisait tant que le formulaire n'ouvrait que depuis la feature Uptime
+ * elle-même ; l'onglet Déploiement d'un projet doit désormais pouvoir déclarer
+ * un service à la volée, exactement comme `TargetDialog` pour une cible de
+ * déploiement — d'où ce même patron `open`/`service`/`onSaved`.
+ */
+export function ServiceDialog({ open, service, onClose, onSaved, onRemoved }: ServiceDialogProps) {
     const [draft, setDraft] = useState<ServiceDraft>(DEFAULTS);
     const [errorName, setErrorName] = useState('');
     const [errorUrl, setErrorUrl] = useState('');
-    // Snapshot of the values the popup opened with, to detect unsaved edits.
+    const [error, setError] = useState<string | null>(null);
+    const [busy, setBusy] = useState(false);
+    // Snapshot of the values the dialog opened with, to detect unsaved edits.
     const initial = useRef<ServiceDraft>(DEFAULTS);
+
+    useEffect(() => {
+        if (!open) return;
+        const next: ServiceDraft = service
+            ? {
+                  name: service.name,
+                  url: service.url,
+                  method: service.method,
+                  expectedStatus: service.expectedStatus,
+                  keyword: service.keyword,
+                  intervalSeconds: service.intervalSeconds,
+                  timeoutSeconds: service.timeoutSeconds,
+                  failureThreshold: service.failureThreshold,
+                  retentionDays: service.retentionDays,
+                  notify: service.notify,
+                  enabled: service.enabled
+              }
+            : DEFAULTS;
+        setDraft(next);
+        initial.current = next;
+        setErrorName('');
+        setErrorUrl('');
+        setError(null);
+    }, [open, service]);
 
     function set<K extends keyof ServiceDraft>(key: K, value: ServiceDraft[K]): void {
         setDraft((prev) => ({ ...prev, [key]: value }));
     }
 
-    function handleOpen(input: UptimeService | null): void {
-        const next: ServiceDraft = input
-            ? {
-                  name: input.name,
-                  url: input.url,
-                  method: input.method,
-                  expectedStatus: input.expectedStatus,
-                  keyword: input.keyword,
-                  intervalSeconds: input.intervalSeconds,
-                  timeoutSeconds: input.timeoutSeconds,
-                  failureThreshold: input.failureThreshold,
-                  retentionDays: input.retentionDays,
-                  notify: input.notify,
-                  enabled: input.enabled
-              }
-            : DEFAULTS;
-        setMode(input ? 'edit' : 'add');
-        setDraft(next);
-        setErrorName('');
-        setErrorUrl('');
-        initial.current = next;
-    }
-
     const dirty = (Object.keys(draft) as (keyof ServiceDraft)[]).some((k) => draft[k] !== initial.current[k]);
 
-    function close(result: ServicePopupResult = null): void {
-        ClosePopup(SERVICE_POPUP, result);
-    }
-
-    function submit(): void {
+    const submit = async () => {
+        if (busy) return;
         const name = draft.name.trim();
         const url = draft.url.trim();
         // Mirrors the server contract (`z.string().url()`): reject here so the
@@ -133,19 +148,44 @@ export function ServicePopup() {
             setErrorUrl(validUrl ? '' : 'URL invalide (http:// ou https://)');
             return;
         }
-        close({ ...draft, name, url, keyword: draft.keyword?.trim() || null });
-    }
+        const payload = { ...draft, name, url, keyword: draft.keyword?.trim() || null };
+        setBusy(true);
+        setError(null);
+        try {
+            const res = service
+                ? await ws.send('uptime.update', { id: service.id, service: payload })
+                : await ws.send('uptime.add', { service: payload });
+            onSaved(res.service);
+        } catch {
+            setError('Enregistrement impossible.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const remove = async () => {
+        if (!service || busy) return;
+        setBusy(true);
+        setError(null);
+        try {
+            await ws.send('uptime.remove', { id: service.id });
+            onRemoved?.();
+        } catch {
+            setError('Suppression impossible.');
+        } finally {
+            setBusy(false);
+        }
+    };
 
     return (
-        <Popup
-            id={SERVICE_POPUP}
-            title={mode === 'add' ? 'Ajouter un service' : 'Modifier le service'}
+        <Dialog
+            open={open}
+            onClose={onClose}
+            title={service ? 'Modifier le service' : 'Ajouter un service'}
             width={560}
-            onInputChange={handleOpen}
-            onClosePopup={() => close()}
-            onSubmit={submit}
+            onSubmit={() => void submit()}
             dirty={dirty}
-            onSave={submit}
+            onSave={() => void submit()}
         >
             <div className={styles.form}>
                 <TextInput
@@ -258,21 +298,25 @@ export function ServicePopup() {
                 <Checkbox checked={draft.enabled} onChange={(v) => set('enabled', v)}>
                     Surveillance active
                 </Checkbox>
+
+                {error && <p className={styles.error}>{error}</p>}
             </div>
 
             <div className={styles.popupActions}>
                 <div className={styles.popupActionsLeft}>
                     <DialogCancelButton>Fermer</DialogCancelButton>
-                    {mode === 'edit' && (
-                        <Button variant='danger' onClick={() => close('delete')}>
+                    {service && onRemoved && (
+                        <Button variant='danger' onClick={() => void remove()} disabled={busy}>
                             Supprimer
                         </Button>
                     )}
                 </div>
-                <Button onClick={submit}>{mode === 'add' ? 'Ajouter' : 'Enregistrer'}</Button>
+                <Button onClick={() => void submit()} disabled={busy}>
+                    {busy ? 'Enregistrement…' : service ? 'Enregistrer' : 'Ajouter'}
+                </Button>
             </div>
-        </Popup>
+        </Dialog>
     );
 }
 
-export default ServicePopup;
+export default ServiceDialog;

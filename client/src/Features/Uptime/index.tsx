@@ -9,8 +9,8 @@ import { refreshUptime } from '@/stores/uptime';
 
 import NotificationsPopup, { NOTIFICATIONS_POPUP } from './NotificationsPopup';
 import ServiceDetail from './ServiceDetail';
+import { ServiceDialog } from './ServiceDialog';
 import ServiceList from './ServiceList';
-import ServicePopup, { SERVICE_POPUP, type ServicePopupResult } from './ServicePopup';
 import styles from './style.module.css';
 
 import type { UptimeService } from 'deveye-types';
@@ -96,28 +96,8 @@ export default function Uptime({ workspace }: FeatureProps) {
         [reload]
     );
 
-    const openForm = useCallback(
-        async (service: UptimeService | null) => {
-            const result = await OpenPopup<ServicePopupResult>(SERVICE_POPUP, service);
-            if (result === null) return;
-            try {
-                if (result === 'delete') {
-                    if (!service) return;
-                    await ws.send('uptime.remove', { id: service.id });
-                    setSelectedId(null);
-                } else if (service) {
-                    await ws.send('uptime.update', { id: service.id, service: result });
-                } else {
-                    await ws.send('uptime.add', { service: result });
-                }
-                await reload();
-                void refreshUptime();
-            } catch {
-                setError('Enregistrement impossible.');
-            }
-        },
-        [workspaceId, reload]
-    );
+    /** Le service réglé dans `ServiceDialog` ; `service: null` = un ajout. `null` = fermé. */
+    const [dialog, setDialog] = useState<{ service: UptimeService | null } | null>(null);
 
     const selected = selectedId === null ? null : (services.find((s) => s.id === selectedId) ?? null);
     const downCount = services.filter((s) => s.enabled && s.status === 'down').length;
@@ -147,7 +127,7 @@ export default function Uptime({ workspace }: FeatureProps) {
                 <ServiceDetail
                     service={selected}
                     onBack={() => setSelectedId(null)}
-                    onEdit={() => void openForm(selected)}
+                    onEdit={() => setDialog({ service: selected })}
                     onCheckNow={() =>
                         void withBusy(selected.id, async () => {
                             await ws.send('uptime.checkNow', { id: selected.id });
@@ -174,7 +154,7 @@ export default function Uptime({ workspace }: FeatureProps) {
                             >
                                 Notifications
                             </Button>
-                            <Button icon='plus' onClick={() => void openForm(null)}>
+                            <Button icon='plus' onClick={() => setDialog({ service: null })}>
                                 Ajouter un service
                             </Button>
                         </div>
@@ -192,7 +172,7 @@ export default function Uptime({ workspace }: FeatureProps) {
                             services={services}
                             busy={busy}
                             onOpen={(service) => setSelectedId(service.id)}
-                            onEdit={(service) => void openForm(service)}
+                            onEdit={(service) => setDialog({ service })}
                             onCheckNow={(service) =>
                                 void withBusy(service.id, async () => {
                                     await ws.send('uptime.checkNow', { id: service.id });
@@ -212,7 +192,26 @@ export default function Uptime({ workspace }: FeatureProps) {
                 </>
             )}
 
-            <ServicePopup />
+            <ServiceDialog
+                open={dialog !== null}
+                service={dialog?.service ?? null}
+                onClose={() => setDialog(null)}
+                onSaved={() => {
+                    setDialog(null);
+                    void reload();
+                    void refreshUptime();
+                }}
+                onRemoved={
+                    dialog?.service
+                        ? () => {
+                              setDialog(null);
+                              setSelectedId(null);
+                              void reload();
+                              void refreshUptime();
+                          }
+                        : undefined
+                }
+            />
             <NotificationsPopup />
         </div>
     );
