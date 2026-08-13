@@ -37,6 +37,7 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
     const [name, setName] = useState('');
     const [kind, setKind] = useState<DeployTargetKind>('application');
     const [busy, setBusy] = useState(false);
+    const [loadingCandidates, setLoadingCandidates] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [confirmRemove, setConfirmRemove] = useState(false);
 
@@ -45,7 +46,6 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
         setExternalId(target?.externalId ?? '');
         setName(target?.name ?? '');
         setKind(target?.kind ?? 'application');
-        setCandidates([]);
         setConfirmRemove(false);
         setError(null);
         void (async () => {
@@ -62,23 +62,50 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
         })();
     }, [open, target]);
 
-    // La liste des applications vient de l'instance : c'est la seule commande du
-    // module qui appelle un service externe en direct, parce qu'attendre un tour
-    // d'ordonnanceur pour remplir un sélecteur n'aurait aucun sens.
-    const loadCandidates = async () => {
-        if (!credentialId) return;
-        setBusy(true);
-        setError(null);
-        try {
-            const res = await ws.send('deploy.candidates', { credentialId: Number(credentialId) });
-            setCandidates(res.candidates);
-            if (res.candidates.length === 0) setError('Cette instance ne déclare aucune application.');
-        } catch (e) {
-            setError(humanizeError(e, 'Impossible de joindre l’instance Dokploy.'));
-        } finally {
-            setBusy(false);
+    /*
+     * Les applications de l'instance, chargées **d'elles-mêmes**.
+     *
+     * C'est la seule commande du module qui appelle un service externe en
+     * direct : attendre un tour d'ordonnanceur pour remplir un sélecteur
+     * n'aurait aucun sens. Elle se déclenchait autrefois sur un bouton
+     * « Lister les applications » — un geste que personne n'avait de raison de
+     * ne pas faire, donc un clic imposé avant le vrai choix. Le sélecteur se
+     * remplit maintenant dès qu'une instance est désignée, et se recharge quand
+     * on en change.
+     *
+     * `busy` reste au dépôt du formulaire : une interrogation en cours ne doit
+     * pas se lire comme un enregistrement en cours, seul le sélecteur s'en
+     * trouve occupé.
+     */
+    useEffect(() => {
+        if (!open || !credentialId) {
+            setCandidates([]);
+            return;
         }
-    };
+        let alive = true;
+        setLoadingCandidates(true);
+        setCandidates([]);
+        void (async () => {
+            try {
+                const res = await ws.send('deploy.candidates', { credentialId: Number(credentialId) });
+                // Une réponse d'une instance qu'on ne regarde plus n'a rien à
+                // dire : changer de jeton avant qu'elle n'arrive est courant.
+                if (!alive) return;
+                setCandidates(res.candidates);
+                setError(null);
+            } catch (e) {
+                // Une instance injoignable n'empêche pas de déclarer la cible :
+                // le repli manuel plus bas reste ouvert, d'où l'erreur affichée
+                // sans que rien ne se ferme.
+                if (alive) setError(humanizeError(e, 'Impossible de joindre l’instance Dokploy.'));
+            } finally {
+                if (alive) setLoadingCandidates(false);
+            }
+        })();
+        return () => {
+            alive = false;
+        };
+    }, [open, credentialId]);
 
     /** Choisir dans la liste remplit tout le reste : type, identifiant, nom. */
     const pick = (chosen: string) => {
@@ -171,30 +198,42 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
                             </SelectInput>
                         </label>
 
-                        <Button
-                            variant='secondary'
-                            icon='refresh'
-                            onClick={() => void loadCandidates()}
-                            disabled={busy || !credentialId}
-                        >
-                            {busy ? 'Interrogation…' : 'Lister les applications'}
-                        </Button>
-
-                        {candidates.length > 0 && (
-                            <label className={styles.field}>
-                                <span className={styles.label}>Cible</span>
-                                <SelectInput value={externalId} onChange={(e) => pick(e.target.value)}>
-                                    <option value=''>Choisir…</option>
-                                    {candidates.map((c) => (
-                                        <option key={`${c.kind}:${c.externalId}`} value={c.externalId}>
-                                            {c.kind === 'compose' ? '🧩 ' : '📦 '}
-                                            {c.name}
-                                            {c.path ? ` — ${c.path}` : ''}
-                                        </option>
-                                    ))}
-                                </SelectInput>
-                            </label>
-                        )}
+                        {/* Toujours présent, y compris vide : c'est le champ par
+                            lequel on choisit, et le faire apparaître seulement
+                            une fois rempli déplacerait le formulaire sous les
+                            yeux au moment où l'instance répond. Sa première
+                            ligne porte donc son propre état. */}
+                        <label className={styles.field}>
+                            <span className={styles.label}>Cible</span>
+                            <SelectInput
+                                value={externalId}
+                                onChange={(e) => pick(e.target.value)}
+                                disabled={loadingCandidates || candidates.length === 0}
+                            >
+                                <option value=''>
+                                    {loadingCandidates
+                                        ? 'Interrogation de l’instance…'
+                                        : candidates.length === 0
+                                          ? 'Cette instance ne déclare aucune application'
+                                          : 'Choisir…'}
+                                </option>
+                                {/* La cible réglée mais absente de la liste — une
+                                    application retirée chez le fournisseur, ou
+                                    saisie à la main. Sans cette entrée, le
+                                    sélecteur afficherait « Choisir… » sur une
+                                    cible qui en a pourtant une. */}
+                                {externalId !== '' && !candidates.some((c) => c.externalId === externalId) && (
+                                    <option value={externalId}>{externalId} — hors liste</option>
+                                )}
+                                {candidates.map((c) => (
+                                    <option key={`${c.kind}:${c.externalId}`} value={c.externalId}>
+                                        {c.kind === 'compose' ? '🧩 ' : '📦 '}
+                                        {c.name}
+                                        {c.path ? ` — ${c.path}` : ''}
+                                    </option>
+                                ))}
+                            </SelectInput>
+                        </label>
 
                         {/* Repli manuel : si l'instance répond dans une forme que
                             le décodeur ne reconnaît pas, on doit quand même
