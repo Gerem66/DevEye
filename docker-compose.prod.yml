@@ -6,6 +6,22 @@
 # The app is intentionally NOT exposed to the internet: it binds to
 # 127.0.0.1 only (localhost). Access it via SSH tunnel or from the host
 # directly. The DB is an external MySQL instance.
+#
+# ## La surface publique, quand elle est activée
+#
+# Régler `PUBLIC_LISTEN_PORT` dans `.env` démarre un **second écouteur** dans le
+# même processus, qui ne déclare que l'ingestion d'audience et son script : ni
+# authentification, ni WebSocket, ni client web n'y existent (voir
+# `src/publicApp.ts`). On lui dédie alors un domaine, et la séparation ne dépend
+# d'aucune règle de routage.
+#
+# Rien à ajouter ici pour cela : le conteneur est déjà sur `dokploy-network`
+# sous l'alias `deveye-server`, et Traefik l'y atteint sur n'importe quel port.
+# Dans Dokploy, ajouter un domaine à cette application en indiquant ce port-là
+# comme port de destination, puis accorder `AUDIENCE_ORIGIN` avec ce domaine.
+#
+# Le bloc `ports:` ci-dessous n'expose volontairement **que** le port privé sur
+# la boucle locale : il sert au dépannage depuis l'hôte, pas au routage.
 
 name: deveye-prod
 

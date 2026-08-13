@@ -1,5 +1,6 @@
 import { env } from '@/Utils/Env';
 import { buildApp } from '@/app';
+import { buildPublicApp } from '@/publicApp';
 import { pruneCloudSync } from '@/cloudSync/prune';
 import { logger } from '@/logger';
 import { agentDistDir, startAgentReconcile } from '@/agent/sync';
@@ -34,6 +35,16 @@ async function main() {
     });
     const audit = createAuditLog(db);
 
+    /**
+     * Le second écouteur, sur son propre port, quand il est réglé.
+     *
+     * Même processus que le premier, et c'est une contrainte et non un choix :
+     * l'ingestion prévient les écrans par `LiveHub`, dont l'état est local au
+     * processus. Un conteneur séparé écrirait les mesures sans que personne ne
+     * soit averti, et le rafraîchissement cesserait en silence.
+     */
+    const publicApp = env.PUBLIC_LISTEN_PORT ? await buildPublicApp({ ingest: audience }) : null;
+
     const shutdown = async (signal: string) => {
         logger.info({ signal }, 'Shutting down');
         try {
@@ -43,6 +54,7 @@ async function main() {
             databases.stop();
             audience.stop();
             sentinel.stop();
+            if (publicApp) await publicApp.close();
             await app.close();
             await pool.end();
             process.exit(0);
@@ -100,6 +112,14 @@ async function main() {
 
     await app.listen({ port: env.LISTEN_PORT, host: '0.0.0.0' });
     logger.info({ port: env.LISTEN_PORT }, 'DevEye server ready');
+
+    if (publicApp && env.PUBLIC_LISTEN_PORT) {
+        await publicApp.listen({ port: env.PUBLIC_LISTEN_PORT, host: '0.0.0.0' });
+        logger.warn(
+            { port: env.PUBLIC_LISTEN_PORT, origin: env.AUDIENCE_ORIGIN || null },
+            'Public surface listening — audience ingest only, no session route registered'
+        );
+    }
 
     audit.record({
         source: 'system',

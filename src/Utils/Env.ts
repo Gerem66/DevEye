@@ -24,6 +24,20 @@ export const env = {
     // développement local sans rien configurer.
     AUDIENCE_ORIGIN: getEnvVar('AUDIENCE_ORIGIN', 'string', false),
 
+    /**
+     * Port du **second écouteur**, celui qu'on expose sur Internet.
+     *
+     * Vide, il n'y en a pas : le serveur se comporte exactement comme avant, et
+     * les routes publiques restent joignables sur le port principal. C'est le
+     * cas du développement, où un seul port sert tout.
+     *
+     * Réglé, un second serveur démarre, qui **n'enregistre que** l'ingestion
+     * d'audience et son script (voir `publicApp.ts`). On lui dédie alors un
+     * domaine côté proxy, et il n'existe aucun chemin de code de ce port vers
+     * l'authentification, la socket ou le client web.
+     */
+    PUBLIC_LISTEN_PORT: getEnvVar('PUBLIC_LISTEN_PORT', 'number', false),
+
     LOG_LEVEL: getEnvVar('LOG_LEVEL', 'enum', ['fatal', 'error', 'warn', 'info', 'debug', 'trace']),
     LOG_PATH: getEnvVar('LOG_PATH', 'string', false) || './logs',
 
@@ -124,3 +138,14 @@ export const env = {
 };
 
 export const isDev = env.ENVIRONMENT === 'dev';
+
+// Les deux écouteurs sur le même port, c'est un `EADDRINUSE` brut au démarrage,
+// et **après** que le serveur principal soit debout : le message ne dirait rien
+// de la cause. On refuse tout de suite, en la nommant.
+if (env.PUBLIC_LISTEN_PORT && env.PUBLIC_LISTEN_PORT === env.LISTEN_PORT) {
+    throw new Error(
+        `PUBLIC_LISTEN_PORT (${env.PUBLIC_LISTEN_PORT}) doit différer de LISTEN_PORT : ce sont deux serveurs distincts, ` +
+            "et c'est ce qui garde les routes internes hors d'atteinte du domaine public. Laisser PUBLIC_LISTEN_PORT vide " +
+            'pour tout servir sur un seul port (cas du développement).'
+    );
+}
