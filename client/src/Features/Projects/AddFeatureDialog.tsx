@@ -3,7 +3,8 @@ import { LinkRepoDialog } from './Git/LinkRepoDialog';
 import { LinkDatabaseDialog } from './Database/LinkDatabaseDialog';
 import { LinkSiteDialog } from './Audience/LinkSiteDialog';
 import { LinkTargetDialog } from './Deploy/LinkTargetDialog';
-import type { ProjectFeatureTabId } from './tabs';
+import { LinkUptimeDialog } from './Deploy/LinkUptimeDialog';
+import type { ProjectFeatureTabId, ProjectTabAddKey } from './tabs';
 
 /**
  * Rien de relié, par construction.
@@ -17,8 +18,8 @@ const NOTHING_LINKED: number[] = [];
 
 interface AddFeatureDialogProps {
     projectId: number;
-    /** La feature dont l'ajout est en cours, ou `null` si le menu n'a rien lancé. */
-    pending: ProjectFeatureTabId | null;
+    /** Le geste dont l'ajout est en cours, ou `null` si le menu n'a rien lancé. */
+    pending: ProjectTabAddKey | null;
     onClose: () => void;
     /** L'ajout a abouti : l'onglet a désormais de quoi s'ouvrir. */
     onAdded: (id: ProjectFeatureTabId) => void;
@@ -35,8 +36,12 @@ interface AddFeatureDialogProps {
  *
  * Les deux points d'entrée ne se marchent jamais dessus : le menu ne propose que
  * ce qui est absent de la barre, et le bouton d'un onglet n'existe que s'il y
- * est. Les quatre restent montés fermés pour que la fermeture s'anime, comme
+ * est. Ils restent tous montés fermés pour que la fermeture s'anime, comme
  * partout ailleurs ; leurs requêtes, elles, ne partent qu'à l'ouverture.
+ *
+ * Le déploiement en porte deux (`deploy`, `uptime`) puisque son onglet montre
+ * deux choses ; les deux gestes révèlent le même onglet, `onAdded('deploy')`
+ * dans les deux cas.
  */
 export function AddFeatureDialog({ projectId, pending, onClose, onAdded }: AddFeatureDialogProps) {
     return (
@@ -81,6 +86,17 @@ export function AddFeatureDialog({ projectId, pending, onClose, onAdded }: AddFe
                 onClose={onClose}
                 onSaved={() => {
                     invalidate('project.board', 'deploy.list', 'deploy.count');
+                    onAdded('deploy');
+                }}
+            />
+
+            <LinkUptimeDialog
+                open={pending === 'uptime'}
+                projectId={projectId}
+                linkedIds={NOTHING_LINKED}
+                onClose={onClose}
+                onSaved={() => {
+                    invalidate('project.board');
                     onAdded('deploy');
                 }}
             />

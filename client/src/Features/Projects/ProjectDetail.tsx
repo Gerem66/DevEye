@@ -29,7 +29,7 @@ import { Audience } from './Audience/Audience';
 import { Deploy } from './Deploy/Deploy';
 import { AddFeatureDialog } from './AddFeatureDialog';
 import { ProjectTabs } from './ProjectTabs';
-import { isProjectTabId, type ProjectFeatureTabId, type ProjectTabId } from './tabs';
+import { isProjectTabId, type ProjectTabAddKey, type ProjectTabId } from './tabs';
 import { useProjectTabs } from './useProjectTabs';
 import styles from './style.module.css';
 
@@ -62,8 +62,8 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
     const [tab, setTab] = useState<ProjectTabId>('board');
 
     const tabs = useProjectTabs(project, canWrite);
-    /** La feature dont le menu « + » a lancé l'ajout, tant qu'il n'est pas clos. */
-    const [adding, setAdding] = useState<ProjectFeatureTabId | null>(null);
+    /** Le geste que le menu « + » a lancé, tant qu'il n'est pas clos. */
+    const [adding, setAdding] = useState<ProjectTabAddKey | null>(null);
 
     // Ce que les onglets rendent peut porter son propre bandeau collant : c'est
     // le cas de l'onglet Audience et de sa barre de période. Elle doit se poser
@@ -490,7 +490,7 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
                     active={tab}
                     onSelect={setTab}
                     addable={tabs.addable}
-                    onAdd={(feature) => setAdding(feature.id)}
+                    onAdd={(_tab, action) => setAdding(action.key)}
                     outline={outlineForTab}
                 />
             </div>

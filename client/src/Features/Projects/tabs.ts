@@ -21,14 +21,28 @@ export type ProjectFeatureTabId = 'git' | 'database' | 'audience' | 'deploy';
 
 export type ProjectTabId = 'board' | 'timeline' | ProjectFeatureTabId | 'history';
 
-/** Ce qu'il faut savoir pour proposer une feature dans le menu « + ». */
-export interface ProjectTabAdd {
+/**
+ * Une clé par geste d'ajout, unique sur l'ensemble des onglets — pas une par
+ * onglet : Déploiement en porte deux (une cible, un uptime), les trois autres
+ * n'en portent qu'un, mais tous se distinguent par la même sorte de clé. C'est
+ * elle qui dit à `AddFeatureDialog` quel dialogue monter.
+ */
+export type ProjectTabAddKey = 'git' | 'database' | 'audience' | 'deploy' | 'uptime';
+
+/** Ce qu'il faut savoir pour proposer un geste d'ajout dans le menu « + ». */
+export interface ProjectTabAddAction {
+    key: ProjectTabAddKey;
     /**
-     * L'intitulé du geste, repris mot pour mot du bouton de l'onglet : le menu
-     * ne fait rien d'autre que l'appuyer à sa place, et deux formulations pour
-     * un même geste laisseraient croire à deux gestes.
+     * L'intitulé du geste, repris mot pour mot du bouton qui fait la même
+     * chose dans l'onglet : le menu ne fait rien d'autre que l'appuyer à sa
+     * place, et deux formulations pour un même geste laisseraient croire à
+     * deux gestes.
      */
     label: string;
+    /** L'icône de la ligne, quand elle diffère de celle de l'onglet — le cas
+     *  d'un onglet à plusieurs gestes, où l'icône est ce qui les distingue au
+     *  premier coup d'œil. */
+    icon?: string;
     /**
      * Le droit d'espace que ce geste réclame **en plus** de `projects: write`.
      *
@@ -47,7 +61,13 @@ export interface ProjectTab {
 
 export interface ProjectFeatureTab extends ProjectTab {
     id: ProjectFeatureTabId;
-    add: ProjectTabAdd;
+    /**
+     * Les gestes qui peuplent cet onglet. Presque toujours un seul ; le
+     * Déploiement en porte deux, car il montre deux choses (voir
+     * `UptimeLinks`) et le menu « + » n'a rien d'autre pour les proposer tant
+     * que l'onglet lui-même n'existe pas encore.
+     */
+    add: ProjectTabAddAction[];
 }
 
 /** Avant les features : le travail lui-même. */
@@ -62,9 +82,9 @@ const TRAILING: ProjectTab[] = [{ id: 'history', label: 'Historique', icon: 'arc
 /**
  * Les quatre onglets suspendus à leur contenu.
  *
- * `requires` suit ce que le dialogue d'ajout fait vraiment, et toutes exigent
- * l'**écriture** sur la feature visée : les quatre dialogues
- * peuvent créer l'objet en plus de le relier, et pas seulement le choisir.
+ * `requires` suit ce que le dialogue d'ajout fait vraiment, et tous exigent
+ * l'**écriture** sur la feature visée : les dialogues peuvent créer l'objet en
+ * plus de le relier, et pas seulement le choisir.
  *
  * Le déploiement a longtemps fait exception, en réclamant `git: read` — le temps
  * où la clé Dokploy vivait dans la feature Git, faute de module pour
@@ -76,25 +96,38 @@ export const PROJECT_FEATURE_TABS: ProjectFeatureTab[] = [
         id: 'git',
         label: 'Git',
         icon: 'branch',
-        add: { label: 'Ajouter un dépôt', requires: { feature: 'git', level: 'write' } }
+        add: [{ key: 'git', label: 'Ajouter un dépôt', requires: { feature: 'git', level: 'write' } }]
     },
     {
         id: 'database',
         label: 'Bases de données',
         icon: 'database',
-        add: { label: 'Ajouter une base', requires: { feature: 'database', level: 'write' } }
+        add: [{ key: 'database', label: 'Ajouter une base', requires: { feature: 'database', level: 'write' } }]
     },
     {
         id: 'audience',
         label: 'Audience',
         icon: 'eye-open',
-        add: { label: 'Ajouter un site', requires: { feature: 'audience', level: 'write' } }
+        add: [{ key: 'audience', label: 'Ajouter un site', requires: { feature: 'audience', level: 'write' } }]
     },
     {
         id: 'deploy',
         label: 'Déploiement',
         icon: 'rocket',
-        add: { label: 'Ajouter une cible', requires: { feature: 'deploy', level: 'write' } }
+        // Deux gestes, car l'onglet montre deux choses : les cibles de
+        // déploiement et les services surveillés (voir `UptimeLinks`). Il
+        // paraît dès que l'un des deux existe (project.linkCounts en somme
+        // déjà les deux) ; tant qu'aucun n'existe, le « + » doit donc pouvoir
+        // lancer l'un ou l'autre.
+        add: [
+            { key: 'deploy', label: 'Ajouter une cible', requires: { feature: 'deploy', level: 'write' } },
+            {
+                key: 'uptime',
+                label: 'Ajouter un uptime',
+                icon: 'uptime',
+                requires: { feature: 'uptime', level: 'write' }
+            }
+        ]
     }
 ];
 

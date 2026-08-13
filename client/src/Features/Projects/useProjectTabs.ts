@@ -8,17 +8,24 @@ import {
     visibleProjectTabs,
     type ProjectFeatureTab,
     type ProjectFeatureTabId,
-    type ProjectTab
+    type ProjectTab,
+    type ProjectTabAddAction
 } from './tabs';
 
 /** Un projet sans aucune liaison — l'état de départ, et celui d'un projet gardé. */
 const NONE: ProjectLinkCounts = { git: 0, database: 0, audience: 0, deploy: 0 };
 
+/** Une ligne du menu « + » : le geste, et l'onglet qu'il fait naître. */
+export interface ProjectTabAddable {
+    tab: ProjectFeatureTab;
+    action: ProjectTabAddAction;
+}
+
 export interface ProjectTabsState {
     /** Les onglets de la barre, dans l'ordre. */
     visible: ProjectTab[];
-    /** Ce que le « + » propose : les features absentes de la barre, ajoutables. */
-    addable: ProjectFeatureTab[];
+    /** Ce que le « + » propose : les gestes dont l'onglet est absent de la barre. */
+    addable: ProjectTabAddable[];
     /** Faux tant que les compteurs n'ont pas été lus une première fois. */
     ready: boolean;
     /**
@@ -96,21 +103,25 @@ export function useProjectTabs(project: Project, canWrite: boolean): ProjectTabs
     }, []);
 
     /*
-     * Ajoutable = absent de la barre, et à la portée de l'appelant. Le droit
-     * d'écriture sur le projet ne suffit pas : le dialogue qui s'ouvre travaille
-     * dans la feature visée, et sans ce droit-là il ne mènerait nulle part.
+     * Ajoutable = onglet absent de la barre, geste à la portée de l'appelant.
+     * Le droit d'écriture sur le projet ne suffit pas : le dialogue qui s'ouvre
+     * travaille dans la feature visée, et sans ce droit-là il ne mènerait nulle
+     * part. Un onglet à plusieurs gestes (Déploiement) peut n'en proposer qu'un
+     * si l'autre feature échappe au rôle courant — mieux vaut une ligne de
+     * moins qu'une ligne qui mène à un refus.
      *
-     * Un projet confidentiel n'admet **aucune** des quatre liaisons (PROJECTS.md
+     * Un projet confidentiel n'admet **aucune** des liaisons (PROJECTS.md
      * §1.4) : le serveur les refuse, le « + » n'a donc rien à proposer. Ses
      * compteurs se lisent quand même — un tel projet peut porter des services
      * surveillés, rattachés avant sa conversion, et l'onglet Déploiement reste
      * le seul endroit d'où les atteindre.
      */
-    const addable =
+    const addable: ProjectTabAddable[] =
         canWrite && !guarded && counts !== null
-            ? PROJECT_FEATURE_TABS.filter(
-                  (tab) =>
-                      counts[tab.id] === 0 && permissions.canFeature(tab.add.requires.feature, tab.add.requires.level)
+            ? PROJECT_FEATURE_TABS.filter((tab) => counts[tab.id] === 0).flatMap((tab) =>
+                  tab.add
+                      .filter((action) => permissions.canFeature(action.requires.feature, action.requires.level))
+                      .map((action) => ({ tab, action }))
               )
             : [];
 

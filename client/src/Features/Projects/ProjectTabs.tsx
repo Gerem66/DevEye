@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDismissLayer } from '@/Components/Dialog';
 import type { LiveOutlineProps } from '@/live/useLiveOutline';
-import type { ProjectFeatureTab, ProjectTab, ProjectTabId } from './tabs';
+import type { ProjectFeatureTab, ProjectTab, ProjectTabAddAction, ProjectTabId } from './tabs';
+import type { ProjectTabAddable } from './useProjectTabs';
 import styles from './style.module.css';
 
 interface ProjectTabsProps {
@@ -9,9 +10,9 @@ interface ProjectTabsProps {
     tabs: ProjectTab[];
     active: ProjectTabId;
     onSelect: (id: ProjectTabId) => void;
-    /** Les features repliées dans le « + ». Vide = pas de bouton du tout. */
-    addable: ProjectFeatureTab[];
-    onAdd: (tab: ProjectFeatureTab) => void;
+    /** Les gestes repliés dans le « + ». Vide = pas de bouton du tout. */
+    addable: ProjectTabAddable[];
+    onAdd: (tab: ProjectFeatureTab, action: ProjectTabAddAction) => void;
     /** Les contours de présence du niveau `l2` (voir LIVE.md). */
     outline: (value: string | null) => LiveOutlineProps;
 }
@@ -44,11 +45,13 @@ export function ProjectTabs({ tabs, active, onSelect, addable, onAdd, outline }:
 }
 
 /**
- * Le menu des features qui ne sont pas dans la barre.
+ * Le menu des gestes dont l'onglet n'est pas encore dans la barre.
  *
- * Chaque entrée nomme la feature **et** le geste qu'elle déclenche : le clic
- * n'ouvre pas un onglet vide, il ouvre le formulaire d'ajout de la feature — le
- * même que son bouton « Ajouter un… ». L'onglet, lui, naît de ce qu'on y met.
+ * Chaque entrée nomme l'onglet **et** le geste qu'elle déclenche : le clic
+ * n'ouvre pas un onglet vide, il ouvre le formulaire d'ajout correspondant — le
+ * même que le bouton « Ajouter un… » de l'onglet. Celui-ci, lui, naît de ce
+ * qu'on y met. Un onglet à plusieurs gestes (Déploiement, tant qu'il n'a ni
+ * cible ni service surveillé) y occupe donc plusieurs lignes, une par geste.
  *
  * Se ferme au choix, au clic à l'extérieur, ou par Échap — cette dernière par
  * la pile de couches partagée, pour que le menu parte avant la popup qui le
@@ -85,21 +88,21 @@ function AddTabMenu({ addable, onAdd }: Pick<ProjectTabsProps, 'addable' | 'onAd
 
             {open && (
                 <div className={styles.tabMenu} role='menu'>
-                    {addable.map((tab) => (
+                    {addable.map(({ tab, action }) => (
                         <button
-                            key={tab.id}
+                            key={action.key}
                             type='button'
                             role='menuitem'
                             className={styles.tabMenuItem}
                             onClick={() => {
                                 setOpen(false);
-                                onAdd(tab);
+                                onAdd(tab, action);
                             }}
                         >
-                            <span className={`icon icon-${tab.icon} ${styles.tabMenuIcon}`} />
+                            <span className={`icon icon-${action.icon ?? tab.icon} ${styles.tabMenuIcon}`} />
                             <span className={styles.tabMenuText}>
                                 {tab.label}
-                                <span className={styles.tabMenuHint}>{tab.add.label}</span>
+                                <span className={styles.tabMenuHint}>{action.label}</span>
                             </span>
                         </button>
                     ))}
