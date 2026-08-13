@@ -27,21 +27,11 @@ import { Git } from './Git/Git';
 import { Databases } from './Database/Databases';
 import { Audience } from './Audience/Audience';
 import { Deploy } from './Deploy/Deploy';
+import { AddFeatureDialog } from './AddFeatureDialog';
+import { ProjectTabs } from './ProjectTabs';
+import { isProjectTabId, type ProjectFeatureTabId, type ProjectTabId } from './tabs';
+import { useProjectTabs } from './useProjectTabs';
 import styles from './style.module.css';
-
-/** Les onglets du projet. Les suivants arrivent avec leurs phases. */
-type TabId = 'board' | 'timeline' | 'git' | 'database' | 'audience' | 'deploy' | 'history';
-
-const TABS: { id: TabId; label: string; icon: string }[] = [
-    { id: 'board', label: 'Tableau', icon: 'projects' },
-    { id: 'timeline', label: 'Frise', icon: 'clock' },
-    { id: 'git', label: 'Git', icon: 'branch' },
-    { id: 'database', label: 'Bases de données', icon: 'database' },
-    { id: 'audience', label: 'Audience', icon: 'eye-open' },
-    { id: 'deploy', label: 'Déploiement', icon: 'rocket' },
-    // Dernier et discret : on l'ouvre rarement, pour une question précise.
-    { id: 'history', label: 'Historique', icon: 'archive' }
-];
 
 interface ProjectDetailProps {
     project: Project;
@@ -54,14 +44,26 @@ interface ProjectDetailProps {
 }
 
 /**
- * Un projet ouvert : son en-tête, ses onglets, et pour l'instant son tableau.
+ * Un projet ouvert : son en-tête, ses onglets, et le contenu de celui qu'on lit.
+ *
+ * **La barre d'onglets suit le contenu du projet.** Un projet neuf n'ouvre que
+ * le tableau, la frise et l'historique ; les quatre onglets d'intégration
+ * paraissent avec leur premier élément et se replient dans le menu « + » quand
+ * le dernier s'en va (la règle vit dans `tabs.ts`, les compteurs dans
+ * `useProjectTabs`). C'est aussi ce qui rend le geste d'ajout accessible sans
+ * onglet : le menu ouvre le formulaire de la feature, et l'onglet naît de ce
+ * qu'on y met.
  *
  * Ce composant possède le niveau `l2` de la présence (la carte ouverte) ; le
  * niveau `l1` (le projet) est déclaré par le composant parent. La règle « un
  * seul déclarant par niveau » (voir LIVE.md) interdit d'en poser un second.
  */
 export function ProjectDetail({ project, members, meUserId, canWrite, onBack, onEditProfile }: ProjectDetailProps) {
-    const [tab, setTab] = useState<TabId>('board');
+    const [tab, setTab] = useState<ProjectTabId>('board');
+
+    const tabs = useProjectTabs(project, canWrite);
+    /** La feature dont le menu « + » a lancé l'ajout, tant qu'il n'est pas clos. */
+    const [adding, setAdding] = useState<ProjectFeatureTabId | null>(null);
 
     // Ce que les onglets rendent peut porter son propre bandeau collant : c'est
     // le cas de l'onglet Audience et de sa barre de période. Elle doit se poser
@@ -106,8 +108,24 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
     useEffect(() => {
         if (!tabTarget?.value) return;
         const wanted = tabTarget.value.replace(/^tab:/, '');
-        if (TABS.some((t) => t.id === wanted)) setTab(wanted as TabId);
+        // Contre la liste **complète** : celui qu'on rejoint est forcément sur un
+        // onglet qui a du contenu, et les compteurs qui le confirmeront peuvent
+        // n'être pas encore arrivés.
+        if (isProjectTabId(wanted)) setTab(wanted);
     }, [tabTarget]);
+
+    /*
+     * Le dernier élément d'une feature vient d'être retiré : son onglet quitte la
+     * barre, et on ne peut pas rester sur un onglet qui n'existe plus. Le tableau
+     * est le repli naturel — c'est là qu'on entre dans un projet.
+     *
+     * Attendre `ready` est ce qui rend l'ajout depuis le « + » possible : tant
+     * que les compteurs sont inconnus, on ne renvoie personne nulle part.
+     */
+    useEffect(() => {
+        if (!tabs.ready) return;
+        if (!tabs.visible.some((t) => t.id === tab)) setTab('board');
+    }, [tabs.ready, tabs.visible, tab]);
 
     /**
      * … et jusque dans la tâche qu'il a ouverte.
@@ -467,20 +485,14 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
                     )}
                 </header>
 
-                <nav className={styles.tabs}>
-                    {TABS.map((t) => (
-                        <button
-                            key={t.id}
-                            type='button'
-                            className={t.id === tab ? styles.tabActive : styles.tab}
-                            aria-current={t.id === tab ? 'page' : undefined}
-                            onClick={() => setTab(t.id)}
-                            {...outlineForTab(`tab:${t.id}`)}
-                        >
-                            <span className={`icon icon-${t.icon}`} /> {t.label}
-                        </button>
-                    ))}
-                </nav>
+                <ProjectTabs
+                    tabs={tabs.visible}
+                    active={tab}
+                    onSelect={setTab}
+                    addable={tabs.addable}
+                    onAdd={(feature) => setAdding(feature.id)}
+                    outline={outlineForTab}
+                />
             </div>
 
             {/* Métadonnée de projet, donc hors des onglets : elle vaut quel que
@@ -555,6 +567,20 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
                     onOpenArchived={(card) => setArchivedView(card)}
                 />
             )}
+
+            {/* Le geste d'ajout lancé depuis le « + ». Il aboutit, l'onglet
+                existe : on l'ouvre dans la foulée — c'est ce qu'on venait
+                chercher, et personne n'a envie de le rouvrir à la main. */}
+            <AddFeatureDialog
+                projectId={project.id}
+                pending={adding}
+                onClose={() => setAdding(null)}
+                onAdded={(id) => {
+                    setAdding(null);
+                    tabs.reveal(id);
+                    setTab(id);
+                }}
+            />
 
             <ArchivedCardDialog
                 open={archivedView !== null}

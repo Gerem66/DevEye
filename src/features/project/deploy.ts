@@ -157,6 +157,10 @@ export const projectDeployLinkFeature: FeatureDefinition<
             externalId: input.externalId,
             content: await cipher.encrypt(JSON.stringify({ name: input.name }))
         });
+        // Dans la frise comme les trois autres liaisons : « depuis quand
+        // déploie-t-on ça d'ici ? » est exactement le genre de question qu'on
+        // repose des mois plus tard.
+        await recordEvent(ctx, project, { kind: 'project.deployLink', label: `Application liée : ${input.name}` });
         ctx.audit({
             action: 'project.deployLink',
             description: 'Application de déploiement liée',
@@ -175,9 +179,17 @@ export const projectDeployUnlinkFeature: FeatureDefinition<
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        await loadProject(ctx, input.projectId);
+        const project = await loadProject(ctx, input.projectId);
+        // Les déploiements déjà déclenchés survivent : ils disent ce qui a été
+        // livré, et ce fait-là ne dépend pas de la liaison qui l'a permis.
         const ok = await ctx.db.projectDeploy.deleteTarget(input.projectId, ctx.workspaceId);
         if (!ok) throw new FeatureError('not_found', 'Aucune application liée');
+        await recordEvent(ctx, project, { kind: 'project.deployUnlink', label: 'Application déliée' });
+        ctx.audit({
+            action: 'project.deployUnlink',
+            description: 'Application de déploiement déliée',
+            metadata: { projectId: input.projectId }
+        });
         return { projectId: input.projectId };
     }
 });

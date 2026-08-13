@@ -1,4 +1,10 @@
-import { projectMyTasks, projectUptimeLink, projectUptimeList, projectUptimeUnlink } from 'deveye-types';
+import {
+    projectLinkCounts,
+    projectMyTasks,
+    projectUptimeLink,
+    projectUptimeList,
+    projectUptimeUnlink
+} from 'deveye-types';
 import type { MyTask, ProjectRow } from 'deveye-types';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { cipherFor, decryptCard, loadProject, toCard, tryDecryptProject } from './_shared';
@@ -68,6 +74,40 @@ export const projectMyTasksFeature: FeatureDefinition<
     }
 });
 
+export const projectLinkCountsFeature: FeatureDefinition<
+    typeof projectLinkCounts.command,
+    typeof projectLinkCounts.input,
+    typeof projectLinkCounts.output
+> = defineFeature({
+    ...projectLinkCounts,
+    access: READ,
+    handler: async (ctx, input) => {
+        await loadProject(ctx, input.projectId);
+        // Les listes plutôt que quatre `COUNT(*)` : ce sont des poignées
+        // d'identifiants, les requêtes existent déjà et sont celles que les
+        // onglets eux-mêmes appellent. Une seconde famille de requêtes pour
+        // rendre le même fait ne se serait payée qu'en occasions de diverger.
+        const [repos, databases, sites, target, services] = await Promise.all([
+            ctx.db.git.listLinkedRepoIds(input.projectId, ctx.workspaceId),
+            ctx.db.databases.listLinkedIds(input.projectId, ctx.workspaceId),
+            ctx.db.audience.listLinkedIds(input.projectId, ctx.workspaceId),
+            ctx.db.projectDeploy.findTarget(input.projectId, ctx.workspaceId),
+            ctx.db.projectLinks.listServiceIds(input.projectId, ctx.workspaceId)
+        ]);
+        return {
+            counts: {
+                git: repos.length,
+                database: databases.length,
+                audience: sites.length,
+                // L'onglet Déploiement montre deux choses : l'application liée
+                // et les services surveillés. Il a donc de quoi s'ouvrir dès que
+                // l'une des deux existe.
+                deploy: (target ? 1 : 0) + services.length
+            }
+        };
+    }
+});
+
 export const projectUptimeListFeature: FeatureDefinition<
     typeof projectUptimeList.command,
     typeof projectUptimeList.input,
@@ -121,6 +161,7 @@ export const projectUptimeUnlinkFeature: FeatureDefinition<
 
 export const projectLinkFeatures = [
     projectMyTasksFeature,
+    projectLinkCountsFeature,
     projectUptimeListFeature,
     projectUptimeLinkFeature,
     projectUptimeUnlinkFeature

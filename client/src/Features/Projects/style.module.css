@@ -635,6 +635,113 @@
     cursor: pointer;
 }
 
+/* Le « + » de bout de barre, et le menu des features qui n'y sont pas.
+   `margin-left: auto` le pousse à droite sans imposer de `justify-content` à
+   `.tabs`, que le dialogue de liaison des dépôts emprunte pour ses deux modes. */
+.tabAddWrap {
+    position: relative;
+    margin-left: auto;
+    align-self: center;
+}
+
+.tabAdd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    background: none;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font: inherit;
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.tabAdd:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.tabAddOpen {
+    composes: tabAdd;
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.tabMenu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 20;
+    min-width: 240px;
+    padding: var(--space-xs);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--surface-popup);
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    backdrop-filter: blur(12px);
+}
+
+.tabMenuItem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-xs) var(--space-sm);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.tabMenuItem:hover {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.tabMenuIcon {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+
+.tabMenuItem:hover .tabMenuIcon {
+    color: var(--accent);
+}
+
+.tabMenuText {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* Ce que le clic va faire, sous le nom de la feature : il n'ouvre pas un onglet
+   vide, il ouvre le formulaire d'ajout. Le dire évite la seule surprise que ce
+   menu pouvait produire. */
+.tabMenuHint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.tabMenuItem:hover .tabMenuHint {
+    color: inherit;
+    opacity: 0.8;
+}
+
 /* ------------------------------------------------------------------ kanban */
 
 .board {
@@ -1585,20 +1692,59 @@
     gap: var(--space-lg);
 }
 
-.deployEmpty {
+/*
+ * L'application liée, dans son cadre — le même que le bloc d'un dépôt
+ * (`Features/Git`) ou d'une base (`Features/Database`), et pour la même raison :
+ * il dit où finit ce que l'onglet montre. Sans lui, l'en-tête et la liste des
+ * déploiements flottaient sur le fond de la popup, et l'onglet ne ressemblait
+ * plus à ses voisins.
+ *
+ * `--block-bg` est la teinte du bloc rendue **opaque** : `--surface-subtle` ne
+ * l'est pas (4 % de blanc), et l'en-tête collant laissait défiler le contenu au
+ * travers. On empile donc la teinte sur le jumeau opaque du fond de popup — un
+ * `linear-gradient` d'une seule couleur sert de calque — ce qui garde la couleur
+ * apparente du bloc sans rien laisser passer, et sans figer une valeur que le
+ * thème peut changer.
+ */
+.deployBlock {
+    --block-bg: linear-gradient(var(--surface-subtle), var(--surface-subtle)), var(--surface-popup-solid);
     display: flex;
     flex-direction: column;
-    align-items: center;
     gap: var(--space-md);
-    padding: var(--space-xl) 0;
+    min-width: 0;
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-subtle);
 }
 
+/* Le geste d'ajout au pied de la page, comme dans les trois autres onglets. */
+.addRow {
+    display: flex;
+    justify-content: center;
+    padding-top: var(--space-sm);
+}
+
+/* L'en-tête reste en vue tant qu'on parcourt la liste des déploiements : il
+   porte le nom de l'application et les boutons qui agissent dessus. Il se pose
+   sous l'en-tête du projet, dont `useStickyOffset` publie la hauteur. */
 .targetHead {
+    position: sticky;
+    top: var(--sticky-head, 0px);
+    z-index: 2;
+    background: var(--block-bg, var(--surface-popup-solid));
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: var(--space-md);
     flex-wrap: wrap;
+}
+
+/* `min-width: 0` : sans lui, un nom d'application long refuse de se tronquer et
+   pousse les boutons hors du cadre. */
+.targetIdent {
+    min-width: 0;
+    flex: 1;
 }
 
 .targetName {
