@@ -12,6 +12,7 @@ import { MailWidget } from '@/Features/Mail/MailWidget';
 import { ProjectsWidget } from '@/Features/Projects/ProjectsWidget';
 import { GitWidget } from '@/Features/Git/GitWidget';
 import { DatabaseWidget } from '@/Features/Database/DatabaseWidget';
+import { AudienceWidget } from '@/Features/Audience/AudienceWidget';
 import { OsintWidget } from '@/Features/Osint/OsintWidget';
 
 import Monitoring from '@/Features/Monitoring';
@@ -25,6 +26,7 @@ import Mail from '@/Features/Mail';
 import FeatureProjects from '@/Features/Projects';
 import FeatureGit from '@/Features/Git';
 import FeatureDatabase from '@/Features/Database';
+import FeatureAudience from '@/Features/Audience';
 import FeatureOsint from '@/Features/Osint';
 
 import type { FeatureProps } from '@/Features/types';
@@ -169,6 +171,23 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         cacheDurationMinutes: 0
     },
     {
+        id: 'audience',
+        title: 'Audience',
+        // `eye-open` et non `activity` : ce dernier appartient déjà à
+        // Monitoring, et deux tuiles voisines qui portent le même pictogramme
+        // ne se distinguent plus au coup d'œil — ce qui est précisément ce
+        // qu'on demande à une grille d'icônes. L'œil dit « des vues », là où la
+        // courbe d'activité dit « une machine qui tourne ».
+        icon: 'eye-open',
+        WidgetContent: AudienceWidget,
+        FullComponent: FeatureAudience,
+        // Démonté dès la fermeture, comme Git et les bases : la fiche tient des
+        // agrégats bornés par une fenêtre de temps, qui auraient vieilli en
+        // silence dans une instance mise en cache. Pas de `holdSecrecy` : rien
+        // n'y est chiffré à l'étage gardé, donc rien ne peut ouvrir l'invite.
+        cacheDurationMinutes: 0
+    },
+    {
         id: 'osint',
         title: 'OSINT',
         icon: 'search',
@@ -201,8 +220,15 @@ export function featureCatalogEntry(id: HomeFeatureId): FeatureCatalogEntry | un
     return FEATURE_CATALOG.find((f) => f.id === id);
 }
 
-/** Qui regarde, et depuis quel genre d'espace. */
-export interface FeatureAudience {
+/**
+ * Qui regarde, et depuis quel genre d'espace.
+ *
+ * ⚠️ **`HomeAudience`, et non `Audience`** : depuis la feature du même nom, ce
+ * mot désigne ailleurs dans le dépôt les visiteurs d'un site suivi. Deux sens à
+ * quelques lignes d'écart — `FEATURE_CATALOG` porte les deux — sont le genre de
+ * collision que rien ne signale et qu'on paye six mois plus tard.
+ */
+export interface HomeAudience {
     kind: WorkspaceKind | undefined;
     isAdmin: boolean;
 }
@@ -215,17 +241,17 @@ export interface FeatureAudience {
  * et le préchargement. En avoir plusieurs, c'est en oublier une — et une seule
  * suffit à rouvrir la porte.
  */
-export function availableFeatures({ kind, isAdmin }: FeatureAudience): FeatureCatalogEntry[] {
+export function availableFeatures({ kind, isAdmin }: HomeAudience): FeatureCatalogEntry[] {
     return FEATURE_CATALOG.filter((f) => featureAllowed(f, { kind, isAdmin }));
 }
 
 /** La même règle, appliquée à une entrée déjà connue. */
-export function featureAllowed(entry: FeatureCatalogEntry, { kind, isAdmin }: FeatureAudience): boolean {
+export function featureAllowed(entry: FeatureCatalogEntry, { kind, isAdmin }: HomeAudience): boolean {
     return !entry.adminOnly || (isAdmin && kind === 'personal');
 }
 
 /** La même règle encore, appliquée à des identifiants déjà épinglés (disposition héritée). */
-export function usableFeatureIds(ids: readonly HomeFeatureId[], audience: FeatureAudience): HomeFeatureId[] {
+export function usableFeatureIds(ids: readonly HomeFeatureId[], audience: HomeAudience): HomeFeatureId[] {
     const allowed = new Set(availableFeatures(audience).map((f) => f.id));
     return ids.filter((id) => allowed.has(id));
 }
@@ -234,7 +260,7 @@ export function usableFeatureIds(ids: readonly HomeFeatureId[], audience: Featur
  * Ce widget est-il ouvrable ici ? Réponse par identifiant, pour les appelants
  * qui n'ont qu'une vue (`allowedToOpen`, la garde unique de navigation).
  */
-export function featureIdAllowed(id: string, audience: FeatureAudience): boolean {
+export function featureIdAllowed(id: string, audience: HomeAudience): boolean {
     const entry = FEATURE_CATALOG.find((f) => f.id === id);
     return !entry || featureAllowed(entry, audience);
 }

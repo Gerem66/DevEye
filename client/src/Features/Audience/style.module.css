@@ -1,0 +1,1404 @@
+/*
+ * Audience — l'apparence.
+ *
+ * Aucune couleur en dur : tout passe par les variables du thème, donc l'écran
+ * suit l'apparence de l'espace sans une ligne de plus.
+ *
+ * ⚠️ Une classe ne doit être définie **qu'une fois** seule dans son sélecteur —
+ * `client/scripts/check-css-modules.mjs` échoue sinon. Ce filet existe parce
+ * qu'une redéfinition silencieuse a rendu la page d'accueil des Projets
+ * inutilisable sans que rien (TypeScript, ESLint, le build) ne le signale.
+ */
+
+.feature {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-height: 0;
+}
+
+.head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.title {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+}
+
+.subtitle {
+    margin: 2px 0 0;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.error {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--danger-bg);
+    color: var(--danger);
+    font-size: 0.85rem;
+}
+
+.notice {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--warning-bg);
+    color: var(--warning);
+    font-size: 0.85rem;
+}
+
+.empty {
+    margin: 0;
+    padding: var(--space-md);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+/* ------------------------------------------------------------ la liste */
+
+.grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-sm);
+    margin: 0;
+    padding: 0 0 var(--space-md);
+    list-style: none;
+    align-content: start;
+    /* Repère de la barre d'insertion, positionnée par rapport à cette boîte. */
+    position: relative;
+}
+
+.dropBar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent-glow);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.card {
+    position: relative;
+    display: flex;
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    background: var(--surface-widget);
+    border: 1px solid var(--glass-border);
+    transition:
+        border-color var(--transition-fast),
+        transform var(--transition-fast);
+}
+
+.card:hover {
+    border-color: var(--glass-border-strong);
+    transform: translateY(-1px);
+}
+
+/* framer-motion possède `opacity` sur les éléments animés : on atténue par un
+   filtre, jamais par la propriété elle-même. */
+.cardDragging {
+    filter: opacity(0.4);
+    cursor: grabbing;
+}
+
+.grip {
+    flex-shrink: 0;
+    align-self: center;
+    width: 18px;
+    height: 18px;
+    margin-left: var(--space-sm);
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: grab;
+    touch-action: none;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+}
+
+.card:hover .grip,
+.card:focus-within .grip {
+    opacity: 1;
+}
+
+.grip:active {
+    cursor: grabbing;
+}
+
+.cardBody {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    text-align: left;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+}
+
+.cardBody:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    border-radius: var(--radius-lg);
+}
+
+.cardMain {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.cardName {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin: 0;
+    font-size: 1rem;
+    color: var(--text-primary);
+}
+
+.cardMeta {
+    margin: 0;
+    font-size: 0.78rem;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cardFoot {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+    margin-top: var(--space-xs);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* Les deux nombres de la carte, alignés à droite : c'est la colonne que l'œil
+   suit en parcourant la liste, et elle doit rester au même endroit d'une carte
+   à l'autre. */
+.cardStats {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    min-width: 96px;
+}
+
+.cardStatValue {
+    font-size: 1.35rem;
+    line-height: 1.1;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.cardStatLabel {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.cardStatSecond {
+    margin-top: 2px;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.statusDot {
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+    border-radius: var(--radius-pill);
+    background: var(--text-muted);
+}
+
+.statusDot[data-tone='online'] {
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success);
+}
+
+.statusDot[data-tone='danger'] {
+    background: var(--danger);
+    box-shadow: 0 0 6px var(--danger);
+}
+
+.statusTag {
+    padding: 1px 8px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+}
+
+.statusTag[data-tone='online'] {
+    color: var(--success);
+    background: var(--success-bg);
+}
+
+.statusTag[data-tone='danger'] {
+    color: var(--danger);
+    background: var(--danger-bg);
+}
+
+/* ------------------------------------------------------------- la fiche */
+
+.detail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+/* Collant sur le corps défilant de la popup — même mécanique que le voile de
+   synchronisation de la feature Git. Le fond doit être **opaque** : sans lui,
+   le contenu défilerait visiblement dessous. */
+.detailHead {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    padding: var(--space-sm) 0;
+    background: var(--surface-popup-solid);
+}
+
+.detailTitle {
+    flex: 1;
+    min-width: 0;
+}
+
+.detailName {
+    margin: 0;
+    font-size: 1.15rem;
+    color: var(--text-primary);
+}
+
+.detailDesc {
+    margin: 2px 0 0;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.detailActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.usageList {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.usageLink {
+    padding: 4px 10px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.usageLink:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+/* --------------------------------------------------------- les chiffres */
+
+.view {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+/* Le voile couvre les chiffres sans les démonter : ils restent lisibles
+   dessous, atténués, et sont remplacés en place. `pointer-events: none` pour
+   qu'on puisse continuer à changer de fenêtre pendant qu'il tourne, et un fond
+   très clair plutôt qu'un masque opaque — on voile une relecture, on ne cache
+   pas un écran. */
+.viewVeil {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    border-radius: var(--radius-lg);
+    background: var(--glass-bg);
+    backdrop-filter: blur(1px);
+    pointer-events: none;
+    color: var(--accent);
+}
+
+.veilSpinner {
+    position: sticky;
+    top: 45%;
+}
+
+.loadingBlock {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    margin: 0;
+    padding: var(--space-xl);
+    color: var(--text-muted);
+    font-size: 0.88rem;
+}
+
+/* Le tour continu d'un indicateur d'attente — distinct de `.spinning`, qui ne
+   fait qu'un tour pour acquitter un clic. */
+.spin {
+    animation: audienceSpin 0.9s linear infinite;
+}
+
+/*
+ * Juste sous le bandeau collant qui la précède, quel qu'il soit.
+ *
+ * `--sticky-head` est publiée par `useStickyOffset`, qui **mesure** ce bandeau
+ * plutôt que de supposer sa hauteur : l'en-tête d'une fiche de site dans la
+ * feature Audience, l'en-tête et les onglets d'un projet dans son onglet
+ * Audience. Le repli `0px` couvre le cas où il n'y en a aucun.
+ *
+ * Une constante écrite en dur marchait dans un seul des deux cas, et se
+ * décalait dès qu'un titre passait à la ligne.
+ */
+.viewHead {
+    position: sticky;
+    top: var(--sticky-head, 0px);
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    padding: var(--space-xs) 0;
+    background: var(--surface-popup-solid);
+}
+
+.ranges {
+    display: inline-flex;
+    padding: 2px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+}
+
+.range {
+    padding: 4px 12px;
+    border: none;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.range:hover {
+    color: var(--text-primary);
+}
+
+.rangeActive {
+    composes: range;
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.liveTag {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--success);
+}
+
+.livePulse {
+    width: 7px;
+    height: 7px;
+    border-radius: var(--radius-pill);
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success);
+    animation: audiencePulse 2s ease-in-out infinite;
+}
+
+@keyframes audiencePulse {
+    50% {
+        filter: opacity(0.35);
+    }
+}
+
+/* Le bandeau : cinq mesures, à largeur égale, qui se replient en grille sur
+   une fenêtre étroite plutôt que de se comprimer jusqu'à l'illisible. */
+.band {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: var(--space-sm);
+    margin: 0;
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-widget);
+}
+
+.bandTile {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    /* Chaque tuile porte sa définition en `title`. Sans ce curseur, rien ne
+       dirait qu'il y a quelque chose à survoler — une info-bulle qu'on ne
+       cherche pas est une info-bulle qui n'existe pas. */
+    cursor: help;
+}
+
+.bandLabel {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.bandValue {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-xs);
+    margin: 0;
+    font-size: 1.4rem;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.bandDelta {
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.bandDelta[data-tone='up'] {
+    color: var(--success);
+}
+
+.bandDelta[data-tone='down'] {
+    color: var(--danger);
+}
+
+/* ---------------------------------------------------------- la courbe */
+
+.chart {
+    margin: 0;
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-widget);
+}
+
+.chartSvg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+}
+
+.chartLine {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+/* La seconde série est plus discrète que la première : les vues portent le
+   relief, les visiteurs ne servent qu'à le relativiser. */
+.chartLineSecondary {
+    fill: none;
+    stroke: var(--text-muted);
+    stroke-width: 1.5;
+    stroke-dasharray: 3 3;
+    stroke-linejoin: round;
+}
+
+.chartTick {
+    fill: var(--text-muted);
+    font-size: 11px;
+}
+
+.chartCursor {
+    stroke: var(--glass-border-strong);
+    stroke-width: 1;
+}
+
+.chartLegend {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    margin-top: var(--space-sm);
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.legendItem {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-variant-numeric: tabular-nums;
+}
+
+.legendSwatch {
+    width: 12px;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+}
+
+.legendSwatch[data-series='visitors'] {
+    background: var(--text-muted);
+}
+
+.legendNote {
+    color: var(--text-muted);
+}
+
+.legendWhen {
+    margin-left: auto;
+    color: var(--text-muted);
+}
+
+/* --------------------------------------------------------- les panneaux */
+
+.panels {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--space-md);
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-widget);
+    min-width: 0;
+}
+
+.panelHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.panelTitle {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.segmented {
+    display: inline-flex;
+    padding: 2px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+}
+
+.segment {
+    padding: 2px 10px;
+    border: none;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.74rem;
+    cursor: pointer;
+}
+
+.segmentActive {
+    composes: segment;
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.topList {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* La barre est **derrière** le texte : en colonne, elle aurait volé la moitié
+   de la largeur à des libellés qui en ont besoin (un chemin est long). */
+.topRow {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 5px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    overflow: hidden;
+}
+
+.topBar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    background: var(--accent-bg);
+    pointer-events: none;
+}
+
+.topLabel {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.topValue {
+    position: relative;
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-xs);
+    flex-shrink: 0;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.topVisitors {
+    color: var(--text-muted);
+    font-size: 0.74rem;
+}
+
+/* ------------------------------------------------------- la carte horaire */
+
+.heatmap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.heatmapGrid {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.heatmapRow {
+    display: grid;
+    grid-template-columns: 32px repeat(24, minmax(0, 1fr));
+    gap: 3px;
+    align-items: center;
+}
+
+.heatmapDay {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.heatmapCell {
+    aspect-ratio: 1;
+    min-height: 10px;
+    border-radius: 2px;
+    background: var(--accent);
+}
+
+/* Une case vide est un creux, pas une absence de case : la grille doit rester
+   lisible comme une grille, sinon le relief perd son repère. */
+.heatmapCell[data-empty] {
+    background: var(--surface-subtle);
+    opacity: 1;
+}
+
+.heatmapHours {
+    display: grid;
+    grid-template-columns: 32px repeat(24, minmax(0, 1fr));
+    gap: 3px;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+}
+
+.timezones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    margin: 0;
+}
+
+.tzTag {
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+}
+
+/* ----------------------------------------------------------- entonnoirs */
+
+/* Le geste d'ajout d'un onglet de projet, centré sous la liste : même place et
+   même forme que « Ajouter une base », pour que les onglets d'un projet ne se
+   distinguent pas les uns des autres par des détails. */
+.addRow {
+    display: flex;
+    justify-content: center;
+    padding-top: var(--space-sm);
+}
+
+.funnelCards {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+/* Une carte entière cliquable : la barre compacte ne répond qu'à « est-ce que
+   ça passe ? », le détail est derrière. Un `button` et non un `div` — c'est un
+   vrai geste, il doit être atteignable au clavier. */
+.funnelCard {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        background-color var(--transition-fast);
+}
+
+.funnelCard:hover {
+    border-color: var(--glass-border-strong);
+    background: var(--surface-subtle);
+}
+
+.funnelCard:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+.funnelCardHead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+}
+
+.funnelCardName {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-primary);
+    font-size: 0.92rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.funnelCardRate {
+    flex-shrink: 0;
+    font-size: 0.8rem;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+}
+
+.funnelCardFoot {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* La barre unique : ses parts somment à 1, donc `flex` sans `flex-wrap` et des
+   largeurs en pourcentage suffisent — aucune ne peut déborder. */
+.funnelSegments {
+    display: flex;
+    gap: 2px;
+    height: 12px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--surface-subtle);
+}
+
+.funnelSegmentEmpty {
+    flex: 1;
+}
+
+/* Trois teintes, pas une de plus : ce qui a converti, l'abandon le plus
+   coûteux, et tout le reste. Une couleur par marche aurait demandé une
+   légende — c'est-à-dire un second aller-retour du regard, pour une vue qui
+   n'existe que pour éviter le premier. */
+.funnelSegmentLost {
+    background: var(--glass-border-strong);
+    min-width: 2px;
+}
+
+.funnelSegmentWorst {
+    composes: funnelSegmentLost;
+    background: var(--warning);
+}
+
+.funnelSegmentDone {
+    composes: funnelSegmentLost;
+    background: var(--accent);
+}
+
+.funnelDetail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+/* Le tour d'icône du bouton de rafraîchissement : il acquitte le clic, il ne
+   mesure rien. `filter` et non `opacity` — framer-motion possède la seconde. */
+.spinning {
+    animation: audienceSpin 0.6s linear;
+}
+
+@keyframes audienceSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.funnel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.funnelStep {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.funnelLabel {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-xs);
+    font-size: 0.82rem;
+}
+
+.funnelKind {
+    flex-shrink: 0;
+    padding: 1px 7px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-muted);
+    font-size: 0.68rem;
+}
+
+.funnelValue {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.funnelCount {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-xs);
+    flex-shrink: 0;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.funnelShare {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.funnelTrack {
+    height: 10px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+    overflow: hidden;
+}
+
+.funnelBar {
+    height: 100%;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    transition: width var(--transition-normal);
+}
+
+/* L'abandon est un **lien entre deux marches**, pas une propriété de l'une
+   d'elles : il est donc rendu au-dessus de la marche dans laquelle il conduit.
+   Le poser en dessous collait la première marche à la deuxième et désalignait
+   toute la colonne — la première n'a pas d'abandon, rien ne la précède. */
+.funnelLink {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0 0 4px;
+    padding-left: var(--space-sm);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.funnelLinkWorst {
+    composes: funnelLink;
+    color: var(--warning);
+}
+
+/* `chevron.svg` pointe à droite ; ici la flèche descend vers la marche. */
+.funnelLink .funnelLinkIcon {
+    width: 11px;
+    transform: rotate(90deg);
+}
+
+/* --------------------------------------------- l'éditeur d'un entonnoir */
+
+.stepList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin: 0 0 var(--space-sm);
+    padding: 0;
+    list-style: none;
+}
+
+.stepRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    min-width: 0;
+}
+
+.stepIndex {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+/* `SelectInput` pose `width: 100%` : sans largeur imposée il réclamerait toute
+   la ligne et écraserait le champ de valeur — le motif est connu du dépôt. */
+.stepKind {
+    flex-shrink: 0;
+}
+
+/* La gouttière, et pourquoi c'est elle qu'il fallait corriger.
+   `SelectInput` pose `padding-right: 48px` — une réserve pour une flèche
+   personnalisée qui **n'existe pas** : le composant ne rend qu'un `<select>` nu,
+   sans `appearance: none`, sans image de fond ni pseudo-élément. Le navigateur
+   dessine donc sa flèche native au bord, et le texte est coupé 48 px avant elle.
+   Élargir le champ ne faisait qu'agrandir ce vide au lieu de le supprimer.
+   28 px laissent la place de la flèche native et rien de plus ; sur 140 px il
+   reste alors ~98 px de texte, quand « Événement » en réclame ~85.
+   ⚠️ **Double sélecteur pour battre les règles de `SelectInput`** : à
+   spécificité égale (0,1,0) c'est l'ordre d'injection des feuilles qui tranche.
+   Deux classes locales montent à (0,2,0) et gagnent quel que soit cet ordre —
+   même motif que `.stepBtn .stepIcon` juste au-dessus. */
+.stepRow .stepKind {
+    width: 140px;
+    padding-right: 8px;
+}
+
+/* `TextInput` rend un conteneur `position: relative` **sans largeur propre** :
+   en enfant direct d'une ligne flex, il se réduit à son contenu et tronque la
+   saisie alors que la place est libre. C'est cette enveloppe qui la réclame. */
+.stepValue {
+    flex: 1;
+    min-width: 0;
+}
+
+.stepActions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 2px;
+}
+
+.stepBtn {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.stepBtn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.stepBtn:disabled {
+    filter: opacity(0.35);
+    cursor: default;
+}
+
+/* Marqueur composable, porté par les trois icônes de la ligne. C'est la règle
+   à double sélecteur juste en dessous qui fixe réellement la taille. */
+.stepIcon {
+    flex-shrink: 0;
+}
+
+/* 18 px est la taille par défaut d'une icône : dans un bouton de 26 px elle
+   remplit tout et ne se lit plus comme un chevron.
+   ⚠️ **Double sélecteur pour battre le `.icon { width: 18px }` global**
+   d'icons.css : à spécificité égale (0,1,0) c'est l'ordre d'injection des
+   feuilles qui tranche, et icons.css passe après. Deux classes locales — le
+   bouton puis l'icône — montent à (0,2,0) et gagnent quel que soit cet ordre.
+   Même motif que `.card2Chip .chipIcon` dans le module Projets.
+   Ni `.stepBtn .icon` ni `:global` : dans un module, un `.icon` nu serait
+   renommé et ne matcherait plus rien — c'est ce qui avait déjà fait échouer,
+   en silence, la rotation du chevron « bas ». */
+.stepBtn .stepIcon {
+    width: 13px;
+}
+
+/* `chevron.svg` pointe **à droite**. Les rotations sont portées par l'icône
+   elle-même, jamais par un sélecteur descendant depuis une classe composée :
+   c'est ce détour qui avait laissé les deux flèches pointer du même côté. */
+.chevronUp {
+    composes: stepIcon;
+    transform: rotate(-90deg);
+}
+
+.chevronDown {
+    composes: stepIcon;
+    transform: rotate(90deg);
+}
+
+/* ------------------------------------------------------- l'attente initiale */
+
+.awaiting {
+    padding: var(--space-xl) var(--space-md);
+    text-align: center;
+    border: 1px dashed var(--glass-border-strong);
+    border-radius: var(--radius-lg);
+}
+
+.awaitingTitle {
+    margin: 0;
+    color: var(--text-primary);
+}
+
+.awaitingHint {
+    margin: var(--space-xs) auto 0;
+    max-width: 46ch;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------ formulaires */
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.label {
+    display: block;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.hint {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* Le seul réglage de la feature qui crée une obligation pour le site suivi.
+   Il se lit donc dans le ton d'un avertissement, pas dans celui d'une aide. */
+.hintWarn {
+    composes: hint;
+    color: var(--warning);
+}
+
+.textarea {
+    width: 100%;
+    padding: var(--space-sm);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-md);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font: inherit;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    resize: vertical;
+}
+
+.textarea:focus {
+    outline: none;
+    border-color: var(--input-focus);
+}
+
+/* `TextInput` et `SelectInput` posent `width: 100%` : sans `min-width: 0` sur
+   leurs conteneurs, ils réclament toute la place et écrasent leur voisin. */
+.row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--space-md);
+    align-items: start;
+}
+
+/* La hauteur d'un `TextInput` (`calc(2.25rem + 2px)`), pour que l'interrupteur
+   occupe la même bande que le champ de la colonne voisine — sans quoi les
+   intitulés s'alignent mais pas les explications en dessous. */
+.switchBox {
+    display: flex;
+    align-items: center;
+    min-height: calc(2.25rem + 2px);
+    min-width: 0;
+}
+
+.confirm {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    line-height: 1.5;
+}
+
+/* ----------------------------------------------------------- installation */
+
+.install {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.installStep {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: var(--space-sm) 0 0;
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+}
+
+.stepNumber {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 0.75rem;
+}
+
+.snippet {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    /* Une balise dépasse toujours la largeur du dialogue : elle défile
+       horizontalement plutôt que d'élargir la popup ou d'être coupée. */
+    overflow-x: auto;
+    white-space: pre;
+}
+
+/* Un bloc d'exemple, plus haut que la balise et défilant verticalement : un
+   exemple complet dépasse toujours la fenêtre, et l'étirer ferait défiler tout
+   le dialogue pour lire dix lignes de code. */
+.snippetTall {
+    composes: snippet;
+    max-height: 340px;
+    overflow-y: auto;
+    white-space: pre;
+}
+
+/* Le mémo pour un agent : un `textarea` en lecture seule, pour qu'un Ctrl+A ne
+   sélectionne que lui. Non redimensionnable en largeur — il déborderait du
+   dialogue — mais en hauteur, pour qui veut tout voir d'un coup. */
+.brief {
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    line-height: 1.5;
+    /* Pas de poignée : c'est un bloc à copier, pas un champ à remplir, et la
+       poignée native d'un `textarea` invite à le retailler pour rien. */
+    resize: none;
+}
+
+.brief:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.installActions {
+    display: flex;
+    gap: var(--space-sm);
+    justify-content: flex-end;
+}
+
+.waiting {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+.received {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--success-bg);
+    color: var(--success);
+    font-size: 0.82rem;
+}
+
+/*
+ * Le groupe de dépliants, **sans gouttière**.
+ *
+ * `.install` espace ses enfants d'un `gap`, qui venait s'ajouter au-dessus de
+ * chaque filet : un titre se retrouvait plus loin de sa propre ligne que du
+ * bloc précédent, et l'ensemble paraissait décalé vers le bas. Le seul
+ * espacement est désormais celui, égal de part et d'autre, du bouton de titre.
+ */
+.disclosures {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Les dépliants s'enchaînent : un filet les distingue sans les encadrer. */
+.disclosure {
+    border-top: 1px solid var(--glass-border);
+}
+
+.disclosureHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-sm) 0;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.84rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+.disclosureHead:hover {
+    color: var(--accent);
+}
+
+/* `chevron.svg` pointe à droite : replié il l'est aussi, déplié il descend. */
+.disclosureShut {
+    transition: transform var(--transition-fast);
+}
+
+.disclosureOpen {
+    composes: disclosureShut;
+    transform: rotate(90deg);
+}
+
+/* ⚠️ Double sélecteur, pour la quatrième fois dans ce fichier : une classe de
+   module seule ne bat pas le `.icon { width: 18px }` global d'icons.css, les
+   deux étant à (0,1,0) et l'ordre d'injection tranchant en faveur du second.
+   12 px est la taille des chevrons du reste de l'application. */
+.disclosureHead .disclosureShut {
+    width: 12px;
+}
+
+/* Le corps d'un dépliant porte lui-même son espacement : à l'intérieur d'un
+   `<details>`, les enfants échappaient au `gap` de `.install`, et le bouton de
+   copie se retrouvait collé au bloc de code qu'il copie. */
+.disclosureBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding-bottom: var(--space-sm);
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+/* Le pied de `Dialog` aligne à droite ; `margin-right: auto` suffit à pousser
+   un élément à l'autre bout sans toucher au composant partagé. */
+.footerLeft {
+    display: flex;
+    gap: var(--space-sm);
+    margin-right: auto;
+}
+
+.rotateWarn {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--warning-bg);
+    color: var(--warning);
+    font-size: 0.82rem;
+}

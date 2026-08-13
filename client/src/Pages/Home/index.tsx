@@ -54,7 +54,7 @@ import {
     featureCatalogEntry,
     featureIdAllowed,
     usableFeatureIds,
-    type FeatureAudience
+    type HomeAudience
 } from './catalog';
 import { isForceReload } from './forceReload';
 import {
@@ -186,7 +186,7 @@ function survivesWorkspaceSwitch(
     layout: HomeLayout,
     permissions: WorkspacePermissions,
     views: readonly ViewConfig[],
-    audience: FeatureAudience
+    audience: HomeAudience
 ): boolean {
     // Une feature réservée à l'administration ne survit pas à l'arrivée dans un
     // espace partagé : sa vue se referme au lieu de rester ouverte sur des
@@ -407,7 +407,7 @@ export default function HomePage() {
     // dépendance stable aux gardes ci-dessous.
     const isAdmin = user?.role === 'admin';
     const workspaceKind = currentWorkspace?.kind;
-    const audience = useMemo<FeatureAudience>(
+    const audience = useMemo<HomeAudience>(
         () => ({ kind: workspaceKind, isAdmin: !!isAdmin }),
         [workspaceKind, isAdmin]
     );

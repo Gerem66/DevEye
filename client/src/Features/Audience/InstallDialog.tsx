@@ -1,0 +1,313 @@
+import { useMemo, useState, type ReactNode } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import type { AudienceSite } from 'deveye-types';
+
+import { Button, Dialog } from '@/Components';
+import { ws } from '@/api/ws';
+import { invalidate } from '@/stores/invalidation';
+import { humanizeError } from '../Projects/api';
+import { formatAgo, snippetFor } from './format';
+import { agentBrief, usageExamples } from './usage';
+import styles from './style.module.css';
+
+/**
+ * Un dépliant, animé et **exclusif**.
+ *
+ * `<details>` natif ne sait ni s'animer ni se refermer quand son voisin
+ * s'ouvre : trois panneaux ouverts en même temps transformaient la fenêtre en
+ * mur de code. L'ouverture est donc pilotée par l'appelant, qui n'en garde
+ * qu'une seule.
+ *
+ * La hauteur est animée par framer-motion, comme le reste de l'application.
+ * `overflow: hidden` pendant la transition, sans quoi le contenu déborderait
+ * du panneau replié pendant la fraction de seconde où il se ferme.
+ */
+function Disclosure({
+    title,
+    open,
+    onToggle,
+    children
+}: {
+    title: string;
+    open: boolean;
+    onToggle: () => void;
+    children: ReactNode;
+}) {
+    return (
+        <div className={styles.disclosure}>
+            <button type='button' className={styles.disclosureHead} onClick={onToggle} aria-expanded={open}>
+                <span className={`icon icon-chevron ${open ? styles.disclosureOpen : styles.disclosureShut}`} />
+                {title}
+            </button>
+            <AnimatePresence initial={false}>
+                {open && (
+                    <motion.div
+                        key='body'
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.22, ease: 'easeOut' }}
+                        style={{ overflow: 'hidden' }}
+                    >
+                        <div className={styles.disclosureBody}>{children}</div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+}
+
+interface InstallDialogProps {
+    open: boolean;
+    site: AudienceSite;
+    /**
+     * L'adresse par laquelle les pages suivies atteignent l'ingestion, telle que
+     * le serveur la connaît (`AUDIENCE_ORIGIN`, à défaut `PUBLIC_ORIGIN`).
+     *
+     * **Jamais `window.location.origin`.** L'application est derrière le VPN et
+     * l'ingestion doit être joignable sans lui : les deux adresses diffèrent par
+     * construction. La déduire du navigateur donnait une balise juste en
+     * développement et fausse en production — fausse là où elle compte.
+     */
+    ingestOrigin: string;
+    canWrite: boolean;
+    onClose: () => void;
+    onRotated: (site: AudienceSite) => void;
+}
+
+/**
+ * Comment brancher un site, et tout ce qu'on peut en faire ensuite.
+ *
+ * Trois dépliants, du plus courant au plus spécialisé : ce qu'on fait le jour
+ * de l'installation, comment appeler l'API dans son langage, et le mémo à
+ * donner à un agent de code. Les deux derniers sont repliés parce qu'on ne les
+ * ouvre qu'une fois — les laisser dépliés aurait noyé l'étape qui compte
+ * vraiment, coller la balise et voir la première mesure arriver.
+ *
+ * Tous les blocs sont bâtis depuis la **vraie** clé et la **vraie** adresse
+ * d'ingestion : un exemple qu'il faut adapter avant de s'en servir est un
+ * exemple qu'on adapte mal.
+ */
+export function InstallDialog({ open, site, ingestOrigin, canWrite, onClose, onRotated }: InstallDialogProps) {
+    /** Le bloc dont la copie vient d'aboutir, pour le retour visuel. */
+    const [copied, setCopied] = useState<string | null>(null);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [confirmRotate, setConfirmRotate] = useState(false);
+    const [lang, setLang] = useState('js');
+    /** Un seul dépliant ouvert à la fois ; `null` = tous repliés. */
+    const [section, setSection] = useState<string | null>(null);
+    const toggle = (id: string) => setSection((current) => (current === id ? null : id));
+
+    // Tout ce que montre cette fenêtre suit le mode réglé sur le site : la
+    // balise, les exemples serveur et le mémo. Donner une balise sans
+    // `data-visitor` à qui vient d'activer le mode persistant reviendrait à lui
+    // laisser croire que les visiteurs connus vont se mesurer.
+    const persistent = site.visitorMode === 'persistent';
+    const snippet = snippetFor(site.publicKey, ingestOrigin, persistent);
+    // Mémorisés : ce sont des chaînes bâties par concaténation, et rien ne les
+    // fait changer tant que la clé ou l'adresse ne bougent pas.
+    const examples = useMemo(
+        () => usageExamples(site.publicKey, ingestOrigin, persistent),
+        [site.publicKey, ingestOrigin, persistent]
+    );
+    const brief = useMemo(
+        () => agentBrief(site.publicKey, ingestOrigin, persistent),
+        [site.publicKey, ingestOrigin, persistent]
+    );
+    const example = examples.find((e) => e.id === lang) ?? examples[0];
+
+    const copy = async (text: string, id: string) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopied(id);
+            window.setTimeout(() => setCopied((c) => (c === id ? null : c)), 2000);
+        } catch {
+            setError('Copie impossible — sélectionnez le texte à la main.');
+        }
+    };
+
+    const rotate = async () => {
+        setBusy(true);
+        setError(null);
+        try {
+            const res = await ws.send('audience.siteRotateKey', { siteId: site.id });
+            invalidate('audience.list');
+            invalidate('audience.detail');
+            setConfirmRotate(false);
+            onRotated(res.site);
+        } catch (e) {
+            setError(humanizeError(e, 'Renouvellement impossible.'));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <Dialog
+            open={open}
+            onClose={onClose}
+            title='Installer la mesure'
+            width={720}
+            onSubmit={onClose}
+            footer={
+                <>
+                    {/* Poussé tout à gauche du pied : c'est un geste rare et
+                        conséquent, il n'a pas à côtoyer « Fermer » qu'on presse
+                        à chaque visite. Le mettre en pleine largeur au bas du
+                        corps lui donnait au contraire le poids d'une action
+                        principale. */}
+                    {canWrite &&
+                        (confirmRotate ? (
+                            <div className={styles.footerLeft}>
+                                <Button variant='secondary' onClick={() => setConfirmRotate(false)} disabled={busy}>
+                                    Annuler
+                                </Button>
+                                <Button variant='danger' onClick={() => void rotate()} disabled={busy}>
+                                    {busy ? 'Renouvellement…' : 'Confirmer le renouvellement'}
+                                </Button>
+                            </div>
+                        ) : (
+                            <Button
+                                className={styles.footerLeft}
+                                variant='ghost'
+                                onClick={() => setConfirmRotate(true)}
+                            >
+                                Renouveler la clé publique
+                            </Button>
+                        ))}
+                    <Button variant='secondary' onClick={onClose}>
+                        Fermer
+                    </Button>
+                </>
+            }
+        >
+            <div className={styles.install}>
+                <p className={styles.installStep}>
+                    <span className={styles.stepNumber}>1</span>
+                    Collez cette balise dans le <code>&lt;head&gt;</code>, avant le bundle de votre application.
+                </p>
+                <pre className={styles.snippet}>{snippet}</pre>
+                <div className={styles.installActions}>
+                    <Button variant='secondary' icon='copy' onClick={() => void copy(snippet, 'tag')}>
+                        {copied === 'tag' ? 'Copié' : 'Copier la balise'}
+                    </Button>
+                </div>
+
+                <p className={styles.installStep}>
+                    <span className={styles.stepNumber}>2</span>
+                    Ouvrez une page du site. La première mesure arrive en quelques secondes.
+                </p>
+                <p className={site.lastEventAt === null ? styles.waiting : styles.received}>
+                    {site.lastEventAt === null
+                        ? 'En attente de la première mesure…'
+                        : `Première mesure reçue — dernière ${formatAgo(site.lastEventAt)}.`}
+                </p>
+
+                {/* Les trois dépliants dans un groupe **sans gouttière** : le
+                    `gap` de `.install` s'ajoutait au-dessus de chaque filet, si
+                    bien qu'un titre était plus loin de sa propre ligne que du
+                    bloc précédent. Le seul espacement est désormais celui, égal,
+                    du bouton de titre. */}
+                <div className={styles.disclosures}>
+                    {/* -------------------------------------- utilisation de base */}
+                    <Disclosure
+                        title='Utilisation de base : marquer des étapes, nommer un utilisateur'
+                        open={section === 'base'}
+                        onToggle={() => toggle('base')}
+                    >
+                        <p className={styles.hint}>
+                            Les pages sont suivies toutes seules, changements de route d’une SPA compris. Le reste se
+                            pose à la main, là où l’étape est réellement franchie :
+                        </p>
+                        <pre className={styles.snippet}>{`window.deveye?.event('Votre projet');
+window.deveye?.identify(user.id);`}</pre>
+
+                        <p className={styles.hint}>
+                            <strong>Ne gardez jamais la référence dans une variable.</strong> La balise porte{' '}
+                            <code>defer</code> : elle s’exécute après les scripts en ligne de la page, donc{' '}
+                            <code>window.deveye</code> peut ne pas exister encore au moment où votre code se charge. Le
+                            relire à chaque appel supprime le problème. La page marcherait sans, mais aucune mesure ne
+                            partirait.
+                        </p>
+                        <p className={styles.hint}>
+                            Les noms sont <strong>comparés à l’identique</strong> : accents, espaces et majuscules
+                            comptent. Composez vos entonnoirs depuis les suggestions plutôt qu’en les retapant.
+                        </p>
+                        <p className={styles.hint}>
+                            Sur <code>localhost</code>, la mesure est désactivée pour qu’un rechargement de
+                            développement ne gonfle pas vos chiffres : ajoutez <code>data-local=&quot;true&quot;</code>{' '}
+                            à la balise pour l’essayer quand même.
+                        </p>
+                    </Disclosure>
+
+                    {/* ------------------------------------- exemples par langage */}
+                    <Disclosure
+                        title='Exemples de code : navigateur, Node.js, PHP'
+                        open={section === 'code'}
+                        onToggle={() => toggle('code')}
+                    >
+                        <div className={styles.segmented} role='group' aria-label='Langage'>
+                            {examples.map((item) => (
+                                <button
+                                    key={item.id}
+                                    type='button'
+                                    className={item.id === lang ? styles.segmentActive : styles.segment}
+                                    aria-pressed={item.id === lang}
+                                    onClick={() => setLang(item.id)}
+                                >
+                                    {item.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        <p className={styles.hint}>{example.note}</p>
+                        <pre className={styles.snippetTall}>{example.code}</pre>
+                        <div className={styles.installActions}>
+                            <Button variant='secondary' icon='copy' onClick={() => void copy(example.code, example.id)}>
+                                {copied === example.id ? 'Copié' : `Copier l’exemple ${example.label}`}
+                            </Button>
+                        </div>
+                    </Disclosure>
+
+                    {/* --------------------------------------- mémo pour un agent */}
+                    <Disclosure
+                        title='Mémo pour un agent de code'
+                        open={section === 'agent'}
+                        onToggle={() => toggle('agent')}
+                    >
+                        <p className={styles.hint}>
+                            À coller tel quel dans une conversation avec un assistant : tout ce qu’il lui faut pour
+                            brancher la mesure sans se tromper, y compris les trois pièges qui coûtent une session de
+                            débogage.
+                        </p>
+                        {/* Un `textarea` en lecture seule plutôt qu'un `pre` : on
+                        sélectionne tout d'un Ctrl+A sans attraper le reste de la
+                        page, et le presse-papiers reste accessible même si
+                        l'API de copie est refusée par le navigateur. */}
+                        <textarea className={styles.brief} value={brief} readOnly spellCheck={false} rows={14} />
+                        <div className={styles.installActions}>
+                            <Button variant='secondary' icon='copy' onClick={() => void copy(brief, 'brief')}>
+                                {copied === 'brief' ? 'Copié' : 'Copier le mémo'}
+                            </Button>
+                        </div>
+                    </Disclosure>
+                </div>
+
+                {/* L'avertissement reste dans le corps : c'est une phrase à lire,
+                    et un pied de fenêtre n'est pas fait pour ça. */}
+                {confirmRotate && (
+                    <p className={styles.rotateWarn}>
+                        L’ancienne clé cesse d’être acceptée <strong>immédiatement</strong> : toute page qui la porte
+                        encore arrêtera de mesurer jusqu’à ce qu’elle soit mise à jour. L’historique déjà collecté est
+                        conservé.
+                    </p>
+                )}
+
+                {error && <p className={styles.error}>{error}</p>}
+            </div>
+        </Dialog>
+    );
+}
+
+export default InstallDialog;
