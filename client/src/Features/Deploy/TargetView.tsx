@@ -140,7 +140,7 @@ interface TriggerDialogProps {
 }
 
 function TriggerDialog({ open, targetId, projectId, busy, setBusy, onClose, onDone }: TriggerDialogProps) {
-    const [title, setTitle] = useState('');
+    const [title, setTitle] = useState('Déploiement DevEye');
     const [description, setDescription] = useState('');
     const [error, setError] = useState<string | null>(null);
 

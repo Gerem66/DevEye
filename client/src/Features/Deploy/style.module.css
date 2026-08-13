@@ -357,15 +357,34 @@
     color: var(--text-secondary);
 }
 
+/*
+ * Même forme que les champs de texte (`TextInput`) et que le textarea des
+ * Projets : `--input-border` au repos, `--input-focus` (l'accent) au focus.
+ * `--field-line` borne la hauteur minimale à une seule ligne — sans elle, le
+ * textarea démarrait plus bas qu'un `TextInput` voisin sur le même formulaire.
+ */
 .textarea {
+    --field-line: calc(1.5em + 2 * var(--space-sm) + 2px);
+
     width: 100%;
-    padding: var(--space-sm);
+    min-height: var(--field-line);
+    padding: var(--space-sm) var(--space-md);
     border-radius: var(--radius-md);
-    border: 1px solid var(--glass-border);
-    background: var(--surface-input);
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
     color: var(--text-primary);
     font: inherit;
+    line-height: 1.5;
     resize: vertical;
+}
+
+.textarea:focus {
+    outline: none;
+    border-color: var(--input-focus);
+}
+
+.textarea::placeholder {
+    color: var(--input-placeholder);
 }
 
 /* Bloc d'action destructrice au pied d'un dialogue : il se signale de lui-même

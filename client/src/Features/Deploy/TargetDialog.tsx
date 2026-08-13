@@ -113,7 +113,7 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
         const candidate = candidates.find((c) => c.externalId === chosen);
         if (!candidate) return;
         setKind(candidate.kind);
-        setName(candidate.name);
+        setName((candidate.path ? `${candidate.path} | ` : '') + candidate.name);
     };
 
     const submit = async () => {
@@ -228,8 +228,8 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
                                 {candidates.map((c) => (
                                     <option key={`${c.kind}:${c.externalId}`} value={c.externalId}>
                                         {c.kind === 'compose' ? '🧩 ' : '📦 '}
+                                        {c.path ? `${c.path} | ` : ''}
                                         {c.name}
-                                        {c.path ? ` — ${c.path}` : ''}
                                     </option>
                                 ))}
                             </SelectInput>
