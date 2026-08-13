@@ -1526,10 +1526,20 @@
 }
 
 .repoBlockFramed {
-    /* Publié pour l'en-tête collant qu'il contient : celui-ci doit porter le
-       fond de sa boîte, et cette boîte n'est pas la même dans la feature et
-       dans l'onglet d'un projet. Le repli couvre le premier cas. */
-    --block-bg: var(--surface-subtle);
+    /*
+     * Le fond que doit porter le bandeau collant de ce bloc, **opaque**.
+     *
+     * La teinte du bloc ne l'est pas : `--surface-subtle` vaut 4 % de blanc et
+     * `--surface-widget` 62 %. Posée telle quelle sur un en-tête collant, elle
+     * laissait défiler le contenu au travers, ce qui est le contraire de ce
+     * qu'on lui demande.
+     *
+     * On empile donc la teinte du bloc **sur** le jumeau opaque du fond de
+     * popup (`linear-gradient` d'une seule couleur sert de calque). Le résultat
+     * a exactement la couleur apparente du bloc, sans rien laisser passer. La
+     * peindre en dur aurait figé une valeur que le thème peut changer.
+     */
+    --block-bg: linear-gradient(var(--surface-subtle), var(--surface-subtle)), var(--surface-popup-solid);
     composes: repoBlock;
     padding: var(--space-md);
     border: 1px solid var(--glass-border);
