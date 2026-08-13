@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import type {
     AudienceActivity,
     AudienceBreakdownItem,
@@ -49,6 +49,18 @@ interface SiteViewProps {
     site: AudienceSite;
     /** Définir un entonnoir est une écriture ; le lire n'en est pas une. */
     canWrite: boolean;
+    /**
+     * De quoi garnir la barre collante : à gauche l'intitulé du bloc, à droite
+     * ses actions.
+     *
+     * Vides dans la feature Audience, où la fiche porte déjà son propre en-tête
+     * collant juste au-dessus. Garnis dans l'onglet d'un projet, où il n'y en a
+     * pas : sans eux, on perdait de vue quel site on regardait dès qu'on avait
+     * défilé, et un projet peut en relier plusieurs. Les loger **dans** cette
+     * barre plutôt qu'au-dessus évite un second bandeau collant à empiler.
+     */
+    heading?: ReactNode;
+    actions?: ReactNode;
 }
 
 type Breakdowns = Partial<Record<AudienceDimension, AudienceBreakdownItem[]>>;
@@ -67,7 +79,7 @@ type Breakdowns = Partial<Record<AudienceDimension, AudienceBreakdownItem[]>>;
  * fait bouger les chiffres de tout le monde en même temps, sans que personne
  * n'ait à recharger.
  */
-export function SiteView({ site, canWrite }: SiteViewProps) {
+export function SiteView({ site, canWrite, heading, actions }: SiteViewProps) {
     const [range, setRange] = useState<AudienceRange>('7d');
     const [overview, setOverview] = useState<AudienceOverview | null>(null);
     const [breakdowns, setBreakdowns] = useState<Breakdowns>({});
@@ -169,12 +181,20 @@ export function SiteView({ site, canWrite }: SiteViewProps) {
     // chercher une panne là où il manque simplement une balise.
     if (site.lastEventAt === null) {
         return (
-            <div className={styles.awaiting}>
-                <p className={styles.awaitingTitle}>Aucune mesure reçue pour l’instant.</p>
-                <p className={styles.awaitingHint}>
-                    Collez la balise d’installation dans les pages à suivre. Les premiers chiffres apparaissent quelques
-                    secondes après la première visite.
-                </p>
+            <div className={styles.view}>
+                {(heading || actions) && (
+                    <div className={styles.viewHead}>
+                        {heading}
+                        {actions}
+                    </div>
+                )}
+                <div className={styles.awaiting}>
+                    <p className={styles.awaitingTitle}>Aucune mesure reçue pour l’instant.</p>
+                    <p className={styles.awaitingHint}>
+                        Collez la balise d’installation dans les pages à suivre. Les premiers chiffres apparaissent
+                        quelques secondes après la première visite.
+                    </p>
+                </div>
             </div>
         );
     }
@@ -205,6 +225,7 @@ export function SiteView({ site, canWrite }: SiteViewProps) {
             )}
 
             <div className={styles.viewHead}>
+                {heading}
                 <div className={styles.ranges} role='group' aria-label='Période'>
                     {RANGES.map((value) => (
                         <button
@@ -224,6 +245,7 @@ export function SiteView({ site, canWrite }: SiteViewProps) {
                         {formatCount(live)} en ce moment
                     </p>
                 )}
+                {actions}
             </div>
 
             {error && <p className={styles.error}>{error}</p>}

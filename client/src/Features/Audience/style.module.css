@@ -404,7 +404,21 @@
     gap: var(--space-md);
     flex-wrap: wrap;
     padding: var(--space-xs) 0;
-    background: var(--surface-popup-solid);
+    background: var(--block-bg, var(--surface-popup-solid));
+}
+
+/* L'intitulé d'un site dans l'onglet d'un projet : il occupe la gauche de la
+   barre et pousse la période vers la droite, ce qui garde l'ordre de lecture
+   « de quoi parle-t-on, sur quelle période, et qu'est-ce que j'en fais ». */
+.blockTitle {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .ranges {
@@ -605,6 +619,9 @@
 }
 
 .panel {
+    /* Publié pour la barre collante qu'il contient dans l'onglet d'un projet :
+       elle doit porter le fond de sa boîte, et non celui de la popup. */
+    --block-bg: var(--surface-widget);
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);

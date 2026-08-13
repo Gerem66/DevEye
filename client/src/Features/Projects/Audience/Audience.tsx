@@ -119,30 +119,43 @@ export function Audience({ project, canWrite }: AudienceProps) {
 
             {linked.map((site) => (
                 <section key={site.id} className={audienceStyles.panel}>
-                    <header className={audienceStyles.panelHead}>
-                        <h3 className={audienceStyles.panelTitle}>{site.name}</h3>
-                        <div className={audienceStyles.detailActions}>
-                            {/* Le sens qui manquerait sinon : la feature sait
-                                mener aux projets d'un site, l'onglet d'un projet
-                                doit savoir mener au site. Par la téléportation,
-                                comme partout — le chemin dit « ouvre la feature,
-                                et dedans, ce site-là », garde d'accès comprise. */}
-                            <Button
-                                variant='secondary'
-                                onClick={() =>
-                                    startTeleport(getActiveWorkspaceId() ?? 0, ['view:audience', `l1:site:${site.id}`])
-                                }
-                            >
-                                Ouvrir dans Audience
-                            </Button>
-                            {canWrite && canWriteAudience && (
-                                <Button variant='ghost' onClick={() => setUnlinking(site)} disabled={busy}>
-                                    Délier
+                    {/* L'intitulé et les actions sont passés à `SiteView`, qui
+                        les loge dans sa barre de période déjà collante. Un
+                        second bandeau collant au-dessus se serait empilé sous le
+                        premier, ou aurait glissé dessous. */}
+                    <SiteView
+                        site={site}
+                        canWrite={canWrite && canWriteAudience}
+                        heading={<h3 className={audienceStyles.blockTitle}>{site.name}</h3>}
+                        actions={
+                            <div className={audienceStyles.detailActions}>
+                                {/* Le sens qui manquerait sinon : la feature sait
+                                    mener aux projets d'un site, l'onglet d'un
+                                    projet doit savoir mener au site. Par la
+                                    téléportation, comme partout : le chemin dit
+                                    « ouvre la feature, et dedans, ce site-là »,
+                                    garde d'accès comprise. Offert même sans droit
+                                    d'écriture, c'est une navigation. */}
+                                <Button
+                                    variant='secondary'
+                                    icon='expand'
+                                    onClick={() =>
+                                        startTeleport(getActiveWorkspaceId() ?? 0, [
+                                            'view:audience',
+                                            `l1:site:${site.id}`
+                                        ])
+                                    }
+                                >
+                                    Ouvrir dans Audience
                                 </Button>
-                            )}
-                        </div>
-                    </header>
-                    <SiteView site={site} canWrite={canWrite && canWriteAudience} />
+                                {canWrite && canWriteAudience && (
+                                    <Button variant='ghost' onClick={() => setUnlinking(site)} disabled={busy}>
+                                        Délier
+                                    </Button>
+                                )}
+                            </div>
+                        }
+                    />
                 </section>
             ))}
 

@@ -66,11 +66,16 @@ interface DatabaseHeaderProps {
     /**
      * Ouvrir cette base dans la feature « Bases de données ».
      *
-     * Absent quand on **y est déjà** — dans sa propre feature, le nom n'a nulle
-     * part où mener. Présent dans l'onglet d'un projet, où il rend le titre
-     * cliquable : la base y est montrée en entier, mais tout ce qui la concerne
-     * vraiment (ses réglages, ses projets, la liste de ses voisines) vit
-     * ailleurs, et on n'avait aucun chemin pour y aller.
+     * Absent quand on y est déjà : dans sa propre feature, le nom n'a nulle part
+     * où mener. Présent dans l'onglet d'un projet, où la base est montrée en
+     * entier alors que tout ce qui la concerne vraiment (ses réglages, ses
+     * projets, ses voisines) vit ailleurs.
+     *
+     * Rendu comme un **bouton de la barre d'actions**, et non plus en rendant le
+     * titre cliquable. Un titre qui navigue ne s'annonce pas : rien ne le
+     * distingue d'un intitulé, et il fallait le survoler pour le découvrir. Les
+     * trois onglets d'un projet portent désormais la même barre, dans le même
+     * ordre : actions de la feature, « Ouvrir dans… », puis « Délier ».
      */
     onOpenInFeature?: () => void;
     /** Posé avant l'identité — un retour à la liste, par exemple. */
@@ -105,27 +110,10 @@ export function DatabaseHeader({
             <div className={styles.detailHead}>
                 {before}
                 <div className={styles.ident}>
-                    {onOpenInFeature ? (
-                        /* Le nom mène à la base, et le logo dit où. Un bouton et
-                           non un lien : la navigation de DevEye n'a pas d'URL, elle
-                           se joue par téléportation. */
-                        <button
-                            type='button'
-                            className={styles.openName}
-                            title={`Ouvrir ${database.name} dans « Bases de données »`}
-                            onClick={onOpenInFeature}
-                        >
-                            <span className={styles.statusDot} data-tone={status.tone} aria-hidden='true' />
-                            <span className='icon icon-database' aria-hidden='true' />
-                            {database.name}
-                            <span className={`icon icon-arrow ${styles.openNameArrow}`} aria-hidden='true' />
-                        </button>
-                    ) : (
-                        <p className={styles.cardName}>
-                            <span className={styles.statusDot} data-tone={status.tone} aria-hidden='true' />
-                            {database.name}
-                        </p>
-                    )}
+                    <p className={styles.cardName}>
+                        <span className={styles.statusDot} data-tone={status.tone} aria-hidden='true' />
+                        {database.name}
+                    </p>
                     <p className={styles.cardMeta}>
                         {ENGINE_LABELS[database.engine]} · {database.host}:{database.port}/{database.database}
                         {database.access.kind !== 'direct' && (
@@ -137,28 +125,43 @@ export function DatabaseHeader({
                     {database.lastError && <p className={styles.error}>{database.lastError}</p>}
                 </div>
             </div>
-            {canWrite && (
+            {/* La barre est rendue dès qu'elle a quelque chose à porter, et non
+                sous la seule condition d'écriture : « Ouvrir dans… » est une
+                navigation, un lecteur y a droit. */}
+            {(canWrite || onOpenInFeature || after) && (
                 <div className={styles.actions}>
-                    <Button variant='secondary' icon='refresh' onClick={onTest} disabled={busy}>
-                        Tester
-                    </Button>
-                    <Button variant='secondary' icon='search' onClick={onInspect} disabled={busy}>
-                        Relever l’état
-                    </Button>
-                    {/* Deux boutons voisins joignent le serveur ; celui-ci dit
+                    {canWrite && (
+                        <>
+                            <Button variant='secondary' icon='refresh' onClick={onTest} disabled={busy}>
+                                Tester
+                            </Button>
+                            <Button variant='secondary' icon='search' onClick={onInspect} disabled={busy}>
+                                Relever l’état
+                            </Button>
+                            {/* Deux boutons voisins joignent le serveur ; celui-ci dit
                         en quoi ils diffèrent, et ce que « relever » garde. */}
-                    <button
-                        type='button'
-                        className={styles.infoButton}
-                        aria-label='Que font « Tester » et « Relever l’état » ?'
-                        title='Que font ces deux boutons ?'
-                        onClick={explainInspect}
-                    >
-                        <span className='icon icon-info' />
-                    </button>
-                    <Button variant='secondary' icon='edit' onClick={onEdit} disabled={busy}>
-                        Modifier
-                    </Button>
+                            <button
+                                type='button'
+                                className={styles.infoButton}
+                                aria-label='Que font « Tester » et « Relever l’état » ?'
+                                title='Que font ces deux boutons ?'
+                                onClick={explainInspect}
+                            >
+                                <span className='icon icon-info' />
+                            </button>
+                            <Button variant='secondary' icon='edit' onClick={onEdit} disabled={busy}>
+                                Modifier
+                            </Button>
+                        </>
+                    )}
+                    {/* Toujours l'avant-dernier : les trois onglets d'un projet
+                        rangent leur barre dans le même ordre, actions de la
+                        feature puis « Ouvrir dans… » puis « Délier ». */}
+                    {onOpenInFeature && (
+                        <Button variant='secondary' icon='expand' onClick={onOpenInFeature}>
+                            Ouvrir dans Bases de données
+                        </Button>
+                    )}
                     {after}
                 </div>
             )}

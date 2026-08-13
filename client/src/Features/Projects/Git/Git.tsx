@@ -229,23 +229,14 @@ function RepoBlock({ repo, members, canWrite, canWriteGit, onUnlink }: RepoBlock
         <section className={gitStyles.repoBlockFramed}>
             <header className={gitStyles.repoHead}>
                 <div className={gitStyles.repoIdent}>
-                    {/*
-                     * Le nom mène au dépôt dans sa feature. Le sens qui manquait :
-                     * Git sait déjà mener aux projets d'un dépôt, l'onglet d'un
-                     * projet ne savait pas mener au dépôt. Par la téléportation,
-                     * comme partout — un chemin `view:git l1:repo:7` dit « ouvre
-                     * la feature, et dedans, ce dépôt-là », garde d'accès
-                     * comprise.
-                     */}
-                    <button
-                        type='button'
-                        className={gitStyles.repoNameLink}
-                        title={`Ouvrir ${repo.owner}/${repo.repo} dans « Git »`}
-                        onClick={() => startTeleport(getActiveWorkspaceId() ?? 0, ['view:git', `l1:repo:${repo.id}`])}
-                    >
+                    {/* Un intitulé, et rien de plus. Il menait au dépôt, mais
+                        un titre qui navigue ne s'annonce pas : rien ne le
+                        distinguait d'un texte, et il fallait le survoler pour
+                        s'en apercevoir. Le geste est devenu un bouton de la
+                        barre, comme dans les deux autres onglets. */}
+                    <p className={gitStyles.repoName}>
                         <span className='icon icon-branch' aria-hidden='true' /> {repo.owner}/{repo.repo}
-                        <span className={`icon icon-arrow ${gitStyles.repoNameArrow}`} aria-hidden='true' />
-                    </button>
+                    </p>
                     <p className={gitStyles.repoMeta}>
                         {repo.defaultBranch && <span>branche {repo.defaultBranch}</span>}
                         {repo.lastSyncAt !== null && (
@@ -264,29 +255,51 @@ function RepoBlock({ repo, members, canWrite, canWriteGit, onUnlink }: RepoBlock
                     </p>
                     {repo.lastSyncError && <p className={gitStyles.error}>{repo.lastSyncError}</p>}
                 </div>
-                {canWrite && canWriteGit && (
-                    <div className={gitStyles.actions}>
-                        <Button
-                            variant='secondary'
-                            icon='refresh'
-                            onClick={() => {
-                                setSyncRequest((n) => n + 1);
-                                void ws.send('git.repoSyncNow', { repoId: repo.id });
-                            }}
-                            disabled={syncing}
-                        >
-                            {syncing ? 'Synchronisation…' : 'Synchroniser'}
-                        </Button>
-                        <Button variant='secondary' icon='edit' onClick={() => setDialogOpen(true)} disabled={syncing}>
-                            Modifier
-                        </Button>
-                        {/* Destructeur, donc à part et confirmé : il ne doit pas
-                            côtoyer « Synchroniser », qu'on presse souvent. */}
+                <div className={gitStyles.actions}>
+                    {canWrite && canWriteGit && (
+                        <>
+                            <Button
+                                variant='secondary'
+                                icon='refresh'
+                                onClick={() => {
+                                    setSyncRequest((n) => n + 1);
+                                    void ws.send('git.repoSyncNow', { repoId: repo.id });
+                                }}
+                                disabled={syncing}
+                            >
+                                {syncing ? 'Synchronisation…' : 'Synchroniser'}
+                            </Button>
+                            <Button
+                                variant='secondary'
+                                icon='edit'
+                                onClick={() => setDialogOpen(true)}
+                                disabled={syncing}
+                            >
+                                Modifier
+                            </Button>
+                        </>
+                    )}
+
+                    {/* Par la téléportation, comme partout : le chemin
+                        `view:git l1:repo:7` dit « ouvre la feature, et dedans,
+                        ce dépôt-là », garde d'accès comprise. Offert même sans
+                        droit d'écriture : c'est une navigation. */}
+                    <Button
+                        variant='secondary'
+                        icon='expand'
+                        onClick={() => startTeleport(getActiveWorkspaceId() ?? 0, ['view:git', `l1:repo:${repo.id}`])}
+                    >
+                        Ouvrir dans Git
+                    </Button>
+
+                    {/* Destructeur, donc en bout de barre et confirmé : il ne
+                        doit pas côtoyer « Synchroniser », qu'on presse souvent. */}
+                    {canWrite && canWriteGit && (
                         <Button variant='ghost' onClick={onUnlink} disabled={syncing}>
                             Délier
                         </Button>
-                    </div>
-                )}
+                    )}
+                </div>
             </header>
 
             <RepoView

@@ -47,7 +47,15 @@
     overflow: hidden;
 }
 
+/* L'en-tête d'une base reste en vue tant qu'on parcourt son bloc : un projet
+   peut en relier plusieurs, et l'explorateur est haut. Il se pose sous
+   l'en-tête du projet via `--sticky-head` ; le repli à 0 vaut dans la feature
+   elle-même, où il n'a rien au-dessus de lui. */
 .header {
+    position: sticky;
+    top: var(--sticky-head, 0px);
+    z-index: 2;
+    background: var(--block-bg, var(--surface-popup-solid));
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -244,45 +252,6 @@
     margin: 0;
     font-size: 1rem;
     color: var(--text-primary);
-}
-
-/*
- * Un titre qui mène ailleurs.
- *
- * Il garde exactement l'allure du titre inerte — même taille, même couleur — et
- * ne se signale qu'au survol : c'est d'abord le nom de la chose qu'on regarde,
- * et seulement ensuite un chemin. Une flèche discrète dit où il mène, le logo
- * de quelle feature.
- */
-.openName {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-xs);
-    max-width: 100%;
-    margin: 0;
-    padding: 0;
-    border: none;
-    background: none;
-    color: var(--text-primary);
-    font: inherit;
-    font-size: 1rem;
-    text-align: left;
-    cursor: pointer;
-    transition: color var(--transition-fast);
-}
-
-.openName:hover {
-    color: var(--accent);
-}
-
-.openNameArrow {
-    width: 14px;
-    filter: opacity(0.45);
-    transition: filter var(--transition-fast);
-}
-
-.openName:hover .openNameArrow {
-    filter: opacity(1);
 }
 
 .cardMeta {
@@ -1616,6 +1585,10 @@
 }
 
 .linkedBlockFramed {
+    /* Publié pour l'en-tête collant qu'il contient : celui-ci doit porter le
+       fond de sa boîte, et cette boîte n'est pas la même dans la feature et
+       dans l'onglet d'un projet. Le repli couvre le premier cas. */
+    --block-bg: var(--surface-subtle);
     composes: linkedBlock;
     padding: var(--space-md);
     border: 1px solid var(--glass-border);
