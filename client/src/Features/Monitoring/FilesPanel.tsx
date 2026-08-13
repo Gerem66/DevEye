@@ -41,11 +41,56 @@ function bytesToBase64(bytes: Uint8Array): string {
     return btoa(bin);
 }
 
+/** Windows path (drive root or UNC share), as the agent reports them. */
+const isWinPath = (p: string) => /^[A-Za-z]:[\\/]/.test(p) || p.startsWith('\\\\');
+
 /** Join a directory path with a child name, keeping the path's separator style. */
 function joinPath(base: string, name: string): string {
     if (base.endsWith('/') || base.endsWith('\\')) return base + name;
     const sep = base.includes('\\') && !base.includes('/') ? '\\' : '/';
     return base + sep + name;
+}
+
+/**
+ * Clickable path segments. Windows roots stay whole: `C:` alone means « current
+ * directory on C: », not the drive root, and a UNC share (`\\srv\partage`) is
+ * indivisible — splitting either one gives a path the device cannot resolve.
+ */
+function crumbsOf(path: string): { label: string; full: string }[] {
+    const acc: { label: string; full: string }[] = [];
+    if (!isWinPath(path)) {
+        let cur = '';
+        for (const p of path.split('/').filter(Boolean)) {
+            cur += `/${p}`;
+            acc.push({ label: p, full: cur });
+        }
+        return acc;
+    }
+    const parts = path.split(/[\\/]/).filter(Boolean);
+    let cur: string;
+    if (path.startsWith('\\\\')) {
+        if (parts.length < 2) return [];
+        cur = `\\\\${parts[0]}\\${parts[1]}`;
+        acc.push({ label: cur, full: cur });
+        parts.splice(0, 2);
+    } else {
+        cur = `${parts[0]}\\`;
+        acc.push({ label: parts[0], full: cur });
+        parts.shift();
+    }
+    for (const p of parts) {
+        cur = joinPath(cur, p);
+        acc.push({ label: p, full: cur });
+    }
+    return acc;
+}
+
+/** Containing directory of `p`, or null at a root (`/`, `C:\`, `\\srv\partage`). */
+function parentOf(p: string): string | null {
+    const crumbs = crumbsOf(p);
+    if (crumbs.length === 0) return null;
+    if (crumbs.length === 1) return isWinPath(p) ? null : '/';
+    return crumbs[crumbs.length - 2].full;
 }
 
 /** Render unix permission bits as `rwxr-xr-x` (empty when unknown). */
@@ -166,16 +211,9 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
     // Drop the cached usage for a path and all its ancestors (whose recursive totals
     // included it). Used after a mutation/upload and on manual refresh.
     const invalidateUsage = useCallback((p: string) => {
-        const sep = p.includes('\\') && !p.includes('/') ? '\\' : '/';
         usageCache.current.delete(p);
-        let cur = p;
-        while (cur.length > 0) {
-            const idx = cur.lastIndexOf(sep);
-            if (idx < 0) break;
-            cur = cur.slice(0, idx) || sep;
-            usageCache.current.delete(cur);
-            if (cur === sep) break;
-        }
+        let cur: string | null = p;
+        while ((cur = parentOf(cur))) usageCache.current.delete(cur);
     }, []);
 
     // Manual refresh: re-list and force a fresh usage pass for the current directory.
@@ -407,17 +445,7 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
         }
     };
 
-    const breadcrumb = useMemo(() => {
-        const sep = path.includes('\\') && !path.includes('/') ? '\\' : '/';
-        const parts = path.split(sep).filter(Boolean);
-        const acc: { label: string; full: string }[] = [];
-        let cur = sep === '/' ? '' : '';
-        for (const p of parts) {
-            cur = cur + sep + p;
-            acc.push({ label: p, full: sep === '/' ? cur : cur.replace(/^\\/, '') });
-        }
-        return acc;
-    }, [path]);
+    const breadcrumb = useMemo(() => crumbsOf(path), [path]);
 
     return (
         <div className={styles.filesPanel}>
@@ -433,9 +461,12 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                     <span className='icon icon-arrow-left' />
                 </button>
                 <div className={styles.filesBreadcrumb}>
-                    <button type='button' className={styles.filesCrumb} onClick={() => navigate('/')}>
-                        /
-                    </button>
+                    {/* Root crumb: a Windows path is already rooted on its drive / share. */}
+                    {!isWinPath(path) && (
+                        <button type='button' className={styles.filesCrumb} onClick={() => navigate('/')}>
+                            /
+                        </button>
+                    )}
                     {breadcrumb.map((c) => (
                         <button
                             key={c.full}
@@ -537,10 +568,8 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                     matches={matches}
                     truncated={truncated}
                     onOpen={(m) => {
-                        const sep = m.path.includes('\\') && !m.path.includes('/') ? '\\' : '/';
-                        const parent = m.path.slice(0, m.path.lastIndexOf(sep)) || sep;
                         setSearchMode(false);
-                        navigate(m.kind === 'dir' ? m.path : parent);
+                        navigate(m.kind === 'dir' ? m.path : (parentOf(m.path) ?? m.path));
                     }}
                 />
             ) : (
