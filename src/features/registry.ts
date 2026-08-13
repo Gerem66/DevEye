@@ -12,6 +12,7 @@ import { osintFeatures } from './osint';
 import { databaseFeatures } from './database';
 import { audienceFeatures } from './audience';
 import { gitFeatures } from './git';
+import { deployFeatures } from './deploy';
 import { projectFeatures } from './project';
 import {
     passwordAddFeature,
@@ -82,6 +83,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...noteFeatures,
     ...projectFeatures,
     ...gitFeatures,
+    ...deployFeatures,
     ...databaseFeatures,
     ...audienceFeatures,
     ...deviceFeatures,

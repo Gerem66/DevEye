@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { GitCredential, GitRepo, GitRepoSyncState, GitRepoUsage } from 'deveye-types';
-import { Button } from '@/Components';
+import type { Credential, GitRepo, GitRepoSyncState, GitRepoUsage } from 'deveye-types';
+import { Button, CredentialsDialog, GIT_CREDENTIALS } from '@/Components';
 import { ws } from '@/api/ws';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
@@ -12,7 +12,7 @@ import { humanizeError } from '../Projects/api';
 import RepoDetail from './RepoDetail';
 import RepoDialog from './RepoDialog';
 import RepoList from './RepoList';
-import CredentialsDialog from './CredentialsDialog';
+
 import styles from './style.module.css';
 
 /**
@@ -40,7 +40,7 @@ export function FeatureGit({ workspace }: FeatureProps) {
     const canWrite = permissions.canFeature('git', 'write');
 
     const [repos, setRepos] = useState<GitRepo[] | null>(null);
-    const [credentials, setCredentials] = useState<GitCredential[]>([]);
+    const [credentials, setCredentials] = useState<Credential[]>([]);
     const [error, setError] = useState<string | null>(null);
 
     /** Le dépôt ouvert ; `null` = on est sur la liste. */
@@ -304,7 +304,7 @@ export function FeatureGit({ workspace }: FeatureProps) {
                         ils vivent donc en tête de la feature, et non enfouis dans
                         le formulaire d'un dépôt comme c'était le cas avant. */}
                     <Button variant='secondary' icon='key' onClick={() => setCredentialsOpen(true)}>
-                        Jetons d’accès
+                        Jetons GitHub
                     </Button>
                     {canWrite && (
                         <Button icon='add' onClick={() => setRepoDialog({ repo: null })}>
@@ -354,6 +354,7 @@ export function FeatureGit({ workspace }: FeatureProps) {
 
             <CredentialsDialog
                 open={credentialsOpen}
+                kind={GIT_CREDENTIALS}
                 credentials={credentials}
                 canWrite={canWrite}
                 onClose={() => setCredentialsOpen(false)}

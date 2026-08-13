@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { GitCredential, GitRepo, MinimalUser, Project } from 'deveye-types';
+import type { Credential, GitRepo, MinimalUser, Project } from 'deveye-types';
 import { Button, Dialog } from '@/Components';
 import { ws } from '@/api/ws';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
@@ -211,7 +211,7 @@ function RepoBlock({ repo, members, canWrite, canWriteGit, onUnlink }: RepoBlock
     const [syncRequest, setSyncRequest] = useState(0);
     const [dialogOpen, setDialogOpen] = useState(false);
     /** Les jetons de l'espace, lus seulement quand le dialogue s'ouvre. */
-    const [credentials, setCredentials] = useState<GitCredential[]>([]);
+    const [credentials, setCredentials] = useState<Credential[]>([]);
 
     useEffect(() => {
         if (!dialogOpen) return;

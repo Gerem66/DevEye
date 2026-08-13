@@ -29,6 +29,10 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     // point. Le filet `MUTATION_VERB` n'en voit donc presque aucune — les
     // `mutates` de cette feature se relisent à la main.
     database: 'database',
+    // Même forme que `git`, et pour cause : c'est le même renversement, appliqué
+    // au dernier module resté une propriété d'un projet (migration 080). Verbes
+    // en camelCase derrière un préfixe unique, donc `mutates` à relire à la main.
+    deploy: 'deploy',
     device: 'devices',
     folder: 'notes',
     // Même forme que `project` : préfixe unique, verbes en camelCase derrière le

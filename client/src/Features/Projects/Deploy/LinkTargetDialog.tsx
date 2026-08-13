@@ -1,93 +1,64 @@
 import { useEffect, useState } from 'react';
-import type { DeployCandidate, GitCredential, ProjectDeployTarget } from 'deveye-types';
-import { Button, Dialog, SelectInput, TextInput } from '@/Components';
+import type { DeployTarget } from 'deveye-types';
+import { Button, Dialog, SelectInput } from '@/Components';
 import { ws } from '@/api/ws';
-import { humanizeError, withSecrecy } from '../api';
+import { TargetDialog } from '@/Features/Deploy/TargetDialog';
+import { hostOf } from '@/Features/Deploy/format';
+import { humanizeError } from '../api';
 import styles from '../style.module.css';
 
 interface LinkTargetDialogProps {
     open: boolean;
     projectId: number;
-    /** L'application déjà liée : le dialogue sert alors à la remplacer. */
-    current: ProjectDeployTarget | null;
+    /** Les cibles déjà reliées : elles sortent de la liste des choix possibles. */
+    linkedIds: number[];
     onClose: () => void;
     onSaved: () => void;
 }
 
 /**
- * Relier une application Dokploy au projet.
+ * Ajouter une cible de déploiement au projet : en choisir une de l'espace, ou en
+ * déclarer une.
  *
- * **Il charge lui-même les accès de l'espace**, et dit ce qui manque quand il
- * n'y en a aucun. C'est ce qui lui permet d'être ouvert de deux endroits — le
- * bouton de l'onglet, et le menu « + » de la barre, qui l'appelle avant même
- * que l'onglet n'existe. Un dialogue à qui l'on passe ses accès aurait obligé
- * chaque appelant à les lire d'abord, et le conseil « ajoutez un accès
- * Dokploy » serait resté affiché loin du geste qu'il débloque.
+ * **La déclaration passe par le vrai dialogue de la feature** (`TargetDialog`),
+ * pas par une copie réduite — même parti pris que `LinkDatabaseDialog` et
+ * `LinkSiteDialog`. Une cible a une instance, un type et un identifiant externe
+ * qu'il faut aller lire chez le fournisseur ; en réécrire un formulaire ici
+ * garantirait qu'il diverge au premier réglage ajouté.
+ *
+ * Rien n'est exclusif : une cible déjà déployée par un autre projet peut être
+ * choisie ici sans lui être retirée — c'est même le cas normal quand un client
+ * et un serveur partent dans la même pile compose.
  */
-export function LinkTargetDialog({ open, projectId, current, onClose, onSaved }: LinkTargetDialogProps) {
-    const [credentials, setCredentials] = useState<GitCredential[] | null>(null);
-    const [credentialId, setCredentialId] = useState('');
-    const [candidates, setCandidates] = useState<DeployCandidate[]>([]);
-    const [externalId, setExternalId] = useState('');
+export function LinkTargetDialog({ open, projectId, linkedIds, onClose, onSaved }: LinkTargetDialogProps) {
+    const [targets, setTargets] = useState<DeployTarget[]>([]);
+    const [picked, setPicked] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    /** Le dialogue de déclaration de la feature, ouvert par-dessus celui-ci. */
+    const [createOpen, setCreateOpen] = useState(false);
 
     useEffect(() => {
         if (!open) return;
-        setExternalId(current?.externalId ?? '');
-        setCandidates([]);
+        setPicked('');
         setError(null);
         void (async () => {
             try {
-                // Les jetons appartiennent à la feature Git, qui les porte pour
-                // les deux fournisseurs. Seuls les accès Dokploy déploient.
-                const res = await ws.send('git.credentialList', {});
-                const dokploy = res.credentials.filter((c) => c.provider === 'dokploy');
-                setCredentials(dokploy);
-                setCredentialId(current?.credentialId ? String(current.credentialId) : String(dokploy[0]?.id ?? ''));
+                const res = await ws.send('deploy.list', {});
+                setTargets(res.targets);
             } catch (e) {
-                setCredentials([]);
-                setError(humanizeError(e, 'Impossible de charger les accès de l’espace.'));
+                setError(humanizeError(e, 'Impossible de charger les cibles de l’espace.'));
             }
         })();
-    }, [open, current]);
+    }, [open]);
 
-    // La liste des applications vient de l'instance : c'est la seule commande du
-    // module qui appelle un service externe en direct, parce qu'attendre un tour
-    // d'ordonnanceur pour remplir un sélecteur n'aurait aucun sens.
-    const loadCandidates = async () => {
-        if (!credentialId) return;
+    const free = targets.filter((t) => !linkedIds.includes(t.id));
+
+    const link = async (targetId: number) => {
         setBusy(true);
         setError(null);
         try {
-            const res = await ws.send('project.deployCandidates', { credentialId: Number(credentialId) });
-            setCandidates(res.candidates);
-            if (res.candidates.length === 0) setError('Cette instance ne déclare aucune application.');
-        } catch (e) {
-            setError(humanizeError(e, 'Impossible de joindre l’instance Dokploy.'));
-        } finally {
-            setBusy(false);
-        }
-    };
-
-    const submit = async () => {
-        const chosen = candidates.find((c) => c.externalId === externalId);
-        if (busy || !credentialId || !externalId) return;
-        setBusy(true);
-        setError(null);
-        try {
-            await withSecrecy(() =>
-                ws.send('project.deployLink', {
-                    projectId,
-                    credentialId: Number(credentialId),
-                    // Une cible saisie à la main est supposée être une
-                    // application : c'est le repli, et le sélecteur donne le
-                    // vrai type dès qu'on passe par lui.
-                    kind: chosen?.kind ?? 'application',
-                    externalId,
-                    name: chosen?.name ?? externalId
-                })
-            );
+            await ws.send('project.deployLink', { projectId, targetId });
             onSaved();
         } catch (e) {
             setError(humanizeError(e, 'La liaison a échoué.'));
@@ -96,93 +67,74 @@ export function LinkTargetDialog({ open, projectId, current, onClose, onSaved }:
         }
     };
 
-    /** Aucun accès Dokploy : rien n'est déployable tant qu'il n'y en a pas un. */
-    const nothingToUse = credentials !== null && credentials.length === 0;
-
     return (
-        <Dialog
-            open={open}
-            onClose={onClose}
-            title={current ? 'Modifier l’application liée' : 'Ajouter une application au projet'}
-            width={560}
-            onSubmit={submit}
-            holdSecrecy
-            footer={
-                <>
-                    <Button variant='secondary' onClick={onClose} disabled={busy}>
-                        Annuler
-                    </Button>
-                    <Button onClick={submit} disabled={busy || !externalId}>
-                        {busy ? 'Enregistrement…' : 'Lier'}
-                    </Button>
-                </>
-            }
-        >
-            <div className={styles.form}>
-                {nothingToUse ? (
-                    <p className={styles.hint}>
-                        {/* Le conseil renvoyait autrefois vers l'onglet Git d'un
-                            projet, qui ne savait créer que des jetons GitHub :
-                            il était donc impossible à suivre. La feature Git,
-                            elle, gère les deux fournisseurs. */}
-                        Aucun accès Dokploy dans cet espace. Ajoutez-en un (adresse de l’instance + clé d’API) depuis la
-                        feature Git, section « Jetons d’accès », puis revenez ici.
-                    </p>
-                ) : (
+        <>
+            <Dialog
+                open={open && !createOpen}
+                onClose={onClose}
+                title='Ajouter une cible au projet'
+                width={560}
+                onSubmit={() => picked !== '' && void link(Number(picked))}
+                footer={
                     <>
+                        <Button variant='secondary' onClick={onClose} disabled={busy}>
+                            Annuler
+                        </Button>
+                        <Button onClick={() => void link(Number(picked))} disabled={busy || picked === ''}>
+                            {busy ? 'Enregistrement…' : 'Relier'}
+                        </Button>
+                    </>
+                }
+            >
+                <div className={styles.form}>
+                    {free.length === 0 ? (
+                        <p className={styles.hint}>
+                            {targets.length === 0
+                                ? 'Aucune cible n’est encore déclarée dans cet espace.'
+                                : 'Toutes les cibles de l’espace sont déjà reliées à ce projet.'}
+                        </p>
+                    ) : (
                         <label className={styles.field}>
-                            <span className={styles.label}>Instance Dokploy</span>
-                            <SelectInput value={credentialId} onChange={(e) => setCredentialId(e.target.value)}>
-                                {(credentials ?? []).map((c) => (
-                                    <option key={c.id} value={c.id}>
-                                        {c.label} — {c.baseUrl}
+                            <span className={styles.label}>Cible de l’espace</span>
+                            <SelectInput value={picked} onChange={(e) => setPicked(e.target.value)}>
+                                <option value=''>Choisir…</option>
+                                {free.map((target) => (
+                                    <option key={target.id} value={target.id}>
+                                        {target.name} — {hostOf(target.baseUrl)}
+                                        {target.projectCount > 0 &&
+                                            ` — ${target.projectCount} projet${target.projectCount > 1 ? 's' : ''}`}
                                     </option>
                                 ))}
                             </SelectInput>
+                            <span className={styles.hint}>
+                                Une cible peut servir plusieurs projets : en choisir une déjà utilisée ailleurs ne la
+                                retire à personne.
+                            </span>
                         </label>
+                    )}
 
-                        <Button
-                            variant='secondary'
-                            icon='refresh'
-                            onClick={() => void loadCandidates()}
-                            disabled={busy || !credentialId}
-                        >
-                            {busy ? 'Interrogation…' : 'Lister les applications'}
-                        </Button>
+                    <Button variant='ghost' icon='add' onClick={() => setCreateOpen(true)}>
+                        Déclarer une nouvelle cible
+                    </Button>
 
-                        {candidates.length > 0 && (
-                            <label className={styles.field}>
-                                <span className={styles.label}>Cible</span>
-                                <SelectInput value={externalId} onChange={(e) => setExternalId(e.target.value)}>
-                                    <option value=''>Choisir…</option>
-                                    {candidates.map((c) => (
-                                        <option key={`${c.kind}:${c.externalId}`} value={c.externalId}>
-                                            {c.kind === 'compose' ? '🧩 ' : '📦 '}
-                                            {c.name}
-                                            {c.path ? ` — ${c.path}` : ''}
-                                        </option>
-                                    ))}
-                                </SelectInput>
-                            </label>
-                        )}
+                    {error && <p className={styles.error}>{error}</p>}
+                </div>
+            </Dialog>
 
-                        {/* Repli manuel : si l'instance répond dans une forme que
-                            le décodeur ne reconnaît pas, on doit quand même
-                            pouvoir lier. */}
-                        <label className={styles.field}>
-                            <span className={styles.label}>…ou identifiant de cible</span>
-                            <TextInput
-                                value={externalId}
-                                placeholder='applicationId ou composeId'
-                                onChange={(e) => setExternalId(e.target.value)}
-                            />
-                        </label>
-                    </>
-                )}
-
-                {error && <p className={styles.error}>{error}</p>}
-            </div>
-        </Dialog>
+            {/* Le vrai formulaire de la feature. Ce qu'il déclare est relié
+                immédiatement : sans cela, « déclarer une cible » depuis un projet
+                laisserait l'utilisateur devant une liste où il faut la
+                rechercher, ce qui est exactement le geste qu'on lui épargne. */}
+            <TargetDialog
+                open={createOpen}
+                target={null}
+                onClose={() => setCreateOpen(false)}
+                onSaved={(target) => {
+                    setCreateOpen(false);
+                    void link(target.id);
+                }}
+            />
+        </>
     );
 }
 

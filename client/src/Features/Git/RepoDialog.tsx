@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { GitCredential, GitRepo } from 'deveye-types';
+import type { Credential, GitRepo } from 'deveye-types';
 import { Button, Checkbox, Dialog, SelectInput } from '@/Components';
 import { ws } from '@/api/ws';
 import { humanizeError } from '../Projects/api';
@@ -10,7 +10,7 @@ interface RepoDialogProps {
     open: boolean;
     /** Le dépôt modifié ; `null` = on en ajoute un. */
     repo: GitRepo | null;
-    credentials: GitCredential[];
+    credentials: Credential[];
     onClose: () => void;
     onSaved: (repoId: number) => void;
     /** Supprimer le dépôt. Absent à la création, ou en lecture seule. */

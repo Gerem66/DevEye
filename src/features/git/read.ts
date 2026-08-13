@@ -140,7 +140,7 @@ export const gitCommitDetailFeature: FeatureDefinition<
         const target = await readJson<Partial<StoredRepo>>(cipher, repoRow.content);
         if (!target?.owner || !target.repo) throw new FeatureError('internal', 'Dépôt illisible');
 
-        const credential = await ctx.db.git.findCredential(repoRow.credential_id, ctx.workspaceId);
+        const credential = await ctx.db.credentials.find(repoRow.credential_id, ctx.workspaceId, 'github');
         if (!credential) throw new FeatureError('not_found', 'Jeton introuvable');
         const token = await cipher.decrypt(credential.secret_enc);
 

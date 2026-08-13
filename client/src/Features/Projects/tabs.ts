@@ -62,13 +62,14 @@ const TRAILING: ProjectTab[] = [{ id: 'history', label: 'Historique', icon: 'arc
 /**
  * Les quatre onglets suspendus à leur contenu.
  *
- * `requires` suit ce que le dialogue d'ajout fait vraiment :
+ * `requires` suit ce que le dialogue d'ajout fait vraiment, et toutes exigent
+ * l'**écriture** sur la feature visée : les quatre dialogues
+ * peuvent créer l'objet en plus de le relier, et pas seulement le choisir.
  *
- * - dépôt, base, site — le dialogue peut **créer** l'objet dans sa feature, en
- *   plus de le relier : il lui faut donc l'écriture ;
- * - déploiement — l'objet vit chez Dokploy, DevEye n'en crée aucun. Le dialogue
- *   ne fait que lire les accès de l'espace (`git.credentialList`), d'où la
- *   simple lecture de `git`.
+ * Le déploiement a longtemps fait exception, en réclamant `git: read` — le temps
+ * où la clé Dokploy vivait dans la feature Git, faute de module pour
+ * l'accueillir. Il a le sien depuis la migration 080, et l'anomalie est partie
+ * avec sa cause.
  */
 export const PROJECT_FEATURE_TABS: ProjectFeatureTab[] = [
     {
@@ -93,7 +94,7 @@ export const PROJECT_FEATURE_TABS: ProjectFeatureTab[] = [
         id: 'deploy',
         label: 'Déploiement',
         icon: 'rocket',
-        add: { label: 'Ajouter une application', requires: { feature: 'git', level: 'read' } }
+        add: { label: 'Ajouter une cible', requires: { feature: 'deploy', level: 'write' } }
     }
 ];
 

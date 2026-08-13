@@ -72,8 +72,12 @@ const COLUMNS: EncryptedColumn[] = [
     { table: 'project_messages', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
     { table: 'project_milestones', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
     { table: 'project_events', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
-    { table: 'project_deploy_targets', id: 'project_id', column: 'content', scope: 'workspace_id', tier: 'open' },
-    { table: 'project_deployments', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    // Déploiement : la cible appartient à l'**espace** et non à un projet
+    // (migration `080`), tout comme le dépôt git au-dessus. Elle n'a donc aucun
+    // tier à suivre, et son historique non plus — `projectRekey` ne les connaît
+    // plus ni l'un ni l'autre.
+    { table: 'deploy_targets', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'deployments', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
     // Git : le dépôt appartient à l'**espace** et non à un projet (migration
     // `064`). Il n'a donc aucun tier à suivre, et tout son cache relève de cette
     // conversion-ci et d'elle seule — `projectRekey` ne le connaît plus.
@@ -90,7 +94,7 @@ const COLUMNS: EncryptedColumn[] = [
     // Les secrets d'accès sont **toujours** sous l'étage ouvert, quel que soit
     // le tier des projets qui s'en servent : le service de fond les lit sans
     // session. Ils suivent donc la conversion d'espace, jamais celle d'un projet.
-    { table: 'project_credentials', id: 'id', column: 'secret_enc', scope: 'workspace_id', tier: 'open' },
+    { table: 'workspace_credentials', id: 'id', column: 'secret_enc', scope: 'workspace_id', tier: 'open' },
     // Bases de données (migration `068`). Comme les dépôts git, elles
     // appartiennent à l'espace et vivent toujours à l'étage ouvert.
     //

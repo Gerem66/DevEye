@@ -37,7 +37,8 @@ import { audienceRepo, type AudienceRepo } from './repos/audience';
 import { audienceIngestRepo, type AudienceIngestRepo } from './repos/audienceIngest';
 import { audienceFunnelsRepo, type AudienceFunnelsRepo } from './repos/audienceFunnels';
 import { gitRepo, type GitRepo } from './repos/git';
-import { projectDeployRepo, type ProjectDeployRepo } from './repos/projectDeploy';
+import { credentialsRepo, type CredentialsRepo } from './repos/credentials';
+import { deployRepo, type DeployRepo } from './repos/deploy';
 import { projectLinksRepo, type ProjectLinksRepo } from './repos/projectLinks';
 import { passwordsRepo, type PasswordsRepo } from './repos/passwords';
 import { refreshTokensRepo, type RefreshTokensRepo } from './repos/refreshTokens';
@@ -82,6 +83,9 @@ export interface Database {
     projectPlan: ProjectPlanRepo;
     projectHistory: ProjectHistoryRepo;
     git: GitRepo;
+    /** Les jetons d'accès de l'espace, partagés par Git et Déploiement. */
+    credentials: CredentialsRepo;
+    deploy: DeployRepo;
     databases: DatabaseRepo;
     /** Les sites suivis de l'espace, et leurs statistiques — le chemin froid. */
     audience: AudienceRepo;
@@ -93,7 +97,6 @@ export interface Database {
     audienceIngest: AudienceIngestRepo;
     /** Les entonnoirs : des lectures des événements, jamais une collecte à part. */
     audienceFunnels: AudienceFunnelsRepo;
-    projectDeploy: ProjectDeployRepo;
     projectLinks: ProjectLinksRepo;
     noteFolders: NoteFoldersRepo;
     devices: DevicesRepo;
@@ -145,11 +148,12 @@ export function createDatabase(q: Queryable): Database {
         projectPlan: projectPlanRepo(q),
         projectHistory: projectHistoryRepo(q),
         git: gitRepo(q),
+        credentials: credentialsRepo(q),
+        deploy: deployRepo(q),
         databases: databaseRepo(q),
         audience: audienceRepo(q),
         audienceIngest: audienceIngestRepo(q),
         audienceFunnels: audienceFunnelsRepo(q),
-        projectDeploy: projectDeployRepo(q),
         projectLinks: projectLinksRepo(q),
         noteFolders: noteFoldersRepo(q),
         devices: devicesRepo(q),

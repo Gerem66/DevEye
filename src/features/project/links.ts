@@ -87,11 +87,11 @@ export const projectLinkCountsFeature: FeatureDefinition<
         // d'identifiants, les requêtes existent déjà et sont celles que les
         // onglets eux-mêmes appellent. Une seconde famille de requêtes pour
         // rendre le même fait ne se serait payée qu'en occasions de diverger.
-        const [repos, databases, sites, target, services] = await Promise.all([
+        const [repos, databases, sites, targets, services] = await Promise.all([
             ctx.db.git.listLinkedRepoIds(input.projectId, ctx.workspaceId),
             ctx.db.databases.listLinkedIds(input.projectId, ctx.workspaceId),
             ctx.db.audience.listLinkedIds(input.projectId, ctx.workspaceId),
-            ctx.db.projectDeploy.findTarget(input.projectId, ctx.workspaceId),
+            ctx.db.deploy.listLinkedTargetIds(input.projectId, ctx.workspaceId),
             ctx.db.projectLinks.listServiceIds(input.projectId, ctx.workspaceId)
         ]);
         return {
@@ -99,10 +99,10 @@ export const projectLinkCountsFeature: FeatureDefinition<
                 git: repos.length,
                 database: databases.length,
                 audience: sites.length,
-                // L'onglet Déploiement montre deux choses : l'application liée
+                // L'onglet Déploiement montre deux choses : les cibles reliées
                 // et les services surveillés. Il a donc de quoi s'ouvrir dès que
                 // l'une des deux existe.
-                deploy: (target ? 1 : 0) + services.length
+                deploy: targets.length + services.length
             }
         };
     }

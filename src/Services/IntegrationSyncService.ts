@@ -325,7 +325,7 @@ export class IntegrationSyncService {
             const target = await this.readJson<{ owner: string; repo: string }>(cipher, repo.content);
             if (!target?.owner || !target.repo) throw new Error('Dépôt illisible.');
 
-            const credential = await this.deps.db.git.findCredential(repo.credential_id, workspaceId);
+            const credential = await this.deps.db.credentials.findAny(repo.credential_id, workspaceId);
             if (!credential) throw new Error('Le jeton d’accès a été retiré.');
             const token = await cipher.decrypt(credential.secret_enc);
 
@@ -678,14 +678,14 @@ export class IntegrationSyncService {
      * seuls déploiements non terminés — il n'y en a jamais plus d'une poignée.
      */
     private async pollDeployments(): Promise<void> {
-        const inFlight = await this.deps.db.projectDeploy.listInFlight(10);
+        const inFlight = await this.deps.db.deploy.listInFlight(10);
         for (const row of inFlight) {
             try {
                 const cipher = this.cipherFor(row.workspace_id);
-                const target = await this.deps.db.projectDeploy.findTarget(row.project_id, row.workspace_id);
+                const target = await this.deps.db.deploy.findTarget(row.target_id, row.workspace_id);
                 if (!target || target.credential_id === null) continue;
 
-                const credential = await this.deps.db.git.findCredential(target.credential_id, row.workspace_id);
+                const credential = await this.deps.db.credentials.findAny(target.credential_id, row.workspace_id);
                 if (!credential?.base_url) continue;
                 const apiKey = await cipher.decrypt(credential.secret_enc);
 
@@ -704,13 +704,15 @@ export class IntegrationSyncService {
                 if (!match || match.status === row.status) continue;
 
                 const body = await this.readJson<Record<string, unknown>>(cipher, row.content);
-                await this.deps.db.projectDeploy.updateDeployment(row.id, {
+                await this.deps.db.deploy.updateDeployment(row.id, {
                     externalId: match.externalId ?? row.external_id,
                     status: match.status,
                     finishedAt: match.finishedAt,
                     content: await cipher.encrypt(JSON.stringify({ ...body, description: match.description }))
                 });
-                this.deps.live?.changed(row.workspace_id, ['projects'], null);
+                // Les deux sujets : la fiche de la cible **et** l'onglet du
+                // projet qui la déploie montrent le même état.
+                this.deps.live?.changed(row.workspace_id, ['deploy', 'projects'], null);
             } catch (e) {
                 this.deps.logger.warn({ err: e, deploymentId: row.id }, 'Project sync: suivi de déploiement échoué');
             }

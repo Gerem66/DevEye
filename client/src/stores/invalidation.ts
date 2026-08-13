@@ -61,6 +61,10 @@ export type ResourceKey =
     | 'git.count'
     | 'git.list'
     | 'git.repo'
+    | 'deploy.count'
+    | 'deploy.list'
+    /** La fiche d'une cible : son historique et les projets qui la déploient. */
+    | 'deploy.detail'
     | 'database.count'
     | 'database.list'
     | 'database.detail'
@@ -122,6 +126,15 @@ const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
     // Un dépôt qui bouge touche la liste (dates de synchro, compteurs) et la vue
     // ouverte. `git.count` suit pour la tuile de l'accueil.
     git: ['git.count', 'git.list', 'git.repo'],
+    /*
+     * Un déploiement qui change d'état touche la liste (dernier état, date) et
+     * la fiche ouverte. `deploy.count` suit pour la tuile de l'accueil.
+     *
+     * Le sujet bat surtout au rythme du suivi de fond, qui réinterroge Dokploy
+     * sur les déploiements en vol : c'est ce qui fait avancer « En cours » vers
+     * « Réussi » sous les yeux, sans sondage côté navigateur.
+     */
+    deploy: ['deploy.count', 'deploy.list', 'deploy.detail'],
     // Un relevé qui aboutit touche la liste (état, taille, alertes franchies) et
     // la fiche ouverte. `database.count` suit pour la tuile de l'accueil.
     database: ['database.count', 'database.list', 'database.detail'],

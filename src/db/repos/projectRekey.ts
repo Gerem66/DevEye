@@ -15,16 +15,16 @@ type Q = Queryable;
  * deviendrait illisible à la bascule. Rien ne peut le détecter : un blob chiffré
  * est indistinguable d'un autre.
  *
- * N'y figurent PAS, et c'est volontaire : `project_credentials.secret_enc` et
- * tout le cache git (`git_*`), toujours sous l'étage ouvert quel que soit le
- * tier des projets qui s'y rattachent — le service de fond doit pouvoir les lire
- * sans session. Ils relèvent de `workspaceRekey`.
+ * N'y figurent PAS, et c'est volontaire : `workspace_credentials.secret_enc`, le
+ * cache git (`git_*`) et le déploiement (`deploy_targets`, `deployments`),
+ * toujours sous l'étage ouvert quel que soit le tier des projets qui s'y
+ * rattachent — les services de fond doivent pouvoir les lire sans session. Ils
+ * relèvent de `workspaceRekey`.
  */
 interface EncryptedCell {
     table: string;
     /**
-     * Colonne identifiante, **unique à elle seule**. Toutes ces tables n'ont pas
-     * de `id` : `project_deploy_targets` est clé sur `project_id`. Aucune n'a de
+     * Colonne identifiante, **unique à elle seule**. Aucune de ces tables n'a de
      * clé composite — cibler une ligne par deux colonnes n'est pas exprimable
      * ici, ce qui explique les clés de substitution ailleurs dans le schéma.
      */
@@ -37,7 +37,7 @@ const COLUMNS: EncryptedCell[] = [
     { table: 'project_cards', idColumn: 'id', column: 'content' },
     { table: 'project_messages', idColumn: 'id', column: 'content' },
     { table: 'project_milestones', idColumn: 'id', column: 'content' },
-    { table: 'project_events', idColumn: 'id', column: 'content' },
+    { table: 'project_events', idColumn: 'id', column: 'content' }
     // ⚠️ **Le cache git n'y figure plus, et ce n'est pas un oubli.** Depuis la
     // migration `064`, un dépôt appartient à l'espace et non à un projet : il
     // est chiffré à l'étage ouvert une fois pour toutes, et plusieurs projets
@@ -49,8 +49,13 @@ const COLUMNS: EncryptedCell[] = [
     // Effet de bord bienvenu : la course qui obligeait à effacer `sync_state` et
     // `last_sync_error` à chaque bascule a disparu avec sa cause — plus rien de
     // ce que le service de fond écrit ne traverse une conversion de projet.
-    { table: 'project_deploy_targets', idColumn: 'project_id', column: 'content' },
-    { table: 'project_deployments', idColumn: 'id', column: 'content' }
+    //
+    // ⚠️ **Le déploiement n'y figure plus non plus**, et pour la même raison que
+    // le git juste au-dessus : depuis la migration `080`, une cible appartient à
+    // l'espace, plusieurs projets peuvent la déployer, et elle est chiffrée à
+    // l'étage ouvert une fois pour toutes. Un projet qui passe en confidentiel
+    // **perd sa liaison** ; la cible et son historique ne bougent pas. Ils
+    // relèvent désormais de `workspaceRekey` seul.
 ];
 
 export interface ProjectEncryptedCell {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { GitCredential, GitRepo } from 'deveye-types';
+import type { Credential, GitRepo } from 'deveye-types';
 import { Button, Dialog, SelectInput } from '@/Components';
 import { ws } from '@/api/ws';
 import { RepoPicker, type RepoTarget } from '@/Features/Git/RepoPicker';
@@ -39,7 +39,7 @@ type Mode = 'pick' | 'create';
  */
 export function LinkRepoDialog({ open, projectId, linkedRepoIds, onClose, onSaved }: LinkRepoDialogProps) {
     const [repos, setRepos] = useState<GitRepo[]>([]);
-    const [credentials, setCredentials] = useState<GitCredential[]>([]);
+    const [credentials, setCredentials] = useState<Credential[]>([]);
     const [mode, setMode] = useState<Mode>('pick');
     const [picked, setPicked] = useState('');
     const [target, setTarget] = useState<RepoTarget>({ owner: '', repo: '', credentialId: null });

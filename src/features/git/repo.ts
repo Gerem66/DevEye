@@ -88,7 +88,7 @@ export const gitRepoAddFeature: FeatureDefinition<
     access: WRITE,
     handler: async (ctx, input) => {
         if (input.credentialId !== null) {
-            const credential = await ctx.db.git.findCredential(input.credentialId, ctx.workspaceId);
+            const credential = await ctx.db.credentials.find(input.credentialId, ctx.workspaceId, 'github');
             if (!credential) throw new FeatureError('not_found', 'Jeton introuvable');
             if (credential.provider !== input.provider) {
                 throw new FeatureError('validation', 'Ce jeton ne correspond pas au fournisseur choisi.');
@@ -162,7 +162,7 @@ export const gitRepoCandidatesFeature: FeatureDefinition<
         // besoin.
         let token: string | null = null;
         if (input.credentialId !== null) {
-            const credential = await ctx.db.git.findCredential(input.credentialId, ctx.workspaceId);
+            const credential = await ctx.db.credentials.find(input.credentialId, ctx.workspaceId, 'github');
             if (!credential) throw new FeatureError('not_found', 'Jeton introuvable');
             if (credential.provider !== 'github') {
                 throw new FeatureError('validation', 'Ce jeton n’est pas un jeton GitHub.');
@@ -213,7 +213,7 @@ export const gitRepoUpdateFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         const existing = await loadRepo(ctx, input.repoId);
         if (input.credentialId !== null) {
-            const credential = await ctx.db.git.findCredential(input.credentialId, ctx.workspaceId);
+            const credential = await ctx.db.credentials.find(input.credentialId, ctx.workspaceId, 'github');
             if (!credential) throw new FeatureError('not_found', 'Jeton introuvable');
             if (credential.provider !== existing.provider) {
                 throw new FeatureError('validation', 'Ce jeton ne correspond pas au fournisseur du dépôt.');

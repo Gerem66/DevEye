@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { GitCredential, GitRepoCandidate } from 'deveye-types';
+import type { Credential, GitRepoCandidate } from 'deveye-types';
 import { GIT_REPO_NAME_MAX_LENGTH, GIT_REPO_OWNER_MAX_LENGTH } from 'deveye-types';
 import { SelectInput, TextInput } from '@/Components';
 import { ws } from '@/api/ws';
@@ -14,7 +14,7 @@ export interface RepoTarget {
 }
 
 interface RepoPickerProps {
-    credentials: GitCredential[];
+    credentials: Credential[];
     value: RepoTarget;
     onChange: (value: RepoTarget) => void;
     autoFocus?: boolean;

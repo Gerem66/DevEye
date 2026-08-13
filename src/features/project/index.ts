@@ -21,7 +21,7 @@ import { projectHistoryFeatures } from './history';
 import { projectDatabaseLinkFeatures } from './databaseLink';
 import { projectAudienceLinkFeatures } from './audienceLink';
 import { projectRepoLinkFeatures } from './repoLink';
-import { projectDeployFeatures } from './deploy';
+import { projectDeployLinkFeatures } from './deployLink';
 import { projectLinkFeatures } from './links';
 import {
     assertGuardedAllowed,
@@ -400,6 +400,19 @@ export const projectSetSecurityTierFeature: FeatureDefinition<
             }
         }
 
+        // Et pour les cibles de déploiement, quatrième fois la même règle
+        // (migration 080). Les cibles, leur clé et leur historique survivent —
+        // seules les liaisons tombent.
+        if (input.securityTier === 'guarded') {
+            const dropped = await ctx.db.deploy.unlinkAllProjects(input.projectId, ctx.workspaceId);
+            if (dropped > 0) {
+                await recordEvent(ctx, existing, {
+                    kind: 'project.deployUnlink',
+                    label: `${dropped} cible${dropped > 1 ? 's' : ''} de déploiement déliée${dropped > 1 ? 's' : ''} (projet passé en confidentiel)`
+                });
+            }
+        }
+
         const from = cipherFor(ctx, existing.security_tier);
         const to = cipherFor(ctx, input.securityTier);
         const content = await reencryptProjectTree(ctx, existing, from, to);
@@ -516,6 +529,6 @@ export const projectFeatures: FeatureDefinition<string, any, any>[] = [
     ...projectRepoLinkFeatures,
     ...projectDatabaseLinkFeatures,
     ...projectAudienceLinkFeatures,
-    ...projectDeployFeatures,
+    ...projectDeployLinkFeatures,
     ...projectLinkFeatures
 ];

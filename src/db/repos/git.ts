@@ -2,7 +2,6 @@ import type {
     GitBranchRow,
     GitCommitAuthorRow,
     GitCommitRow,
-    GitCredentialRow,
     GitPullRequestRow,
     GitReleaseRow,
     GitRepoRow
@@ -36,25 +35,6 @@ export interface GitRepoUsageRow {
 }
 
 export interface GitRepo {
-    // -- identifiants d'accès (portée : l'espace) --------------------------
-    listCredentials(workspaceId: number): Promise<GitCredentialRow[]>;
-    findCredential(id: number, workspaceId: number): Promise<GitCredentialRow | null>;
-    createCredential(input: {
-        workspaceId: number;
-        provider: string;
-        label: string;
-        baseUrl: string | null;
-        secretEnc: string;
-    }): Promise<GitCredentialRow>;
-    updateCredential(
-        id: number,
-        workspaceId: number,
-        input: { label: string; baseUrl: string | null; secretEnc?: string }
-    ): Promise<GitCredentialRow | null>;
-    deleteCredential(id: number, workspaceId: number): Promise<boolean>;
-    /** Combien de dépôts et de cibles de déploiement s'appuient sur ce jeton. */
-    countCredentialUses(workspaceId: number): Promise<Map<number, number>>;
-
     // -- dépôts ------------------------------------------------------------
     listRepos(workspaceId: number): Promise<GitRepoWithUsageRow[]>;
     findRepo(id: number, workspaceId: number): Promise<GitRepoRow | null>;
@@ -199,70 +179,6 @@ export interface GitRepo {
 
 export function gitRepo(pool: Q): GitRepo {
     return {
-        async listCredentials(workspaceId) {
-            const r = await pool.query<GitCredentialRow>(
-                'SELECT * FROM project_credentials WHERE workspace_id = ? ORDER BY provider ASC, label ASC',
-                [workspaceId]
-            );
-            return r.rows;
-        },
-        async findCredential(id, workspaceId) {
-            const r = await pool.query<GitCredentialRow>(
-                'SELECT * FROM project_credentials WHERE id = ? AND workspace_id = ?',
-                [id, workspaceId]
-            );
-            return r.rows[0] ?? null;
-        },
-        async createCredential({ workspaceId, provider, label, baseUrl, secretEnc }) {
-            const res = await pool.query(
-                `INSERT INTO project_credentials (workspace_id, provider, label, base_url, secret_enc)
-                 VALUES (?, ?, ?, ?, ?)`,
-                [workspaceId, provider, label, baseUrl, secretEnc]
-            );
-            const r = await pool.query<GitCredentialRow>('SELECT * FROM project_credentials WHERE id = ?', [
-                res.insertId
-            ]);
-            return r.rows[0];
-        },
-        async updateCredential(id, workspaceId, { label, baseUrl, secretEnc }) {
-            // Secret absent = on garde celui en place : le client ne le reçoit
-            // jamais, il ne peut donc pas le renvoyer inchangé.
-            const res = secretEnc
-                ? await pool.query(
-                      'UPDATE project_credentials SET label = ?, base_url = ?, secret_enc = ? WHERE id = ? AND workspace_id = ?',
-                      [label, baseUrl, secretEnc, id, workspaceId]
-                  )
-                : await pool.query(
-                      'UPDATE project_credentials SET label = ?, base_url = ? WHERE id = ? AND workspace_id = ?',
-                      [label, baseUrl, id, workspaceId]
-                  );
-            if (res.rowCount === 0) return null;
-            return this.findCredential(id, workspaceId);
-        },
-        async deleteCredential(id, workspaceId) {
-            const r = await pool.query('DELETE FROM project_credentials WHERE id = ? AND workspace_id = ?', [
-                id,
-                workspaceId
-            ]);
-            return r.rowCount > 0;
-        },
-        async countCredentialUses(workspaceId) {
-            // Les deux consommateurs d'un jeton, en une requête : un dépôt git
-            // et une cible de déploiement. C'est ce chiffre qui dit à l'écran ce
-            // qu'une suppression va couper.
-            const r = await pool.query<{ credential_id: number; uses: number }>(
-                `SELECT credential_id, SUM(n) AS uses FROM (
-                     SELECT credential_id, COUNT(*) AS n FROM git_repos
-                      WHERE workspace_id = ? AND credential_id IS NOT NULL GROUP BY credential_id
-                     UNION ALL
-                     SELECT credential_id, COUNT(*) AS n FROM project_deploy_targets
-                      WHERE workspace_id = ? AND credential_id IS NOT NULL GROUP BY credential_id
-                 ) t GROUP BY credential_id`,
-                [workspaceId, workspaceId]
-            );
-            return new Map(r.rows.map((row) => [Number(row.credential_id), Number(row.uses)]));
-        },
-
         async listRepos(workspaceId) {
             const r = await pool.query<GitRepoWithUsageRow>(
                 `SELECT r.*, COUNT(l.project_id) AS project_count

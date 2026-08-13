@@ -11,6 +11,7 @@ import { SentinelWidget } from '@/Features/Sentinel/SentinelWidget';
 import { MailWidget } from '@/Features/Mail/MailWidget';
 import { ProjectsWidget } from '@/Features/Projects/ProjectsWidget';
 import { GitWidget } from '@/Features/Git/GitWidget';
+import { DeployWidget } from '@/Features/Deploy/DeployWidget';
 import { DatabaseWidget } from '@/Features/Database/DatabaseWidget';
 import { AudienceWidget } from '@/Features/Audience/AudienceWidget';
 import { OsintWidget } from '@/Features/Osint/OsintWidget';
@@ -25,6 +26,7 @@ import Sentinel from '@/Features/Sentinel';
 import Mail from '@/Features/Mail';
 import FeatureProjects from '@/Features/Projects';
 import FeatureGit from '@/Features/Git';
+import FeatureDeploy from '@/Features/Deploy';
 import FeatureDatabase from '@/Features/Database';
 import FeatureAudience from '@/Features/Audience';
 import FeatureOsint from '@/Features/Osint';
@@ -155,6 +157,18 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         // Démonté dès la fermeture : la vue d'un dépôt sonde l'avancement d'une
         // synchronisation en cours, et une instance en cache continuerait de
         // sonder sans être vue. Pas de `holdSecrecy` : rien n'y est chiffré à
+        // l'étage gardé, donc rien ne peut déclencher l'invite.
+        cacheDurationMinutes: 0
+    },
+    {
+        id: 'deploy',
+        title: 'Déploiements',
+        icon: 'rocket',
+        WidgetContent: DeployWidget,
+        FullComponent: FeatureDeploy,
+        // Démonté dès la fermeture, comme Git : la fiche d'une cible suit l'état
+        // d'un déploiement en vol, et une instance en cache continuerait de le
+        // suivre sans être vue. Pas de `holdSecrecy` : rien n'y est chiffré à
         // l'étage gardé, donc rien ne peut déclencher l'invite.
         cacheDurationMinutes: 0
     },

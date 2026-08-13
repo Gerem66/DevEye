@@ -1,0 +1,393 @@
+/*
+ * Déploiement — l'apparence.
+ *
+ * Aucune couleur en dur : tout passe par les variables du thème, donc l'écran
+ * suit l'apparence de l'espace sans une ligne de plus.
+ *
+ * La liste reprend la forme des cartes d'Audience et de Git : c'est la même
+ * chose montrée — des objets d'espace rangeables à la main — et deux listes
+ * voisines n'ont pas à se distinguer par leur géométrie.
+ *
+ * ⚠️ Une classe ne doit être définie **qu'une fois** seule dans son sélecteur —
+ * `client/scripts/check-css-modules.mjs` échoue sinon.
+ */
+
+.feature {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-height: 0;
+}
+
+.head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.title {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+}
+
+.subtitle {
+    margin: 2px 0 0;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.error {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--danger-bg);
+    color: var(--danger);
+    font-size: 0.85rem;
+}
+
+.empty {
+    margin: 0;
+    padding: var(--space-md);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.hint {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+/* Un accès retiré : la cible est là, mais plus rien n'en partira. */
+.overdue {
+    color: var(--warning);
+}
+
+/* ------------------------------------------------------------- la liste */
+
+.grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-sm);
+    margin: 0;
+    padding: 0 0 var(--space-md);
+    list-style: none;
+    align-content: start;
+    /* Repère de la barre d'insertion, positionnée par rapport à cette boîte. */
+    position: relative;
+}
+
+.dropBar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent-glow);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.card {
+    position: relative;
+    display: flex;
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    background: var(--surface-widget);
+    border: 1px solid var(--glass-border);
+    transition:
+        border-color var(--transition-fast),
+        transform var(--transition-fast);
+}
+
+.card:hover {
+    border-color: var(--glass-border-strong);
+    transform: translateY(-1px);
+}
+
+/* framer-motion possède `opacity` sur les éléments animés : on atténue par un
+   filtre, jamais par la propriété elle-même. */
+.cardDragging {
+    filter: opacity(0.4);
+    cursor: grabbing;
+}
+
+.grip {
+    flex-shrink: 0;
+    align-self: center;
+    width: 18px;
+    height: 18px;
+    margin-left: var(--space-sm);
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: grab;
+    touch-action: none;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+}
+
+.card:hover .grip,
+.card:focus-within .grip {
+    opacity: 1;
+}
+
+.grip:active {
+    cursor: grabbing;
+}
+
+.cardBody {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    text-align: left;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+}
+
+.cardBody:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    border-radius: var(--radius-lg);
+}
+
+.cardMain {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.cardName {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin: 0;
+    font-size: 1rem;
+    color: var(--text-primary);
+}
+
+.cardMeta {
+    margin: 0;
+    font-size: 0.78rem;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cardFoot {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+    margin-top: var(--space-xs);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.statusDot {
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+    border-radius: var(--radius-pill);
+    background: var(--text-muted);
+}
+
+.statusDot[data-tone='online'] {
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success);
+}
+
+.statusDot[data-tone='danger'] {
+    background: var(--danger);
+    box-shadow: 0 0 6px var(--danger);
+}
+
+.statusTag {
+    flex-shrink: 0;
+    padding: 1px 8px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+}
+
+.statusTag[data-tone='online'] {
+    color: var(--success);
+    background: var(--success-bg);
+}
+
+.statusTag[data-tone='danger'] {
+    color: var(--danger);
+    background: var(--danger-bg);
+}
+
+/* ------------------------------------------------- la cible, et son histoire */
+
+/*
+ * Le bloc encadré, partagé par la fiche de la feature et l'onglet d'un projet.
+ *
+ * Le cadre ne sert pas qu'à séparer deux cibles : il dit **où finit ce que la
+ * vue montre**. Sans lui, une cible seule se confondrait avec le fond de la
+ * popup — c'est la règle qu'appliquent déjà les onglets Git, Bases et Audience.
+ */
+.block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-width: 0;
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-subtle);
+}
+
+.blockHead {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+/* `min-width: 0` : sans lui, un nom long refuse de se tronquer et pousse les
+   boutons hors du cadre. */
+.blockIdent {
+    min-width: 0;
+    flex: 1;
+}
+
+.blockName {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin: 0;
+    font-size: 1rem;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+}
+
+.blockMeta {
+    margin: var(--space-xs) 0 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.history {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.sectionTitle {
+    margin: 0;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.itemList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.itemList li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    min-width: 0;
+}
+
+.itemName {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+}
+
+.itemDate {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+/* ------------------------------------------------------------ les formulaires */
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.label {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.textarea {
+    width: 100%;
+    padding: var(--space-sm);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: var(--surface-input);
+    color: var(--text-primary);
+    font: inherit;
+    resize: vertical;
+}
+
+/* Bloc d'action destructrice au pied d'un dialogue : il se signale de lui-même
+   plutôt que de côtoyer les boutons ordinaires. */
+.dangerZone {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+    border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+    background: var(--danger-bg);
+}
+
+/* Le texte de la zone, et lui seul : viser `.dangerZone > div` frapperait aussi
+   le groupe de boutons de confirmation, qui s'empilerait au lieu de rester en
+   ligne. */
+.dangerText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}

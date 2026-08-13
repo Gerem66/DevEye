@@ -1,34 +1,24 @@
 import { gitCredentialAdd, gitCredentialList, gitCredentialRemove, gitCredentialUpdate } from 'deveye-types';
-import type { GitCredential, GitCredentialRow } from 'deveye-types';
-import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
-import { gitCipher, READ, WRITE } from './_shared';
+import { defineFeature, type FeatureDefinition } from '../_define';
+import { addCredential, listCredentials, removeCredential, updateCredential } from '../_credentials';
+import { READ, WRITE } from './_shared';
 
 /**
- * Les jetons d'accès de l'espace — GitHub et Dokploy.
+ * Les jetons **GitHub** de l'espace.
  *
- * Ils vivent ici et non dans un projet : un jeton GitHub sert en général à
- * plusieurs dépôts, une clé Dokploy ne relève d'aucun dépôt, et le ressaisir par
- * projet serait à la fois pénible et plus risqué.
+ * Ils vivent ici et non dans un projet : un même jeton ouvre en général
+ * plusieurs dépôts, et le ressaisir par projet serait à la fois pénible et plus
+ * risqué.
  *
- * ⚠️ Les secrets ne sortent **jamais** : les DTO ne portent qu'un `hasSecret`.
- * Un secret qu'on ne renvoie pas est un secret qui ne peut fuiter ni par une
- * capture d'écran ni par un journal.
+ * Les clés **Dokploy** ont quitté cet écran : elles appartiennent à la feature
+ * Déploiement (`features/deploy/credentials.ts`). Elles n'avaient atterri ici
+ * que parce que ce module fut le premier à savoir gérer un secret, à une époque
+ * où le déploiement n'était qu'un onglet de projet sans place pour le sien.
  *
- * Toujours sous l'étage ouvert, quel que soit le palier des projets qui s'en
- * servent : le service de fond doit les lire sans session (voir `gitCipher`).
+ * Le comportement est dans `_credentials.ts`, partagé avec l'autre porte : seuls
+ * le fournisseur et le droit exigé changent. Aucun `baseUrl` ici — l'API GitHub
+ * est publique, il n'y a pas d'instance à désigner.
  */
-
-function toCredential(row: GitCredentialRow, useCount: number): GitCredential {
-    return {
-        id: row.id,
-        provider: row.provider === 'dokploy' ? 'dokploy' : 'github',
-        label: row.label,
-        baseUrl: row.base_url,
-        hasSecret: row.secret_enc.length > 0,
-        created: row.created,
-        useCount
-    };
-}
 
 export const gitCredentialListFeature: FeatureDefinition<
     typeof gitCredentialList.command,
@@ -37,13 +27,7 @@ export const gitCredentialListFeature: FeatureDefinition<
 > = defineFeature({
     ...gitCredentialList,
     access: READ,
-    handler: async (ctx) => {
-        const [rows, uses] = await Promise.all([
-            ctx.db.git.listCredentials(ctx.workspaceId),
-            ctx.db.git.countCredentialUses(ctx.workspaceId)
-        ]);
-        return { credentials: rows.map((row) => toCredential(row, uses.get(row.id) ?? 0)) };
-    }
+    handler: async (ctx) => ({ credentials: await listCredentials(ctx, 'github') })
 });
 
 export const gitCredentialAddFeature: FeatureDefinition<
@@ -54,22 +38,9 @@ export const gitCredentialAddFeature: FeatureDefinition<
     ...gitCredentialAdd,
     mutates: true,
     access: WRITE,
-    handler: async (ctx, input) => {
-        const row = await ctx.db.git.createCredential({
-            workspaceId: ctx.workspaceId,
-            provider: input.provider,
-            label: input.label,
-            baseUrl: input.baseUrl,
-            secretEnc: await gitCipher(ctx).encrypt(input.secret)
-        });
-        ctx.audit({
-            action: 'git.credentialAdd',
-            description: `Jeton ${input.provider} ajouté`,
-            metadata: { credentialId: row.id, provider: input.provider }
-        });
-        // Neuf, donc encore utilisé par rien.
-        return { credential: toCredential(row, 0) };
-    }
+    handler: async (ctx, input) => ({
+        credential: await addCredential(ctx, 'github', { label: input.label, baseUrl: null, secret: input.secret })
+    })
 });
 
 export const gitCredentialUpdateFeature: FeatureDefinition<
@@ -80,18 +51,14 @@ export const gitCredentialUpdateFeature: FeatureDefinition<
     ...gitCredentialUpdate,
     mutates: true,
     access: WRITE,
-    handler: async (ctx, input) => {
-        const row = await ctx.db.git.updateCredential(input.credentialId, ctx.workspaceId, {
+    handler: async (ctx, input) => ({
+        credential: await updateCredential(ctx, 'github', {
+            credentialId: input.credentialId,
             label: input.label,
-            baseUrl: input.baseUrl,
-            // Secret absent = inchangé. Le client ne l'a jamais reçu, il ne peut
-            // donc pas le renvoyer à l'identique.
-            secretEnc: input.secret ? await gitCipher(ctx).encrypt(input.secret) : undefined
-        });
-        if (!row) throw new FeatureError('not_found', 'Jeton introuvable');
-        const uses = await ctx.db.git.countCredentialUses(ctx.workspaceId);
-        return { credential: toCredential(row, uses.get(row.id) ?? 0) };
-    }
+            baseUrl: null,
+            secret: input.secret
+        })
+    })
 });
 
 export const gitCredentialRemoveFeature: FeatureDefinition<
@@ -103,17 +70,7 @@ export const gitCredentialRemoveFeature: FeatureDefinition<
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        // Les dépôts et les cibles de déploiement qui s'en servaient gardent leur
-        // lien mais perdent leur accès (`ON DELETE SET NULL`) : la
-        // synchronisation s'arrête proprement et le dit, au lieu de disparaître
-        // avec le jeton.
-        const ok = await ctx.db.git.deleteCredential(input.credentialId, ctx.workspaceId);
-        if (!ok) throw new FeatureError('not_found', 'Jeton introuvable');
-        ctx.audit({
-            action: 'git.credentialRemove',
-            description: 'Jeton retiré',
-            metadata: { credentialId: input.credentialId }
-        });
+        await removeCredential(ctx, 'github', input.credentialId);
         return { credentialId: input.credentialId };
     }
 });

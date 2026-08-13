@@ -77,10 +77,10 @@ export function AddFeatureDialog({ projectId, pending, onClose, onAdded }: AddFe
             <LinkTargetDialog
                 open={pending === 'deploy'}
                 projectId={projectId}
-                current={null}
+                linkedIds={NOTHING_LINKED}
                 onClose={onClose}
                 onSaved={() => {
-                    invalidate('project.board');
+                    invalidate('project.board', 'deploy.list', 'deploy.count');
                     onAdded('deploy');
                 }}
             />
