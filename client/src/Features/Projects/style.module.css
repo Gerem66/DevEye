@@ -2337,15 +2337,6 @@
     box-shadow: 0 0 6px var(--danger);
 }
 
-.linkList {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-xs);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
 /* --------------------------------------------- vignette du projet (dialogue) */
 
 /* Le choix de l'image et le titre sur une même ligne : les deux nomment le

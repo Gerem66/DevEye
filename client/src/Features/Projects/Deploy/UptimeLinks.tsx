@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { UptimeService } from 'deveye-types';
-import { Button, SelectInput } from '@/Components';
+import { Button } from '@/Components';
 import { ws, WsError } from '@/api/ws';
 import { useWorkspacePermissions } from '@/stores/workspace';
+import deployStyles from '@/Features/Deploy/style.module.css';
 import { humanizeError } from '../api';
+import { LinkUptimeDialog } from './LinkUptimeDialog';
+import { UptimeLinkRow } from './UptimeLinkRow';
 import styles from '../style.module.css';
 
 interface UptimeLinksProps {
@@ -26,10 +29,12 @@ interface UptimeLinksProps {
  * rattachés, sans pouvoir les nommer — plutôt que de les voir disparaître.
  */
 export function UptimeLinks({ projectId, canWrite }: UptimeLinksProps) {
-    const canReadUptime = useWorkspacePermissions().canFeature('uptime');
+    const permissions = useWorkspacePermissions();
+    const canReadUptime = permissions.canFeature('uptime');
+    const canWriteUptime = permissions.canFeature('uptime', 'write');
     const [serviceIds, setServiceIds] = useState<number[]>([]);
     const [services, setServices] = useState<UptimeService[] | null>(null);
-    const [picked, setPicked] = useState('');
+    const [linkOpen, setLinkOpen] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
 
@@ -72,30 +77,20 @@ export function UptimeLinks({ projectId, canWrite }: UptimeLinksProps) {
         };
     }, [canReadUptime]);
 
-    const write = async (command: 'project.uptimeLink' | 'project.uptimeUnlink', serviceId: number) => {
+    const unlink = async (serviceId: number) => {
         setBusy(true);
         try {
-            const res = await ws.send(command, { projectId, serviceId });
+            const res = await ws.send('project.uptimeUnlink', { projectId, serviceId });
             setServiceIds(res.serviceIds);
-            setPicked('');
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'La liaison n’a pas pu être modifiée.'));
+            setError(humanizeError(e, 'Le déliement a échoué.'));
         } finally {
             setBusy(false);
         }
     };
 
     const byId = new Map((services ?? []).map((s) => [s.id, s]));
-    const free = (services ?? []).filter((s) => !serviceIds.includes(s.id));
-
-    /** Le point d'état, avec la même sémantique que dans Uptime. */
-    const tone = (service: UptimeService | undefined) => {
-        if (!service || !service.enabled) return 'neutral';
-        if (service.status === 'up') return 'online';
-        if (service.status === 'down') return 'down';
-        return 'neutral';
-    };
 
     return (
         <section className={styles.uptimeLinks}>
@@ -103,67 +98,78 @@ export function UptimeLinks({ projectId, canWrite }: UptimeLinksProps) {
 
             {error && <p className={styles.error}>{error}</p>}
 
-            {serviceIds.length > 0 && (
-                <ul className={styles.linkList}>
-                    {serviceIds.map((id) => {
-                        const service = byId.get(id);
-                        return (
-                            <li key={id} className={styles.tag}>
-                                <span className={styles.uptimeDot} data-tone={tone(service)} aria-hidden='true' />
-                                {service?.name ?? `Service #${id}`}
+            {serviceIds.map((id) => {
+                const service = byId.get(id);
+                // Sans le droit `uptime: read`, le serveur ne rend qu'un
+                // identifiant nu : le bloc reste là, mais sans nom ni barres —
+                // plutôt que de le faire disparaître.
+                if (!service) {
+                    return (
+                        <section key={id} className={deployStyles.block}>
+                            <header className={deployStyles.blockHead}>
+                                <div className={deployStyles.blockIdent}>
+                                    <p className={deployStyles.blockName}>Service #{id}</p>
+                                </div>
                                 {canWrite && (
-                                    <button
-                                        type='button'
-                                        className={styles.tagRemove}
-                                        aria-label={`Détacher ${service?.name ?? `le service #${id}`}`}
-                                        disabled={busy}
-                                        onClick={() => void write('project.uptimeUnlink', id)}
-                                    >
-                                        <span className='icon icon-x' />
-                                    </button>
+                                    <div className={deployStyles.actions}>
+                                        <Button
+                                            variant='ghost'
+                                            icon='x'
+                                            onClick={() => void unlink(id)}
+                                            disabled={busy}
+                                        >
+                                            Délier
+                                        </Button>
+                                    </div>
                                 )}
-                            </li>
-                        );
-                    })}
-                </ul>
-            )}
+                            </header>
+                        </section>
+                    );
+                }
+                return (
+                    <UptimeLinkRow
+                        key={id}
+                        service={service}
+                        canWrite={canWrite}
+                        busy={busy}
+                        onUnlink={() => void unlink(id)}
+                    />
+                );
+            })}
 
             {serviceIds.length === 0 && (
-                <p className={styles.hint}>
+                <p className={styles.empty}>
                     Aucun service rattaché. Reliez ce qui surveille l’application déployée, pour lire sa disponibilité
                     ici même.
                 </p>
             )}
 
-            {canWrite && canReadUptime && (
-                <div className={styles.tagRow}>
-                    <SelectInput
-                        value={picked}
-                        onChange={(e) => setPicked(e.target.value)}
-                        disabled={busy || free.length === 0}
-                    >
-                        <option value=''>
-                            {services === null ? 'Chargement…' : free.length === 0 ? 'Rien à rattacher' : 'Choisir…'}
-                        </option>
-                        {free.map((s) => (
-                            <option key={s.id} value={s.id}>
-                                {s.name || `Service #${s.id}`}
-                            </option>
-                        ))}
-                    </SelectInput>
-                    <Button
-                        variant='secondary'
-                        disabled={busy || !picked}
-                        onClick={() => void write('project.uptimeLink', Number(picked))}
-                    >
-                        Rattacher
+            {canWrite && canWriteUptime && (
+                <div className={styles.addRow}>
+                    <Button icon='add' onClick={() => setLinkOpen(true)}>
+                        Ajouter un uptime
                     </Button>
                 </div>
             )}
 
-            {canWrite && !canReadUptime && (
-                <span className={styles.hint}>Votre rôle ne donne pas accès à Uptime dans cet espace.</span>
+            {canWrite && !canWriteUptime && (
+                <span className={styles.hint}>
+                    {canReadUptime
+                        ? 'Votre rôle ne permet pas de modifier les uptimes de cet espace.'
+                        : 'Votre rôle ne donne pas accès à Uptime dans cet espace.'}
+                </span>
             )}
+
+            <LinkUptimeDialog
+                open={linkOpen}
+                projectId={projectId}
+                linkedIds={serviceIds}
+                onClose={() => setLinkOpen(false)}
+                onSaved={() => {
+                    setLinkOpen(false);
+                    void load();
+                }}
+            />
         </section>
     );
 }
