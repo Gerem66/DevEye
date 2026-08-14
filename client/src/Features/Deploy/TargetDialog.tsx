@@ -5,6 +5,7 @@ import { Button, Dialog, SelectInput, TextInput } from '@/Components';
 import { ws } from '@/api/ws';
 import { invalidate } from '@/stores/invalidation';
 import { humanizeError } from '@/Features/Projects/api';
+import { DOKPLOY_TIMEOUT_MS } from './format';
 import styles from './style.module.css';
 
 interface TargetDialogProps {
@@ -87,7 +88,11 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
         setCandidates([]);
         void (async () => {
             try {
-                const res = await ws.send('deploy.candidates', { credentialId: Number(credentialId) });
+                const res = await ws.send(
+                    'deploy.candidates',
+                    { credentialId: Number(credentialId) },
+                    { timeoutMs: DOKPLOY_TIMEOUT_MS }
+                );
                 // Une réponse d'une instance qu'on ne regarde plus n'a rien à
                 // dire : changer de jeton avant qu'elle n'arrive est courant.
                 if (!alive) return;

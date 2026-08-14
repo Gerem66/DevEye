@@ -3,13 +3,15 @@ import {
     deployCandidates,
     deployCount,
     deployGet,
+    deployHistory,
     deployList,
+    deployLog,
     deployRemove,
     deployReorder,
     deployTrigger,
     deployUpdate
 } from 'deveye-types';
-import { listTargets, triggerDeploy } from '@/Services/integrations/dokploy';
+import { fetchDeploymentLog, listDeployments, listTargets, triggerDeploy } from '@/Services/integrations/dokploy';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { deployCredentialFeatures } from './credentials';
 import {
@@ -313,6 +315,83 @@ export const deployTriggerFeature: FeatureDefinition<
 });
 
 /**
+ * L'historique complet d'une cible, tel que Dokploy le rend.
+ *
+ * Distincte de `deployGet` : celle-ci interroge le fournisseur en direct à
+ * chaque appel plutôt que de relire le suivi local, donc coûte une requête
+ * externe et peut échouer si l'instance est injoignable — raison pour laquelle
+ * rien ne l'appelle en boucle ni depuis une liste de plusieurs cibles.
+ */
+export const deployHistoryFeature: FeatureDefinition<
+    typeof deployHistory.command,
+    typeof deployHistory.input,
+    typeof deployHistory.output
+> = defineFeature({
+    ...deployHistory,
+    access: READ,
+    handler: async (ctx, input) => {
+        const target = await loadTarget(ctx, input.targetId);
+        // Le jeton a été retiré : rien à interroger, mais ce n'est pas une
+        // erreur — la fiche le dit déjà par ailleurs (« accès retiré »).
+        if (target.credential_id === null) return { entries: [] };
+
+        const { baseUrl, apiKey } = await loadDokployCredential(ctx, target.credential_id);
+        try {
+            const remote = await listDeployments(
+                baseUrl,
+                apiKey,
+                target.target_kind === 'compose' ? 'compose' : 'application',
+                target.external_id
+            );
+            return { entries: [...remote].sort((a, b) => b.startedAt - a.startedAt) };
+        } catch (e) {
+            throw new FeatureError('internal', e instanceof Error ? e.message : 'Instance Dokploy injoignable.');
+        }
+    }
+});
+
+/**
+ * Le journal complet d'un déploiement, tel que Dokploy l'a produit.
+ *
+ * Reconstitue le chemin du journal en repassant par l'historique complet
+ * plutôt que de le faire porter au client : ce chemin est un détail
+ * d'implémentation du fournisseur (un emplacement sur son disque), pas
+ * quelque chose que DevEye a de raison d'exposer.
+ */
+export const deployLogFeature: FeatureDefinition<
+    typeof deployLog.command,
+    typeof deployLog.input,
+    typeof deployLog.output
+> = defineFeature({
+    ...deployLog,
+    access: READ,
+    handler: async (ctx, input) => {
+        const target = await loadTarget(ctx, input.targetId);
+        if (target.credential_id === null) {
+            throw new FeatureError('validation', 'L’accès Dokploy a été retiré : reliez une clé.');
+        }
+        const { baseUrl, apiKey } = await loadDokployCredential(ctx, target.credential_id);
+
+        const remote = await listDeployments(
+            baseUrl,
+            apiKey,
+            target.target_kind === 'compose' ? 'compose' : 'application',
+            target.external_id
+        ).catch((e) => {
+            throw new FeatureError('internal', e instanceof Error ? e.message : 'Instance Dokploy injoignable.');
+        });
+        const match = remote.find((d) => d.externalId === input.externalId);
+        if (!match?.logPath) throw new FeatureError('not_found', 'Aucun journal pour ce déploiement.');
+
+        try {
+            return { log: await fetchDeploymentLog(baseUrl, apiKey, match.logPath) };
+        } catch (e) {
+            throw new FeatureError('internal', e instanceof Error ? e.message : 'Flux de journaux injoignable.');
+        }
+    }
+});
+
+/**
  * Inscrit le déclenchement dans la frise du projet d'où il est parti.
  *
  * Traverse la frontière des deux modules, et c'est assumé : c'est le seul point
@@ -356,5 +435,7 @@ export const deployFeatures: FeatureDefinition<string, any, any>[] = [
     deployReorderFeature,
     deployCandidatesFeature,
     deployTriggerFeature,
+    deployHistoryFeature,
+    deployLogFeature,
     ...deployCredentialFeatures
 ];

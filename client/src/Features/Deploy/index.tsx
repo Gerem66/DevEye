@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Credential, DeployTarget, Deployment } from 'deveye-types';
+import type { Credential, DeployHistoryEntry, DeployTarget, Deployment } from 'deveye-types';
 
 import { Button, CredentialsDialog, DEPLOY_CREDENTIALS } from '@/Components';
 import { ws } from '@/api/ws';
@@ -9,6 +9,8 @@ import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
 import type { FeatureProps } from '@/Features/types';
 import { humanizeError } from '@/Features/Projects/api';
+import { dokployError, DOKPLOY_TIMEOUT_MS } from './format';
+import LogsDialog from './LogsDialog';
 import TargetDialog from './TargetDialog';
 import TargetList from './TargetList';
 import TargetView from './TargetView';
@@ -40,9 +42,20 @@ export function FeatureDeploy({ workspace }: FeatureProps) {
     const [openedId, setOpenedId] = useState<number | null>(null);
     const [opened, setOpened] = useState<{ target: DeployTarget; deployments: Deployment[] } | null>(null);
 
+    /**
+     * L'historique complet, tel que Dokploy le rend — chargé à part de
+     * `opened` : une instance injoignable ne doit pas priver la fiche de son
+     * nom ni de son bouton « Déployer », seul l'historique doit le dire.
+     * `null` = en cours de chargement.
+     */
+    const [history, setHistory] = useState<DeployHistoryEntry[] | null>(null);
+    const [historyError, setHistoryError] = useState<string | null>(null);
+
     const [dialog, setDialog] = useState<{ target: DeployTarget | null } | null>(null);
     const [credentialsOpen, setCredentialsOpen] = useState(false);
     const [credentials, setCredentials] = useState<Credential[]>([]);
+    /** L'identifiant Dokploy dont on regarde le journal ; `null` = popup fermée. */
+    const [logsFor, setLogsFor] = useState<string | null>(null);
 
     const listVersion = useResourceVersion('deploy.list');
     const detailVersion = useResourceVersion('deploy.detail');
@@ -120,6 +133,29 @@ export function FeatureDeploy({ workspace }: FeatureProps) {
         }
         void loadOpened(openedId);
     }, [openedId, loadOpened, detailVersion]);
+
+    const loadHistory = useCallback(async (targetId: number) => {
+        setHistory(null);
+        setHistoryError(null);
+        try {
+            const res = await ws.send('deploy.history', { targetId }, { timeoutMs: DOKPLOY_TIMEOUT_MS });
+            setHistory(res.entries);
+        } catch (e) {
+            // Le message de Dokploy lui-même, pas un intitulé générique : c'est
+            // souvent la seule piste pour distinguer une instance injoignable
+            // d'un refus d'authentification (voir `dokployError`).
+            setHistoryError(dokployError(e, 'Impossible de charger l’historique complet.'));
+        }
+    }, []);
+
+    useEffect(() => {
+        if (openedId === null) {
+            setHistory(null);
+            setHistoryError(null);
+            return;
+        }
+        void loadHistory(openedId);
+    }, [openedId, loadHistory, detailVersion]);
 
     const onDragStateChange = useCallback(
         (active: boolean) => {
@@ -212,6 +248,9 @@ export function FeatureDeploy({ workspace }: FeatureProps) {
                         members={workspace.users}
                         canWrite={canWrite}
                         onEdit={() => setDialog({ target: opened.target })}
+                        fullHistory={history}
+                        fullHistoryError={historyError}
+                        onOpenLogs={setLogsFor}
                     />
                 </>
             )}
@@ -251,6 +290,13 @@ export function FeatureDeploy({ workspace }: FeatureProps) {
                     // doit le dire sans attendre.
                     invalidate('deploy.list');
                 }}
+            />
+
+            <LogsDialog
+                open={logsFor !== null}
+                targetId={openedId}
+                externalId={logsFor}
+                onClose={() => setLogsFor(null)}
             />
         </div>
     );

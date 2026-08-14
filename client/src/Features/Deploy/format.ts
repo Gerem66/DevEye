@@ -1,4 +1,5 @@
 import type { DeployStatus } from 'deveye-types';
+import { WsError } from '@/api/ws';
 
 /** Le vocabulaire d'état, un seul jeu pour toute la feature. */
 export const STATUS_LABELS: Record<DeployStatus, string> = {
@@ -33,6 +34,38 @@ export function formatAgo(at: number | null): string {
     if (hours < 24) return `il y a ${hours} h`;
     return `il y a ${Math.floor(hours / 24)} j`;
 }
+
+/**
+ * Le message d'un échec côté Dokploy, tel quel.
+ *
+ * `humanizeError` (`Features/Projects/api`) ne rend le message du serveur que
+ * pour un code `validation` — pensé pour des refus de saisie, pas pour « quelle
+ * instance, quelle route, quelle raison ». Ici l'échec vient presque toujours du
+ * fournisseur (`internal` : instance injoignable, historique introuvable, point
+ * d'entrée du journal refusé…) : le cacher derrière un intitulé générique
+ * retirerait justement ce qui aide à comprendre quoi, côté Dokploy, ne répond
+ * pas comme attendu.
+ */
+export function dokployError(e: unknown, fallback: string): string {
+    if (e instanceof WsError && e.message) return e.message;
+    return fallback;
+}
+
+/**
+ * Budget client pour un aller-retour Dokploy (`deploy.history`, `deploy.candidates`,
+ * `deploy.trigger`) — au-delà du défaut de la socket (15 s) : le serveur borne
+ * chaque appel à l'instance à 30 s (`AbortSignal.timeout` de l'adaptateur), et le
+ * client doit laisser ce délai s'écouler avant de conclure à une panne plutôt que
+ * d'abandonner avant lui.
+ */
+export const DOKPLOY_TIMEOUT_MS = 35_000;
+
+/**
+ * Budget client pour `deploy.log` : le serveur y enchaîne un aller-retour Dokploy
+ * ({@link DOKPLOY_TIMEOUT_MS}) puis l'attente du flux de journaux (jusqu'à 30 s
+ * de plus) — les deux doivent tenir dans ce délai.
+ */
+export const DOKPLOY_LOG_TIMEOUT_MS = 65_000;
 
 /** L'hôte seul : une liste n'a pas besoin du schéma ni du chemin. */
 export function hostOf(baseUrl: string | null): string {

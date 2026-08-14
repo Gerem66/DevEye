@@ -315,7 +315,16 @@
     list-style: none;
 }
 
+/* Colonne, et non plus une seule ligne : `.itemError` s'y ajoute en dessous
+   pour les déploiements en échec, sans reprendre toute la géométrie. */
 .itemList li {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.itemRow {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
@@ -335,6 +344,38 @@
 .itemDate {
     color: var(--text-muted);
     font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+/*
+ * `.itemRow` rendu comme un <button> quand un journal existe pour la ligne —
+ * toute la ligne devient la cible du clic, pas une icône à part. N'ajoute que
+ * ce qu'il faut pour effacer les à-plats par défaut d'un bouton et poser le
+ * survol ; l'apparence au repos reste celle de `.itemRow` seul.
+ */
+.itemRowClickable {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.itemRowClickable:hover {
+    background: var(--glass-bg-light);
+}
+
+/* Le message d'erreur du fournisseur, quand il y en a un. */
+.itemError {
+    margin: 0;
+    color: var(--danger);
+    font-size: 0.72rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
@@ -409,4 +450,25 @@
     flex-direction: column;
     gap: 2px;
     min-width: 0;
+}
+
+/* ------------------------------------------------------- le journal */
+
+/* Comme un terminal, plutôt que le fond des autres blocs : c'est un flux
+   brut du fournisseur, pas un contenu mis en forme par DevEye. */
+.logBox {
+    flex: 1;
+    min-height: 240px;
+    margin: 0;
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow: auto;
 }

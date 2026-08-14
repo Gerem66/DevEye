@@ -1,12 +1,12 @@
 import { useState, type ReactNode } from 'react';
-import type { DeployTarget, Deployment, MinimalUser } from 'deveye-types';
+import type { DeployHistoryEntry, DeployStatus, DeployTarget, Deployment, MinimalUser } from 'deveye-types';
 import { DEPLOY_TITLE_MAX_LENGTH } from 'deveye-types';
 import { Button, Dialog, TextInput } from '@/Components';
 import { ws } from '@/api/ws';
 import { invalidate } from '@/stores/invalidation';
 import { humanizeError } from '@/Features/Projects/api';
 import { Avatar } from '@/Features/Projects/Board/Avatar';
-import { formatAgo, hostOf, STATUS_LABELS, statusTone } from './format';
+import { DOKPLOY_TIMEOUT_MS, formatAgo, hostOf, STATUS_LABELS, statusTone } from './format';
 import styles from './style.module.css';
 
 interface TargetViewProps {
@@ -27,6 +27,36 @@ interface TargetViewProps {
     onEdit?: () => void;
     /** Actions propres à l'appelant : « Délier », « Ouvrir le Déploiement ». */
     after?: ReactNode;
+    /**
+     * L'historique complet du fournisseur, à la place du suivi local
+     * (`deployments`) : il couvre aussi ce qui n'est jamais passé par DevEye.
+     * `null` = en cours de chargement. **Absent dans l'onglet d'un projet** —
+     * `deployments` y suffit, et interroger Dokploy pour chaque cible reliée
+     * coûterait une requête externe par carte pour peu d'apport.
+     */
+    fullHistory?: DeployHistoryEntry[] | null;
+    /** Dokploy injoignable pendant le chargement de `fullHistory` — n'empêche
+     *  pas le reste de la fiche (nom, déclenchement) de fonctionner. */
+    fullHistoryError?: string | null;
+    /**
+     * Ouvre le journal d'une ligne — absent dans l'onglet d'un projet, où le
+     * geste n'a pas de sens sans `fullHistory` pour lui donner un identifiant
+     * fournisseur sûr.
+     */
+    onOpenLogs?: (externalId: string) => void;
+}
+
+/** Une ligne d'historique, qu'elle vienne du suivi local ou de Dokploy en direct. */
+interface HistoryRow {
+    key: string | number;
+    status: DeployStatus;
+    title: string;
+    description: string;
+    startedAt: number;
+    /** `null` = inconnu (ligne venue de Dokploy) ou tâche de fond. */
+    triggeredByUserId: number | null;
+    /** `null` = pas d'identifiant fournisseur, donc pas de journal à ouvrir. */
+    externalId: string | null;
 }
 
 /**
@@ -38,11 +68,48 @@ interface TargetViewProps {
  * porte donc l'en-tête, le bouton qui déclenche et la liste de ce qui est parti ;
  * l'appelant n'ajoute que ce qui lui est propre, par `after`.
  */
-export function TargetView({ target, deployments, members, canWrite, projectId, onEdit, after }: TargetViewProps) {
+export function TargetView({
+    target,
+    deployments,
+    members,
+    canWrite,
+    projectId,
+    onEdit,
+    after,
+    fullHistory,
+    fullHistoryError,
+    onOpenLogs
+}: TargetViewProps) {
     const [triggerOpen, setTriggerOpen] = useState(false);
     const [busy, setBusy] = useState(false);
 
     const orphan = target.credentialId === null;
+
+    const rows: HistoryRow[] | null =
+        fullHistory === undefined
+            ? deployments.map((d) => ({
+                  key: d.id,
+                  status: d.status,
+                  title: d.title,
+                  description: d.description,
+                  startedAt: d.startedAt,
+                  triggeredByUserId: d.triggeredByUserId,
+                  externalId: d.externalId
+              }))
+            : fullHistory === null
+              ? null
+              : fullHistory.map((d, i) => ({
+                    // Pas d'id DevEye pour une ligne que Dokploy seul connaît ;
+                    // son identifiant chez le fournisseur en tient lieu, avec
+                    // l'index en dernier repli s'il n'en donne aucun.
+                    key: d.externalId ?? `${d.startedAt}-${i}`,
+                    status: d.status,
+                    title: d.title,
+                    description: d.description,
+                    startedAt: d.startedAt,
+                    triggeredByUserId: null,
+                    externalId: d.externalId
+                }));
 
     return (
         <section className={styles.block}>
@@ -86,27 +153,61 @@ export function TargetView({ target, deployments, members, canWrite, projectId, 
 
             <div className={styles.history}>
                 <h3 className={styles.sectionTitle}>Déploiements</h3>
-                {deployments.length === 0 ? (
+                {fullHistoryError ? (
+                    <p className={styles.error}>{fullHistoryError}</p>
+                ) : rows === null ? (
+                    <p className={styles.empty}>Chargement…</p>
+                ) : rows.length === 0 ? (
                     <p className={styles.empty}>Rien n’est encore parti d’ici.</p>
                 ) : (
                     <ul className={styles.itemList}>
-                        {deployments.map((d) => (
-                            <li key={d.id}>
-                                <span className={styles.statusTag} data-tone={statusTone(d.status)}>
-                                    {STATUS_LABELS[d.status]}
-                                </span>
-                                <span className={styles.itemName}>{d.title}</span>
-                                {d.triggeredByUserId !== null && (
-                                    <Avatar user={members.find((m) => m.id === d.triggeredByUserId)} size={18} />
-                                )}
-                                <span
-                                    className={styles.itemDate}
-                                    title={new Date(d.startedAt * 1000).toLocaleString('fr-FR')}
-                                >
-                                    {formatAgo(d.startedAt)}
-                                </span>
-                            </li>
-                        ))}
+                        {rows.map((row) => {
+                            const clickable = Boolean(onOpenLogs) && row.externalId !== null;
+                            const content = (
+                                <>
+                                    <span className={styles.statusTag} data-tone={statusTone(row.status)}>
+                                        {STATUS_LABELS[row.status]}
+                                    </span>
+                                    <span className={styles.itemName}>{row.title}</span>
+                                    {row.triggeredByUserId !== null && (
+                                        <Avatar user={members.find((m) => m.id === row.triggeredByUserId)} size={18} />
+                                    )}
+                                    <span
+                                        className={styles.itemDate}
+                                        title={new Date(row.startedAt * 1000).toLocaleString('fr-FR')}
+                                    >
+                                        {formatAgo(row.startedAt)}
+                                    </span>
+                                </>
+                            );
+                            return (
+                                <li key={row.key}>
+                                    {/* Toute la ligne est la cible du clic — pas une
+                                        icône à part qu'il faudrait viser — quand un
+                                        journal existe pour elle. */}
+                                    {clickable ? (
+                                        <button
+                                            type='button'
+                                            className={`${styles.itemRow} ${styles.itemRowClickable}`}
+                                            title='Voir le journal'
+                                            onClick={() => onOpenLogs?.(row.externalId as string)}
+                                        >
+                                            {content}
+                                        </button>
+                                    ) : (
+                                        <div className={styles.itemRow}>{content}</div>
+                                    )}
+                                    {/* Le message du fournisseur, pas une simple
+                                        étiquette rouge : c'est lui qui dit pourquoi,
+                                        pas seulement que ça a échoué. */}
+                                    {row.status === 'failed' && row.description && (
+                                        <p className={styles.itemError} title={row.description}>
+                                            {row.description}
+                                        </p>
+                                    )}
+                                </li>
+                            );
+                        })}
                     </ul>
                 )}
             </div>
@@ -149,12 +250,16 @@ function TriggerDialog({ open, targetId, projectId, busy, setBusy, onClose, onDo
         setBusy(true);
         setError(null);
         try {
-            await ws.send('deploy.trigger', {
-                targetId,
-                title,
-                description,
-                ...(projectId === undefined ? {} : { projectId })
-            });
+            await ws.send(
+                'deploy.trigger',
+                {
+                    targetId,
+                    title,
+                    description,
+                    ...(projectId === undefined ? {} : { projectId })
+                },
+                { timeoutMs: DOKPLOY_TIMEOUT_MS }
+            );
             setTitle('');
             setDescription('');
             onDone();

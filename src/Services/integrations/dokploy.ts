@@ -1,3 +1,5 @@
+import WebSocket from 'ws';
+
 /**
  * Adaptateur Dokploy.
  *
@@ -48,6 +50,8 @@ export interface DokployDeployment {
     description: string;
     startedAt: number;
     finishedAt: number | null;
+    /** Chemin du journal chez le fournisseur, pour {@link fetchDeploymentLog}. */
+    logPath: string | null;
 }
 
 function base(baseUrl: string): string {
@@ -219,7 +223,8 @@ export function readDeployments(payload: unknown): DokployDeployment[] {
             startedAt,
             // Un déploiement en cours n'a pas de fin, même si l'instance
             // renvoie un horodatage qui bouge à chaque battement.
-            finishedAt: status === 'running' || status === 'queued' ? null : finishedAt
+            finishedAt: status === 'running' || status === 'queued' ? null : finishedAt,
+            logPath: pick(row, ['logPath'])
         };
     });
 }
@@ -256,5 +261,66 @@ export async function triggerDeploy(
     await call<unknown>(baseUrl, kind === 'compose' ? 'compose.deploy' : 'application.deploy', apiKey, {
         input,
         mutate: true
+    });
+}
+
+/** `/listen-deployment?logPath=…`, jamais sous `/api/trpc`. */
+function logSocketUrl(baseUrl: string, logPath: string): string {
+    const url = new URL(baseUrl.replace(/\/+$/, ''));
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.pathname = '/listen-deployment';
+    url.search = `?logPath=${encodeURIComponent(logPath)}`;
+    return url.toString();
+}
+
+/** Un silence de ce temps referme la connexion et rend ce qui a été reçu. */
+const LOG_TIMEOUT_MS = 30_000;
+
+/**
+ * Rejoue le journal d'un déploiement, tel que Dokploy le stream.
+ *
+ * **Hors du protocole `call()`** : aucune procédure tRPC ne le rend. Dokploy
+ * le sert par un WebSocket dédié, repéré en observant le trafic de sa propre
+ * interface — non documenté, donc collecté avec un filet plutôt qu'en confiance
+ * aveugle :
+ *
+ *  - L'en-tête `x-api-key` est posé comme pour le reste de l'adaptateur, mais
+ *    rien ne garantit que cette route l'exige, ni même la reconnaisse — le
+ *    navigateur qui a servi de référence pour ce point d'entrée ne peut de
+ *    toute façon poser aucun en-tête sur un WebSocket, donc son propre trafic
+ *    ne dit rien de ce que cette route attend vraiment. Une instance qui la
+ *    refuse remonte une erreur normale, pas un crash.
+ *  - {@link LOG_TIMEOUT_MS} de silence referme la connexion et rend ce qui a
+ *    été reçu : un déploiement déjà terminé clôt son flux de lui-même une fois
+ *    le fichier rejoué, mais rien ne garantit qu'un déploiement encore en
+ *    cours le fasse un jour dans le temps d'une requête HTTP — le journal
+ *    rendu serait alors partiel, jamais une erreur pour autant.
+ */
+export function fetchDeploymentLog(baseUrl: string, apiKey: string, logPath: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const socket = new WebSocket(logSocketUrl(baseUrl, logPath), { headers: { 'x-api-key': apiKey } });
+        const chunks: string[] = [];
+        let settled = false;
+
+        const timer = setTimeout(() => finish(), LOG_TIMEOUT_MS);
+
+        function finish(err?: Error): void {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            socket.terminate();
+            // Un lot déjà reçu vaut mieux qu'une erreur : un journal partiel
+            // reste lisible, une page vide sur une simple coupure ne l'est pas.
+            if (err && chunks.length === 0) reject(err);
+            else resolve(chunks.join(''));
+        }
+
+        socket.on('message', (data) => {
+            chunks.push(
+                Buffer.isBuffer(data) ? data.toString('utf8') : Buffer.from(data as ArrayBuffer).toString('utf8')
+            );
+        });
+        socket.on('close', () => finish());
+        socket.on('error', (err) => finish(err));
     });
 }
