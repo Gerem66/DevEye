@@ -172,6 +172,21 @@ export const osintHistoryClearFeature: FeatureDefinition<
     }
 });
 
+/**
+ * Compte les sondes disponibles / le total.
+ *
+ * Le total est fixe : le nombre de sondes enregistrées, qui ne varie pas selon
+ * les clés posées. Seule une sonde qui **exige** une clé (`requiresKey`) et
+ * dont le fournisseur n'est pas tenu compte comme indisponible — une sonde
+ * qu'une clé ne fait qu'enrichir (`phone` avec Numverify) répond déjà sans
+ * elle, et compte donc comme disponible dans les deux cas.
+ */
+function countProbeAvailability(held: ReadonlySet<OsintProvider>): { available: number; total: number } {
+    const probes = Object.values(PROBES);
+    const missingKey = probes.filter((probe) => probe.requiresKey && !(probe.provider && held.has(probe.provider)));
+    return { available: probes.length - missingKey.length, total: probes.length };
+}
+
 export const osintKeyListFeature: FeatureDefinition<
     typeof osintKeyList.command,
     typeof osintKeyList.input,
@@ -185,11 +200,14 @@ export const osintKeyListFeature: FeatureDefinition<
         // Tous les fournisseurs sont rendus, posés ou non : l'écran de réglages
         // doit pouvoir proposer ceux qui manquent, pas seulement lister l'acquis.
         // La clé elle-même ne sort jamais — seulement le fait qu'elle existe.
+        const { available: probesAvailable, total: probesTotal } = countProbeAvailability(held);
         return {
             providers: osintProviderSchema.options.map((provider) => ({
                 provider,
                 hasKey: held.has(provider)
-            }))
+            })),
+            probesAvailable,
+            probesTotal
         };
     }
 });

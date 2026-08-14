@@ -728,23 +728,13 @@
 .widget {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    justify-content: center;
     height: 100%;
 }
 
-.widgetTarget {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
+/* En bas à gauche, comme les autres vignettes : `margin-top: auto` la pousse
+   au pied de la carte sans rien centrer ni forcer sa hauteur. */
 .widgetMuted {
-    display: flex;
-    align-items: center;
+    margin-top: auto;
     font-size: 0.75rem;
     color: var(--text-muted);
 }
