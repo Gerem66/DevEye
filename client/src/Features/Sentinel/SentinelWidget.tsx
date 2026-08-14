@@ -19,8 +19,9 @@ export function SentinelWidget() {
     const total = totalOpen(open);
     const worst = worstSeverity(open);
 
-    // Rien d'ouvert ne se teinte pas : la couleur du texte primaire *est* l'état
-    // calme, et lui inventer une classe ferait croire à une troisième nuance.
+    // Rien d'ouvert ne se teinte pas : la couleur de l'accent, celle de toutes
+    // les autres vignettes au repos, *est* l'état calme — seul un constat net
+    // (élevé ou critique) la fait basculer vers une nuance active.
     const tone = worst === 'critical' || worst === 'high' ? styles.widgetAlert : worst ? styles.widgetWarn : '';
 
     return (
