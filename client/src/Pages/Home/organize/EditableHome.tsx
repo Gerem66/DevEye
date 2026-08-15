@@ -24,13 +24,16 @@ import {
     type SortingStrategy
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { Device, HomeFeatureId, HomeSection, ShortcutItem } from 'deveye-types';
+import type { Device, HomeFeatureId, HomeFolder, HomeSection, ShortcutItem } from 'deveye-types';
+import { isHomeFolder } from 'deveye-types';
 
 import { useDevices } from '@/stores/devices';
 import {
+    addFolder,
     moveSectionItem,
     removeDevice,
     removeFeature,
+    removeFolder,
     removeSection,
     removeShortcut,
     renameSection,
@@ -48,6 +51,7 @@ import { Widget } from '@/Components/Widget';
 import { deviceTileVisual, featureTileVisual, shortcutTileVisual, type TileVisual } from '../tiles/tileVisual';
 import { AddSectionDialog } from './AddSectionDialog';
 import { AddTileDialog } from './AddTileDialog';
+import { FolderDialog } from './FolderDialog';
 import { ADD_TILE_LABEL, SECTION_KIND_LABEL } from './sectionKinds';
 import styles from './organize.module.css';
 
@@ -55,6 +59,12 @@ import styles from './organize.module.css';
 interface ShortcutEdit {
     sectionId: string;
     item: ShortcutItem;
+}
+
+/** Un dossier dont on demande le retrait, avec la section qui le porte. */
+interface FolderRemoval {
+    sectionId: string;
+    folder: HomeFolder;
 }
 
 /**
@@ -101,7 +111,8 @@ function tileVisualFor(
 ): { visual: TileVisual | null; compact: boolean } {
     if (section.kind === 'feature') {
         // Only features keep the full height; the rest use the shorter card.
-        return { visual: featureTileVisual(id as HomeFeatureId), compact: false };
+        const tile = section.items.find((t) => (isHomeFolder(t) ? t.id === id : t === id));
+        return { visual: tile === undefined ? null : featureTileVisual(tile), compact: false };
     }
     if (section.kind === 'device') {
         const device = devices.find((d) => d.id === id);
@@ -111,12 +122,27 @@ function tileVisualFor(
     return { visual: item ? shortcutTileVisual(item, { editing: true }) : null, compact: true };
 }
 
+/** Le dossier de cette section portant cet id de tuile, s'il y en a un. */
+function folderIn(section: HomeSection, id: string): HomeFolder | undefined {
+    if (section.kind !== 'feature') return undefined;
+    for (const tile of section.items) if (isHomeFolder(tile) && tile.id === id) return tile;
+    return undefined;
+}
+
 /** Wording of the "remove a populated section" confirmation. */
 function removalWarning(section: HomeSection): string {
     const n = section.items.length;
     const tiles = `${n} tuile${n > 1 ? 's' : ''}`;
     const subject = section.title ? `« ${section.title} »` : 'Cette section';
     return `${subject} et ses ${tiles} seront retirées de l’accueil.`;
+}
+
+/** Le même avertissement pour un dossier : ce qu'il tient quitte l'accueil avec lui. */
+function folderRemovalWarning(folder: HomeFolder): string {
+    const n = folder.items.length;
+    const features = `${n} fonctionnalité${n > 1 ? 's' : ''}`;
+    const subject = folder.title.trim() ? `« ${folder.title.trim()} »` : 'Ce dossier';
+    return `${subject} et les ${features} qu’il contient seront retirés de l’accueil.`;
 }
 
 /** The card on its own, no drag wiring — rendered both in the grid and, while
@@ -204,12 +230,18 @@ function SectionTiles({
     section,
     devices,
     onAdd,
-    onEditShortcut
+    onAddFolder,
+    onEditShortcut,
+    onEditFolder,
+    onRemoveFolder
 }: {
     section: HomeSection;
     devices: Device[];
     onAdd: () => void;
+    onAddFolder: () => void;
     onEditShortcut: (item: ShortcutItem) => void;
+    onEditFolder: (folder: HomeFolder) => void;
+    onRemoveFolder: (folder: HomeFolder) => void;
 }) {
     const addClass =
         section.kind === 'feature'
@@ -222,22 +254,19 @@ function SectionTiles({
 
     const renderTile = (id: string) => {
         const { visual, compact } = tileVisualFor(section, id, devices);
+        const folder = folderIn(section, id);
         const onRemove = () => {
-            if (section.kind === 'feature') removeFeature(section.id, id as HomeFeatureId);
+            if (folder) onRemoveFolder(folder);
+            else if (section.kind === 'feature') removeFeature(section.id, id as HomeFeatureId);
             else if (section.kind === 'device') removeDevice(section.id, id);
             else removeShortcut(section.id, id);
         };
         const item = section.kind === 'shortcut' ? section.items.find((s) => s.id === id) : undefined;
-        return (
-            <SortableTile
-                key={id}
-                id={id}
-                compact={compact}
-                visual={visual}
-                onEdit={item ? () => onEditShortcut(item) : undefined}
-                onRemove={onRemove}
-            />
-        );
+        // Le crayon ouvre la fiche du dossier, comme il ouvre celle d'un
+        // raccourci : dans les deux cas, la tuile porte un contenu que seul son
+        // auteur peut décrire.
+        const onEdit = folder ? () => onEditFolder(folder) : item ? () => onEditShortcut(item) : undefined;
+        return <SortableTile key={id} id={id} compact={compact} visual={visual} onEdit={onEdit} onRemove={onRemove} />;
     };
 
     return (
@@ -248,6 +277,17 @@ function SectionTiles({
                     <span className={`icon icon-plus ${styles.addTileIcon}`} />
                     <span className={styles.addTileLabel}>{ADD_TILE_LABEL[section.kind]}</span>
                 </button>
+                {/* Un dossier est une tuile de fonctionnalités : il ne se propose
+                    donc que là, et à côté de l'ajout plutôt que dedans. Le
+                    sélecteur de fonctionnalités reste ce qu'il est, une liste de
+                    widgets à poser, et rien n'oblige à passer par un dossier
+                    pour en ajouter un. */}
+                {section.kind === 'feature' && (
+                    <button type='button' className={`${styles.addTile} ${addClass}`} onClick={onAddFolder}>
+                        <span className={`icon icon-folder-plus ${styles.addTileIcon}`} />
+                        <span className={styles.addTileLabel}>Nouveau dossier</span>
+                    </button>
+                )}
             </div>
         </SortableContext>
     );
@@ -259,13 +299,19 @@ function SortableSection({
     section,
     devices,
     onAdd,
+    onAddFolder,
     onEditShortcut,
+    onEditFolder,
+    onRemoveFolder,
     onRemove
 }: {
     section: HomeSection;
     devices: Device[];
     onAdd: () => void;
+    onAddFolder: () => void;
     onEditShortcut: (item: ShortcutItem) => void;
+    onEditFolder: (folder: HomeFolder) => void;
+    onRemoveFolder: (folder: HomeFolder) => void;
     onRemove: () => void;
 }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: section.id });
@@ -336,7 +382,15 @@ function SortableSection({
                     <span className={`icon icon-x ${styles.actionIconRemove}`} />
                 </button>
             </div>
-            <SectionTiles section={section} devices={devices} onAdd={onAdd} onEditShortcut={onEditShortcut} />
+            <SectionTiles
+                section={section}
+                devices={devices}
+                onAdd={onAdd}
+                onAddFolder={onAddFolder}
+                onEditShortcut={onEditShortcut}
+                onEditFolder={onEditFolder}
+                onRemoveFolder={onRemoveFolder}
+            />
         </section>
     );
 }
@@ -360,6 +414,10 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
     const [editShortcut, setEditShortcut] = useState<ShortcutEdit | null>(null);
     const [addingSection, setAddingSection] = useState(autoOpenAdd);
     const [confirmRemove, setConfirmRemove] = useState<HomeSection | null>(null);
+    /** Le dossier dont la fiche est ouverte, par son id (relu dans la disposition). */
+    const [editFolder, setEditFolder] = useState<string | null>(null);
+    /** Le dossier dont on demande le retrait, quand il n'est pas vide. */
+    const [confirmFolder, setConfirmFolder] = useState<FolderRemoval | null>(null);
     /** Tile currently riding in the drag overlay (null when dragging a section). */
     const [activeTileId, setActiveTileId] = useState<string | null>(null);
     /** Where that tile started, so a cancelled drag puts it back. */
@@ -553,6 +611,30 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
         setConfirmRemove(null);
     };
 
+    /**
+     * Créer un dossier ouvre sa fiche dans la foulée : vide, il n'a rien à
+     * montrer, et le nommer puis le remplir est le geste qui suit de toute façon.
+     */
+    const startFolder = (sectionId: string) => {
+        const id = addFolder(sectionId);
+        if (id) setEditFolder(id);
+    };
+
+    /**
+     * Un dossier vide s'en va sans rien demander (le recréer est un clic) ; un
+     * dossier plein prévient, parce que son retrait emporte aussi les tuiles
+     * qu'il tenait hors de l'accueil.
+     */
+    const requestRemoveFolder = (sectionId: string, folder: HomeFolder) => {
+        if (folder.items.length === 0) removeFolder(sectionId, folder.id);
+        else setConfirmFolder({ sectionId, folder });
+    };
+
+    const doRemoveFolder = () => {
+        if (confirmFolder) removeFolder(confirmFolder.sectionId, confirmFolder.folder.id);
+        setConfirmFolder(null);
+    };
+
     return (
         <div className={styles.editRoot}>
             <DndContext
@@ -573,7 +655,10 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
                             section={section}
                             devices={devices}
                             onAdd={() => setAddTarget(section.id)}
+                            onAddFolder={() => startFolder(section.id)}
                             onEditShortcut={(item) => setEditShortcut({ sectionId: section.id, item })}
+                            onEditFolder={(folder) => setEditFolder(folder.id)}
+                            onRemoveFolder={(folder) => requestRemoveFolder(section.id, folder)}
                             onRemove={() => requestRemove(section)}
                         />
                     ))}
@@ -603,6 +688,27 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
                     setEditShortcut(null);
                 }}
             />
+
+            <FolderDialog folderId={editFolder} onClose={() => setEditFolder(null)} />
+
+            <Dialog
+                open={confirmFolder !== null}
+                onClose={() => setConfirmFolder(null)}
+                title='Supprimer le dossier ?'
+                onSubmit={doRemoveFolder}
+                footer={
+                    <>
+                        <Button variant='secondary' onClick={() => setConfirmFolder(null)}>
+                            Annuler
+                        </Button>
+                        <Button variant='danger' onClick={doRemoveFolder}>
+                            Supprimer
+                        </Button>
+                    </>
+                }
+            >
+                <p className={styles.confirmText}>{confirmFolder ? folderRemovalWarning(confirmFolder.folder) : ''}</p>
+            </Dialog>
 
             <Dialog
                 open={confirmRemove !== null}

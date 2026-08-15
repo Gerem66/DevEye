@@ -10,6 +10,42 @@
     flex: 1;
     overflow-y: auto;
     padding-top: var(--navbar-height);
+    transition:
+        filter var(--transition-slow),
+        transform var(--transition-slow);
+}
+
+/*
+ * L'accueil recule pendant qu'un dossier est déployé.
+ *
+ * Flou **et** léger retrait : le flou seul aplatit, le retrait seul ne dit pas
+ * qu'on a changé de plan. Ensemble ils donnent la profondeur, et le liseré de
+ * fond d'écran qui apparaît sur les bords suffit à faire lire la couche du
+ * dessus comme posée par-dessus plutôt que comme un remplacement.
+ *
+ * Le flou est porté par l'accueil, pas par la couche : une couche floutante
+ * (`backdrop-filter`) aurait flouté au passage les cartes qu'elle transporte.
+ *
+ * `pointer-events: none` par sûreté : le voile intercepte déjà les clics, mais
+ * une tuile qui dépasserait resterait cliquable derrière une interface qui dit
+ * le contraire. La molette, elle, traverse et défile la couche du dessus.
+ */
+.recessed {
+    filter: blur(7px);
+    transform: scale(0.965);
+    pointer-events: none;
+}
+
+/* Mouvement réduit : le plan recule quand même (c'est une information), mais
+   sans glissement ni changement d'échelle. */
+@media (prefers-reduced-motion: reduce) {
+    .main {
+        transition: none;
+    }
+
+    .recessed {
+        transform: none;
+    }
 }
 
 .content {

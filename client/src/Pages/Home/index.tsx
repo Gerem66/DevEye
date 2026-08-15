@@ -19,6 +19,7 @@ import { syncThemeFromServer } from '@/stores/theme';
 import { syncHomeLayoutFromServer } from '@/stores/homeLayout';
 import {
     useHomeLayout,
+    findFolder,
     getHomeLayout,
     placedDeviceIds,
     placedFeatureIds,
@@ -53,6 +54,7 @@ import {
     featureAllowed,
     featureCatalogEntry,
     featureIdAllowed,
+    folderFeatures,
     usableFeatureIds,
     type HomeAudience
 } from './catalog';
@@ -65,9 +67,10 @@ import {
     shortcutTileVisual
 } from './tiles/tileVisual';
 import { EditableHome } from './organize/EditableHome';
+import { FolderOverlay, folderTitle } from './folders';
 
 import type { HomeFeatureId, HomeLayout, HomeSection, WorkspaceFeatureId, WorkspacePermissions } from 'deveye-types';
-import { WORKSPACE_FEATURE_IDS } from 'deveye-types';
+import { isHomeFolder, WORKSPACE_FEATURE_IDS } from 'deveye-types';
 import type { FeatureProps } from '@/Features/types';
 import styles from './Dashboard.module.css';
 import type { Workspace } from 'deveye-types';
@@ -416,6 +419,20 @@ export default function HomePage() {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [editing, setEditing] = useState(false);
     const [autoAddSection, setAutoAddSection] = useState(false);
+    /**
+     * Le dossier déployé : son id, et la tuile d'où il sort.
+     *
+     * L'id, et non le dossier lui-même : son contenu est relu dans la
+     * disposition à chaque rendu, donc une modification faite par un autre
+     * membre de l'espace se voit tout de suite, et un dossier supprimé referme
+     * l'écran de lui-même. La mesure de la tuile, elle, est prise au clic : le
+     * fond recule aussitôt après, et le mesurer ensuite rendrait un cadre déjà
+     * rétréci. `offset` est la hauteur de l'en-tête de l'accueil, pour que les
+     * cartes déployées se posent là où commence la grille, et pas plus haut.
+     */
+    const [openFolder, setOpenFolder] = useState<{ id: string; source: DOMRect; offset: number } | null>(null);
+    /** L'en-tête (« Bonjour… »), mesuré à l'ouverture d'un dossier. */
+    const greetingRef = useRef<HTMLElement>(null);
 
     // Set of view ids whose components are currently mounted (cached).
     const [mountedFeatures, setMountedFeatures] = useState<Set<string>>(new Set());
@@ -730,6 +747,29 @@ export default function HomePage() {
     const audienceRef = useRef(audience);
     audienceRef.current = audience;
 
+    /**
+     * Le dossier déployé, relu dans la disposition courante à chaque rendu.
+     *
+     * C'est ce qui le rend vivant : renommé, rempli ou vidé par un autre membre
+     * de l'espace, l'écran suit sans rien de particulier à brancher. Un dossier
+     * qui n'a plus rien à montrer (supprimé, vidé, ou resté dans l'espace qu'on
+     * vient de quitter) referme l'écran plutôt que de laisser une couche voilée
+     * sur du vide.
+     */
+    const folderView = useMemo(
+        () => (openFolder ? (findFolder(layout, openFolder.id)?.folder ?? null) : null),
+        [openFolder, layout]
+    );
+    const folderEntries = useMemo(
+        () => (folderView ? folderFeatures(folderView.items, audience) : []),
+        [folderView, audience]
+    );
+    useEffect(() => {
+        if (openFolder !== null && folderEntries.length === 0) setOpenFolder(null);
+    }, [openFolder, folderEntries.length]);
+
+    const closeFolder = useCallback(() => setOpenFolder(null), []);
+
     const handleExitComplete = useCallback(() => {
         const featureId = closingFeatureRef.current;
         closingFeatureRef.current = null;
@@ -931,6 +971,9 @@ export default function HomePage() {
      *  empty-home prompt, where organizing is only a means to that end. */
     const startOrganizing = (autoAdd = false) => {
         if (expandedWidget) handleClose();
+        // Un dossier déployé n'a pas de place en mode organisation : la grille
+        // qu'on va manipuler est justement celle qu'il recouvre.
+        setOpenFolder(null);
         setAutoAddSection(autoAdd);
         setEditing(true);
     };
@@ -942,7 +985,44 @@ export default function HomePage() {
     const renderSection = (section: HomeSection): ReactNode => {
         const tiles: ReactNode[] = [];
         if (section.kind === 'feature') {
-            for (const fid of section.items) {
+            for (const tile of section.items) {
+                if (isHomeFolder(tile)) {
+                    const v = featureTileVisual(tile);
+                    if (!v) continue;
+                    // Un dossier **rempli** dont ce contexte ne verrait rien
+                    // s'efface, comme une tuile réservée à l'administration :
+                    // promettre un écran qui n'a rien à montrer serait pire que
+                    // de ne rien montrer. Un dossier vraiment vide, lui, reste :
+                    // on vient de le créer, et le voir disparaître de l'accueil
+                    // se lirait comme une perte. Il est simplement inerte, et son
+                    // corps dit où le remplir.
+                    const visible = folderFeatures(tile.items, audience);
+                    if (visible.length === 0 && tile.items.length > 0) continue;
+                    const folderId = tile.id;
+                    tiles.push(
+                        <Widget
+                            key={folderId}
+                            widgetId={v.widgetId}
+                            title={v.title}
+                            icon={v.icon}
+                            interactive={visible.length > 0}
+                            // La tuile reste visible pendant le déploiement : elle
+                            // part avec le fond qui recule, et c'est ce qui dit
+                            // d'où viennent les cartes.
+                            onExpand={(e) => {
+                                setOpenFolder({
+                                    id: folderId,
+                                    source: e.currentTarget.getBoundingClientRect(),
+                                    offset: greetingRef.current?.offsetHeight ?? 0
+                                });
+                            }}
+                        >
+                            {v.body}
+                        </Widget>
+                    );
+                    continue;
+                }
+                const fid = tile;
                 // Retirée, et non grisée : « pas accessible » n'est pas « visible
                 // mais verrouillé ». Une disposition héritée d'un contexte où le
                 // widget était offert ne doit pas le faire réapparaître.
@@ -1021,8 +1101,12 @@ export default function HomePage() {
                 <Wallpaper />
 
                 <TopNavbar
-                    viewTitle={expandedConfig?.title}
-                    onBack={expandedWidget ? handleClose : undefined}
+                    // Un dossier déployé prend la barre comme une vue : elle
+                    // porte son intitulé et le retour, exactement comme pour un
+                    // écran de fonctionnalité. Une vue ouverte par-dessus passe
+                    // devant, et son retour ramène au dossier.
+                    viewTitle={expandedConfig?.title ?? (folderView ? folderTitle(folderView.title) : undefined)}
+                    onBack={expandedWidget ? handleClose : folderView ? closeFolder : undefined}
                     onOpenProfile={(e) => handleExpand('profile', isForceReload(e))}
                     onOpenSecurity={(e) => handleExpand('security', isForceReload(e))}
                     onOpenDevices={user.role === 'admin' ? (e) => handleExpand('clients', isForceReload(e)) : undefined}
@@ -1038,10 +1122,13 @@ export default function HomePage() {
                 />
 
                 {/* The grid stays mounted under the popup so the shared-element morph
-                back into a card is smooth and never dips behind sibling cards. */}
-                <main className={styles.main}>
+                back into a card is smooth and never dips behind sibling cards.
+                Un dossier déployé le fait reculer : flou et léger retrait, pour
+                que les cartes qui en sortent aient de la profondeur derrière
+                elles (voir `.recessed`). */}
+                <main className={`${styles.main} ${folderView ? styles.recessed : ''}`}>
                     <div className={styles.content} ref={setContentEl}>
-                        <header className={styles.greeting}>
+                        <header className={styles.greeting} ref={greetingRef}>
                             <h1 className={styles.greetingText}>{heading.title}</h1>
                             <p className={styles.dateText}>{heading.subtitle}</p>
                         </header>
@@ -1079,6 +1166,21 @@ export default function HomePage() {
                         )}
                     </div>
                 </main>
+
+                {/* Le dossier déployé. Posé **avant** la popup : à palier de
+                    z-index égal, c'est l'ordre de l'arbre qui décide, donc une
+                    fonctionnalité ouverte depuis une carte voile bien le dossier
+                    au lieu de passer dessous. */}
+                <FolderOverlay
+                    folder={folderView}
+                    entries={folderEntries}
+                    source={openFolder?.source ?? null}
+                    topOffset={openFolder?.offset ?? 0}
+                    expandedWidget={expandedWidget}
+                    isLocked={(id) => !allowedToOpen(id)}
+                    onOpenFeature={(id, e) => handleExpand(id, isForceReload(e))}
+                    onClose={closeFolder}
+                />
 
                 {/* The animated popup shell. Feature content is portaled into its body
                 by the keep-alive layer below, so closing never unmounts the view. */}

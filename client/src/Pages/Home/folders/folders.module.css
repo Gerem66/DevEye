@@ -1,0 +1,156 @@
+/* ── La carte du dossier, sur la grille ──────────────────────────────────── */
+
+.tileBody {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    align-content: flex-start;
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    padding: 3px var(--space-sm);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chipIcon {
+    width: 13px;
+    color: var(--accent);
+}
+
+/* Le reste, compté : une pastille de plus vaut mieux qu'une liste tronquée sans
+   le dire. Teinte d'accent pour qu'elle se lise comme un total, pas comme une
+   sixième fonctionnalité qui s'appellerait « +3 ». */
+.chipMore {
+    border-color: transparent;
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.tileCount {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.tileEmpty {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--space-xs);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.tileHint {
+    font-size: 0.78rem;
+    opacity: 0.8;
+}
+
+/* ── Le dossier déployé ──────────────────────────────────────────────────── */
+
+/*
+ * La couche du déploiement.
+ *
+ * Sous la popup de fonctionnalité (même palier `--z-popup-overlay`, mais posée
+ * avant elle dans l'arbre) : ouvrir une carte du dossier doit voiler le dossier,
+ * pas l'inverse. Et sous la barre du haut, qui garde l'intitulé et le retour.
+ */
+.layer {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-popup-overlay);
+    overflow-y: auto;
+    padding-top: var(--navbar-height);
+}
+
+.scrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(4, 7, 12, 0.45);
+}
+
+/*
+ * La même boîte que la colonne de l'accueil (`Dashboard.module.css`) : même
+ * largeur maximale, mêmes marges, donc **les mêmes colonnes de grille**. C'est
+ * ce qui fait que les cartes arrivent exactement sur les places des tuiles
+ * ordinaires, sans qu'aucune position ne soit calculée à la main.
+ */
+.content {
+    position: relative;
+    width: 100%;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: var(--space-lg) var(--space-lg) var(--space-xl);
+}
+
+/* L'origine en haut à gauche est ce qui permet d'empiler par simple translation
+   et mise à l'échelle : le coin de la carte se pose sur le coin de la tuile. */
+.card {
+    transform-origin: top left;
+    will-change: transform;
+}
+
+/* Sa vue est ouverte par-dessus. `visibility`, et non `opacity` : cette
+   dernière appartient à framer-motion sur ces cartes. */
+.cardHidden {
+    visibility: hidden;
+}
+
+/*
+ * Le couvercle : la copie de la tuile, exactement là où elle se trouve, et
+ * au-dessus des cartes pour qu'elles semblent en sortir puis y rentrer.
+ * Décoratif de bout en bout : le clic doit tomber sur la couche derrière, qui
+ * referme.
+ */
+.lid {
+    position: fixed;
+    pointer-events: none;
+}
+
+/* La carte remplit le cadre mesuré au lieu de reprendre sa hauteur minimale :
+   deux pixels d'écart et le couvercle ne recouvre plus tout à fait. */
+.lid > * {
+    height: 100%;
+}
+
+/* Mêmes règles que la grille pour une fonctionnalité que le rôle n'ouvre pas. */
+.lockedCard {
+    filter: opacity(0.5);
+}
+
+.lockedCard:hover {
+    filter: opacity(0.6);
+}
+
+.lockedBody {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+    .content {
+        padding: var(--space-md) var(--space-md) var(--space-xl);
+    }
+}

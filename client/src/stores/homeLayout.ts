@@ -1,7 +1,11 @@
 import { useSyncExternalStore } from 'react';
 import {
     homeLayoutSchema,
+    HOME_SECTION_MAX_TILES,
+    isHomeFolder,
     type HomeFeatureId,
+    type HomeFeatureTile,
+    type HomeFolder,
     type HomeLayout,
     type HomeSection,
     type HomeSectionKind,
@@ -108,9 +112,50 @@ export function placedDeviceIds(layout: HomeLayout): string[] {
     return layout.sections.flatMap((s) => (s.kind === 'device' ? s.items : []));
 }
 
-/** Same, for feature tiles (a feature also belongs to a single section). */
+/**
+ * Same, for feature tiles (a feature also belongs to a single section).
+ *
+ * **Le contenu des dossiers en fait partie.** Une fonctionnalité rangée dans un
+ * dossier est posée sur l'accueil comme une autre : simplement, sa carte attend
+ * derrière une tuile au lieu d'occuper une place. Tout ce qui se demande « où
+ * est-elle ? » lit cette liste, donc la règle « pas deux fois la même » et la
+ * survie d'une vue ouverte à une bascule d'espace n'ont pas à connaître les
+ * dossiers.
+ */
 export function placedFeatureIds(layout: HomeLayout): HomeFeatureId[] {
-    return layout.sections.flatMap((s) => (s.kind === 'feature' ? s.items : []));
+    return layout.sections.flatMap((s) =>
+        s.kind === 'feature' ? s.items.flatMap((tile) => (isHomeFolder(tile) ? tile.items : [tile])) : []
+    );
+}
+
+/**
+ * Les fonctionnalités **rangées dans un dossier**, où qu'il soit.
+ *
+ * Le complément de `placedFeatureIds` : ce qui est posé sur l'accueil sans être
+ * là-dedans se trouve sur la grille, et peut donc être déplacé dans un dossier.
+ */
+export function foldedFeatureIds(layout: HomeLayout): HomeFeatureId[] {
+    return layout.sections.flatMap((s) =>
+        s.kind === 'feature' ? s.items.flatMap((tile) => (isHomeFolder(tile) ? tile.items : [])) : []
+    );
+}
+
+/**
+ * Retrouve un dossier dans la disposition, et la section qui le porte.
+ *
+ * Par son seul id : un dossier est unique dans tout l'accueil, et ses appelants
+ * (l'écran qui le déploie, la fiche qui l'édite) n'ont aucune raison de tenir la
+ * section à jour de leur côté. Relire par id à chaque rendu est aussi ce qui
+ * fait que l'écran suit une modification venue d'un autre membre de l'espace.
+ */
+export function findFolder(layout: HomeLayout, folderId: string): { section: HomeSection; folder: HomeFolder } | null {
+    for (const section of layout.sections) {
+        if (section.kind !== 'feature') continue;
+        for (const tile of section.items) {
+            if (isHomeFolder(tile) && tile.id === folderId) return { section, folder: tile };
+        }
+    }
+    return null;
 }
 
 // ── Sections ───────────────────────────────────────────────────────────────
@@ -180,13 +225,16 @@ export function setSectionOrder(ids: string[]): void {
 /**
  * L'identité d'une tuile, quel que soit le genre de sa section.
  *
- * Un raccourci porte son `id`, un appareil et une fonctionnalité **sont** leur
- * id. Une seule définition, ici, parce que c'est le vocabulaire du déplacement :
- * l'organiseur s'en sert pour ses identifiants de glissé, le store pour retrouver
- * une tuile. Deux copies auraient divergé au premier genre ajouté.
+ * Un raccourci et un dossier portent leur `id`, un appareil et une
+ * fonctionnalité **sont** leur id. Une seule définition, ici, parce que c'est le
+ * vocabulaire du déplacement : l'organiseur s'en sert pour ses identifiants de
+ * glissé, le store pour retrouver une tuile. Deux copies auraient divergé au
+ * premier genre ajouté.
  */
 export function sectionTileIds(section: HomeSection): string[] {
-    return section.kind === 'shortcut' ? section.items.map((s) => s.id) : [...section.items];
+    if (section.kind === 'shortcut') return section.items.map((s) => s.id);
+    if (section.kind === 'feature') return section.items.map((tile) => (isHomeFolder(tile) ? tile.id : tile));
+    return [...section.items];
 }
 
 /**
@@ -276,9 +324,17 @@ export function transferSectionItem(fromId: string, toId: string, tileId: string
 }
 
 // ── Tiles ──────────────────────────────────────────────────────────────────
+/**
+ * Pose une fonctionnalité sur la grille.
+ *
+ * Refusée si elle est **déjà quelque part** sur l'accueil, dossiers compris : la
+ * garde est celle de la disposition entière, pas celle de la section. Le
+ * sélecteur filtre déjà sur la même liste ; l'avoir aussi ici est ce qui rend la
+ * règle vraie quel que soit le chemin.
+ */
 export function addFeature(sectionId: string, featureId: HomeFeatureId): void {
     const section = findSection(state, sectionId);
-    if (section?.kind !== 'feature' || section.items.includes(featureId)) return;
+    if (section?.kind !== 'feature' || placedFeatureIds(state).includes(featureId)) return;
     replaceItems(sectionId, [...section.items, featureId]);
 }
 export function removeFeature(sectionId: string, featureId: HomeFeatureId): void {
@@ -286,8 +342,101 @@ export function removeFeature(sectionId: string, featureId: HomeFeatureId): void
     if (section?.kind !== 'feature') return;
     replaceItems(
         sectionId,
-        section.items.filter((id) => id !== featureId)
+        section.items.filter((tile) => isHomeFolder(tile) || tile !== featureId)
     );
+}
+
+// ── Dossiers ───────────────────────────────────────────────────────────────
+/**
+ * Réécrit un dossier en place, en laissant tout le reste de la disposition
+ * intact. Passage unique des quatre mutations ci-dessous : la forme de l'union
+ * (chaîne ou objet) n'est lue qu'ici.
+ */
+function updateFolder(sectionId: string, folderId: string, fn: (folder: HomeFolder) => HomeFolder): void {
+    const section = findSection(state, sectionId);
+    if (section?.kind !== 'feature') return;
+    let touched = false;
+    const items = section.items.map((tile) => {
+        if (!isHomeFolder(tile) || tile.id !== folderId) return tile;
+        touched = true;
+        return fn(tile);
+    });
+    if (touched) replaceItems(sectionId, items);
+}
+
+/**
+ * Ajoute un dossier vide en fin de section et rend son id, pour que
+ * l'organiseur ouvre sa fiche dans la foulée : un dossier vide n'a rien à
+ * montrer, le remplir est le geste suivant.
+ */
+export function addFolder(sectionId: string): string | null {
+    const section = findSection(state, sectionId);
+    if (section?.kind !== 'feature') return null;
+    // Le plafond du schéma, tenu **avant** l'écriture : une section trop longue
+    // ne se valide plus, donc le serveur la refuse et le prochain démarrage relit
+    // une disposition vide. Un bouton qui ne fait rien vaut mieux qu'un accueil
+    // effacé en silence. Rien n'y mène qu'une rafale de créations de dossiers,
+    // les fonctionnalités étant moins nombreuses que le plafond.
+    if (section.items.length >= HOME_SECTION_MAX_TILES) return null;
+    const id = uid();
+    replaceItems(sectionId, [...section.items, { kind: 'folder', id, title: '', items: [] }]);
+    return id;
+}
+
+/** Intitulé porté par la carte. Vide, l'affichage retombe sur « Dossier ». */
+export function renameFolder(sectionId: string, folderId: string, title: string): void {
+    updateFolder(sectionId, folderId, (folder) => ({ ...folder, title: title.slice(0, 40) }));
+}
+
+/** Retire le dossier, et donc les fonctionnalités qu'il tenait, de l'accueil. */
+export function removeFolder(sectionId: string, folderId: string): void {
+    const section = findSection(state, sectionId);
+    if (section?.kind !== 'feature') return;
+    replaceItems(
+        sectionId,
+        section.items.filter((tile) => !isHomeFolder(tile) || tile.id !== folderId)
+    );
+}
+
+/**
+ * Range une fonctionnalité dans un dossier, d'où qu'elle vienne.
+ *
+ * Posée sur la grille, elle **quitte sa tuile dans la même écriture** : deux
+ * mutations l'auraient laissée à deux endroits le temps d'un rendu, et surtout
+ * la disposition partie au serveur entre les deux aurait porté le doublon. Ce
+ * qui est déjà dans un **autre** dossier ne bouge pas : la fiche ne le propose
+ * pas, et une demande venue d'ailleurs ne doit pas vider un dossier voisin sans
+ * que personne l'ait demandé.
+ */
+export function addFeatureToFolder(sectionId: string, folderId: string, featureId: HomeFeatureId): void {
+    if (foldedFeatureIds(state).includes(featureId)) return;
+    let filed = false;
+    const sections = state.sections.map((section) => {
+        if (section.kind !== 'feature') return section;
+        const items = section.items.flatMap<HomeFeatureTile>((tile) => {
+            // La tuile de la grille, s'il y en avait une : elle s'en va.
+            if (!isHomeFolder(tile)) return tile === featureId ? [] : [tile];
+            if (section.id !== sectionId || tile.id !== folderId) return [tile];
+            filed = true;
+            return [{ ...tile, items: [...tile.items, featureId] }];
+        });
+        return { ...section, items } as HomeSection;
+    });
+    // Sans dossier cible, rien : retirer la tuile de la grille pour la ranger
+    // nulle part serait une disparition pure et simple.
+    if (filed) commit({ ...state, sections });
+}
+
+/**
+ * Sort une fonctionnalité de son dossier. Elle quitte l'accueil et redevient
+ * proposable dans le sélecteur : la remettre sur la grille est un ajout normal,
+ * ce qui évite un troisième geste (« sortir vers la section ») à comprendre.
+ */
+export function removeFeatureFromFolder(sectionId: string, folderId: string, featureId: HomeFeatureId): void {
+    updateFolder(sectionId, folderId, (folder) => ({
+        ...folder,
+        items: folder.items.filter((id) => id !== featureId)
+    }));
 }
 
 export function addDevice(sectionId: string, deviceId: string): void {

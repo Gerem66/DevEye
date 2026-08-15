@@ -700,3 +700,47 @@
     gap: var(--space-sm);
     margin-top: var(--space-xs);
 }
+
+/* ── Fiche d'un dossier ──────────────────────────────────────────────────── */
+.folderForm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+.folderGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+/* Intitulé de rubrique, dans la même graisse que les titres de section de
+   l'accueil : deux listes se suivent dans cette fiche, et rien d'autre ne dit
+   laquelle est le contenu et laquelle est la réserve. */
+.folderGroupTitle {
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+}
+
+.folderList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+/* Même carrosserie qu'une ligne de sélecteur, mais ce n'est pas un bouton : la
+   ligne entière ne fait rien, seule la croix agit. Un dossier ne se remplit pas
+   en cliquant sur ce qu'il contient déjà. */
+.folderItem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+}

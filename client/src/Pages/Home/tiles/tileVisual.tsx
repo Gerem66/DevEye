@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
-import type { Device, ShortcutItem } from 'deveye-types';
+import type { Device, HomeFeatureTile, ShortcutItem } from 'deveye-types';
+import { isHomeFolder } from 'deveye-types';
 import { DeviceWidget } from '@/Features/Monitoring/DeviceWidget';
 import { ShortcutTile } from './ShortcutTile';
+import { FolderTile, folderKey, folderTitle } from '../folders';
 import { featureCatalogEntry } from '../catalog';
-import type { HomeFeatureId } from 'deveye-types';
 
 /**
  * Shared definition of a grid tile's visuals, so normal mode (interactive,
@@ -28,8 +29,21 @@ export const DEVICE_VIEW_PREFIX = 'device:';
 export const deviceViewId = (deviceId: string) => `${DEVICE_VIEW_PREFIX}${deviceId}`;
 export const shortcutKey = (id: string) => `shortcut:${id}`;
 
-export function featureTileVisual(featureId: HomeFeatureId): TileVisual | null {
-    const entry = featureCatalogEntry(featureId);
+/**
+ * La tuile d'une section de fonctionnalités : la carte d'un widget, ou celle
+ * d'un dossier. Les deux se rendent pareil, à la grille comme à l'organiseur,
+ * parce que sur l'accueil ce sont deux tuiles comme les autres.
+ */
+export function featureTileVisual(tile: HomeFeatureTile): TileVisual | null {
+    if (isHomeFolder(tile)) {
+        return {
+            widgetId: folderKey(tile.id),
+            title: folderTitle(tile.title),
+            icon: 'folder',
+            body: <FolderTile folder={tile} />
+        };
+    }
+    const entry = featureCatalogEntry(tile);
     if (!entry) return null;
     return { widgetId: entry.id, title: entry.title, icon: entry.icon, body: <entry.WidgetContent /> };
 }

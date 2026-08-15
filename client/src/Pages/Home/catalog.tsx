@@ -259,6 +259,24 @@ export function availableFeatures({ kind, isAdmin }: HomeAudience): FeatureCatal
     return FEATURE_CATALOG.filter((f) => featureAllowed(f, { kind, isAdmin }));
 }
 
+/**
+ * Le contenu visible d'un dossier, dans l'ordre où il a été rangé.
+ *
+ * La même règle que la grille, appliquée derrière une tuile : un widget que ce
+ * contexte n'a pas le droit d'ouvrir n'est pas déployé non plus. Un identifiant
+ * inconnu (disposition écrite par une version plus récente) est ignoré plutôt
+ * que de faire tomber l'écran.
+ *
+ * Un dossier peut donc paraître vide alors qu'il ne l'est pas dans la
+ * disposition : c'est voulu, et c'est le même choix que pour la grille, où une
+ * tuile réservée à l'administration disparaît au lieu de se griser.
+ */
+export function folderFeatures(items: readonly HomeFeatureId[], audience: HomeAudience): FeatureCatalogEntry[] {
+    return items
+        .map((id) => featureCatalogEntry(id))
+        .filter((entry): entry is FeatureCatalogEntry => entry !== undefined && featureAllowed(entry, audience));
+}
+
 /** La même règle, appliquée à une entrée déjà connue. */
 export function featureAllowed(entry: FeatureCatalogEntry, { kind, isAdmin }: HomeAudience): boolean {
     return !entry.adminOnly || (isAdmin && kind === 'personal');
