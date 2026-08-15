@@ -147,7 +147,7 @@ where
     }
 
     let result: Result<Outcome> = match action {
-        "install-user" => crate::service::install(false).map(|()| Outcome::Done),
+        "install-user" => crate::service::install(false, None).map(|()| Outcome::Done),
         "elevate" => crate::elevate::elevate(),
         "drop" => crate::elevate::drop_privileges(),
         other => Err(anyhow::anyhow!("action de service inconnue : {other}")),

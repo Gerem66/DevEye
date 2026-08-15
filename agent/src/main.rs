@@ -120,6 +120,13 @@ enum ServiceCmd {
         /// Explicit per-user install (the default; accepted for clarity).
         #[arg(long, conflicts_with = "system")]
         user: bool,
+        /// Config file to bake into the service definition. Le chemin de la
+        /// machine **enrôlée** : `sudo` et `pkexec` remplacent `$HOME` par celui
+        /// de root, si bien qu'une installation système qui le devine grave un
+        /// fichier qui n'existe pas. L'agent qui demande l'élévation le connaît,
+        /// lui, et le passe ici.
+        #[arg(long)]
+        config: Option<String>,
     },
     /// Remove the autostart service (user and/or system).
     Uninstall,
@@ -172,8 +179,12 @@ async fn main() -> Result<()> {
 
 fn service_cmd(action: ServiceCmd) -> Result<()> {
     match action {
-        ServiceCmd::Install { system, user: _ } => {
-            service::install(system)?;
+        ServiceCmd::Install {
+            system,
+            user: _,
+            config,
+        } => {
+            service::install(system, config.as_deref())?;
             // En ligne de commande, « installer » veut dire « et démarre-le » :
             // c'est le point d'entrée autonome, notamment la commande que
             // l'interface propose quand l'agent ne peut pas ouvrir lui-même la

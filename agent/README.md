@@ -110,6 +110,30 @@ Test a freshly approved device end-to-end:
 deveye-agent run --once     # one instant + report, then exits
 ```
 
+### System scope: two traps the per-user scope never hits
+
+Both surface only on a real machine, and one of them only on the Fedora family.
+
+1. **The elevated process has root's `$HOME`.** `pkexec` (Linux), `osascript …
+   with administrator privileges` (macOS) and `sudo` on the distributions that
+   set `always_set_home` all rewrite it, so a config path computed inside the
+   elevated install pointed at `/root/.config/deveye/agent.toml` — a file that
+   does not exist. The running agent knows its own config, so it now passes
+   `--config <path>` to the elevated `service install --system`; when nobody
+   does, `invoking_config_path()` resolves the caller's home via `SUDO_USER` or
+   `PKEXEC_UID` (`pkexec` sets only the latter).
+
+2. **SELinux forbids `init` from executing a file in a home directory.** The
+   agent is downloaded into `~`, where it is labelled `user_home_t`; `init_t`
+   has no `execute` on that type, so the unit fails `203/EXEC` in a restart loop
+   while `systemctl status` only says "Permission denied" about a file that is
+   plainly `0755`. Machines without SELinux ran it fine — hence a bug that only
+   ever showed on Fedora and its derivatives. A **system** install therefore
+   copies the binary to `/usr/local/bin/deveye-agent` (`bin_t`, and writable on
+   ostree systems where `/usr/local` links to `/var/usrlocal`) and points the
+   unit there. The copy is removed by `service uninstall`, unless it is the
+   binary currently running.
+
 ## Supervision (`--managed`)
 
 `run --managed` declares to the process: _“I am supervised by a service manager
