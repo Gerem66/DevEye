@@ -480,18 +480,15 @@
     flex: 1 1 0;
     min-width: 1px;
     border-radius: 1px;
-    transition:
-        transform var(--transition-fast),
-        filter var(--transition-fast);
+    transition: opacity var(--transition-fast);
 }
 
-/* La barre désignée par la bulle. Elle s'éclaircit **et** s'élargit : sur des
-   tranches de trois pixels, une nuance seule ne se voit pas, et c'est justement
-   quand elles sont serrées qu'il faut savoir laquelle on lit. `filter` plutôt
-   qu'`opacity` — elle reste franche au lieu de se diluer dans le fond. */
+/* La barre désignée par la bulle. Elle s'atténue le temps du survol, sans bouger :
+   sur des tranches de trois pixels, tout ce qui change la largeur d'une barre la
+   fait déborder sur ses voisines et déforme la lecture. La bulle dit déjà de quelle
+   tranche il s'agit, le repère n'a qu'à confirmer. */
 .barHovered {
-    filter: brightness(1.45);
-    transform: scaleX(2.2);
+    opacity: 0.6;
 }
 
 /*
