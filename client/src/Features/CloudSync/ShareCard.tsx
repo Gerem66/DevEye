@@ -10,8 +10,10 @@ import ExclusionsDialog from './ExclusionsDialog';
 import HeroIcon from './HeroIcon';
 import LogsDialog from './LogsDialog';
 import SettingsDialog from './SettingsDialog';
+import SnapshotsDialog from './SnapshotsDialog';
 import VersionsBrowser from './VersionsBrowser';
 import { stateLook } from './state';
+import { formatEta, useTransferRate } from './useTransferRate';
 import styles from './style.module.css';
 import type { LiveOutlineProps } from '@/live/useLiveOutline';
 
@@ -35,7 +37,9 @@ interface ShareCardProps {
  */
 export default function ShareCard({ share, onChanged, onOpenChange, outline }: ShareCardProps) {
     const { stateFor, progressFor } = useCloudSyncLive();
-    const [dialog, setDialog] = useState<'devices' | 'exclusions' | 'versions' | 'logs' | 'settings' | null>(null);
+    const [dialog, setDialog] = useState<
+        'devices' | 'exclusions' | 'versions' | 'snapshots' | 'logs' | 'settings' | null
+    >(null);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -54,6 +58,13 @@ export default function ShareCard({ share, onChanged, onOpenChange, outline }: S
     const bytesDone = sessions.reduce((sum, p) => sum + p.bytesDone, 0);
     const current = sessions.find((p) => p.currentPath !== null);
     const currentDevice = current ? share.devices.find((d) => d.deviceId === current.deviceId)?.deviceName : null;
+    const { rate, etaSeconds } = useTransferRate(bytesDone, bytesTotal);
+    // Sous-barre du fichier en cours : sans elle, un fichier de plusieurs Go
+    // laisse la barre globale immobile et l'utilisateur croit à un blocage.
+    const filePercent =
+        current && current.currentTotal > 0
+            ? Math.min(100, Math.round((current.currentBytes / current.currentTotal) * 100))
+            : null;
 
     const run = async (action: () => Promise<unknown>) => {
         setError(null);
@@ -109,9 +120,17 @@ export default function ShareCard({ share, onChanged, onOpenChange, outline }: S
                                     }}
                                 />
                             </span>
+                            {(rate !== null || etaSeconds !== null) && (
+                                <span className={styles.heroDetail}>
+                                    {rate !== null && `${formatBytesFr(Math.round(rate))}/s`}
+                                    {rate !== null && etaSeconds !== null && ' · '}
+                                    {etaSeconds !== null && `${formatEta(etaSeconds)} restantes`}
+                                </span>
+                            )}
                             {current && current.currentPath && (
                                 <span className={styles.heroDetail}>
                                     {currentDevice ?? 'Appareil'} — {current.currentPath}
+                                    {filePercent !== null && ` (${filePercent} %)`}
                                 </span>
                             )}
                         </div>
@@ -133,6 +152,9 @@ export default function ShareCard({ share, onChanged, onOpenChange, outline }: S
                 <Button variant='ghost' icon='clock' onClick={() => setDialog('versions')}>
                     Sauvegardes
                     {stats.versionCount > 0 && ` (${formatBytesFr(stats.versionBytes)})`}
+                </Button>
+                <Button variant='ghost' icon='archive' onClick={() => setDialog('snapshots')}>
+                    Restauration
                 </Button>
                 <Button variant='ghost' icon='logs' onClick={() => setDialog('logs')}>
                     Logs
@@ -161,7 +183,13 @@ export default function ShareCard({ share, onChanged, onOpenChange, outline }: S
                 onClose={() => setDialog(null)}
                 onChanged={onChanged}
             />
-            <LogsDialog open={dialog === 'logs'} share={share} onClose={() => setDialog(null)} />
+            <SnapshotsDialog
+                open={dialog === 'snapshots'}
+                share={share}
+                onClose={() => setDialog(null)}
+                onChanged={onChanged}
+            />
+            <LogsDialog open={dialog === 'logs'} share={share} onClose={() => setDialog(null)} onChanged={onChanged} />
             <SettingsDialog
                 open={dialog === 'settings'}
                 share={share}

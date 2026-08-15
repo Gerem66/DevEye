@@ -101,6 +101,11 @@ export default function ExclusionsDialog({ open, share, onClose, onChanged }: Ex
                     </Button>
                 </div>
                 {error && <div className={styles.mutedNote}>{error}</div>}
+                <div className={styles.mutedNote}>
+                    Jamais synchronisés, quelles que soient les règles : liens symboliques, liens durs (chaque copie
+                    devient un fichier indépendant), fichiers creux (recopiés en fichiers pleins), ACL et attributs
+                    étendus. Seuls les bits de permission Unix sont conservés.
+                </div>
             </div>
         </Dialog>
     );
