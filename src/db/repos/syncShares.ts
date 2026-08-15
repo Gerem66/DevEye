@@ -16,8 +16,15 @@ export interface SyncShareDeviceNamedRow extends SyncShareDeviceRow {
 }
 
 /** Assignation vue depuis un appareil : sa ligne + le statut du partage parent. */
+/**
+ * Une attache appareil↔partage, enrichie des réglages du PARTAGE que l'agent
+ * doit appliquer lui-même : le plafond de montée (il en est l'émetteur) et la
+ * rétention de sa corbeille locale.
+ */
 export interface SyncDeviceAssignmentRow extends SyncShareDeviceRow {
     share_status: SyncShareStatus;
+    rate_up_bps: number | null;
+    trash_keep_days: number;
 }
 
 export interface SyncSharesRepo {
@@ -31,6 +38,13 @@ export interface SyncSharesRepo {
             name: string;
             backupPruneEnabled: boolean;
             backupLimitBytes: number | null;
+            snapshotEnabled: boolean;
+            snapshotIntervalHours: number;
+            snapshotKeepDays: number;
+            integrityScanEnabled: boolean;
+            rateUpBps: number | null;
+            rateDownBps: number | null;
+            trashKeepDays: number;
             conflictPolicy: SyncConflictPolicy;
         }
     ): Promise<SyncShareRow | null>;
@@ -78,13 +92,44 @@ export function syncSharesRepo(pool: Q): SyncSharesRepo {
             const r = await pool.query<SyncShareRow>('SELECT * FROM sync_shares WHERE id = ?', [res.insertId]);
             return r.rows[0];
         },
-        async update(id, { name, backupPruneEnabled, backupLimitBytes, conflictPolicy }) {
+        async update(
+            id,
+            {
+                name,
+                backupPruneEnabled,
+                backupLimitBytes,
+                snapshotEnabled,
+                snapshotIntervalHours,
+                snapshotKeepDays,
+                integrityScanEnabled,
+                rateUpBps,
+                rateDownBps,
+                trashKeepDays,
+                conflictPolicy
+            }
+        ) {
             const res = await pool.query(
                 `UPDATE sync_shares
-                 SET name = ?, backup_prune_enabled = ?, backup_limit_bytes = ?, conflict_policy = ?,
+                 SET name = ?, backup_prune_enabled = ?, backup_limit_bytes = ?,
+                     snapshot_enabled = ?, snapshot_interval_hours = ?, snapshot_keep_days = ?,
+                     integrity_scan_enabled = ?, rate_up_bps = ?, rate_down_bps = ?, trash_keep_days = ?,
+                     conflict_policy = ?,
                      updated = UNIX_TIMESTAMP()
                  WHERE id = ?`,
-                [name, backupPruneEnabled ? 1 : 0, backupLimitBytes, conflictPolicy, id]
+                [
+                    name,
+                    backupPruneEnabled ? 1 : 0,
+                    backupLimitBytes,
+                    snapshotEnabled ? 1 : 0,
+                    snapshotIntervalHours,
+                    snapshotKeepDays,
+                    integrityScanEnabled ? 1 : 0,
+                    rateUpBps,
+                    rateDownBps,
+                    trashKeepDays,
+                    conflictPolicy,
+                    id
+                ]
             );
             if (res.rowCount === 0) return null;
             const r = await pool.query<SyncShareRow>('SELECT * FROM sync_shares WHERE id = ?', [id]);
@@ -132,7 +177,7 @@ export function syncSharesRepo(pool: Q): SyncSharesRepo {
         },
         async listByDevice(deviceId) {
             const r = await pool.query<SyncDeviceAssignmentRow>(
-                `SELECT sd.*, s.status AS share_status
+                `SELECT sd.*, s.status AS share_status, s.rate_up_bps, s.trash_keep_days
                  FROM sync_share_devices sd
                  JOIN sync_shares s ON s.id = sd.share_id
                  WHERE sd.device_id = ?`,

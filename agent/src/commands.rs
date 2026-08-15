@@ -632,12 +632,14 @@ where
             op_id,
             op,
             ok,
+            resume_from,
             error,
         } => ClientMessage::SyncOpResult {
             device_id: device_id.to_string(),
             op_id,
             op: op.to_string(),
             ok,
+            resume_from,
             error,
         },
     };

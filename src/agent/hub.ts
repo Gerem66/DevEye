@@ -18,6 +18,9 @@ import {
     AGENT_SCAN,
     AGENT_SERVICE,
     AGENT_SYNC_APPLY_CHUNK,
+    AGENT_SYNC_APPLY_DIR,
+    AGENT_SYNC_APPLY_START,
+    AGENT_SYNC_APPLY_LOCAL,
     AGENT_SYNC_CONFIG,
     AGENT_SYNC_DELETE,
     AGENT_SYNC_PUSH,
@@ -61,6 +64,9 @@ import {
     type AgentPowerPayload,
     type AgentServicePayload,
     type AgentSyncApplyChunkPayload,
+    type AgentSyncApplyDirPayload,
+    type AgentSyncApplyStartPayload,
+    type AgentSyncApplyLocalPayload,
     type AgentSyncConfigPayload,
     type AgentSyncDeletePayload,
     type AgentSyncPushPayload,
@@ -537,6 +543,21 @@ export class MonitorHub {
         return this.sendToAgent(deviceId, AGENT_SYNC_APPLY_CHUNK, payload);
     }
 
+    /** Ask a connected agent where to resume a download (replies `applyReady`). */
+    requestSyncApplyStart(deviceId: string, payload: AgentSyncApplyStartPayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_SYNC_APPLY_START, payload);
+    }
+
+    /** Ask a connected agent to create an empty directory (no bytes transferred). */
+    requestSyncApplyDir(deviceId: string, payload: AgentSyncApplyDirPayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_SYNC_APPLY_DIR, payload);
+    }
+
+    /** Ask a connected agent to install content it already holds at another path. */
+    requestSyncApplyLocal(deviceId: string, payload: AgentSyncApplyLocalPayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_SYNC_APPLY_LOCAL, payload);
+    }
+
     /** Propagate a deletion (local recycle) to a connected agent. No-op if offline. */
     requestSyncDelete(deviceId: string, payload: AgentSyncDeletePayload): boolean {
         return this.sendToAgent(deviceId, AGENT_SYNC_DELETE, payload);
@@ -853,6 +874,8 @@ export interface MonitorTransport {
     unsubscribeSync(shareIds: number[]): void;
     /** Send one CloudSync download chunk to this socket; returns the send-buffer size. */
     sendSyncChunk(payload: CloudSyncChunkPush): number;
+    /** Current send-buffer size, polled while waiting for backpressure to clear. */
+    syncChunkBuffered(): number;
 }
 
 export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): MonitorTransport {
@@ -890,6 +913,7 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         requestFilesUpload: (deviceId, payload) => hub.requestFilesUpload(deviceId, payload),
         subscribeSync: (shareIds) => hub.subscribeSync(socket, shareIds),
         unsubscribeSync: (shareIds) => hub.unsubscribeSync(socket, shareIds),
-        sendSyncChunk: (payload) => hub.sendSyncChunk(socket, payload)
+        sendSyncChunk: (payload) => hub.sendSyncChunk(socket, payload),
+        syncChunkBuffered: () => socket.bufferedAmount
     };
 }

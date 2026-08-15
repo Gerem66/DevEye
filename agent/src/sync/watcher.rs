@@ -67,9 +67,14 @@ pub fn start(share_id: i64, root: PathBuf, tx: Sender<SyncEvent>) -> Result<Shar
     let handler_pending = Arc::clone(&pending);
     let handler_root = root.clone();
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-        let Ok(event) = res else { return };
-        if !event.paths.is_empty() && !event.paths.iter().any(|p| relevant(&handler_root, p)) {
-            return;
+        // Une erreur du backend (débordement de la file inotify, typiquement)
+        // veut dire qu'on a PERDU des événements : c'est le moment de re-scanner,
+        // surtout pas de se taire. On tombe donc volontairement dans le cas
+        // « quelque chose a bougé » sans filtrer sur les chemins.
+        if let Ok(event) = &res {
+            if !event.paths.is_empty() && !event.paths.iter().any(|p| relevant(&handler_root, p)) {
+                return;
+            }
         }
         let mut p = handler_pending.lock().expect("pending lock");
         let now = Instant::now();

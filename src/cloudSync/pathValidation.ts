@@ -34,20 +34,68 @@ export function relPathHash(relPath: string): string {
 }
 
 /**
- * Un chemin relatif sûr : non vide, ≤ 1024, slashes avant uniquement, pas de
- * segment vide/`.`/`..`, pas de `\`, pas de caractère de contrôle, pas de
- * préfixe réservé. Retourne la forme NFC-normalisée, ou `null` si refusé.
+ * Caractères qu'un nom de fichier NTFS/Win32 ne peut pas porter. Un partage est
+ * censé être identique sur les trois OS : accepter dans le « cloud » un nom que
+ * Windows ne sait pas écrire condamnerait l'agent Windows à échouer sur ce
+ * fichier à chaque cycle, indéfiniment, et à diverger pour toujours. Le refus
+ * est donc GLOBAL, quel que soit l'OS qui a créé le fichier — la copie locale
+ * sur sa machine d'origine, elle, reste évidemment intacte.
+ */
+const WINDOWS_FORBIDDEN_CHARS = /["*:<>?|]/;
+
+/** Noms de périphériques DOS, réservés avec ou sans extension. */
+const WINDOWS_RESERVED_NAMES = /^(?:CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])(?:\..*)?$/i;
+
+/** Limite d'un composant de chemin sur la quasi-totalité des systèmes de fichiers. */
+const SEGMENT_MAX_BYTES = 255;
+
+/** Le problème d'un composant de chemin, ou `null` s'il est portable partout. */
+function segmentProblem(segment: string): string | null {
+    if (segment === '' || segment === '.' || segment === '..') {
+        return 'segment de chemin vide ou relatif';
+    }
+    if (Buffer.byteLength(segment, 'utf8') > SEGMENT_MAX_BYTES) {
+        return `nom de plus de ${SEGMENT_MAX_BYTES} octets`;
+    }
+    const bad = WINDOWS_FORBIDDEN_CHARS.exec(segment);
+    if (bad !== null) return `caractère « ${bad[0]} » interdit sous Windows`;
+    if (WINDOWS_RESERVED_NAMES.test(segment)) return `« ${segment} » est un nom réservé sous Windows`;
+    // Windows tronque silencieusement les points et espaces de fin : deux noms
+    // distincts ailleurs y deviendraient le même fichier.
+    if (segment.endsWith('.')) return 'nom terminé par un point (impossible sous Windows)';
+    if (segment.endsWith(' ')) return 'nom terminé par une espace (impossible sous Windows)';
+    return null;
+}
+
+/**
+ * Le problème d'un chemin relatif, ou `null` s'il est synchronisable partout.
+ * C'est LA règle de nommage du partage, partagée mot pour mot avec l'agent
+ * (`agent/src/sync/paths.rs::rel_path_problem`). Renvoyer la raison plutôt
+ * qu'un booléen permet de la journaliser telle quelle dans la popup « Logs ».
+ */
+export function relPathProblem(relPath: string): string | null {
+    if (relPath.length === 0) return 'chemin vide';
+    if (relPath.length > SYNC_REL_PATH_MAX) return `chemin de plus de ${SYNC_REL_PATH_MAX} caractères`;
+    if (relPath.includes('\\')) return 'antislash interdit dans un chemin';
+    if (hasControlChars(relPath)) return 'caractère de contrôle interdit';
+    const segments = normalizeRelPath(relPath).split('/');
+    if ((RESERVED_TOP_DIRS as readonly string[]).includes(segments[0])) {
+        return `« ${segments[0]} » est un dossier réservé à l'agent`;
+    }
+    for (const segment of segments) {
+        const problem = segmentProblem(segment);
+        if (problem !== null) return problem;
+    }
+    return null;
+}
+
+/**
+ * Un chemin relatif sûr : slashes avant uniquement, pas d'échappement, et
+ * portable sur les trois OS (voir {@link relPathProblem}). Retourne la forme
+ * NFC-normalisée, ou `null` si refusé.
  */
 export function safeRelPath(relPath: string): string | null {
-    if (relPath.length === 0 || relPath.length > SYNC_REL_PATH_MAX) return null;
-    if (relPath.includes('\\') || CONTROL_CHARS.test(relPath)) return null;
-    const normalized = normalizeRelPath(relPath);
-    const segments = normalized.split('/');
-    for (const seg of segments) {
-        if (seg === '' || seg === '.' || seg === '..') return null;
-    }
-    if ((RESERVED_TOP_DIRS as readonly string[]).includes(segments[0])) return null;
-    return normalized;
+    return relPathProblem(relPath) === null ? normalizeRelPath(relPath) : null;
 }
 
 export interface StoragePathVerdict {

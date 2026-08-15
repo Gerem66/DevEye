@@ -36,6 +36,12 @@ export interface SyncVersionsRepo {
     totals(shareId: number, relPath: string | null): Promise<{ total: number; totalBytes: number }>;
     /** Les plus anciennes d'abord — candidates à la purge par budget. */
     listOldest(shareId: number, limit: number): Promise<SyncVersionRow[]>;
+    /**
+     * Comme {@link listOldest}, mais en excluant les versions qui portent encore
+     * une suppression en attente de propagation : sans elles, `deleteOnDevice`
+     * ne pourrait plus prouver l'archivage et le fichier resterait chez le pair.
+     */
+    listOldestPrunable(shareId: number, limit: number): Promise<SyncVersionRow[]>;
     delete(id: number): Promise<boolean>;
     /** Hashes distincts d'une sélection (pour le GC des blobs après suppression). */
     hashesForIds(shareId: number, ids: number[]): Promise<string[]>;
@@ -108,6 +114,30 @@ export function syncVersionsRepo(pool: Q): SyncVersionsRepo {
         async listOldest(shareId, limit) {
             const r = await pool.query<SyncVersionRow>(
                 'SELECT * FROM sync_versions WHERE share_id = ? ORDER BY created ASC, id ASC LIMIT ?',
+                [shareId, limit]
+            );
+            return r.rows;
+        },
+        async listOldestPrunable(shareId, limit) {
+            // Une version est intouchable tant qu'un appareil a encore ce contenu
+            // en baseline pour un chemin marqué `deleted` : c'est exactement la
+            // preuve d'archivage qu'exige `deleteOnDevice` avant d'ordonner la
+            // mise à la corbeille. La purger relancerait la suppression en boucle.
+            const r = await pool.query<SyncVersionRow>(
+                `SELECT v.* FROM sync_versions v
+                 WHERE v.share_id = ?
+                   AND NOT EXISTS (
+                       SELECT 1
+                       FROM sync_device_files b
+                       JOIN sync_files f
+                         ON f.share_id = b.share_id AND f.rel_path_hash = b.rel_path_hash
+                       WHERE b.share_id = v.share_id
+                         AND b.rel_path = v.rel_path
+                         AND b.hash = v.hash
+                         AND f.state = 'deleted'
+                   )
+                 ORDER BY v.created ASC, v.id ASC
+                 LIMIT ?`,
                 [shareId, limit]
             );
             return r.rows;

@@ -8,7 +8,7 @@
 
 mod index_cache;
 pub mod paths;
-mod scanner;
+pub mod scanner;
 mod transfer;
 mod watcher;
 
@@ -46,11 +46,14 @@ pub enum SyncEvent {
     },
     /// Crédit de flux d'un download.
     Ack { op_id: String, seq: u64 },
-    /// Issue d'une op locale (`apply` | `delete` | `push`).
+    /// Issue d'une op locale (`apply` | `applyDir` | `applyLocal` | `applyReady`
+    /// | `delete` | `push`).
     OpResult {
         op_id: String,
         op: &'static str,
         ok: bool,
+        /// `applyReady` seulement : octets de clair déjà détenus.
+        resume_from: Option<u64>,
         error: Option<String>,
     },
 }
@@ -86,7 +89,19 @@ impl SyncManager {
         for assignment in assignments {
             let share_id = assignment.share_id;
             let active = assignment.status == "active";
-            let unchanged = self.shares.remove(&share_id).filter(|s| {
+            let previous = self.shares.remove(&share_id);
+            // Le cache de scan est indexé par partage, pas par dossier : le
+            // garder après un changement de `local_path` reviendrait à faire
+            // confiance aux hashes de l'ANCIEN dossier pour le nouveau (même
+            // chemin relatif, même taille, même mtime = hash réutilisé à tort).
+            if previous
+                .as_ref()
+                .is_some_and(|s| s.assignment.local_path != assignment.local_path)
+            {
+                index_cache::IndexCache::remove(share_id);
+                self.applier.invalidate_cache(share_id);
+            }
+            let unchanged = previous.filter(|s| {
                 s.assignment.local_path == assignment.local_path && (s._watcher.is_some()) == active
             });
             let watcher = match unchanged {
@@ -118,6 +133,7 @@ impl SyncManager {
         // et leur cache de scan n'a plus de raison d'être.
         for share_id in self.shares.keys() {
             index_cache::IndexCache::remove(*share_id);
+            self.applier.invalidate_cache(*share_id);
         }
         info!(count = next.len(), "sync: config applied");
         self.shares = next;
@@ -128,7 +144,11 @@ impl SyncManager {
     }
 
     /// Scan complet (thread dédié) ; partage inconnu/en pause → lot d'erreur.
-    pub fn start_scan(&self, session_id: String, share_id: i64) {
+    ///
+    /// `&mut` : le scan va réécrire le cache d'index sur disque, donc la copie
+    /// mémorisée par l'applier doit être oubliée maintenant.
+    pub fn start_scan(&mut self, session_id: String, share_id: i64) {
+        self.applier.invalidate_cache(share_id);
         match self.assignment(share_id) {
             Some(a) if a.status == "active" => {
                 scanner::spawn_scan(session_id, a.clone(), self.tx.clone());
@@ -145,13 +165,17 @@ impl SyncManager {
         }
     }
 
-    /// Upload d'un fichier local (thread dédié).
-    pub fn start_push(&self, op_id: String, share_id: i64, rel_path: String) {
+    /// Upload d'un fichier local (thread dédié). `start_offset` reprend un
+    /// transfert coupé : le serveur a gardé un partiel et ne redemande que la
+    /// suite. Le plafond de débit vient de la config du partage.
+    pub fn start_push(&self, op_id: String, share_id: i64, rel_path: String, start_offset: u64) {
         match self.assignment(share_id) {
             Some(a) => transfer::spawn_push(
                 op_id,
                 PathBuf::from(&a.local_path),
                 rel_path,
+                start_offset,
+                a.rate_up_bps,
                 self.tx.clone(),
             ),
             None => {
@@ -182,18 +206,32 @@ impl SyncManager {
         hash: &str,
         size: u64,
         mtime: i64,
+        mode: Option<u32>,
+        resume_from: u64,
     ) -> Vec<SyncEvent> {
         let Some(assignment) = self.assignment(share_id).cloned() else {
             return vec![SyncEvent::OpResult {
                 op_id: op_id.to_string(),
                 op: "apply",
                 ok: false,
+                resume_from: None,
                 error: Some("Partage inconnu sur cet appareil".to_string()),
             }];
         };
         let root = PathBuf::from(&assignment.local_path);
         match self.applier.apply_chunk(
-            op_id, share_id, &root, rel_path, seq, data, done, hash, size, mtime,
+            op_id,
+            share_id,
+            &root,
+            rel_path,
+            seq,
+            data,
+            done,
+            hash,
+            size,
+            mtime,
+            mode,
+            resume_from,
         ) {
             ApplyOutcome::Ack { seq } => vec![SyncEvent::Ack {
                 op_id: op_id.to_string(),
@@ -208,6 +246,7 @@ impl SyncManager {
                     op_id: op_id.to_string(),
                     op: "apply",
                     ok: true,
+                    resume_from: None,
                     error: None,
                 },
             ],
@@ -215,8 +254,85 @@ impl SyncManager {
                 op_id: op_id.to_string(),
                 op: "apply",
                 ok: false,
+                resume_from: None,
                 error: Some(error),
             }],
+        }
+    }
+
+    /// Amorce d'un download : dit au serveur combien d'octets de clair on
+    /// détient déjà pour ce hash, pour qu'il ne renvoie que la suite.
+    pub fn apply_start(&self, op_id: &str, share_id: i64, hash: &str) -> SyncEvent {
+        let held = match self.assignment(share_id) {
+            Some(a) => transfer::held_bytes_for(&PathBuf::from(&a.local_path), hash),
+            None => 0,
+        };
+        SyncEvent::OpResult {
+            op_id: op_id.to_string(),
+            op: "applyReady",
+            ok: true,
+            resume_from: Some(held),
+            error: None,
+        }
+    }
+
+    /// Création d'un dossier vide (ou ajustement de son mode) : aucun transfert.
+    pub fn apply_dir(
+        &self,
+        op_id: &str,
+        share_id: i64,
+        rel_path: &str,
+        kind: &str,
+        mode: Option<u32>,
+    ) -> SyncEvent {
+        let outcome = match self.assignment(share_id) {
+            Some(a) => transfer::apply_dir(&PathBuf::from(&a.local_path), rel_path, kind, mode)
+                .map_err(|e| e.to_string()),
+            None => Err("Partage inconnu sur cet appareil".to_string()),
+        };
+        SyncEvent::OpResult {
+            op_id: op_id.to_string(),
+            op: "applyDir",
+            ok: outcome.is_ok(),
+            resume_from: None,
+            error: outcome.err(),
+        }
+    }
+
+    /// Installation par copie locale d'un contenu déjà présent dans le partage
+    /// (renommage/déplacement). Un échec n'est pas grave : le serveur retombe
+    /// sur le téléchargement chunké normal.
+    #[allow(clippy::too_many_arguments)]
+    pub fn apply_local(
+        &self,
+        op_id: &str,
+        share_id: i64,
+        rel_path: &str,
+        source_rel_path: &str,
+        hash: &str,
+        size: u64,
+        mtime: i64,
+        mode: Option<u32>,
+    ) -> SyncEvent {
+        let outcome = match self.assignment(share_id) {
+            Some(a) => transfer::apply_local(
+                &PathBuf::from(&a.local_path),
+                rel_path,
+                source_rel_path,
+                hash,
+                size,
+                mtime,
+                mode,
+            )
+            .map_err(|e| e.to_string()),
+            None => Err("Partage inconnu sur cet appareil".to_string()),
+        };
+        SyncEvent::OpResult {
+            op_id: op_id.to_string(),
+            op: "applyLocal",
+            ok: outcome.is_ok(),
+            resume_from: None,
+            error: outcome.err(),
         }
     }
 
@@ -231,6 +347,7 @@ impl SyncManager {
             op_id: op_id.to_string(),
             op: "delete",
             ok: outcome.is_ok(),
+            resume_from: None,
             error: outcome.err(),
         }
     }

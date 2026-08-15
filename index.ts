@@ -54,6 +54,10 @@ async function main() {
             databases.stop();
             audience.stop();
             sentinel.stop();
+            // Rend le bail CloudSync : sans ça, le processus qui redémarre ne
+            // reconnaît pas son propre bail (identité neuve) et resterait passif
+            // jusqu'à expiration.
+            await cloudSync.stop();
             if (publicApp) await publicApp.close();
             await app.close();
             await pool.end();

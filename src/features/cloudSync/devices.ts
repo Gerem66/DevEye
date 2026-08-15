@@ -9,7 +9,7 @@ import {
 import { hasControlChars } from '@/cloudSync/pathValidation';
 import { authorizeDevice } from '../devices/shared';
 import { defineFeature, FeatureError, type FeatureContext } from '../_define';
-import { authorizeShare, requireEngine } from './_shared';
+import { authorizeShare, requireActiveEngine, requireEngine } from './_shared';
 
 /** Le chemin local est validé pour de bon par l'agent ; ici, garde-fous de base. */
 function assertPlausibleLocalPath(localPath: string): string {
@@ -45,7 +45,7 @@ export const cloudSyncAttachDeviceFeature = defineFeature({
     handler: async (ctx, input) => {
         const share = await authorizeShare(ctx, input.shareId);
         const device = await authorizeDevice(ctx, input.deviceId);
-        const engine = requireEngine(ctx);
+        const engine = requireActiveEngine(ctx);
         if (await ctx.db.syncShares.findDevice(share.id, device.id)) {
             throw new FeatureError('conflict', 'Cet appareil est déjà attaché au partage');
         }
@@ -70,7 +70,7 @@ export const cloudSyncDetachDeviceFeature = defineFeature({
     mutates: true,
     handler: async (ctx, input) => {
         const share = await authorizeShare(ctx, input.shareId);
-        const engine = requireEngine(ctx);
+        const engine = requireActiveEngine(ctx);
         const removed = await ctx.db.syncShares.detachDevice(share.id, input.deviceId);
         if (!removed) throw new FeatureError('not_found', 'Appareil non attaché à ce partage');
         // La baseline part avec l'attache : un ré-attachement futur repart en

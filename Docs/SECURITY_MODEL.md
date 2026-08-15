@@ -151,6 +151,20 @@ peuvent pas vivre en base. À la place :
 - l'index (chemins relatifs, hashes, tailles, mtimes, appareil source) est en
   clair dans MySQL — nécessaire au merge, à la navigation et à la volumétrie.
 
+Le format de blob porte un octet de version : `0x01` (flux GCM unique) reste lu
+pour toujours, `0x02` scelle par blocs de 1 Mio (nonce dérivé d'un compteur,
+AAD = compteur + marqueur de fin contre la troncature) — c'est ce qui rend un
+transfert interrompu reprenable sans jamais retransmettre les octets déjà reçus.
+
+**Pourquoi pas la DEK personnelle**, question tranchée et close : la DEK gardée
+est liée à une session WebSocket vivante (fenêtre glissante de 60 s, effacée à
+la fermeture de la socket, jamais persistée) et le code la déclare
+structurellement inatteignable sans session. Or une session CloudSync est
+pilotée par l'agent, sans aucune session utilisateur. Un partage ainsi chiffré
+ne se synchroniserait que pendant qu'un onglet est ouvert et déverrouillé, et un
+transfert de plusieurs Go survivrait de toute façon à la fenêtre. C'est
+contradictoire avec la promesse du produit, pas seulement coûteux.
+
 Ce que ça protège : le disque au repos (vol, snapshot hors-ligne). Ce que ça
 ne protège pas : une compromission du serveur vivant (qui détient la clé).
 C'est le même niveau de garantie que les secrets liés à l'auth (2FA), et un

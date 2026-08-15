@@ -20,6 +20,23 @@ export function requireEngine(ctx: FeatureContext): CloudSyncEngine {
     return ctx.cloudSync;
 }
 
+/**
+ * Le moteur, pour une commande qui MUTE. Refuse quand un autre processus tient
+ * le bail : sans cette garde, une instance passive détruirait quand même des
+ * versions, restaurerait des snapshots et lancerait des GC en parallèle de
+ * l'instance qui travaille — exactement ce que le bail existe pour empêcher.
+ */
+export function requireActiveEngine(ctx: FeatureContext): CloudSyncEngine {
+    const engine = requireEngine(ctx);
+    if (!engine.isActive) {
+        throw new FeatureError(
+            'internal',
+            'CloudSync est piloté par un autre processus serveur : cette instance est en lecture seule.'
+        );
+    }
+    return engine;
+}
+
 /** Charge un partage de l'espace actif (ou n'importe lequel pour un admin). */
 export async function authorizeShare(ctx: FeatureContext, shareId: number): Promise<SyncShareRow> {
     const row = await ctx.db.syncShares.findById(shareId);
@@ -37,9 +54,11 @@ export function toClientExclusion(row: SyncExclusionRow): CloudSyncExclusion {
 export function toClientFile(row: SyncFileRow): CloudSyncFile {
     return {
         relPath: row.rel_path,
+        kind: row.kind,
         hash: row.hash,
         size: row.size,
         mtime: row.mtime,
+        mode: row.mode,
         state: row.state,
         updated: row.updated
     };
@@ -85,6 +104,13 @@ export async function toClientShare(ctx: FeatureContext, row: SyncShareRow): Pro
         status: row.status,
         backupPruneEnabled: Boolean(row.backup_prune_enabled),
         backupLimitBytes: row.backup_limit_bytes,
+        snapshotEnabled: Boolean(row.snapshot_enabled),
+        snapshotIntervalHours: row.snapshot_interval_hours,
+        snapshotKeepDays: row.snapshot_keep_days,
+        integrityScanEnabled: Boolean(row.integrity_scan_enabled),
+        rateUpBps: row.rate_up_bps,
+        rateDownBps: row.rate_down_bps,
+        trashKeepDays: row.trash_keep_days,
         conflictPolicy: row.conflict_policy,
         stats: {
             fileCount: files.fileCount,

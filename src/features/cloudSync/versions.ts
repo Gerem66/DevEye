@@ -11,7 +11,7 @@ import {
 
 import { relPathHash, safeRelPath } from '@/cloudSync/pathValidation';
 import { defineFeature, FeatureError, type FeatureContext } from '../_define';
-import { authorizeShare, requireEngine, toClientVersion } from './_shared';
+import { authorizeShare, requireActiveEngine, requireEngine, toClientVersion } from './_shared';
 
 /** Charge une version + autorise son partage (les versions n'ont pas d'owner propre). */
 async function authorizeVersion(
@@ -44,7 +44,7 @@ export const cloudSyncRestoreVersionFeature = defineFeature({
     ...cloudSyncRestoreVersion,
     mutates: true,
     handler: async (ctx, input) => {
-        const engine = requireEngine(ctx);
+        const engine = requireActiveEngine(ctx);
         const { version } = await authorizeVersion(ctx, input.versionId);
         const share = await authorizeShare(ctx, version.share_id);
         await engine.restoreVersion(share, version);
@@ -62,7 +62,7 @@ export const cloudSyncDeleteVersionFeature = defineFeature({
     ...cloudSyncDeleteVersion,
     mutates: true,
     handler: async (ctx, input) => {
-        const engine = requireEngine(ctx);
+        const engine = requireActiveEngine(ctx);
         const { version } = await authorizeVersion(ctx, input.versionId);
         const share = await authorizeShare(ctx, version.share_id);
         await engine.deleteVersion(share, version);
@@ -81,7 +81,7 @@ export const cloudSyncDeleteVersionsFeature = defineFeature({
     ...cloudSyncDeleteVersions,
     mutates: true,
     handler: async (ctx, input) => {
-        const engine = requireEngine(ctx);
+        const engine = requireActiveEngine(ctx);
         const share = await authorizeShare(ctx, input.shareId);
         const deleted = await engine.deleteVersions(share, input.versionIds);
 
@@ -99,7 +99,7 @@ export const cloudSyncClearVersionsFeature = defineFeature({
     ...cloudSyncClearVersions,
     mutates: true,
     handler: async (ctx, input) => {
-        const engine = requireEngine(ctx);
+        const engine = requireActiveEngine(ctx);
         const share = await authorizeShare(ctx, input.shareId);
         const deleted = await engine.clearVersions(share);
 

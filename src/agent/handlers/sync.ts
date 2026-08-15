@@ -56,6 +56,7 @@ export async function handleSyncOpResult(
         type: 'opResult',
         op: payload.op,
         ok: payload.ok,
+        resumeFrom: payload.resumeFrom,
         error: payload.error
     });
     ack(s, 1);

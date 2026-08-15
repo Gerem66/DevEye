@@ -426,6 +426,22 @@ pub struct SyncShareAssignment {
     /// `active` | `paused` (share-level OR device-level pause, pre-merged).
     pub status: String,
     pub exclusions: Vec<SyncExclusion>,
+    /// Plafond de débit des MONTÉES en octets/s ; `None` = illimité. Appliqué
+    /// ici parce que l'agent est l'émetteur : brider côté serveur ne ferait que
+    /// gonfler les tampons intermédiaires sans ralentir la lecture du disque.
+    #[serde(rename = "rateUpBps", default)]
+    pub rate_up_bps: Option<u64>,
+    /// Rétention de `.deveye-trash/`, en jours.
+    #[serde(rename = "trashKeepDays", default = "default_trash_days")]
+    pub trash_keep_days: u64,
+}
+
+fn default_trash_days() -> u64 {
+    30
+}
+
+fn default_dir_kind() -> String {
+    "dir".to_string()
 }
 
 /// One entry of a CloudSync scan (mirrors `syncIndexEntrySchema`). `mtime` is
@@ -434,9 +450,14 @@ pub struct SyncShareAssignment {
 pub struct SyncIndexEntry {
     #[serde(rename = "relPath")]
     pub rel_path: String,
+    /// `file`, ou `dir` pour un dossier VIDE (les dossiers peuplés sont implicites).
+    pub kind: String,
     pub hash: String,
     pub size: u64,
     pub mtime: i64,
+    /// Bits de permission Unix ; `None` sous Windows, que le serveur interprète
+    /// comme « inconnu » et non comme « aucune permission ».
+    pub mode: Option<u32>,
 }
 
 /// Messages the agent sends to the server over the `/agent` WebSocket.
@@ -682,6 +703,10 @@ pub enum ClientMessage {
         op_id: String,
         op: String,
         ok: bool,
+        /// `applyReady` seulement : octets de clair déjà détenus pour ce hash,
+        /// pour que le serveur ne renvoie que ce qui manque.
+        #[serde(rename = "resumeFrom", skip_serializing_if = "Option::is_none")]
+        resume_from: Option<u64>,
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
@@ -875,6 +900,9 @@ pub enum ServerMessage {
         share_id: i64,
         #[serde(rename = "relPath")]
         rel_path: String,
+        /// Reprise : octets déjà détenus par le serveur, à ne pas renvoyer.
+        #[serde(rename = "startOffset", default)]
+        start_offset: u64,
     },
     /// CloudSync: one download chunk to install (hash/size/mtime repeated on
     /// every frame; ack each chunk; on `done` verify then rename atomically).
@@ -892,6 +920,71 @@ pub enum ServerMessage {
         hash: String,
         size: u64,
         mtime: i64,
+        #[serde(default)]
+        mode: Option<u32>,
+        /// Offset de clair décidé par le SERVEUR pour cette reprise. L'agent
+        /// tronque son temporaire à cette valeur : il ne doit jamais présumer
+        /// de son propre point de reprise, sous peine de diverger.
+        #[serde(rename = "resumeFrom", default)]
+        resume_from: u64,
+    },
+    /// CloudSync: prepare a download. The agent replies `sync.opResult` with
+    /// `op: "applyReady"` and the number of plaintext bytes it already holds for
+    /// this exact hash, so the server only resends what is missing.
+    // `rel_path`/`size`/`mtime`/`mode` sont portés par le protocole (le serveur
+    // les répète sur chaque frame) mais l'amorce n'a besoin que du hash : c'est
+    // lui seul qui identifie le partiel réutilisable.
+    #[allow(dead_code)]
+    #[serde(rename = "sync.applyStart")]
+    SyncApplyStart {
+        #[serde(rename = "opId")]
+        op_id: String,
+        #[serde(rename = "shareId")]
+        share_id: i64,
+        #[serde(rename = "relPath")]
+        rel_path: String,
+        hash: String,
+        size: u64,
+        mtime: i64,
+        #[serde(default)]
+        mode: Option<u32>,
+    },
+    /// CloudSync: create an empty directory (no bytes transferred). The
+    /// counterpart of `sync.applyChunk` for `dir` index entries, and the way a
+    /// permission-only change reaches a device.
+    #[serde(rename = "sync.applyDir")]
+    SyncApplyDir {
+        #[serde(rename = "opId")]
+        op_id: String,
+        #[serde(rename = "shareId")]
+        share_id: i64,
+        #[serde(rename = "relPath")]
+        rel_path: String,
+        /// `dir` autorise la création du chemin ; `file` ne fait qu'ajuster le
+        /// mode d'un chemin existant.
+        #[serde(default = "default_dir_kind")]
+        kind: String,
+        #[serde(default)]
+        mode: Option<u32>,
+    },
+    /// CloudSync: install content the device ALREADY holds elsewhere in the
+    /// share (rename, move, copy). The agent verifies the source's hash before
+    /// copying; on any failure the server falls back to a chunked download.
+    #[serde(rename = "sync.applyLocal")]
+    SyncApplyLocal {
+        #[serde(rename = "opId")]
+        op_id: String,
+        #[serde(rename = "shareId")]
+        share_id: i64,
+        #[serde(rename = "relPath")]
+        rel_path: String,
+        #[serde(rename = "sourceRelPath")]
+        source_rel_path: String,
+        hash: String,
+        size: u64,
+        mtime: i64,
+        #[serde(default)]
+        mode: Option<u32>,
     },
     /// CloudSync: move a local file to the share's trash (`.deveye-trash/`).
     /// Only ever sent once a hash-verified server-side version exists.

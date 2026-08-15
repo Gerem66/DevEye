@@ -23,6 +23,14 @@ import {
     cloudSyncValidatePathFeature
 } from './shares';
 import {
+    cloudSyncCreateSnapshotFeature,
+    cloudSyncDeleteSnapshotFeature,
+    cloudSyncDiffSnapshotFeature,
+    cloudSyncListSnapshotsFeature,
+    cloudSyncRestoreSnapshotFeature,
+    cloudSyncVerifyIntegrityFeature
+} from './snapshots';
+import {
     cloudSyncClearVersionsFeature,
     cloudSyncDeleteVersionFeature,
     cloudSyncDeleteVersionsFeature,
@@ -58,5 +66,11 @@ export const cloudSyncFeatures: ReadonlyArray<FeatureDefinition<string, any, any
     cloudSyncDeleteVersionsFeature,
     cloudSyncClearVersionsFeature,
     cloudSyncDownloadVersionFeature,
-    cloudSyncDownloadFileFeature
+    cloudSyncDownloadFileFeature,
+    cloudSyncListSnapshotsFeature,
+    cloudSyncCreateSnapshotFeature,
+    cloudSyncDiffSnapshotFeature,
+    cloudSyncRestoreSnapshotFeature,
+    cloudSyncDeleteSnapshotFeature,
+    cloudSyncVerifyIntegrityFeature
 ];

@@ -8,7 +8,7 @@ import {
 
 import { canonicalStoragePath, validateStoragePath } from '@/cloudSync/pathValidation';
 import { defineFeature, FeatureError } from '../_define';
-import { authorizeShare, requireEngine, toClientShare } from './_shared';
+import { authorizeShare, requireActiveEngine, toClientShare } from './_shared';
 
 export const cloudSyncListSharesFeature = defineFeature({
     ...cloudSyncListShares,
@@ -27,7 +27,7 @@ export const cloudSyncCreateShareFeature = defineFeature({
     ...cloudSyncCreateShare,
     mutates: true,
     handler: async (ctx, input) => {
-        const engine = requireEngine(ctx);
+        const engine = requireActiveEngine(ctx);
         const verdict = await validateStoragePath(ctx.db, input.storagePath);
         if (!verdict.ok) throw new FeatureError('validation', verdict.problem ?? 'Chemin invalide');
 
@@ -62,6 +62,13 @@ export const cloudSyncUpdateShareFeature = defineFeature({
             name: (input.name ?? row.name).trim(),
             backupPruneEnabled: pruneEnabled,
             backupLimitBytes: limitBytes,
+            snapshotEnabled: input.snapshotEnabled ?? Boolean(row.snapshot_enabled),
+            snapshotIntervalHours: input.snapshotIntervalHours ?? row.snapshot_interval_hours,
+            snapshotKeepDays: input.snapshotKeepDays ?? row.snapshot_keep_days,
+            integrityScanEnabled: input.integrityScanEnabled ?? Boolean(row.integrity_scan_enabled),
+            rateUpBps: input.rateUpBps === undefined ? row.rate_up_bps : input.rateUpBps,
+            rateDownBps: input.rateDownBps === undefined ? row.rate_down_bps : input.rateDownBps,
+            trashKeepDays: input.trashKeepDays ?? row.trash_keep_days,
             conflictPolicy: input.conflictPolicy ?? row.conflict_policy
         });
         if (!updated) throw new FeatureError('not_found', 'Partage introuvable');
@@ -79,7 +86,7 @@ export const cloudSyncDeleteShareFeature = defineFeature({
     ...cloudSyncDeleteShare,
     mutates: true,
     handler: async (ctx, input) => {
-        const engine = requireEngine(ctx);
+        const engine = requireActiveEngine(ctx);
         const row = await authorizeShare(ctx, input.shareId);
         await engine.deleteShare(row, input.deleteData);
 

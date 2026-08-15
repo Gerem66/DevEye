@@ -1,4 +1,4 @@
-import type { SyncDeviceFileRow, SyncFileRow, SyncIndexEntry } from 'deveye-types';
+import type { SyncDeviceFileRow, SyncEntryKind, SyncFileRow, SyncIndexEntry } from 'deveye-types';
 import { SYNC_MTIME_SKEW_MS } from 'deveye-types';
 
 /**
@@ -21,16 +21,28 @@ import { SYNC_MTIME_SKEW_MS } from 'deveye-types';
 
 export interface PlanFile {
     relPath: string;
+    /** `dir` = dossier VIDE (aucun octet ne transite pour lui). */
+    kind: SyncEntryKind;
     hash: string;
     size: number;
     /** Millisecondes unix. */
     mtime: number;
+    /** Permissions Unix (`& 0o777`) ; `null` = inconnu. */
+    mode: number | null;
 }
 
 export interface PlanConflict {
     winner: 'device' | 'server';
     device: PlanFile;
     server: PlanFile;
+}
+
+/** Un changement de permissions seul : même contenu, aucun transfert. */
+export interface PlanModeChange {
+    /** Vers où pousser le mode : l'index serveur, ou l'appareil. */
+    target: 'server' | 'device';
+    file: PlanFile;
+    mode: number;
 }
 
 export interface Plan {
@@ -46,6 +58,8 @@ export interface Plan {
     conflicts: PlanConflict[];
     /** Déjà synchronisé mais baseline absente/périmée : à réécrire sans transfert. */
     refreshBaseline: PlanFile[];
+    /** Contenu identique, permissions divergentes : `chmod` sans transfert. */
+    modeChanges: PlanModeChange[];
     /** Baselines orphelines (chemin disparu des deux côtés) : à purger. */
     dropBaseline: string[];
     /** Chemins ignorés avec raison (collisions de casse…) — remontés en warning. */
@@ -57,6 +71,36 @@ export interface Plan {
 
 function sameContent(aHash: string, bHash: string): boolean {
     return aHash === bHash;
+}
+
+/**
+ * Arbitre un mode divergent à contenu identique, sur le même schéma 3 voies que
+ * le contenu : si l'appareil seul a bougé, il pousse ; sinon le serveur fait
+ * foi. Un agent Windows renvoie `null` (il n'a pas de bits Unix) — ce n'est PAS
+ * un changement, sinon un simple passage sur Windows effacerait le bit
+ * exécutable de tout le monde.
+ */
+function planModeChange(
+    plan: Plan,
+    file: PlanFile,
+    deviceMode: number | null,
+    serverMode: number | null,
+    baseMode: number | null
+): void {
+    // L'appareil n'a pas la notion de permissions (Windows) : il n'y a rien à
+    // lui pousser, et surtout rien à conclure. Lui envoyer le mode serveur
+    // rejouerait le même ordre À CHAQUE SESSION, indéfiniment — son scan
+    // suivant annoncerait toujours `null`, un aller-retour par fichier pour
+    // rien. Le mode reste conservé côté serveur (`COALESCE` dans `upsert`), ce
+    // qui suffit à le rendre aux machines Unix.
+    if (deviceMode === null) return;
+    if (deviceMode === serverMode) return;
+    const deviceChanged = baseMode !== null && deviceMode !== baseMode;
+    if (serverMode === null || deviceChanged) {
+        plan.modeChanges.push({ target: 'server', file, mode: deviceMode });
+    } else {
+        plan.modeChanges.push({ target: 'device', file, mode: serverMode });
+    }
 }
 
 /**
@@ -81,6 +125,24 @@ function caseCollisions(paths: Iterable<string>): Set<string> {
     return collided;
 }
 
+/**
+ * Tous les dossiers ancêtres d'un ensemble de chemins de fichiers.
+ * `a/b/c.txt` produit `a` et `a/b`.
+ */
+function ancestorDirs(filePaths: Iterable<string>): Set<string> {
+    const dirs = new Set<string>();
+    for (const p of filePaths) {
+        let cut = p.lastIndexOf('/');
+        while (cut > 0) {
+            const dir = p.slice(0, cut);
+            if (dirs.has(dir)) break; // Les ancêtres au-dessus sont déjà là.
+            dirs.add(dir);
+            cut = dir.lastIndexOf('/');
+        }
+    }
+    return dirs;
+}
+
 export function planSession(
     deviceIndex: ReadonlyArray<SyncIndexEntry>,
     baseline: ReadonlyArray<SyncDeviceFileRow>,
@@ -93,6 +155,7 @@ export function planSession(
         deleteOnDevice: [],
         conflicts: [],
         refreshBaseline: [],
+        modeChanges: [],
         dropBaseline: [],
         skipped: [],
         filesTotal: 0,
@@ -102,6 +165,22 @@ export function planSession(
     const device = new Map(deviceIndex.map((e) => [e.relPath, e]));
     const base = new Map(baseline.map((b) => [b.rel_path, b]));
     const srv = new Map(server.map((s) => [s.rel_path, s]));
+
+    // Un dossier n'est indexé que TANT QU'IL EST VIDE. Dès qu'un fichier
+    // apparaît dessous, son entrée `dir` devient un fantôme : le scan ne la
+    // remonte plus, et la règle « présent côté serveur, absent côté appareil,
+    // baseline concordante » conclurait à tort à une suppression — qui se
+    // propagerait ensuite au dossier PEUPLÉ des autres appareils. On écarte donc
+    // toute entrée `dir` qui préfixe un fichier vivant, des deux côtés.
+    const liveFiles = [
+        ...[...device.values()].filter((e) => e.kind !== 'dir').map((e) => e.relPath),
+        ...[...srv.values()].filter((s) => s.kind !== 'dir' && s.state === 'present').map((s) => s.rel_path)
+    ];
+    const populated = ancestorDirs(liveFiles);
+    const isGhostDir = (relPath: string, kind: SyncEntryKind): boolean => kind === 'dir' && populated.has(relPath);
+    for (const [relPath, entry] of device) if (isGhostDir(relPath, entry.kind)) device.delete(relPath);
+    for (const [relPath, row] of srv) if (isGhostDir(relPath, row.kind)) srv.delete(relPath);
+    for (const [relPath, row] of base) if (isGhostDir(relPath, row.kind)) base.delete(relPath);
 
     const collided = caseCollisions(
         (function* () {
@@ -126,17 +205,40 @@ export function planSession(
         const s = srv.get(relPath);
         const sPresent = s !== undefined && s.state === 'present';
 
-        const toPlanFile = (src: { hash: string; size: number; mtime: number }): PlanFile => ({
+        const toPlanFile = (src: {
+            kind: SyncEntryKind;
+            hash: string;
+            size: number;
+            mtime: number;
+            mode: number | null;
+        }): PlanFile => ({
             relPath,
+            kind: src.kind,
             hash: src.hash,
             size: src.size,
-            mtime: src.mtime
+            mtime: src.mtime,
+            mode: src.mode
         });
 
         if (d && sPresent) {
+            if (d.kind !== s.kind) {
+                // Dossier d'un côté, fichier de l'autre : aucune fusion n'a de
+                // sens et écraser l'un par l'autre détruirait du contenu. On
+                // laisse les deux en place et on le signale.
+                plan.skipped.push({
+                    relPath,
+                    reason: `Conflit de nature : ${d.kind === 'dir' ? 'dossier' : 'fichier'} sur l’appareil, ${
+                        s.kind === 'dir' ? 'dossier' : 'fichier'
+                    } côté serveur`
+                });
+                continue;
+            }
             if (sameContent(d.hash, s.hash)) {
                 // Synchronisé. Baseline absente ou périmée → à rafraîchir (sans transfert).
                 if (!b || !sameContent(b.hash, d.hash)) plan.refreshBaseline.push(toPlanFile(d));
+                // Un `chmod` ne change pas le hash : sans ce cas, un bit
+                // exécutable posé sur une machine ne partirait jamais ailleurs.
+                else planModeChange(plan, toPlanFile(d), d.mode, s.mode, b.mode);
                 continue;
             }
             const deviceChanged = !b || !sameContent(b.hash, d.hash);
@@ -185,7 +287,8 @@ export function planSession(
         ...plan.downloads,
         ...plan.conflicts.map((c) => (c.winner === 'device' ? c.device : c.server))
     ];
-    plan.filesTotal = transfers.length + plan.deleteOnServer.length + plan.deleteOnDevice.length;
+    plan.filesTotal =
+        transfers.length + plan.deleteOnServer.length + plan.deleteOnDevice.length + plan.modeChanges.length;
     // Les conflits comptent aussi l'archivage du perdant côté appareil (upload).
     const conflictLoserBytes = plan.conflicts
         .filter((c) => c.winner === 'server')

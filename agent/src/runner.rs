@@ -668,21 +668,43 @@ async fn stream_session(
                                 sync_mgr.start_scan(session_id, share_id);
                             }
                             // CloudSync: upload one file (off-loop; streams via sync_rx).
-                            Ok(ServerMessage::SyncPush { op_id, share_id, rel_path }) => {
-                                sync_mgr.start_push(op_id, share_id, rel_path);
+                            Ok(ServerMessage::SyncPush { op_id, share_id, rel_path, start_offset }) => {
+                                sync_mgr.start_push(op_id, share_id, rel_path, start_offset);
                             }
                             // CloudSync: install one download chunk. Applied inline
                             // (sequentially) like FilesUpload, so chunks of one op never race.
-                            Ok(ServerMessage::SyncApplyChunk { op_id, share_id, rel_path, seq, data, done, hash, size, mtime }) => {
+                            Ok(ServerMessage::SyncApplyChunk { op_id, share_id, rel_path, seq, data, done, hash, size, mtime, mode, resume_from }) => {
                                 let bytes = base64::engine::general_purpose::STANDARD
                                     .decode(data.as_bytes())
                                     .unwrap_or_default();
                                 let events = tokio::task::block_in_place(|| {
-                                    sync_mgr.apply_chunk(&op_id, share_id, &rel_path, seq, &bytes, done, &hash, size, mtime)
+                                    sync_mgr.apply_chunk(&op_id, share_id, &rel_path, seq, &bytes, done, &hash, size, mtime, mode, resume_from)
                                 });
                                 for ev in events {
                                     commands::send_sync_event(&mut sink, device_id, ev).await;
                                 }
+                            }
+                            // CloudSync: tell the server where to resume a download.
+                            Ok(ServerMessage::SyncApplyStart { op_id, share_id, hash, .. }) => {
+                                let ev = tokio::task::block_in_place(|| {
+                                    sync_mgr.apply_start(&op_id, share_id, &hash)
+                                });
+                                commands::send_sync_event(&mut sink, device_id, ev).await;
+                            }
+                            // CloudSync: create an empty directory (no bytes transferred).
+                            Ok(ServerMessage::SyncApplyDir { op_id, share_id, rel_path, kind, mode }) => {
+                                let ev = tokio::task::block_in_place(|| {
+                                    sync_mgr.apply_dir(&op_id, share_id, &rel_path, &kind, mode)
+                                });
+                                commands::send_sync_event(&mut sink, device_id, ev).await;
+                            }
+                            // CloudSync: install content already held elsewhere in the share
+                            // (rename/move) by local copy — nothing crosses the network.
+                            Ok(ServerMessage::SyncApplyLocal { op_id, share_id, rel_path, source_rel_path, hash, size, mtime, mode }) => {
+                                let ev = tokio::task::block_in_place(|| {
+                                    sync_mgr.apply_local(&op_id, share_id, &rel_path, &source_rel_path, &hash, size, mtime, mode)
+                                });
+                                commands::send_sync_event(&mut sink, device_id, ev).await;
                             }
                             // CloudSync: propagate a deletion (local trash, never unlink).
                             Ok(ServerMessage::SyncDelete { op_id, share_id, rel_path }) => {
