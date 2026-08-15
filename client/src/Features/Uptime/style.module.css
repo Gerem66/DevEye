@@ -498,6 +498,38 @@
     border-radius: 1px;
 }
 
+/* Le bout de la ligne de légende, poussé à l'opposé. `auto` plutôt qu'un
+   `space-between` sur la rangée : la légende garde ses écarts réguliers, et ce
+   coin reste vide tant que personne n'a rien à y poser. */
+.barsTrailing {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+/* Les trois disponibilités en note de bas de graphique : mêmes chiffres que la
+   colonne d'une carte de service, mais du poids d'une légende — elles chiffrent
+   les couleurs, elles ne les remplacent pas. */
+.ratiosCompact {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.ratioCompact {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    color: var(--text-secondary);
+}
+
+.ratioCompactLabel {
+    color: var(--text-muted);
+}
+
 /* ------------------------------------------------------------------ *
  * Chart
  * ------------------------------------------------------------------ */

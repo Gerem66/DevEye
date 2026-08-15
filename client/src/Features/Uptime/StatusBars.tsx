@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 
 import { formatBucket, formatMs, formatRatio } from './format';
 import styles from './style.module.css';
@@ -69,6 +69,12 @@ interface StatusBarsProps {
     from: number;
     to: number;
     resolution: UptimeResolution;
+    /**
+     * Placé au bout de la ligne de légende, poussé à l'opposé. La bande n'a rien
+     * à savoir de ce qu'on y met : elle prête ce coin, qui est vide de toute
+     * façon, à qui a un chiffre à poser en face de ses couleurs.
+     */
+    trailing?: ReactNode;
 }
 
 /**
@@ -81,7 +87,7 @@ interface StatusBarsProps {
  * millisecond count: a 20 ms endpoint and a 400 ms one are both normal, and only
  * a departure from their own baseline is worth flagging.
  */
-export function StatusBars({ points, from, to, resolution }: StatusBarsProps) {
+export function StatusBars({ points, from, to, resolution, trailing }: StatusBarsProps) {
     const slots = useMemo(() => toSlots(points, from, to), [points, from, to]);
     const slowAbove = useMemo(() => {
         const median = medianMs(slots);
@@ -130,6 +136,7 @@ export function StatusBars({ points, from, to, resolution }: StatusBarsProps) {
                 <span className={styles.legendItem}>
                     <span className={`${styles.legendSwatch} ${styles.barEmpty}`} /> aucune mesure
                 </span>
+                {trailing && <span className={styles.barsTrailing}>{trailing}</span>}
             </div>
         </div>
     );

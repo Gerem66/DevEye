@@ -5,6 +5,7 @@ import { ws } from '@/api/ws';
 import { startTeleport } from '@/stores/live';
 import { getActiveWorkspaceId } from '@/stores/workspace';
 import { rangeWindow } from '@/Features/Uptime/format';
+import { Ratios } from '@/Features/Uptime/Ratios';
 import { StatusBars } from '@/Features/Uptime/StatusBars';
 import deployStyles from '@/Features/Deploy/style.module.css';
 import styles from '../style.module.css';
@@ -29,10 +30,11 @@ function tone(service: UptimeService): 'online' | 'down' | 'neutral' {
  * bloc bordé, pas une puce — c'est ce que montrent déjà Git, Bases de données
  * et Audience pour tout objet d'espace relié à un projet.
  *
- * Le corps ne porte que les barres des dernières 24 h (`StatusBars`, le
- * composant de la feature Uptime lui-même) : latence, incidents et journal
+ * Le corps porte les barres des dernières 24 h et, en face de leur légende, la
+ * disponibilité sur les trois fenêtres usuelles (`StatusBars` et `Ratios`, les
+ * composants de la feature Uptime eux-mêmes) : latence, incidents et journal
  * restent dans la fiche complète, une porte plus loin — ce bloc ne répond
- * qu'à « est-ce en ligne, et depuis quand ? ».
+ * qu'à « est-ce en ligne, depuis quand, et à quel prix sur la durée ? ».
  */
 export function UptimeLinkRow({ service, canWrite, busy, onUnlink }: UptimeLinkRowProps) {
     const [points, setPoints] = useState<UptimePoint[]>([]);
@@ -94,7 +96,18 @@ export function UptimeLinkRow({ service, canWrite, busy, onUnlink }: UptimeLinkR
                 </div>
             </header>
 
-            <StatusBars points={points} from={axis.from} to={axis.to} resolution={resolution} />
+            {/* Les barres disent « quand », les pourcentages disent « combien ».
+                Les seconds se lisent en face de la légende parce qu'ils la
+                chiffrent : sans eux, un incident d'une heure et un incident d'un
+                jour se ressemblent à cette échelle. Ils viennent d'`uptime.list`,
+                déjà chargée par la section — aucune requête de plus. */}
+            <StatusBars
+                points={points}
+                from={axis.from}
+                to={axis.to}
+                resolution={resolution}
+                trailing={<Ratios service={service} compact />}
+            />
         </section>
     );
 }

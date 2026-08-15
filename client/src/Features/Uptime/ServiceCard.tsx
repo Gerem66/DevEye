@@ -1,6 +1,7 @@
 import { StatusBadge } from '@/Components/StatusBadge';
 
-import { formatAgo, formatDuration, formatMs, formatRatio } from './format';
+import { formatAgo, formatDuration, formatMs } from './format';
+import Ratios from './Ratios';
 import styles from './style.module.css';
 
 import type { UptimeService } from 'deveye-types';
@@ -101,20 +102,7 @@ export function ServiceCard({
                 </p>
             </div>
 
-            <div className={styles.cardRatios}>
-                {(
-                    [
-                        ['24 h', service.ratio24h],
-                        ['7 j', service.ratio7d],
-                        ['30 j', service.ratio30d]
-                    ] as const
-                ).map(([label, ratio]) => (
-                    <span key={label} className={styles.ratio}>
-                        <span className={styles.ratioValue}>{formatRatio(ratio)}</span>
-                        <span className={styles.ratioLabel}>{label}</span>
-                    </span>
-                ))}
-            </div>
+            <Ratios service={service} />
 
             <div className={styles.cardActions}>
                 <button
