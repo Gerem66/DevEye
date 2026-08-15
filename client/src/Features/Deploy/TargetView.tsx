@@ -44,6 +44,17 @@ interface TargetViewProps {
      * fournisseur sûr.
      */
     onOpenLogs?: (externalId: string) => void;
+    /**
+     * Affiche la section dédiée à l'historique complet, sous l'en-tête.
+     *
+     * `false` dans l'onglet « Déploiement » d'un projet : ce panneau ne le
+     * concerne pas. La fiche s'y limite à l'identité et au dernier déploiement
+     * (`blockLastDeploy`), comme avant que l'historique n'y gagne sa propre
+     * carte. Réservée à la feature Déploiement elle-même, où l'historique
+     * complet a de la place pour respirer, surtout sur sa page dédiée.
+     * Par défaut `true`.
+     */
+    showHistory?: boolean;
 }
 
 /** Une ligne d'historique, qu'elle vienne du suivi local ou de Dokploy en direct. */
@@ -78,14 +89,18 @@ export function TargetView({
     after,
     fullHistory,
     fullHistoryError,
-    onOpenLogs
+    onOpenLogs,
+    showHistory = true
 }: TargetViewProps) {
     const [triggerOpen, setTriggerOpen] = useState(false);
     const [busy, setBusy] = useState(false);
 
     const orphan = target.credentialId === null;
 
-    const rows: HistoryRow[] | null =
+    // Toujours calculées, `showHistory` ou pas : l'en-tête a besoin de la
+    // première ligne (son titre) pour son propre résumé du dernier
+    // déploiement, que la section dédiée soit rendue ou non.
+    const historyRows: HistoryRow[] | null =
         fullHistory === undefined
             ? deployments.map((d) => ({
                   key: d.id,
@@ -111,106 +126,150 @@ export function TargetView({
                     externalId: d.externalId
                 }));
 
-    return (
-        <section className={styles.block}>
-            <header className={styles.blockHead}>
-                <div className={styles.blockIdent}>
-                    <p className={styles.blockName}>
-                        <span className='icon icon-rocket' aria-hidden='true' /> {target.name}
-                    </p>
-                    <p className={styles.blockMeta}>
-                        {orphan ? (
-                            <span className={styles.overdue}>accès retiré, déclenchement impossible</span>
-                        ) : (
-                            <span>
-                                {target.kind === 'compose' ? 'pile compose' : 'application'} · {hostOf(target.baseUrl)}{' '}
-                                · {target.externalId}
-                            </span>
-                        )}
-                        {target.projectCount > 1 && (
-                            <span>
-                                {' '}
-                                · partagée avec {target.projectCount - 1} autre{target.projectCount > 2 ? 's' : ''}{' '}
-                                projet{target.projectCount > 2 ? 's' : ''}
-                            </span>
-                        )}
-                    </p>
-                </div>
-                <div className={styles.actions}>
-                    {canWrite && (
-                        <Button icon='rocket' onClick={() => setTriggerOpen(true)} disabled={busy || orphan}>
-                            Déployer
-                        </Button>
-                    )}
-                    {canWrite && onEdit && (
-                        <Button variant='secondary' icon='edit' onClick={onEdit}>
-                            Modifier
-                        </Button>
-                    )}
-                    {after}
-                </div>
-            </header>
+    // La section dédiée, elle, respecte `showHistory` : c'est elle que
+    // l'onglet d'un projet n'affiche pas, pas le calcul qui la nourrit.
+    const rows = showHistory ? historyRows : null;
+    // La ligne la plus récente, pour le résumé compact de l'en-tête : les deux
+    // sources sont triées du plus récent au plus ancien (voir le serveur).
+    const lastRow = historyRows?.[0] ?? null;
 
-            <div className={styles.history}>
-                <h3 className={styles.sectionTitle}>Déploiements</h3>
-                {fullHistoryError ? (
-                    <p className={styles.error}>{fullHistoryError}</p>
-                ) : rows === null ? (
-                    <p className={styles.empty}>Chargement…</p>
-                ) : rows.length === 0 ? (
-                    <p className={styles.empty}>Rien n’est encore parti d’ici.</p>
-                ) : (
-                    <ul className={styles.itemList}>
-                        {rows.map((row) => {
-                            const clickable = Boolean(onOpenLogs) && row.externalId !== null;
-                            const content = (
+    return (
+        <div className={styles.targetGroup}>
+            <section className={styles.block}>
+                <header className={styles.blockHead}>
+                    <div className={styles.blockIdent}>
+                        <p className={styles.blockName}>
+                            <span className='icon icon-rocket' aria-hidden='true' /> {target.name}
+                        </p>
+                        <p className={styles.blockMeta}>
+                            {orphan ? (
+                                <span className={styles.overdue}>accès retiré, déclenchement impossible</span>
+                            ) : (
+                                <span>
+                                    {target.kind === 'compose' ? 'pile compose' : 'application'} ·{' '}
+                                    {hostOf(target.baseUrl)} · {target.externalId}
+                                </span>
+                            )}
+                            {target.projectCount > 1 && (
+                                <span>
+                                    {' '}
+                                    · partagée avec {target.projectCount - 1} autre{target.projectCount > 2 ? 's' : ''}{' '}
+                                    projet{target.projectCount > 2 ? 's' : ''}
+                                </span>
+                            )}
+                        </p>
+                        {/* Le dernier état à même hauteur que l'identité : le détail de
+                            la fiche n'oblige plus à descendre jusqu'à l'historique pour
+                            savoir si ça tient toujours debout. */}
+                        <p className={styles.blockLastDeploy}>
+                            {target.lastStatus === null ? (
+                                <span className={styles.hint}>Aucun déploiement pour l’instant.</span>
+                            ) : (
                                 <>
-                                    <span className={styles.statusTag} data-tone={statusTone(row.status)}>
-                                        {STATUS_LABELS[row.status]}
+                                    <span className={styles.statusTag} data-tone={statusTone(target.lastStatus)}>
+                                        {STATUS_LABELS[target.lastStatus]}
                                     </span>
-                                    <span className={styles.itemName}>{row.title}</span>
-                                    {row.triggeredByUserId !== null && (
-                                        <Avatar user={members.find((m) => m.id === row.triggeredByUserId)} size={18} />
+                                    {/* Le titre du dernier déploiement, pas seulement son état : le
+                                        même que celui de la première ligne de l'historique, tronqué
+                                        si besoin plutôt que de pousser la date hors du cadre. */}
+                                    {lastRow?.title && (
+                                        <span className={styles.lastDeployName} title={lastRow.title}>
+                                            {lastRow.title}
+                                        </span>
                                     )}
-                                    <span
-                                        className={styles.itemDate}
-                                        title={new Date(row.startedAt * 1000).toLocaleString('fr-FR')}
-                                    >
-                                        {formatAgo(row.startedAt)}
+                                    <span className={styles.hint}>
+                                        Dernier déploiement {formatAgo(target.lastDeployAt)}
                                     </span>
                                 </>
-                            );
-                            return (
-                                <li key={row.key}>
-                                    {/* Toute la ligne est la cible du clic — pas une
-                                        icône à part qu'il faudrait viser — quand un
-                                        journal existe pour elle. */}
-                                    {clickable ? (
-                                        <button
-                                            type='button'
-                                            className={`${styles.itemRow} ${styles.itemRowClickable}`}
-                                            title='Voir le journal'
-                                            onClick={() => onOpenLogs?.(row.externalId as string)}
+                            )}
+                        </p>
+                    </div>
+                    <div className={styles.actions}>
+                        {canWrite && (
+                            <Button icon='rocket' onClick={() => setTriggerOpen(true)} disabled={busy || orphan}>
+                                Déployer
+                            </Button>
+                        )}
+                        {canWrite && onEdit && (
+                            <Button variant='secondary' icon='edit' onClick={onEdit}>
+                                Modifier
+                            </Button>
+                        )}
+                        {after}
+                    </div>
+                </header>
+            </section>
+
+            {/* Section à part entière, et non plus nichée sous l'en-tête : l'historique
+                complet a désormais sa propre carte, avec sa propre respiration, surtout
+                sensible sur la page dédiée de la feature, plus large qu'un onglet de projet.
+                Absente de l'onglet d'un projet (`showHistory` à `false`), qui n'a que faire
+                de ce second panneau (voir la doc de la prop). */}
+            {showHistory && (
+                <section className={`${styles.block} ${styles.historyBlock} ${styles.history}`}>
+                    <h3 className={styles.sectionTitle}>Déploiements</h3>
+                    {fullHistoryError ? (
+                        <p className={styles.error}>{fullHistoryError}</p>
+                    ) : rows === null ? (
+                        <p className={styles.empty}>Chargement…</p>
+                    ) : rows.length === 0 ? (
+                        <p className={styles.empty}>Rien n’est encore parti d’ici.</p>
+                    ) : (
+                        <ul className={styles.itemList}>
+                            {rows.map((row) => {
+                                const clickable = Boolean(onOpenLogs) && row.externalId !== null;
+                                const content = (
+                                    <>
+                                        <span className={styles.statusTag} data-tone={statusTone(row.status)}>
+                                            {STATUS_LABELS[row.status]}
+                                        </span>
+                                        <span className={styles.itemName}>{row.title}</span>
+                                        {row.triggeredByUserId !== null && (
+                                            <Avatar
+                                                user={members.find((m) => m.id === row.triggeredByUserId)}
+                                                size={18}
+                                            />
+                                        )}
+                                        <span
+                                            className={styles.itemDate}
+                                            title={new Date(row.startedAt * 1000).toLocaleString('fr-FR')}
                                         >
-                                            {content}
-                                        </button>
-                                    ) : (
-                                        <div className={styles.itemRow}>{content}</div>
-                                    )}
-                                    {/* Le message du fournisseur, pas une simple
-                                        étiquette rouge : c'est lui qui dit pourquoi,
-                                        pas seulement que ça a échoué. */}
-                                    {row.status === 'failed' && row.description && (
-                                        <p className={styles.itemError} title={row.description}>
-                                            {row.description}
-                                        </p>
-                                    )}
-                                </li>
-                            );
-                        })}
-                    </ul>
-                )}
-            </div>
+                                            {formatAgo(row.startedAt)}
+                                        </span>
+                                    </>
+                                );
+                                return (
+                                    <li key={row.key}>
+                                        {/* Toute la ligne est la cible du clic — pas une
+                                            icône à part qu'il faudrait viser — quand un
+                                            journal existe pour elle. */}
+                                        {clickable ? (
+                                            <button
+                                                type='button'
+                                                className={`${styles.itemRow} ${styles.itemRowClickable}`}
+                                                title='Voir le journal'
+                                                onClick={() => onOpenLogs?.(row.externalId as string)}
+                                            >
+                                                {content}
+                                            </button>
+                                        ) : (
+                                            <div className={styles.itemRow}>{content}</div>
+                                        )}
+                                        {/* Le message du fournisseur, pas une simple
+                                            étiquette rouge : c'est lui qui dit pourquoi,
+                                            pas seulement que ça a échoué. */}
+                                        {row.status === 'failed' && row.description && (
+                                            <p className={styles.itemError} title={row.description}>
+                                                {row.description}
+                                            </p>
+                                        )}
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+                </section>
+            )}
 
             <TriggerDialog
                 open={triggerOpen}
@@ -226,7 +285,7 @@ export function TargetView({
                     invalidate('deploy.list', 'deploy.detail', 'project.board');
                 }}
             />
-        </section>
+        </div>
     );
 }
 

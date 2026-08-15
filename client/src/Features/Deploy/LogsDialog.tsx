@@ -51,7 +51,7 @@ export function LogsDialog({ open, targetId, externalId, onClose }: LogsDialogPr
             open={open}
             onClose={onClose}
             title='Journal du déploiement'
-            width={720}
+            width={1200}
             fill
             footer={
                 <>

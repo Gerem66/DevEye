@@ -143,6 +143,10 @@ export function Deploy({ project, members, canWrite }: DeployProps) {
                         // déclenchement s'inscrira dans sa frise.
                         projectId={project.id}
                         onEdit={canWriteDeploy ? () => setEditing(item.target) : undefined}
+                        // L'historique complet est un panneau de la feature Déploiement,
+                        // pas de cet onglet : ici, le dernier déploiement affiché dans
+                        // l'en-tête suffit, comme avant que l'historique n'ait sa propre carte.
+                        showHistory={false}
                         after={
                             <>
                                 {/* Le sens qui manquerait sinon : la feature sait

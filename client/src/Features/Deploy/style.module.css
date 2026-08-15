@@ -243,6 +243,15 @@
 
 /* ------------------------------------------------- la cible, et son histoire */
 
+/* Sépare l'en-tête (identité + action) de l'historique : deux cartes, et non
+   plus une seule (voir `.historyBlock` plus bas). */
+.targetGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-width: 0;
+}
+
 /*
  * Le bloc encadré, partagé par la fiche de la feature et l'onglet d'un projet.
  *
@@ -292,10 +301,48 @@
     color: var(--text-muted);
 }
 
+/* Le dernier état, à même hauteur que l'identité (voir `TargetView`). */
+.blockLastDeploy {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: var(--space-xs) 0 0;
+}
+
+/*
+ * Le titre du dernier déploiement, entre la pastille d'état et la date.
+ *
+ * Pas `.itemName` : celui-là est taillé pour une ligne de liste, où il prend
+ * `flex: 1` pour rejeter la date à droite. Ici c'est l'inverse qu'on veut :
+ * les trois éléments se suivent, et c'est le titre (le seul de longueur
+ * imprévisible) qui se tronque quand la place manque, pas la date qui s'en va.
+ */
+.lastDeployName {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.78rem;
+    color: var(--text-primary);
+}
+
+/* La date reste entière : c'est le titre au-dessus qui cède la place. */
+.blockLastDeploy .hint {
+    flex-shrink: 0;
+}
+
 .history {
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
+}
+
+/* L'historique est maintenant sa propre carte (`.block` + `.historyBlock`),
+   pas un appendice sous l'en-tête : plus de respiration, surtout sensible sur
+   la page dédiée de la feature, bien plus large qu'un onglet de projet. */
+.historyBlock {
+    padding: var(--space-lg);
+    gap: var(--space-md);
 }
 
 .sectionTitle {
@@ -309,7 +356,7 @@
 .itemList {
     display: flex;
     flex-direction: column;
-    gap: var(--space-xs);
+    gap: var(--space-sm);
     margin: 0;
     padding: 0;
     list-style: none;
