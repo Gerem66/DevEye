@@ -840,6 +840,28 @@
     color: var(--text-muted);
 }
 
+/*
+ * « C'est réglé » et « Légitime » répondent à deux questions différentes, et se
+ * confondraient posés côte à côte dans la même rangée de boutons. Le trait les
+ * sépare : au-dessus, ranger un constat corrigé ; en dessous, décider qu'une
+ * situation est normale — la seule des deux qui écrive une autorisation.
+ */
+.settled {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    padding-bottom: var(--space-sm);
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.settledNote {
+    margin: 0;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
 /* ── appel à l'action (machine non surveillée) ───────────────────────────── */
 
 .callout {

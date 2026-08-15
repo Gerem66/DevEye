@@ -113,6 +113,16 @@ et **rejoués à la reconnexion** (invariant 1 de Monitoring).
    lesquelles existaient ni revenir dessus, et une décision d'un jour devenait un
    angle mort permanent.
 
+   **« Réglé » n'est pas « légitime », et les deux sorties doivent exister.** Le
+   moteur ne résout de lui-même que ce qu'il sait rejouer (`SNAPSHOT_RULES`, via
+   `resolveMissing`) : un constat d'événement — `auth.*`, `persistence.*` — décrit
+   un fait passé, donc plus aucun relevé ne cessera de le porter, et il reste
+   ouvert indéfiniment même après correction. `sentinel.resolve` le ferme **sans
+   écrire d'autorisation** : il rouvrira au premier relevé qui le revoit, là où un
+   acquittement l'aurait fait taire pour toujours. N'offrir que l'acquittement
+   revenait à faire déclarer normal ce qui venait d'être corrigé — et à empoisonner
+   l'allowlist, qui est le seul état que rien ne reconstruit.
+
 9. **Un constat ≥ `high` épingle son instant.** Via `metrics.setInstantsPinned`,
    qui traite les deux tables en une instruction. Sans cela la rétention
    effacerait, trente jours plus tard, la seule liste de processus qui explique le

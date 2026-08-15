@@ -288,6 +288,15 @@ export interface FindingsRepo {
     /** Décompte par gravité des constats ouverts d'un ensemble d'appareils. */
     openCounts(deviceIds: string[]): Promise<Record<FindingSeverity, number>>;
     acknowledge(findingId: number, userId: number, at: number): Promise<void>;
+    /**
+     * Ferme un constat parce que la situation a cessé, sans le juger normal.
+     *
+     * Volontairement le même état que la résolution automatique : la seule
+     * différence est *qui* l'a constatée. Un état de plus n'aurait rien dit de
+     * neuf, et aurait fallu le traiter partout où `resolved` l'est déjà —
+     * filtres, rétention, réouverture par `upsert`.
+     */
+    resolve(findingId: number, at: number): Promise<void>;
     reopen(findingId: number, at: number): Promise<void>;
     markNotified(ids: number[]): Promise<void>;
     /** Balaye les constats résolus au-delà de la rétention. Les ouverts survivent. */
@@ -462,6 +471,16 @@ export function findingsRepo(pool: Q): FindingsRepo {
             await pool.query(
                 `UPDATE device_findings SET state = 'acknowledged', acked_by = ?, acked_at = ? WHERE id = ?`,
                 [userId, at, findingId]
+            );
+        },
+
+        async resolve(findingId, at) {
+            // `state = 'open'` en garde : sans elle, un double clic rouvrirait la
+            // fenêtre de rétention d'un constat déjà résolu, et « réglé » écraserait
+            // un acquittement — deux décisions qui ne se remplacent pas l'une l'autre.
+            await pool.query(
+                `UPDATE device_findings SET state = 'resolved', last_seen = ? WHERE id = ? AND state = 'open'`,
+                [at, findingId]
             );
         },
 

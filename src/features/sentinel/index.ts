@@ -11,6 +11,7 @@ import {
     sentinelRemoveAllow,
     sentinelReopen,
     sentinelResetBaseline,
+    sentinelResolve,
     sentinelScanNow,
     sentinelGetSettings,
     sentinelSetConfig,
@@ -241,6 +242,37 @@ export const sentinelAcknowledgeFeature: FeatureDefinition<
 
         const updated = await ctx.db.findings.find(row.id);
         return { finding: toFinding(updated ?? row), allow: toAllow(allow) };
+    }
+});
+
+export const sentinelResolveFeature: FeatureDefinition<
+    typeof sentinelResolve.command,
+    typeof sentinelResolve.input,
+    typeof sentinelResolve.output
+> = defineFeature({
+    ...sentinelResolve,
+    mutates: true,
+    access: { feature: 'sentinel', level: 'write' },
+    handler: async (ctx, input) => {
+        const row = await ctx.db.findings.find(input.findingId);
+        if (!row) throw new FeatureError('not_found', 'Constat introuvable');
+        const device = await authorizeDevice(ctx, row.device_id);
+        // Un constat acquitté est déjà clos, par une décision plus forte : le
+        // « régler » par-dessus effacerait la trace de qui l'a jugé légitime.
+        if (row.state !== 'open') {
+            throw new FeatureError('conflict', "Ce constat n'est plus ouvert");
+        }
+
+        await ctx.db.findings.resolve(row.id, Date.now());
+
+        ctx.audit({
+            action: 'sentinel.resolve',
+            description: `Constat marqué réglé (${SENTINEL_RULES[row.rule].label}) sur « ${device.name} » : ${row.subject}`,
+            metadata: { deviceId: device.id, rule: row.rule, subject: row.subject }
+        });
+
+        const updated = await ctx.db.findings.find(row.id);
+        return { finding: toFinding(updated ?? row) };
     }
 });
 
@@ -502,6 +534,7 @@ export const sentinelFeatures: FeatureDefinition<string, any, any>[] = [
     sentinelBaselineFeature,
     sentinelPostureFeature,
     sentinelAcknowledgeFeature,
+    sentinelResolveFeature,
     sentinelReopenFeature,
     sentinelAllowlistFeature,
     sentinelRemoveAllowFeature,

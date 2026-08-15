@@ -17,16 +17,24 @@ import styles from './style.module.css';
  * « ce port ouvert est normal **sur cette machine** » et « notre agent de
  * sauvegarde est légitime **partout** ». N'offrir que la première ferait rejuger
  * huit fois la même décision.
+ *
+ * « C'est réglé » n'est pas une troisième portée mais l'autre réponse possible :
+ * on a corrigé, ce n'est pas devenu normal. Elle existe parce que le moteur ne
+ * résout de lui-même que ce qu'il peut rejouer — une authentification suspecte ou
+ * une entrée de persistance décrivent un fait passé, que plus aucun relevé ne
+ * viendra contredire. Sans elle, la seule façon de ranger un constat corrigé
+ * était de le déclarer légitime.
  */
 
 interface Props {
     finding: Finding;
     onAcknowledge: (scope: AllowScope, reason: string | null) => Promise<void>;
+    onResolve: () => Promise<void>;
     onReopen: () => Promise<void>;
     onClose: () => void;
 }
 
-export default function FindingDetail({ finding, onAcknowledge, onReopen, onClose }: Props) {
+export default function FindingDetail({ finding, onAcknowledge, onResolve, onReopen, onClose }: Props) {
     const meta = SENTINEL_RULES[finding.rule];
     const [reason, setReason] = useState('');
     const [busy, setBusy] = useState(false);
@@ -115,6 +123,23 @@ export default function FindingDetail({ finding, onAcknowledge, onReopen, onClos
                 </div>
             ) : (
                 <div className={styles.actions}>
+                    {finding.state === 'open' && (
+                        <div className={styles.settled}>
+                            <p className={styles.settledNote}>
+                                Corrigé ? Fermez-le sans le déclarer normal : il rouvrira de lui-même si la situation
+                                revient.
+                            </p>
+                            <Button
+                                variant='secondary'
+                                icon='check-circle'
+                                disabled={busy}
+                                onClick={() => void run(onResolve)}
+                            >
+                                C’est réglé
+                            </Button>
+                        </div>
+                    )}
+
                     <label className={styles.field}>
                         <span className={styles.fieldLabel}>Raison (facultatif)</span>
                         <TextInput

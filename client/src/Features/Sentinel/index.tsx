@@ -158,6 +158,16 @@ export default function Sentinel({ workspace }: FeatureProps) {
         [selected, afterWrite]
     );
 
+    const resolve = useCallback(async () => {
+        if (!selected) return;
+        await ws.send('sentinel.resolve', { findingId: selected.id });
+        // Sans `setSelected` : la relecture s'en charge, et elle seule sait quoi
+        // faire des deux cas. Le constat quitte le filtre par défaut — le détail
+        // se referme ; il reste sous « voir les constats réglés » — le détail se
+        // met à jour. Le forcer ici aurait tranché à sa place.
+        await afterWrite();
+    }, [selected, afterWrite]);
+
     const reopen = useCallback(async () => {
         if (!selected) return;
         const res = await ws.send('sentinel.reopen', { findingId: selected.id });
@@ -364,6 +374,7 @@ export default function Sentinel({ workspace }: FeatureProps) {
                                         <FindingDetail
                                             finding={selected}
                                             onAcknowledge={acknowledge}
+                                            onResolve={resolve}
                                             onReopen={reopen}
                                             onClose={() => setSelected(null)}
                                         />
