@@ -10,12 +10,8 @@ import type { UptimeService } from 'deveye-types';
 interface ServiceListProps {
     /** The workspace's services, already in the user's order. */
     services: UptimeService[];
-    /** Ids with an action in flight (their buttons are disabled). */
-    busy: ReadonlySet<number>;
     onOpen: (service: UptimeService) => void;
     onEdit: (service: UptimeService) => void;
-    onToggle: (service: UptimeService) => void;
-    onCheckNow: (service: UptimeService) => void;
     /** The complete new order after a drop. */
     onReorder: (ids: number[]) => void;
     /** A drag started or ended — the host pauses its polling meanwhile. */
@@ -31,16 +27,7 @@ interface ServiceListProps {
  * only what makes this list look like itself — the card, its grip, and the
  * insertion bar.
  */
-export function ServiceList({
-    services,
-    busy,
-    onOpen,
-    onEdit,
-    onToggle,
-    onCheckNow,
-    onReorder,
-    onDragStateChange
-}: ServiceListProps) {
+export function ServiceList({ services, onOpen, onEdit, onReorder, onDragStateChange }: ServiceListProps) {
     /** A real drag just ended: the click the browser still fires afterwards
      *  must not also open the detail view. Unlike the other lists, the grip
      *  sits *inside* the clickable card, so the click does reach it. */
@@ -64,7 +51,6 @@ export function ServiceList({
                 <ServiceCard
                     key={service.id}
                     service={service}
-                    busy={busy.has(service.id)}
                     dragging={drag.draggingId === service.id}
                     onOpen={() => {
                         if (suppressClickRef.current) {
@@ -74,8 +60,6 @@ export function ServiceList({
                         onOpen(service);
                     }}
                     onEdit={() => onEdit(service)}
-                    onToggle={() => onToggle(service)}
-                    onCheckNow={() => onCheckNow(service)}
                     onDragPointerDown={(e) => drag.onGripPointerDown(e, service.id)}
                 />
             ))}

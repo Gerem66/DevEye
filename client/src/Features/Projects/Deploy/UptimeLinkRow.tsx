@@ -1,12 +1,10 @@
-import { useEffect, useState } from 'react';
-import type { UptimePoint, UptimeResolution, UptimeService } from 'deveye-types';
+import type { UptimeService } from 'deveye-types';
 import { Button } from '@/Components';
-import { ws } from '@/api/ws';
 import { startTeleport } from '@/stores/live';
 import { getActiveWorkspaceId } from '@/stores/workspace';
-import { rangeWindow } from '@/Features/Uptime/format';
 import { Ratios } from '@/Features/Uptime/Ratios';
 import { StatusBars } from '@/Features/Uptime/StatusBars';
+import { useServiceHistory } from '@/Features/Uptime/useServiceHistory';
 import deployStyles from '@/Features/Deploy/style.module.css';
 import styles from '../style.module.css';
 
@@ -37,33 +35,7 @@ function tone(service: UptimeService): 'online' | 'down' | 'neutral' {
  * qu'à « est-ce en ligne, depuis quand, et à quel prix sur la durée ? ».
  */
 export function UptimeLinkRow({ service, canWrite, busy, onUnlink }: UptimeLinkRowProps) {
-    const [points, setPoints] = useState<UptimePoint[]>([]);
-    const [resolution, setResolution] = useState<UptimeResolution>('raw');
-
-    const id = service.id;
-    // Bouge à chaque sonde : c'est ce qui rafraîchit les barres sans minuteur.
-    const stamp = service.lastCheckedAt;
-
-    useEffect(() => {
-        let cancelled = false;
-        void (async () => {
-            try {
-                const res = await ws.send('uptime.history', { id, range: '24h' });
-                if (!cancelled) {
-                    setPoints(res.points);
-                    setResolution(res.resolution);
-                }
-            } catch {
-                // Un aperçu manqué n'est pas une erreur à afficher ici : le nom
-                // et le point d'état restent, seules les barres se taisent.
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [id, stamp]);
-
-    const axis = rangeWindow('24h', points);
+    const { points, resolution, axis } = useServiceHistory(service.id, service.lastCheckedAt);
 
     return (
         <section className={deployStyles.block}>

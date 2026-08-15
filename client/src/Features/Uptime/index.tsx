@@ -21,8 +21,6 @@ export default function Uptime({ workspace }: FeatureProps) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedId, setSelectedId] = useState<number | null>(null);
-    /** Ids with a probe or a pause/resume in flight (their buttons are disabled). */
-    const [busy, setBusy] = useState<ReadonlySet<number>>(new Set());
     /** A row is in flight: the periodic reload must not reshuffle under it. */
     const dragging = useRef(false);
 
@@ -75,22 +73,15 @@ export default function Uptime({ workspace }: FeatureProps) {
         };
     }, [reload]);
 
-    /** Run a per-service action while flagging it busy, then re-sync everything. */
-    const withBusy = useCallback(
-        async (id: number, run: () => Promise<void>) => {
-            setBusy((prev) => new Set(prev).add(id));
+    /** Run a per-service action, then re-sync the list and the shared count. */
+    const runAction = useCallback(
+        async (run: () => Promise<void>) => {
             try {
                 await run();
                 await reload();
                 void refreshUptime();
             } catch {
                 setError('Action impossible.');
-            } finally {
-                setBusy((prev) => {
-                    const next = new Set(prev);
-                    next.delete(id);
-                    return next;
-                });
             }
         },
         [reload]
@@ -129,7 +120,7 @@ export default function Uptime({ workspace }: FeatureProps) {
                     onBack={() => setSelectedId(null)}
                     onEdit={() => setDialog({ service: selected })}
                     onCheckNow={() =>
-                        void withBusy(selected.id, async () => {
+                        void runAction(async () => {
                             await ws.send('uptime.checkNow', { id: selected.id });
                         })
                     }
@@ -170,19 +161,8 @@ export default function Uptime({ workspace }: FeatureProps) {
                     ) : (
                         <ServiceList
                             services={services}
-                            busy={busy}
                             onOpen={(service) => setSelectedId(service.id)}
                             onEdit={(service) => setDialog({ service })}
-                            onCheckNow={(service) =>
-                                void withBusy(service.id, async () => {
-                                    await ws.send('uptime.checkNow', { id: service.id });
-                                })
-                            }
-                            onToggle={(service) =>
-                                void withBusy(service.id, async () => {
-                                    await ws.send('uptime.setEnabled', { id: service.id, enabled: !service.enabled });
-                                })
-                            }
                             onReorder={handleReorder}
                             onDragStateChange={(active) => {
                                 dragging.current = active;

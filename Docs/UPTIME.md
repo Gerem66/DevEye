@@ -101,11 +101,28 @@ blocs s'alignent colonne par colonne, et un trou de surveillance se voit comme
 un trou. Le seuil « lent » est relatif à la médiane du service (2×, plancher
 150 ms) — un endpoint à 20 ms et un à 400 ms sont tous deux normaux.
 
+La bande d'état sert trois endroits, en deux formes. `full` — sous un titre, avec
+sa légende — dans le détail d'un service et dans l'onglet Déploiement d'un projet,
+où les trois pourcentages se posent en face de la légende (`trailing`). `inline` —
+plus basse, sans légende — dans chaque ligne de la liste : répétée vingt fois, une
+légende pèserait plus que les barres, et la **bulle de survol** dit déjà ce
+qu'elle dirait. Cette bulle remplace l'attribut `title` : l'infobulle native se
+fait attendre une seconde et ne désigne jamais *quelle* barre elle décrit, ce qui
+est précisément la question sur des tranches de trois pixels.
+
 ## Les trois étages du panneau
 
 `liste des services` → `détail d'un service` → `journal des mesures`, chacun
 remplaçant le précédent avec un bouton retour (le même schéma que la liste vers
 le détail).
+
+**La liste se lit, elle ne pilote pas.** Chaque ligne porte le nom, l'état, la
+bande des dernières 24 h, les trois pourcentages et « Modifier ». Rien d'autre :
+« tester maintenant » et « mettre en pause » y étaient deux boutons par ligne pour
+des gestes rares, et vivent là où l'on se rend pour les faire — la fiche du
+service porte « Tester », son formulaire porte la pause. Toute la ligne mène à la
+fiche, barres comprises : repérer un creux rouge et vouloir l'ouvrir est le même
+geste.
 
 Le journal complet a son propre étage parce qu'un an de sondes fait des dizaines
 de milliers de lignes : en ligne dans le détail, il enterrait les graphiques.

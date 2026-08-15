@@ -2,6 +2,8 @@ import { StatusBadge } from '@/Components/StatusBadge';
 
 import { formatAgo, formatDuration, formatMs } from './format';
 import Ratios from './Ratios';
+import StatusBars from './StatusBars';
+import { useServiceHistory } from './useServiceHistory';
 import styles from './style.module.css';
 
 import type { UptimeService } from 'deveye-types';
@@ -11,10 +13,6 @@ interface ServiceCardProps {
     service: UptimeService;
     onOpen: () => void;
     onEdit: () => void;
-    onToggle: () => void;
-    onCheckNow: () => void;
-    /** A probe or a toggle is in flight for this service. */
-    busy: boolean;
     /** Card being dragged right now — dimmed, never restyled otherwise. */
     dragging: boolean;
     onDragPointerDown: (e: React.PointerEvent) => void;
@@ -33,9 +31,20 @@ function statusBadge(service: UptimeService): { tone: 'online' | 'danger' | 'neu
 }
 
 /**
- * One service in the list: state, target, availability over the three usual
- * windows and its latest latency. Clicking anywhere opens the detail view; the
- * corner actions stop the click so they don't also navigate.
+ * One service in the list: state, target, the last 24 h as a status strip,
+ * availability over the three usual windows and its latest latency. Clicking
+ * anywhere opens the detail view; the corner action stops the click so it
+ * doesn't also navigate.
+ *
+ * **Lire, pas piloter.** La carte portait aussi « tester maintenant » et « mettre
+ * en pause ». Deux boutons par ligne, sur toute une liste, pour des gestes qu'on
+ * fait une fois par mois — et qui vivent déjà là où l'on se rend pour les faire :
+ * la fiche du service porte « Tester », son formulaire porte la pause. Ce qu'on
+ * parcourt du regard, on le parcourt mieux sans.
+ *
+ * La bande d'état a pris leur place, au milieu. C'est elle qui répond à la
+ * question qu'on se pose en survolant une liste — « et depuis quand ? » — là où
+ * les trois pourcentages, seuls, disaient combien sans dire quand.
  *
  * Reordering hangs off the leading grip alone, like a note's block rows (see
  * {@link ../Notes/BlockEditor}) — not off the whole row. That keeps the card a
@@ -44,19 +53,11 @@ function statusBadge(service: UptimeService): { tone: 'online' | 'danger' | 'neu
  * anywhere else still scrolls the list. The gesture itself is `pointerdown`
  * rather than HTML5 `draggable` — see {@link ./ServiceList} for why.
  */
-export function ServiceCard({
-    service,
-    onOpen,
-    onEdit,
-    onToggle,
-    onCheckNow,
-    busy,
-    dragging,
-    onDragPointerDown
-}: ServiceCardProps) {
+export function ServiceCard({ service, onOpen, onEdit, dragging, onDragPointerDown }: ServiceCardProps) {
     const badge = statusBadge(service);
     // Quelqu'un consulte ce service, plus bas que moi : sa couleur ici.
     const outline = useLiveOutline('l1', String(service.id));
+    const { points, resolution, axis } = useServiceHistory(service.id, service.lastCheckedAt);
     const action = (run: () => void) => (e: React.MouseEvent) => {
         e.stopPropagation();
         run();
@@ -102,29 +103,17 @@ export function ServiceCard({
                 </p>
             </div>
 
+            {/* La bande ne capte pas le clic : elle n'a que du survol à offrir, et
+                le reste de la ligne mène au service. Cliquer une barre ouvre donc
+                la fiche, comme cliquer ailleurs — ce qui est exactement le geste
+                qu'on a en tête quand on vient de repérer un creux rouge. */}
+            <div className={styles.cardGraph}>
+                <StatusBars points={points} from={axis.from} to={axis.to} resolution={resolution} variant='inline' />
+            </div>
+
             <Ratios service={service} />
 
             <div className={styles.cardActions}>
-                <button
-                    type='button'
-                    className={styles.iconBtn}
-                    disabled={busy}
-                    title='Tester maintenant'
-                    aria-label='Tester maintenant'
-                    onClick={action(onCheckNow)}
-                >
-                    <span className='icon icon-refresh' />
-                </button>
-                <button
-                    type='button'
-                    className={styles.iconBtn}
-                    disabled={busy}
-                    title={service.enabled ? 'Mettre en pause' : 'Reprendre la surveillance'}
-                    aria-label={service.enabled ? 'Mettre en pause' : 'Reprendre la surveillance'}
-                    onClick={action(onToggle)}
-                >
-                    <span className={`icon icon-${service.enabled ? 'pause' : 'play'}`} />
-                </button>
                 <button
                     type='button'
                     className={styles.iconBtn}

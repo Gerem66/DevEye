@@ -190,7 +190,20 @@
 }
 
 .cardMain {
-    flex: 1 1 auto;
+    flex: 1 1 220px;
+    min-width: 0;
+}
+
+/*
+ * La bande d'état, au milieu de la ligne.
+ *
+ * `flex: 2 1 180px` : elle prend la place restante en priorité — c'est elle qui
+ * gagne à être large, un nom et une URL non — mais elle cède avant de rendre le
+ * reste illisible. En dessous de sa base, elle passe au fil des points de rupture
+ * plutôt que d'écraser tout le monde.
+ */
+.cardGraph {
+    flex: 2 1 180px;
     min-width: 0;
 }
 
@@ -441,6 +454,12 @@
     gap: var(--space-xs);
 }
 
+/* Ancre de la bulle : elle se place en pourcentage de la largeur des barres, donc
+   c'est ce bloc-ci — et pas la colonne avec sa légende — qui doit la référencer. */
+.barsPlot {
+    position: relative;
+}
+
 /* Always the same fixed number of slots (see StatusBars), so a bar is a slice of
    time and stays a slender vertical tick whatever the container's width. */
 .barsRow {
@@ -450,15 +469,52 @@
     height: 42px;
 }
 
+/* Dans une rangée qu'on parcourt, les barres tiennent sur la hauteur d'une ligne
+   de texte : assez pour lire la forme d'un incident, pas assez pour voler la
+   vedette au nom du service. */
+.barsInline .barsRow {
+    height: 26px;
+}
+
 .bar {
     flex: 1 1 0;
     min-width: 1px;
     border-radius: 1px;
-    transition: opacity var(--transition-fast);
+    transition:
+        transform var(--transition-fast),
+        filter var(--transition-fast);
 }
 
-.bar:hover {
-    opacity: 0.6;
+/* La barre désignée par la bulle. Elle s'éclaircit **et** s'élargit : sur des
+   tranches de trois pixels, une nuance seule ne se voit pas, et c'est justement
+   quand elles sont serrées qu'il faut savoir laquelle on lit. `filter` plutôt
+   qu'`opacity` — elle reste franche au lieu de se diluer dans le fond. */
+.barHovered {
+    filter: brightness(1.45);
+    transform: scaleX(2.2);
+}
+
+/*
+ * Ce que dit la tranche survolée : l'heure, la disponibilité, la latence.
+ *
+ * Remplace l'infobulle native, qui se fait attendre une seconde et n'indique
+ * jamais quelle barre elle décrit. `pointer-events: none` est ce qui empêche la
+ * bulle de passer sous le curseur et de couper le survol qui l'a fait naître.
+ */
+.barsTip {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    z-index: 2;
+    padding: 4px var(--space-sm);
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-widget);
+    box-shadow: var(--shadow-md);
+    color: var(--text-primary);
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    pointer-events: none;
 }
 
 .barUp {
@@ -798,6 +854,13 @@
        the actions onto row 2 instead of squeezing this block out of existence. */
     .cardMain {
         flex: 1 1 calc(100% - 18px - var(--space-sm));
+    }
+
+    /* Une ligne à elle seule. La partager avec les pourcentages et le bouton ne
+       laisserait à cette largeur de quoi lire à personne — et une bande d'état
+       trop courte ne dit plus rien de la forme d'un incident. */
+    .cardGraph {
+        flex: 1 1 100%;
     }
 
     .cardRatios {
