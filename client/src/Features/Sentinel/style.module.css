@@ -113,6 +113,16 @@
     overflow: hidden;
 }
 
+/*
+ * Le contenu, à largeur figée pendant que le panneau anime la sienne. Sa valeur
+ * vient de `index.tsx`, en même temps que celle de l'animation : c'est la même
+ * largeur, et elle n'a qu'une seule source. Ici on ne pose que ce qui rend le
+ * rognage propre — pas de rétrécissement, pas de saut de ligne.
+ */
+.detailInner {
+    flex-shrink: 0;
+}
+
 /* Sous 1000 px la colonne de détail passe sous la liste : deux colonnes ne
    tiennent pas, et rétrécir la liste rendrait les sujets — souvent des
    chemins — illisibles. */

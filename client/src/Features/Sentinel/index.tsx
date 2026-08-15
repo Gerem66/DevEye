@@ -41,6 +41,13 @@ export { SentinelWidget } from './SentinelWidget';
  * passe, ce qui est l'état normal d'un détecteur.
  */
 
+/**
+ * Largeur du panneau de détail. Vit ici, en une seule constante, parce que deux
+ * choses en dépendent : la largeur qu'anime framer-motion, et celle que le
+ * contenu garde pendant qu'elle change (voir plus bas).
+ */
+const DETAIL_WIDTH = 360;
+
 export default function Sentinel({ workspace }: FeatureProps) {
     const [devices, setDevices] = useState<DeviceSentinelState[]>([]);
     const [fleetScore, setFleetScore] = useState<number | null>(null);
@@ -328,16 +335,39 @@ export default function Sentinel({ workspace }: FeatureProps) {
                                     key='detail'
                                     className={styles.detailPane}
                                     initial={{ x: 24, width: 0, opacity: 0 }}
-                                    animate={{ x: 0, width: 360, opacity: 1 }}
+                                    animate={{ x: 0, width: DETAIL_WIDTH, opacity: 1 }}
                                     exit={{ x: 24, width: 0, opacity: 0 }}
-                                    transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+                                    transition={{
+                                        type: 'spring',
+                                        stiffness: 380,
+                                        damping: 34,
+                                        // L'opacité ne suit pas le ressort : elle
+                                        // doit avoir fini bien avant la largeur.
+                                        // Le ressort passe ses dernières dizaines
+                                        // de pixels à approcher zéro, et c'est là
+                                        // que le contenu, encore visible, se
+                                        // réduit à ses aplats de couleur.
+                                        opacity: { type: 'tween', duration: 0.12, ease: 'easeOut' }
+                                    }}
                                 >
-                                    <FindingDetail
-                                        finding={selected}
-                                        onAcknowledge={acknowledge}
-                                        onReopen={reopen}
-                                        onClose={() => setSelected(null)}
-                                    />
+                                    {/*
+                                     * Le contenu garde sa largeur pendant que le
+                                     * panneau perd la sienne : `overflow: hidden`
+                                     * le rogne au lieu de le remettre en page.
+                                     * Sans ça, la fermeture rejouait à toute
+                                     * vitesse une mise en page de 360 px à 0 —
+                                     * liseré de gravité, séparations et boutons
+                                     * écrasés en barres horizontales et
+                                     * verticales, l'espace de quelques images.
+                                     */}
+                                    <div className={styles.detailInner} style={{ width: DETAIL_WIDTH }}>
+                                        <FindingDetail
+                                            finding={selected}
+                                            onAcknowledge={acknowledge}
+                                            onReopen={reopen}
+                                            onClose={() => setSelected(null)}
+                                        />
+                                    </div>
                                 </motion.aside>
                             )}
                         </AnimatePresence>
