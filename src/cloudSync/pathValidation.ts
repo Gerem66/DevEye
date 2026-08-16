@@ -98,6 +98,50 @@ export function safeRelPath(relPath: string): string | null {
     return relPathProblem(relPath) === null ? normalizeRelPath(relPath) : null;
 }
 
+/**
+ * Le chemin est-il sur une couche ÉPHÉMÈRE de conteneur ?
+ *
+ * Le serveur tourne en conteneur (voir `docker-compose.prod.yml`), et le chemin
+ * de stockage d'un partage est un chemin DU SERVEUR. Saisir `/mnt/cloud` créait
+ * donc joyeusement `/mnt/cloud` **dans le conteneur** : l'utilisateur ne voyait
+ * rien sur son hôte, et le contenu partait au premier redéploiement. Un système
+ * de sauvegarde qui perd tout à chaque mise à jour ne vaut rien — d'où ce refus.
+ *
+ * Méthode : `/proc/self/mountinfo` liste les points de montage. Le plus long
+ * point de montage qui préfixe le chemin est celui qui le porte ; si c'est `/`
+ * et qu'on est en conteneur, le chemin vit sur la couche d'écriture du
+ * conteneur, donc il est éphémère.
+ *
+ * Hors conteneur (bare-metal, dev), rien n'est refusé : `/` y est parfaitement
+ * durable.
+ */
+async function isEphemeralContainerPath(resolved: string): Promise<boolean> {
+    // `/.dockerenv` (Docker) ou un cgroup de conteneur : sans ça, un serveur
+    // installé normalement verrait tous ses chemins refusés.
+    const containerized = await fs
+        .access('/.dockerenv')
+        .then(() => true)
+        .catch(() => false);
+    if (!containerized) return false;
+
+    let mountinfo: string;
+    try {
+        mountinfo = await fs.readFile('/proc/self/mountinfo', 'utf8');
+    } catch {
+        return false; // Pas de /proc : on ne sait pas, on ne bloque pas.
+    }
+
+    let best = '';
+    for (const line of mountinfo.split('\n')) {
+        // Format : id parent maj:min racine POINT_DE_MONTAGE options...
+        const point = line.split(' ')[4];
+        if (point === undefined) continue;
+        const isPrefix = resolved === point || resolved.startsWith(point === '/' ? '/' : `${point}/`);
+        if (isPrefix && point.length > best.length) best = point;
+    }
+    return best === '/' || best === '';
+}
+
 export interface StoragePathVerdict {
     ok: boolean;
     freeBytes: number | null;
@@ -128,6 +172,14 @@ export async function validateStoragePath(db: Database, rawPath: string): Promis
     const overlapping = await db.syncShares.pathsOverlapping(resolved);
     if (overlapping.length > 0) {
         return refuse(`Chemin en conflit avec le partage « ${overlapping[0].name} ».`);
+    }
+
+    if (await isEphemeralContainerPath(resolved)) {
+        return refuse(
+            "Ce chemin n'est pas persistant : le serveur tourne en conteneur et ce dossier vivrait à l'intérieur, " +
+                'donc invisible depuis la machine hôte et effacé au prochain redéploiement. ' +
+                'Choisis un chemin situé sous un volume monté (voir CLOUDSYNC_STORAGE_ROOT dans docker-compose).'
+        );
     }
 
     try {

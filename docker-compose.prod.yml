@@ -39,8 +39,15 @@ services:
     # Agent binaries live here, synced once at boot from the rolling release
     # (AGENT_DOWNLOAD_TOKEN / AGENT_RELEASE_TAG in .env). A named volume so the
     # sync survives redeploys — only a genuinely new build is re-downloaded.
+    # Le stockage CloudSync est un chemin DU SERVEUR, donc du conteneur. Sans ce
+    # montage, un partage créé sur `/data/cloudsync/…` vivrait sur la couche
+    # d'écriture du conteneur : invisible depuis l'hôte, et effacé au prochain
+    # redéploiement. `CLOUDSYNC_STORAGE_ROOT` pointe l'hôte (défaut :
+    # `./cloudsync-data`, à côté du compose) et l'interface refuse désormais tout
+    # chemin qui ne serait pas sous un volume monté.
     volumes:
       - agent-bin:/app/DevEye/agent/dist
+      - ${CLOUDSYNC_STORAGE_ROOT:-./cloudsync-data}:/data/cloudsync
     ports:
       - '127.0.0.1:${LISTEN_PORT:-3000}:${LISTEN_PORT:-3000}'
     healthcheck:

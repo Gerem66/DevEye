@@ -91,6 +91,8 @@ const PROGRESS_PERSIST_MS = 2_000;
 const PAUSE_CHECK_TTL_MS = 750;
 /** Chunks `sync.applyChunk` en vol au maximum (crédit d'acks). */
 const DOWNLOAD_WINDOW = 4;
+/** Au-delà, une session sans travail est tout de même montrée (gros scan). */
+const VISIBLE_AFTER_MS = 3_000;
 
 /**
  * Le fichier a bougé sous nos pieds entre le scan et la lecture. Distinguée
@@ -138,6 +140,7 @@ export class SyncSession {
      * qu'en re-téléchargement. Rempli au moment du plan.
      */
     private baselineByHash = new Map<string, string>();
+    private readonly startedAt = Date.now();
     /**
      * Plafond de débit des DESCENTES ; `null` = illimité (le défaut). Les
      * montées sont bridées par l'agent, qui en est l'émetteur — brider ici ne
@@ -162,6 +165,20 @@ export class SyncSession {
     /** Vrai si la session a modifié l'index canonique (uploads, suppressions, conflits). */
     get changedServer(): boolean {
         return this.serverChanged;
+    }
+
+    /**
+     * Cette session mérite-t-elle d'être MONTRÉE comme « synchronisation en
+     * cours » ?
+     *
+     * Un scan à vide dure une fraction de seconde et ne change rien. L'annoncer
+     * faisait clignoter le badge du partage à chaque déclenchement du watcher —
+     * du bruit permanent pour un état qui, lui, n'a pas bougé. On n'annonce donc
+     * que s'il y a du vrai travail, ou si le scan dure assez longtemps pour que
+     * se taire deviendrait mensonger.
+     */
+    get isVisible(): boolean {
+        return this.filesTotal > 0 || Date.now() - this.startedAt > VISIBLE_AFTER_MS;
     }
 
     /** Écrit une ligne dans le journal du partage (popup « Logs »), sans juger la session. */

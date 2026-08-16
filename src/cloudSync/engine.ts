@@ -83,6 +83,8 @@ export class CloudSyncEngine {
     private readonly lastProgress = new Map<string, CloudSyncProgress>();
     /** Dernière erreur de session par partage (état agrégé), effacée au succès. */
     private readonly lastError = new Map<number, string>();
+    /** Dernier état PUBLIÉ par partage, pour ne pas repousser à l'identique. */
+    private readonly lastState = new Map<number, string>();
 
     constructor(private readonly deps: EngineDeps) {}
 
@@ -406,9 +408,22 @@ export class CloudSyncEngine {
         return { progress, states };
     }
 
+    /**
+     * Publie l'état agrégé d'un partage — mais seulement s'il a CHANGÉ.
+     *
+     * Sans cette comparaison, chaque début et fin de session poussait une frame
+     * identique aux navigateurs, qui re-rendaient le badge pour rien. Sur un
+     * partage tranquille c'était du clignotement permanent pour un état
+     * rigoureusement stable.
+     */
     private publishShareState(shareId: number): void {
         void this.computeShareState(shareId)
-            .then((state) => this.deps.hub.publishSyncState(state))
+            .then((state) => {
+                const serialized = JSON.stringify(state);
+                if (this.lastState.get(shareId) === serialized) return;
+                this.lastState.set(shareId, serialized);
+                this.deps.hub.publishSyncState(state);
+            })
             .catch(() => undefined);
     }
 
@@ -439,8 +454,10 @@ export class CloudSyncEngine {
         });
 
         if (share.status === 'paused') return of('paused', null);
-        for (const key of this.running.keys()) {
-            if (key.startsWith(`${shareId}:`)) return of('syncing', null);
+        // `isVisible` et non « une session tourne » : un scan à vide ne doit pas
+        // faire clignoter le badge à chaque réveil du watcher.
+        for (const [key, session] of this.running) {
+            if (key.startsWith(`${shareId}:`) && session.isVisible) return of('syncing', null);
         }
         const error = this.lastError.get(shareId);
         if (error !== undefined) return of('error', error);
@@ -866,6 +883,7 @@ export class CloudSyncEngine {
         await this.runExclusive(share.id, async () => {
             await this.deps.db.syncShares.delete(share.id);
             this.storeCache().drop(share.storage_path);
+            this.lastState.delete(share.id);
             if (deleteData) {
                 // On n'efface QUE ce que le store possède (`blobs/`, `tmp/`) —
                 // jamais un rm -rf du dossier de stockage entier, qui pourrait

@@ -28,6 +28,20 @@ ligne d'index. Une session converge toujours, dans un sens ou dans l'autre.
   partagent les blobs par hash ; GC uniquement via `gcBlobIfUnreferenced`,
   sous le mutex du partage).
 
+### Où le mettre, et pourquoi ça compte
+
+Le `storage_path` est un chemin **du serveur**. Ce n'est PAS un miroir lisible du
+dossier : on n'y trouve que `blobs/` (contenus chiffrés, nommés par hash) et
+`tmp/`. Chercher ses fichiers par leur nom à cet endroit ne donnera jamais rien —
+l'arborescence n'existe que dans MySQL.
+
+Le serveur tournant en conteneur, ce chemin est celui **du conteneur**. Un
+chemin hors volume monté vivrait donc sur sa couche d'écriture : invisible depuis
+l'hôte, et effacé au redéploiement. `docker-compose.prod.yml` monte
+`CLOUDSYNC_STORAGE_ROOT` (hôte) sur `/data/cloudsync`, et
+`validateStoragePath` **refuse** un chemin qui ne serait sous aucun montage —
+un système de sauvegarde qui perd tout à chaque mise à jour ne vaut rien.
+
 ## Tables (migration `031_cloud_sync.sql`)
 
 | Table | Rôle |

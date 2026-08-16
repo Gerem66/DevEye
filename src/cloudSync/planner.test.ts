@@ -201,3 +201,20 @@ describe('planSession — déplacements', () => {
         assert.equal(plan.uploads[0].hash, plan.deleteOnServer[0].hash);
     });
 });
+
+describe('planSession — une session à vide ne doit rien annoncer', () => {
+    it('ne produit AUCUN travail quand tout est déjà en phase', () => {
+        // C'est ce que voit le watcher à chaque réveil sur un dossier stable.
+        // `filesTotal` doit valoir 0, sans quoi le badge du partage clignote à
+        // chaque cycle alors que rien n'a bougé.
+        const plan = planSession(
+            [device('a.txt', H.a, { mode: 0o644 }), device('b.txt', H.b, { mode: 0o644 })],
+            [base('a.txt', H.a, { mode: 0o644 }), base('b.txt', H.b, { mode: 0o644 })],
+            [server('a.txt', H.a, { mode: 0o644 }), server('b.txt', H.b, { mode: 0o644 })]
+        );
+        assert.equal(plan.filesTotal, 0);
+        assert.equal(plan.bytesTotal, 0);
+        assert.deepEqual(plan.modeChanges, []);
+        assert.deepEqual(plan.refreshBaseline, []);
+    });
+});

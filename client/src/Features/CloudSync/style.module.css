@@ -290,11 +290,26 @@
 /* ─── Barre de progression (pattern DeploymentStatus, 4 px pilule) ─── */
 
 .progress {
-    width: min(420px, 100%);
+    /* Largeur FIXE, et surtout indépendante du contenu.
+       Avec une largeur en pourcentage, la barre se calait sur la largeur du
+       bloc, elle-même dictée par le plus large de ses enfants : le nom du
+       fichier en cours et le débit. Ces textes changent à chaque rafraîchi, donc
+       la barre changeait de taille en permanence et l'avancement devenait
+       illisible — c'était le seul repère fixe, et il bougeait. */
+    width: 420px;
+    max-width: 100%;
     display: flex;
     flex-direction: column;
     gap: var(--space-xs);
     align-items: center;
+}
+
+/* Les lignes de détail REMPLISSENT la largeur au lieu de la dicter : elles se
+   coupent en points de suspension plutôt que d'élargir ou rétrécir la barre. */
+.progress .heroDetail {
+    width: 100%;
+    max-width: 100%;
+    text-align: center;
 }
 
 .bar {
