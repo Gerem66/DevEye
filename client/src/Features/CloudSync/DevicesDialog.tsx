@@ -3,8 +3,8 @@ import type { CloudSyncShare } from 'deveye-types';
 
 import { ws } from '@/api/ws';
 import { Button, Dialog, SelectInput, TextInput } from '@/Components';
-import { useDevices } from '@/stores/devices';
 import DeviceFolderPicker from './DeviceFolderPicker';
+import { useAttachableDevices, useShareDevices } from './useShareDevices';
 import styles from './style.module.css';
 
 interface DevicesDialogProps {
@@ -16,13 +16,15 @@ interface DevicesDialogProps {
 
 /** Gestion des appareils d'un partage : attacher, pause/reprise, détacher. */
 export default function DevicesDialog({ open, share, onClose, onChanged }: DevicesDialogProps) {
-    const { devices } = useDevices();
+    // Nom et présence pris sur le vif : figés dans `share`, ils ne suivaient ni
+    // un renommage ni un retour en ligne avant un rechargement de la page.
+    const attachedDevices = useShareDevices(share);
+    const attachable = useAttachableDevices(share);
     const [deviceId, setDeviceId] = useState('');
     const [localPath, setLocalPath] = useState('');
     const [pickerOpen, setPickerOpen] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const attachable = devices.filter((d) => d.online && !share.devices.some((s) => s.deviceId === d.id));
     const pickedDevice = attachable.find((d) => d.id === deviceId);
 
     const run = async (action: () => Promise<unknown>) => {
@@ -47,7 +49,7 @@ export default function DevicesDialog({ open, share, onClose, onChanged }: Devic
             <Dialog open={open} onClose={onClose} title={`Appareils — ${share.name}`} width={560}>
                 <div className={styles.formCol}>
                     <div className={styles.rows}>
-                        {share.devices.map((d) => (
+                        {attachedDevices.map((d) => (
                             <div key={d.deviceId} className={styles.row}>
                                 <span className={`icon icon-server`} />
                                 <div className={styles.rowMain}>
@@ -90,7 +92,7 @@ export default function DevicesDialog({ open, share, onClose, onChanged }: Devic
                                 </div>
                             </div>
                         ))}
-                        {share.devices.length === 0 && (
+                        {attachedDevices.length === 0 && (
                             <div className={styles.mutedNote}>Aucun appareil attaché pour l’instant.</div>
                         )}
                     </div>

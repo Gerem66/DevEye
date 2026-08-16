@@ -103,7 +103,6 @@ const NON_MUTATING = new Set([
     // verbe suit immédiatement le point — contrairement au reste du module git,
     // que le filet ne voit pas du tout (camelCase sous un préfixe unique).
     'git.syncStatuses',
-    'cloudSync.validatePath',
     'mail.oauthStart',
     'mail.accountTestConnection',
     'mail.attachmentScan',

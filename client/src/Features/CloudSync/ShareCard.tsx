@@ -13,6 +13,7 @@ import SettingsDialog from './SettingsDialog';
 import SnapshotsDialog from './SnapshotsDialog';
 import VersionsBrowser from './VersionsBrowser';
 import { stateLook } from './state';
+import { useShareDevices } from './useShareDevices';
 import { formatEta, useTransferRate } from './useTransferRate';
 import styles from './style.module.css';
 import type { LiveOutlineProps } from '@/live/useLiveOutline';
@@ -57,7 +58,10 @@ export default function ShareCard({ share, onChanged, onOpenChange, outline }: S
     const bytesTotal = sessions.reduce((sum, p) => sum + p.bytesTotal, 0);
     const bytesDone = sessions.reduce((sum, p) => sum + p.bytesDone, 0);
     const current = sessions.find((p) => p.currentPath !== null);
-    const currentDevice = current ? share.devices.find((d) => d.deviceId === current.deviceId)?.deviceName : null;
+    // Nom pris sur le vif : figé dans `share`, il gardait l'ancien nom après un
+    // renommage jusqu'au prochain rechargement de la page.
+    const shareDevices = useShareDevices(share);
+    const currentDevice = current ? shareDevices.find((d) => d.deviceId === current.deviceId)?.deviceName : null;
     const { rate, etaSeconds } = useTransferRate(bytesDone, bytesTotal);
     // Sous-barre du fichier en cours : sans elle, un fichier de plusieurs Go
     // laisse la barre globale immobile et l'utilisateur croit à un blocage.
@@ -134,7 +138,7 @@ export default function ShareCard({ share, onChanged, onOpenChange, outline }: S
                                 </span>
                             )}
                         </div>
-                    ) : share.devices.length === 0 ? (
+                    ) : shareDevices.length === 0 ? (
                         <span className={styles.heroDetail}>Attache un premier appareil pour démarrer la synchro.</span>
                     ) : (
                         detail && <span className={styles.heroDetail}>{detail}</span>
@@ -144,7 +148,7 @@ export default function ShareCard({ share, onChanged, onOpenChange, outline }: S
 
             <div className={styles.actions}>
                 <Button variant='ghost' icon='server' onClick={() => setDialog('devices')}>
-                    Appareils ({share.devices.length})
+                    Appareils ({shareDevices.length})
                 </Button>
                 <Button variant='ghost' icon='list' onClick={() => setDialog('exclusions')}>
                     Exclusions

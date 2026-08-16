@@ -341,7 +341,29 @@ aucune mutation ne doit le contourner.
   anti-traversée —, scanner, index_cache, watcher, transfer, mod).
 - **Client** : `client/src/Features/CloudSync/` (héros d'état, wizard,
   appareils, exclusions, versions, points de restauration, réglages), store
-  `client/src/stores/cloudSync.ts`, entrée catalogue `cloudsync`.
+  `client/src/stores/cloudSync.ts`, fusion des appareils `useShareDevices.ts`,
+  entrée catalogue `cloudsync`.
+
+## Rafraîchissement de l'interface
+
+Deux sources, et le partage des rôles est la seule chose à retenir :
+
+- le **partage** possède l'attache (dossier local, statut d'attache, dernière
+  synchro) — rafraîchi par le sujet live `cloudsync`, et par `devices` puisque
+  la liste embarque les appareils attachés ;
+- le **store `devices`** possède l'appareil (nom, présence) — recomposé au rendu
+  par `useShareDevices`, donc sans aller-retour ni invalidation.
+
+`cloudSync.listShares` embarquait un `deviceName` et un `online` figés à
+l'instant de la réponse : renommer un appareil, ou le voir revenir en ligne
+après une mise à jour d'agent, n'apparaissait qu'au rechargement de la page.
+Recomposer au rendu supprime le problème à la racine plutôt que d'ajouter une
+invalidation de plus à maintenir.
+
+La liste des appareils attachables n'est volontairement **pas** filtrée sur la
+présence : attacher un appareil hors ligne est légitime (il rattrape à sa
+prochaine connexion), et filtrer faisait disparaître de la liste l'appareil
+qu'on venait justement de mettre à jour, le temps de son redémarrage.
 
 ## Tests
 

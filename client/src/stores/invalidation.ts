@@ -101,7 +101,21 @@ const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
     // une boîte laissée ouverte mentait jusqu'au prochain clic.
     mail: ['mail.accountCount', 'mail.accountList', 'mail.folderList', 'mail.messageList'],
     uptime: ['uptime.count', 'uptime.list'],
-    devices: ['device.list'],
+    /*
+     * `cloudSync.listShares` en second : la liste des partages embarque les
+     * appareils ATTACHÉS, dont le statut d'attache et le dossier local. Ces
+     * champs-là appartiennent au partage, mais ils n'existent que pour des
+     * appareils qui, eux, peuvent disparaître, revenir ou être renommés.
+     *
+     * Sans cette clé, attacher un appareil depuis un autre onglet — ou en voir
+     * un redevenir attachable après une mise à jour d'agent — n'apparaissait
+     * qu'au rechargement complet de la page.
+     *
+     * Le nom et la présence, eux, ne passent PAS par là : ils sont recomposés
+     * au rendu depuis le store `devices` (`useShareDevices`), donc sans le
+     * moindre aller-retour.
+     */
+    devices: ['device.list', 'cloudSync.listShares'],
     /*
      * Sujet distinct de `devices`, et non un alias : les constats bougent à
      * chaque tour du moteur, la liste d'appareils presque jamais. Les confondre
