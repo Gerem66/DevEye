@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { CloudSyncShare } from 'deveye-types';
 
 import { ws } from '@/api/ws';
@@ -11,7 +11,16 @@ import { useResourceVersion } from '@/stores/invalidation';
  * du socket et à chaque `invalidate('cloudSync.listShares')` ; un échec
  * transitoire conserve la dernière valeur au lieu d'un faux « vide ».
  */
-export function useShares(): CloudSyncShare[] | null {
+export function useShares(): {
+    shares: CloudSyncShare[] | null;
+    /**
+     * Réordonne la liste SUR PLACE, sans aller-retour : la carte se déplace sous
+     * le clic au lieu d'attendre le serveur. Volontairement appliqué à l'état du
+     * hook plutôt qu'à une copie tenue par l'appelant — une seconde liste
+     * dériverait de celle-ci dès le prochain rechargement.
+     */
+    applyOrder: (ids: number[]) => void;
+} {
     const version = useResourceVersion('cloudSync.listShares');
     const [shares, setShares] = useState<CloudSyncShare[] | null>(null);
 
@@ -36,5 +45,19 @@ export function useShares(): CloudSyncShare[] | null {
         };
     }, [version]);
 
-    return shares;
+    const applyOrder = useCallback((ids: number[]) => {
+        setShares((prev) => {
+            if (prev === null) return prev;
+            const byId = new Map(prev.map((s) => [s.id, s]));
+            // `flatMap` sur une recherche : un identifiant devenu inconnu (partage
+            // supprimé entre-temps) disparaît au lieu de laisser un trou.
+            const next = ids.flatMap((id) => byId.get(id) ?? []);
+            // Et ce que `ids` ne nomme pas reste : mieux vaut une carte à sa
+            // place d'origine qu'une carte évaporée par un ordre incomplet.
+            for (const share of prev) if (!ids.includes(share.id)) next.push(share);
+            return next;
+        });
+    }, []);
+
+    return { shares, applyOrder };
 }

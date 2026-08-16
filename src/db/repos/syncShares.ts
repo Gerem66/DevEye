@@ -49,6 +49,8 @@ export interface SyncSharesRepo {
         }
     ): Promise<SyncShareRow | null>;
     setStatus(id: number, status: SyncShareStatus): Promise<boolean>;
+    /** Range les partages d'un espace : `ids` est la liste COMPLÈTE, dans son ordre final. */
+    reorder(workspaceId: number, ids: number[]): Promise<void>;
     delete(id: number): Promise<boolean>;
     /** Partages dont le stockage est identique, parent ou enfant de `path` (anti-imbrication). */
     pathsOverlapping(path: string): Promise<SyncShareRow[]>;
@@ -70,8 +72,11 @@ export interface SyncSharesRepo {
 export function syncSharesRepo(pool: Q): SyncSharesRepo {
     return {
         async listByWorkspace(workspaceId) {
+            // `created` reste le départage : deux partages créés dans la même
+            // seconde, ou des rangs égaux hérités d'une base non encore rangée,
+            // gardent un ordre stable au lieu de dépendre du plan d'exécution.
             const r = await pool.query<SyncShareRow>(
-                'SELECT * FROM sync_shares WHERE workspace_id = ? ORDER BY created ASC, id ASC',
+                'SELECT * FROM sync_shares WHERE workspace_id = ? ORDER BY sort_order ASC, created ASC, id ASC',
                 [workspaceId]
             );
             return r.rows;
@@ -85,9 +90,12 @@ export function syncSharesRepo(pool: Q): SyncSharesRepo {
             return r.rows[0] ?? null;
         },
         async create({ userId, workspaceId, name, storagePath }) {
+            // Rang suivant : un nouveau partage se pose EN FIN de liste, seul
+            // endroit qui ne bouscule pas l'ordre déjà choisi par l'utilisateur.
             const res = await pool.query(
-                'INSERT INTO sync_shares (user_id, workspace_id, name, storage_path) VALUES (?, ?, ?, ?)',
-                [userId, workspaceId, name, storagePath]
+                `INSERT INTO sync_shares (user_id, workspace_id, name, storage_path, sort_order)
+                 SELECT ?, ?, ?, ?, COALESCE(MAX(sort_order) + 1, 0) FROM sync_shares WHERE workspace_id <=> ?`,
+                [userId, workspaceId, name, storagePath, workspaceId]
             );
             const r = await pool.query<SyncShareRow>('SELECT * FROM sync_shares WHERE id = ?', [res.insertId]);
             return r.rows[0];
@@ -141,6 +149,25 @@ export function syncSharesRepo(pool: Q): SyncSharesRepo {
                 id
             ]);
             return r.rowCount > 0;
+        },
+        async reorder(workspaceId, ids) {
+            // Rang = indice, en UN SEUL UPDATE : une boucle laisserait un
+            // rangement à moitié appliqué si une requête échouait, et deux
+            // rangements simultanés s'entrelaceraient. La clause `workspace_id`
+            // fait le tri : un identifiant venu d'ailleurs est ignoré en
+            // silence, sans qu'il soit possible de ranger le partage d'autrui.
+            // Rien d'autre n'est touché — `updated` non plus : ranger n'est pas
+            // modifier un partage.
+            if (ids.length === 0) return;
+            const cases = ids.map(() => 'WHEN ? THEN ?').join(' ');
+            const params: number[] = [];
+            for (let i = 0; i < ids.length; i++) params.push(ids[i], i);
+            await pool.query(
+                `UPDATE sync_shares
+                    SET sort_order = CASE id ${cases} ELSE sort_order END
+                  WHERE workspace_id = ? AND id IN (${ids.map(() => '?').join(',')})`,
+                [...params, workspaceId, ...ids]
+            );
         },
         async delete(id) {
             const r = await pool.query('DELETE FROM sync_shares WHERE id = ?', [id]);

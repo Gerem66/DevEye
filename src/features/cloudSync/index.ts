@@ -19,6 +19,7 @@ import {
     cloudSyncCreateShareFeature,
     cloudSyncDeleteShareFeature,
     cloudSyncListSharesFeature,
+    cloudSyncReorderSharesFeature,
     cloudSyncUpdateShareFeature
 } from './shares';
 import {
@@ -44,6 +45,7 @@ export const cloudSyncFeatures: ReadonlyArray<FeatureDefinition<string, any, any
     cloudSyncListSharesFeature,
     cloudSyncCreateShareFeature,
     cloudSyncUpdateShareFeature,
+    cloudSyncReorderSharesFeature,
     cloudSyncDeleteShareFeature,
     cloudSyncAttachDeviceFeature,
     cloudSyncDetachDeviceFeature,

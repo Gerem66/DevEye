@@ -1,4 +1,10 @@
-import { cloudSyncCreateShare, cloudSyncDeleteShare, cloudSyncListShares, cloudSyncUpdateShare } from 'deveye-types';
+import {
+    cloudSyncCreateShare,
+    cloudSyncDeleteShare,
+    cloudSyncListShares,
+    cloudSyncReorderShares,
+    cloudSyncUpdateShare
+} from 'deveye-types';
 
 import { storagePathForName, validateStoragePath } from '@/cloudSync/pathValidation';
 import { defineFeature, FeatureError } from '../_define';
@@ -78,6 +84,23 @@ export const cloudSyncUpdateShareFeature = defineFeature({
             metadata: { shareId: updated.id, pruneEnabled, limitBytes }
         });
         return { share: await toClientShare(ctx, updated) };
+    }
+});
+
+export const cloudSyncReorderSharesFeature = defineFeature({
+    ...cloudSyncReorderShares,
+    mutates: true,
+    handler: async (ctx, input) => {
+        // Volontairement SANS `requireActiveEngine` : ranger sa liste ne touche
+        // ni un fichier, ni un index, ni une session. Une instance passive peut
+        // donc l'accepter — refuser reviendrait à figer l'interface pour une
+        // opération qui n'a rien à voir avec le moteur.
+        //
+        // Pas de contrôle d'appartenance non plus : la clause `workspace_id` du
+        // dépôt ignore en silence tout identifiant venu d'ailleurs, donc un `ids`
+        // forgé ne peut ranger que ce que l'espace possède déjà.
+        await ctx.db.syncShares.reorder(ctx.workspaceId, input.ids);
+        return { ids: input.ids };
     }
 });
 

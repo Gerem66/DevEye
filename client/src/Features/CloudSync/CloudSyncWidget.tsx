@@ -8,7 +8,7 @@ import styles from './style.module.css';
 
 /** Carte compacte de la grille : l'état agrégé de tous les partages. */
 export default function CloudSyncWidget() {
-    const shares = useShares();
+    const { shares } = useShares();
     const { stateFor } = useCloudSyncLive();
 
     useEffect(() => {

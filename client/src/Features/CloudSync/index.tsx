@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import { ws } from '@/api/ws';
 import { Button } from '@/Components';
 import type { FeatureProps } from '@/Features/types';
 import { acquireCloudSync } from '@/stores/cloudSync';
@@ -20,7 +21,7 @@ export { default as CloudSyncWidget } from './CloudSyncWidget';
  * réglages) vit dans des dialogues.
  */
 export default function CloudSync(_props: FeatureProps) {
-    const shares = useShares();
+    const { shares, applyOrder } = useShares();
     const [wizardOpen, setWizardOpen] = useState(false);
     /** Le partage dont un dialogue est ouvert — le niveau profond de CloudSync. */
     const [openShareId, setOpenShareId] = useState<number | null>(null);
@@ -36,6 +37,29 @@ export default function CloudSync(_props: FeatureProps) {
     }, []);
 
     const refresh = useCallback(() => invalidate('cloudSync.listShares'), []);
+
+    /**
+     * Échange un partage avec son voisin. Appliqué localement d'abord, pour que
+     * la carte bouge sous le clic ; un échec revient à l'ordre du serveur, seul
+     * ordre réellement vrai.
+     *
+     * L'envoi porte la liste COMPLÈTE et non le seul couple échangé : c'est ce
+     * qui rend l'opération idempotente et réparatrice — deux partages ayant
+     * hérité du même rang se retrouvent départagés au premier déplacement.
+     */
+    const move = useCallback(
+        (shareId: number, delta: -1 | 1) => {
+            if (shares === null) return;
+            const from = shares.findIndex((s) => s.id === shareId);
+            const to = from + delta;
+            if (from === -1 || to < 0 || to >= shares.length) return;
+            const ids = shares.map((s) => s.id);
+            [ids[from], ids[to]] = [ids[to], ids[from]];
+            applyOrder(ids);
+            ws.send('cloudSync.reorderShares', { ids }).catch(refresh);
+        },
+        [shares, applyOrder, refresh]
+    );
 
     // Abonnement live à tous les partages affichés (progression + états).
     useEffect(() => {
@@ -67,13 +91,18 @@ export default function CloudSync(_props: FeatureProps) {
                 </div>
             ) : (
                 <>
-                    {shares.map((share) => (
+                    {shares.map((share, index) => (
                         <ShareCard
                             key={share.id}
                             share={share}
                             onChanged={refresh}
                             onOpenChange={handleOpenChange}
                             outline={outlineOf(String(share.id))}
+                            // `null` = pas de voisin de ce côté : la flèche
+                            // s'affiche désactivée plutôt que de disparaître,
+                            // pour que le coin ne change pas de forme.
+                            onMoveUp={index === 0 ? null : () => move(share.id, -1)}
+                            onMoveDown={index === shares.length - 1 ? null : () => move(share.id, 1)}
                         />
                     ))}
                     <div className={styles.actions}>

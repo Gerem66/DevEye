@@ -414,6 +414,39 @@ L'ordre importe : chaque filtre traite une cause différente, et aucun ne masque
 un vrai changement d'état. Réduire les rendus sans traiter la cause en amont
 donnerait une interface qui ne suit plus.
 
+Deux règles complètent le tableau, sur la ligne du fichier en cours :
+
+- `currentPath` n'est **pas** vidé entre deux fichiers. Le pas suivant l'écrase,
+  la fin de session l'efface. Le vider faisait alterner le flux publié entre
+  « ce fichier » et « aucun fichier », et la ligne clignotait une frame sur deux.
+  Ce que l'interface lit, c'est le dernier fichier touché par la session.
+- Les lignes de progression ont une **hauteur réservée** en CSS (`1.4em`) et sont
+  toujours rendues, même vides. Une ligne momentanément sans contenu s'effondrait
+  à zéro, changeait la hauteur de la carte et déplaçait les boutons.
+
+### État agrégé : ce que « hors ligne » veut dire
+
+`offline` décrit le **partage**, pas un appareil : il ne vaut que si plus rien ne
+peut se synchroniser, donc si *aucun* appareil actif n'est joignable. Tant qu'il
+en reste un, le partage fonctionne et son état est celui de son contenu, l'absent
+étant nommé en détail. Le prendre dès le premier appareil absent était trompeur :
+sur deux machines dont une éteinte, le partage restait bloqué sur « appareil hors
+ligne » alors qu'il était parfaitement à jour.
+
+### Ordre des cartes
+
+`sort_order` sur `sync_shares` (migration `083`), rangé par `cloudSync.reorderShares`
+et par rien d'autre ; un nouveau partage prend le rang suivant, donc la fin de la
+liste. La commande envoie la liste **complète** dans son ordre final, ce qui la
+rend idempotente et réparatrice : deux partages ayant hérité du même rang se
+départagent au premier déplacement. Elle n'exige pas le bail d'instance, parce que
+ranger sa liste ne touche ni fichier, ni index, ni session.
+
+Les flèches sont posées en **absolu** dans le coin de la carte : la disposition
+est identique avec ou sans elles. Pas de glisser-déposer ici, contrairement aux
+autres écrans, parce que les cartes sont hautes et qu'un glissement sur cette
+hauteur est pénible.
+
 ## Tests
 
 `npm test` (runner natif de Node via `tsx`) couvre la pièce PURE, celle dont
