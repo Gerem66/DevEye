@@ -3,6 +3,7 @@ import { DEVICE_FILES_LISTING_EVENT, type DeviceFilesListingPush, type FileListi
 
 import { ws } from '@/api/ws';
 import { Button, Dialog } from '@/Components';
+import { acquireMetrics } from '@/stores/metricsSubscription';
 import styles from './style.module.css';
 
 interface DeviceFolderPickerProps {
@@ -39,9 +40,20 @@ export default function DeviceFolderPicker({ open, deviceId, deviceName, onClose
         [deviceId]
     );
 
+    // Les réponses de l'agent (`files.listing`) ne sont diffusées qu'aux
+    // ABONNÉS de l'appareil (`hub.publishToSubscribers`). Sans abonnement, la
+    // commande partait bien, l'agent répondait bien, et le serveur jetait sa
+    // réponse faute de destinataire : « Chargement… » à l'infini. Chaque
+    // panneau du Monitoring qui consomme un push d'appareil prend le même
+    // abonnement ; celui-ci manquait ici. Le compte de références empêche de
+    // couper l'abonnement d'un autre écran ouvert sur la même machine.
     useEffect(() => {
         if (!open) return;
-        navigate('/');
+        return acquireMetrics(deviceId);
+    }, [open, deviceId]);
+
+    useEffect(() => {
+        if (!open) return;
         const off = ws.onMessage((msg) => {
             if (msg.command !== DEVICE_FILES_LISTING_EVENT || !msg.payload.ok) return;
             const d = msg.payload.data as DeviceFilesListingPush;
@@ -51,8 +63,15 @@ export default function DeviceFolderPicker({ open, deviceId, deviceName, onClose
                 setError(d.error ?? 'Dossier illisible');
                 return;
             }
+            setError(null);
             setListing(d.listing);
         });
+        // Navigation lancée APRÈS l'écoute, sinon une réponse rapide arriverait
+        // avant l'abonnement local et se perdrait à son tour. On repart de la
+        // racine et on vide l'ancienne arborescence : rouvrir le dialogue sur
+        // une autre machine ne doit pas montrer les dossiers de la précédente.
+        setListing(null);
+        navigate('/');
         return off;
     }, [open, deviceId, navigate]);
 
