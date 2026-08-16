@@ -369,8 +369,19 @@ export class SyncSession {
         //    doit pas être balayé ensuite) ;
         //  - à la suppression, les fichiers d'abord, les dossiers ensuite (on ne
         //    met pas un dossier à la corbeille avec son contenu encore dedans).
-        const dirsFirst = (a: PlanFile, b: PlanFile): number =>
-            a.kind === b.kind ? a.relPath.localeCompare(b.relPath) : a.kind === 'dir' ? -1 : 1;
+        //
+        // Entre deux dossiers l'ordre suit la PROFONDEUR, en sens inverse selon
+        // le cas : on crée le parent avant l'enfant, et on supprime l'enfant
+        // avant le parent. Sans ça, mettre `a` à la corbeille avant `a/b`
+        // emportait `a/b` avec lui — le résultat restait correct (la suppression
+        // suivante devient un no-op idempotent), mais la corbeille ne reflétait
+        // plus ce qui avait été demandé.
+        const depth = (relPath: string): number => relPath.split('/').length;
+        const dirsFirst = (a: PlanFile, b: PlanFile): number => {
+            if (a.kind !== b.kind) return a.kind === 'dir' ? -1 : 1;
+            if (a.kind === 'dir' && depth(a.relPath) !== depth(b.relPath)) return depth(a.relPath) - depth(b.relPath);
+            return a.relPath.localeCompare(b.relPath);
+        };
         const filesFirst = (a: PlanFile, b: PlanFile): number => -dirsFirst(a, b);
 
         for (const file of plan.uploads) {
@@ -922,7 +933,15 @@ export class SyncSession {
         const pathHash = relPathHash(file.relPath);
         const row = await db.syncFiles.getByRelPathHash(this.share.id, pathHash);
         if (row && row.state === 'present') {
-            await archiveCurrent(db, this.store, row, 'delete'); // Lève si blob absent.
+            // Un dossier n'a pas de contenu : rien à archiver, et rien à perdre.
+            // Son hash est celui du vide, pour lequel aucun blob n'est jamais
+            // écrit (voir `uploadFromDevice`, qui exclut déjà `dir` de
+            // l'archivage). L'archiver levait donc « blob absent » et annulait
+            // la suppression : un dossier vide supprimé sur un appareil était
+            // signalé en échec à chaque cycle et ne partait jamais du serveur.
+            if (row.kind !== 'dir') {
+                await archiveCurrent(db, this.store, row, 'delete'); // Lève si blob absent.
+            }
             await db.syncFiles.markDeleted(this.share.id, pathHash, this.deviceId);
             this.serverChanged = true;
         }
@@ -960,7 +979,12 @@ export class SyncSession {
         // ailleurs dans l'index. Sans cette seconde porte, l'optimisation des
         // déplacements condamnait chaque pair à ressusciter l'ancien chemin
         // à chaque cycle : le fichier réapparaissait indéfiniment, en double.
+        //
+        // Un DOSSIER n'a, lui, aucun contenu à archiver : exiger une preuve
+        // qui ne peut pas exister le faisait ressusciter à chaque cycle. La
+        // preuve ne porte que sur ce qui peut être perdu, donc sur du contenu.
         const archived =
+            file.kind === 'dir' ||
             (await db.syncVersions.exists(this.share.id, file.relPath, file.hash)) ||
             (await db.syncFiles.isHashReferenced(this.share.id, file.hash));
         if (!archived) {

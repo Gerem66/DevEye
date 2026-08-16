@@ -498,7 +498,14 @@ export class CloudSyncEngine {
             for (const row of rows) {
                 const problem = relPathProblem(row.rel_path);
                 try {
-                    await archiveCurrent(db, store, row, 'excluded'); // Lève si blob absent.
+                    // Un dossier n'a pas de contenu : rien à archiver, et son
+                    // hash (celui du vide) n'a jamais de blob. Sans cette garde
+                    // un dossier exclu ou au nom non portable échouait ici à
+                    // chaque balayage, restait dans l'index pour toujours et
+                    // repassait dans les logs à chaque tour.
+                    if (row.kind !== 'dir') {
+                        await archiveCurrent(db, store, row, 'excluded'); // Lève si blob absent.
+                    }
                 } catch (err) {
                     // Un blob manquant ne doit pas bloquer tout le balayage : on
                     // laisse la ligne en place et on le signale. Rien n'est perdu.
