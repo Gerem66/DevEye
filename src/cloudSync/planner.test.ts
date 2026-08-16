@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { SyncDeviceFileRow, SyncEntryKind, SyncFileRow, SyncIndexEntry } from 'deveye-types';
 import { SYNC_DIR_HASH, SYNC_MTIME_SKEW_MS } from 'deveye-types';
-import { planSession } from './planner';
+import { planSession, planSignature } from './planner';
 
 /**
  * Le planner est la seule pièce PURE de CloudSync, et celle dont dépend
@@ -280,5 +280,47 @@ describe('planSession — un déplacement ne laisse pas l’ancien chemin derri�
         );
         assert.deepEqual(plan.deleteOnDevice, []);
         assert.deepEqual(paths(plan.uploads), ['ancien.txt'], 'il est ressuscité, jamais détruit');
+    });
+});
+
+describe('planSignature', () => {
+    it('rend la même empreinte pour deux plans identiques', () => {
+        const build = () => planSession([device('a.txt', H.a)], [], []);
+        assert.equal(planSignature(build()), planSignature(build()));
+    });
+
+    it('ignore l’ordre d’énumération', () => {
+        // L'ordre des lignes rendues par MySQL n'est garanti nulle part : deux
+        // scans du même état ne doivent pas produire deux empreintes.
+        const un = planSession([device('a.txt', H.a), device('b.txt', H.b)], [], []);
+        const deux = planSession([device('b.txt', H.b), device('a.txt', H.a)], [], []);
+        assert.equal(planSignature(un), planSignature(deux));
+    });
+
+    it('change dès que le CONTENU d’un chemin change', () => {
+        // C'est ce qui fait qu'une reprise redevient visible : un fichier
+        // réécrit entre deux tentatives n'est plus « le même travail ».
+        const avant = planSession([device('a.txt', H.a)], [], []);
+        const apres = planSession([device('a.txt', H.b)], [], []);
+        assert.notEqual(planSignature(avant), planSignature(apres));
+    });
+
+    it('change dès qu’un chemin s’ajoute au travail', () => {
+        const seul = planSession([device('a.txt', H.a)], [], []);
+        const deux = planSession([device('a.txt', H.a), device('b.txt', H.b)], [], []);
+        assert.notEqual(planSignature(seul), planSignature(deux));
+    });
+
+    it('distingue un envoi d’une suppression sur le même chemin', () => {
+        const envoi = planSession([device('a.txt', H.a)], [], []);
+        const suppression = planSession([], [base('a.txt', H.a)], [server('a.txt', H.a)]);
+        assert.deepEqual(paths(suppression.deleteOnServer), ['a.txt']);
+        assert.notEqual(planSignature(envoi), planSignature(suppression));
+    });
+
+    it('rend une empreinte vide quand il n’y a rien à faire', () => {
+        const rien = planSession([device('a.txt', H.a)], [base('a.txt', H.a)], [server('a.txt', H.a)]);
+        assert.equal(rien.filesTotal, 0);
+        assert.equal(planSignature(rien), '');
     });
 });

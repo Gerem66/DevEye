@@ -154,6 +154,23 @@ suppression, qui se propagerait au dossier peuplé des autres appareils. L'agent
 retire de son côté les dossiers parents devenus vides après une mise à la
 corbeille.
 
+**Un dossier n'a pas de contenu, donc rien à archiver.** L'invariant
+« archive-avant-destruction » ne porte que sur ce qui peut être perdu : des
+octets. Le hash d'une entrée `dir` est celui du vide, pour lequel aucun blob
+n'est jamais écrit, si bien que le faire passer par `archiveCurrent` levait
+« blob absent » et **annulait la suppression**. Supprimer un dossier vide était
+donc impossible : l'appareil signalait « 1 fichier(s) non synchronisé(s) » à
+chaque cycle et le dossier ne partait jamais du serveur. Les trois voies
+concernées (`deleteOnServer`, l'hygiène d'index, la restauration de snapshot)
+excluent désormais `kind === 'dir'`, comme `uploadFromDevice` le faisait déjà.
+Symétriquement, `deleteOnDevice` n'exige pas de preuve d'archivage pour un
+dossier : une preuve qui ne peut pas exister le faisait ressusciter sans fin.
+
+Suppressions ordonnées par **profondeur décroissante** entre dossiers (et
+croissante à la création) : mettre `a` à la corbeille avant `a/b` emportait
+`a/b` avec lui. Le résultat restait correct — la suppression suivante devient un
+no-op idempotent — mais la corbeille ne reflétait plus ce qui avait été demandé.
+
 Le `mode` Unix (`& 0o777`) est transporté et réappliqué sur Linux/macOS. Un
 agent Windows annonce `null`, que le serveur interprète comme « je ne sais pas »
 et qui **conserve** la valeur en base : sans cette règle, un aller-retour par
@@ -364,6 +381,38 @@ La liste des appareils attachables n'est volontairement **pas** filtrée sur la
 présence : attacher un appareil hors ligne est légitime (il rattrape à sa
 prochaine connexion), et filtrer faisait disparaître de la liste l'appareil
 qu'on venait justement de mettre à jour, le temps de son redémarrage.
+
+Le sélecteur de dossier distant prend le même abonnement d'appareil que les
+panneaux du Monitoring (`acquireMetrics`). Les réponses de l'agent ne sont
+diffusées qu'aux **abonnés** (`hub.publishToSubscribers`) : sans lui, la commande
+partait, l'agent répondait, et le serveur jetait sa réponse faute de
+destinataire — « Chargement… » à l'infini. L'abonnement se prend avant la
+navigation, sinon une réponse rapide arrive avant l'écoute et se perd à son tour.
+
+### Ce qui déclenche un rendu, et ce qui n'en déclenche pas
+
+Trois filtres, chacun à l'endroit où il coûte le moins :
+
+1. **Le serveur ne republie pas un état identique** (`lastState`, comparaison sur
+   la charge sérialisée).
+2. **Une session sans travail visible ne s'annonce pas.** `isVisible` couvre deux
+   cas : le scan à vide (aucun fichier au plan) et, depuis, la **reprise à
+   l'identique d'un plan déjà échoué** — reconnue par `planSignature`, une
+   empreinte du travail planifié insensible à l'ordre d'énumération. Sans elle,
+   un échec permanent faisait osciller le partage entre « synchronisation » et
+   « erreur » à chaque cycle, rejouant l'animation de l'icône (`key={state}`
+   remonte le composant) : un à-coup visible toutes les deux secondes. Le sursis
+   de trois secondes continue de s'appliquer, pour qu'une reprise qui travaille
+   vraiment finisse par s'annoncer. L'audit `warning` suit la même règle : le
+   même échec, tour après tour, ne vaut qu'une entrée.
+3. **Le store client ne notifie que sur changement réel**, champ par champ
+   (`sameProgress`, `applyState`). `sessionId` est délibérément exclu de la
+   comparaison : il change à chaque tentative, y compris quand rien de visible
+   n'a bougé.
+
+L'ordre importe : chaque filtre traite une cause différente, et aucun ne masque
+un vrai changement d'état. Réduire les rendus sans traiter la cause en amont
+donnerait une interface qui ne suit plus.
 
 ## Tests
 

@@ -351,3 +351,32 @@ export function planSession(
 
     return plan;
 }
+
+/**
+ * Empreinte du travail décrit par un plan, indépendante de l'ordre.
+ *
+ * Sert à reconnaître une session qui reprend, à l'identique, un travail qui
+ * vient d'échouer : même empreinte ⇒ mêmes chemins, mêmes contenus, mêmes
+ * opérations, donc aucun progrès à annoncer. Voir `SyncSession.isVisible`.
+ *
+ * Volontairement construite sur le chemin ET le contenu : un fichier réécrit
+ * entre deux tentatives change de hash, donc d'empreinte, et la reprise
+ * redevient visible. Le tri rend l'empreinte insensible à l'ordre d'énumération
+ * de la base, qui n'est garanti nulle part.
+ */
+export function planSignature(plan: Plan): string {
+    const parts: string[] = [];
+    const add = (tag: string, files: { relPath: string; hash: string }[]): void => {
+        for (const f of files) parts.push(`${tag} ${f.relPath} ${f.hash}`);
+    };
+    add('up', plan.uploads);
+    add('down', plan.downloads);
+    add('delS', plan.deleteOnServer);
+    add('delD', plan.deleteOnDevice);
+    for (const m of plan.modeChanges) parts.push(`mode ${m.target} ${m.file.relPath} ${m.mode}`);
+    for (const m of plan.moves) parts.push(`mv ${m.from.relPath} ${m.to.relPath} ${m.to.hash}`);
+    for (const c of plan.conflicts) parts.push(`cf ${c.device.relPath} ${c.winner}`);
+    for (const s of plan.skipped) parts.push(`skip ${s.relPath} ${s.reason}`);
+    parts.sort();
+    return parts.join('\n');
+}

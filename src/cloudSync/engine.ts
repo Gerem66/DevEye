@@ -85,6 +85,14 @@ export class CloudSyncEngine {
     private readonly lastError = new Map<number, string>();
     /** Dernier état PUBLIÉ par partage, pour ne pas repousser à l'identique. */
     private readonly lastState = new Map<number, string>();
+    /**
+     * Empreinte du dernier plan ÉCHOUÉ par paire, effacée dès qu'une session
+     * réussit. Une nouvelle session de même empreinte reprend exactement le même
+     * travail : elle se tait au lieu de faire clignoter le partage entre
+     * « synchronisation » et « erreur » à chaque cycle. Voir
+     * `SyncSession.isVisible`.
+     */
+    private readonly failedPlan = new Map<string, string>();
 
     constructor(private readonly deps: EngineDeps) {}
 
@@ -253,6 +261,11 @@ export class CloudSyncEngine {
 
     /** Un appareil détaché doit aussi perdre son assignation (config re-poussée). */
     async notifyDeviceDetached(deviceId: string): Promise<void> {
+        // Ses paires n'existent plus : garder leur mémoire ferait hériter un
+        // ré-attachement futur de l'échec de l'attache précédente.
+        const suffix = `:${deviceId}`;
+        for (const key of this.lastProgress.keys()) if (key.endsWith(suffix)) this.lastProgress.delete(key);
+        for (const key of this.failedPlan.keys()) if (key.endsWith(suffix)) this.failedPlan.delete(key);
         await this.pushConfigTo(deviceId);
     }
 
@@ -334,7 +347,17 @@ export class CloudSyncEngine {
             logger,
             claimOp: (opId, ownerDeviceId, push) => this.ops.set(opId, { deviceId: ownerDeviceId, push }),
             releaseOp: (opId) => this.ops.delete(opId),
-            onPlanned: () => this.publishShareState(shareId),
+            onPlanned: () => {
+                // Le plan est arrêté : c'est ici, et seulement ici, qu'on peut
+                // dire si cette session reprend le travail qui vient d'échouer.
+                // Posé AVANT la publication, sinon l'état partirait en
+                // « synchronisation » avant que la session sache se taire.
+                const previous = this.failedPlan.get(key);
+                if (previous !== undefined && previous === session.signature) {
+                    session.markRepeatOfFailedPlan();
+                }
+                this.publishShareState(shareId);
+            },
             publishProgress: (progress) => {
                 this.lastProgress.set(key, progress);
                 hub.publishSyncProgress(progress);
@@ -368,7 +391,19 @@ export class CloudSyncEngine {
         } finally {
             this.running.delete(key);
             const last = this.lastProgress.get(key);
-            if (last?.state === 'error') {
+            // Mémorisation de l'échec par son PLAN, pas par son message : c'est
+            // ce qui permet à la tentative suivante de reconnaître qu'elle
+            // reprend le même travail (et donc de ne pas faire clignoter le
+            // partage). Effacé au succès, pour qu'un échec réglé n'étouffe pas
+            // le prochain vrai transfert.
+            const signature = session.signature;
+            const repeated = last?.state === 'error' && signature !== null && this.failedPlan.get(key) === signature;
+            if (last?.state === 'error' && signature !== null) this.failedPlan.set(key, signature);
+            else if (last?.state !== 'error') this.failedPlan.delete(key);
+
+            // Le même échec, tour après tour, ne vaut qu'une entrée d'audit :
+            // le journal doit garder la trace du problème, pas la compter.
+            if (last?.state === 'error' && !repeated) {
                 audit.record({
                     source: 'system',
                     category: 'cloudSync',
@@ -894,7 +929,14 @@ export class CloudSyncEngine {
         await this.runExclusive(share.id, async () => {
             await this.deps.db.syncShares.delete(share.id);
             this.storeCache().drop(share.storage_path);
+            // Toute la mémoire vive tenue POUR ce partage part avec lui, sinon
+            // un partage recréé sur le même identifiant hériterait de l'état du
+            // précédent (et les entrées s'accumuleraient sans jamais partir).
             this.lastState.delete(share.id);
+            this.lastError.delete(share.id);
+            const prefix = `${share.id}:`;
+            for (const key of this.lastProgress.keys()) if (key.startsWith(prefix)) this.lastProgress.delete(key);
+            for (const key of this.failedPlan.keys()) if (key.startsWith(prefix)) this.failedPlan.delete(key);
             if (deleteData) {
                 // On n'efface QUE ce que le store possède (`blobs/`, `tmp/`) —
                 // jamais un rm -rf du dossier de stockage entier, qui pourrait

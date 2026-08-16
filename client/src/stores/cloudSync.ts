@@ -28,13 +28,62 @@ function emit(): void {
     for (const fn of listeners) fn();
 }
 
-function applyProgress(p: CloudSyncProgress): void {
+/** Retourne vrai si la vue a RÉELLEMENT changé (donc si un rendu se justifie). */
+function applyProgress(p: CloudSyncProgress): boolean {
     const key = `${p.shareId}:${p.deviceId}`;
     if (p.state === 'done' || p.state === 'error' || p.state === 'cancelled') {
-        progressByPair.delete(key); // L'issue est portée par l'état agrégé.
-    } else {
-        progressByPair.set(key, p);
+        return progressByPair.delete(key); // L'issue est portée par l'état agrégé.
     }
+    const previous = progressByPair.get(key);
+    progressByPair.set(key, p);
+    return previous === undefined || !sameProgress(previous, p);
+}
+
+/**
+ * Deux progressions équivalentes À L'AFFICHAGE.
+ *
+ * Le serveur republie à cadence fixe, y compris quand rien n'a bougé (fin de
+ * transfert, attente d'un pair, reprise qui piétine). Rendre à l'identique n'a
+ * aucun effet visible mais coûte un rendu de toute la vue à chaque tour, ce qui
+ * se voyait sous forme de micro-à-coups.
+ *
+ * On compare donc CHAMP PAR CHAMP plutôt que par référence : c'est la seule
+ * façon d'être sûr de ne rien étouffer, un champ nouveau devant être ajouté ici
+ * explicitement pour être ignoré.
+ *
+ * `sessionId` est délibérément hors de la comparaison : il change à chaque
+ * tentative, y compris quand la précédente s'est arrêtée sur exactement le même
+ * point. Le comparer reviendrait à re-rendre à chaque cycle une vue qui n'a pas
+ * bougé d'un pixel — précisément ce qu'on cherche à éviter ici.
+ */
+function sameProgress(a: CloudSyncProgress, b: CloudSyncProgress): boolean {
+    return (
+        a.state === b.state &&
+        a.direction === b.direction &&
+        a.filesDone === b.filesDone &&
+        a.filesTotal === b.filesTotal &&
+        a.bytesDone === b.bytesDone &&
+        a.bytesTotal === b.bytesTotal &&
+        a.currentPath === b.currentPath &&
+        a.currentBytes === b.currentBytes &&
+        a.currentTotal === b.currentTotal &&
+        a.error === b.error
+    );
+}
+
+/** Idem pour l'état agrégé, dont la volumétrie change plus rarement que le rythme de publication. */
+function applyState(s: CloudSyncShareState): boolean {
+    const previous = stateByShare.get(s.shareId);
+    stateByShare.set(s.shareId, s);
+    return (
+        previous === undefined ||
+        previous.state !== s.state ||
+        previous.detail !== s.detail ||
+        previous.stats.fileCount !== s.stats.fileCount ||
+        previous.stats.liveBytes !== s.stats.liveBytes ||
+        previous.stats.versionCount !== s.stats.versionCount ||
+        previous.stats.versionBytes !== s.stats.versionBytes
+    );
 }
 
 function sendSubscribe(shareIds: number[]): void {
@@ -42,9 +91,10 @@ function sendSubscribe(shareIds: number[]): void {
     void ws
         .send('cloudSync.subscribe', { shareIds })
         .then((out) => {
-            for (const p of out.progress) applyProgress(p);
-            for (const s of out.states) stateByShare.set(s.shareId, s);
-            emit();
+            let changed = false;
+            for (const p of out.progress) changed = applyProgress(p) || changed;
+            for (const s of out.states) changed = applyState(s) || changed;
+            if (changed) emit();
         })
         .catch(() => {});
 }
@@ -53,12 +103,9 @@ function ensureWired(): void {
     if (!offMessage) {
         offMessage = ws.onMessage((msg) => {
             if (msg.command === CLOUD_SYNC_PROGRESS_EVENT && msg.payload.ok) {
-                applyProgress(msg.payload.data as CloudSyncProgress);
-                emit();
+                if (applyProgress(msg.payload.data as CloudSyncProgress)) emit();
             } else if (msg.command === CLOUD_SYNC_STATE_EVENT && msg.payload.ok) {
-                const s = msg.payload.data as CloudSyncShareState;
-                stateByShare.set(s.shareId, s);
-                emit();
+                if (applyState(msg.payload.data as CloudSyncShareState)) emit();
             }
         });
     }

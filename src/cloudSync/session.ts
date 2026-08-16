@@ -8,6 +8,7 @@ import { compileExclusions } from './exclusions';
 import { makeBucket, type TokenBucket } from './rateLimit';
 import {
     planSession,
+    planSignature,
     type Plan,
     type PlanConflict,
     type PlanFile,
@@ -167,6 +168,18 @@ export class SyncSession {
     private renamedAway = new Set<string>();
     private readonly startedAt = Date.now();
     /**
+     * Empreinte du travail planifié : ce que cette session s'apprête à faire,
+     * indépendamment de l'ordre. Le moteur la compare à celle de la tentative
+     * précédente pour savoir si une nouvelle session est un vrai progrès ou la
+     * énième reprise du même échec. Voir {@link isVisible}.
+     */
+    private planSignature: string | null = null;
+    /**
+     * Le plan est-il exactement celui qui a déjà échoué juste avant ? Posé par
+     * le moteur, seul à connaître la tentative précédente.
+     */
+    private repeatsFailedPlan = false;
+    /**
      * Plafond de débit des DESCENTES ; `null` = illimité (le défaut). Les
      * montées sont bridées par l'agent, qui en est l'émetteur — brider ici ne
      * ferait que gonfler les tampons intermédiaires sans ralentir la source.
@@ -201,9 +214,36 @@ export class SyncSession {
      * du bruit permanent pour un état qui, lui, n'a pas bougé. On n'annonce donc
      * que s'il y a du vrai travail, ou si le scan dure assez longtemps pour que
      * se taire deviendrait mensonger.
+     *
+     * Deuxième cas de bruit, plus sournois : un travail qui échoue TOUJOURS de
+     * la même façon (un fichier verrouillé, un chemin illisible) est replanifié
+     * à chaque cycle. Il a bien `filesTotal > 0`, donc il s'annonçait — et le
+     * partage repassait « synchronisation » puis « erreur » indéfiniment, en
+     * rejouant l'animation de l'icône à chaque tour. Reprendre à l'identique un
+     * plan déjà échoué n'est pourtant pas un progrès : tant que rien n'a bougé,
+     * l'erreur affichée reste la vérité, et on la laisse en place.
+     *
+     * Le sursis de {@link VISIBLE_AFTER_MS} continue de s'appliquer : une
+     * reprise qui s'éternise finit par s'annoncer, parce que se taire pendant
+     * une minute de travail réel serait mensonger à son tour.
      */
     get isVisible(): boolean {
+        if (this.repeatsFailedPlan) return Date.now() - this.startedAt > VISIBLE_AFTER_MS;
         return this.filesTotal > 0 || Date.now() - this.startedAt > VISIBLE_AFTER_MS;
+    }
+
+    /**
+     * Empreinte du travail planifié, ou `null` tant que le plan est inconnu.
+     * Deux sessions de même empreinte s'apprêtent à faire exactement la même
+     * chose.
+     */
+    get signature(): string | null {
+        return this.planSignature;
+    }
+
+    /** Déclare que ce plan reprend, à l'identique, celui qui vient d'échouer. */
+    markRepeatOfFailedPlan(): void {
+        this.repeatsFailedPlan = true;
     }
 
     /**
@@ -349,6 +389,7 @@ export class SyncSession {
 
         this.filesTotal = plan.filesTotal;
         this.bytesTotal = plan.bytesTotal;
+        this.planSignature = planSignature(plan);
         await this.persistProgress(true);
         // Le plan vient d'être arrêté : c'est MAINTENANT qu'on sait s'il y a du
         // travail, donc maintenant que l'état agrégé mérite d'être republié.
