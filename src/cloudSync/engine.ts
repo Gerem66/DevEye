@@ -334,6 +334,7 @@ export class CloudSyncEngine {
             logger,
             claimOp: (opId, ownerDeviceId, push) => this.ops.set(opId, { deviceId: ownerDeviceId, push }),
             releaseOp: (opId) => this.ops.delete(opId),
+            onPlanned: () => this.publishShareState(shareId),
             publishProgress: (progress) => {
                 this.lastProgress.set(key, progress);
                 hub.publishSyncProgress(progress);

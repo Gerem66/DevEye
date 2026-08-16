@@ -23,6 +23,7 @@ import {
     AGENT_SYNC_APPLY_LOCAL,
     AGENT_SYNC_CONFIG,
     AGENT_SYNC_DELETE,
+    AGENT_SYNC_MOVE,
     AGENT_SYNC_PUSH,
     AGENT_SYNC_SCAN,
     AGENT_TERM_CLOSE,
@@ -69,6 +70,7 @@ import {
     type AgentSyncApplyLocalPayload,
     type AgentSyncConfigPayload,
     type AgentSyncDeletePayload,
+    type AgentSyncMovePayload,
     type AgentSyncPushPayload,
     type AgentSyncScanPayload,
     type AgentTermClosePayload,
@@ -556,6 +558,11 @@ export class MonitorHub {
     /** Ask a connected agent to install content it already holds at another path. */
     requestSyncApplyLocal(deviceId: string, payload: AgentSyncApplyLocalPayload): boolean {
         return this.sendToAgent(deviceId, AGENT_SYNC_APPLY_LOCAL, payload);
+    }
+
+    /** Ask a connected agent to rename a file in place (no transfer, no trash). */
+    requestSyncMove(deviceId: string, payload: AgentSyncMovePayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_SYNC_MOVE, payload);
     }
 
     /** Propagate a deletion (local recycle) to a connected agent. No-op if offline. */

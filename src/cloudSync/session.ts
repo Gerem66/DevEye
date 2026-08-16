@@ -6,7 +6,14 @@ import type { MonitorHub } from '../agent/hub';
 import { BlobHashMismatchError, type ShareBlobStore } from './blobStore';
 import { compileExclusions } from './exclusions';
 import { makeBucket, type TokenBucket } from './rateLimit';
-import { planSession, type Plan, type PlanConflict, type PlanFile, type PlanModeChange } from './planner';
+import {
+    planSession,
+    type Plan,
+    type PlanConflict,
+    type PlanFile,
+    type PlanModeChange,
+    type PlanMove
+} from './planner';
 import { normalizeRelPath, relPathHash, relPathProblem } from './pathValidation';
 import { archiveBlobAsVersion, archiveCurrent } from './versions';
 
@@ -33,7 +40,7 @@ export type AgentSyncEvent =
     | { type: 'ack'; seq: number }
     | {
           type: 'opResult';
-          op: 'apply' | 'applyDir' | 'applyLocal' | 'applyReady' | 'delete' | 'push';
+          op: 'apply' | 'applyDir' | 'applyLocal' | 'applyReady' | 'delete' | 'move' | 'push';
           ok: boolean;
           /** `applyReady` seulement : octets de clair déjà détenus par l'agent. */
           resumeFrom?: number;
@@ -50,6 +57,8 @@ export interface SessionHost {
     releaseOp(opId: string): void;
     /** Publie la progression aux abonnés web (et la met en cache pour les snapshots). */
     publishProgress(progress: CloudSyncProgress): void;
+    /** Le plan est connu : l'état agrégé du partage peut être réévalué. */
+    onPlanned(): void;
 }
 
 /** File d'événements consommée séquentiellement, avec timeout d'inactivité. */
@@ -140,6 +149,14 @@ export class SyncSession {
      * qu'en re-téléchargement. Rempli au moment du plan.
      */
     private baselineByHash = new Map<string, string>();
+    /**
+     * Chemins que ce plan va faire disparaître de l'appareil. Croisé avec
+     * {@link baselineByHash}, c'est ce qui distingue un DÉPLACEMENT (le contenu
+     * quitte un chemin pour un autre : on renomme) d'une simple copie (il reste
+     * aux deux endroits). Sans cette distinction, un déplacement laissait une
+     * copie intégrale dans la corbeille de chaque pair.
+     */
+    private movedAway = new Set<string>();
     private readonly startedAt = Date.now();
     /**
      * Plafond de débit des DESCENTES ; `null` = illimité (le défaut). Les
@@ -179,6 +196,14 @@ export class SyncSession {
      */
     get isVisible(): boolean {
         return this.filesTotal > 0 || Date.now() - this.startedAt > VISIBLE_AFTER_MS;
+    }
+
+    /**
+     * Le plan est-il connu ? Tant qu'il ne l'est pas (scan en cours), `isVisible`
+     * ne peut pas encore trancher, et l'état publié ne doit pas être figé.
+     */
+    get planned(): boolean {
+        return this.state !== 'scanning';
     }
 
     /** Écrit une ligne dans le journal du partage (popup « Logs »), sans juger la session. */
@@ -305,6 +330,7 @@ export class SyncSession {
         // Ce que l'appareil a déjà sous la main, indexé par contenu. Seuls les
         // chemins encore présents dans le scan comptent : une baseline qui ne
         // correspond plus à rien sur le disque ferait échouer la copie locale.
+        this.movedAway = new Set(plan.deleteOnDevice.filter((f) => f.kind !== 'dir').map((f) => f.relPath));
         const scanned = new Set(device.map((e) => e.relPath));
         this.baselineByHash = new Map(
             baseline
@@ -315,6 +341,10 @@ export class SyncSession {
         this.filesTotal = plan.filesTotal;
         this.bytesTotal = plan.bytesTotal;
         await this.persistProgress(true);
+        // Le plan vient d'être arrêté : c'est MAINTENANT qu'on sait s'il y a du
+        // travail, donc maintenant que l'état agrégé mérite d'être republié.
+        // Sans ça, un vrai transfert n'apparaissait qu'au bout de trois secondes.
+        this.host.onPlanned();
         return plan;
     }
 
@@ -348,6 +378,11 @@ export class SyncSession {
             await this.guardedStep(change.file.relPath, change.target === 'server' ? 'up' : 'down', () =>
                 this.applyModeChange(change)
             );
+        }
+        // AVANT les suppressions : un déplacement doit être reconnu comme tel,
+        // pas exécuté par ses deux moitiés.
+        for (const move of plan.moves) {
+            await this.guardedStep(move.to.relPath, 'up', () => this.applyMove(move));
         }
         for (const file of [...plan.deleteOnServer].sort(filesFirst)) {
             await this.guardedStep(file.relPath, 'delete', () => this.deleteOnServer(file));
@@ -629,6 +664,37 @@ export class SyncSession {
     }
 
     /**
+     * Tente le RENOMMAGE local : le contenu quitte un chemin pour un autre sur
+     * l'appareil. Ni transfert, ni corbeille. Un échec n'est pas grave — le
+     * serveur retombe sur le chemin ordinaire, qui reste sûr.
+     */
+    private async tryMove(file: PlanFile, fromRelPath: string): Promise<boolean> {
+        const opId = crypto.randomUUID();
+        const queue = new EventQueue();
+        this.host.claimOp(opId, this.deviceId, (ev) => queue.push(ev));
+        try {
+            const sent = this.host.hub.requestSyncMove(this.deviceId, {
+                opId,
+                shareId: this.share.id,
+                fromRelPath,
+                relPath: file.relPath,
+                hash: file.hash,
+                size: file.size,
+                mtime: file.mtime,
+                mode: file.mode
+            });
+            if (!sent) throw new SessionAbort('error', 'Agent hors ligne');
+            for (;;) {
+                const ev = await queue.next(OP_TIMEOUT_MS);
+                if (ev.type !== 'opResult') continue;
+                return ev.ok;
+            }
+        } finally {
+            this.host.releaseOp(opId);
+        }
+    }
+
+    /**
      * Tente l'installation par copie LOCALE : l'appareil possède déjà ce contenu
      * exact ailleurs dans le partage (renommage, déplacement, copie). Renvoie
      * `false` si l'agent n'a pas pu — l'appelant retombe alors sur le transfert
@@ -701,10 +767,22 @@ export class SyncSession {
         }
 
         // L'appareil a-t-il déjà ce contenu exact ailleurs ? Sa baseline le dit.
-        // Un déplacement devient alors une copie locale instantanée au lieu d'un
-        // re-téléchargement intégral.
         const localSource = this.baselineByHash.get(file.hash);
         if (localSource !== undefined && localSource !== file.relPath) {
+            // Ce contenu va-t-il DISPARAÎTRE de son ancien chemin ? Alors c'est
+            // un déplacement, et il se renomme : copier puis mettre l'original à
+            // la corbeille garderait une copie intégrale pour rien.
+            if (this.movedAway.has(localSource)) {
+                if (await this.tryMove(file, localSource)) {
+                    this.movedAway.delete(localSource);
+                    await this.host.db.syncFiles.deleteBaseline(this.share.id, this.deviceId, relPathHash(localSource));
+                    await this.writeBaseline(file);
+                    await this.fileDone(file.size);
+                    return;
+                }
+            }
+            // Sinon le contenu reste aux deux endroits : copie locale, toujours
+            // sans transfert réseau.
             if (await this.tryLocalCopy(file, localSource)) {
                 await this.writeBaseline(file);
                 await this.fileDone(file.size); // Aucun octet sur le fil : compté ici.
@@ -788,6 +866,45 @@ export class SyncSession {
         }
     }
 
+    /**
+     * Un déplacement : le même contenu change de chemin.
+     *
+     * Ni version, ni corbeille, ni transfert. C'est l'intérêt de l'appariement :
+     * traiter les deux moitiés séparément archivait une copie intégrale côté
+     * serveur ET en déposait une autre dans la corbeille de chaque pair, pour
+     * une opération qui ne détruit rien. Le blob, lui, ne bouge pas d'un octet —
+     * il est adressé par son contenu, pas par son chemin.
+     *
+     * L'appareil source a DÉJÀ déplacé le fichier (c'est ce qui a produit le
+     * plan) : il n'y a que l'index à recoller. Les pairs, eux, reçoivent l'ordre
+     * de renommer à leur prochaine session.
+     */
+    private async applyMove(move: PlanMove): Promise<void> {
+        const { db } = this.host;
+        const fromHash = relPathHash(move.from.relPath);
+        const toHash = relPathHash(move.to.relPath);
+
+        await db.syncFiles.upsert({
+            shareId: this.share.id,
+            relPath: move.to.relPath,
+            relPathHash: toHash,
+            kind: move.to.kind,
+            hash: move.to.hash,
+            size: move.to.size,
+            mtime: move.to.mtime,
+            mode: move.to.mode,
+            sourceDeviceId: this.deviceId
+        });
+        // L'ancien chemin part sans archivage : son contenu vit toujours, sous
+        // le nouveau nom. Archiver reviendrait à garder deux fois le même octet.
+        await db.syncFiles.markDeleted(this.share.id, fromHash, this.deviceId);
+        this.serverChanged = true;
+
+        await db.syncFiles.deleteBaseline(this.share.id, this.deviceId, fromHash);
+        await this.writeBaseline(move.to);
+        await this.fileDone(0);
+    }
+
     /** Suppression constatée sur l'appareil : archive → index `deleted` → baseline. */
     private async deleteOnServer(file: PlanFile): Promise<void> {
         const { db } = this.host;
@@ -805,6 +922,13 @@ export class SyncSession {
     /** Suppression à propager : l'appareil ne détruit qu'après preuve d'archive. */
     private async deleteOnDevice(file: PlanFile): Promise<void> {
         const { db } = this.host;
+        // Déjà consommée par un renommage plus haut dans le plan : le fichier
+        // n'est plus là, et il n'a jamais été détruit.
+        if (!this.movedAway.has(file.relPath) && this.baselineByHash.get(file.hash) === file.relPath) {
+            await db.syncFiles.deleteBaseline(this.share.id, this.deviceId, relPathHash(file.relPath));
+            await this.fileDone(0);
+            return;
+        }
         // Invariant vérifié côté serveur AVANT l'ordre : une version archivée de ce
         // chemin AVEC ce contenu exact doit exister.
         //

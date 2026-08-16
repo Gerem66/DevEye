@@ -169,8 +169,23 @@ planner écarterait ensuite pour toujours en « conflit de nature ».
 
 ## Déplacements et renommages
 
-Un renommage se lit comme « suppression ici + ajout là du MÊME hash ». Les deux
-bouts sont optimisés, et aucun octet ne traverse le réseau :
+Un renommage se lit comme « suppression ici + ajout là du MÊME hash ». Le
+planner **apparie ces deux moitiés** (`plan.moves`) au lieu de les traiter
+séparément, ce qui change tout : un déplacement ne crée alors **ni version
+serveur, ni entrée de corbeille chez les pairs**. Traité en deux temps, il
+coûtait deux copies intégrales du fichier pour une opération qui ne détruit
+rien — c'est ce qui faisait gonfler la corbeille.
+
+Chez l'appareil source, il n'y a que l'index à recoller (le fichier a déjà
+bougé). Chez les pairs, le serveur envoie `sync.move` et l'agent **renomme sur
+place**, après avoir vérifié que la source porte bien le contenu attendu. Un
+échec retombe sur le chemin ordinaire, qui reste sûr.
+
+Distinction qui compte : on ne renomme que si le contenu QUITTE son ancien
+chemin. S'il y reste (une copie), c'est une copie locale — sans quoi on
+détruirait l'original.
+
+Et aucun octet ne traverse le réseau dans les deux cas :
 - **montée** : si le blob store possède déjà ce hash, l'upload est sauté (le CAS
   garantit que le blob de ce hash *est* ce contenu) ;
 - **descente** : si la baseline de l'appareil montre qu'il détient déjà ce

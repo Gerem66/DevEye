@@ -986,6 +986,24 @@ pub enum ServerMessage {
         #[serde(default)]
         mode: Option<u32>,
     },
+    /// CloudSync: rename a file in place. No transfer, no trash — the content
+    /// does not move, only its path does.
+    #[serde(rename = "sync.move")]
+    SyncMove {
+        #[serde(rename = "opId")]
+        op_id: String,
+        #[serde(rename = "shareId")]
+        share_id: i64,
+        #[serde(rename = "fromRelPath")]
+        from_rel_path: String,
+        #[serde(rename = "relPath")]
+        rel_path: String,
+        hash: String,
+        size: u64,
+        mtime: i64,
+        #[serde(default)]
+        mode: Option<u32>,
+    },
     /// CloudSync: move a local file to the share's trash (`.deveye-trash/`).
     /// Only ever sent once a hash-verified server-side version exists.
     #[serde(rename = "sync.delete")]

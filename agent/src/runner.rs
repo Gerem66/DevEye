@@ -706,6 +706,13 @@ async fn stream_session(
                                 });
                                 commands::send_sync_event(&mut sink, device_id, ev).await;
                             }
+                            // CloudSync: rename in place (no transfer, no trash).
+                            Ok(ServerMessage::SyncMove { op_id, share_id, from_rel_path, rel_path, hash, size, mtime, mode }) => {
+                                let ev = tokio::task::block_in_place(|| {
+                                    sync_mgr.move_file(&op_id, share_id, &from_rel_path, &rel_path, &hash, size, mtime, mode)
+                                });
+                                commands::send_sync_event(&mut sink, device_id, ev).await;
+                            }
                             // CloudSync: propagate a deletion (local trash, never unlink).
                             Ok(ServerMessage::SyncDelete { op_id, share_id, rel_path }) => {
                                 let ev = tokio::task::block_in_place(|| {

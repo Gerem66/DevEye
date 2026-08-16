@@ -336,6 +336,41 @@ impl SyncManager {
         }
     }
 
+    /// Déplacement propagé : renommage sur place, sans corbeille ni transfert.
+    #[allow(clippy::too_many_arguments)]
+    pub fn move_file(
+        &self,
+        op_id: &str,
+        share_id: i64,
+        from_rel_path: &str,
+        rel_path: &str,
+        hash: &str,
+        size: u64,
+        mtime: i64,
+        mode: Option<u32>,
+    ) -> SyncEvent {
+        let outcome = match self.assignment(share_id) {
+            Some(a) => transfer::move_file(
+                &PathBuf::from(&a.local_path),
+                from_rel_path,
+                rel_path,
+                hash,
+                size,
+                mtime,
+                mode,
+            )
+            .map_err(|e| e.to_string()),
+            None => Err("Partage inconnu sur cet appareil".to_string()),
+        };
+        SyncEvent::OpResult {
+            op_id: op_id.to_string(),
+            op: "move",
+            ok: outcome.is_ok(),
+            resume_from: None,
+            error: outcome.err(),
+        }
+    }
+
     /// Suppression propagée : corbeille locale, puis `sync.opResult`.
     pub fn delete(&self, op_id: &str, share_id: i64, rel_path: &str) -> SyncEvent {
         let outcome = match self.assignment(share_id) {

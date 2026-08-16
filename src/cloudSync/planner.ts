@@ -37,6 +37,18 @@ export interface PlanConflict {
     server: PlanFile;
 }
 
+/**
+ * Un déplacement ou un renommage : le MÊME contenu quitte un chemin pour un
+ * autre. Apparié parce que traiter les deux moitiés séparément coûte deux
+ * copies parfaitement inutiles du fichier — une version côté serveur, et une
+ * entrée de corbeille chez chaque pair — pour une opération qui ne détruit
+ * rien.
+ */
+export interface PlanMove {
+    from: PlanFile;
+    to: PlanFile;
+}
+
 /** Un changement de permissions seul : même contenu, aucun transfert. */
 export interface PlanModeChange {
     /** Vers où pousser le mode : l'index serveur, ou l'appareil. */
@@ -60,6 +72,8 @@ export interface Plan {
     refreshBaseline: PlanFile[];
     /** Contenu identique, permissions divergentes : `chmod` sans transfert. */
     modeChanges: PlanModeChange[];
+    /** Déplacements/renommages appariés (voir {@link PlanMove}). */
+    moves: PlanMove[];
     /** Baselines orphelines (chemin disparu des deux côtés) : à purger. */
     dropBaseline: string[];
     /** Chemins ignorés avec raison (collisions de casse…) — remontés en warning. */
@@ -156,6 +170,7 @@ export function planSession(
         conflicts: [],
         refreshBaseline: [],
         modeChanges: [],
+        moves: [],
         dropBaseline: [],
         skipped: [],
         filesTotal: 0,
@@ -282,13 +297,52 @@ export function planSession(
         if (b) plan.dropBaseline.push(relPath);
     }
 
+    // ─── Appariement des déplacements ──────────────────────────────────────
+    //
+    // Une suppression et un ajout du MÊME contenu, dans la même session, sont
+    // les deux moitiés d'un déplacement. Les laisser séparés reviendrait à
+    // archiver l'ancien chemin en version ET à mettre une copie à la corbeille
+    // chez chaque pair — deux copies intégrales pour une opération qui ne perd
+    // rien. On les recolle, et la session se contentera de renommer.
+    //
+    // Seuls les fichiers sont appariés : un dossier vide n'a pas de contenu qui
+    // permette de reconnaître qu'il s'agit du même.
+    const removedByHash = new Map<string, PlanFile[]>();
+    for (const gone of plan.deleteOnServer) {
+        if (gone.kind === 'dir') continue;
+        const bucket = removedByHash.get(gone.hash);
+        if (bucket) bucket.push(gone);
+        else removedByHash.set(gone.hash, [gone]);
+    }
+
+    if (removedByHash.size > 0) {
+        const remainingUploads: PlanFile[] = [];
+        const moved = new Set<PlanFile>();
+        for (const added of plan.uploads) {
+            const bucket = added.kind === 'dir' ? undefined : removedByHash.get(added.hash);
+            const from = bucket?.shift();
+            if (from === undefined) {
+                remainingUploads.push(added);
+                continue;
+            }
+            moved.add(from);
+            plan.moves.push({ from, to: added });
+        }
+        plan.uploads = remainingUploads;
+        plan.deleteOnServer = plan.deleteOnServer.filter((f) => !moved.has(f));
+    }
+
     const transfers = [
         ...plan.uploads,
         ...plan.downloads,
         ...plan.conflicts.map((c) => (c.winner === 'device' ? c.device : c.server))
     ];
     plan.filesTotal =
-        transfers.length + plan.deleteOnServer.length + plan.deleteOnDevice.length + plan.modeChanges.length;
+        transfers.length +
+        plan.deleteOnServer.length +
+        plan.deleteOnDevice.length +
+        plan.modeChanges.length +
+        plan.moves.length;
     // Les conflits comptent aussi l'archivage du perdant côté appareil (upload).
     const conflictLoserBytes = plan.conflicts
         .filter((c) => c.winner === 'server')

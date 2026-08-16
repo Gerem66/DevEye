@@ -587,6 +587,54 @@ fn uuid_like(rel_path: &str, mtime: i64) -> String {
     format!("{:x}", hasher.finalize())[..32].to_string()
 }
 
+/// Renomme un fichier sur place : un déplacement, pas une copie suivie d'une
+/// suppression.
+///
+/// Le hash de la source est VÉRIFIÉ d'abord — sans quoi un fichier modifié
+/// entre le scan et l'ordre serait déplacé sous un nom que le serveur croit
+/// porter un autre contenu. En cas de doute on refuse, et le serveur retombe
+/// sur le chemin ordinaire (téléchargement puis corbeille), qui reste sûr.
+#[allow(clippy::too_many_arguments)]
+pub fn move_file(
+    root: &Path,
+    from_rel_path: &str,
+    rel_path: &str,
+    hash: &str,
+    size: u64,
+    mtime: i64,
+    mode: Option<u32>,
+) -> Result<()> {
+    let src = safe_join(root, from_rel_path)?;
+    let meta = std::fs::symlink_metadata(&src).context("source introuvable")?;
+    if !meta.is_file() {
+        bail!("la source n'est pas un fichier régulier");
+    }
+    if meta.len() != size {
+        bail!("taille de la source inattendue");
+    }
+    if hash_file(&src)? != hash {
+        bail!("contenu de la source inattendu");
+    }
+
+    let dest = safe_join(root, rel_path)?;
+    if std::fs::symlink_metadata(&dest).is_ok() {
+        bail!("la cible existe déjà");
+    }
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent).context("création des dossiers parents")?;
+    }
+    rename_with_retry(&src, &dest).context("déplacement")?;
+
+    let ft = FileTime::from_unix_time(mtime / 1000, ((mtime % 1000) * 1_000_000) as u32);
+    let _ = filetime::set_file_mtime(&dest, ft);
+    apply_mode(&dest, mode);
+    // Le dossier d'origine peut être devenu vide : sans ça, déplacer une
+    // arborescence laisserait sa coquille derrière elle.
+    prune_empty_parents(root, &src);
+    debug!(from_rel_path, rel_path, "sync: fichier déplacé");
+    Ok(())
+}
+
 // ─── Corbeille locale ────────────────────────────────────────────────────────
 
 /// Déplace un fichier vers `.deveye-trash/<horodatage>/<relPath>` (jamais unlink).

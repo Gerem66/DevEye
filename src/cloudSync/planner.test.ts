@@ -191,17 +191,6 @@ describe('planSession — collisions', () => {
     });
 });
 
-describe('planSession — déplacements', () => {
-    it('voit un renommage comme une suppression + un ajout du MÊME contenu', () => {
-        // C'est ce qui permet à la session de reconnaître un déplacement : même
-        // hash des deux côtés, donc ni octet transféré ni version archivée.
-        const plan = planSession([device('nouveau.txt', H.a)], [base('ancien.txt', H.a)], [server('ancien.txt', H.a)]);
-        assert.deepEqual(paths(plan.uploads), ['nouveau.txt']);
-        assert.deepEqual(paths(plan.deleteOnServer), ['ancien.txt']);
-        assert.equal(plan.uploads[0].hash, plan.deleteOnServer[0].hash);
-    });
-});
-
 describe('planSession — une session à vide ne doit rien annoncer', () => {
     it('ne produit AUCUN travail quand tout est déjà en phase', () => {
         // C'est ce que voit le watcher à chaque réveil sur un dossier stable.
@@ -216,5 +205,49 @@ describe('planSession — une session à vide ne doit rien annoncer', () => {
         assert.equal(plan.bytesTotal, 0);
         assert.deepEqual(plan.modeChanges, []);
         assert.deepEqual(plan.refreshBaseline, []);
+    });
+});
+
+describe('planSession — déplacements appariés', () => {
+    it('apparie une suppression et un ajout du même contenu', () => {
+        // Sans appariement, ce déplacement coûtait DEUX copies intégrales : une
+        // version côté serveur, et une entrée de corbeille chez chaque pair.
+        const plan = planSession([device('nouveau.txt', H.a)], [base('ancien.txt', H.a)], [server('ancien.txt', H.a)]);
+        assert.equal(plan.moves.length, 1);
+        assert.equal(plan.moves[0].from.relPath, 'ancien.txt');
+        assert.equal(plan.moves[0].to.relPath, 'nouveau.txt');
+        assert.deepEqual(plan.uploads, [], 'la moitié « ajout » est consommée');
+        assert.deepEqual(plan.deleteOnServer, [], 'la moitié « suppression » aussi');
+    });
+
+    it('n’apparie pas une COPIE : le contenu reste aux deux endroits', () => {
+        const plan = planSession(
+            [device('a.txt', H.a), device('copie.txt', H.a)],
+            [base('a.txt', H.a)],
+            [server('a.txt', H.a)]
+        );
+        assert.deepEqual(plan.moves, []);
+        assert.deepEqual(paths(plan.uploads), ['copie.txt']);
+    });
+
+    it('apparie chaque déplacement une seule fois', () => {
+        // Deux fichiers de contenu IDENTIQUE déplacés : deux déplacements, et
+        // surtout aucun appariement en double.
+        const plan = planSession(
+            [device('x/1.txt', H.a), device('x/2.txt', H.a)],
+            [base('1.txt', H.a), base('2.txt', H.a)],
+            [server('1.txt', H.a), server('2.txt', H.a)]
+        );
+        assert.equal(plan.moves.length, 2);
+        assert.deepEqual(plan.uploads, []);
+        assert.deepEqual(plan.deleteOnServer, []);
+    });
+
+    it('n’apparie jamais un dossier vide', () => {
+        // Un dossier n'a pas de contenu qui permette de reconnaître « le même ».
+        const dirEntry = device('neuf', SYNC_DIR_HASH, { kind: 'dir', size: 0 });
+        const dirRow = server('vieux', SYNC_DIR_HASH, { kind: 'dir', size: 0 });
+        const plan = planSession([dirEntry], [base('vieux', SYNC_DIR_HASH, { kind: 'dir', size: 0 })], [dirRow]);
+        assert.deepEqual(plan.moves, []);
     });
 });
