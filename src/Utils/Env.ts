@@ -42,11 +42,16 @@ export const env = {
     LOG_PATH: getEnvVar('LOG_PATH', 'string', false) || './logs',
 
     /**
-     * Racine du stockage CloudSync, DANS le serveur. Le compose y monte un
-     * volume de l'hôte : c'est ce qui rend les partages persistants, et c'est
-     * la seule zone où l'on accepte d'en créer. Voir `Docs/CLOUDSYNC.md`.
+     * Racine du stockage CloudSync **vue par le serveur**, c'est-à-dire dans le
+     * conteneur. Le compose y monte un volume dont la source, sur l'hôte, est
+     * `CLOUDSYNC_STORAGE_ROOT` — deux variables distinctes parce que ce sont
+     * deux chemins différents, et les confondre menait à écrire à l'intérieur
+     * du conteneur (donc à perdre les données au redéploiement).
+     *
+     * On n'y touche que pour un déploiement hors conteneur, où les deux côtés
+     * se confondent effectivement. Voir `Docs/CLOUDSYNC.md`.
      */
-    CLOUDSYNC_STORAGE_ROOT: getEnvVar('CLOUDSYNC_STORAGE_ROOT', 'string', false) || '/data/cloudsync',
+    CLOUDSYNC_STORAGE_DIR: getEnvVar('CLOUDSYNC_STORAGE_DIR', 'string', false) || '/data/cloudsync',
 
     SSL_PRIVATE_KEY_PATH: getEnvVar('SSL_PRIVATE_KEY_PATH', 'string', false),
     SSL_CERTIFICATE_PATH: getEnvVar('SSL_CERTIFICATE_PATH', 'string', false),

@@ -116,9 +116,37 @@ export function safeRelPath(relPath: string): string | null {
  * Hors conteneur (bare-metal, dev), rien n'est refusé : `/` y est parfaitement
  * durable.
  */
+/**
+ * Le point de montage qui PORTE ce chemin, parmi une liste de points connus.
+ *
+ * Extrait et exporté pour être testable : cette fonction a déjà refusé une
+ * configuration parfaitement valide. Un partage vit SOUS un volume, il n'en est
+ * pas un lui-même — c'est le montage le plus profond qui le préfixe qui compte.
+ *
+ * `startsWith` seul ne suffit pas : `/data/cloudsync-old` commence par
+ * `/data/cloudsync` sans être dedans. La comparaison se fait donc sur des
+ * frontières de segment.
+ */
+export function mountPointFor(resolved: string, points: readonly string[]): string {
+    let best = '';
+    for (const point of points) {
+        const inside = resolved === point || resolved.startsWith(point === '/' ? '/' : `${point}/`);
+        if (inside && point.length > best.length) best = point;
+    }
+    return best === '' ? '/' : best;
+}
+
+/**
+ * Le chemin est-il sur une couche ÉPHÉMÈRE de conteneur ?
+ *
+ * Le serveur tourne en conteneur, et le stockage d'un partage est un chemin DU
+ * SERVEUR. Un dossier hors volume monté vit donc sur la couche d'écriture du
+ * conteneur : invisible depuis l'hôte, et effacé au redéploiement. Un système
+ * de sauvegarde qui perd tout à chaque mise à jour ne vaut rien — d'où ce refus.
+ *
+ * Hors conteneur (bare-metal, dev), rien n'est refusé : `/` y est durable.
+ */
 async function isEphemeralContainerPath(resolved: string): Promise<boolean> {
-    // `/.dockerenv` (Docker) ou un cgroup de conteneur : sans ça, un serveur
-    // installé normalement verrait tous ses chemins refusés.
     const containerized = await fs
         .access('/.dockerenv')
         .then(() => true)
@@ -131,16 +159,13 @@ async function isEphemeralContainerPath(resolved: string): Promise<boolean> {
     } catch {
         return false; // Pas de /proc : on ne sait pas, on ne bloque pas.
     }
+    // Format : id parent maj:min racine POINT_DE_MONTAGE options...
+    const points = mountinfo
+        .split('\n')
+        .map((line) => line.split(' ')[4])
+        .filter((point): point is string => point !== undefined && point.startsWith('/'));
 
-    let best = '';
-    for (const line of mountinfo.split('\n')) {
-        // Format : id parent maj:min racine POINT_DE_MONTAGE options...
-        const point = line.split(' ')[4];
-        if (point === undefined) continue;
-        const isPrefix = resolved === point || resolved.startsWith(point === '/' ? '/' : `${point}/`);
-        if (isPrefix && point.length > best.length) best = point;
-    }
-    return best === '/' || best === '';
+    return mountPointFor(resolved, points) === '/';
 }
 
 export interface StoragePathVerdict {
@@ -176,10 +201,16 @@ export async function validateStoragePath(db: Database, rawPath: string): Promis
     }
 
     if (await isEphemeralContainerPath(resolved)) {
+        // Nommer LA variable en cause et la valeur constatée : le premier
+        // message renvoyait vers `CLOUDSYNC_STORAGE_ROOT` (le chemin HÔTE, lu
+        // par docker compose seul), alors que le fautif est toujours le chemin
+        // conteneur. Chercher au mauvais endroit fait perdre un temps fou.
         return refuse(
-            "Ce chemin n'est pas persistant : le serveur tourne en conteneur et ce dossier vivrait à l'intérieur, " +
+            `« ${resolved} » n'est sur aucun volume monté : ce dossier vivrait dans le conteneur, ` +
                 'donc invisible depuis la machine hôte et effacé au prochain redéploiement. ' +
-                'Choisis un chemin situé sous un volume monté (voir CLOUDSYNC_STORAGE_ROOT dans docker-compose).'
+                `CLOUDSYNC_STORAGE_DIR vaut « ${env.CLOUDSYNC_STORAGE_DIR} » — il doit désigner la CIBLE du montage ` +
+                "dans le conteneur (`/data/cloudsync` par défaut), et non le chemin de l'hôte, qui lui se règle " +
+                'avec CLOUDSYNC_STORAGE_ROOT dans docker-compose.'
         );
     }
 
@@ -244,7 +275,7 @@ export async function storagePathForName(db: Database, name: string): Promise<st
             .replace(/^-+|-+$/g, '')
             .slice(0, 60) || 'partage';
 
-    const root = path.resolve(env.CLOUDSYNC_STORAGE_ROOT);
+    const root = path.resolve(env.CLOUDSYNC_STORAGE_DIR);
     for (let n = 0; ; n += 1) {
         const candidate = path.join(root, n === 0 ? slug : `${slug}-${n + 1}`);
         const taken = await db.syncShares.pathsOverlapping(candidate);

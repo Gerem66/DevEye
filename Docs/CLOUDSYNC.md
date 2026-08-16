@@ -42,10 +42,18 @@ du nom (`« Documents »` → `<racine>/documents`, suffixé si déjà pris — 
 partages ne doivent jamais partager un blob store, leurs GC se détruiraient
 mutuellement).
 
-La racine est `CLOUDSYNC_STORAGE_ROOT` (défaut `/data/cloudsync`), que
-`docker-compose.prod.yml` monte depuis l'hôte. `validateStoragePath` refuse en
-plus tout chemin qui ne serait sous aucun montage : c'est la ceinture qui vaut
-pour un stockage mal configuré comme pour une future reprise de chemin manuel.
+**Deux variables, deux chemins**, et les confondre revient à écrire dans le
+conteneur (donc à tout perdre au redéploiement) :
+
+| Variable | Côté | Rôle |
+|---|---|---|
+| `CLOUDSYNC_STORAGE_ROOT` | hôte | source du montage, lue par docker compose SEUL |
+| `CLOUDSYNC_STORAGE_DIR` | conteneur | où le serveur crée les partages (défaut `/data/cloudsync`) |
+
+`validateStoragePath` refuse tout chemin qui ne serait sous aucun montage —
+`mountPointFor` (exportée et testée) rattache un partage au volume qui le porte,
+un sous-dossier n'étant jamais lui-même un point de montage. Hors conteneur,
+rien n'est refusé et les deux variables se confondent.
 
 ## Tables (migration `031_cloud_sync.sql`)
 
