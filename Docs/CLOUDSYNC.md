@@ -160,6 +160,17 @@ et qui **conserve** la valeur en base : sans cette règle, un aller-retour par
 Windows effacerait le bit exécutable d'un script pour toute la flotte. Un `chmod`
 seul ne change pas le hash : il passe par `plan.modeChanges`, sans transfert.
 
+**Le propriétaire, lui, n'est pas transporté — il est ADOPTÉ.** L'agent tourne
+le plus souvent en root (service système) : tout ce qu'il crée appartiendrait
+donc à root, et l'utilisateur se retrouverait avec, dans son propre dossier, des
+fichiers qu'il ne peut ni modifier ni supprimer. Chaque fichier installé et
+chaque dossier créé prend donc le propriétaire de la RACINE du partage
+(`adopt_owner`, `lchown` pour ne jamais suivre un lien).
+
+Le symptôme était sournois : un fichier simplement DÉPLACÉ garde son
+propriétaire d'origine, donc seuls les fichiers réellement téléchargés
+basculaient. Le dossier paraissait sain jusqu'à ce qu'on bute sur l'un d'eux.
+
 Corollaire à ne pas rater : on ne pousse **rien** vers un appareil qui annonce
 `null`. Lui envoyer le mode serveur rejouerait le même ordre à chaque session,
 indéfiniment (son scan suivant annoncerait toujours `null`) — un aller-retour par

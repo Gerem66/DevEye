@@ -460,14 +460,13 @@ impl Applier {
             }
         }
 
-        if let Some(parent) = dest.parent() {
-            std::fs::create_dir_all(parent).context("création des dossiers parents")?;
-        }
+        create_parents_owned(&state.root, &dest)?;
         let ft = FileTime::from_unix_time(mtime / 1000, ((mtime % 1000) * 1_000_000) as u32);
         let _ = filetime::set_file_mtime(&state.tmp_path, ft);
         // Le mode est posé sur le TEMPORAIRE : la cible n'existe jamais dans un
         // état intermédiaire avec les mauvaises permissions.
         apply_mode(&state.tmp_path, state.mode);
+        adopt_owner(&state.root, &state.tmp_path);
         rename_with_retry(&state.tmp_path, &dest).context("installation (rename atomique)")?;
         debug!(rel_path = %state.rel_path, "sync: fichier installé");
         Ok(true)
@@ -509,6 +508,75 @@ fn apply_mode(path: &Path, mode: Option<u32>) {
 #[cfg(not(unix))]
 fn apply_mode(_path: &Path, _mode: Option<u32>) {}
 
+/// Rend un fichier installé au propriétaire du DOSSIER DU PARTAGE.
+///
+/// L'agent tourne le plus souvent en root (service système). Tout ce qu'il crée
+/// appartient donc à root — et l'utilisateur se retrouve avec, dans son propre
+/// dossier, des fichiers qu'il ne peut ni modifier ni supprimer. Un fichier
+/// simplement DÉPLACÉ garde son propriétaire, ce qui rend le symptôme sournois :
+/// seuls les fichiers réellement téléchargés basculent, et le dossier paraît
+/// sain jusqu'à ce qu'on bute sur l'un d'eux.
+///
+/// La racine du partage sert de référence : c'est elle qui dit à qui ce dossier
+/// appartient réellement. Best-effort — sans privilège, `chown` échoue, mais
+/// dans ce cas l'agent n'est pas root et le fichier a déjà le bon propriétaire.
+#[cfg(unix)]
+fn adopt_owner(root: &Path, path: &Path) {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::fs::MetadataExt;
+
+    let Ok(reference) = std::fs::metadata(root) else {
+        return;
+    };
+    let Ok(current) = std::fs::symlink_metadata(path) else {
+        return;
+    };
+    if current.uid() == reference.uid() && current.gid() == reference.gid() {
+        return; // Déjà au bon propriétaire : rien à faire, et pas de syscall.
+    }
+    let Ok(raw) = CString::new(path.as_os_str().as_bytes()) else {
+        return;
+    };
+    // `lchown` et non `chown` : ne jamais suivre un lien symbolique, même si le
+    // scan les ignore — on ne veut pas changer le propriétaire de sa cible.
+    unsafe {
+        libc::lchown(raw.as_ptr(), reference.uid(), reference.gid());
+    }
+}
+
+#[cfg(not(unix))]
+fn adopt_owner(_root: &Path, _path: &Path) {}
+
+/// Crée les dossiers parents d'une cible ET les rend au propriétaire du
+/// partage. `create_dir_all` peut en créer plusieurs d'un coup : les laisser à
+/// root donnerait une arborescence que l'utilisateur ne peut pas modifier,
+/// alors même que les fichiers dedans lui appartiennent.
+fn create_parents_owned(root: &Path, dest: &Path) -> Result<()> {
+    let Some(parent) = dest.parent() else {
+        return Ok(());
+    };
+    if parent.exists() {
+        return Ok(());
+    }
+    // Les ancêtres manquants, du plus proche de la racine au plus profond, pour
+    // que chacun soit adopté après sa création.
+    let mut missing: Vec<&Path> = Vec::new();
+    let mut cursor = Some(parent);
+    while let Some(dir) = cursor {
+        if dir == root || !dir.starts_with(root) || dir.exists() {
+            break;
+        }
+        missing.push(dir);
+        cursor = dir.parent();
+    }
+    std::fs::create_dir_all(parent).context("création des dossiers parents")?;
+    for dir in missing.into_iter().rev() {
+        adopt_owner(root, dir);
+    }
+    Ok(())
+}
+
 /// Pose les métadonnées d'un chemin sans transférer un seul octet. Deux usages,
 /// volontairement réunis parce qu'ils font exactement le même travail :
 ///  - une entrée `dir` de l'index (dossier VIDE) : le dossier est créé ;
@@ -530,6 +598,7 @@ pub fn apply_dir(root: &Path, rel_path: &str, kind: &str, mode: Option<u32>) -> 
         std::fs::create_dir_all(&dest).context("création du dossier")?;
     }
     apply_mode(&dest, mode);
+    adopt_owner(root, &dest);
     Ok(())
 }
 
@@ -564,12 +633,11 @@ pub fn apply_local(
     let tmp_path = tmp_dir.join(format!("copy-{}.part", uuid_like(rel_path, mtime)));
     // Copier PUIS renommer : jamais de cible à moitié écrite.
     std::fs::copy(&src, &tmp_path).context("copie locale")?;
-    if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent).context("création des dossiers parents")?;
-    }
+    create_parents_owned(root, &dest)?;
     let ft = FileTime::from_unix_time(mtime / 1000, ((mtime % 1000) * 1_000_000) as u32);
     let _ = filetime::set_file_mtime(&tmp_path, ft);
     apply_mode(&tmp_path, mode);
+    adopt_owner(root, &tmp_path);
     if let Err(e) = rename_with_retry(&tmp_path, &dest) {
         let _ = std::fs::remove_file(&tmp_path);
         return Err(e).context("installation (rename atomique)");
@@ -620,9 +688,7 @@ pub fn move_file(
     if std::fs::symlink_metadata(&dest).is_ok() {
         bail!("la cible existe déjà");
     }
-    if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent).context("création des dossiers parents")?;
-    }
+    create_parents_owned(root, &dest)?;
     rename_with_retry(&src, &dest).context("déplacement")?;
 
     let ft = FileTime::from_unix_time(mtime / 1000, ((mtime % 1000) * 1_000_000) as u32);
@@ -773,6 +839,28 @@ mod tests {
         assert_eq!(resumable_prefix(&path, 0).bytes, 0);
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn created_parents_stay_under_the_share_root() {
+        // `create_parents_owned` doit créer l'arborescence manquante ET ne
+        // jamais remonter au-dessus de la racine du partage (sans quoi un
+        // `chown` toucherait des dossiers qui ne nous appartiennent pas).
+        let root = std::env::temp_dir().join(format!("deveye-parents-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+
+        let dest = root.join("a").join("b").join("c.txt");
+        create_parents_owned(&root, &dest).unwrap();
+        assert!(
+            root.join("a").join("b").is_dir(),
+            "les parents doivent exister"
+        );
+
+        // Idempotent : rappelé sur une arborescence déjà là, il ne casse rien.
+        create_parents_owned(&root, &dest).unwrap();
+        assert!(root.join("a").join("b").is_dir());
+
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]

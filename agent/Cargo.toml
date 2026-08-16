@@ -60,6 +60,13 @@ notify = "8"
 filetime = "0.2"
 unicode-normalization = "0.1"
 
+# Reprise du propriétaire des fichiers installés par CloudSync. L'agent tourne
+# souvent en root (service système) : sans `chown`, tout fichier qu'il crée
+# appartient à root, et l'utilisateur ne peut plus ni le modifier ni le
+# supprimer dans son propre dossier.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 # Used by build.rs to read the version out of the root package.json.
 [build-dependencies]
 serde_json = "1"
