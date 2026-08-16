@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { SYNC_REL_PATH_MAX, SYNC_STORAGE_PATH_MAX } from 'deveye-types';
 import type { Database } from '../db';
+import { env } from '../Utils/Env';
 import { BLOB_STORE_SUBDIRS } from './blobStore';
 
 /**
@@ -220,7 +221,33 @@ export async function validateStoragePath(db: Database, rawPath: string): Promis
     return { ok: true, freeBytes, problem: null };
 }
 
-/** La forme canonique (résolue) d'un chemin de stockage déjà validé. */
-export function canonicalStoragePath(rawPath: string): string {
-    return path.resolve(rawPath.trim());
+/**
+ * Le dossier de stockage d'un partage, dérivé de son NOM.
+ *
+ * L'utilisateur ne saisit plus de chemin : il n'a aucune raison de connaître
+ * l'arborescence du serveur, et lui demander de la deviner est précisément ce
+ * qui menait à créer un partage sur une couche éphémère de conteneur. Le nom
+ * devient un identifiant de dossier lisible, et le serveur le place sous sa
+ * racine persistante.
+ *
+ * Un suffixe est ajouté tant que le dossier est déjà pris : deux partages
+ * nommés pareil ne doivent surtout pas partager un blob store — leurs GC se
+ * détruiraient mutuellement.
+ */
+export async function storagePathForName(db: Database, name: string): Promise<string> {
+    const slug =
+        name
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '') // Accents retirés, pas remplacés.
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 60) || 'partage';
+
+    const root = path.resolve(env.CLOUDSYNC_STORAGE_ROOT);
+    for (let n = 0; ; n += 1) {
+        const candidate = path.join(root, n === 0 ? slug : `${slug}-${n + 1}`);
+        const taken = await db.syncShares.pathsOverlapping(candidate);
+        if (taken.length === 0) return candidate;
+    }
 }

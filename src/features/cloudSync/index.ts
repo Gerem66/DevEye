@@ -19,8 +19,7 @@ import {
     cloudSyncCreateShareFeature,
     cloudSyncDeleteShareFeature,
     cloudSyncListSharesFeature,
-    cloudSyncUpdateShareFeature,
-    cloudSyncValidatePathFeature
+    cloudSyncUpdateShareFeature
 } from './shares';
 import {
     cloudSyncCreateSnapshotFeature,
@@ -43,7 +42,6 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const cloudSyncFeatures: ReadonlyArray<FeatureDefinition<string, any, any>> = [
     cloudSyncListSharesFeature,
-    cloudSyncValidatePathFeature,
     cloudSyncCreateShareFeature,
     cloudSyncUpdateShareFeature,
     cloudSyncDeleteShareFeature,

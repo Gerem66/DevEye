@@ -35,12 +35,17 @@ dossier : on n'y trouve que `blobs/` (contenus chiffrés, nommés par hash) et
 `tmp/`. Chercher ses fichiers par leur nom à cet endroit ne donnera jamais rien —
 l'arborescence n'existe que dans MySQL.
 
-Le serveur tournant en conteneur, ce chemin est celui **du conteneur**. Un
-chemin hors volume monté vivrait donc sur sa couche d'écriture : invisible depuis
-l'hôte, et effacé au redéploiement. `docker-compose.prod.yml` monte
-`CLOUDSYNC_STORAGE_ROOT` (hôte) sur `/data/cloudsync`, et
-`validateStoragePath` **refuse** un chemin qui ne serait sous aucun montage —
-un système de sauvegarde qui perd tout à chaque mise à jour ne vaut rien.
+**Il n'est plus saisi.** Le demander revenait à faire deviner l'arborescence
+interne d'un conteneur, et menait à créer le partage sur sa couche d'écriture :
+invisible depuis l'hôte, effacé au redéploiement. `storagePathForName` le dérive
+du nom (`« Documents »` → `<racine>/documents`, suffixé si déjà pris — deux
+partages ne doivent jamais partager un blob store, leurs GC se détruiraient
+mutuellement).
+
+La racine est `CLOUDSYNC_STORAGE_ROOT` (défaut `/data/cloudsync`), que
+`docker-compose.prod.yml` monte depuis l'hôte. `validateStoragePath` refuse en
+plus tout chemin qui ne serait sous aucun montage : c'est la ceinture qui vaut
+pour un stockage mal configuré comme pour une future reprise de chemin manuel.
 
 ## Tables (migration `031_cloud_sync.sql`)
 

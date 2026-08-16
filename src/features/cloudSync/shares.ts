@@ -1,12 +1,6 @@
-import {
-    cloudSyncCreateShare,
-    cloudSyncDeleteShare,
-    cloudSyncListShares,
-    cloudSyncUpdateShare,
-    cloudSyncValidatePath
-} from 'deveye-types';
+import { cloudSyncCreateShare, cloudSyncDeleteShare, cloudSyncListShares, cloudSyncUpdateShare } from 'deveye-types';
 
-import { canonicalStoragePath, validateStoragePath } from '@/cloudSync/pathValidation';
+import { storagePathForName, validateStoragePath } from '@/cloudSync/pathValidation';
 import { defineFeature, FeatureError } from '../_define';
 import { authorizeShare, requireActiveEngine, toClientShare } from './_shared';
 
@@ -18,24 +12,29 @@ export const cloudSyncListSharesFeature = defineFeature({
     }
 });
 
-export const cloudSyncValidatePathFeature = defineFeature({
-    ...cloudSyncValidatePath,
-    handler: async (ctx, input) => validateStoragePath(ctx.db, input.path)
-});
-
 export const cloudSyncCreateShareFeature = defineFeature({
     ...cloudSyncCreateShare,
     mutates: true,
     handler: async (ctx, input) => {
         const engine = requireActiveEngine(ctx);
-        const verdict = await validateStoragePath(ctx.db, input.storagePath);
-        if (!verdict.ok) throw new FeatureError('validation', verdict.problem ?? 'Chemin invalide');
+        // Le chemin n'est plus saisi : l'utilisateur n'a aucune raison de
+        // connaître l'arborescence du serveur, et le lui demander est
+        // précisément ce qui menait à créer un partage sur une couche éphémère
+        // de conteneur. Il est dérivé du nom, sous la racine persistante.
+        const storagePath = await storagePathForName(ctx.db, input.name);
+        const verdict = await validateStoragePath(ctx.db, storagePath);
+        if (!verdict.ok) {
+            throw new FeatureError(
+                'internal',
+                `Le stockage du serveur n'est pas utilisable (${verdict.problem ?? 'raison inconnue'}). Vérifie CLOUDSYNC_STORAGE_ROOT et son montage.`
+            );
+        }
 
         const row = await ctx.db.syncShares.create({
             userId: ctx.userId,
             workspaceId: ctx.workspaceId,
             name: input.name.trim(),
-            storagePath: canonicalStoragePath(input.storagePath)
+            storagePath
         });
         await engine.storeFor(row); // Initialise blobs/ et tmp/ tout de suite.
 
