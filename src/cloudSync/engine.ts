@@ -501,10 +501,25 @@ export class CloudSyncEngine {
         const error = this.lastError.get(shareId);
         if (error !== undefined) return of('error', error);
 
+        // « Hors ligne » décrit le PARTAGE, pas un appareil : il ne vaut que si
+        // plus rien ne peut se synchroniser, donc si aucun appareil actif n'est
+        // joignable. Tant qu'il en reste un, le partage fonctionne et son état
+        // est celui de son contenu.
+        //
+        // Le prendre dès le premier appareil absent était trompeur : sur deux
+        // machines dont une éteinte, le partage restait bloqué sur « appareil
+        // hors ligne » alors qu'il était parfaitement à jour. L'information
+        // n'est pas perdue pour autant, elle descend en détail.
         const devices = await db.syncShares.listDevices(shareId);
-        const offline = devices.find((d) => d.status === 'active' && !hub.isOnline(d.device_id));
-        if (offline) return of('offline', offline.device_name);
-        return of('synced', null);
+        const active = devices.filter((d) => d.status === 'active');
+        const offline = active.filter((d) => !hub.isOnline(d.device_id));
+        if (offline.length === 0) return of('synced', null);
+
+        const who =
+            offline.length === 1
+                ? `« ${offline[0].device_name} » hors ligne`
+                : `${offline.length} appareils hors ligne`;
+        return of(offline.length === active.length ? 'offline' : 'synced', who);
     }
 
     // ─── Opérations sur les versions & téléchargements web ────────────────────
