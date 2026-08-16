@@ -508,8 +508,12 @@ export class SyncSession {
             );
             this.recordFailure(relPath, err instanceof Error ? err.message : String(err));
         }
-        this.currentPath = null;
-        this.direction = null;
+        // `currentPath` et `direction` ne sont PAS remis à zéro ici : le pas
+        // suivant les écrase, et la fin de session les efface. Les vider entre
+        // deux fichiers faisait alterner le flux publié entre « ce fichier » et
+        // « aucun fichier », et la ligne du fichier en cours clignotait une
+        // frame sur deux. Ce que l'interface veut lire, c'est le dernier fichier
+        // touché par la session — ce qu'ils décrivent maintenant.
     }
 
     /** Upload appareil → blob store, puis archive de l'ancien contenu + index + baseline. */
@@ -1099,7 +1103,6 @@ export class SyncSession {
         this.filesDone += 1;
         this.bytesDone += bytes;
         this.endFile();
-        this.currentPath = null;
         // Throttlé, PAS forcé : sur un partage de milliers de petits fichiers,
         // forcer ici inondait le socket d'une frame par fichier. Les transitions
         // d'état et la fin de session, elles, restent forcées.
@@ -1150,6 +1153,11 @@ export class SyncSession {
 
     private async finish(state: 'done' | 'error' | 'cancelled', error: string | null): Promise<void> {
         this.state = state;
+        // Seul endroit où « aucun fichier en cours » est vrai : la session est
+        // finie. Entre deux fichiers elle en a toujours un dernier en mémoire.
+        this.currentPath = null;
+        this.direction = null;
+        this.endFile();
         await this.persistProgress(true).catch(() => undefined);
         await this.host.db.syncSessions.finish(this.sessionRowId, state, error);
         this.host.publishProgress(this.snapshot(error));

@@ -32,6 +32,7 @@
 /* ─── Carte d'un partage ─── */
 
 .card {
+    position: relative; /* Référentiel des flèches de réorganisation. */
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -40,6 +41,63 @@
     background: var(--surface-widget);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-lg);
+}
+
+/* Flèches de réorganisation, dans le coin haut droit.
+   En absolu, donc hors du flux : la disposition de la carte est exactement la
+   même avec ou sans elles. Elles tiennent dans la marge haute (32px) et ne
+   croisent donc jamais la ligne de statistiques, qui commence en dessous.
+   Discrètes au repos, lisibles au survol de la carte. */
+.orderArrows {
+    position: absolute;
+    top: var(--space-sm);
+    right: var(--space-sm);
+    display: flex;
+    gap: 2px;
+    opacity: 0.35;
+    transition: opacity var(--transition-fast);
+}
+
+.card:hover .orderArrows,
+.orderArrows:focus-within {
+    opacity: 1;
+}
+
+.orderArrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.orderArrow:hover:not(:disabled) {
+    background: var(--glass-border);
+    color: var(--text-primary);
+}
+
+.orderArrow:disabled {
+    /* `visibility` conservée : le coin garde sa forme, seule l'action s'éteint.
+       Atténué par un filtre et non par `opacity`, qui est déjà portée par le
+       conteneur — les deux se multiplieraient et la flèche disparaîtrait. */
+    filter: opacity(0.3);
+    cursor: default;
+}
+
+.orderArrow .icon {
+    width: 12px;
+    height: 12px;
+}
+
+/* Une seule icône pour les deux sens : le chevron bas, retourné. */
+.orderArrowUp {
+    transform: rotate(180deg);
 }
 
 .cardHeader {
@@ -268,12 +326,14 @@
 
 .heroDetail {
     font-size: 0.8rem;
+    line-height: 1.4;
     color: var(--text-muted);
     max-width: 420px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
 
 /* Rotation d'un masque d'icône (spinner de chargement plein écran). */
 .spinning {
@@ -310,6 +370,12 @@
     width: 100%;
     max-width: 100%;
     text-align: center;
+    /* Hauteur RÉSERVÉE, pleine ou vide : `1.4em` vaut exactement une ligne à la
+       taille de police locale. Sans ça, une ligne momentanément sans contenu
+       (débit pas encore estimable, fichier en cours entre deux transferts)
+       s'effondrait à zéro — le panneau changeait de hauteur et poussait les
+       boutons de quelques pixels. Le contenu varie, l'encombrement non. */
+    min-height: 1.4em;
 }
 
 .bar {

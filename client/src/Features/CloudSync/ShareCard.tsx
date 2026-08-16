@@ -29,6 +29,9 @@ interface ShareCardProps {
      */
     onOpenChange: (shareId: number, open: boolean) => void;
     outline: LiveOutlineProps;
+    /** Déplacer d'un cran ; `null` quand il n'y a pas de voisin de ce côté. */
+    onMoveUp: (() => void) | null;
+    onMoveDown: (() => void) | null;
 }
 
 /**
@@ -36,7 +39,7 @@ interface ShareCardProps {
  * ou synchro en cours avec barre de progression et fichier courant), puis une
  * rangée d'actions discrètes.
  */
-export default function ShareCard({ share, onChanged, onOpenChange, outline }: ShareCardProps) {
+export default function ShareCard({ share, onChanged, onOpenChange, outline, onMoveUp, onMoveDown }: ShareCardProps) {
     const { stateFor, progressFor } = useCloudSyncLive();
     const [dialog, setDialog] = useState<
         'devices' | 'exclusions' | 'versions' | 'snapshots' | 'logs' | 'settings' | null
@@ -84,6 +87,32 @@ export default function ShareCard({ share, onChanged, onOpenChange, outline }: S
 
     return (
         <section className={styles.card} {...outline}>
+            {/* Réorganisation : posée en absolu dans le coin, donc sans rien
+                déplacer du reste de la carte. Les cartes sont trop hautes pour
+                qu'un glisser-déposer soit agréable ici, contrairement aux
+                listes compactes des autres écrans. */}
+            <div className={styles.orderArrows}>
+                <button
+                    type='button'
+                    className={styles.orderArrow}
+                    disabled={onMoveUp === null}
+                    title='Déplacer vers le haut'
+                    aria-label='Déplacer vers le haut'
+                    onClick={() => onMoveUp?.()}
+                >
+                    <span className={`icon icon-chevron-down ${styles.orderArrowUp}`} />
+                </button>
+                <button
+                    type='button'
+                    className={styles.orderArrow}
+                    disabled={onMoveDown === null}
+                    title='Déplacer vers le bas'
+                    aria-label='Déplacer vers le bas'
+                    onClick={() => onMoveDown?.()}
+                >
+                    <span className='icon icon-chevron-down' />
+                </button>
+            </div>
             <header className={styles.cardHeader}>
                 <span className={styles.cardTitle}>
                     <span className='icon icon-cloud' />
@@ -124,19 +153,23 @@ export default function ShareCard({ share, onChanged, onOpenChange, outline }: S
                                     }}
                                 />
                             </span>
-                            {(rate !== null || etaSeconds !== null) && (
-                                <span className={styles.heroDetail}>
-                                    {rate !== null && `${formatBytesFr(Math.round(rate))}/s`}
-                                    {rate !== null && etaSeconds !== null && ' · '}
-                                    {etaSeconds !== null && `${formatEta(etaSeconds)} restantes`}
-                                </span>
-                            )}
-                            {current && current.currentPath && (
-                                <span className={styles.heroDetail}>
-                                    {currentDevice ?? 'Appareil'} — {current.currentPath}
-                                    {filePercent !== null && ` (${filePercent} %)`}
-                                </span>
-                            )}
+                            {/* Les deux lignes sont TOUJOURS rendues, même vides :
+                                leur hauteur est réservée en CSS, et les faire
+                                disparaître changeait la hauteur de la carte,
+                                déplaçant les boutons de quelques pixels. */}
+                            <span className={styles.heroDetail}>
+                                {rate !== null && `${formatBytesFr(Math.round(rate))}/s`}
+                                {rate !== null && etaSeconds !== null && ' · '}
+                                {etaSeconds !== null && `${formatEta(etaSeconds)} restantes`}
+                            </span>
+                            <span className={styles.heroDetail}>
+                                {current?.currentPath && (
+                                    <>
+                                        {currentDevice ?? 'Appareil'} — {current.currentPath}
+                                        {filePercent !== null && ` (${filePercent} %)`}
+                                    </>
+                                )}
+                            </span>
                         </div>
                     ) : shareDevices.length === 0 ? (
                         <span className={styles.heroDetail}>Attache un premier appareil pour démarrer la synchro.</span>
