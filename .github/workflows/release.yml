@@ -122,7 +122,27 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # `dtolnay/rust-toolchain` appelle `rustup`, qui télécharge depuis
+      # static.rust-lang.org SANS aucun réessai : un « Connection reset by peer »
+      # d'une seconde suffit à faire échouer tout le job, alors que rien n'est
+      # cassé. Le réessai est ici, autour de l'action elle-même.
       - name: Install Rust toolchain
+        id: rust
+        continue-on-error: true
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Install Rust toolchain (2e tentative)
+        id: rust-retry
+        if: steps.rust.outcome == 'failure'
+        continue-on-error: true
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Install Rust toolchain (dernière tentative)
+        if: steps.rust.outcome == 'failure' && steps.rust-retry.outcome == 'failure'
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt

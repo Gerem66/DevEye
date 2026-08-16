@@ -157,6 +157,14 @@ export class SyncSession {
      * copie intégrale dans la corbeille de chaque pair.
      */
     private movedAway = new Set<string>();
+    /**
+     * Chemins RÉELLEMENT renommés par cette session, et donc déjà partis du
+     * disque. Distinct de {@link movedAway}, qui n'exprime qu'une intention :
+     * un renommage peut échouer (cible occupée, fichier verrouillé), auquel cas
+     * la suppression doit reprendre son cours normal. Confondre les deux
+     * laissait le fichier sur place POUR TOUJOURS, sa baseline effacée.
+     */
+    private renamedAway = new Set<string>();
     private readonly startedAt = Date.now();
     /**
      * Plafond de débit des DESCENTES ; `null` = illimité (le défaut). Les
@@ -331,6 +339,7 @@ export class SyncSession {
         // chemins encore présents dans le scan comptent : une baseline qui ne
         // correspond plus à rien sur le disque ferait échouer la copie locale.
         this.movedAway = new Set(plan.deleteOnDevice.filter((f) => f.kind !== 'dir').map((f) => f.relPath));
+        this.renamedAway = new Set();
         const scanned = new Set(device.map((e) => e.relPath));
         this.baselineByHash = new Map(
             baseline
@@ -774,7 +783,9 @@ export class SyncSession {
             // la corbeille garderait une copie intégrale pour rien.
             if (this.movedAway.has(localSource)) {
                 if (await this.tryMove(file, localSource)) {
-                    this.movedAway.delete(localSource);
+                    // Constaté, pas supposé : c'est ce qui autorise la
+                    // suppression correspondante à être sautée plus bas.
+                    this.renamedAway.add(localSource);
                     await this.host.db.syncFiles.deleteBaseline(this.share.id, this.deviceId, relPathHash(localSource));
                     await this.writeBaseline(file);
                     await this.fileDone(file.size);
@@ -922,9 +933,14 @@ export class SyncSession {
     /** Suppression à propager : l'appareil ne détruit qu'après preuve d'archive. */
     private async deleteOnDevice(file: PlanFile): Promise<void> {
         const { db } = this.host;
-        // Déjà consommée par un renommage plus haut dans le plan : le fichier
-        // n'est plus là, et il n'a jamais été détruit.
-        if (!this.movedAway.has(file.relPath) && this.baselineByHash.get(file.hash) === file.relPath) {
+        // Déjà consommée par un renommage RÉUSSI plus haut dans le plan : le
+        // fichier n'est plus à cet endroit, et il n'a jamais été détruit.
+        //
+        // La condition porte sur ce qui a été CONSTATÉ (`renamedAway`) et non
+        // sur l'intention : un renommage peut échouer, et sauter la suppression
+        // dans ce cas laisserait le fichier sur le disque avec sa baseline
+        // effacée — donc plus jamais repris par aucune session, pour toujours.
+        if (this.renamedAway.has(file.relPath)) {
             await db.syncFiles.deleteBaseline(this.share.id, this.deviceId, relPathHash(file.relPath));
             await this.fileDone(0);
             return;
@@ -937,7 +953,17 @@ export class SyncSession {
         // ici et l'erreur reviendrait à CHAQUE cycle, indéfiniment. On reconverge
         // dans l'autre sens : le contenu de l'appareil remonte et ressuscite la
         // ligne d'index. Rien n'est détruit, et l'état redevient cohérent.
-        if (!(await db.syncVersions.exists(this.share.id, file.relPath, file.hash))) {
+        //
+        // Un DÉPLACEMENT ne laisse volontairement aucune version (c'est tout
+        // l'intérêt : le contenu vit toujours, sous un autre nom). La preuve
+        // d'archivage vaut donc aussi quand le contenu est encore VIVANT
+        // ailleurs dans l'index. Sans cette seconde porte, l'optimisation des
+        // déplacements condamnait chaque pair à ressusciter l'ancien chemin
+        // à chaque cycle : le fichier réapparaissait indéfiniment, en double.
+        const archived =
+            (await db.syncVersions.exists(this.share.id, file.relPath, file.hash)) ||
+            (await db.syncFiles.isHashReferenced(this.share.id, file.hash));
+        if (!archived) {
             this.recordNotice(
                 file.relPath,
                 "Suppression annulée : le contenu n'était plus archivé, le fichier a été remonté depuis cet appareil"

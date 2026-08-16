@@ -251,3 +251,34 @@ describe('planSession — déplacements appariés', () => {
         assert.deepEqual(plan.moves, []);
     });
 });
+
+describe('planSession — un déplacement ne laisse pas l’ancien chemin derrière', () => {
+    it('propage la suppression de l’ancien chemin chez le pair', () => {
+        // Vu du PAIR après un déplacement fait ailleurs : le serveur a marqué
+        // l'ancien chemin supprimé et créé le nouveau. Le pair doit à la fois
+        // récupérer le nouveau ET se débarrasser de l'ancien — sans quoi le
+        // fichier existe en double chez lui.
+        const plan = planSession(
+            [device('ancien.txt', H.a)],
+            [base('ancien.txt', H.a)],
+            [server('ancien.txt', H.a, { state: 'deleted' }), server('nouveau.txt', H.a)]
+        );
+        assert.deepEqual(paths(plan.deleteOnDevice), ['ancien.txt']);
+        assert.deepEqual(paths(plan.downloads), ['nouveau.txt']);
+        // Et surtout : les deux moitiés ne s'apparient PAS ici. C'est un
+        // déplacement déjà acté côté serveur, pas un déplacement à constater.
+        assert.deepEqual(plan.moves, []);
+    });
+
+    it('ne supprime rien chez un appareil qui n’avait jamais l’ancien chemin', () => {
+        // Sans baseline, aucune suppression ne peut être inférée : la règle d'or
+        // anti-perte tient même dans le chemin du déplacement.
+        const plan = planSession(
+            [device('ancien.txt', H.a)],
+            [],
+            [server('ancien.txt', H.a, { state: 'deleted' }), server('nouveau.txt', H.a)]
+        );
+        assert.deepEqual(plan.deleteOnDevice, []);
+        assert.deepEqual(paths(plan.uploads), ['ancien.txt'], 'il est ressuscité, jamais détruit');
+    });
+});

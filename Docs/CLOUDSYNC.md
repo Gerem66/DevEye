@@ -196,6 +196,17 @@ Distinction qui compte : on ne renomme que si le contenu QUITTE son ancien
 chemin. S'il y reste (une copie), c'est une copie locale — sans quoi on
 détruirait l'original.
 
+Et une suppression n'est sautée que sur un renommage **constaté**, jamais sur
+l'intention d'en faire un : un renommage peut échouer (cible occupée, fichier
+verrouillé), et sauter la suppression dans ce cas laisserait le fichier sur le
+disque avec sa baseline effacée — donc plus jamais repris par aucune session.
+
+**Corollaire sur l'invariant anti-perte** : un déplacement ne laisse
+volontairement aucune version. La preuve d'archivage qu'exige `deleteOnDevice`
+accepte donc aussi qu'un contenu soit encore VIVANT ailleurs dans l'index.
+Faute de quoi l'optimisation des déplacements condamnait chaque pair à
+ressusciter l'ancien chemin à chaque cycle, indéfiniment.
+
 Et aucun octet ne traverse le réseau dans les deux cas :
 - **montée** : si le blob store possède déjà ce hash, l'upload est sauté (le CAS
   garantit que le blob de ce hash *est* ce contenu) ;
