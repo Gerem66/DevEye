@@ -81,11 +81,6 @@ export default function ShareSetupWizard({ open, onClose, onCreated }: ShareSetu
                         Nom du partage
                         <TextInput placeholder='Ex. Documents' value={name} onChange={(e) => setName(e.target.value)} />
                     </label>
-                    <div className={styles.mutedNote}>
-                        Le stockage serveur est choisi automatiquement, sous l’emplacement persistant configuré. On n’y
-                        retrouve pas les fichiers par leur nom : les contenus y sont chiffrés et rangés par empreinte.
-                        Pour les parcourir, utilise la vue du partage.
-                    </div>
                     <div className={styles.formCol}>
                         <label className={styles.field}>
                             Premier appareil (facultatif)

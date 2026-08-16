@@ -270,11 +270,21 @@ aucune purge, aucun GC, et surtout **pas de `failStale`** — qui aurait passé 
 erreur toutes les sessions vivantes du premier. Les commandes mutantes passent
 par `requireActiveEngine` et refusent franchement.
 
-Le TTL est **court (5 min) avec un battement dédié d'une minute**, et le bail est
-**rendu à l'arrêt propre**. C'est indispensable : l'identité d'une instance est un
-UUID neuf à chaque démarrage, donc un processus qui redémarre ne reconnaît pas
-« son » ancien bail — avec un TTL long, chaque déploiement laisserait la synchro
-morte jusqu'à expiration.
+**L'identité est celle de l'EMPLACEMENT, pas de l'exécution** (hôte + dossier de
+travail + PID, hachés). C'est le point qui compte : un conteneur tué par
+`SIGKILL` (OOM, délai de grâce Docker dépassé) ne libère rien, et avec une
+identité aléatoire le processus suivant ne reconnaissait pas « son » bail —
+la synchro restait morte jusqu'à expiration, ce qui est arrivé en production.
+Un redémarrage au même endroit reprend donc la main immédiatement.
+
+Le bail est aussi rendu à l'arrêt propre, le TTL (3 min) ne servant plus qu'au
+déplacement d'instance. Et le battement tourne **même en mode passif** : c'est
+lui qui reprend la main dès l'expiration, faute de quoi une instance passive le
+resterait pour toujours. En reprenant, elle relance `scheduleAllActive` pour
+rattraper le retard au lieu d'attendre un événement d'agent.
+
+Si le blocage persiste, la sortie de secours est une ligne de SQL :
+`DELETE FROM sync_meta WHERE k = 'engine_lease';` puis redémarrage.
 
 `runExclusive` est LE point de couture de tout ce qui mute un partage. Le jour
 où une vraie coordination sera nécessaire, c'est le seul endroit à remplacer :

@@ -143,6 +143,9 @@ export class CloudSyncEngine {
      */
     private startLeaseHeartbeat(): void {
         if (this.leaseTimer !== null) return;
+        // Démarre AUSSI en mode passif : c'est ce battement qui reprend la main
+        // dès que le bail de l'autre expire. Sans lui, une instance passive le
+        // restait pour toujours et la fonctionnalité était morte.
         this.leaseTimer = setInterval(() => void this.renewLease(), LEASE_HEARTBEAT_MS);
         this.leaseTimer.unref();
     }
