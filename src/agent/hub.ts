@@ -105,12 +105,28 @@ import {
 } from 'deveye-types';
 
 import { accessEpochNow } from '@/features/_access';
+import { logger } from '@/logger';
 
 /**
  * Période du balayage de vivacité des agents. Deux tours sans `pong` ferment la
  * socket. Aligné sur celui de `LiveHub`, pour une seule cadence à retenir.
  */
 const AGENT_HEARTBEAT_MS = 30_000;
+
+/**
+ * Fenêtre et seuil du signalement de reconnexions en rafale.
+ *
+ * Un agent sain se connecte une fois et reste. Au-delà de ce seuil sur cette
+ * fenêtre, la machine va mal : lien instable, résolution DNS qui bascule entre
+ * deux chemins, ou instance dupliquée qui se fait évincer en boucle.
+ *
+ * Ça mérite un signalement explicite, parce que les gardes qui bornent le
+ * travail de connexion (rapport, relevé Sentinelle) rendent désormais ce
+ * symptôme invisible. Les borner sans le dire aurait remplacé un bug voyant par
+ * un bug silencieux.
+ */
+const RECONNECT_WINDOW_MS = 60 * 60 * 1000;
+const RECONNECT_WARN_THRESHOLD = 12;
 
 /**
  * In-memory hub coordinating live monitoring between agent sockets (producers)
@@ -177,6 +193,8 @@ export class MonitorHub {
      * commande de l'utilisateur répare l'instantané.
      */
     private readonly grants = new Map<WebSocket, { allowed: boolean; epoch: number }>();
+    /** deviceId → connexions comptées sur la fenêtre courante (voir `noteReconnect`). */
+    private readonly reconnects = new Map<string, { since: number; count: number }>();
 
     agentOnline(deviceId: string, socket: WebSocket): void {
         // One live session per device. Without this, a superseded socket (fast
@@ -189,7 +207,34 @@ export class MonitorHub {
         this.agents.set(deviceId, socket);
         this.agentAlive.set(socket, true);
         socket.on('pong', () => this.agentAlive.set(socket, true));
+        this.noteReconnect(deviceId);
         this.publishPresence(deviceId, true);
+    }
+
+    /**
+     * Compte les connexions d'un appareil sur une fenêtre glissante et signale
+     * les rafales. Aucune table : c'est un symptôme à voir passer dans les logs,
+     * pas un historique à conserver.
+     *
+     * Signalé une seule fois par fenêtre et par appareil (le compteur repart à
+     * zéro), sinon un agent en boucle inonderait les logs du message qui dénonce
+     * justement une inondation.
+     */
+    private noteReconnect(deviceId: string): void {
+        const now = Date.now();
+        const seen = this.reconnects.get(deviceId);
+        if (seen === undefined || now - seen.since >= RECONNECT_WINDOW_MS) {
+            this.reconnects.set(deviceId, { since: now, count: 1 });
+            return;
+        }
+        seen.count += 1;
+        if (seen.count < RECONNECT_WARN_THRESHOLD) return;
+
+        logger.warn(
+            { deviceId, connections: seen.count, windowMinutes: Math.round(RECONNECT_WINDOW_MS / 60_000) },
+            'Agent reconnecting repeatedly — unstable link, DNS flapping, or a duplicate instance being evicted'
+        );
+        this.reconnects.set(deviceId, { since: now, count: 0 });
     }
 
     /**
