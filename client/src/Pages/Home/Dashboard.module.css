@@ -10,9 +10,7 @@
     flex: 1;
     overflow-y: auto;
     padding-top: var(--navbar-height);
-    transition:
-        filter var(--transition-slow),
-        transform var(--transition-slow);
+    transition: filter var(--transition-slow);
 }
 
 /*
@@ -29,22 +27,23 @@
  * `pointer-events: none` par sûreté : le voile intercepte déjà les clics, mais
  * une tuile qui dépasserait resterait cliquable derrière une interface qui dit
  * le contraire. La molette, elle, traverse et défile la couche du dessus.
+ *
+ * Le retrait, lui, n'est **pas** ici : il est animé par framer-motion sur
+ * `main` (voir `index.tsx`). Une mise à l'échelle posée en CSS sur l'ancêtre de
+ * toutes les tuiles fausse leurs mesures — framer ne sait retrancher d'une
+ * mesure que les transformations qu'il a écrites lui-même — et les tuiles
+ * partaient alors se replacer à côté, voire hors de l'écran.
  */
 .recessed {
     filter: blur(7px);
-    transform: scale(0.965);
     pointer-events: none;
 }
 
 /* Mouvement réduit : le plan recule quand même (c'est une information), mais
-   sans glissement ni changement d'échelle. */
+   sans le glissement. Le retrait est déjà désarmé côté `index.tsx`. */
 @media (prefers-reduced-motion: reduce) {
     .main {
         transition: none;
-    }
-
-    .recessed {
-        transform: none;
     }
 }
 

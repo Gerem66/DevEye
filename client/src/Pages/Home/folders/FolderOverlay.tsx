@@ -1,5 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, type MouseEvent, type ReactNode } from 'react';
-import { AnimatePresence, animate, motion, useMotionValue, usePresence, useReducedMotion } from 'framer-motion';
+import {
+    AnimatePresence,
+    animate,
+    motion,
+    useMotionValue,
+    usePresence,
+    useReducedMotion,
+    useTransform
+} from 'framer-motion';
 import type { HomeFeatureId, HomeFolder } from 'deveye-types';
 
 import { Widget } from '@/Components/Widget';
@@ -24,21 +32,31 @@ const SPRING = { type: 'spring', stiffness: 240, damping: 28, mass: 0.9 } as con
 const FOLD_BACK = { duration: 0.32, ease: [0.4, 0, 0.2, 1] } as const;
 
 /**
- * Le couvercle : une copie de la tuile du dossier, posée sur la couche, au même
- * endroit et par-dessus les cartes.
+ * Où en est l'éventail quand le couvercle commence, puis finit, de s'effacer.
  *
- * C'est ce qui donne le « dessous ». Les cartes vivent sur une couche fixe,
- * au-dessus de l'accueil : rien ne peut les faire passer derrière la vraie
- * tuile, qui est en dessous. Une copie sur la couche, elle, se met devant, et
- * les cartes glissent sous elle au départ comme au retour. Elle s'efface une
- * fois l'éventail sorti, sinon elle masquerait la carte qui vient prendre sa
- * place, et revient juste avant que les cartes ne rentrent.
+ * Le couvercle **suit** le déploiement au lieu d'attendre un délai calculé à
+ * côté. L'ancienne version s'effaçait après `entries.length * STAGGER_IN`, une
+ * durée qui n'a rien à voir avec celle d'un ressort : selon le nombre de cartes,
+ * il partait tantôt bien après que tout se soit posé, tantôt au beau milieu du
+ * mouvement. Deux dossiers ne s'ouvraient pas de la même manière, et aucune des
+ * deux lectures — « il reste » ou « il s'efface pendant que ça sort » — n'était
+ * tenue jusqu'au bout.
  *
- * Le repli dure `FOLD_BACK` : le couvercle a largement le temps de redevenir
- * opaque avant que la première carte n'arrive.
+ * Accroché à l'avancement réel, le parti pris est le second et il est le même
+ * partout : le couvercle disparaît **pendant** que l'éventail s'étale, une fois
+ * la pile dégagée de dessous lui, et il a fini avant qu'aucune carte ne se soit
+ * posée.
  */
-const LID_FADE_OUT = { duration: 0.3 } as const;
-const LID_FADE_IN = { duration: 0.16 } as const;
+const LID_FADE_FROM = 0.22;
+const LID_FADE_TO = 0.6;
+
+/**
+ * Le retour du couvercle, au repli.
+ *
+ * Plus court que `FOLD_BACK` : il doit être redevenu opaque avant que la
+ * première carte ne revienne se ranger dessous.
+ */
+const LID_RESTACK = { duration: 0.16, ease: 'easeOut' } as const;
 
 /** Où poser une carte pour qu'elle se confonde avec la tuile du dossier. */
 function stackedOn(source: DOMRect, slot: { left: number; top: number; width: number }) {
@@ -139,6 +157,56 @@ function FanCard({ index, count, source, hidden, children }: FanCardProps) {
             // Le clic sur une carte lui appartient : c'est la couche entière qui
             // referme le dossier, sauf ici.
             onClick={(e) => e.stopPropagation()}
+        >
+            {children}
+        </motion.div>
+    );
+}
+
+/**
+ * Le couvercle : une copie de la tuile du dossier, posée sur la couche, au même
+ * endroit et par-dessus les cartes.
+ *
+ * C'est ce qui donne le « dessous ». Les cartes vivent sur une couche fixe,
+ * au-dessus de l'accueil : rien ne peut les faire passer derrière la vraie
+ * tuile, qui est en dessous. Une copie sur la couche, elle, se met devant, et
+ * les cartes glissent sous elle au départ comme au retour. Elle s'efface une
+ * fois la pile dégagée, sinon elle masquerait la carte qui vient prendre sa
+ * place, et revient juste avant que les cartes ne rentrent.
+ *
+ * `spread` est la clé : c'est le mouvement de la **dernière** carte, rejoué sur
+ * une valeur de 0 (pile) à 1 (place d'arrivée). Même ressort, même délai de
+ * départ, donc même course — un ressort avance de la même façon quelle que soit
+ * la distance qu'il couvre. Le couvercle lit là un avancement réel, et non une
+ * durée supposée, ce qui rend son effacement identique d'un dossier à l'autre.
+ *
+ * Décoratif de bout en bout : c'est `.lid` qui laisse passer les clics.
+ */
+function FolderLid({ count, source, children }: { count: number; source: DOMRect; children: ReactNode }) {
+    const [isPresent, safeToRemove] = usePresence();
+    const spread = useMotionValue(0);
+    const opacity = useTransform(spread, [LID_FADE_FROM, LID_FADE_TO], [1, 0]);
+
+    useLayoutEffect(() => {
+        const running = animate(spread, 1, { ...SPRING, delay: Math.max(count - 1, 0) * STAGGER_IN });
+        return () => running.stop();
+        // Monté une fois, comme les cartes qu'il double : le nombre d'entrées
+        // peut changer en direct, l'éventail déjà parti, lui, ne change plus.
+    }, []);
+
+    // Le repli : le couvercle se referme, puis la couche attend que les cartes
+    // soient rentrées pour disparaître — il reste donc opaque jusqu'au bout.
+    useEffect(() => {
+        if (isPresent) return;
+        const running = animate(spread, 0, LID_RESTACK);
+        void running.finished.then(() => safeToRemove()).catch(() => {});
+        return () => running.stop();
+    }, [isPresent]);
+
+    return (
+        <motion.div
+            className={styles.lid}
+            style={{ left: source.left, top: source.top, width: source.width, height: source.height, opacity }}
         >
             {children}
         </motion.div>
@@ -256,24 +324,7 @@ export function FolderOverlay({
                         empiler qui que ce soit. Sans mouvement, il n'a rien à
                         cacher : les cartes ne traversent alors pas la tuile. */}
                     {!reduced && (
-                        <motion.div
-                            className={styles.lid}
-                            style={{
-                                left: source.left,
-                                top: source.top,
-                                width: source.width,
-                                height: source.height
-                            }}
-                            initial={{ opacity: 1 }}
-                            animate={{
-                                opacity: 0,
-                                // Le temps que la dernière carte se soit dégagée.
-                                transition: { ...LID_FADE_OUT, delay: entries.length * STAGGER_IN + 0.12 }
-                            }}
-                            // Le retour est immédiat : il doit être opaque avant
-                            // que la première carte ne revienne se ranger.
-                            exit={{ opacity: 1, transition: LID_FADE_IN }}
-                        >
+                        <FolderLid count={entries.length} source={source}>
                             <Widget
                                 widgetId={folderKey(folder.id)}
                                 title={folderTitle(folder.title)}
@@ -282,7 +333,7 @@ export function FolderOverlay({
                             >
                                 <FolderTile folder={folder} />
                             </Widget>
-                        </motion.div>
+                        </FolderLid>
                     )}
                 </div>
             )}

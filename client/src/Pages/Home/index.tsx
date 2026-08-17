@@ -396,6 +396,9 @@ function upperFirst(text: string): string {
 
 export default function HomePage() {
     const { user, refresh } = useAuth();
+    /** Le retrait de l'accueil derrière un dossier déployé est un mouvement : il
+     *  se coupe, le flou reste (voir `.recessed`). */
+    const reducedMotion = useReducedMotion() === true;
     const { epoch: workspaceEpoch } = useWorkspaceState();
     const currentWorkspace = useActiveWorkspace();
     const layout = useHomeLayout();
@@ -1126,7 +1129,33 @@ export default function HomePage() {
                 Un dossier déployé le fait reculer : flou et léger retrait, pour
                 que les cartes qui en sortent aient de la profondeur derrière
                 elles (voir `.recessed`). */}
-                <main className={`${styles.main} ${folderView ? styles.recessed : ''}`}>
+                <motion.main
+                    className={`${styles.main} ${folderView ? styles.recessed : ''}`}
+                    /*
+                     * C'est **ici** que l'accueil défile, et framer doit le savoir.
+                     *
+                     * Les tuiles se mesurent en coordonnées de page ; sans
+                     * `layoutScroll`, le défilement du conteneur n'est jamais
+                     * retranché de ces mesures, et la moindre remesure prise après
+                     * un déroulement lisait un déplacement qui n'a pas eu lieu. Les
+                     * tuiles partaient alors se « replacer » à des centaines de
+                     * pixels de là : les sections du bas — les raccourcis, souvent —
+                     * semblaient disparaître dès qu'un dossier s'ouvrait, alors
+                     * qu'elles n'ont rien à voir avec lui. Ce qui déclenchait la
+                     * remesure était simplement le rendu provoqué par l'ouverture.
+                     */
+                    layoutScroll
+                    /*
+                     * Le retrait, animé par framer plutôt qu'en CSS : c'est la même
+                     * histoire. Framer ne retranche d'une mesure que les
+                     * transformations qu'il a lui-même écrites, donc un
+                     * `transform: scale()` posé en CSS sur l'ancêtre de toutes les
+                     * tuiles décalait chacune d'elles. Passé par ce chemin, il est
+                     * connu et compensé.
+                     */
+                    animate={{ scale: folderView && !reducedMotion ? 0.965 : 1 }}
+                    transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+                >
                     <div className={styles.content} ref={setContentEl}>
                         <header className={styles.greeting} ref={greetingRef}>
                             <h1 className={styles.greetingText}>{heading.title}</h1>
@@ -1165,7 +1194,7 @@ export default function HomePage() {
                             <div className={styles.sections}>{layout.sections.map(renderSection)}</div>
                         )}
                     </div>
-                </main>
+                </motion.main>
 
                 {/* Le dossier déployé. Posé **avant** la popup : à palier de
                     z-index égal, c'est l'ordre de l'arbre qui décide, donc une
