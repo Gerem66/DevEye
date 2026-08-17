@@ -97,53 +97,55 @@ export default function FindingsList({ findings, selectedId, onSelect, showDevic
                             <span className={styles.groupCount}>{group.length}</span>
                         </h4>
                         <ul className={styles.findingRows}>
-                            {group.map((finding) => (
-                                <li key={finding.id}>
-                                    <button
-                                        type='button'
-                                        className={`${styles.findingRow} ${
-                                            finding.id === selectedId ? styles.findingRowActive : ''
-                                        } ${finding.state !== 'open' ? styles.findingRowMuted : ''}`}
-                                        onClick={() => onSelect(finding)}
-                                    >
-                                        <span
-                                            className={`${styles.findingBar} ${severityClass(finding.severity)}`}
-                                            aria-hidden='true'
-                                        />
-                                        <span className={styles.findingMain}>
-                                            <span className={styles.findingRule}>
-                                                {SENTINEL_RULES[finding.rule].label}
-                                            </span>
-                                            <span className={styles.findingSubject}>{finding.subject}</span>
-                                        </span>
-                                        <span className={styles.findingMeta}>
-                                            {finding.state === 'acknowledged' && (
-                                                <span className={styles.chip}>légitime</span>
-                                            )}
-                                            {finding.state === 'resolved' && (
-                                                <span className={styles.chip}>résolu</span>
-                                            )}
-                                            {persistedFor(finding) !== null && (
-                                                <span
-                                                    className={styles.chip}
-                                                    // Une durée se lit tout de suite, là où « ×300 » se
-                                                    // lisait comme trois cents problèmes distincts. Le
-                                                    // décompte brut reste dans l'infobulle : rien ne
-                                                    // disparaît, il quitte seulement le premier plan.
-                                                    title={`Situation vue sans interruption depuis ${persistedFor(finding)} (${finding.occurrences} relevés)`}
-                                                    aria-label={`Présent depuis ${persistedFor(finding)}`}
-                                                >
-                                                    {persistedFor(finding)}
+                            {group.map((finding) => {
+                                const persisted = persistedFor(finding);
+                                return (
+                                    <li key={finding.id}>
+                                        <button
+                                            type='button'
+                                            className={`${styles.findingRow} ${
+                                                finding.id === selectedId ? styles.findingRowActive : ''
+                                            } ${finding.state !== 'open' ? styles.findingRowMuted : ''}`}
+                                            onClick={() => onSelect(finding)}
+                                        >
+                                            <span
+                                                className={`${styles.findingBar} ${severityClass(finding.severity)}`}
+                                                aria-hidden='true'
+                                            />
+                                            <span className={styles.findingMain}>
+                                                <span className={styles.findingRule}>
+                                                    {SENTINEL_RULES[finding.rule].label}
                                                 </span>
-                                            )}
-                                            {showDevice && (
-                                                <span className={styles.findingDevice}>{finding.deviceName}</span>
-                                            )}
-                                            <span className={styles.findingAgo}>{ago(finding.lastSeen)}</span>
-                                        </span>
-                                    </button>
-                                </li>
-                            ))}
+                                                <span className={styles.findingSubject}>{finding.subject}</span>
+                                            </span>
+                                            <span className={styles.findingMeta}>
+                                                {finding.state === 'acknowledged' && (
+                                                    <span className={styles.chip}>légitime</span>
+                                                )}
+                                                {finding.state === 'resolved' && (
+                                                    <span className={styles.chip}>résolu</span>
+                                                )}
+                                                {persisted !== null && (
+                                                    <span
+                                                        className={styles.chip}
+                                                        // Une durée se lit tout de suite, là où « ×300 » se
+                                                        // lisait comme trois cents problèmes distincts. Le
+                                                        // décompte brut reste dans l'infobulle.
+                                                        title={`Situation vue sans interruption depuis ${persisted} (${finding.occurrences} relevés)`}
+                                                        aria-label={`Présent depuis ${persisted}`}
+                                                    >
+                                                        {persisted}
+                                                    </span>
+                                                )}
+                                                {showDevice && (
+                                                    <span className={styles.findingDevice}>{finding.deviceName}</span>
+                                                )}
+                                                <span className={styles.findingAgo}>{ago(finding.lastSeen)}</span>
+                                            </span>
+                                        </button>
+                                    </li>
+                                );
+                            })}
                         </ul>
                     </section>
                 );

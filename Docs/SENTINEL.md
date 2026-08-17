@@ -59,10 +59,9 @@ Deux gardes, délibérément aux deux bouts :
 
 - **Agent** (`runner.rs`) : `ConnectMarks` retient quand chaque travail a été fait
   pour la dernière fois, **au-delà de la session** pour survivre à une
-  reconnexion ; `due_at` décide. `MIN_CONNECT_REPORT_GAP` et
-  `MIN_CONNECT_SCAN_GAP` valent 15 min contre une cadence nominale d'une heure.
-  Au lancement du processus les jalons sont `None`, donc un vrai démarrage ne perd
-  rien. Les tickers **posent** le jalon eux aussi, sinon un tour d'horloge suivi
+  reconnexion ; `due_at` décide. `MIN_CONNECT_WORK_GAP` vaut 15 min contre une
+  cadence nominale d'une heure. Au lancement du processus les jalons sont `None`,
+  donc un vrai démarrage ne perd rien. Les tickers **posent** le jalon eux aussi, sinon un tour d'horloge suivi
   d'une reconnexion serait immédiatement rejoué. `agent.collect` et `agent.scan`
   ne sont jamais bornés : ce sont des ordres explicites.
 - **Serveur** (`SecurityMonitor.ts`) : `EVAL_FLOOR_MS` (10 min) plafonne la

@@ -53,20 +53,11 @@ const RECONNECT_DELAY: Duration = Duration::from_secs(2);
 /// this: reconnect loops must not multiply snapshots. The server can still force
 /// one at any time via `agent.collect`.
 const MIN_CONNECT_SNAPSHOT_GAP: Duration = Duration::from_secs(60);
-/// Idem pour le rapport et le relevé Sentinelle faits à la connexion.
-///
-/// Ces deux-là étaient les seuls travaux de connexion SANS garde, alors qu'ils
-/// sont les plus lourds : le rapport empreinte des centaines de fichiers et lit
-/// des journaux. Une machine qui se reconnectait toutes les trente secondes les
-/// rejouait donc autant de fois, et le serveur réévaluait ses règles à chaque
-/// coup — un constat `port.*` ou `posture.*` se retrouvait « constaté 300 fois »
-/// en quelques heures pour une cadence nominale d'une par heure.
-///
-/// Quinze minutes contre une heure de cadence : assez long pour éteindre une
-/// boucle de reconnexion, assez court pour qu'un vrai démarrage ne perde rien —
-/// au lancement du processus la valeur est `None`, donc le travail se fait.
-const MIN_CONNECT_REPORT_GAP: Duration = Duration::from_secs(15 * 60);
-const MIN_CONNECT_SCAN_GAP: Duration = Duration::from_secs(15 * 60);
+/// Idem pour le rapport et le relevé Sentinelle, dont la cadence nominale est
+/// l'heure : quinze minutes suffisent à éteindre une boucle de reconnexion sans
+/// qu'un vrai démarrage perde quoi que ce soit (le jalon est alors `None`).
+/// Détail dans `Docs/SENTINEL.md`.
+const MIN_CONNECT_WORK_GAP: Duration = Duration::from_secs(15 * 60);
 /// Retry delay after the server *rejects* us at the handshake (revoked, unknown
 /// or not-yet-approved device). Much slower than a normal reconnect: a rejection
 /// won't clear on its own, so we back off to roughly hourly to avoid hammering
@@ -389,7 +380,7 @@ async fn stream_session(
     // forte encore : c'est le travail le plus lourd de la connexion, et le
     // serveur réévalue ses règles de sécurité à chaque rapport reçu.
     let (report_tx, mut report_rx) = tokio::sync::mpsc::channel::<DeviceReport>(4);
-    if due_at(marks.report, Instant::now(), MIN_CONNECT_REPORT_GAP) {
+    if due_at(marks.report, Instant::now(), MIN_CONNECT_WORK_GAP) {
         spawn_report(&report_tx, &sockets);
         marks.report = Some(Instant::now());
     }
@@ -399,7 +390,7 @@ async fn stream_session(
     // tournent hors de la boucle, qui reste disponible pour les pings et les
     // métriques.
     let (scan_tx, mut scan_rx) = tokio::sync::mpsc::channel::<ScanResult>(4);
-    if sentinel && due_at(marks.scan, Instant::now(), MIN_CONNECT_SCAN_GAP) {
+    if sentinel && due_at(marks.scan, Instant::now(), MIN_CONNECT_WORK_GAP) {
         // À la connexion : une machine qu'on vient d'allumer doit rendre son
         // état sans attendre le premier tour d'horloge. Le garde préserve
         // exactement ça (aucun relevé encore fait ⇒ `None` ⇒ on relève) tout en
@@ -587,7 +578,7 @@ async fn stream_session(
                                 // serveur peut toujours forcer par `agent.scan`.
                                 if sentinel
                                     && !was_on
-                                    && due_at(marks.scan, Instant::now(), MIN_CONNECT_SCAN_GAP)
+                                    && due_at(marks.scan, Instant::now(), MIN_CONNECT_WORK_GAP)
                                 {
                                     spawn_scan(&scan_tx, auth_enabled, auth_cursor);
                                     marks.scan = Some(Instant::now());
@@ -1108,52 +1099,38 @@ fn log_server_text(txt: &str) {
 mod tests {
     use super::*;
 
-    /// Le garde des travaux de connexion. C'est lui qui empêche une boucle de
-    /// reconnexion de multiplier rapports et relevés Sentinelle, donc de gonfler
-    /// les constats du serveur — il mérite d'être vérifié sans socket ni attente.
-    ///
-    /// `now` est construit en avant d'une base, jamais en arrière : sur certaines
-    /// plateformes un `Instant` fraîchement lu est proche de l'origine, et lui
-    /// soustraire une heure déborderait.
+    /// Le garde des travaux de connexion : c'est lui qui empêche une boucle de
+    /// reconnexion de multiplier rapports et relevés, donc de gonfler les constats
+    /// du serveur. `now` est construit **en avant** d'une base, jamais en arrière :
+    /// un `Instant` fraîchement lu peut être proche de l'origine de la plateforme,
+    /// et lui soustraire une heure déborderait.
     #[test]
     fn connect_work_runs_when_never_done() {
-        // Démarrage du processus : rien n'a encore été fait, le travail se fait.
-        // C'est ce qui préserve « une machine qu'on vient d'allumer rend son état ».
-        assert!(due_at(None, Instant::now(), MIN_CONNECT_REPORT_GAP));
+        // Démarrage du processus : c'est ce qui préserve « une machine qu'on vient
+        // d'allumer rend son état sans attendre son premier tour d'horloge ».
+        assert!(due_at(None, Instant::now(), MIN_CONNECT_WORK_GAP));
     }
 
     #[test]
-    fn connect_work_is_skipped_right_after() {
-        // Le cas de la boucle de reconnexion : on vient de le faire, on ne le
-        // refait pas.
+    fn connect_work_waits_for_the_whole_gap() {
         let base = Instant::now();
-        assert!(!due_at(Some(base), base, MIN_CONNECT_REPORT_GAP));
+        // La boucle de reconnexion : on vient de le faire, on ne le refait pas.
+        assert!(!due_at(Some(base), base, MIN_CONNECT_WORK_GAP));
         assert!(!due_at(
             Some(base),
-            base + Duration::from_secs(30),
-            MIN_CONNECT_REPORT_GAP
+            base + MIN_CONNECT_WORK_GAP - Duration::from_secs(1),
+            MIN_CONNECT_WORK_GAP
         ));
-    }
-
-    #[test]
-    fn connect_work_runs_again_past_the_gap() {
-        let base = Instant::now();
-        // Juste avant l'échéance : toujours non.
-        assert!(!due_at(
-            Some(base),
-            base + MIN_CONNECT_REPORT_GAP - Duration::from_secs(1),
-            MIN_CONNECT_REPORT_GAP
-        ));
-        // Pile à l'échéance, et au-delà : oui.
+        // Pile à l'échéance, puis bien après.
         assert!(due_at(
             Some(base),
-            base + MIN_CONNECT_REPORT_GAP,
-            MIN_CONNECT_REPORT_GAP
+            base + MIN_CONNECT_WORK_GAP,
+            MIN_CONNECT_WORK_GAP
         ));
         assert!(due_at(
             Some(base),
             base + Duration::from_secs(3600),
-            MIN_CONNECT_REPORT_GAP
+            MIN_CONNECT_WORK_GAP
         ));
     }
 
@@ -1166,17 +1143,17 @@ mod tests {
         assert!(!due_at(
             Some(base + Duration::from_secs(600)),
             base,
-            MIN_CONNECT_REPORT_GAP
+            MIN_CONNECT_WORK_GAP
         ));
     }
 
     #[test]
-    fn snapshot_gap_is_shorter_than_the_heavy_jobs() {
-        // L'instant de métriques est léger et attendu par l'interface ; le rapport
-        // et le relevé sont lourds. Si cet ordre s'inversait un jour, le correctif
-        // perdrait son sens.
-        assert!(MIN_CONNECT_SNAPSHOT_GAP < MIN_CONNECT_REPORT_GAP);
-        assert!(MIN_CONNECT_REPORT_GAP < REPORT_INTERVAL);
-        assert!(MIN_CONNECT_SCAN_GAP < AUTH_INTERVAL);
+    fn the_gaps_stay_ordered() {
+        // L'instant de métriques est léger et attendu par l'interface, le rapport
+        // et le relevé sont lourds ; et un garde plus long que la cadence qu'il
+        // borne empêcherait le travail au lieu de le dédoublonner. Si l'un de ces
+        // deux ordres s'inversait, le correctif perdrait son sens.
+        assert!(MIN_CONNECT_SNAPSHOT_GAP < MIN_CONNECT_WORK_GAP);
+        assert!(MIN_CONNECT_WORK_GAP < REPORT_INTERVAL);
     }
 }

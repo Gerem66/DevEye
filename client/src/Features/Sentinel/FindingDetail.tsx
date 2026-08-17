@@ -36,6 +36,7 @@ interface Props {
 
 export default function FindingDetail({ finding, onAcknowledge, onResolve, onReopen, onClose }: Props) {
     const meta = SENTINEL_RULES[finding.rule];
+    const persisted = persistedFor(finding);
     const [reason, setReason] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -86,12 +87,12 @@ export default function FindingDetail({ finding, onAcknowledge, onResolve, onReo
                     <dt>Dernière fois</dt>
                     <dd>
                         {ago(finding.lastSeen)}
-                        {persistedFor(finding) !== null && (
+                        {persisted !== null && (
                             <span
                                 className={styles.evidenceNote}
                                 title={`${finding.occurrences} relevés depuis le premier signalement`}
                             >
-                                présent depuis {persistedFor(finding)}
+                                présent depuis {persisted}
                             </span>
                         )}
                     </dd>
