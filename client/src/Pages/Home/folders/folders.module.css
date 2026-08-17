@@ -82,23 +82,10 @@
     padding-top: var(--navbar-height);
 }
 
-/*
- * Le voile, léger.
- *
- * Il était à 0,45, ce qui suffisait à effacer l'accueil derrière lui : un voile
- * opaque est **additif**, il rapproche la carte et le fond d'une même couleur
- * au lieu de les atténuer l'un comme l'autre, et l'écart entre les deux fondait
- * de moitié (voir le détail dans `.recessed`, `Dashboard.module.css`).
- *
- * Il n'avait pas à en faire tant : le flou, le retrait et le liseré de fond
- * d'écran sur les bords disent déjà qu'on a changé de plan. Ce qu'il reste à
- * faire au voile est d'asseoir les cartes du dossier sur quelque chose, et 0,28
- * y suffit.
- */
 .scrim {
     position: fixed;
     inset: 0;
-    background: rgba(4, 7, 12, 0.28);
+    background: rgba(4, 7, 12, 0.45);
 }
 
 /*

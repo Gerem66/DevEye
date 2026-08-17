@@ -30,40 +30,12 @@
  *
  * Le retrait, lui, n'est **pas** ici : il est animé par framer-motion sur
  * `main` (voir `index.tsx`). Une mise à l'échelle posée en CSS sur l'ancêtre de
- * toutes les tuiles fausse leurs mesures, framer ne sachant retrancher d'une
- * mesure que les transformations qu'il a écrites lui-même, et les tuiles
+ * toutes les tuiles fausse leurs mesures — framer ne sait retrancher d'une
+ * mesure que les transformations qu'il a écrites lui-même — et les tuiles
  * partaient alors se replacer à côté, voire hors de l'écran.
- *
- * ## Le plan recule, il ne s'efface pas
- *
- * Reculer coûte du contraste, et il s'en dépensait plus qu'il n'y en avait :
- * les cartes de l'arrière-plan devenaient indiscernables du fond d'écran, ce
- * qui se lisait comme leur disparition. Deux effets se multipliaient sur les
- * mêmes pixels.
- *
- * Le flou d'abord. `blur(r)` est une gaussienne d'écart-type `r` : le trait de
- * 1 px qui **dessine** la carte y est étalé sur `2r`, donc réduit à
- * `1 / (r × √2π)` de son amplitude. À 7 px il ne restait que 0,5 % de blanc du
- * cadre, autant dire rien. Le voile de la couche ensuite (voir `.scrim`), qui
- * pousse la carte et le fond vers une même valeur plate.
- *
- * Mesuré : l'écart de luminance entre une carte et le fond tombait de 9,9 à
- * 3,8 sur 255, soit 1,5 %. Sous ce seuil, une tuile sans en-tête lumineux (un
- * raccourci, un appareil : voir `tiles/tileVisual`) n'a plus rien à montrer.
- *
- * D'où les trois réglages ci-dessous, qui rendent au plan de quoi rester lu.
- * Le flou est ramené à 5 px, et les deux jetons de verre sont relevés le temps
- * du retrait : ils cascadent jusqu'aux cartes sans qu'on ait à les désigner
- * (`.widget` lit déjà `var(--surface-widget)` et `var(--glass-border)`, depuis
- * un autre module CSS), et ils ne peuvent pas fuir vers les vues de
- * fonctionnalité, qui vivent hors de `main`. On retrouve ainsi ~70 % du
- * contraste de l'accueil de plein pied : assez pour lire, pas assez pour
- * rivaliser avec la couche du dessus.
  */
 .recessed {
-    --surface-widget: rgba(20, 29, 43, 0.7);
-    --glass-border: rgba(255, 255, 255, 0.2);
-    filter: blur(5px);
+    filter: blur(7px);
     pointer-events: none;
 }
 
