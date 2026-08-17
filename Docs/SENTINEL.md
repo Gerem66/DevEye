@@ -46,6 +46,41 @@ d'agent — la façon la plus sûre de faire abandonner la feature.
 Réglages par appareil : `devices.sentinel_*`, poussés à l'agent par `agent.config`
 et **rejoués à la reconnexion** (invariant 1 de Monitoring).
 
+### Le travail de connexion est borné des deux côtés
+
+Rapport et relevés partent **aussi** à la connexion, pour qu'une machine qu'on
+vient d'allumer rende son état sans attendre son premier tour d'horloge. Mais une
+machine qui se **reconnecte en boucle** les rejouait alors autant de fois : le
+serveur réévaluait ses règles à chaque coup, et un constat `port.*` ou `posture.*`
+de cadence horaire finissait « constaté 300 fois » en quelques heures — pour un
+travail qui empreinte des centaines de fichiers et lit des journaux.
+
+Deux gardes, délibérément aux deux bouts :
+
+- **Agent** (`runner.rs`) : `ConnectMarks` retient quand chaque travail a été fait
+  pour la dernière fois, **au-delà de la session** pour survivre à une
+  reconnexion ; `due_at` décide. `MIN_CONNECT_REPORT_GAP` et
+  `MIN_CONNECT_SCAN_GAP` valent 15 min contre une cadence nominale d'une heure.
+  Au lancement du processus les jalons sont `None`, donc un vrai démarrage ne perd
+  rien. Les tickers **posent** le jalon eux aussi, sinon un tour d'horloge suivi
+  d'une reconnexion serait immédiatement rejoué. `agent.collect` et `agent.scan`
+  ne sont jamais bornés : ce sont des ordres explicites.
+- **Serveur** (`SecurityMonitor.ts`) : `EVAL_FLOOR_MS` (10 min) plafonne la
+  réévaluation de `report` / `auth` / `integrity` par appareil. Nécessaire *en
+  plus* du garde agent, pour deux raisons : la flotte se met à jour à son rythme,
+  et un `Instant` est relatif au processus, donc un agent qui **plante** en boucle
+  repart sans mémoire. L'ingestion n'est pas touchée — `report_json`, les ports et
+  la ligne de base s'écrivent comme avant ; seule la relecture des règles est
+  bornée.
+
+Piège refermé au passage : sauter une évaluation saute **aussi** son entrée dans
+`replayed`. Annoncer une famille rejouée sans lui fournir de constats la ferait
+résoudre en bloc — le détecteur qui s'éteint sans bruit de l'invariant plus bas.
+
+Ces gardes rendent le symptôme invisible, donc le hub **signale** désormais les
+rafales de reconnexion (`noteReconnect`, au-delà de 12 connexions par heure et par
+appareil). Les taire sans le dire aurait remplacé un bug voyant par un bug muet.
+
 ## Invariants à préserver
 
 1. **L'ingestion n'évalue pas.** Un lot de métriques peut porter cent instants
@@ -262,8 +297,12 @@ connaître l'état précédent, et deviendrait intestable.
   deux identiques : la migration 074 déclare donc la sienne explicitement, sans
   quoi elle passerait ici et échouerait sur une base restaurée ailleurs — au
   démarrage, hors transaction, à moitié appliquée.
-- **`cargo fmt` n'existe pas sur cette machine** (cargo Fedora sans le
-  sous-commande) : appeler `rustfmt` directement sur la liste des fichiers.
+- **`occurrences` n'est plus affiché tel quel.** Le compteur reste incrémenté et
+  en base, mais l'interface montre une **durée** (`persistedFor`, qui réutilise
+  `formatDuration` du Monitoring). Pour une condition vraie en permanence le
+  nombre n'était que la durée divisée par la cadence de relevé, et « ×300 » se
+  lisait comme trois cents problèmes distincts. Le décompte brut survit dans les
+  infobulles.
 - **Le cache de ligne de base du moteur est en mémoire** et suppose un seul
   processus, comme `lastProcessSampleTs` dans `agent/handlers/telemetry.ts`.
   `sentinel.resetBaseline` appelle `monitor.invalidate()` — sans quoi la remise à

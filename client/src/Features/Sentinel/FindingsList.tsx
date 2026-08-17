@@ -1,5 +1,6 @@
 import { SENTINEL_RULES, type Finding, type FindingSeverity } from 'deveye-types';
 
+import { formatDuration } from '@/Features/Monitoring/utils';
 import styles from './style.module.css';
 
 /**
@@ -31,6 +32,23 @@ export function severityClass(severity: FindingSeverity): string {
         default:
             return styles.sevInfo;
     }
+}
+
+/**
+ * Depuis combien de temps la situation dure, ou `null` si ça n'a pas de sens.
+ *
+ * Remplace le décompte d'occurrences qui s'affichait ici. Le nombre était juste
+ * mais informait mal : pour une condition vraie en permanence, il n'est que la
+ * durée divisée par la cadence de relevé. Un constat de posture revu chaque heure
+ * annonçait « constaté 300 fois », ce qui se lisait comme trois cents problèmes
+ * plutôt que comme un problème vieux de quelques jours.
+ *
+ * `null` en deçà de la minute : un constat qui vient d'apparaître n'a pas de
+ * durée à montrer, et `first_seen == last_seen` au premier relevé.
+ */
+export function persistedFor(finding: Pick<Finding, 'firstSeen' | 'lastSeen'>): string | null {
+    const span = finding.lastSeen - finding.firstSeen;
+    return span < 60_000 ? null : formatDuration(span);
 }
 
 /** « il y a 3 min », « il y a 2 j » — la précision utile, pas la date exacte. */
@@ -105,16 +123,17 @@ export default function FindingsList({ findings, selectedId, onSelect, showDevic
                                             {finding.state === 'resolved' && (
                                                 <span className={styles.chip}>résolu</span>
                                             )}
-                                            {finding.occurrences > 1 && (
+                                            {persistedFor(finding) !== null && (
                                                 <span
                                                     className={styles.chip}
-                                                    // Le « ×10 » ne se devine pas : c'est le nombre de
-                                                    // relevés où la situation a été revue, pas dix
-                                                    // problèmes distincts.
-                                                    title={`Situation constatée ${finding.occurrences} fois depuis le premier signalement`}
-                                                    aria-label={`Constatée ${finding.occurrences} fois`}
+                                                    // Une durée se lit tout de suite, là où « ×300 » se
+                                                    // lisait comme trois cents problèmes distincts. Le
+                                                    // décompte brut reste dans l'infobulle : rien ne
+                                                    // disparaît, il quitte seulement le premier plan.
+                                                    title={`Situation vue sans interruption depuis ${persistedFor(finding)} (${finding.occurrences} relevés)`}
+                                                    aria-label={`Présent depuis ${persistedFor(finding)}`}
                                                 >
-                                                    ×{finding.occurrences}
+                                                    {persistedFor(finding)}
                                                 </span>
                                             )}
                                             {showDevice && (

@@ -4,7 +4,7 @@ import { SENTINEL_RULES, type AllowScope, type Finding } from 'deveye-types';
 import Button from '@/Components/Button';
 import TextInput from '@/Components/TextInput';
 
-import { ago, severityClass } from './FindingsList';
+import { ago, persistedFor, severityClass } from './FindingsList';
 import styles from './style.module.css';
 
 /**
@@ -86,9 +86,12 @@ export default function FindingDetail({ finding, onAcknowledge, onResolve, onReo
                     <dt>Dernière fois</dt>
                     <dd>
                         {ago(finding.lastSeen)}
-                        {finding.occurrences > 1 && (
-                            <span className={styles.evidenceNote}>
-                                situation constatée {finding.occurrences} fois depuis le premier signalement
+                        {persistedFor(finding) !== null && (
+                            <span
+                                className={styles.evidenceNote}
+                                title={`${finding.occurrences} relevés depuis le premier signalement`}
+                            >
+                                présent depuis {persistedFor(finding)}
                             </span>
                         )}
                     </dd>
