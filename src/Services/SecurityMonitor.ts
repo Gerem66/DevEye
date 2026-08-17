@@ -67,6 +67,48 @@ const TICK_SECONDS = env.SENTINEL_TICK_SECONDS;
 const SLOW_PASS_MS = 60 * 60 * 1000;
 
 /**
+ * Plancher entre deux évaluations d'une même famille de règles, pour un même
+ * appareil.
+ *
+ * Les familles `report`, `auth` et `persistence` sont nourries par des relevés à
+ * cadence horaire (six heures pour la persistance). Mais l'agent les émet AUSSI
+ * à la connexion, si bien qu'une machine qui se reconnecte en boucle les faisait
+ * rejouer autant de fois : un constat `port.*` ou `posture.*` se retrouvait
+ * « constaté 300 fois » en quelques heures, et le serveur relisait des centaines
+ * de fichiers pour rien.
+ *
+ * L'agent borne désormais son travail de connexion, mais la flotte se met à jour
+ * à son propre rythme et un agent qui *plante* en boucle repart sans mémoire. Ce
+ * plancher-ci prend effet immédiatement et couvre ces deux cas : le serveur ne
+ * doit pas dépendre du bon comportement de ses agents pour une opération aussi
+ * coûteuse.
+ *
+ * Dix minutes reste **plus réactif** que la cadence horaire visée : rien n'est
+ * perdu en détection, seul le débit maximum est ramené de ~100 évaluations par
+ * heure à six.
+ */
+const EVAL_FLOOR_MS = 10 * 60 * 1000;
+
+/**
+ * Le délai est-il écoulé depuis la dernière fois ?
+ *
+ * `undefined` veut dire « jamais », donc oui. Extrait pour être vérifiable sans
+ * horloge ni base, et volontairement symétrique de `due_at` côté agent
+ * (`agent/src/runner.rs`) : c'est la même décision, prise aux deux bouts.
+ */
+export function dueSince(lastMs: number | undefined, nowMs: number, floorMs: number): boolean {
+    return lastMs === undefined || nowMs - lastMs >= floorMs;
+}
+
+/**
+ * Les familles soumises au plancher : celles nourries par un relevé périodique
+ * que l'agent réémet à la connexion. L'instant de métriques n'y est PAS — il est
+ * léger, arrive à la minute, et c'est lui qui porte la détection réactive.
+ */
+const EVAL_FAMILIES = ['report', 'auth', 'integrity'] as const;
+type EvalFamily = (typeof EVAL_FAMILIES)[number];
+
+/**
  * Combien d'instants d'absence avant de déclarer un programme disparu.
  *
  * Généreux exprès : un programme qui redémarre entre deux relevés ne doit pas
@@ -162,6 +204,14 @@ export class SecurityMonitor {
      * `invalidate()` est appelé par `sentinel.resetBaseline`.
      */
     private readonly baselines = new Map<string, BaselineCache>();
+    /**
+     * `deviceId:famille` → dernière évaluation, pour {@link EVAL_FLOOR_MS}.
+     *
+     * En mémoire volontairement : une perte au redémarrage n'autorise qu'une
+     * évaluation de plus, ce qui est sans conséquence. Purgée avec la ligne de
+     * base, pour qu'un appareil retiré n'y laisse pas d'entrée.
+     */
+    private readonly lastEval = new Map<string, number>();
 
     constructor(private readonly deps: SecurityMonitorDeps) {}
 
@@ -189,6 +239,22 @@ export class SecurityMonitor {
     /** Oublie la ligne de base en mémoire d'un appareil (après une remise à zéro). */
     invalidate(deviceId: string): void {
         this.baselines.delete(deviceId);
+        // Une remise à zéro veut dire « reprends tout depuis rien » : garder le
+        // plancher ferait attendre dix minutes la première évaluation qu'elle est
+        // justement censée provoquer.
+        for (const kind of EVAL_FAMILIES) this.lastEval.delete(`${deviceId}:${kind}`);
+    }
+
+    /**
+     * Réserve le droit d'évaluer une famille de règles pour cet appareil, ou le
+     * refuse si le plancher n'est pas écoulé. Marque au passage : deux appels
+     * rapprochés ne peuvent pas tous deux réussir.
+     */
+    private claimEvaluation(deviceId: string, kind: EvalFamily, now: number): boolean {
+        const key = `${deviceId}:${kind}`;
+        if (!dueSince(this.lastEval.get(key), now, EVAL_FLOOR_MS)) return false;
+        this.lastEval.set(key, now);
+        return true;
     }
 
     // ─────────────────────────────── la file ─────────────────────────────────
@@ -319,14 +385,25 @@ export class SecurityMonitor {
             drafts.push(...evaluateSnapshot(ctx));
             replayed.push(...SNAPSHOT_RULES);
         }
-        if (pending.report === true) {
+        // Les trois familles périodiques passent par le plancher (voir
+        // {@link EVAL_FLOOR_MS}). Sauter l'évaluation saute AUSSI le `replayed`
+        // correspondant, et c'est indispensable : annoncer une famille rejouée
+        // sans lui fournir de constats la ferait résoudre en bloc, exactement le
+        // détecteur qui s'éteint sans bruit décrit plus haut.
+        //
+        // L'ingestion, elle, n'est pas touchée : `report_json`, les ports et la
+        // ligne de base sont écrits comme avant, plus bas. Seule la relecture des
+        // règles est bornée.
+        if (pending.report === true && this.claimEvaluation(deviceId, 'report', now)) {
             drafts.push(...evaluateReport(ctx));
             replayed.push(...REPORT_RULES);
         }
-        if (pending.integrity) {
+        if (pending.integrity && this.claimEvaluation(deviceId, 'integrity', now)) {
             drafts.push(...persistenceRules(ctx, pending.integrity.entries, pending.integrity.truncated));
         }
-        if (pending.auth) drafts.push(...authRules(ctx, pending.auth));
+        if (pending.auth && this.claimEvaluation(deviceId, 'auth', now)) {
+            drafts.push(...authRules(ctx, pending.auth));
+        }
 
         const opened = await this.record(device, drafts, replayed);
 
