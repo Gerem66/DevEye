@@ -53,6 +53,20 @@ const RECONNECT_DELAY: Duration = Duration::from_secs(2);
 /// this: reconnect loops must not multiply snapshots. The server can still force
 /// one at any time via `agent.collect`.
 const MIN_CONNECT_SNAPSHOT_GAP: Duration = Duration::from_secs(60);
+/// Idem pour le rapport et le relevé Sentinelle faits à la connexion.
+///
+/// Ces deux-là étaient les seuls travaux de connexion SANS garde, alors qu'ils
+/// sont les plus lourds : le rapport empreinte des centaines de fichiers et lit
+/// des journaux. Une machine qui se reconnectait toutes les trente secondes les
+/// rejouait donc autant de fois, et le serveur réévaluait ses règles à chaque
+/// coup — un constat `port.*` ou `posture.*` se retrouvait « constaté 300 fois »
+/// en quelques heures pour une cadence nominale d'une par heure.
+///
+/// Quinze minutes contre une heure de cadence : assez long pour éteindre une
+/// boucle de reconnexion, assez court pour qu'un vrai démarrage ne perde rien —
+/// au lancement du processus la valeur est `None`, donc le travail se fait.
+const MIN_CONNECT_REPORT_GAP: Duration = Duration::from_secs(15 * 60);
+const MIN_CONNECT_SCAN_GAP: Duration = Duration::from_secs(15 * 60);
 /// Retry delay after the server *rejects* us at the handshake (revoked, unknown
 /// or not-yet-approved device). Much slower than a normal reconnect: a rejection
 /// won't clear on its own, so we back off to roughly hourly to avoid hammering
@@ -81,6 +95,43 @@ const DEFAULT_INTEGRITY_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 /// campagne de tentatives se compte en minutes, pas en heures — mais la fenêtre
 /// étant glissante, rien n'est perdu entre deux relevés.
 const AUTH_INTERVAL: Duration = Duration::from_secs(60 * 60);
+
+/// Un travail périodique fait À LA CONNEXION doit-il être rejoué ?
+///
+/// `None` veut dire « jamais fait dans ce processus », donc au démarrage : on le
+/// fait, c'est tout l'intérêt du travail de connexion. Sinon on ne le refait que
+/// si le précédent a dépassé `gap`, ce qui empêche une boucle de reconnexion de
+/// multiplier un travail coûteux.
+///
+/// Prend `now` en paramètre plutôt que d'appeler `Instant::now()` : c'est ce qui
+/// rend la décision vérifiable sans attendre quinze minutes ni ouvrir de socket.
+///
+/// **Limite assumée** : `Instant` est relatif au processus. Un agent qui *plante*
+/// en boucle repart de `None` et rejoue. Le garde couvre les reconnexions, pas
+/// les redémarrages — c'est déjà vrai du garde de l'instant de métriques, et le
+/// plancher côté serveur est ce qui rattrape ce cas.
+fn due_at(last: Option<Instant>, now: Instant, gap: Duration) -> bool {
+    match last {
+        None => true,
+        Some(previous) => now.saturating_duration_since(previous) >= gap,
+    }
+}
+
+/// Ce que ce processus a déjà fait, conservé d'une session à l'autre.
+///
+/// Regroupé en une structure plutôt que passé en trois paramètres : c'est un seul
+/// concept, et c'est ce qui permet aux gardes de reconnaître une reconnexion.
+/// Vit dans la boucle externe, jamais dans la session — ce qui doit survivre à
+/// une déconnexion ne peut pas mourir avec elle.
+#[derive(Default)]
+struct ConnectMarks {
+    /// Dernier instant complet (métriques + liste de processus).
+    snapshot: Option<Instant>,
+    /// Dernier rapport OS/sécurité émis.
+    report: Option<Instant>,
+    /// Dernier relevé Sentinelle émis.
+    scan: Option<Instant>,
+}
 
 /// Attend un ordre d'arrêt du système (SIGTERM) ou du terminal (Ctrl-C).
 ///
@@ -129,9 +180,10 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
     let mut collector = Collector::new();
     let mut queue: VecDeque<MetricSnapshot> = VecDeque::with_capacity(QUEUE_CAPACITY);
     let mut backoff = MIN_BACKOFF;
-    // When the last connect-time full snapshot + processes were sent, kept across
-    // sessions so reconnect loops can't multiply snapshots (see the gap constant).
-    let mut last_full_snapshot: Option<Instant> = None;
+    // Quand chaque travail de connexion a été fait pour la dernière fois, gardé
+    // d'une session à l'autre pour qu'une boucle de reconnexion ne les multiplie
+    // pas (voir `ConnectMarks` et les constantes de garde).
+    let mut marks = ConnectMarks::default();
 
     info!(device_id = %device_id, metric_interval_secs = opts.interval.as_secs(), "DevEye agent starting");
 
@@ -143,7 +195,7 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
             opts.interval,
             &mut collector,
             &mut queue,
-            &mut last_full_snapshot,
+            &mut marks,
         )
         .await
         {
@@ -237,7 +289,7 @@ async fn stream_session(
     initial_interval: Duration,
     collector: &mut Collector,
     queue: &mut VecDeque<MetricSnapshot>,
-    last_collect: &mut Option<Instant>,
+    marks: &mut ConnectMarks,
 ) -> Result<SessionOutcome> {
     let (ws_stream, _) = tokio_tungstenite::connect_async(ws_url)
         .await
@@ -318,11 +370,11 @@ async fn stream_session(
     // skipped when the last one is recent — a reconnect loop must not mint an
     // instant per connection. Its socket probe then feeds the report, and the
     // queue flush replays anything buffered while offline.
-    let due = last_collect.is_none_or(|t| t.elapsed() >= MIN_CONNECT_SNAPSHOT_GAP);
+    let due = due_at(marks.snapshot, Instant::now(), MIN_CONNECT_SNAPSHOT_GAP);
     let sockets = if due {
         let (snapshot, sockets) = collect(collector, &capture, true).await?;
         push_bounded(queue, snapshot);
-        *last_collect = Some(Instant::now());
+        marks.snapshot = Some(Instant::now());
         sockets
     } else {
         sockets::read_sockets(true)
@@ -332,18 +384,28 @@ async fn stream_session(
     flush_queue(&mut sink, device_id, queue).await?;
 
     // Le rapport voyage par ce canal, construit hors de la boucle.
+    //
+    // Borné par le même garde que l'instant ci-dessus, et pour une raison plus
+    // forte encore : c'est le travail le plus lourd de la connexion, et le
+    // serveur réévalue ses règles de sécurité à chaque rapport reçu.
     let (report_tx, mut report_rx) = tokio::sync::mpsc::channel::<DeviceReport>(4);
-    spawn_report(&report_tx, &sockets);
+    if due_at(marks.report, Instant::now(), MIN_CONNECT_REPORT_GAP) {
+        spawn_report(&report_tx, &sockets);
+        marks.report = Some(Instant::now());
+    }
 
     // Les relevés Sentinelle voyagent par ce canal, comme le rapport : ils
     // empreintent des centaines de fichiers et lisent des journaux, donc ils
     // tournent hors de la boucle, qui reste disponible pour les pings et les
     // métriques.
     let (scan_tx, mut scan_rx) = tokio::sync::mpsc::channel::<ScanResult>(4);
-    if sentinel {
+    if sentinel && due_at(marks.scan, Instant::now(), MIN_CONNECT_SCAN_GAP) {
         // À la connexion : une machine qu'on vient d'allumer doit rendre son
-        // état sans attendre le premier tour d'horloge.
+        // état sans attendre le premier tour d'horloge. Le garde préserve
+        // exactement ça (aucun relevé encore fait ⇒ `None` ⇒ on relève) tout en
+        // refusant de le rejouer à chaque reconnexion.
         spawn_scan(&scan_tx, auth_enabled, auth_cursor);
+        marks.scan = Some(Instant::now());
     }
 
     let mut ticker = new_ticker(interval);
@@ -423,7 +485,7 @@ async fn stream_session(
                 let (snapshot, sockets) = collect(collector, &capture, false).await?;
                 last_sockets = sockets;
                 push_bounded(queue, snapshot);
-                *last_collect = Some(Instant::now());
+                marks.snapshot = Some(Instant::now());
                 flush_queue(&mut sink, device_id, queue).await?;
             }
             _ = shutdown_signal() => {
@@ -447,10 +509,15 @@ async fn stream_session(
                 }
             }
             _ = integrity_ticker.tick(), if sentinel => {
+                // Les tickers POSENT le jalon eux aussi : sans ça un relevé fait
+                // à l'horloge, suivi d'une reconnexion, serait immédiatement
+                // rejoué par le travail de connexion.
                 spawn_scan(&scan_tx, false, auth_cursor);
+                marks.scan = Some(Instant::now());
             }
             _ = auth_ticker.tick(), if sentinel && auth_enabled => {
                 spawn_scan_auth_only(&scan_tx, auth_cursor);
+                marks.scan = Some(Instant::now());
             }
             _ = report_ticker.tick() => {
                 // The last tick's socket map already has everything — except on
@@ -460,6 +527,7 @@ async fn stream_session(
                     last_sockets = tokio::task::spawn_blocking(|| sockets::read_sockets(true)).await?;
                 }
                 spawn_report(&report_tx, &last_sockets);
+                marks.report = Some(Instant::now());
             }
             incoming = stream.next() => {
                 match incoming {
@@ -469,9 +537,13 @@ async fn stream_session(
                             Ok(ServerMessage::Collect {}) => {
                                 let (snapshot, sockets) = collect(collector, &capture, true).await?;
                                 push_bounded(queue, snapshot);
-                                *last_collect = Some(Instant::now());
+                                marks.snapshot = Some(Instant::now());
                                 flush_queue(&mut sink, device_id, queue).await?;
+                                // Demandé explicitement par l'utilisateur : jamais
+                                // borné. On pose quand même le jalon, pour qu'une
+                                // reconnexion juste après ne le refasse pas.
                                 spawn_report(&report_tx, &sockets);
+                                marks.report = Some(Instant::now());
                                 last_sockets = sockets;
                             }
                             Ok(ServerMessage::Config {
@@ -504,8 +576,21 @@ async fn stream_session(
                                 // Vient d'être allumée : on relève tout de suite,
                                 // sinon la première mesure attendrait six heures et
                                 // l'utilisateur croirait la sonde en panne.
-                                if sentinel && !was_on {
+                                //
+                                // Borné, parce que ce chemin est AUSSI celui d'une
+                                // config arrivée après le délai de l'accueil : sur un
+                                // lien lent, `was_on` est alors faux à chaque
+                                // connexion, et rien ne distinguerait ici « l'humain
+                                // vient de l'allumer » de « la config a traîné ». Le
+                                // pire cas sur un allumage réel devient quinze
+                                // minutes d'attente au lieu de six heures, et le
+                                // serveur peut toujours forcer par `agent.scan`.
+                                if sentinel
+                                    && !was_on
+                                    && due_at(marks.scan, Instant::now(), MIN_CONNECT_SCAN_GAP)
+                                {
                                     spawn_scan(&scan_tx, auth_enabled, auth_cursor);
+                                    marks.scan = Some(Instant::now());
                                 }
                                 info!(
                                     interval_secs = interval.as_secs(),
@@ -514,10 +599,12 @@ async fn stream_session(
                                     "applied server config"
                                 );
                             }
-                            // Relevé Sentinelle à la demande.
+                            // Relevé Sentinelle à la demande. Jamais borné (c'est un
+                            // ordre explicite), mais pose le jalon comme les autres.
                             Ok(ServerMessage::Scan {}) => {
                                 if sentinel {
                                     spawn_scan(&scan_tx, auth_enabled, auth_cursor);
+                                    marks.scan = Some(Instant::now());
                                 } else {
                                     warn!("scan requested while Sentinel is off — ignored");
                                 }
@@ -1014,5 +1101,82 @@ fn log_server_text(txt: &str) {
         Ok(ServerMessage::Error { code, message }) => warn!(%code, %message, "server error"),
         Ok(_) => {}
         Err(_) => debug!("ignoring unrecognized server frame"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Le garde des travaux de connexion. C'est lui qui empêche une boucle de
+    /// reconnexion de multiplier rapports et relevés Sentinelle, donc de gonfler
+    /// les constats du serveur — il mérite d'être vérifié sans socket ni attente.
+    ///
+    /// `now` est construit en avant d'une base, jamais en arrière : sur certaines
+    /// plateformes un `Instant` fraîchement lu est proche de l'origine, et lui
+    /// soustraire une heure déborderait.
+    #[test]
+    fn connect_work_runs_when_never_done() {
+        // Démarrage du processus : rien n'a encore été fait, le travail se fait.
+        // C'est ce qui préserve « une machine qu'on vient d'allumer rend son état ».
+        assert!(due_at(None, Instant::now(), MIN_CONNECT_REPORT_GAP));
+    }
+
+    #[test]
+    fn connect_work_is_skipped_right_after() {
+        // Le cas de la boucle de reconnexion : on vient de le faire, on ne le
+        // refait pas.
+        let base = Instant::now();
+        assert!(!due_at(Some(base), base, MIN_CONNECT_REPORT_GAP));
+        assert!(!due_at(
+            Some(base),
+            base + Duration::from_secs(30),
+            MIN_CONNECT_REPORT_GAP
+        ));
+    }
+
+    #[test]
+    fn connect_work_runs_again_past_the_gap() {
+        let base = Instant::now();
+        // Juste avant l'échéance : toujours non.
+        assert!(!due_at(
+            Some(base),
+            base + MIN_CONNECT_REPORT_GAP - Duration::from_secs(1),
+            MIN_CONNECT_REPORT_GAP
+        ));
+        // Pile à l'échéance, et au-delà : oui.
+        assert!(due_at(
+            Some(base),
+            base + MIN_CONNECT_REPORT_GAP,
+            MIN_CONNECT_REPORT_GAP
+        ));
+        assert!(due_at(
+            Some(base),
+            base + Duration::from_secs(3600),
+            MIN_CONNECT_REPORT_GAP
+        ));
+    }
+
+    #[test]
+    fn a_clock_going_backwards_does_not_unlock_the_gap() {
+        // `saturating_duration_since` rend zéro plutôt que de paniquer. Un `now`
+        // antérieur au jalon doit donc SAUTER le travail, jamais l'autoriser :
+        // c'est le sens sûr, celui qui ne peut pas inonder le serveur.
+        let base = Instant::now();
+        assert!(!due_at(
+            Some(base + Duration::from_secs(600)),
+            base,
+            MIN_CONNECT_REPORT_GAP
+        ));
+    }
+
+    #[test]
+    fn snapshot_gap_is_shorter_than_the_heavy_jobs() {
+        // L'instant de métriques est léger et attendu par l'interface ; le rapport
+        // et le relevé sont lourds. Si cet ordre s'inversait un jour, le correctif
+        // perdrait son sens.
+        assert!(MIN_CONNECT_SNAPSHOT_GAP < MIN_CONNECT_REPORT_GAP);
+        assert!(MIN_CONNECT_REPORT_GAP < REPORT_INTERVAL);
+        assert!(MIN_CONNECT_SCAN_GAP < AUTH_INTERVAL);
     }
 }
