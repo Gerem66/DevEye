@@ -18,6 +18,7 @@ import type { AuthWindow, DeviceReport, PersistenceEntry, ReportProcess } from '
 import type { BaselineRow } from '@/db/repos/sentinel';
 import {
     authRules,
+    evaluateReport,
     evaluateSnapshot,
     persistenceRules,
     processKey,
@@ -189,9 +190,11 @@ expect(
     ),
     []
 );
+// Les connexions établies viennent du rapport, pas de l'instant : la règle est
+// donc rangée avec `evaluateReport`, malgré son préfixe `net.`.
 expect(
     'connexion vers un pool de minage',
-    evaluateSnapshot(
+    evaluateReport(
         ctx({
             report: report({
                 connections: [
@@ -206,7 +209,7 @@ expect(
 console.log('\nRègles de ports');
 expect(
     'nouveau port exposé au monde',
-    evaluateSnapshot(
+    evaluateReport(
         ctx({
             report: report({
                 openPorts: [{ proto: 'tcp', port: 8099, address: '0.0.0.0', zone: null, pid: 42, process: 'python3' }]
@@ -217,7 +220,7 @@ expect(
 );
 expect(
     'port sur la boucle locale : rien',
-    evaluateSnapshot(
+    evaluateReport(
         ctx({
             report: report({
                 openPorts: [{ proto: 'tcp', port: 8099, address: '127.0.0.1', zone: null, pid: 42, process: 'python3' }]
@@ -228,7 +231,7 @@ expect(
 );
 expect(
     'écoute sans propriétaire malgré les privilèges',
-    evaluateSnapshot(
+    evaluateReport(
         ctx({
             report: report({
                 openPorts: [{ proto: 'tcp', port: 31337, address: '127.0.0.1', zone: null, pid: null, process: null }]
@@ -239,7 +242,7 @@ expect(
 );
 expect(
     'même écoute, agent non privilégié : rien',
-    evaluateSnapshot(
+    evaluateReport(
         ctx({
             report: report({
                 agent: { privileged: false, user: 'deploy', serviceScope: 'user', managed: true, probes: [] },
@@ -310,7 +313,7 @@ expect(
 console.log('\nRègles de posture');
 expect(
     'pare-feu éteint + SSH root + mots de passe',
-    evaluateSnapshot(
+    evaluateReport(
         ctx({
             report: report({
                 security: {
@@ -330,10 +333,51 @@ expect(
     ),
     ['posture.firewall_off', 'posture.ssh_root_login', 'posture.ssh_password_auth']
 );
+expect('sondes toutes à null : AUCUN constat (pas de fausse assurance)', evaluateReport(ctx({ report: report() })), []);
+
+console.log('\nSéparation des cadences');
+// Le rapport arrive une fois par heure, l'instant toutes les soixante secondes.
+// Tant que la posture vivait dans `evaluateSnapshot`, chaque lot de métriques la
+// re-constatait sur un rapport inchangé : « constaté 1206 fois » comptait des
+// tours de moteur, et « dernière fois il y a 5 min » datait un fait relevé
+// jusqu'à une heure plus tôt. Ces deux assertions tiennent la frontière.
+const posture = report({
+    security: {
+        firewall: false,
+        diskEncryption: null,
+        sip: null,
+        pendingUpdates: null,
+        pendingSecurityUpdates: null,
+        updatesCheckedAt: null,
+        sshRootLogin: true,
+        sshPasswordAuth: true,
+        mandatoryAccessControl: null,
+        rebootRequired: null
+    },
+    openPorts: [{ proto: 'tcp', port: 8099, address: '0.0.0.0', zone: null, pid: 42, process: 'python3' }],
+    connections: [{ localAddress: '10.0.0.2', localPort: 51234, remoteAddress: '1.2.3.4', remotePort: 14444 }]
+});
 expect(
-    'sondes toutes à null : AUCUN constat (pas de fausse assurance)',
-    evaluateSnapshot(ctx({ report: report() })),
+    'un instant banal ne rejoue RIEN de ce que porte le rapport',
+    evaluateSnapshot(
+        ctx({
+            snapshot: snap([proc({ name: 'nginx', execPath: '/usr/sbin/nginx', user: 'www-data' })]),
+            baseline: known('nginx|/usr/sbin/nginx'),
+            report: posture
+        })
+    ),
     []
+);
+expect(
+    'un rapport ne rejoue AUCUNE règle d’instant (sinon il les résoudrait toutes)',
+    evaluateReport(ctx({ snapshot: null, report: posture })),
+    [
+        'net.mining_pool',
+        'port.exposed',
+        'posture.firewall_off',
+        'posture.ssh_root_login',
+        'posture.ssh_password_auth'
+    ]
 );
 
 console.log('\nRègles de persistance');

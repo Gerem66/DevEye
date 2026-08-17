@@ -302,8 +302,24 @@ function netRules(ctx: EvalContext): FindingDraft[] {
         }
     }
 
-    // Les connexions établies vivent dans le rapport, pas dans l'instant : c'est
-    // lui qui porte le détail derrière le simple compteur `activeConnections`.
+    return out;
+}
+
+/**
+ * Les connexions établies, telles que le rapport les porte.
+ *
+ * Elles vivent dans le rapport et pas dans l'instant : c'est lui qui porte le
+ * détail derrière le simple compteur `activeConnections`. La règle est donc
+ * rangée avec les autres règles de rapport, à la cadence du rapport — la
+ * rejouer à chaque instant la re-constatait toutes les soixante secondes sur
+ * une liste de connexions inchangée.
+ *
+ * L'instant reste utile quand il y en a un : il date le constat, et c'est lui
+ * qu'épingle `setInstantsPinned` pour une règle de cette gravité.
+ */
+function connectionRules(ctx: EvalContext): FindingDraft[] {
+    const ts = ctx.snapshot?.ts ?? null;
+    const out: FindingDraft[] = [];
     for (const c of ctx.report?.connections ?? []) {
         if (!MINING_POOL_PORTS.has(c.remotePort)) continue;
         out.push(
@@ -764,14 +780,33 @@ export function authRules(_ctx: EvalContext, auth: AuthWindow): FindingDraft[] {
 }
 
 /**
- * Toutes les règles d'un instant, dans l'ordre où on veut les lire.
+ * Les règles d'un instant, dans l'ordre où on veut les lire.
  *
  * Persistance et authentification n'y sont pas : elles arrivent sur leurs
  * propres relevés, à leur propre cadence, et les rejouer à chaque instant
  * ferait remonter des constats sur des données inchangées.
+ *
+ * **Posture et ports non plus, pour exactement la même raison.** Ils ne lisent
+ * que `ctx.report`, qui n'arrive qu'au rapport horaire ; les rejouer à chaque
+ * lot de métriques réécrivait `last_seen` et incrémentait `occurrences` toutes
+ * les soixante secondes sans qu'aucune mesure n'ait eu lieu. L'interface
+ * annonçait « constaté il y a 5 min » pour un fait relevé jusqu'à une heure
+ * plus tôt, et « constaté 1206 fois » comptait des tours de moteur. Voir
+ * `evaluateReport`.
  */
 export function evaluateSnapshot(ctx: EvalContext): FindingDraft[] {
-    return [...execRules(ctx), ...netRules(ctx), ...listenerRules(ctx), ...processRules(ctx), ...postureRules(ctx)];
+    return [...execRules(ctx), ...netRules(ctx), ...processRules(ctx)];
+}
+
+/**
+ * Les règles nourries par le rapport, à rejouer seulement quand il en arrive un.
+ *
+ * `connectionRules` lit `ctx.report.connections`, `listenerRules`
+ * `ctx.report.openPorts` et `postureRules` `ctx.report.security` : aucune ne
+ * regarde l'instant autrement que pour dater son constat.
+ */
+export function evaluateReport(ctx: EvalContext): FindingDraft[] {
+    return [...connectionRules(ctx), ...listenerRules(ctx), ...postureRules(ctx)];
 }
 
 /** Les règles qu'`evaluateSnapshot` couvre — celles que le moteur peut résoudre. */
@@ -780,14 +815,18 @@ export const SNAPSHOT_RULES: SentinelRuleId[] = [
     'exec.masquerade',
     'exec.deleted_binary',
     'net.shell_outbound',
-    'net.mining_pool',
     'net.connection_spike',
-    'port.unattributed',
-    'port.exposed',
     'process.new',
     'process.user_changed',
     'process.new_listener',
-    'process.resource_anomaly',
+    'process.resource_anomaly'
+];
+
+/** Les règles qu'`evaluateReport` couvre. Même office, autre cadence. */
+export const REPORT_RULES: SentinelRuleId[] = [
+    'net.mining_pool',
+    'port.unattributed',
+    'port.exposed',
     'posture.firewall_off',
     'posture.disk_unencrypted',
     'posture.sip_off',

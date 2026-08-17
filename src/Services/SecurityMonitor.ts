@@ -23,11 +23,13 @@ import {
 
 import {
     authRules,
+    evaluateReport,
     evaluateSnapshot,
     isWorldBound,
     listenerKey,
     persistenceRules,
     processKey,
+    REPORT_RULES,
     SNAPSHOT_RULES,
     type EvalContext,
     type FindingDraft,
@@ -300,17 +302,33 @@ export class SecurityMonitor {
         const ctx: EvalContext = { now, learning, snapshot, report, baseline };
 
         const drafts: FindingDraft[] = [];
-        // Les règles d'instant ne tournent que s'il y a de quoi les nourrir. Sans
-        // ce garde, un simple manifeste de persistance ferait re-résoudre tous
-        // les constats d'instant faute d'instant à leur opposer.
-        const hasSnapshotInput = snapshot !== null || pending.report === true;
-        if (hasSnapshotInput) drafts.push(...evaluateSnapshot(ctx));
+        // Chaque famille ne tourne que s'il y a de quoi la nourrir, et on note
+        // laquelle a été rejouée : c'est ce qui autorise `record()` à résoudre
+        // ses constats devenus muets. Sans ce garde, un simple manifeste de
+        // persistance ferait re-résoudre tous les constats d'instant faute
+        // d'instant à leur opposer.
+        //
+        // Instant et rapport sont distingués parce qu'ils arrivent à des
+        // cadences différentes (60 s contre 1 h). Les confondre avait deux
+        // effets, tous deux faux : la posture se re-constatait chaque minute sur
+        // un rapport inchangé, et un rapport arrivé sans instant résolvait d'un
+        // coup tous les constats `exec.*` / `net.*` / `process.*` — un détecteur
+        // qui s'éteint sans bruit.
+        const replayed: SentinelRuleId[] = [];
+        if (snapshot !== null) {
+            drafts.push(...evaluateSnapshot(ctx));
+            replayed.push(...SNAPSHOT_RULES);
+        }
+        if (pending.report === true) {
+            drafts.push(...evaluateReport(ctx));
+            replayed.push(...REPORT_RULES);
+        }
         if (pending.integrity) {
             drafts.push(...persistenceRules(ctx, pending.integrity.entries, pending.integrity.truncated));
         }
         if (pending.auth) drafts.push(...authRules(ctx, pending.auth));
 
-        const opened = await this.record(device, drafts, hasSnapshotInput);
+        const opened = await this.record(device, drafts, replayed);
 
         // La ligne de base s'écrit **après** l'évaluation : l'inverse ferait
         // qu'un programme nouveau serait déjà connu au moment où on se demande
@@ -352,7 +370,7 @@ export class SecurityMonitor {
     private async record(
         device: DeviceRow,
         drafts: FindingDraft[],
-        resolveSnapshotRules: boolean
+        replayed: SentinelRuleId[]
     ): Promise<{ draft: FindingDraft; id: number }[]> {
         const now = Date.now();
         const workspaceId = device.workspace_id;
@@ -374,9 +392,12 @@ export class SecurityMonitor {
 
         // Ce qui ne se déclenche plus se résout — mais seulement pour les règles
         // qu'on vient effectivement de rejouer. Résoudre `persistence.*` parce
-        // qu'un instant est passé dirait une chose fausse.
-        if (resolveSnapshotRules) {
-            await this.deps.db.findings.resolveMissing(device.id, SNAPSHOT_RULES, seen, now);
+        // qu'un instant est passé dirait une chose fausse, et résoudre la posture
+        // parce qu'un lot de métriques est arrivé dirait qu'un réglage a changé
+        // sans que personne ne l'ait relu. `resolveMissing` filtre par jeu de
+        // règles, donc `seen` peut rester l'union de tout ce qu'on a produit.
+        if (replayed.length > 0) {
+            await this.deps.db.findings.resolveMissing(device.id, replayed, seen, now);
         }
 
         // Épingler l'instant qui porte la preuve, pour les constats sérieux. Sans
@@ -571,7 +592,10 @@ export class SecurityMonitor {
                 }));
 
             if (drafts.length === 0) continue;
-            const opened = await this.record(device, drafts, false);
+            // Aucune famille rejouée : `process.vanished` se constate par absence
+            // et n'a rien à résoudre — c'est le retour du programme qui le ferme,
+            // pas ce balayage.
+            const opened = await this.record(device, drafts, []);
             if (opened.length > 0) await this.announce(device, opened);
         }
 

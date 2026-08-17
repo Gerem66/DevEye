@@ -159,6 +159,35 @@ et **rejoués à la reconnexion** (invariant 1 de Monitoring).
     copier-coller — et le perdre changerait **toutes** les empreintes de
     dédoublonnage d'un coup. → Ne jamais le retaper à la main ailleurs.
 
+15. **Une règle ne se rejoue qu'à la cadence de ce qui la nourrit.** Chaque flux
+    a la sienne (tableau plus haut) : l'instant toutes les 60 s, le rapport
+    toutes les heures. `evaluateSnapshot` ne prend que ce qui lit `ctx.snapshot`,
+    `evaluateReport` ce qui lit `ctx.report` ; persistance et authentification
+    arrivent sur leurs propres relevés. Chaque famille a son jeu de règles
+    résolubles (`SNAPSHOT_RULES` / `REPORT_RULES`), et `record()` ne résout que
+    celles qu'on vient effectivement de rejouer.
+
+    **C'est la source qui range une règle, pas son préfixe.** `net.mining_pool`
+    est une règle de rapport : les connexions établies vivent dans
+    `report.connections`, l'instant ne porte que le compteur
+    `activeConnections`. La ranger avec `net.shell_outbound`, qui lit bien
+    l'instant, suffisait à lui rendre le défaut décrit plus bas. En cas de doute,
+    la question n'est pas « de quoi ça parle » mais « qu'est-ce que la fonction
+    lit dans `ctx` ».
+
+    La posture a d'abord vécu dans `evaluateSnapshot`, et les deux pannes qui en
+    découlaient disent pourquoi cet invariant existe. **Un constat se
+    re-constatait chaque minute sur un rapport inchangé** : `occurrences`
+    comptait des tours de moteur (1206 en quatre jours pour une donnée relevée
+    96 fois) et `last_seen` annonçait « il y a 5 min » un fait mesuré jusqu'à une
+    heure plus tôt — de quoi partir chercher sur la machine un problème déjà
+    corrigé. Et surtout, **un rapport arrivé sans instant résolvait d'un coup
+    tous les `exec.*` / `net.*` / `process.*`** : les règles rendaient `[]` faute
+    de `ctx.snapshot`, et `resolveMissing` prenait ce silence pour une
+    disparition. Un détecteur qui s'éteint sans bruit, exactement le mode de
+    panne contre lequel `check-rules.ts` est le seul filet. → Voir la section
+    « Séparation des cadences » de ce script.
+
 ## L'interface : deux niveaux, aucun onglet
 
 On entre par **la flotte** — qu'est-ce qui ne va pas, et où — et on descend sur

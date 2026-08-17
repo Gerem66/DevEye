@@ -1214,40 +1214,231 @@ pub(crate) struct UpdateCounts {
     security: Option<u32>,
 }
 
+/// Traduit la valeur d'une directive booléenne de sshd.
+///
+/// `prohibit-password` / `without-password` / `forced-commands-only` interdisent
+/// le mot de passe : pour la question posée (« root peut-il se connecter comme
+/// n'importe qui ? »), ce sont des non. Toute autre forme rend `None` — on ne
+/// devine pas.
+#[cfg(not(target_os = "windows"))]
+fn ssh_bool(v: &str) -> Option<bool> {
+    match v.trim_matches('"').to_lowercase().as_str() {
+        "yes" => Some(true),
+        "no" | "prohibit-password" | "without-password" | "forced-commands-only" => Some(false),
+        _ => None,
+    }
+}
+
+/// Le disque, vu par l'analyseur de configuration : lire un fichier, lister un
+/// dossier. Injecté pour que l'analyse soit vérifiable sans rien poser sur le
+/// disque — c'est la même raison qui garde les règles du serveur pures.
+#[cfg(not(target_os = "windows"))]
+trait ConfigFs {
+    fn read(&self, path: &str) -> Option<String>;
+    /// Chemins complets des fichiers d'un dossier, triés — OpenSSH déroule un
+    /// glob dans l'ordre lexicographique, et l'ordre décide du vainqueur.
+    fn list(&self, dir: &str) -> Vec<String>;
+}
+
+#[cfg(not(target_os = "windows"))]
+struct DiskFs;
+
+#[cfg(not(target_os = "windows"))]
+impl ConfigFs for DiskFs {
+    fn read(&self, path: &str) -> Option<String> {
+        std::fs::read_to_string(path).ok()
+    }
+
+    fn list(&self, dir: &str) -> Vec<String> {
+        let mut out: Vec<String> = std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+            .map(|e| e.path().to_string_lossy().into_owned())
+            .collect();
+        out.sort();
+        out
+    }
+}
+
+/// Ce qu'une passe d'analyse a conclu sur un fichier.
+#[cfg(not(target_os = "windows"))]
+enum Scan {
+    /// La directive a été rencontrée. `None` à l'intérieur = valeur non comprise.
+    Value(Option<bool>),
+    /// Un bloc `Match` s'ouvre : la section globale est finie, ici **et** chez
+    /// l'appelant — l'état du parseur d'OpenSSH traverse les `Include`.
+    Stop,
+    /// Fichier épuisé sans rien trouver ; l'appelant poursuit sa lecture.
+    End,
+    /// Quelque chose n'a pas pu être lu. On ne conclut pas.
+    Unknown,
+}
+
+/// `*` et `?` seulement — c'est tout ce qu'on rencontre dans un `Include`.
+#[cfg(not(target_os = "windows"))]
+fn glob_match(pattern: &str, name: &str) -> bool {
+    let (p, n): (Vec<char>, Vec<char>) = (pattern.chars().collect(), name.chars().collect());
+    // Parcours avec point de reprise sur la dernière `*` : linéaire en pratique,
+    // et sans récursion — un `Include` est lu à chaque rapport.
+    let (mut pi, mut ni) = (0usize, 0usize);
+    let (mut star, mut resume) = (None, 0usize);
+    while ni < n.len() {
+        if pi < p.len() && (p[pi] == '?' || p[pi] == n[ni]) {
+            pi += 1;
+            ni += 1;
+        } else if pi < p.len() && p[pi] == '*' {
+            star = Some(pi);
+            resume = ni;
+            pi += 1;
+        } else if let Some(s) = star {
+            pi = s + 1;
+            resume += 1;
+            ni = resume;
+        } else {
+            return false;
+        }
+    }
+    p[pi..].iter().all(|c| *c == '*')
+}
+
+/// Les fichiers désignés par un motif d'`Include`, dans l'ordre où sshd les lit.
+///
+/// Un motif relatif se résout depuis `/etc/ssh`, comme chez OpenSSH.
+#[cfg(not(target_os = "windows"))]
+fn include_targets(fs: &dyn ConfigFs, pattern: &str) -> Vec<String> {
+    let full = if pattern.starts_with('/') {
+        pattern.to_string()
+    } else {
+        format!("/etc/ssh/{pattern}")
+    };
+    let Some(cut) = full.rfind('/') else {
+        return vec![full];
+    };
+    let (dir, name) = (&full[..cut], &full[cut + 1..]);
+    if !name.contains('*') && !name.contains('?') {
+        return vec![full.clone()];
+    }
+    fs.list(dir)
+        .into_iter()
+        .filter(|path| {
+            path.rfind('/')
+                .map(|c| glob_match(name, &path[c + 1..]))
+                .unwrap_or(false)
+        })
+        .collect()
+}
+
+/// Découpe une ligne de sshd_config en (mot-clé, reste).
+///
+/// OpenSSH accepte `Key value` **et** `Key=value`, et tolère les espaces autour
+/// du `=`. Le mot-clé est insensible à la casse.
+#[cfg(not(target_os = "windows"))]
+fn ssh_directive(line: &str) -> Option<(String, &str)> {
+    let line = line.trim();
+    if line.is_empty() || line.starts_with('#') {
+        return None;
+    }
+    let end = line
+        .find(|c: char| c.is_whitespace() || c == '=')
+        .unwrap_or(line.len());
+    let rest = line[end..].trim_start_matches([' ', '\t', '=']);
+    Some((line[..end].to_lowercase(), rest))
+}
+
+/// Première valeur obtenue pour `key` dans la **section globale**, en partant de
+/// `path`.
+///
+/// Reproduit trois règles d'OpenSSH qu'un simple `grep` du fichier principal
+/// ignore, et dont chacune produit un constat faux quand on l'oublie :
+///
+/// - **le premier obtenu gagne**, pas le dernier écrit ;
+/// - **`Include` est déroulé à sa place.** Fedora et Debian récents le posent en
+///   *tête* de `sshd_config` : un `PermitRootLogin yes` resté plus bas dans le
+///   fichier principal est donc battu par le `no` d'un `sshd_config.d/`. Lire le
+///   seul fichier principal faisait dire « SSH autorise root » à une machine
+///   dûment verrouillée ;
+/// - **`Match` clôt la section globale.** Un `PermitRootLogin yes` sous
+///   `Match Address 10.0.0.0/8` ne décrit pas le cas général, et `sshd -T` sans
+///   `-C` ne le rend pas non plus.
+#[cfg(not(target_os = "windows"))]
+fn ssh_config_scan(fs: &dyn ConfigFs, path: &str, key: &str, depth: u8) -> Scan {
+    // Garde-fou : `Include` peut boucler. OpenSSH s'arrête aussi, on ne conclut
+    // rien de ce qu'on n'a pas fini de lire.
+    if depth > 8 {
+        return Scan::Unknown;
+    }
+    let Some(text) = fs.read(path) else {
+        return Scan::Unknown;
+    };
+    for line in text.lines() {
+        let Some((word, rest)) = ssh_directive(line) else {
+            continue;
+        };
+        if word == "match" {
+            return Scan::Stop;
+        }
+        if word == "include" {
+            for pattern in rest.split_whitespace() {
+                for target in include_targets(fs, pattern) {
+                    match ssh_config_scan(fs, &target, key, depth + 1) {
+                        // Un fichier du glob qui ne s'ouvre pas : on renonce.
+                        // Prétendre que la directive est absente reviendrait à
+                        // conclure sur ce qu'on n'a pas lu.
+                        Scan::End => continue,
+                        other => return other,
+                    }
+                }
+            }
+            continue;
+        }
+        if word == key {
+            return Scan::Value(rest.split_whitespace().next().and_then(ssh_bool));
+        }
+    }
+    Scan::End
+}
+
+/// Chemins où chercher `sshd`, avant de s'en remettre au `PATH`.
+///
+/// Le binaire vit dans un `sbin`, et le `PATH` d'un service n'en contient pas
+/// toujours un. Le manquer fait basculer sur l'analyse du fichier — correcte
+/// depuis, mais moins sûre que la parole de `sshd` lui-même.
+#[cfg(not(target_os = "windows"))]
+const SSHD_PATHS: [&str; 4] = [
+    "/usr/sbin/sshd",
+    "/usr/local/sbin/sshd",
+    "/sbin/sshd",
+    "sshd",
+];
+
 /// Réglage effectif du serveur SSH, ou `None` si on ne peut pas l'affirmer.
 ///
 /// Deux chemins, et une abstention assumée :
 ///
 /// - **privilégié** : `sshd -T` rend la configuration *effective*, `Include`
 ///   résolus et blocs `Match` appliqués. C'est la seule source qui fasse foi ;
-/// - **non privilégié** : on lit `/etc/ssh/sshd_config` et on ne répond que si
-///   la directive y figure **explicitement**. Son absence ne veut rien dire de
-///   sûr — un fichier de `sshd_config.d/` peut la poser — et conclure sur la
-///   valeur par défaut d'OpenSSH produirait des constats faux sur toute machine
-///   dont la configuration est éclatée, ce qui est la disposition par défaut des
-///   distributions récentes.
+/// - **non privilégié** : on déroule `/etc/ssh/sshd_config` nous-mêmes, avec ses
+///   `Include` et en s'arrêtant au premier `Match` (voir `ssh_config_scan`), et
+///   on ne répond que si la directive s'y trouve. Son absence ne veut rien dire
+///   de sûr, et conclure sur la valeur par défaut d'OpenSSH produirait des
+///   constats faux sur toute machine dont la configuration est éclatée — ce qui
+///   est la disposition par défaut des distributions récentes.
 ///
 /// `None` est donc une réponse fréquente et voulue : mieux vaut « pas mesuré »
 /// qu'un « SSH accepte root » qui enverrait chercher un problème inexistant.
 #[cfg(not(target_os = "windows"))]
 fn ssh_setting(key: &str) -> Option<bool> {
-    let yes = |v: &str| -> Option<bool> {
-        match v {
-            "yes" => Some(true),
-            // `prohibit-password` / `without-password` / `forced-commands-only`
-            // interdisent le mot de passe : pour la question posée (« root peut-il
-            // se connecter comme n'importe qui ? »), ce sont des non.
-            "no" | "prohibit-password" | "without-password" | "forced-commands-only" => Some(false),
-            _ => None,
-        }
-    };
-
     if is_privileged() {
-        if let Some(out) = run("sshd", &["-T"]) {
+        for exe in SSHD_PATHS {
+            let Some(out) = run(exe, &["-T"]) else {
+                continue;
+            };
             for line in out.lines() {
                 let mut it = line.split_whitespace();
                 if it.next().map(str::to_lowercase).as_deref() == Some(key) {
-                    return it.next().and_then(|v| yes(&v.to_lowercase()));
+                    return it.next().and_then(ssh_bool);
                 }
             }
             // `sshd -T` a répondu sans la clé : la configuration ne la contient
@@ -1256,18 +1447,10 @@ fn ssh_setting(key: &str) -> Option<bool> {
         }
     }
 
-    let text = std::fs::read_to_string("/etc/ssh/sshd_config").ok()?;
-    for line in text.lines() {
-        let line = line.trim();
-        if line.starts_with('#') {
-            continue;
-        }
-        let mut it = line.split_whitespace();
-        if it.next().map(str::to_lowercase).as_deref() == Some(key) {
-            return it.next().and_then(|v| yes(&v.to_lowercase()));
-        }
+    match ssh_config_scan(&DiskFs, "/etc/ssh/sshd_config", key, 0) {
+        Scan::Value(v) => v,
+        _ => None,
     }
-    None
 }
 
 #[cfg(target_os = "windows")]
@@ -2010,6 +2193,233 @@ mod tests {
         assert_eq!(info.conn_in, Some(12));
         assert_eq!(info.conn_out, Some(2));
         assert_eq!(info.listen_ports, vec![80, 443], "sorted and deduped");
+    }
+
+    /// L'analyse de `sshd_config` quand `sshd -T` n'est pas joignable.
+    ///
+    /// Ce qui se jouait ici : un `PermitRootLogin yes` resté dans le fichier
+    /// principal, battu par un `no` d'un `sshd_config.d/`, faisait signaler
+    /// « SSH autorise root » en boucle sur une machine correctement verrouillée.
+    /// La sonde ne doit plus jamais conclure sur ce qu'elle n'a pas déroulé.
+    #[cfg(not(target_os = "windows"))]
+    mod sshd_config {
+        use super::*;
+        use std::collections::BTreeMap;
+
+        /// Un disque de mensonge : des chemins et leur contenu, rien de plus.
+        struct FakeFs(BTreeMap<String, String>);
+
+        impl FakeFs {
+            fn new(files: &[(&str, &str)]) -> Self {
+                Self(
+                    files
+                        .iter()
+                        .map(|(p, c)| ((*p).to_string(), (*c).to_string()))
+                        .collect(),
+                )
+            }
+        }
+
+        impl ConfigFs for FakeFs {
+            fn read(&self, path: &str) -> Option<String> {
+                self.0.get(path).cloned()
+            }
+
+            fn list(&self, dir: &str) -> Vec<String> {
+                let prefix = format!("{dir}/");
+                // La `BTreeMap` est déjà triée : c'est l'ordre lexicographique
+                // que déroule OpenSSH, et il décide du vainqueur.
+                self.0
+                    .keys()
+                    .filter(|p| p.starts_with(&prefix) && !p[prefix.len()..].contains('/'))
+                    .cloned()
+                    .collect()
+            }
+        }
+
+        fn look(files: &[(&str, &str)]) -> Option<bool> {
+            match ssh_config_scan(
+                &FakeFs::new(files),
+                "/etc/ssh/sshd_config",
+                "permitrootlogin",
+                0,
+            ) {
+                Scan::Value(v) => v,
+                _ => None,
+            }
+        }
+
+        #[test]
+        fn lit_le_fichier_principal() {
+            assert_eq!(
+                look(&[("/etc/ssh/sshd_config", "PermitRootLogin yes\n")]),
+                Some(true)
+            );
+        }
+
+        #[test]
+        fn prohibit_password_est_un_non() {
+            assert_eq!(
+                look(&[(
+                    "/etc/ssh/sshd_config",
+                    "PermitRootLogin prohibit-password\n"
+                )]),
+                Some(false)
+            );
+        }
+
+        #[test]
+        fn les_commentaires_ne_comptent_pas() {
+            assert_eq!(
+                look(&[("/etc/ssh/sshd_config", "#PermitRootLogin yes\n")]),
+                None
+            );
+        }
+
+        /// Le cas qui a produit le faux constat : l'`Include` est en tête, donc
+        /// le drop-in est *obtenu en premier* et l'emporte sur le `yes` resté
+        /// plus bas dans le fichier principal.
+        #[test]
+        fn le_drop_in_inclus_en_tete_bat_le_fichier_principal() {
+            assert_eq!(
+                look(&[
+                    (
+                        "/etc/ssh/sshd_config",
+                        "Include /etc/ssh/sshd_config.d/*.conf\nPermitRootLogin yes\n"
+                    ),
+                    (
+                        "/etc/ssh/sshd_config.d/99-hardening.conf",
+                        "PermitRootLogin no\n"
+                    ),
+                ]),
+                Some(false)
+            );
+        }
+
+        /// Symétrique : l'`Include` en queue ne peut plus rien changer.
+        #[test]
+        fn un_include_en_queue_ne_renverse_rien() {
+            assert_eq!(
+                look(&[
+                    (
+                        "/etc/ssh/sshd_config",
+                        "PermitRootLogin yes\nInclude /etc/ssh/sshd_config.d/*.conf\n"
+                    ),
+                    (
+                        "/etc/ssh/sshd_config.d/99-hardening.conf",
+                        "PermitRootLogin no\n"
+                    ),
+                ]),
+                Some(true)
+            );
+        }
+
+        #[test]
+        fn le_glob_se_deroule_dans_l_ordre_lexicographique() {
+            assert_eq!(
+                look(&[
+                    (
+                        "/etc/ssh/sshd_config",
+                        "Include /etc/ssh/sshd_config.d/*.conf\n"
+                    ),
+                    (
+                        "/etc/ssh/sshd_config.d/10-cloud.conf",
+                        "PermitRootLogin no\n"
+                    ),
+                    (
+                        "/etc/ssh/sshd_config.d/99-late.conf",
+                        "PermitRootLogin yes\n"
+                    ),
+                ]),
+                Some(false)
+            );
+        }
+
+        #[test]
+        fn le_glob_ignore_ce_qui_ne_correspond_pas() {
+            assert_eq!(
+                look(&[
+                    (
+                        "/etc/ssh/sshd_config",
+                        "Include /etc/ssh/sshd_config.d/*.conf\n"
+                    ),
+                    (
+                        "/etc/ssh/sshd_config.d/50-x.conf.bak",
+                        "PermitRootLogin yes\n"
+                    ),
+                ]),
+                None
+            );
+        }
+
+        /// Un `Match` clôt la section globale : ce qui suit est conditionnel et
+        /// ne décrit pas le cas général — `sshd -T` sans `-C` ne le rend pas non
+        /// plus.
+        #[test]
+        fn ce_qui_suit_un_match_ne_compte_pas() {
+            assert_eq!(
+                look(&[(
+                    "/etc/ssh/sshd_config",
+                    "Match Address 10.0.0.0/8\nPermitRootLogin yes\n"
+                )]),
+                None
+            );
+        }
+
+        /// L'état du parseur traverse les `Include` : un `Match` ouvert dans un
+        /// fichier inclus vaut aussi pour la suite du fichier appelant.
+        #[test]
+        fn un_match_dans_un_include_clot_aussi_l_appelant() {
+            assert_eq!(
+                look(&[
+                    (
+                        "/etc/ssh/sshd_config",
+                        "Include /etc/ssh/sshd_config.d/*.conf\nPermitRootLogin yes\n"
+                    ),
+                    (
+                        "/etc/ssh/sshd_config.d/10-match.conf",
+                        "Match User deploy\n"
+                    ),
+                ]),
+                None
+            );
+        }
+
+        #[test]
+        fn un_include_illisible_fait_renoncer_plutot_que_conclure() {
+            assert_eq!(
+                look(&[(
+                    "/etc/ssh/sshd_config",
+                    "Include /etc/ssh/absent.conf\nPermitRootLogin yes\n"
+                )]),
+                None
+            );
+        }
+
+        #[test]
+        fn la_forme_avec_egal_est_comprise() {
+            assert_eq!(
+                look(&[("/etc/ssh/sshd_config", "PermitRootLogin=no\n")]),
+                Some(false)
+            );
+        }
+
+        #[test]
+        fn une_valeur_inconnue_ne_se_devine_pas() {
+            assert_eq!(
+                look(&[("/etc/ssh/sshd_config", "PermitRootLogin maybe\n")]),
+                None
+            );
+        }
+
+        #[test]
+        fn glob_match_couvre_etoile_et_point_interrogation() {
+            assert!(glob_match("*.conf", "99-x.conf"));
+            assert!(glob_match("*", "toto"));
+            assert!(glob_match("5?-*.conf", "50-a.conf"));
+            assert!(!glob_match("*.conf", "x.conf.bak"));
+            assert!(!glob_match("5?-*.conf", "5-a.conf"));
+        }
     }
 }
 
