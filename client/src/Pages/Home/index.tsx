@@ -394,6 +394,30 @@ function upperFirst(text: string): string {
     return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/**
+ * Le cadre d'une tuile **telle qu'elle est posée**, transformations retirées.
+ *
+ * `getBoundingClientRect` les inclut, et une tuile qu'on vient de cliquer en
+ * porte deux : le soulèvement au survol (`whileHover`, 4 px vers le haut) et le
+ * rebond de l'enfoncement (`whileTap`), dont le ressort n'a pas fini sa course
+ * au moment où le clic part. Le couvercle du dossier, posé sur ce cadre, se
+ * retrouvait donc 4 px au-dessus de la tuile qu'il double, d'une fraction qui
+ * changeait d'un clic à l'autre. Deux copies décalées de la même carte, l'une
+ * nette et l'autre floue, qui se croisent en fondu : c'est le scintillement
+ * qu'on voyait à l'ouverture.
+ *
+ * Framer écrit ses transformations en style en ligne, donc les couper le temps
+ * d'une mesure suffit, et son prochain rendu les réécrit de lui-même. Le
+ * recalcul forcé que cela coûte est celui d'un clic, pas d'une image.
+ */
+function tileFrame(el: HTMLElement): DOMRect {
+    const previous = el.style.transform;
+    el.style.transform = 'none';
+    const frame = el.getBoundingClientRect();
+    el.style.transform = previous;
+    return frame;
+}
+
 export default function HomePage() {
     const { user, refresh } = useAuth();
     /** Le retrait de l'accueil derrière un dossier déployé est un mouvement : il
@@ -1015,7 +1039,7 @@ export default function HomePage() {
                             onExpand={(e) => {
                                 setOpenFolder({
                                     id: folderId,
-                                    source: e.currentTarget.getBoundingClientRect(),
+                                    source: tileFrame(e.currentTarget),
                                     offset: greetingRef.current?.offsetHeight ?? 0
                                 });
                             }}
