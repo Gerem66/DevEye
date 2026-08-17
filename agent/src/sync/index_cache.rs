@@ -20,6 +20,15 @@ pub struct CacheEntry {
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct IndexCache {
+    /// Le dossier local du partage, tel qu'il était au dernier scan.
+    ///
+    /// Il ne sert pas au scan, qui reçoit sa racine du serveur : il sert au
+    /// **retrait**. `uninstall` tourne hors ligne, sans config de partage, et
+    /// c'est la seule trace locale de l'endroit où l'agent a posé ses
+    /// `.deveye-tmp` / `.deveye-trash` — sans quoi la désinstallation les
+    /// laisserait derrière elle sans même pouvoir les nommer.
+    #[serde(default)]
+    pub root: String,
     pub entries: HashMap<String, CacheEntry>,
 }
 

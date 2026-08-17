@@ -9,6 +9,19 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
+/// Nom du fichier de config, quand rien ne l'impose via `DEVEYE_CONFIG`.
+pub const CONFIG_FILE: &str = "agent.toml";
+/// Les fichiers que l'agent pose **à côté** de sa config. Nommés ici plutôt
+/// qu'aux quatre coins du code parce que le retrait (`uninstall`) doit les
+/// balayer dans un dossier qui n'est pas forcément le sien — celui de
+/// l'utilisateur derrière un `sudo` —, où `Config::pid_path()` et consorts ne
+/// pointent pas.
+pub const SIBLING_FILES: [&str; 3] = ["agent.pid", "agent.log", "agent.state"];
+/// Encadrement du nom d'un cache de scan CloudSync : `sync-<shareId>.index.json`.
+/// Un partage par fichier, donc un balayage par motif et non par nom.
+pub const SYNC_INDEX_PREFIX: &str = "sync-";
+pub const SYNC_INDEX_SUFFIX: &str = ".index.json";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// HTTP base URL of the DevEye server, e.g. `https://deveye.example.com`.
@@ -37,7 +50,7 @@ impl Config {
         dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("deveye")
-            .join("agent.toml")
+            .join(CONFIG_FILE)
     }
 
     pub fn load() -> Result<Self> {
@@ -54,24 +67,24 @@ impl Config {
 
     /// PID file for a backgrounded `run --detach`, alongside the config.
     pub fn pid_path() -> PathBuf {
-        Self::sibling("agent.pid")
+        Self::sibling(SIBLING_FILES[0])
     }
 
     /// Log file used when running detached.
     pub fn log_path() -> PathBuf {
-        Self::sibling("agent.log")
+        Self::sibling(SIBLING_FILES[1])
     }
 
     /// Runtime-state file the running agent records (pid + the account it runs as),
     /// so out-of-process commands like `status` report *its* facts. Alongside config.
     pub fn state_path() -> PathBuf {
-        Self::sibling("agent.state")
+        Self::sibling(SIBLING_FILES[2])
     }
 
     /// CloudSync per-share scan cache (relPath → size/mtime/hash), so unchanged
     /// files aren't rehashed on every scan. Alongside config.
     pub fn sync_index_path(share_id: i64) -> PathBuf {
-        Self::sibling(&format!("sync-{share_id}.index.json"))
+        Self::sibling(&format!("{SYNC_INDEX_PREFIX}{share_id}{SYNC_INDEX_SUFFIX}"))
     }
 
     fn sibling(name: &str) -> PathBuf {

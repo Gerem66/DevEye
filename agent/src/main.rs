@@ -7,6 +7,7 @@
 //!   - `stop`         Stop a backgrounded agent.
 //!   - `status`       Print the local enrollment + running state.
 //!   - `unlink`       Forget the local enrollment (config + token).
+//!   - `uninstall`    Remove the agent entirely from this machine.
 
 mod authlog;
 mod commands;
@@ -28,6 +29,7 @@ mod sockets;
 mod state;
 mod sync;
 mod terminal;
+mod uninstall;
 mod update;
 
 use std::fs;
@@ -108,6 +110,23 @@ enum Command {
     Packages,
     /// Forget the local enrollment (deletes the config + token).
     Unlink,
+    /// Remove the agent entirely: autostart, config, token, caches, binary.
+    ///
+    /// `unlink` oublie l'enrôlement et laisse tout le reste en place ; celle-ci
+    /// retire la machine de l'équation : démarrage automatique, linger, agent en
+    /// marche, config, jeton, journal, caches, et le binaire lui-même.
+    ///
+    /// Elle ne touche pas au serveur : l'appareil et son historique restent à
+    /// supprimer dans DevEye → Appareils.
+    Uninstall {
+        /// Ne pas demander confirmation.
+        #[arg(long, short = 'y')]
+        yes: bool,
+        /// Effacer aussi la corbeille locale des partages CloudSync
+        /// (`.deveye-trash`), qui contient vos fichiers supprimés.
+        #[arg(long)]
+        purge_shares: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -174,6 +193,9 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Command::Unlink => unlink(),
+        Command::Uninstall { yes, purge_shares } => {
+            uninstall::run(uninstall::Options { yes, purge_shares })
+        }
     }
 }
 
@@ -367,7 +389,7 @@ fn stop() -> Result<()> {
 /// force-kills via `taskkill /F` (the agent installs no graceful-shutdown
 /// handler, so it relies on the OS terminating it either way).
 #[cfg(unix)]
-fn kill_process(pid: &str) -> Result<()> {
+pub(crate) fn kill_process(pid: &str) -> Result<()> {
     let status = PCommand::new("kill")
         .arg(pid)
         .status()
@@ -380,7 +402,7 @@ fn kill_process(pid: &str) -> Result<()> {
 }
 
 #[cfg(windows)]
-fn kill_process(pid: &str) -> Result<()> {
+pub(crate) fn kill_process(pid: &str) -> Result<()> {
     let status = PCommand::new("taskkill")
         .args(["/PID", pid, "/F"])
         .status()

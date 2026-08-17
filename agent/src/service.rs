@@ -87,8 +87,11 @@ fn invoking_key() -> Option<String> {
     })
 }
 
+/// Le foyer de l'appelant d'origine sous `sudo`/`pkexec`, quand on peut le
+/// nommer. Public au crate : le retrait doit balayer *son* dossier de config,
+/// pas celui de root (voir `uninstall::config_dirs`).
 #[cfg(unix)]
-fn invoking_home() -> Option<std::path::PathBuf> {
+pub(crate) fn invoking_home() -> Option<std::path::PathBuf> {
     let key = invoking_key()?;
     let home = crate::report::run("getent", &["passwd", &key])
         .and_then(|line| line.split(':').nth(5).map(|h| h.trim().to_string()))
@@ -192,6 +195,15 @@ pub fn start(system: bool) -> Result<()> {
 /// Remove whatever autostart service is installed (user or system).
 pub fn uninstall() -> Result<()> {
     uninstall_impl()
+}
+
+/// Éteint le « linger » qu'une installation *utilisateur* avait allumé. Rend
+/// `true` s'il y avait effectivement quelque chose à éteindre.
+///
+/// Sans OS concerné (macOS, Windows), c'est un non-événement : le linger est une
+/// notion systemd.
+pub fn disable_linger() -> Result<bool> {
+    disable_linger_impl()
 }
 
 /// Remove only the **per-user** autostart, leaving any system service in place.
@@ -369,6 +381,12 @@ mod imp {
         Ok(())
     }
 
+    /// Pas de linger sous launchd : un `LaunchAgent` suit la session, un
+    /// `LaunchDaemon` l'amorçage, et rien ne se règle en dehors du plist.
+    pub fn disable_linger_impl() -> Result<bool> {
+        Ok(false)
+    }
+
     pub fn uninstall_user_impl() -> Result<()> {
         for path in user_plists() {
             if path.exists() {
@@ -514,8 +532,19 @@ mod imp {
             .unwrap_or(false)
     }
 
+    /// L'utilisateur dont le linger nous concerne.
+    ///
+    /// `current_user()` est l'utilisateur *effectif* : sous `sudo`, il dit
+    /// « root ». Or le service utilisateur qu'on installe (ou qu'on retire) est
+    /// celui de l'appelant, et son linger aussi — allumer celui de root ne fait
+    /// pas démarrer sa session à lui, et l'éteindre à la désinstallation
+    /// couperait le linger d'un compte auquel on n'a jamais touché.
+    fn linger_user() -> String {
+        sudo_user().unwrap_or_else(crate::report::current_user)
+    }
+
     fn ensure_linger() -> Result<()> {
-        let user = crate::report::current_user();
+        let user = linger_user();
         if user.is_empty() {
             bail!("impossible de déterminer l'utilisateur pour activer le « linger »");
         }
@@ -533,6 +562,30 @@ mod imp {
              activez le « linger » avec « sudo loginctl enable-linger {user} », ou passez l'agent \
              en service système (root)"
         );
+    }
+
+    /// Éteint le linger allumé par [`ensure_linger`].
+    ///
+    /// Rien ne le faisait, et il survivait donc à l'agent : un compte que
+    /// l'installation avait rendu « toujours actif au démarrage » le restait
+    /// pour de bon, longtemps après la disparition du service qui l'exigeait.
+    /// Appelé par le retrait, et **seulement** quand un service utilisateur
+    /// était installé : c'est le seul cas où le linger est de notre fait.
+    pub fn disable_linger_impl() -> Result<bool> {
+        let user = linger_user();
+        if user.is_empty() || !linger_enabled(&user) {
+            return Ok(false);
+        }
+        let _ = Command::new("loginctl")
+            .args(["disable-linger", &user])
+            .output();
+        if linger_enabled(&user) {
+            bail!(
+                "« linger » toujours actif pour {user} : retirez-le avec \
+                 « sudo loginctl disable-linger {user} »"
+            );
+        }
+        Ok(true)
     }
 
     pub fn install_impl(system: bool, config: Option<&str>) -> Result<()> {
@@ -750,6 +803,11 @@ mod imp {
         Ok(())
     }
 
+    /// Notion systemd, sans équivalent dans le planificateur de tâches.
+    pub fn disable_linger_impl() -> Result<bool> {
+        Ok(false)
+    }
+
     pub fn installed_scope_impl() -> ServiceScope {
         let out = match Command::new("schtasks")
             .args(["/Query", "/TN", TASK, "/FO", "LIST", "/V"])
@@ -767,7 +825,10 @@ mod imp {
     }
 }
 
-use imp::{install_impl, installed_scope_impl, start_impl, uninstall_impl, uninstall_user_impl};
+use imp::{
+    disable_linger_impl, install_impl, installed_scope_impl, start_impl, uninstall_impl,
+    uninstall_user_impl,
+};
 
 #[cfg(test)]
 mod tests {

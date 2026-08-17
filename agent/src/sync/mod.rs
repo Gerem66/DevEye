@@ -6,7 +6,7 @@
 //! locale (`.deveye-trash/`) uniquement quand le serveur — qui a déjà archivé
 //! une version vérifiée — le demande.
 
-mod index_cache;
+pub mod index_cache;
 pub mod paths;
 pub mod scanner;
 mod transfer;

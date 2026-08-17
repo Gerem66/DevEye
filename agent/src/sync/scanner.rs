@@ -151,7 +151,10 @@ fn scan(session_id: &str, assignment: &SyncShareAssignment, tx: &Sender<SyncEven
 
     let excluded = CompiledExclusions::compile(&assignment.exclusions);
     let cache = IndexCache::load(assignment.share_id);
-    let mut fresh = IndexCache::default();
+    let mut fresh = IndexCache {
+        root: root.to_string_lossy().into_owned(),
+        ..IndexCache::default()
+    };
 
     let mut batch: Vec<SyncIndexEntry> = Vec::with_capacity(BATCH);
     let mut walked = 0usize;

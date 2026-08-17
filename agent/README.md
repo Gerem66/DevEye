@@ -103,6 +103,7 @@ connect, so the dashboard shows data without waiting a full interval.
 | `status`                                                                    | Print platform, server, enrollment and running state.                                                                                                                                                                                                                                                                                  |
 | `service install [--system] \| uninstall \| status`                         | Manage the autostart service (launchd / systemd / Task Scheduler). Per-user by default, `--system` needs root. Also driven from the UI (« Démarrage auto »).                                                                                                                                                                           |
 | `unlink`                                                                    | Forget the local enrollment (deletes the config + token).                                                                                                                                                                                                                                                                              |
+| `uninstall [--yes] [--purge-shares]`                                        | **Retrait complet** de la machine : autostart, linger, processus, config, jeton, journal, caches, binaire. Voir [Retrait complet](#retrait-complet-uninstall).                                                                                                                                                                          |
 
 Test a freshly approved device end-to-end:
 
@@ -133,6 +134,48 @@ Both surface only on a real machine, and one of them only on the Fedora family.
    ostree systems where `/usr/local` links to `/var/usrlocal`) and points the
    unit there. The copy is removed by `service uninstall`, unless it is the
    binary currently running.
+
+## Retrait complet (`uninstall`)
+
+```sh
+deveye-agent uninstall                  # récapitule, demande confirmation, retire tout
+sudo deveye-agent uninstall             # si un service *système* est installé
+deveye-agent uninstall --yes            # sans confirmation (scripts, non interactif)
+deveye-agent uninstall --purge-shares   # + la corbeille locale des partages CloudSync
+```
+
+`unlink` oublie l'enrôlement. `uninstall` retire **la machine de l'équation** :
+
+1. le service de démarrage automatique (les deux portées, plus la copie
+   `/usr/local/bin/deveye-agent`), **avant tout effacement** ;
+2. le « linger » systemd qu'une install utilisateur avait allumé — rien ne
+   l'éteignait jusqu'ici, et il survivait à l'agent ;
+3. l'agent en marche, y compris un `run --detach` que le service ne connaît pas ;
+4. le dossier de config (`agent.toml`, `agent.pid`, `agent.log`, `agent.state`,
+   `sync-*.index.json`), puis le dossier lui-même s'il est vide ;
+5. les `.deveye-tmp` des partages CloudSync ;
+6. les résidus d'une mise à jour interrompue, puis **son propre binaire**.
+
+Trois choses à savoir :
+
+- **L'ordre du point 1 n'est pas cosmétique.** Une unité systemd est en
+  `Restart=always` / `StartLimitIntervalSec=0` : effacer le binaire sans retirer
+  l'unité la fait reboucler toutes les deux secondes sur un `ExecStart` qui
+  n'existe plus, indéfiniment. C'est exactement ce que produit une **suppression
+  d'appareil depuis l'interface** quand un service est installé
+  (`commands::handle_destroy` efface config et binaire, jamais l'unité) — d'où
+  cette commande.
+- **Un service système fait refuser la commande sans droits root**, avant d'avoir
+  touché quoi que ce soit : un retrait à moitié fait est pire que pas de retrait.
+- **`.deveye-trash` est conservé par défaut** : c'est la corbeille locale d'un
+  partage, donc des fichiers de l'utilisateur. Son chemin est affiché, et
+  `--purge-shares` l'efface aussi. (C'est pour ça que le cache de scan enregistre
+  la racine du partage : hors ligne, l'agent n'a aucun autre moyen de la
+  retrouver.)
+
+Restent hors de portée, et la commande le dit : l'appareil **côté serveur** (à
+supprimer dans **Appareils**, ce qui emporte son historique) et les lignes du
+service dans le journal systemd, qui ne partent qu'à la rotation du journal.
 
 ## Supervision (`--managed`)
 
@@ -181,8 +224,10 @@ The agent writes its own config during `link`. Location: `$DEVEYE_CONFIG`, or
 - macOS: `~/Library/Application Support/deveye/agent.toml`
 - Windows: `%APPDATA%\deveye\agent.toml`
 
-Alongside it, when running: `agent.pid` (for `stop`/`status`) and, when detached,
-`agent.log`. See `agent.example.toml` for the file format.
+Alongside it, when running: `agent.pid` (for `stop`/`status`), `agent.state` (the
+runtime facts `status` reports), `sync-<shareId>.index.json` (caches de scan
+CloudSync) and, when detached, `agent.log`. See `agent.example.toml` for the file
+format, et [`uninstall`](#retrait-complet-uninstall) pour tout reprendre.
 
 ## What is collected & cadence
 
