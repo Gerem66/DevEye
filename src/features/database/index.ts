@@ -1,6 +1,7 @@
 import { databaseAlertFeatures } from './alerts';
 import { databaseCrudFeatures } from './crud';
 import { databaseExploreFeatures } from './explore';
+import { databaseNotificationFeatures } from './notifications';
 import { databaseProbeFeatures } from './probe';
 
 /**
@@ -17,10 +18,14 @@ import { databaseProbeFeatures } from './probe';
  *  - `alerts.ts` — les conditions et leur essai à blanc. L'évaluation qui
  *    notifie, elle, appartient à `DatabaseMonitor` : c'est le même chemin pour
  *    un relevé manuel et un relevé automatique.
+ *  - `notifications.ts` — **où** partent ces alertes. Cinquième fichier depuis
+ *    la migration 085, qui a rendu à la feature les canaux qu'elle empruntait à
+ *    Uptime.
  */
 export const databaseFeatures = [
     ...databaseCrudFeatures,
     ...databaseProbeFeatures,
     ...databaseExploreFeatures,
-    ...databaseAlertFeatures
+    ...databaseAlertFeatures,
+    ...databaseNotificationFeatures
 ];

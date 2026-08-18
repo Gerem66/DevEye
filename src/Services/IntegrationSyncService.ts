@@ -3,7 +3,7 @@ import type Encryption from '@/Services/Encryption';
 import type { LiveHub } from '@/live/hub';
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
 import type { Logger } from 'pino';
-import type { GitSyncStatus } from 'deveye-types';
+import type { DeploymentRow, DeployTargetSyncRow, GitSyncStatus } from 'deveye-types';
 import {
     authorRef,
     fetchBranches,
@@ -17,11 +17,13 @@ import {
     type GitHubCommit,
     type GitHubSyncState
 } from './integrations/github';
-import { listDeployments } from './integrations/dokploy';
+import { listDeployments, type DokployDeployment } from './integrations/dokploy';
+import { deliver, formatDuration, formatMoment, hasChannel, resolveChannels } from '@/Services/notifications';
 
 /**
  * Les intégrations externes, en tâche de fond : synchronisation des **dépôts
- * git de l'espace**, et suivi des **déploiements de projet** encore en vol.
+ * git de l'espace**, et rapprochement des **cibles de déploiement** avec ce que
+ * le fournisseur en dit.
  *
  * Les deux vivent dans le même service parce qu'ils ont exactement la même
  * forme — un minuteur, un budget d'appels, un fournisseur tiers qui répond
@@ -29,6 +31,13 @@ import { listDeployments } from './integrations/dokploy';
  * calquée sur {@link UptimeMonitor} : un minuteur `unref`é, une garde de
  * ré-entrance, une carte de promesses en vol pour ne jamais traiter deux fois
  * le même dépôt, et des chiffres mémoïsés par espace.
+ *
+ * Le volet déploiement a changé de sujet : il suivait les **lignes** encore en
+ * vol, il rapproche désormais les **cibles**. La nuance décide de ce qui est
+ * visible — seules les lignes écrites par `deploy.trigger` existaient en base,
+ * donc un déploiement lancé depuis Dokploy, une CI ou un push git n'apparaissait
+ * nulle part tant qu'on n'ouvrait pas sa fiche, qui interroge l'instance en
+ * direct. Voir {@link IntegrationSyncService.syncDeployTargets}.
  *
  * **Tout est lu et écrit à l'étage ouvert.** Depuis la migration `064`, un dépôt
  * appartient à l'espace : il n'a plus de palier de confidentialité à suivre, et
@@ -111,6 +120,62 @@ const SYNC_PHASES = ['Dépôt', 'Branches', 'Commits', 'Comparaison des branches
 const COMMITS_STEP = SYNC_PHASES.indexOf('Commits');
 
 /**
+ * Cibles de déploiement rapprochées par tour.
+ *
+ * Une cible = un appel tRPC. La borne existe pour qu'un espace à quarante cibles
+ * ne produise pas quarante requêtes sortantes d'un coup ; celles qui n'ont pas
+ * eu leur tour passeront au suivant, deux minutes plus tard.
+ */
+const DEPLOY_BATCH = 6;
+
+/**
+ * Délai minimal entre deux rapprochements d'une même cible **au repos**.
+ *
+ * Une cible qui a un déploiement en vol échappe à ce délai et passe à chaque
+ * tour : c'est là que l'état bouge à la minute. Les autres n'ont rien à dire
+ * plus souvent qu'un quart d'heure — un déploiement lancé ailleurs y apparaîtra
+ * au plus tard à ce délai, et sa fiche, elle, interroge l'instance en direct.
+ */
+const DEPLOY_MIN_INTERVAL_SECONDS = 900;
+
+/**
+ * Lignes d'historique retenues par cible et par tour.
+ *
+ * Dokploy rend l'historique complet d'une application, qui peut compter des
+ * centaines d'entrées. On n'en garde que la tête : au-delà, ce sont des
+ * déploiements anciens, déjà en base s'ils comptaient, et les recopier à chaque
+ * tour ne ferait qu'alourdir la table.
+ */
+const DEPLOY_IMPORT_LIMIT = 20;
+
+/**
+ * Écart toléré pour rattacher un déploiement local à une ligne du fournisseur
+ * **quand l'identifiant externe manque**.
+ *
+ * Dokploy ne rend pas toujours d'identifiant au déclenchement : la ligne écrite
+ * par `deploy.trigger` naît donc sans `external_id`, et c'est la date qui les
+ * rapproche jusqu'à ce qu'il arrive. Deux minutes, parce que c'est le délai
+ * entre l'écriture locale et la prise en compte côté fournisseur, pas la durée
+ * d'un déploiement.
+ */
+const DEPLOY_MATCH_WINDOW_SECONDS = 120;
+
+/**
+ * Âge au-delà duquel un déploiement local **que le fournisseur ne reconnaît
+ * pas** cesse d'être considéré en vol.
+ *
+ * Sans cette borne, une ligne écrite par `deploy.trigger` dont Dokploy n'a
+ * jamais rendu la trace — l'ordre perdu, l'instance redéployée entre-temps —
+ * reste `queued` indéfiniment. Elle mentirait doublement : à l'écran, en
+ * affichant un déploiement qui n'avance pas, et dans l'ordonnanceur, en gardant
+ * sa cible dans la voie rapide à chaque tour, pour toujours.
+ *
+ * Six heures, soit bien au-delà de ce que dure une mise en production, pour ne
+ * jamais couper un déploiement réellement long.
+ */
+const DEPLOY_STALE_SECONDS = 6 * 3600;
+
+/**
  * Branches comparées par tour à la branche par défaut.
  *
  * Chaque comparaison est un appel : un dépôt à cinquante branches ne doit pas
@@ -119,6 +184,40 @@ const COMMITS_STEP = SYNC_PHASES.indexOf('Commits');
  * rafales de nouvelles branches, qui rattraperont au tour suivant.
  */
 const MAX_COMPARISONS_PER_RUN = 12;
+
+/** Un déploiement dont l'issue est connue : c'est ce qui mérite un avis. */
+function isTerminal(status: string): boolean {
+    return status === 'success' || status === 'failed';
+}
+
+/**
+ * Retrouve la ligne locale que décrit une entrée du fournisseur.
+ *
+ * Deux clés, dans cet ordre, et c'est l'ordre qui compte. L'identifiant externe
+ * est le seul rapprochement sûr ; la date ne sert qu'aux lignes qui n'en ont
+ * **pas encore** — `deploy.trigger` écrit sa ligne avant d'appeler Dokploy, qui
+ * ne rend pas toujours d'identifiant au déclenchement. Réserver la date aux
+ * lignes sans identifiant évite de recoller deux déploiements distincts du
+ * fournisseur sur la même ligne locale quand ils sont partis à quelques secondes
+ * d'intervalle.
+ *
+ * `claimed` interdit qu'une même ligne serve deux fois dans le tour : sans lui,
+ * deux entrées voisines choisiraient la même et l'une des deux serait perdue.
+ */
+function matchDeployment(entry: DokployDeployment, local: DeploymentRow[], claimed: Set<number>): DeploymentRow | null {
+    if (entry.externalId !== null) {
+        const byId = local.find((row) => row.external_id === entry.externalId && !claimed.has(row.id));
+        if (byId) return byId;
+    }
+    return (
+        local.find(
+            (row) =>
+                row.external_id === null &&
+                !claimed.has(row.id) &&
+                Math.abs(entry.startedAt - Number(row.started_at)) < DEPLOY_MATCH_WINDOW_SECONDS
+        ) ?? null
+    );
+}
 
 export interface IntegrationSyncDeps {
     db: Database;
@@ -152,6 +251,17 @@ export class IntegrationSyncService {
      * enchaîne les tranches de backfill sans attendre la cadence ordinaire.
      */
     private readonly backfilling = new Set<number>();
+
+    /**
+     * Cibles de déploiement en recul, jusqu'à l'instant indiqué.
+     *
+     * En mémoire et non en base, comme `progress` : c'est l'état d'une instance
+     * Dokploy injoignable *depuis ce processus*, pas un fait sur la cible. Le
+     * garder ici évite surtout d'écrire dans `synced_at` un rapprochement qui
+     * n'a pas eu lieu — ce qui ferait passer le premier import pour fait, et
+     * transformerait tout l'historique de la cible en avis au tour suivant.
+     */
+    private readonly deployBackoff = new Map<number, number>();
 
     constructor(private readonly deps: IntegrationSyncDeps) {}
 
@@ -257,9 +367,10 @@ export class IntegrationSyncService {
                 .slice(0, BATCH);
 
             await Promise.all(picked.map((row) => this.syncOne(row.id, row.workspace_id)));
-            // Les déploiements en vol sont suivis à part : ils n'ont rien à voir
-            // avec la cadence des dépôts, et un déploiement dure des minutes.
-            await this.pollDeployments();
+            // Les cibles de déploiement sont rapprochées à part : elles n'ont
+            // rien à voir avec la cadence des dépôts, et un déploiement dure des
+            // minutes là où une synchronisation git en prend dix.
+            await this.syncDeployTargets();
         } catch (e) {
             this.deps.logger.error({ err: e }, 'Integration sync: tick failed');
         } finally {
@@ -672,51 +783,275 @@ export class IntegrationSyncService {
     }
 
     /**
-     * Réinterroge le fournisseur sur les déploiements encore en vol.
+     * Rapproche les cibles de déploiement de ce que le fournisseur en dit.
      *
-     * DevEye ne reçoit aucun webhook : c'est donc du sondage, mais borné aux
-     * seuls déploiements non terminés — il n'y en a jamais plus d'une poignée.
+     * **Par cible, et non plus par ligne locale.** L'ancienne passe ne
+     * réinterrogeait que les déploiements déjà en base, c'est-à-dire ceux que
+     * `deploy.trigger` avait écrits : tout ce qui partait de l'interface de
+     * Dokploy, d'une CI ou d'un push git n'existait nulle part côté DevEye, et
+     * n'apparaissait qu'en ouvrant une fiche — qui interroge l'instance en
+     * direct. En arrivant sur la page, la liste ne montrait rien de tout cela.
+     *
+     * DevEye ne reçoit toujours aucun webhook : Dokploy n'en émet pas de forme
+     * générique, ses « notifications » étant mises en page pour Discord, Slack
+     * ou Telegram. C'est donc du sondage, mais borné de trois façons —
+     * {@link DEPLOY_BATCH} cibles par tour, {@link DEPLOY_MIN_INTERVAL_SECONDS}
+     * entre deux tours d'une même cible au repos, {@link DEPLOY_IMPORT_LIMIT}
+     * lignes retenues par appel. Une cible qui a un déploiement en vol échappe
+     * au deuxième et passe à chaque tour, là où l'état bouge vraiment.
      */
-    private async pollDeployments(): Promise<void> {
-        const inFlight = await this.deps.db.deploy.listInFlight(10);
-        for (const row of inFlight) {
+    private async syncDeployTargets(): Promise<void> {
+        const now = Math.floor(Date.now() / 1000);
+        // Même forme que la sélection des dépôts : on demande large, on filtre
+        // en mémoire, on tranche. Sans cela, une poignée de cibles injoignables
+        // — qui trient en tête, n'ayant jamais abouti — consommerait chaque tour
+        // et les autres ne passeraient jamais.
+        const due = await this.deps.db.deploy.listTargetsDue(DEPLOY_BATCH * 4, now - DEPLOY_MIN_INTERVAL_SECONDS);
+        const picked = due.filter((t) => (this.deployBackoff.get(t.id) ?? 0) <= now).slice(0, DEPLOY_BATCH);
+
+        for (const target of picked) {
             try {
-                const cipher = this.cipherFor(row.workspace_id);
-                const target = await this.deps.db.deploy.findTarget(row.target_id, row.workspace_id);
-                if (!target || target.credential_id === null) continue;
-
-                const credential = await this.deps.db.credentials.findAny(target.credential_id, row.workspace_id);
-                if (!credential?.base_url) continue;
-                const apiKey = await cipher.decrypt(credential.secret_enc);
-
-                const remote = await listDeployments(
-                    credential.base_url,
-                    apiKey,
-                    target.target_kind === 'compose' ? 'compose' : 'application',
-                    target.external_id
-                );
-                // On rattache par identifiant externe quand on en a un, sinon
-                // par proximité de date : Dokploy ne renvoie pas toujours
-                // l'identifiant au déclenchement.
-                const match =
-                    (row.external_id !== null && remote.find((d) => d.externalId === row.external_id)) ||
-                    remote.find((d) => Math.abs(d.startedAt - Number(row.started_at)) < 120);
-                if (!match || match.status === row.status) continue;
-
-                const body = await this.readJson<Record<string, unknown>>(cipher, row.content);
-                await this.deps.db.deploy.updateDeployment(row.id, {
-                    externalId: match.externalId ?? row.external_id,
-                    status: match.status,
-                    finishedAt: match.finishedAt,
-                    content: await cipher.encrypt(JSON.stringify({ ...body, description: match.description }))
-                });
-                // Les deux sujets : la fiche de la cible **et** l'onglet du
-                // projet qui la déploie montrent le même état.
-                this.deps.live?.changed(row.workspace_id, ['deploy', 'projects'], null);
+                await this.syncDeployTarget(target, now);
+                this.deployBackoff.delete(target.id);
             } catch (e) {
-                this.deps.logger.warn({ err: e, deploymentId: row.id }, 'Project sync: suivi de déploiement échoué');
+                // Un recul en mémoire plutôt qu'en base : c'est l'instance qui
+                // ne répond pas, pas la cible qui a changé. `synced_at` reste
+                // donc à sa valeur — et à `null` si le premier import n'a jamais
+                // abouti, sans quoi le suivant prendrait tout l'historique pour
+                // du neuf et enverrait un avis par ligne.
+                this.deployBackoff.set(target.id, now + DEPLOY_MIN_INTERVAL_SECONDS);
+                this.deps.logger.warn(
+                    { err: e instanceof Error ? e.message : String(e), targetId: target.id },
+                    'Deploy sync: cible non rapprochée'
+                );
             }
         }
+    }
+
+    /**
+     * Une cible : lire chez le fournisseur, réconcilier, prévenir de ce qui a
+     * atterri.
+     *
+     * L'ordre compte. On écrit **avant** de notifier : un avis parti sur un état
+     * qui n'a pas été enregistré repartirait au tour suivant, alors qu'un état
+     * enregistré sans avis ne se perd que d'un message.
+     */
+    private async syncDeployTarget(target: DeployTargetSyncRow, now: number): Promise<void> {
+        if (target.credential_id === null || !target.base_url) return;
+
+        const cipher = this.cipherFor(target.workspace_id);
+        const credential = await this.deps.db.credentials.findAny(target.credential_id, target.workspace_id);
+        if (!credential?.base_url) return;
+        const apiKey = await cipher.decrypt(credential.secret_enc);
+
+        const remote = await listDeployments(
+            credential.base_url,
+            apiKey,
+            target.target_kind === 'compose' ? 'compose' : 'application',
+            target.external_id
+        );
+
+        // Le premier rapprochement **garnit sans prévenir** : tout l'historique
+        // d'une cible est « nouveau » ce jour-là sans que rien ne vienne de se
+        // produire, et l'annoncer serait un mensonge sur la date.
+        const firstImport = target.synced_at === null;
+        const local = await this.deps.db.deploy.listDeployments(
+            target.id,
+            target.workspace_id,
+            DEPLOY_IMPORT_LIMIT * 3
+        );
+
+        const recent = [...remote].sort((a, b) => b.startedAt - a.startedAt).slice(0, DEPLOY_IMPORT_LIMIT);
+        /** Lignes locales déjà appariées : une ligne ne vaut que pour un distant. */
+        const claimed = new Set<number>();
+        /** Ce qui vient d'atterrir et n'a pas encore été annoncé. */
+        const landed: {
+            id: number;
+            status: string;
+            title: string;
+            description: string;
+            startedAt: number;
+            finishedAt: number | null;
+        }[] = [];
+        let changed = false;
+
+        for (const entry of recent) {
+            const match = matchDeployment(entry, local, claimed);
+
+            if (match) {
+                claimed.add(match.id);
+                const externalId = entry.externalId ?? match.external_id;
+                const finishedAt = entry.finishedAt;
+                const settled =
+                    match.status === entry.status &&
+                    match.external_id === externalId &&
+                    (match.finished_at === null ? finishedAt === null : Number(match.finished_at) === finishedAt);
+
+                if (!settled) {
+                    const body = await this.readJson<Record<string, unknown>>(cipher, match.content);
+                    await this.deps.db.deploy.updateDeployment(match.id, {
+                        externalId,
+                        status: entry.status,
+                        finishedAt,
+                        content: await cipher.encrypt(JSON.stringify({ ...body, description: entry.description }))
+                    });
+                    changed = true;
+                }
+                // L'atterrissage se juge sur `notified`, jamais sur « l'état
+                // vient de changer » : un déploiement terminé pendant que le
+                // serveur était arrêté n'aurait sinon jamais son avis.
+                if (isTerminal(entry.status) && match.notified === 0) {
+                    landed.push({
+                        id: match.id,
+                        status: entry.status,
+                        title: entry.title,
+                        description: entry.description,
+                        startedAt: entry.startedAt,
+                        finishedAt
+                    });
+                }
+                continue;
+            }
+
+            // Inconnu ici : un déploiement parti d'ailleurs. Il entre avec la
+            // date et l'état du fournisseur, sans auteur — l'ordre ne vient de
+            // personne dans DevEye.
+            const row = await this.deps.db.deploy.createRemoteDeployment({
+                targetId: target.id,
+                workspaceId: target.workspace_id,
+                externalId: entry.externalId,
+                status: entry.status,
+                startedAt: entry.startedAt,
+                finishedAt: entry.finishedAt,
+                // Le premier import tait le **passé**, pas le présent : une pile
+                // en cours de déploiement à cet instant-là est un fait réel, qui
+                // va atterrir dans quelques minutes et mérite son avis. Seul ce
+                // qui est déjà terminé entre en base marqué comme annoncé.
+                notified: firstImport && isTerminal(entry.status),
+                content: await cipher.encrypt(
+                    JSON.stringify({
+                        title: entry.title,
+                        description: entry.description,
+                        url: credential.base_url
+                    })
+                )
+            });
+            changed = true;
+            if (!firstImport && isTerminal(entry.status)) {
+                landed.push({
+                    id: row.id,
+                    status: entry.status,
+                    title: entry.title,
+                    description: entry.description,
+                    startedAt: entry.startedAt,
+                    finishedAt: entry.finishedAt
+                });
+            }
+        }
+
+        // Ce que DevEye croit en vol et que le fournisseur ne connaît pas : au
+        // bout d'un moment, ce n'est plus un déploiement en cours, c'est un
+        // suivi perdu. Marqué `failed` faute d'état « inconnu » dans le
+        // vocabulaire — mais **sans avis**, et c'est délibéré : on ne sait
+        // justement pas ce qui s'est passé, et annoncer un échec qu'on n'a pas
+        // constaté serait pire que de ne rien dire. La ligne, elle, le dit.
+        for (const row of local) {
+            if (claimed.has(row.id) || isTerminal(row.status)) continue;
+            if (Number(row.started_at) > now - DEPLOY_STALE_SECONDS) continue;
+
+            const body = await this.readJson<Record<string, unknown>>(cipher, row.content);
+            await this.deps.db.deploy.updateDeployment(row.id, {
+                externalId: row.external_id,
+                status: 'failed',
+                finishedAt: now,
+                content: await cipher.encrypt(
+                    JSON.stringify({
+                        ...body,
+                        description: 'Suivi perdu : le fournisseur ne connaît plus ce déploiement.'
+                    })
+                )
+            });
+            await this.deps.db.deploy.markDeploymentNotified(row.id);
+            changed = true;
+        }
+
+        await this.deps.db.deploy.markTargetSynced(target.id, now);
+
+        if (changed) {
+            // Les deux sujets : la fiche de la cible **et** l'onglet du projet
+            // qui la déploie montrent le même état.
+            this.deps.live?.changed(target.workspace_id, ['deploy', 'projects'], null);
+        }
+
+        if (landed.length > 0) {
+            const name = (await this.readJson<{ name?: string }>(cipher, target.content))?.name ?? target.external_id;
+            for (const item of landed) {
+                // Le premier rapprochement ne prévient **jamais** — y compris
+                // pour une ligne locale restée en vol que le fournisseur dit
+                // terminée depuis trois semaines. On ne peut pas distinguer, ce
+                // jour-là, « vient d'atterrir » de « a atterri il y a longtemps » ;
+                // seule la marque part, pour que le tour suivant n'y revienne pas.
+                if (!firstImport) await this.announceDeployment(target.workspace_id, cipher, name, item);
+                // Marqué quoi qu'il advienne de l'envoi : `deliver` avale déjà
+                // ses erreurs, et réessayer à chaque tour un canal mal réglé
+                // produirait une boucle silencieuse plutôt qu'un rattrapage.
+                await this.deps.db.deploy.markDeploymentNotified(item.id);
+            }
+        }
+    }
+
+    /**
+     * Annonce un déploiement qui vient d'atterrir, sur les canaux de la feature
+     * **Déploiement**.
+     *
+     * Ses propres canaux, jamais ceux d'Uptime : un déploiement raté ne concerne
+     * ni les mêmes personnes ni le même salon qu'un service tombé. C'est le
+     * travers corrigé pour Sentinelle en 075 et pour Bases de données en 085 ; il
+     * n'y avait pas de raison de le refaire une troisième fois.
+     */
+    private async announceDeployment(
+        workspaceId: number,
+        cipher: Cipher,
+        targetName: string,
+        item: { status: string; title: string; description: string; startedAt: number; finishedAt: number | null }
+    ): Promise<void> {
+        const channels = await resolveChannels(this.deps.db, cipher, workspaceId, 'deploy');
+        if (!hasChannel(channels)) return;
+
+        const failed = item.status === 'failed';
+        const label = item.title || 'Déploiement';
+        const lines = [
+            failed
+                ? `Le déploiement « ${label} » de ${targetName} a échoué.`
+                : `Le déploiement « ${label} » de ${targetName} est passé.`,
+            '',
+            `Cible       : ${targetName}`,
+            `État        : ${failed ? 'Échec' : 'Succès'}`,
+            `Démarré le  : ${formatMoment(item.startedAt)}`
+        ];
+        if (item.finishedAt !== null) {
+            lines.push(`Terminé le  : ${formatMoment(item.finishedAt)}`);
+            lines.push(`Durée       : ${formatDuration(Math.max(0, item.finishedAt - item.startedAt))}`);
+        }
+        // La description porte le message d'erreur du fournisseur quand il y en
+        // a un (voir `readDeployments`) : c'est la seule ligne qui dise
+        // *pourquoi*, et la couper serait renvoyer l'utilisateur chez Dokploy.
+        if (item.description) lines.push('', item.description);
+
+        await deliver(
+            channels,
+            {
+                subject: `[DevEye] ${failed ? 'Échec' : 'Succès'} du déploiement — ${targetName}`,
+                body: lines.join('\n'),
+                payload: {
+                    event: failed ? 'deploy_failed' : 'deploy_succeeded',
+                    target: targetName,
+                    title: label,
+                    at: item.finishedAt ?? item.startedAt
+                }
+            },
+            this.deps.logger.child({ workspaceId })
+        );
     }
 
     /**

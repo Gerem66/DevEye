@@ -1,4 +1,4 @@
-import type { DeployTargetRow, DeployTargetWithUsageRow, DeploymentRow } from 'deveye-types';
+import type { DeployTargetRow, DeployTargetSyncRow, DeployTargetWithUsageRow, DeploymentRow } from 'deveye-types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
@@ -11,6 +11,13 @@ type Q = Queryable;
  * corollaire est que rien ici ne suit le `security_tier` d'un projet — tout est
  * à l'étage ouvert, et la garde atomique qu'exigeait l'ancienne écriture de
  * `updateDeployment` a disparu avec sa cause.
+ *
+ * L'historique n'est plus seulement **ce que DevEye a déclenché** (migration
+ * 085). `listTargetsDue` et `createRemoteDeployment` servent le rapprochement de
+ * fond, qui recopie en base ce que le fournisseur connaît — y compris les
+ * déploiements partis de son interface, d'une CI ou d'un push git. C'est ce qui
+ * fait qu'une liste ouverte sans réseau vers Dokploy dit malgré tout la vérité
+ * du dernier état connu.
  */
 export interface DeployRepo {
     // -- cibles -------------------------------------------------------------
@@ -49,6 +56,24 @@ export interface DeployRepo {
     /** Retire toutes les liaisons d'un projet : sa conversion en confidentiel. */
     unlinkAllProjects(projectId: number, workspaceId: number): Promise<number>;
 
+    // -- rapprochement de fond ----------------------------------------------
+    /**
+     * Les cibles qu'il est temps de réinterroger, la plus urgente d'abord.
+     *
+     * Deux régimes dans une seule requête : une cible qui a un déploiement en
+     * vol passe **à chaque tour**, les autres attendent `staleBefore`. C'est ce
+     * qui permet de suivre un déploiement à la minute sans sonder toute la liste
+     * aussi souvent — et de rester borné : `limit` plafonne la rafale sortante,
+     * quel que soit le nombre de cibles déclarées.
+     *
+     * Les cibles sans jeton ou sans adresse d'instance sont écartées ici plutôt
+     * que dans l'appelant : il n'y a rien à leur demander, et les faire remonter
+     * ne servirait qu'à consommer le budget d'un tour.
+     */
+    listTargetsDue(limit: number, staleBefore: number): Promise<DeployTargetSyncRow[]>;
+    /** Horodate un rapprochement réussi ; c'est lui qui sort du premier import. */
+    markTargetSynced(id: number, at: number): Promise<void>;
+
     // -- déploiements -------------------------------------------------------
     createDeployment(input: {
         targetId: number;
@@ -57,16 +82,36 @@ export interface DeployRepo {
         triggeredByUserId: number;
         content: string;
     }): Promise<DeploymentRow>;
+    /**
+     * Enregistre un déploiement **découvert chez le fournisseur**, avec son état
+     * et sa date à lui.
+     *
+     * Distincte de `createDeployment`, qui écrit un déclenchement parti d'ici :
+     * celle-ci n'a pas d'auteur (`triggered_by_user_id` reste NULL — l'ordre
+     * vient de l'interface de Dokploy, d'une CI ou d'un push), commence rarement
+     * à `queued`, et porte `notified` explicitement : le premier import d'une
+     * cible entre en base **déjà notifié**, sans quoi il enverrait un avis par
+     * ligne d'historique.
+     */
+    createRemoteDeployment(input: {
+        targetId: number;
+        workspaceId: number;
+        externalId: string | null;
+        status: string;
+        startedAt: number;
+        finishedAt: number | null;
+        notified: boolean;
+        content: string;
+    }): Promise<DeploymentRow>;
     updateDeployment(
         id: number,
         input: { externalId: string | null; status: string; finishedAt: number | null; content: string }
     ): Promise<void>;
+    /** Marque l'avis parti. Séparé de l'écriture d'état : on notifie **après**
+     *  avoir enregistré, pour qu'un envoi qui échoue ne se répète pas en boucle
+     *  mais qu'un état perdu ne fasse pas non plus disparaître le déploiement. */
+    markDeploymentNotified(id: number): Promise<void>;
     listDeployments(targetId: number, workspaceId: number, limit: number): Promise<DeploymentRow[]>;
-    /**
-     * Les déploiements encore en vol, toutes cibles confondues : c'est ce que
-     * l'ordonnanceur doit aller réinterroger chez le fournisseur.
-     */
-    listInFlight(limit: number): Promise<DeploymentRow[]>;
 }
 
 /**
@@ -212,6 +257,30 @@ export function deployRepo(pool: Q): DeployRepo {
             return r.rowCount;
         },
 
+        async listTargetsDue(limit, staleBefore) {
+            // Sous-requête plutôt que HAVING : le compte des déploiements en vol
+            // est un scalaire corrélé, pas une agrégation du groupe, et le
+            // filtrer demande donc de le matérialiser d'abord.
+            const r = await pool.query<DeployTargetSyncRow>(
+                `SELECT * FROM (
+                     SELECT t.*, c.base_url,
+                            (SELECT COUNT(*) FROM deployments d
+                              WHERE d.target_id = t.id AND d.status IN ('queued', 'running')) AS in_flight
+                       FROM deploy_targets t
+                       JOIN workspace_credentials c ON c.id = t.credential_id
+                      WHERE c.provider = 'dokploy' AND c.base_url IS NOT NULL AND c.base_url <> ''
+                 ) AS x
+                  WHERE x.in_flight > 0 OR x.synced_at IS NULL OR x.synced_at < ?
+                  ORDER BY x.in_flight DESC, x.synced_at IS NULL DESC, x.synced_at ASC, x.id ASC
+                  LIMIT ?`,
+                [staleBefore, limit]
+            );
+            return r.rows;
+        },
+        async markTargetSynced(id, at) {
+            await pool.query('UPDATE deploy_targets SET synced_at = ? WHERE id = ?', [at, id]);
+        },
+
         async createDeployment({ targetId, workspaceId, externalId, triggeredByUserId, content }) {
             const res = await pool.query(
                 `INSERT INTO deployments (target_id, workspace_id, external_id, status, triggered_by_user_id, content)
@@ -220,6 +289,29 @@ export function deployRepo(pool: Q): DeployRepo {
             );
             const r = await pool.query<DeploymentRow>('SELECT * FROM deployments WHERE id = ?', [res.insertId]);
             return r.rows[0];
+        },
+        async createRemoteDeployment({
+            targetId,
+            workspaceId,
+            externalId,
+            status,
+            startedAt,
+            finishedAt,
+            notified,
+            content
+        }) {
+            const res = await pool.query(
+                `INSERT INTO deployments
+                     (target_id, workspace_id, external_id, status, triggered_by_user_id,
+                      started_at, finished_at, notified, content)
+                 VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
+                [targetId, workspaceId, externalId, status, startedAt, finishedAt, notified ? 1 : 0, content]
+            );
+            const r = await pool.query<DeploymentRow>('SELECT * FROM deployments WHERE id = ?', [res.insertId]);
+            return r.rows[0];
+        },
+        async markDeploymentNotified(id) {
+            await pool.query('UPDATE deployments SET notified = 1 WHERE id = ?', [id]);
         },
         async updateDeployment(id, { externalId, status, finishedAt, content }) {
             // Écriture simple : plus de garde atomique sur `security_tier`. Une
@@ -235,14 +327,6 @@ export function deployRepo(pool: Q): DeployRepo {
                 `SELECT * FROM deployments WHERE target_id = ? AND workspace_id = ?
                  ORDER BY started_at DESC, id DESC LIMIT ?`,
                 [targetId, workspaceId, limit]
-            );
-            return r.rows;
-        },
-        async listInFlight(limit) {
-            const r = await pool.query<DeploymentRow>(
-                `SELECT * FROM deployments WHERE status IN ('queued', 'running')
-                 ORDER BY started_at ASC LIMIT ?`,
-                [limit]
             );
             return r.rows;
         }

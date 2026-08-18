@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { MailAccount } from 'deveye-types';
+import type { MailAccount, NotificationSettings } from 'deveye-types';
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
@@ -8,25 +8,67 @@ import { Dialog } from '@/Components/Dialog';
 import SelectInput from '@/Components/SelectInput';
 import TextInput from '@/Components/TextInput';
 
-import styles from './style.module.css';
+import styles from './NotificationsDialog.module.css';
 
 /**
- * Où partent les constats de Sentinelle.
+ * Où partent les alertes d'une feature — **le même écran pour les quatre**.
  *
- * **Ses propres canaux**, et c'est tout le sujet : Sentinelle empruntait ceux
- * d'Uptime « pour éviter deux jeux de réglages ». On recevait donc des alertes
- * de sécurité sur un salon désigné pour la disponibilité, sans que rien ne
- * l'ait annoncé, et sans moyen de les couper sans couper aussi Uptime.
+ * Uptime, Sentinelle, Bases de données et Déploiement règlent exactement les
+ * mêmes champs : un compte expéditeur « open », un destinataire, un webhook.
+ * Ils en avaient pourtant deux implémentations, et allaient en avoir quatre : le
+ * dialogue de Sentinelle est né d'un copier-coller de la popup d'Uptime, dont il
+ * a hérité les mêmes cent quarante lignes et perdu au passage l'avertissement
+ * « aucun compte expéditeur valide » — un écran qui laissait donc croire à un
+ * canal actif là où l'autre prévenait.
  *
- * Éteint par défaut : rien ne part tant que rien n'est réglé ici.
+ * Ce qui distingue réellement un émetteur d'un autre tient dans trois chaînes :
+ * le préfixe de ses commandes, son titre, et la phrase qui dit **quand** il
+ * écrit. Tout le reste est commun, y compris l'ordre des gestes — enregistrer
+ * avant de tester, sans quoi le test partirait sur les anciens canaux.
+ *
+ * ⚠️ Les trois commandes attendues (`<feature>.getSettings`, `.setSettings`,
+ * `.testNotification`) sont supposées exister : c'est la contrepartie du
+ * paramétrage par préfixe. Un émetteur qui n'en déclarerait que deux se verrait
+ * refusé par le typage des commandes, pas par une vérification d'exécution.
  */
+
+/** Les émetteurs qui savent notifier, côté client. Miroir de `notificationFeatureSchema`. */
+export type NotificationsFeature = 'uptime' | 'sentinel' | 'database' | 'deploy';
 
 interface Props {
     open: boolean;
     onClose: () => void;
+    /** L'émetteur : décide de la ligne de réglages lue et écrite. */
+    feature: NotificationsFeature;
+    /** Titre du dialogue — « Notifications de Sentinelle », etc. */
+    title: string;
+    /**
+     * Ce qui distingue ces canaux de ceux des autres features, en une phrase.
+     * Affiché sous le titre : c'est ce qui évite de régler Uptime en croyant
+     * régler la Sentinelle.
+     */
+    description: string;
+    /** **Quand** cette feature écrit. Affiché en tête du corps. */
+    when: string;
 }
 
-export default function NotificationsDialog({ open, onClose }: Props) {
+/** Les commandes d'un émetteur, reconstituées depuis son préfixe. */
+type Commands = {
+    get: `${NotificationsFeature}.getSettings`;
+    set: `${NotificationsFeature}.setSettings`;
+    test: `${NotificationsFeature}.testNotification`;
+};
+
+function commandsOf(feature: NotificationsFeature): Commands {
+    return {
+        get: `${feature}.getSettings`,
+        set: `${feature}.setSettings`,
+        test: `${feature}.testNotification`
+    };
+}
+
+export function NotificationsDialog({ open, onClose, feature, title, description, when }: Props) {
+    const [settings, setSettings] = useState<NotificationSettings | null>(null);
     const [accounts, setAccounts] = useState<MailAccount[]>([]);
     const [mailAccountId, setMailAccountId] = useState<number | null>(null);
     const [email, setEmail] = useState('');
@@ -36,13 +78,17 @@ export default function NotificationsDialog({ open, onClose }: Props) {
     const [status, setStatus] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
 
+    const commands = commandsOf(feature);
+
     // Rechargé à chaque ouverture : un dialogue qui garde l'état d'avant fait
     // enregistrer ce qu'on croyait avoir annulé.
     useEffect(() => {
         if (!open) return;
         setStatus(null);
-        void Promise.all([ws.send('sentinel.getSettings', {}), ws.send('mail.accountList', {})])
+        setSettings(null);
+        void Promise.all([ws.send(commands.get, {}), ws.send('mail.accountList', {})])
             .then(([s, a]) => {
+                setSettings(s.settings);
                 setEmailEnabled(s.settings.emailEnabled);
                 setEmail(s.settings.email ?? '');
                 setMailAccountId(s.settings.mailAccountId);
@@ -51,9 +97,9 @@ export default function NotificationsDialog({ open, onClose }: Props) {
                 setAccounts(a.accounts);
             })
             .catch(() => setStatus('Chargement impossible.'));
-    }, [open]);
+    }, [open, commands.get]);
 
-    function payload(): Parameters<typeof ws.send<'sentinel.setSettings'>>[1] {
+    function payload() {
         return { emailEnabled, email, mailAccountId, webhookEnabled, webhookUrl };
     }
 
@@ -61,7 +107,7 @@ export default function NotificationsDialog({ open, onClose }: Props) {
         setBusy(true);
         setStatus(null);
         try {
-            await ws.send('sentinel.setSettings', payload());
+            await ws.send(commands.set, payload());
             onClose();
         } catch {
             setStatus('Enregistrement impossible.');
@@ -75,8 +121,8 @@ export default function NotificationsDialog({ open, onClose }: Props) {
         setBusy(true);
         setStatus(null);
         try {
-            await ws.send('sentinel.setSettings', payload());
-            const res = await ws.send('sentinel.testNotification', {});
+            await ws.send(commands.set, payload());
+            const res = await ws.send(commands.test, {});
             setStatus(res.sent ? 'Notification de test envoyée.' : (res.error ?? 'Envoi impossible.'));
         } catch {
             setStatus('Envoi impossible.');
@@ -93,11 +139,11 @@ export default function NotificationsDialog({ open, onClose }: Props) {
         <Dialog
             open={open}
             onClose={onClose}
-            title='Notifications de Sentinelle'
-            description='Distinctes de celles d’Uptime : une alerte de sécurité n’a ni les mêmes destinataires ni la même urgence qu’un service tombé.'
+            title={title}
+            description={description}
             width={520}
             footer={
-                <div className={styles.dialogFooter}>
+                <div className={styles.footer}>
                     <Button variant='ghost' disabled={busy} onClick={() => void test()}>
                         Tester
                     </Button>
@@ -108,11 +154,8 @@ export default function NotificationsDialog({ open, onClose }: Props) {
             }
             onSubmit={() => void save()}
         >
-            <div className={styles.dialogBody}>
-                <p className={styles.fieldHint}>
-                    Envoyées à l’ouverture d’un constat de gravité « élevé » ou plus, et regroupées par appareil : une
-                    machine compromise déclenche plusieurs règles d’un coup, qui partent en un seul message.
-                </p>
+            <div className={styles.body}>
+                <p className={styles.fieldHint}>{when}</p>
 
                 <Checkbox checked={emailEnabled} onChange={setEmailEnabled}>
                     Par e-mail
@@ -142,11 +185,13 @@ export default function NotificationsDialog({ open, onClose }: Props) {
                 <label className={styles.field}>
                     <span className={styles.fieldLabel}>Destinataire</span>
                     <TextInput
+                        type='email'
                         value={email}
                         disabled={!emailEnabled}
                         placeholder='Adresse du compte expéditeur'
                         onChange={(e) => setEmail(e.target.value)}
                     />
+                    <span className={styles.fieldHint}>Laissez vide pour utiliser l’adresse du compte expéditeur.</span>
                 </label>
 
                 <Checkbox checked={webhookEnabled} onChange={setWebhookEnabled}>
@@ -154,7 +199,7 @@ export default function NotificationsDialog({ open, onClose }: Props) {
                 </Checkbox>
 
                 <label className={styles.field}>
-                    <span className={styles.fieldLabel}>URL</span>
+                    <span className={styles.fieldLabel}>URL appelée en POST</span>
                     <TextInput
                         value={webhookUrl}
                         disabled={!webhookEnabled}
@@ -162,13 +207,25 @@ export default function NotificationsDialog({ open, onClose }: Props) {
                         onChange={(e) => setWebhookUrl(e.target.value)}
                     />
                     <span className={styles.fieldHint}>
-                        Une seule URL pour Discord, Slack ou un point d’entrée maison : le corps porte les trois formes
-                        à la fois.
+                        Une seule URL pour Discord, Slack ou un point d’entrée maison : le message lisible est répété
+                        dans <code>content</code> (Discord) et <code>text</code> (Slack), et les champs structurés
+                        suivent pour les endpoints maison.
                     </span>
                 </label>
 
+                {/* L'avertissement n'existait que dans Uptime. Il compte partout :
+                    sans lui, un canal coché sans compte expéditeur valide a
+                    exactement l'air d'un canal qui fonctionne. */}
+                {settings && emailEnabled && !settings.mailAccountReady && (
+                    <p className={styles.warning}>
+                        Aucun compte mail « open » sélectionné : les e-mails ne partiront pas tant qu’un compte
+                        expéditeur valide n’est pas choisi ci-dessus.
+                    </p>
+                )}
                 {status && <p className={styles.notice}>{status}</p>}
             </div>
         </Dialog>
     );
 }
+
+export default NotificationsDialog;

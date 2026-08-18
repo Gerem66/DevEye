@@ -14,6 +14,7 @@ import {
 import { fetchDeploymentLog, listDeployments, listTargets, triggerDeploy } from '@/Services/integrations/dokploy';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { deployCredentialFeatures } from './credentials';
+import { deployNotificationFeatures } from './notifications';
 import {
     READ,
     WRITE,
@@ -437,5 +438,6 @@ export const deployFeatures: FeatureDefinition<string, any, any>[] = [
     deployTriggerFeature,
     deployHistoryFeature,
     deployLogFeature,
+    ...deployNotificationFeatures,
     ...deployCredentialFeatures
 ];

@@ -2,9 +2,8 @@ import type { Logger } from 'pino';
 import type { Database as Db } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import type { LiveHub } from '@/live/hub';
-import type { UptimeMonitor } from '@/Services/UptimeMonitor';
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
-import * as mailClient from '@/Services/MailAccountClient';
+import { deliver, hasChannel, resolveChannels } from '@/Services/notifications';
 import type { DatabaseComparator, DatabaseCondition, DatabaseProbe, DatabaseRow } from 'deveye-types';
 import { explainError, openSession, singleNumber, type EngineTarget, type Session } from './databases/engine';
 import type { TunnelConfig } from './databases/tunnel';
@@ -23,12 +22,19 @@ import type { TunnelConfig } from './databases/tunnel';
  * l'interface le dit plutôt que de laisser croire à une surveillance qui
  * n'existe pas.
  *
- * ## Les canaux de notification sont ceux d'Uptime
+ * ## Les canaux de notification sont les siens
  *
- * Le compte mail et le webhook réglés dans Uptime servent aussi ici : ce sont
- * les mêmes canaux pour les mêmes personnes, et en tenir deux jeux à jour serait
- * une source d'erreur de plus. D'où la dépendance à `UptimeMonitor`, dont on
- * n'emprunte que `resolveChannels`.
+ * Ils ne l'ont pas toujours été : ce service appelait `UptimeMonitor.resolveChannels`,
+ * au motif que c'étaient « les mêmes canaux pour les mêmes personnes, et en
+ * tenir deux jeux à jour serait une source d'erreur de plus ». C'est mot pour
+ * mot le raisonnement que Sentinelle avait suivi avant la migration 075, et il
+ * a produit le même effet : un seuil SQL franchi arrivait sur le salon désigné
+ * pour la disponibilité, sans qu'on puisse l'éteindre sans éteindre Uptime.
+ *
+ * Depuis la migration 085, la ligne `database` de `notification_settings` est la
+ * sienne — reprise à l'identique de celle d'Uptime, pour que personne ne perde
+ * au redémarrage une alerte qu'il recevait la veille. La dépendance à
+ * `UptimeMonitor` a disparu avec sa cause.
  *
  * ## Notifier aux transitions, jamais à chaque relevé
  *
@@ -84,8 +90,6 @@ export interface DatabaseMonitorDeps {
     crypt: Encryption;
     logger: Logger;
     live?: LiveHub;
-    /** Pour les canaux de notification de l'espace — et rien d'autre. */
-    uptime: UptimeMonitor;
 }
 
 /** L'issue d'une évaluation de condition : une valeur, ou la raison de son absence. */
@@ -379,65 +383,38 @@ export class DatabaseMonitor {
     }
 
     /**
-     * Délivre une alerte sur les canaux de l'espace.
+     * Délivre une alerte sur les canaux de la feature **Bases de données**.
      *
-     * Toute erreur est journalisée puis avalée : un webhook en panne ne doit ni
-     * supprimer le mail, ni arrêter la boucle de relevé.
+     * Trois choses tenaient ici et n'y sont plus. Les canaux, empruntés à Uptime
+     * — ce sont les siens depuis la migration 085. L'envoi, recopié mot pour mot
+     * depuis `UptimeMonitor` alors que `Services/notifications.ts` existait
+     * précisément pour l'éviter. Et la gestion d'erreur qui allait avec : c'est
+     * `deliver` qui journalise puis avale, canal par canal, pour qu'un webhook
+     * en panne ne supprime pas le mail ni n'arrête la boucle de relevé.
      */
     private async notify(
         workspaceId: number,
         alert: { databaseName: string; alertName: string; firing: boolean; body: string; at: number }
     ): Promise<void> {
-        const channels = await this.deps.uptime.resolveChannels(workspaceId);
-        const subject = alert.firing
-            ? `[DevEye] Alerte ${alert.databaseName} — ${alert.alertName}`
-            : `[DevEye] Retour à la normale ${alert.databaseName} — ${alert.alertName}`;
+        const channels = await resolveChannels(this.deps.db, this.cipherFor(workspaceId), workspaceId, 'database');
+        if (!hasChannel(channels)) return;
 
-        if (channels.email && channels.sendAccount) {
-            try {
-                await mailClient.sendMail(channels.sendAccount.credentials, {
-                    from: channels.sendAccount.fromEmail,
-                    to: [{ name: null, address: channels.email }],
-                    subject,
-                    text: alert.body
-                });
-            } catch (e) {
-                this.deps.logger.error(
-                    { workspaceId, err: e instanceof Error ? e.message : String(e) },
-                    'Database alert mail failed'
-                );
-            }
-        }
-
-        if (channels.webhook) {
-            try {
-                const response = await fetch(channels.webhook, {
-                    method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    signal: AbortSignal.timeout(10_000),
-                    // Même charge utile que les alertes Uptime : `content` pour
-                    // Discord, `text` pour Slack, et les champs structurés pour
-                    // un point d'entrée maison. Aucun des trois ne gêne les
-                    // autres, ce qui évite de demander « quel service ? ».
-                    body: JSON.stringify({
-                        content: alert.body.slice(0, 1900),
-                        text: alert.body.slice(0, 1900),
-                        event: alert.firing ? 'database_alert' : 'database_recovered',
-                        database: alert.databaseName,
-                        alert: alert.alertName,
-                        at: alert.at
-                    })
-                });
-                if (!response.ok) {
-                    this.deps.logger.warn({ workspaceId, status: response.status }, 'Database alert webhook rejected');
+        await deliver(
+            channels,
+            {
+                subject: alert.firing
+                    ? `[DevEye] Alerte ${alert.databaseName} — ${alert.alertName}`
+                    : `[DevEye] Retour à la normale ${alert.databaseName} — ${alert.alertName}`,
+                body: alert.body,
+                payload: {
+                    event: alert.firing ? 'database_alert' : 'database_recovered',
+                    database: alert.databaseName,
+                    alert: alert.alertName,
+                    at: alert.at
                 }
-            } catch (e) {
-                this.deps.logger.error(
-                    { workspaceId, err: e instanceof Error ? e.message : String(e) },
-                    'Database alert webhook failed'
-                );
-            }
-        }
+            },
+            this.deps.logger.child({ workspaceId })
+        );
     }
 }
 

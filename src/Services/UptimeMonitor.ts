@@ -2,9 +2,15 @@ import type { UptimeServiceRow, UptimeStatus } from 'deveye-types';
 import type { Logger } from 'pino';
 
 import { decryptError, decryptService, encryptError, type ServicePayload } from '@/features/uptime/_shared';
-import * as mailClient from '@/Services/MailAccountClient';
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
-import { resolveChannels, type Channels } from '@/Services/notifications';
+import {
+    deliver,
+    formatDuration,
+    formatMoment,
+    resolveChannels,
+    sendTest,
+    type Channels
+} from '@/Services/notifications';
 import { env } from '@/Utils/Env';
 
 import type { LiveHub } from '@/live/hub';
@@ -140,37 +146,6 @@ function webhookPayload(alert: WebhookAlert): Record<string, unknown> {
         url: alert.url,
         at: alert.at
     };
-}
-
-/** A rejected webhook, explained: the provider's own words beat "HTTP 400". */
-async function webhookRejection(response: Response): Promise<string> {
-    const detail = await response
-        .text()
-        .then((body) => body.slice(0, 200).trim())
-        .catch(() => '');
-    return detail ? `Le webhook a répondu ${response.status} : ${detail}` : `Le webhook a répondu ${response.status}`;
-}
-
-/** Short French date+time used in alert bodies. */
-function formatMoment(epochSeconds: number): string {
-    return new Date(epochSeconds * 1000).toLocaleString('fr-FR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
-}
-
-/** "2 h 5 min" / "45 s" — outage length in an alert. */
-function formatDuration(seconds: number): string {
-    if (seconds < 60) return `${seconds} s`;
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes} min`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} h ${minutes % 60} min`;
-    return `${Math.floor(hours / 24)} j ${hours % 24} h`;
 }
 
 export class UptimeMonitor {
@@ -394,69 +369,34 @@ export class UptimeMonitor {
     }
 
     /**
-     * Deliver one alert on every channel the user enabled. Returns true as soon
-     * as one channel accepted it — a failing webhook must not suppress the mail,
-     * nor stop the probe loop, so every error is logged and swallowed.
+     * Livre une alerte sur chaque canal réglé, et dit si l'un d'eux l'a acceptée.
+     *
+     * Le corps de l'envoi vit dans `Services/notifications.ts` : il était
+     * recopié ici, mot pour mot, alors que ce module existait déjà pour l'éviter
+     * — il ne servait qu'à Sentinelle. Le booléen rendu est ce qui marque
+     * l'incident `notified`, et donc ce qui interdit d'envoyer un « c'est
+     * revenu » sans avoir envoyé le « c'est tombé ».
      */
     private async notify(
         row: UptimeServiceRow,
         target: ServicePayload,
         alert: { subject: string; body: string; event: 'down' | 'recovered'; at: number }
     ): Promise<boolean> {
-        const channels = await this.resolveChannels(row.workspace_id);
-        let delivered = false;
-
-        if (channels.email && channels.sendAccount) {
-            try {
-                await mailClient.sendMail(channels.sendAccount.credentials, {
-                    from: channels.sendAccount.fromEmail,
-                    to: [{ name: null, address: channels.email }],
-                    subject: alert.subject,
-                    text: alert.body
-                });
-                delivered = true;
-            } catch (e) {
-                this.deps.logger.error(
-                    { serviceId: row.id, err: e instanceof Error ? e.message : String(e) },
-                    'Uptime alert mail failed'
-                );
-            }
-        }
-
-        if (channels.webhook) {
-            try {
-                const response = await fetch(channels.webhook, {
-                    method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    signal: AbortSignal.timeout(10_000),
-                    body: JSON.stringify(
-                        webhookPayload({
-                            event: alert.event,
-                            service: target.name,
-                            url: target.url,
-                            at: alert.at,
-                            body: alert.body
-                        })
-                    )
-                });
-                // A rejected POST is not a delivery: counting it would mark the
-                // incident notified and later send a lone recovery message.
-                if (response.ok) delivered = true;
-                else {
-                    this.deps.logger.warn(
-                        { serviceId: row.id, reason: await webhookRejection(response) },
-                        'Uptime alert webhook rejected'
-                    );
-                }
-            } catch (e) {
-                this.deps.logger.error(
-                    { serviceId: row.id, err: e instanceof Error ? e.message : String(e) },
-                    'Uptime alert webhook failed'
-                );
-            }
-        }
-
-        return delivered;
+        return deliver(
+            await this.resolveChannels(row.workspace_id),
+            {
+                subject: alert.subject,
+                body: alert.body,
+                payload: webhookPayload({
+                    event: alert.event,
+                    service: target.name,
+                    url: target.url,
+                    at: alert.at,
+                    body: alert.body
+                })
+            },
+            this.deps.logger.child({ serviceId: row.id })
+        );
     }
 
     /**
@@ -468,25 +408,18 @@ export class UptimeMonitor {
     /**
      * Les canaux d'Uptime pour cet espace.
      *
-     * La résolution vit dans `Services/notifications.ts` : Uptime et Sentinelle
-     * lisent la même table à des lignes différentes, et deux implémentations
-     * jumelles auraient dérivé. Cette méthode reste exposée parce que
-     * `DatabaseMonitor` s'en sert délibérément — les alertes de base partagent
-     * les destinataires d'Uptime, ce qui est un choix, pas un oubli.
+     * La résolution vit dans `Services/notifications.ts` : les quatre émetteurs
+     * lisent la même table à des lignes différentes, et quatre implémentations
+     * jumelles auraient dérivé. Cette méthode n'est plus qu'un raccourci interne
+     * — `DatabaseMonitor` l'appelait, faute d'avoir ses propres canaux avant la
+     * migration 085 ; il lit désormais la ligne `database` comme les autres.
      */
-    async resolveChannels(workspaceId: number): Promise<Channels> {
+    private async resolveChannels(workspaceId: number): Promise<Channels> {
         return resolveChannels(this.deps.db, this.cipherFor(workspaceId), workspaceId, 'uptime');
     }
 
-    /** Send a sample alert on every configured channel (settings "Tester"). */
+    /** Envoie une alerte d'exemple sur chaque canal réglé (bouton « Tester »). */
     async sendTestAlert(workspaceId: number): Promise<{ sent: boolean; error: string | null }> {
-        const channels = await this.resolveChannels(workspaceId);
-        if (!channels.sendAccount && !channels.webhook) {
-            return {
-                sent: false,
-                error: 'Aucun canal de notification activé (choisissez un compte mail « open » ou un webhook).'
-            };
-        }
         const at = Math.floor(Date.now() / 1000);
         const body = [
             'Ceci est un test de notification DevEye Uptime.',
@@ -494,36 +427,17 @@ export class UptimeMonitor {
             `Envoyé le : ${formatMoment(at)}`,
             'Si vous lisez ce message, les alertes de disponibilité vous parviendront bien.'
         ].join('\n');
-
-        let error: string | null = null;
-        let sent = false;
-        if (channels.email && channels.sendAccount) {
-            try {
-                await mailClient.sendMail(channels.sendAccount.credentials, {
-                    from: channels.sendAccount.fromEmail,
-                    to: [{ name: null, address: channels.email }],
-                    subject: 'DevEye — test de notification',
-                    text: body
-                });
-                sent = true;
-            } catch (e) {
-                error = e instanceof Error ? e.message : String(e);
-            }
-        }
-        if (channels.webhook) {
-            try {
-                const response = await fetch(channels.webhook, {
-                    method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    signal: AbortSignal.timeout(10_000),
-                    body: JSON.stringify(webhookPayload({ event: 'test', service: null, url: null, at, body }))
-                });
-                if (response.ok) sent = true;
-                else error ??= await webhookRejection(response);
-            } catch (e) {
-                error ??= e instanceof Error ? e.message : String(e);
-            }
-        }
-        return { sent, error: sent ? null : error };
+        return sendTest(
+            this.deps.db,
+            this.cipherFor(workspaceId),
+            workspaceId,
+            'uptime',
+            {
+                subject: 'DevEye — test de notification',
+                body,
+                payload: webhookPayload({ event: 'test', service: null, url: null, at, body })
+            },
+            this.deps.logger.child({ workspaceId })
+        );
     }
 }

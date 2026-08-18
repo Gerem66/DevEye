@@ -758,16 +758,6 @@
     padding-right: var(--space-xs);
 }
 
-/* ------------------------------------------------------------------ *
- * Popups (service form + notifications)
- * ------------------------------------------------------------------ */
-
-.popupHint {
-    margin: 0 0 var(--space-md) 0;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-}
-
 .form {
     display: flex;
     flex-direction: column;
@@ -796,21 +786,6 @@
 .fieldHint {
     font-size: 0.72rem;
     color: var(--text-muted);
-}
-
-.warning {
-    margin: 0;
-    padding: var(--space-sm);
-    border-radius: var(--radius-sm);
-    background: var(--warning-bg);
-    color: var(--warning);
-    font-size: 0.8rem;
-}
-
-.status {
-    margin: 0;
-    font-size: 0.8rem;
-    color: var(--text-secondary);
 }
 
 .popupActions {

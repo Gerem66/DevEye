@@ -14,6 +14,13 @@ import type { Database } from '@/db';
  * et les mêmes précautions, recopiées. Trois copies d'une même quarantaine de
  * lignes, c'est trois occasions de corriger un bug à un seul endroit.
  *
+ * Il n'avait d'abord absorbé que Sentinelle : Uptime et Bases de données ont
+ * gardé leur copie longtemps après, ce qui laissait le module vrai en principe
+ * et faux en pratique — il annonçait une mutualisation dont un seul appelant
+ * bénéficiait. Les quatre émetteurs (Uptime, Sentinelle, Bases de données,
+ * Déploiement) passent désormais par {@link deliver}, et c'est ce qui rend
+ * l'affirmation ci-dessus vérifiable plutôt que déclarative.
+ *
  * **Le mécanisme est commun, la configuration ne l'est pas** : `feature` désigne
  * la ligne de `notification_settings` à lire, et deux features ne se marchent
  * jamais dessus.
@@ -82,6 +89,36 @@ export async function resolveChannels(
     return { email, sendAccount, webhook };
 }
 
+/**
+ * Date et heure dans le corps d'une alerte, en français.
+ *
+ * Ici et non dans l'émetteur : les quatre features écrivent des corps de
+ * message, et une alerte de base horodatée autrement qu'une alerte de
+ * disponibilité donnerait l'impression de venir d'un autre produit. C'était déjà
+ * le seul exemplaire, resté privé dans `UptimeMonitor` ; le rendre commun évite
+ * simplement qu'un deuxième naisse.
+ */
+export function formatMoment(epochSeconds: number): string {
+    return new Date(epochSeconds * 1000).toLocaleString('fr-FR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+}
+
+/** « 2 h 5 min », « 45 s » — une durée lisible dans un corps d'alerte. */
+export function formatDuration(seconds: number): string {
+    if (seconds < 60) return `${seconds} s`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} h ${minutes % 60} min`;
+    return `${Math.floor(hours / 24)} j ${hours % 24} h`;
+}
+
 /** Ce qu'une alerte porte, indépendamment du canal qui la transporte. */
 export interface Alert {
     subject: string;
@@ -94,13 +131,42 @@ export interface Alert {
 }
 
 /**
- * Livre une alerte sur tous les canaux configurés.
+ * Tronqué sous la limite stricte de 2000 caractères de Discord, qui rejette le
+ * message entier au-delà plutôt que de le couper.
+ */
+const WEBHOOK_TEXT_MAX = 1900;
+
+/**
+ * Un webhook refusé, expliqué : les mots du fournisseur valent mieux qu'« HTTP
+ * 400 ». Discord dit « Cannot send an empty message », Slack nomme le champ
+ * manquant ; le code seul n'a jamais permis de corriger une URL.
+ */
+async function webhookRejection(response: Response): Promise<string> {
+    const detail = await response
+        .text()
+        .then((body) => body.slice(0, 200).trim())
+        .catch(() => '');
+    return detail ? `Le webhook a répondu ${response.status} : ${detail}` : `Le webhook a répondu ${response.status}`;
+}
+
+/**
+ * Livre une alerte sur tous les canaux configurés, et dit si **au moins un** l'a
+ * acceptée.
  *
  * Chaque erreur est journalisée puis avalée, et les canaux sont indépendants :
  * un webhook en panne ne doit ni supprimer le mail, ni arrêter la boucle qui a
  * produit l'alerte.
+ *
+ * Le booléen n'est pas décoratif. Uptime marque son incident `notified` sur
+ * cette réponse, et ne peut donc envoyer un « c'est revenu » que s'il a bien
+ * envoyé le « c'est tombé » — sans quoi on recevrait un rétablissement sans
+ * contexte. Un POST refusé n'est **pas** une livraison : le compter comme telle
+ * était le bug que ce retour empêche. Les appelants qui n'en ont pas l'usage
+ * l'ignorent simplement.
  */
-export async function deliver(channels: Channels, alert: Alert, logger: Logger): Promise<void> {
+export async function deliver(channels: Channels, alert: Alert, logger: Logger): Promise<boolean> {
+    let delivered = false;
+
     if (channels.email && channels.sendAccount) {
         try {
             await mailClient.sendMail(channels.sendAccount.credentials, {
@@ -109,6 +175,7 @@ export async function deliver(channels: Channels, alert: Alert, logger: Logger):
                 subject: alert.subject,
                 text: alert.body
             });
+            delivered = true;
         } catch (e) {
             logger.error({ err: e instanceof Error ? e.message : String(e) }, 'Alert mail failed');
         }
@@ -125,16 +192,45 @@ export async function deliver(channels: Channels, alert: Alert, logger: Logger):
                 // maison. Aucun des trois ne gêne les autres, ce qui évite de
                 // demander « quel service ? » à la configuration.
                 body: JSON.stringify({
-                    content: alert.body.slice(0, 1900),
-                    text: alert.body.slice(0, 1900),
+                    content: alert.body.slice(0, WEBHOOK_TEXT_MAX),
+                    text: alert.body.slice(0, WEBHOOK_TEXT_MAX),
                     ...alert.payload
                 })
             });
-            if (!response.ok) {
-                logger.warn({ status: response.status }, 'Alert webhook rejected');
-            }
+            if (response.ok) delivered = true;
+            else logger.warn({ reason: await webhookRejection(response) }, 'Alert webhook rejected');
         } catch (e) {
             logger.error({ err: e instanceof Error ? e.message : String(e) }, 'Alert webhook failed');
         }
     }
+
+    return delivered;
+}
+
+/**
+ * Le squelette d'un `*.testNotification` : résout, refuse poliment s'il n'y a
+ * rien à joindre, livre sinon.
+ *
+ * Les quatre commandes de test faisaient les mêmes six lignes. « Aucun canal
+ * activé » y est une **réponse**, pas une exception : le dialogue affiche la
+ * phrase telle quelle au lieu d'un « échec » qui laisserait croire à une panne
+ * d'envoi.
+ */
+export async function sendTest(
+    db: Database,
+    cipher: Cipher,
+    workspaceId: number,
+    feature: NotificationFeature,
+    alert: Alert,
+    logger: Logger
+): Promise<{ sent: boolean; error: string | null }> {
+    const channels = await resolveChannels(db, cipher, workspaceId, feature);
+    if (!hasChannel(channels)) {
+        return { sent: false, error: 'Aucun canal activé (choisissez un compte mail « open » ou un webhook).' };
+    }
+    const sent = await deliver(channels, alert, logger);
+    return {
+        sent,
+        error: sent ? null : 'Aucun canal n’a accepté l’envoi — vérifiez le compte expéditeur et l’URL du webhook.'
+    };
 }

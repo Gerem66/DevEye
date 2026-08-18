@@ -62,7 +62,11 @@ un incident, pas à une sonde.
   initiale, **seulement si** le « down » avait bien été notifié (sinon on
   enverrait un « c'est revenu » sans contexte).
 
-Canaux (`uptime_settings`, un par utilisateur) :
+Canaux (`notification_settings`, ligne `uptime`, un jeu par espace) — la table
+`uptime_settings` a disparu à la migration `075`, qui a séparé les canaux **par
+feature** : Uptime, Sentinelle, Bases de données et Déploiement lisent la même
+table à quatre lignes différentes, et l'envoi lui-même vit dans
+`Services/notifications.ts`. Régler l'un ne touche donc jamais aux autres.
 
 - **e-mail** — destinataire libre, vide = l'adresse du compte. Nécessite les
   variables `SMTP_*` (voir `.env.template`) ; sans elles la popup le dit au lieu
@@ -79,6 +83,12 @@ Canaux (`uptime_settings`, un par utilisateur) :
 
 Le bouton « Tester » enregistre d'abord, puis envoie une alerte d'exemple sur
 tous les canaux activés — sinon le test porterait sur l'ancienne configuration.
+
+L'écran de réglage est `Components/NotificationsDialog/`, **partagé par les
+quatre émetteurs** : ils règlent exactement les mêmes champs, et la copie qui
+existait pour Sentinelle avait déjà perdu au passage l'avertissement « aucun
+compte expéditeur valide » — un écran laissait donc croire à un canal actif là
+où l'autre prévenait.
 
 Chaque bascule est aussi journalisée dans les logs d'audit (`uptime.down`,
 `uptime.recovered`), donc consultable dans la feature Logs.

@@ -13,7 +13,7 @@ import DeviceHeader from './DeviceHeader';
 import FindingDetail from './FindingDetail';
 import FindingsList from './FindingsList';
 import FleetHeader from './FleetHeader';
-import NotificationsDialog from './NotificationsDialog';
+import { NotificationsDialog } from '@/Components/NotificationsDialog';
 import PostureGrid from './PostureGrid';
 import SentinelDialog from './SentinelDialog';
 import styles from './style.module.css';
@@ -386,7 +386,14 @@ export default function Sentinel({ workspace }: FeatureProps) {
                 )}
             </main>
 
-            <NotificationsDialog open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
+            <NotificationsDialog
+                open={notificationsOpen}
+                onClose={() => setNotificationsOpen(false)}
+                feature='sentinel'
+                title='Notifications de Sentinelle'
+                description='Distinctes de celles d’Uptime : une alerte de sécurité n’a ni les mêmes destinataires ni la même urgence qu’un service tombé.'
+                when='Envoyées à l’ouverture d’un constat de gravité « élevé » ou plus, et regroupées par appareil : une machine compromise déclenche plusieurs règles d’un coup, qui partent en un seul message.'
+            />
 
             <SentinelDialog
                 open={settingsFor !== null}

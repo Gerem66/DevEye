@@ -169,9 +169,12 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     const uptime = new UptimeMonitor({ db: deps.db, crypt: deps.crypt, audit, logger, live });
     const mailSync = new MailSyncService({ db: deps.db, crypt: deps.crypt, logger, live });
     const integrations = new IntegrationSyncService({ db: deps.db, crypt: deps.crypt, logger, live });
-    // Les canaux de notification sont ceux d'Uptime : mêmes destinataires, une
-    // seule configuration à tenir à jour.
-    const databases = new DatabaseMonitor({ db: deps.db, crypt: deps.crypt, logger, live, uptime });
+    // Bases de données a **ses propres** canaux (`notification_settings`, ligne
+    // `database`), depuis la migration 085. Elle empruntait ceux d'Uptime, et un
+    // seuil SQL franchi arrivait donc sur le salon désigné pour la
+    // disponibilité — la même erreur que Sentinelle avant la 075, corrigée de la
+    // même façon, reprise de la ligne existante comprise.
+    const databases = new DatabaseMonitor({ db: deps.db, crypt: deps.crypt, logger, live });
     // L'ingestion d'audience. Rien à joindre au-dehors : contrairement aux
     // quatre services ci-dessus, celui-ci ne sonde rien — il **reçoit**, et son
     // seul travail périodique est de vider ce qu'on lui a déposé.
