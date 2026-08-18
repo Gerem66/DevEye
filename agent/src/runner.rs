@@ -100,10 +100,10 @@ const DEFAULT_CAPTURE: &str = "all";
 /// sans fermer la socket. Un délai de silence le résout aussi bien, sans
 /// envoyer un octet.
 ///
-/// Doit rester nettement au-dessus de deux fois `AGENT_HEARTBEAT_MS` côté
-/// serveur (15 s), sinon un balayage en retard sous charge ferait reconnecter
-/// des agents parfaitement sains.
-const SERVER_SILENCE_LIMIT: Duration = Duration::from_secs(40);
+/// Doit rester au-dessus de deux fois `AGENT_HEARTBEAT_MS` côté serveur (60 s),
+/// sinon un balayage en retard sous charge ferait reconnecter des agents
+/// parfaitement sains. 150 s laisse une marge de trente secondes.
+const SERVER_SILENCE_LIMIT: Duration = Duration::from_secs(150);
 
 /// Cadence du contrôle de sortie de veille, et écart au-delà duquel on conclut
 /// que la machine a dormi. Voir le bras `wake_ticker` de la boucle.
@@ -1319,12 +1319,13 @@ mod tests {
     }
 
     #[test]
-    fn the_ping_stays_faster_than_the_snapshot_guard() {
-        // Un battement plus lent que le garde de l'instant de connexion voudrait
-        // dire qu'on détecte une socket morte moins vite qu'on ne s'interdit de
-        // renvoyer un instant : la reconnexion arriverait alors toujours trop
-        // tard pour rafraîchir le tableau de bord.
-        assert!(SERVER_SILENCE_LIMIT < MIN_CONNECT_SNAPSHOT_GAP);
+    fn the_silence_limit_leaves_room_for_two_server_beats() {
+        // Le serveur balaie toutes les 60 s (`AGENT_HEARTBEAT_MS`). Sous ce
+        // seuil, un balayage en retard sous charge suffirait à faire reconnecter
+        // un agent parfaitement sain — et une tempête de reconnexions coûte
+        // infiniment plus cher que le ping qu'on aurait cru économiser. La marge
+        // est de trente secondes ; la réduire demande de relire hub.ts.
+        assert!(SERVER_SILENCE_LIMIT >= Duration::from_secs(150));
         assert!(WAKE_CHECK_INTERVAL < WAKE_SKEW_THRESHOLD);
         assert!(REJECTED_MIN < REJECTED_MAX);
         assert!(RECONNECT_DELAY_MIN < RECONNECT_DELAY_MAX);

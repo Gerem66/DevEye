@@ -109,14 +109,35 @@ import { logger } from '@/logger';
 
 /**
  * Période du balayage de vivacité des agents. Deux tours sans `pong` ferment la
- * socket, donc la détection tombe dans `[P, 2P]` : 15 à 30 s ici.
+ * socket, donc la détection tombe dans `[P, 2P]` : 60 à 120 s ici.
+ *
+ * ## Pourquoi un battement, puisqu'on est sur une WebSocket
+ *
+ * L'événement de fermeture ne couvre que les arrêts PROPRES, et ceux-là sont
+ * déjà gratuits : sur `SIGTERM`, l'agent envoie une trame de fermeture et on le
+ * voit partir tout de suite. Le battement existe pour tout le reste — coupure de
+ * courant, câble arraché, VM tuée, machine mise en veille — où personne n'émet
+ * rien. TCP étant silencieux au repos, la socket reste `ESTABLISHED` et AUCUN
+ * événement ne se déclenche : la machine s'afficherait en ligne et avalerait les
+ * commandes qu'on lui envoie. Le noyau ne l'apprendrait qu'en tentant d'émettre
+ * (retransmissions, ~15 min) ou par son keepalive TCP, deux heures par défaut.
+ *
+ * ## Pourquoi cette cadence
  *
  * C'est le SEUL battement du lien : l'agent n'émet plus le sien, il se contente
  * de constater un silence (`SERVER_SILENCE_LIMIT`). Ce ping et le pong qu'il
- * appelle sont donc, à eux deux, tout le trafic permanent d'un agent au repos.
- * D'où le choix de la cadence : à 10 s, avec un battement dans chaque sens, une
- * flotte immobile produisait vingt-quatre trames par minute et par machine
- * contre huit auparavant — et ça se voyait sur une courbe réseau.
+ * appelle sont donc, à eux deux, TOUT le trafic permanent d'un agent au repos —
+ * deux trames par minute. Une minute est le meilleur compromis trouvé : quatre
+ * fois plus discret que le code d'origine, tout en gardant une marge confortable
+ * sous le délai d'inactivité d'un proxy inverse (180 s par défaut chez Traefik),
+ * au-delà duquel la connexion serait coupée et la reconnexion coûterait bien
+ * plus cher que le ping économisé.
+ *
+ * Le balayage est volontairement INCONDITIONNEL. Ne pas pinguer un agent qui
+ * vient de parler paraît malin, mais ça n'économise des trames que lorsqu'il y a
+ * déjà du trafic — donc jamais quand ça se verrait — et ça couple les deux
+ * côtés : un ping sauté ici raccourcit le silence perçu là-bas, au risque de
+ * faire reconnecter un agent parfaitement sain.
  *
  * DÉLIBÉRÉMENT plus rapide que celui de `LiveHub` (30 s), et il ne faut pas
  * « corriger » la divergence. Les coûts d'une panne ne sont pas comparables :
@@ -124,10 +145,10 @@ import { logger } from '@/logger';
  * avale en silence les commandes qu'on lui envoie, alors qu'une socket de
  * navigateur morte ne laisse qu'un fantôme dans une liste de présence.
  *
- * `SERVER_SILENCE_LIMIT` (40 s) doit rester nettement au-dessus de `2 × P`,
- * sinon un balayage en retard sous charge ferait reconnecter des agents sains.
+ * `SERVER_SILENCE_LIMIT` (150 s) doit rester au-dessus de `2 × P`, sinon un
+ * balayage en retard sous charge ferait reconnecter des agents sains.
  */
-const AGENT_HEARTBEAT_MS = 15_000;
+const AGENT_HEARTBEAT_MS = 60_000;
 
 /**
  * Fenêtre et seuil du signalement de reconnexions en rafale.
