@@ -11,6 +11,25 @@
     overflow-y: auto;
     padding-top: var(--navbar-height);
     transition: filter var(--transition-slow);
+    /*
+     * Quand le verre des tuiles a le droit de revenir : après le flou, jamais
+     * pendant.
+     *
+     * Au repli, React retire `.recessed` d'un coup, donc `--glass-backdrop`
+     * reprend sa valeur immédiatement, alors que `filter` n'est pas parti : il
+     * *transitionne* vers zéro. Or **toute** valeur de `filter` autre que `none`
+     * fait encore de `main` un backdrop root. Sans ce délai, le verre revient
+     * pile pendant cette fenêtre et des tuiles s'effacent le temps du repli,
+     * pour reparaître à la fin. C'est l'exact symétrique du défaut d'ouverture,
+     * et il ne se voit qu'à la fermeture parce qu'à l'aller la classe arrive
+     * *avant* le flou, si bien que les deux ne se croisent jamais.
+     *
+     * 60 ms de marge sur les 400 ms de `--transition-slow`. En dur, parce que ce
+     * jeton porte sa courbe en plus de sa durée et n'est donc pas calculable, et
+     * parce qu'une image ou deux de battement coûtent moins cher qu'un
+     * scintillement. À garder ≥ à la durée ci-dessus.
+     */
+    --glass-backdrop-delay: 460ms;
 }
 
 /*
@@ -53,6 +72,9 @@
  */
 .recessed {
     --glass-backdrop: none;
+    /* À l'aller, aucun délai : le verre doit avoir disparu avant que le flou ne
+       commence à monter, sinon on ouvre la même fenêtre qu'au repli. */
+    --glass-backdrop-delay: 0s;
     filter: blur(7px);
     pointer-events: none;
 }

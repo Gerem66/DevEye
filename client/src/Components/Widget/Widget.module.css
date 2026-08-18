@@ -16,7 +16,13 @@
        the card's pre-border-box height — preserved so the grid rhythm is unchanged. */
     min-height: 206px;
     position: relative;
-    transition: border-color var(--transition-fast);
+    /* Le verre part sur-le-champ, mais ne revient qu'après le délai que lui
+       dicte son ancêtre : tant qu'un `filter` transitionne au-dessus, cette
+       carte est encore sous un backdrop root vide (voir `--glass-backdrop`). */
+    transition:
+        border-color var(--transition-fast),
+        backdrop-filter 0s var(--glass-backdrop-delay, 0s),
+        -webkit-backdrop-filter 0s var(--glass-backdrop-delay, 0s);
     /* The card can render as an anchor (shortcut tiles) — keep it looking like a card. */
     text-decoration: none;
     color: inherit;
