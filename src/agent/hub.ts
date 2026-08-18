@@ -109,20 +109,25 @@ import { logger } from '@/logger';
 
 /**
  * Période du balayage de vivacité des agents. Deux tours sans `pong` ferment la
- * socket, donc la détection tombe dans `[P, 2P]` : 10 à 20 s ici.
+ * socket, donc la détection tombe dans `[P, 2P]` : 15 à 30 s ici.
+ *
+ * C'est le SEUL battement du lien : l'agent n'émet plus le sien, il se contente
+ * de constater un silence (`SERVER_SILENCE_LIMIT`). Ce ping et le pong qu'il
+ * appelle sont donc, à eux deux, tout le trafic permanent d'un agent au repos.
+ * D'où le choix de la cadence : à 10 s, avec un battement dans chaque sens, une
+ * flotte immobile produisait vingt-quatre trames par minute et par machine
+ * contre huit auparavant — et ça se voyait sur une courbe réseau.
  *
  * DÉLIBÉRÉMENT plus rapide que celui de `LiveHub` (30 s), et il ne faut pas
  * « corriger » la divergence. Les coûts d'une panne ne sont pas comparables :
  * une socket d'agent morte fait passer une machine éteinte pour en ligne et
  * avale en silence les commandes qu'on lui envoie, alors qu'une socket de
- * navigateur morte ne laisse qu'un fantôme dans une liste de présence. Tripler
- * la cadence de tous les onglets ouverts, téléphones en 4G compris, pour gagner
- * quarante secondes sur une péremption cosmétique serait un mauvais marché.
+ * navigateur morte ne laisse qu'un fantôme dans une liste de présence.
  *
- * Miroir de `AGENT_PING_INTERVAL` côté agent : les deux sens détectent, parce
- * qu'aucun des deux ne peut déduire la vivacité de l'autre de son propre ping.
+ * `SERVER_SILENCE_LIMIT` (40 s) doit rester nettement au-dessus de `2 × P`,
+ * sinon un balayage en retard sous charge ferait reconnecter des agents sains.
  */
-const AGENT_HEARTBEAT_MS = 10_000;
+const AGENT_HEARTBEAT_MS = 15_000;
 
 /**
  * Fenêtre et seuil du signalement de reconnexions en rafale.

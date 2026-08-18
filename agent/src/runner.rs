@@ -85,22 +85,25 @@ const REPORT_INTERVAL: Duration = Duration::from_secs(60 * 60);
 /// Default used until the server pushes `agent.config` (≈immediately on
 /// connect). Mirrors the server default (`DEFAULT_PROCESS_CAPTURE`).
 const DEFAULT_CAPTURE: &str = "all";
-/// Cadence du ping émis par l'agent, et délai au-delà duquel il considère le
-/// serveur perdu.
+/// Silence du serveur au-delà duquel l'agent considère le lien mort.
 ///
-/// Symétrique du battement de cœur côté serveur : sans lui, l'agent reste bloqué
-/// dans `stream.next()` indéfiniment quand le serveur disparaît sans fermer la
-/// socket — jusqu'au keepalive TCP du noyau, plus de deux heures. Il ne se
-/// reconnectait donc pas, et se croyait supervisé.
+/// L'agent n'émet AUCUN ping. C'est délibéré, et c'est ce qui rend son coût
+/// réseau permanent nul : le serveur le pingue déjà (`AGENT_HEARTBEAT_MS`), donc
+/// l'agent reçoit forcément une trame à intervalle régulier et il lui suffit de
+/// constater qu'elle n'arrive plus. Un battement dans chaque sens doublait les
+/// trames sans rien apprendre de plus — sur une flotte au repos, c'était
+/// l'essentiel du trafic, en permanence.
 ///
-/// Dix secondes : les deux côtés appliquent la même règle « deux tours sans
-/// réponse », donc la détection tombe dans `[P, 2P]`, soit 10 à 20 s au lieu de
-/// 30 à 60. Descendre à 5 s ne gagnerait rien de perceptible, alors que le cas
-/// qui paraît réellement cassé — la sortie de veille — est traité
-/// structurellement par `WAKE_SKEW_THRESHOLD` plutôt qu'en sondant plus fort.
-/// Dix secondes reste par ailleurs très en dessous du délai d'inactivité usuel
-/// d'un proxy inverse, donc le battement continue de servir de keepalive.
-const AGENT_PING_INTERVAL: Duration = Duration::from_secs(10);
+/// Ce qu'il ne faut PAS refaire : revenir à un ping émis d'ici. Le problème
+/// d'origine était que l'agent restait bloqué dans `stream.next()` jusqu'au
+/// keepalive TCP du noyau (plus de deux heures) quand le serveur disparaissait
+/// sans fermer la socket. Un délai de silence le résout aussi bien, sans
+/// envoyer un octet.
+///
+/// Doit rester nettement au-dessus de deux fois `AGENT_HEARTBEAT_MS` côté
+/// serveur (15 s), sinon un balayage en retard sous charge ferait reconnecter
+/// des agents parfaitement sains.
+const SERVER_SILENCE_LIMIT: Duration = Duration::from_secs(40);
 
 /// Cadence du contrôle de sortie de veille, et écart au-delà duquel on conclut
 /// que la machine a dormi. Voir le bras `wake_ticker` de la boucle.
@@ -502,7 +505,9 @@ async fn stream_session(
     let mut report_ticker = new_ticker(REPORT_INTERVAL);
     let mut integrity_ticker = new_ticker(integrity_interval);
     let mut auth_ticker = new_ticker(AUTH_INTERVAL);
-    let mut ping_ticker = new_ticker(AGENT_PING_INTERVAL);
+    // Dernière trame REÇUE du serveur, quelle qu'elle soit. C'est la seule mesure
+    // de vivacité du lien côté agent, et elle ne coûte rien à produire.
+    let mut last_seen = Instant::now();
     // Détection de sortie de veille. `Instant` est monotone (CLOCK_MONOTONIC sur
     // Linux, `mach_absolute_time` sur macOS) et n'avance PAS pendant la
     // suspension ; `SystemTime` est relue de l'horloge matérielle au réveil.
@@ -514,7 +519,6 @@ async fn stream_session(
     let mut last_wall = std::time::SystemTime::now();
     // Remis à `true` par chaque `Pong` ; deux tours sans réponse ferment la
     // session, qui se rétablit par la boucle de reconnexion habituelle.
-    let mut server_alive = true;
     // The socket map of the latest tick, reused by the next report so a report
     // never re-probes what a tick just enumerated.
     let mut last_sockets = sockets;
@@ -597,17 +601,17 @@ async fn stream_session(
                 let _ = sink.flush().await;
                 return Ok(SessionOutcome::Stop);
             }
-            _ = ping_ticker.tick() => {
-                if !server_alive {
-                    warn!("no pong from the server — reconnecting");
-                    return Ok(SessionOutcome::Established);
-                }
-                server_alive = false;
-                if sink.send(Message::Ping(Vec::new())).await.is_err() {
-                    return Ok(SessionOutcome::Established);
-                }
-            }
             _ = wake_ticker.tick() => {
+                // Contrôle de silence, logé dans le ticker du réveil plutôt que
+                // dans le sien : il n'émet rien, donc il n'a pas besoin d'une
+                // cadence à lui, et un timer de moins est un timer de moins.
+                if last_seen.elapsed() > SERVER_SILENCE_LIMIT {
+                    warn!(
+                        silent_secs = last_seen.elapsed().as_secs(),
+                        "server silent for too long — reconnecting"
+                    );
+                    return Ok(SessionOutcome::Established);
+                }
                 let now_mono = Instant::now();
                 let now_wall = std::time::SystemTime::now();
                 let mono = now_mono.saturating_duration_since(last_mono);
@@ -663,6 +667,13 @@ async fn stream_session(
                 marks.report = Some(Instant::now());
             }
             incoming = stream.next() => {
+                // AVANT le tri : ping, pong, texte ou binaire, tout prouve
+                // également que le lien est vivant. Ne rafraîchir que sur
+                // certaines trames rendrait le témoin faux dès qu'un serveur
+                // silencieux mais sain se contente de pinguer.
+                if matches!(incoming, Some(Ok(_))) {
+                    last_seen = Instant::now();
+                }
                 match incoming {
                     Some(Ok(Message::Text(txt))) => {
                         match serde_json::from_str::<ServerMessage>(&txt) {
@@ -978,9 +989,9 @@ async fn stream_session(
                     Some(Ok(Message::Ping(payload))) => {
                         sink.send(Message::Pong(payload)).await.ok();
                     }
-                    Some(Ok(Message::Pong(_))) => {
-                        server_alive = true;
-                    }
+                    // Le pong ne porte plus rien de particulier : c'est le
+                    // rafraîchissement de `last_seen` ci-dessus qui compte.
+                    Some(Ok(Message::Pong(_))) => {}
                     Some(Ok(Message::Close(_))) | None => return Ok(SessionOutcome::Established),
                     Some(Ok(_)) => {}
                     Some(Err(e)) => return Err(e).context("WebSocket stream error"),
@@ -1313,7 +1324,7 @@ mod tests {
         // dire qu'on détecte une socket morte moins vite qu'on ne s'interdit de
         // renvoyer un instant : la reconnexion arriverait alors toujours trop
         // tard pour rafraîchir le tableau de bord.
-        assert!(AGENT_PING_INTERVAL < MIN_CONNECT_SNAPSHOT_GAP);
+        assert!(SERVER_SILENCE_LIMIT < MIN_CONNECT_SNAPSHOT_GAP);
         assert!(WAKE_CHECK_INTERVAL < WAKE_SKEW_THRESHOLD);
         assert!(REJECTED_MIN < REJECTED_MAX);
         assert!(RECONNECT_DELAY_MIN < RECONNECT_DELAY_MAX);
