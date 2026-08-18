@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DEVICE_FILES_LISTING_EVENT, type DeviceFilesListingPush, type FileListing } from 'deveye-types';
+import {
+    DEVICE_FILES_LISTING_EVENT,
+    DEVICE_FILES_OP_EVENT,
+    type DeviceFilesListingPush,
+    type DeviceFilesOpPush,
+    type FileListing
+} from 'deveye-types';
 
 import { ws } from '@/api/ws';
-import { Button, Dialog } from '@/Components';
+import { Button, Dialog, TextInput } from '@/Components';
+import { joinPath } from '@/devicePath';
 import { acquireMetrics } from '@/stores/metricsSubscription';
 import styles from './style.module.css';
 
@@ -18,13 +25,27 @@ interface DeviceFolderPickerProps {
 /**
  * Mini-explorateur de dossiers d'un appareil, sur les commandes de
  * l'explorateur de fichiers du Monitoring (`device.filesList` + push corrélé
- * par opId) — dossiers uniquement, avec « Choisir ce dossier ».
+ * par opId) — dossiers uniquement, avec « Choisir ce dossier », « Actualiser »
+ * et « Nouveau dossier ».
  */
 export default function DeviceFolderPicker({ open, deviceId, deviceName, onClose, onPick }: DeviceFolderPickerProps) {
     const [listing, setListing] = useState<FileListing | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [mkdirOpen, setMkdirOpen] = useState(false);
+    const [mkdirName, setMkdirName] = useState('');
     const listOp = useRef('');
+    const mutateOp = useRef('');
+    /** Chemin du dossier qu'un mkdir en cours vient de créer, ouvert au succès. */
+    const mkdirTarget = useRef<string | null>(null);
+    /**
+     * Le dossier affiché, en référence. Les gestionnaires de push vivent dans un
+     * abonnement monté UNE fois : y lire l'état `listing` capturerait sa valeur
+     * du premier rendu (donc `null`) pour toute la vie du dialogue. Le remettre
+     * dans les dépendances de l'effet serait pire — chaque navigation
+     * réabonnerait et relancerait une navigation vers la racine.
+     */
+    const pathRef = useRef('/');
 
     const navigate = useCallback(
         (target: string) => {
@@ -55,76 +76,154 @@ export default function DeviceFolderPicker({ open, deviceId, deviceName, onClose
     useEffect(() => {
         if (!open) return;
         const off = ws.onMessage((msg) => {
-            if (msg.command !== DEVICE_FILES_LISTING_EVENT || !msg.payload.ok) return;
-            const d = msg.payload.data as DeviceFilesListingPush;
-            if (d.deviceId !== deviceId || d.opId !== listOp.current) return;
-            setLoading(false);
-            if (d.error || !d.listing) {
-                setError(d.error ?? 'Dossier illisible');
+            if (msg.command === DEVICE_FILES_LISTING_EVENT && msg.payload.ok) {
+                const d = msg.payload.data as DeviceFilesListingPush;
+                if (d.deviceId !== deviceId || d.opId !== listOp.current) return;
+                setLoading(false);
+                if (d.error || !d.listing) {
+                    setError(d.error ?? 'Dossier illisible');
+                    return;
+                }
+                setError(null);
+                setListing(d.listing);
+                pathRef.current = d.listing.path;
                 return;
             }
-            setError(null);
-            setListing(d.listing);
+            if (msg.command === DEVICE_FILES_OP_EVENT && msg.payload.ok) {
+                const d = msg.payload.data as DeviceFilesOpPush;
+                if (d.deviceId !== deviceId || d.opId !== mutateOp.current) return;
+                const created = mkdirTarget.current;
+                mkdirTarget.current = null;
+                // Un dossier créé s'ouvre directement : c'est presque toujours
+                // celui qu'on venait chercher, et ça vaut re-listage de toute
+                // façon puisque le contenu du dossier courant a changé.
+                if (d.ok) navigate(created ?? pathRef.current);
+                else setError(d.error ?? 'Création impossible');
+            }
         });
         // Navigation lancée APRÈS l'écoute, sinon une réponse rapide arriverait
         // avant l'abonnement local et se perdrait à son tour. On repart de la
         // racine et on vide l'ancienne arborescence : rouvrir le dialogue sur
         // une autre machine ne doit pas montrer les dossiers de la précédente.
         setListing(null);
+        pathRef.current = '/';
         navigate('/');
         return off;
     }, [open, deviceId, navigate]);
 
+    /** Re-liste le dossier courant (le contenu distant a pu bouger sous nous). */
+    const refresh = () => navigate(listing?.path ?? '/');
+
+    const createFolder = () => {
+        const name = mkdirName.trim();
+        if (name === '' || !listing) return;
+        const opId = crypto.randomUUID();
+        mutateOp.current = opId;
+        mkdirTarget.current = joinPath(listing.path, name);
+        setMkdirOpen(false);
+        setError(null);
+        void ws.send('device.filesMutate', { deviceId, opId, op: 'mkdir', path: mkdirTarget.current }).catch((e) => {
+            mkdirTarget.current = null;
+            setError(e instanceof Error ? e.message : 'Création impossible');
+        });
+    };
+
     const dirs = (listing?.entries ?? []).filter((e) => e.kind === 'dir');
 
     return (
-        <Dialog
-            open={open}
-            onClose={onClose}
-            title={`Dossier sur « ${deviceName} »`}
-            description='Choisis le dossier local à synchroniser avec le cloud.'
-            width={520}
-            footer={
-                <>
-                    <Button variant='secondary' onClick={onClose}>
-                        Annuler
-                    </Button>
-                    <Button disabled={!listing} onClick={() => listing && onPick(listing.path)}>
-                        Choisir ce dossier
-                    </Button>
-                </>
-            }
-        >
-            <div className={styles.pickerPath}>{loading ? 'Chargement…' : (listing?.path ?? '—')}</div>
-            {error && <div className={styles.mutedNote}>{error}</div>}
-            <div className={styles.pickerList}>
-                {listing?.parent && (
+        <>
+            <Dialog
+                open={open}
+                onClose={onClose}
+                title={`Dossier sur « ${deviceName} »`}
+                description='Choisis le dossier local à synchroniser avec le cloud.'
+                width={520}
+                footer={
+                    <>
+                        <Button variant='secondary' onClick={onClose}>
+                            Annuler
+                        </Button>
+                        <Button disabled={!listing} onClick={() => listing && onPick(listing.path)}>
+                            Choisir ce dossier
+                        </Button>
+                    </>
+                }
+            >
+                <div className={styles.pickerBar}>
+                    <span className={styles.pickerPath}>{loading ? 'Chargement…' : (listing?.path ?? '—')}</span>
                     <button
                         type='button'
-                        className={styles.pickerEntry}
-                        onClick={() => navigate(listing.parent ?? '/')}
+                        className={styles.pickerIconBtn}
+                        title='Actualiser'
+                        aria-label='Actualiser'
+                        onClick={refresh}
                     >
-                        <span className='icon icon-arrow-left' />
-                        Dossier parent
+                        <span className='icon icon-refresh' />
                     </button>
-                )}
-                {dirs.map((entry) => (
                     <button
-                        key={entry.name}
                         type='button'
-                        className={styles.pickerEntry}
+                        className={styles.pickerIconBtn}
+                        title='Nouveau dossier'
+                        aria-label='Nouveau dossier'
+                        disabled={!listing}
                         onClick={() => {
-                            const base = listing?.path ?? '/';
-                            const sep = base.includes('\\') && !base.includes('/') ? '\\' : '/';
-                            navigate(base.endsWith(sep) ? `${base}${entry.name}` : `${base}${sep}${entry.name}`);
+                            setMkdirName('');
+                            setMkdirOpen(true);
                         }}
                     >
-                        <span className='icon icon-folder' />
-                        {entry.name}
+                        <span className='icon icon-folder-plus' />
                     </button>
-                ))}
-                {!loading && dirs.length === 0 && <div className={styles.mutedNote}>Aucun sous-dossier.</div>}
-            </div>
-        </Dialog>
+                </div>
+                {error && <div className={styles.mutedNote}>{error}</div>}
+                <div className={styles.pickerList}>
+                    {listing?.parent && (
+                        <button
+                            type='button'
+                            className={styles.pickerEntry}
+                            onClick={() => navigate(listing.parent ?? '/')}
+                        >
+                            <span className='icon icon-arrow-left' />
+                            Dossier parent
+                        </button>
+                    )}
+                    {dirs.map((entry) => (
+                        <button
+                            key={entry.name}
+                            type='button'
+                            className={styles.pickerEntry}
+                            onClick={() => navigate(joinPath(listing?.path ?? '/', entry.name))}
+                        >
+                            <span className='icon icon-folder' />
+                            {entry.name}
+                        </button>
+                    ))}
+                    {!loading && dirs.length === 0 && <div className={styles.mutedNote}>Aucun sous-dossier.</div>}
+                </div>
+            </Dialog>
+
+            {/* Empilé au-dessus du sélecteur : il possède alors la couche de
+                fermeture, donc Échap annule la saisie du nom sans refermer le
+                sélecteur derrière. */}
+            <Dialog
+                open={mkdirOpen}
+                onClose={() => setMkdirOpen(false)}
+                title='Nouveau dossier'
+                description={listing ? `Il sera créé dans ${listing.path}.` : undefined}
+                width={420}
+                onSubmit={createFolder}
+                footer={
+                    <>
+                        <Button variant='secondary' onClick={() => setMkdirOpen(false)}>
+                            Annuler
+                        </Button>
+                        <Button disabled={mkdirName.trim() === ''} onClick={createFolder}>
+                            Créer
+                        </Button>
+                    </>
+                }
+            >
+                <TextInput value={mkdirName} onChange={(e) => setMkdirName(e.target.value)} placeholder='Nom' />
+            </Dialog>
+        </>
     );
 }

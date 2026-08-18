@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ws } from '@/api/ws';
 import { acquireMetrics } from '@/stores/metricsSubscription';
+import { isWinPath, joinPath } from '@/devicePath';
 import Button from '@/Components/Button';
 import TextInput from '@/Components/TextInput';
 import SelectInput from '@/Components/SelectInput';
@@ -39,16 +40,6 @@ function bytesToBase64(bytes: Uint8Array): string {
     let bin = '';
     for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
     return btoa(bin);
-}
-
-/** Windows path (drive root or UNC share), as the agent reports them. */
-const isWinPath = (p: string) => /^[A-Za-z]:[\\/]/.test(p) || p.startsWith('\\\\');
-
-/** Join a directory path with a child name, keeping the path's separator style. */
-function joinPath(base: string, name: string): string {
-    if (base.endsWith('/') || base.endsWith('\\')) return base + name;
-    const sep = base.includes('\\') && !base.includes('/') ? '\\' : '/';
-    return base + sep + name;
 }
 
 /**
