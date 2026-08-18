@@ -24,12 +24,13 @@
      * et il ne se voit qu'à la fermeture parce qu'à l'aller la classe arrive
      * *avant* le flou, si bien que les deux ne se croisent jamais.
      *
-     * 60 ms de marge sur les 400 ms de `--transition-slow`. En dur, parce que ce
-     * jeton porte sa courbe en plus de sa durée et n'est donc pas calculable, et
-     * parce qu'une image ou deux de battement coûtent moins cher qu'un
-     * scintillement. À garder ≥ à la durée ci-dessus.
+     * Calculé sur la durée du flou plutôt que recopié : le délai doit rester
+     * supérieur à elle, et un nombre en dur ne tient cette règle que tant qu'on
+     * pense à relire le commentaire qui la rappelle. La marge de 60 ms, elle,
+     * est un choix — une image ou deux de battement coûtent moins cher qu'un
+     * scintillement — mais elle ne peut plus se désaccorder du flou.
      */
-    --glass-backdrop-delay: 460ms;
+    --glass-backdrop-delay: calc(var(--transition-slow-ms) + 60ms);
 }
 
 /*

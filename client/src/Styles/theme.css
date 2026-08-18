@@ -126,7 +126,17 @@
   /* Transitions */
   --transition-fast: 150ms ease;
   --transition-normal: 250ms ease;
-  --transition-slow: 400ms ease;
+  /*
+   * La lente est la seule dont la **durée** se lit séparément, parce qu'elle est
+   * la seule sur laquelle un autre réglage doit se caler : le retour du verre
+   * des tuiles doit tomber après le flou de l'accueil, jamais pendant (voir
+   * `--glass-backdrop-delay`, `Pages/Home/Dashboard.module.css`). Un jeton qui
+   * porte sa courbe en plus de sa durée n'entre pas dans un `calc`, et le délai
+   * était donc écrit en dur, à charge d'un commentaire de rappeler qu'il fallait
+   * le suivre. Scindé, le couplage est mécanique et ne peut plus se désaccorder.
+   */
+  --transition-slow-ms: 400ms;
+  --transition-slow: var(--transition-slow-ms) ease;
 }
 
 /* Monitoring's activity tint (idle grey → normal green → intensive orange). It
