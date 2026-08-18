@@ -475,6 +475,43 @@
     gap: var(--space-md);
 }
 
+/* ─── Suggestions d'exclusion ───
+   Rangée de puces cliquables : un clic pose la règle, et la puce quitte la
+   rangée (voir ExclusionsDialog). Elle s'enroule, parce que dix noms ne tiennent
+   pas sur une ligne à 560 px et qu'un défilement horizontal ici serait pénible. */
+
+.suggestRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.suggestLabel {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin-right: var(--space-xs);
+}
+
+.suggestChip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 2px var(--space-sm);
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    border: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.suggestChip:hover {
+    color: var(--text-primary);
+    border-color: var(--accent);
+}
+
 /* Ligne case-à-cocher + libellé (réglages). */
 .checkRow {
     display: flex;
