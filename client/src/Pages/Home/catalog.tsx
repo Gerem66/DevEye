@@ -13,6 +13,7 @@ import { ProjectsWidget } from '@/Features/Projects/ProjectsWidget';
 import { GitWidget } from '@/Features/Git/GitWidget';
 import { DeployWidget } from '@/Features/Deploy/DeployWidget';
 import { DatabaseWidget } from '@/Features/Database/DatabaseWidget';
+import { FinanceWidget } from '@/Features/Finance/FinanceWidget';
 import { AudienceWidget } from '@/Features/Audience/AudienceWidget';
 import { OsintWidget } from '@/Features/Osint/OsintWidget';
 
@@ -28,6 +29,7 @@ import FeatureProjects from '@/Features/Projects';
 import FeatureGit from '@/Features/Git';
 import FeatureDeploy from '@/Features/Deploy';
 import FeatureDatabase from '@/Features/Database';
+import FeatureFinance from '@/Features/Finance';
 import FeatureAudience from '@/Features/Audience';
 import FeatureOsint from '@/Features/Osint';
 
@@ -182,6 +184,20 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         // des résultats lus chez un serveur tiers, qui n'ont aucune raison de
         // survivre à la fermeture de l'écran. Pas de `holdSecrecy` : rien n'y
         // est chiffré à l'étage gardé.
+        cacheDurationMinutes: 0
+    },
+    {
+        id: 'finance',
+        title: 'Finances',
+        icon: 'finance',
+        WidgetContent: FinanceWidget,
+        FullComponent: FeatureFinance,
+        // Démonté dès la fermeture, comme le journal des bases : le journal des
+        // opérations tient une page bornée par une période et des filtres qui
+        // n'ont aucune raison de survivre à la fermeture de l'écran, et les
+        // soldes d'une instance en cache auraient vieilli en silence. Pas de
+        // `holdSecrecy` : rien n'y est chiffré à l'étage gardé, donc rien ne
+        // peut déclencher l'invite de mot de passe.
         cacheDurationMinutes: 0
     },
     {

@@ -31,6 +31,7 @@ const FEATURE_LABELS: Record<(typeof WORKSPACE_FEATURE_IDS)[number], string> = {
     git: 'Git',
     deploy: 'Déploiement',
     database: 'Bases de données',
+    finance: 'Finances',
     audience: 'Audience',
     osint: 'OSINT'
 };

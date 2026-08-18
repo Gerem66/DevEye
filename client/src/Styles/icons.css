@@ -44,6 +44,10 @@
     -webkit-mask-image: url(/icons/database.svg);
     mask-image: url(/icons/database.svg);
 }
+.icon.icon-finance {
+    -webkit-mask-image: url(/icons/finance.svg);
+    mask-image: url(/icons/finance.svg);
+}
 .icon.icon-details {
     -webkit-mask-image: url(/icons/details.svg);
     mask-image: url(/icons/details.svg);

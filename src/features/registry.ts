@@ -13,6 +13,7 @@ import { databaseFeatures } from './database';
 import { audienceFeatures } from './audience';
 import { gitFeatures } from './git';
 import { deployFeatures } from './deploy';
+import { financeFeatures } from './finance';
 import { projectFeatures } from './project';
 import {
     passwordAddFeature,
@@ -85,6 +86,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...gitFeatures,
     ...deployFeatures,
     ...databaseFeatures,
+    ...financeFeatures,
     ...audienceFeatures,
     ...deviceFeatures,
     ...cloudSyncFeatures,

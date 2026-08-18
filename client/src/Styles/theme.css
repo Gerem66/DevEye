@@ -60,6 +60,21 @@
   --note-blue: #4da8ff;
   --note-purple: #b088ff;
 
+  /* Finance colours : la palette nommée des comptes et des catégories
+     (`--finance-<nom>`, miroir de financeColorSchema dans deveye-types). Huit
+     teintes séparées, parce qu'un camembert de catégories en demande plus que
+     les six des notes, et sans cyan pour la même raison que --user-* : c'est
+     celui de --accent, et une part de cette couleur se lirait comme un élément
+     de l'interface plutôt que comme une catégorie. */
+  --finance-red: #ff6b81;
+  --finance-orange: #ff9f43;
+  --finance-yellow: #ffd54a;
+  --finance-green: #38d9a9;
+  --finance-blue: #4da8ff;
+  --finance-indigo: #7c8cff;
+  --finance-purple: #b088ff;
+  --finance-pink: #ff7ac6;
+
   /* User colours — l'identité visuelle d'un compte dans la présence en direct
      (`--user-<nom>`, miroir de userColorSchema dans deveye-types) : son curseur
      chez les autres, sa bulle, la bordure du nœud où il se trouve.

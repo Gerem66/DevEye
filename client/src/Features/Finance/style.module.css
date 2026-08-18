@@ -1,0 +1,1628 @@
+/* ------------------------------------------------------------------ *
+ * Finances
+ *
+ * Une seule feuille pour toute la feature, comme ses voisines. Les blocs
+ * suivent l'ordre de lecture des écrans : la carte de l'accueil, la coquille
+ * et sa barre d'onglets, puis chaque onglet, puis ce qui est commun aux
+ * formulaires.
+ *
+ * Aucune couleur en dur : tout passe par les jetons du thème, y compris la
+ * palette `--finance-*` que portent comptes et catégories.
+ * ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------ *
+ * Carte de la grille d'accueil
+ * ------------------------------------------------------------------ */
+
+.widget {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    height: 100%;
+}
+
+.widgetStat {
+    margin-top: var(--space-sm);
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+}
+
+.widgetValue {
+    font-size: 1.9rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Un solde négatif est la seule chose que cette carte doive crier. */
+.widgetNegative {
+    color: var(--danger);
+}
+
+.widgetFoot {
+    margin-top: auto;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.widgetIn {
+    color: var(--success);
+}
+
+.widgetOut {
+    color: var(--danger);
+}
+
+/* ------------------------------------------------------------------ *
+ * Coquille et barre d'onglets
+ * ------------------------------------------------------------------ */
+
+.feature {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    height: 100%;
+    min-height: 0;
+}
+
+.toolbar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.tabs {
+    display: flex;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+}
+
+.tab,
+.tabActive {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.tab:hover {
+    color: var(--text-primary);
+}
+
+.tabActive {
+    border-bottom-color: var(--accent);
+    color: var(--accent);
+}
+
+/* Sur un écran étroit la barre garde ses cinq entrées : seules les étiquettes
+   disparaissent, les pictogrammes suffisent alors à s'y retrouver. */
+@media (max-width: 720px) {
+    .tabLabel {
+        display: none;
+    }
+}
+
+.toolbarActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding-bottom: var(--space-sm);
+}
+
+.panel {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    /* Laisse respirer la dernière ligne au-dessus du bord de la popup. */
+    padding-bottom: var(--space-md);
+}
+
+/* ------------------------------------------------------------------ *
+ * États communs
+ * ------------------------------------------------------------------ */
+
+.placeholder {
+    margin: 0;
+    padding: var(--space-md) 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.error {
+    margin: 0 0 var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    background: var(--danger-bg);
+    color: var(--danger);
+    font-size: 0.875rem;
+}
+
+.empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xl) var(--space-md);
+    text-align: center;
+}
+
+.emptyIcon {
+    width: 40px;
+    color: var(--text-muted);
+}
+
+.emptyTitle {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.emptyText {
+    margin: 0 0 var(--space-sm);
+    max-width: 52ch;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------ *
+ * Sélecteur segmenté (période, nature d'une opération, sens)
+ * ------------------------------------------------------------------ */
+
+.segmented {
+    display: inline-flex;
+    padding: 2px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+}
+
+.segment,
+.segmentActive {
+    padding: 6px var(--space-md);
+    border: none;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.segment:hover {
+    color: var(--text-primary);
+}
+
+.segmentActive {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+/* ------------------------------------------------------------------ *
+ * Tableau de bord
+ * ------------------------------------------------------------------ */
+
+.dashboard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.rangeBar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.rangeHint {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+.kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: var(--space-sm);
+}
+
+.kpi {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+}
+
+.kpiLabel {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.kpiValue {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+/* La teinte porte le sens du nombre, pas celui du bloc : `neutral` reste
+   volontairement sans couleur, pour qu'un solde positif ne se confonde pas
+   avec une entrée d'argent. */
+.kpi[data-tone='good'] .kpiValue {
+    color: var(--success);
+}
+
+.kpi[data-tone='bad'] .kpiValue {
+    color: var(--danger);
+}
+
+.kpiHint {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+.vatBand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-lg);
+    flex-wrap: wrap;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--accent-bg);
+}
+
+.vatItem {
+    display: flex;
+    flex-direction: column;
+}
+
+.vatLabel {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.vatValue {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.vatItem[data-strong='true'] .vatValue {
+    color: var(--accent);
+    font-size: 1.05rem;
+}
+
+.vatNote {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.split {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: var(--space-md);
+}
+
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    /* Sans cela, une frise large pousse la grille au lieu de défiler chez elle. */
+    min-width: 0;
+}
+
+.cardHead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.cardTitle {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.cardLink {
+    border: none;
+    background: none;
+    padding: 0;
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+.cardLink:hover {
+    color: var(--accent-hover);
+}
+
+.dashboardFoot {
+    display: flex;
+    justify-content: center;
+    padding-top: var(--space-sm);
+}
+
+/* ------------------------------------------------------------------ *
+ * Graphiques
+ * ------------------------------------------------------------------ */
+
+.chart {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.chartSvg {
+    width: 100%;
+    height: auto;
+    overflow: visible;
+}
+
+.chartAxis {
+    stroke: var(--glass-border);
+    stroke-width: 1;
+}
+
+.chartBarIn {
+    fill: var(--success);
+    opacity: 0.75;
+}
+
+.chartBarOut {
+    fill: var(--danger);
+    opacity: 0.7;
+}
+
+.chartLine {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.chartCursor {
+    stroke: var(--text-muted);
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+}
+
+.chartTick {
+    fill: var(--text-muted);
+    font-size: 11px;
+}
+
+.chartLegend {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.legendItem {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-variant-numeric: tabular-nums;
+}
+
+.legendSwatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    background: var(--text-muted);
+}
+
+.legendSwatch[data-series='in'] {
+    background: var(--success);
+}
+
+.legendSwatch[data-series='out'] {
+    background: var(--danger);
+}
+
+.legendSwatch[data-series='balance'] {
+    background: var(--accent);
+}
+
+.legendNote {
+    color: var(--text-muted);
+}
+
+.legendWhen {
+    margin-left: auto;
+    color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------ *
+ * Répartition par catégorie, et jauges de budget
+ * ------------------------------------------------------------------ */
+
+.shares {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.shareRow,
+.shareRowAction {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+}
+
+.shareRowAction {
+    cursor: pointer;
+}
+
+.shareRowAction:hover .shareName {
+    color: var(--accent);
+}
+
+.shareHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 0.85rem;
+}
+
+.shareIcon {
+    width: 15px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.shareName {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+    transition: color var(--transition-fast);
+}
+
+.shareAmount {
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.shareTrack {
+    display: block;
+    height: 6px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    overflow: hidden;
+}
+
+/* La largeur est une transition CSS : elle doit rejouer quand la fenêtre
+   d'analyse change, sans que le composant soit remonté. */
+.shareFill,
+.gaugeFill {
+    display: block;
+    height: 100%;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    transition: width var(--transition-normal);
+}
+
+.shareShare {
+    align-self: flex-end;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.gauges {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.gauge {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.gaugeHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 0.85rem;
+}
+
+.gaugeAmount {
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.gaugeAmount[data-over='true'] {
+    color: var(--danger);
+}
+
+/* Trois états, et un seul message chacun : dans les clous, on approche,
+   dépassé. Le dégradé continu aurait été plus joli et moins lisible. */
+.gaugeFill[data-near='true'] {
+    background: var(--warning);
+}
+
+.gaugeFill[data-over='true'] {
+    background: var(--danger);
+}
+
+/* ------------------------------------------------------------------ *
+ * Journal des opérations
+ * ------------------------------------------------------------------ */
+
+.journal {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.filters {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.totals {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    font-variant-numeric: tabular-nums;
+}
+
+.totalIn {
+    color: var(--success);
+    font-weight: 600;
+}
+
+.totalOut {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.totalNet {
+    color: var(--text-primary);
+    font-weight: 700;
+}
+
+.totalNet[data-negative='true'] {
+    color: var(--danger);
+}
+
+.totalsNote {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+.days {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.day {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.dayHead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    margin: 0;
+    padding-bottom: var(--space-xs);
+    border-bottom: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.dayTotal {
+    color: var(--text-muted);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    text-transform: none;
+}
+
+.rows {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.row {
+    display: flex;
+    align-items: stretch;
+    gap: var(--space-xs);
+    border-radius: var(--radius-sm);
+    transition: background var(--transition-fast);
+}
+
+.row:hover {
+    background: var(--surface-subtle);
+}
+
+/* La case de pointage est cliquable seule : c'est le geste qu'on répète des
+   dizaines de fois d'affilée au moment du rapprochement bancaire, et le faire
+   passer par l'ouverture de la fiche le rendrait impraticable. */
+.rowClear {
+    display: flex;
+    align-items: center;
+    padding: 0 var(--space-xs) 0 var(--space-sm);
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.rowClear:hover:not(:disabled) {
+    color: var(--accent);
+}
+
+.rowClear[aria-pressed='true'] {
+    color: var(--success);
+}
+
+.rowClear:disabled {
+    cursor: default;
+}
+
+.rowBody {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex: 1;
+    min-width: 0;
+    padding: var(--space-sm) var(--space-sm) var(--space-sm) 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.rowBody:disabled {
+    cursor: default;
+}
+
+.rowIcon {
+    width: 16px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.rowText {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.rowLabel {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+/* Le fanion « écrite par une échéance » : une opération qu'on n'a pas saisie
+   soi-même doit se reconnaître, sans pour autant se distinguer au point de
+   rompre la lecture de la liste. */
+.rowBadge {
+    width: 12px;
+    color: var(--text-muted);
+}
+
+.rowMeta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+.rowAmount {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    flex-shrink: 0;
+    color: var(--text-primary);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.rowAmount[data-flow='in'] {
+    color: var(--success);
+}
+
+.rowAmount[data-flow='out'] {
+    color: var(--text-primary);
+}
+
+.rowVat {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 400;
+}
+
+.pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+}
+
+.pagerLabel {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+/* ------------------------------------------------------------------ *
+ * Comptes
+ * ------------------------------------------------------------------ */
+
+.accounts,
+.budgets,
+.recurring {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.accountsHead {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.accountsTotalLabel {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.accountsTotal {
+    display: block;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.accountsTotal[data-negative='true'] {
+    color: var(--danger);
+}
+
+.budgetsCount {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.accountGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: var(--space-sm);
+    /* Ancre la barre d'insertion, positionnée par rapport à la grille. */
+    position: relative;
+}
+
+.accountCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    /* Le filet de couleur du compte : assez pour l'identifier d'un coup d'œil
+       dans une grille, trop peu pour teindre la carte entière. */
+    border-top: 2px solid var(--account-color, var(--accent));
+    transition: border-color var(--transition-fast);
+}
+
+.accountCard:hover {
+    border-color: var(--glass-border-strong);
+    border-top-color: var(--account-color, var(--accent));
+}
+
+/* framer-motion ne touche pas ces cartes, mais la règle vaut quand même :
+   atténuer par un filtre et non par `opacity` laisse la propriété libre pour
+   qui voudrait animer la carte plus tard. */
+.accountCard[data-archived='true'] {
+    filter: opacity(0.55);
+}
+
+.accountDragging {
+    filter: opacity(0.4);
+}
+
+.accountHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.accountIcon {
+    width: 16px;
+    color: var(--account-color, var(--accent));
+}
+
+.accountName {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* Poignée et bouton d'édition n'apparaissent qu'au survol de la carte, à la
+   manière des éditeurs natifs : au repos, la grille ne montre que des soldes. */
+.grip,
+.accountEdit {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+}
+
+.grip {
+    /* Ce qui rend le glissé possible sous un doigt : le défilement ne réclame
+       plus le geste. Cantonné à ces 18 px, le reste de la carte défile encore. */
+    touch-action: none;
+}
+
+.accountCard:hover .grip,
+.accountCard:hover .accountEdit,
+.grip:focus-visible,
+.accountEdit:focus-visible {
+    opacity: 1;
+}
+
+.accountEdit:hover {
+    color: var(--accent);
+}
+
+.accountBalance {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.accountBalance[data-negative='true'] {
+    color: var(--danger);
+}
+
+.accountMeta {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+.accountFoot {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.accountNote {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dropBar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent-glow);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.archived {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.archivedHead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.archivedHint {
+    color: var(--text-muted);
+    font-weight: 400;
+    font-size: 0.78rem;
+}
+
+/* ------------------------------------------------------------------ *
+ * Budgets
+ * ------------------------------------------------------------------ */
+
+.budgetList,
+.recurringList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.budgetRow,
+.recurringRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    transition: border-color var(--transition-fast);
+}
+
+.budgetRow:hover,
+.recurringRow:hover {
+    border-color: var(--glass-border-strong);
+}
+
+.budgetBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.budgetBody:disabled {
+    cursor: default;
+}
+
+.budgetHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 0.9rem;
+}
+
+.budgetPeriod {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+.budgetAmount {
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.budgetAmount[data-over='true'] {
+    color: var(--danger);
+}
+
+.budgetFoot {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.budgetFoot [data-over='true'] {
+    color: var(--danger);
+}
+
+.budgetWindow {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+/* ------------------------------------------------------------------ *
+ * Échéances
+ * ------------------------------------------------------------------ */
+
+.recurringRow[data-inactive='true'] {
+    filter: opacity(0.6);
+}
+
+.recurringBody {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.recurringBody:disabled {
+    cursor: default;
+}
+
+.recurringWhen {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+/* En retard : seules les échéances manuelles peuvent l'être, les automatiques
+   ayant déjà été écrites par le rattrapage. C'est donc un appel à l'action. */
+.recurringWhen[data-overdue='true'] {
+    color: var(--warning);
+    font-weight: 600;
+}
+
+.recurringDate {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 400;
+}
+
+.recurringActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    flex-shrink: 0;
+}
+
+.autoBadge,
+.pausedBadge {
+    padding: 1px 6px;
+    border-radius: var(--radius-pill);
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.autoBadge {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.pausedBadge {
+    background: var(--surface-subtle);
+    color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------ *
+ * Formulaires et dialogues
+ * ------------------------------------------------------------------ */
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.formRow {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.field,
+.fieldWide {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 140px;
+}
+
+.fieldWide {
+    flex: 2;
+}
+
+.fieldLabel {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.fieldHint {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1.4;
+}
+
+.fieldStatic {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-sm) 0;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.fieldLink {
+    align-self: flex-start;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+/* Le montant est le champ autour duquel tourne toute la saisie : il se lit
+   comme un chiffre et non comme un champ de texte parmi d'autres. */
+.amountInput {
+    font-size: 1.2rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.textarea {
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.9rem;
+    resize: vertical;
+    transition: border-color var(--transition-fast);
+}
+
+.textarea:focus {
+    outline: none;
+    border-color: var(--input-focus);
+}
+
+.chips {
+    display: flex;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+}
+
+.chip,
+.chipActive {
+    padding: 4px var(--space-sm);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.chip:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.chipActive {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.swatches {
+    display: flex;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+}
+
+.swatch,
+.swatchActive {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    transition: transform var(--transition-fast);
+}
+
+.swatch:hover,
+.swatchActive:hover {
+    transform: scale(1.12);
+}
+
+/* L'anneau, et non un contour : posé à l'intérieur, il reste lisible quelle
+   que soit la couleur du pastillon. */
+.swatchActive {
+    box-shadow:
+        0 0 0 2px var(--surface-popup-solid),
+        0 0 0 4px var(--accent);
+}
+
+.iconGrid {
+    display: flex;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+}
+
+.iconPick,
+.iconPickActive {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.iconPick:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.iconPickActive {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.popupActions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    margin-top: var(--space-lg);
+}
+
+.popupActionsLeft {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.settingsLink {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+/* ------------------------------------------------------------------ *
+ * Dialogue des catégories
+ * ------------------------------------------------------------------ */
+
+.categoriesBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.seedBand {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--accent-bg);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.categoryColumns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--space-md);
+}
+
+.categoryGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.categoryGroupHead {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.categoryList {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.categoryRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    border-radius: var(--radius-sm);
+    transition: background var(--transition-fast);
+}
+
+.categoryRow:hover {
+    background: var(--surface-subtle);
+}
+
+.categoryPick {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex: 1;
+    min-width: 0;
+    padding: var(--space-xs) var(--space-sm);
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-size: 0.88rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+.categoryPick:disabled {
+    cursor: default;
+}
+
+.categoryRemove {
+    flex-shrink: 0;
+    padding: var(--space-xs);
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0;
+    transition:
+        opacity var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.categoryRow:hover .categoryRemove,
+.categoryRemove:focus-visible {
+    opacity: 1;
+}
+
+.categoryRemove:hover {
+    color: var(--danger);
+}
+
+.categoryForm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--glass-border);
+}
+
+.categoryFormActions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+}
+
+/* ------------------------------------------------------------------ *
+ * Échéances à venir (bloc du tableau de bord)
+ * ------------------------------------------------------------------ */
+
+.upcoming {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.upcomingRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xs) 0;
+    font-size: 0.85rem;
+}
+
+.upcomingWhen {
+    flex-shrink: 0;
+    width: 8.5ch;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+.upcomingWhen[data-overdue='true'] {
+    color: var(--warning);
+    font-weight: 600;
+}
+
+.upcomingLabel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-primary);
+}
+
+.upcomingAccount {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.upcomingAmount {
+    flex-shrink: 0;
+    color: var(--text-primary);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.upcomingAmount[data-flow='in'] {
+    color: var(--success);
+}
+
+/* ------------------------------------------------------------------ *
+ * Mouvement réduit
+ *
+ * Les transitions de cette feuille sont toutes décoratives (survol, largeur
+ * d'une jauge, apparition d'une poignée) : les couper ne retire aucune
+ * information. Les animations framer-motion des écrans respectent le même
+ * réglage par leur propre mécanisme.
+ * ------------------------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+    .tab,
+    .tabActive,
+    .segment,
+    .segmentActive,
+    .shareFill,
+    .gaugeFill,
+    .accountCard,
+    .budgetRow,
+    .recurringRow,
+    .row,
+    .categoryRow,
+    .grip,
+    .accountEdit,
+    .categoryRemove,
+    .swatch,
+    .swatchActive,
+    .chip,
+    .chipActive,
+    .iconPick,
+    .iconPickActive,
+    .textarea,
+    .rowClear,
+    .shareName {
+        transition: none;
+    }
+
+    .swatch:hover,
+    .swatchActive:hover {
+        transform: none;
+    }
+}

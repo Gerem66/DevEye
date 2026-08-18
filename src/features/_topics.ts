@@ -34,6 +34,10 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     // en camelCase derrière un préfixe unique, donc `mutates` à relire à la main.
     deploy: 'deploy',
     device: 'devices',
+    // Même forme que `git`, `database` et `audience` : préfixe unique, verbes en
+    // camelCase derrière le point. Le filet `MUTATION_VERB` n'en voit donc
+    // **aucune** ; les `mutates` de cette feature se relisent à la main.
+    finance: 'finance',
     folder: 'notes',
     // Même forme que `project` : préfixe unique, verbes en camelCase derrière le
     // point. Le filet `MUTATION_VERB` plus bas n'en verra donc **aucune** — les

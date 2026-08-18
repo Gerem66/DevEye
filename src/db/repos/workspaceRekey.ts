@@ -126,7 +126,18 @@ const COLUMNS: EncryptedColumn[] = [
     // lecture — mais laisserait un écran de marches sans intitulés, ce qui est
     // exactement aussi inutilisable.
     { table: 'audience_funnels', id: 'id', column: 'content', scope: 'audience_site', tier: 'open' },
-    { table: 'audience_funnel_steps', id: 'id', column: 'content', scope: 'audience_site', tier: 'open' }
+    { table: 'audience_funnel_steps', id: 'id', column: 'content', scope: 'audience_site', tier: 'open' },
+    // Les finances (migration `084`) : étage ouvert, comme tout ce qui
+    // appartient à l'espace plutôt qu'à un projet. Les quatre colonnes
+    // comptent, et en oublier une serait particulièrement sournois ici : les
+    // soldes, les budgets et les graphes resteraient parfaitement justes (ils
+    // n'agrègent que du clair) pendant que les intitulés, les tiers et les noms
+    // de comptes deviendraient illisibles. Une panne qui ne se voit qu'à
+    // l'écran, et jamais dans un total.
+    { table: 'finance_accounts', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'finance_categories', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'finance_transactions', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'finance_recurring', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' }
 ];
 
 export interface EncryptedCell {

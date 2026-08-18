@@ -65,6 +65,19 @@ export type ResourceKey =
     | 'deploy.list'
     /** La fiche d'une cible : son historique et les projets qui la déploient. */
     | 'deploy.detail'
+    /**
+     * Les finances. Six clés, parce qu'une écriture des finances remue plusieurs
+     * vues à la fois (une dépense change le journal, un solde, un budget, la
+     * frise du tableau de bord et la carte de l'accueil) et que chacune de ces
+     * vues n'a aucune raison de relire les cinq autres. `Features/Finance/api.ts`
+     * les invalide ensemble, une fois, à la source de la mutation.
+     */
+    | 'finance.summary'
+    | 'finance.accountList'
+    | 'finance.transactionList'
+    | 'finance.budgetList'
+    | 'finance.recurringList'
+    | 'finance.overview'
     | 'database.count'
     | 'database.list'
     | 'database.detail'
@@ -152,6 +165,28 @@ const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
     // Un relevé qui aboutit touche la liste (état, taille, alertes franchies) et
     // la fiche ouverte. `database.count` suit pour la tuile de l'accueil.
     database: ['database.count', 'database.list', 'database.detail'],
+    /*
+     * Les six clés ensemble, et c'est le sujet.
+     *
+     * Une écriture des finances remue plusieurs vues à la fois : une dépense
+     * change le journal, le solde de son compte, un budget, la frise du tableau
+     * de bord et la carte de l'accueil. N'en invalider qu'une partie ferait
+     * diverger deux écrans de la même donnée à la même seconde, chez la même
+     * personne. Sur un livre de comptes, cela se lit comme une erreur de calcul
+     * et non comme un retard d'affichage.
+     *
+     * Le sujet bat aussi quand le rattrapage des échéances écrit tout seul
+     * (`postDueRecurring`, en tête de chaque lecture) : c'est ce qui fait
+     * apparaître un loyer prélevé sans que personne n'ait rien saisi.
+     */
+    finance: [
+        'finance.summary',
+        'finance.accountList',
+        'finance.transactionList',
+        'finance.budgetList',
+        'finance.recurringList',
+        'finance.overview'
+    ],
     /*
      * **Les quatre clés ensemble, et c'est le sujet.**
      *
