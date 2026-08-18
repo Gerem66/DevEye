@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import type { Device, HomeFeatureTile, ShortcutItem } from 'deveye-types';
-import { isHomeFolder } from 'deveye-types';
+import type { Device, HomeTile, ShortcutItem } from 'deveye-types';
+import { homeTileKind, isFeatureTile, isHomeFolder, isShortcutTile } from 'deveye-types';
 import { DeviceWidget } from '@/Features/Monitoring/DeviceWidget';
 import { ShortcutTile } from './ShortcutTile';
 import { FolderTile, folderKey, folderTitle } from '../folders';
@@ -16,10 +16,17 @@ export interface TileVisual {
     widgetId: string;
     title?: string;
     icon?: string;
-    /** Shorter card (device tiles). */
+    /**
+     * Carte courte : appareils et raccourcis.
+     *
+     * **La même hauteur pour les deux**, et c'est le point : les deux genres
+     * cohabitent désormais dans une même section, donc une même ligne peut les
+     * mêler. Deux cartes courtes de hauteurs différentes côte à côte se lisaient
+     * comme un défaut d'alignement. Une carte de fonctionnalité, elle, reste
+     * haute : mêler les hauteurs sur une ligne est assumé, mêler deux hauteurs
+     * *presque* égales ne l'est pas.
+     */
     compact?: boolean;
-    /** Even shorter "thin & long" card (shortcut tiles). */
-    slim?: boolean;
     /** When set, the tile is a real link (anchor) opening this URL in a new tab. */
     href?: string;
     body: ReactNode;
@@ -29,12 +36,8 @@ export const DEVICE_VIEW_PREFIX = 'device:';
 export const deviceViewId = (deviceId: string) => `${DEVICE_VIEW_PREFIX}${deviceId}`;
 export const shortcutKey = (id: string) => `shortcut:${id}`;
 
-/**
- * La tuile d'une section de fonctionnalités : la carte d'un widget, ou celle
- * d'un dossier. Les deux se rendent pareil, à la grille comme à l'organiseur,
- * parce que sur l'accueil ce sont deux tuiles comme les autres.
- */
-export function featureTileVisual(tile: HomeFeatureTile): TileVisual | null {
+/** La carte d'un widget de fonctionnalité, ou celle d'un dossier. */
+export function featureTileVisual(tile: HomeTile): TileVisual | null {
     if (isHomeFolder(tile)) {
         return {
             widgetId: folderKey(tile.id),
@@ -43,7 +46,7 @@ export function featureTileVisual(tile: HomeFeatureTile): TileVisual | null {
             body: <FolderTile folder={tile} />
         };
     }
-    const entry = featureCatalogEntry(tile);
+    const entry = isFeatureTile(tile) ? featureCatalogEntry(tile) : undefined;
     if (!entry) return null;
     return { widgetId: entry.id, title: entry.title, icon: entry.icon, body: <entry.WidgetContent /> };
 }
@@ -59,11 +62,29 @@ export function deviceTileVisual(device: Device, opts?: { editing?: boolean }): 
 }
 
 export function shortcutTileVisual(item: ShortcutItem, opts?: { editing?: boolean }): TileVisual {
-    // No header — the shortcut body owns the whole (slim) card, which is a link.
+    // No header — the shortcut body owns the whole (compact) card, which is a link.
     return {
         widgetId: shortcutKey(item.id),
-        slim: true,
+        compact: true,
         href: item.url,
         body: <ShortcutTile item={item} hideBadge={opts?.editing} />
     };
+}
+
+/**
+ * La carte d'une tuile, quel que soit son genre.
+ *
+ * Le seul aiguillage de l'accueil : la grille et l'organiseur passent par lui,
+ * donc une section n'a jamais à savoir ce qu'elle tient. Rend `null` quand la
+ * tuile ne désigne plus rien (appareil supprimé, identifiant écrit par une
+ * version plus récente) ; l'appelant décide alors s'il l'escamote ou s'il pose
+ * une carte « indisponible ».
+ */
+export function homeTileVisual(tile: HomeTile, devices: Device[], opts?: { editing?: boolean }): TileVisual | null {
+    if (homeTileKind(tile) === 'device') {
+        const device = devices.find((d) => d.id === tile);
+        return device ? deviceTileVisual(device, opts) : null;
+    }
+    if (isShortcutTile(tile)) return shortcutTileVisual(tile, opts);
+    return featureTileVisual(tile);
 }

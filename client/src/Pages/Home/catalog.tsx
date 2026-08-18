@@ -36,15 +36,65 @@ import FeatureOsint from '@/Features/Osint';
 import type { FeatureProps } from '@/Features/types';
 
 /**
+ * Le rayon du marché où la fonctionnalité est rangée.
+ *
+ * Un seul rangement, porté par l'entrée elle-même : c'est ce qui fait que le
+ * sélecteur d'ajout et la fiche « À propos » racontent la même chose sans table
+ * de correspondance à tenir à jour à côté.
+ */
+export type FeatureCategory = 'supervision' | 'security' | 'dev' | 'work' | 'daily' | 'analysis';
+
+export const FEATURE_CATEGORY_LABEL: Record<FeatureCategory, string> = {
+    supervision: 'Supervision',
+    security: 'Sécurité',
+    dev: 'Développement',
+    work: 'Travail',
+    daily: 'Quotidien',
+    analysis: 'Analyse'
+};
+
+export const FEATURE_CATEGORY_ICON: Record<FeatureCategory, string> = {
+    supervision: 'activity',
+    security: 'shield',
+    dev: 'branch',
+    work: 'projects',
+    daily: 'notes',
+    analysis: 'finance'
+};
+
+/** L'ordre des rayons, du plus structurant au plus périphérique. */
+export const FEATURE_CATEGORIES: FeatureCategory[] = ['work', 'dev', 'supervision', 'security', 'analysis', 'daily'];
+
+/**
+ * Ce qui relie une fonctionnalité à une autre.
+ *
+ * Une vraie liaison de données, pas un voisinage thématique : un projet pointe
+ * ses dépôts, ses bases, ses cibles de déploiement ; un émetteur d'alertes
+ * passe par un compte Mail. C'est ce que la fiche « À propos » donne à lire,
+ * pour qu'on sache avant d'ajouter une carte ce qu'elle va pouvoir raccrocher.
+ */
+export interface FeatureLink {
+    to: HomeFeatureId;
+    /** Ce que la liaison permet, dit du point de vue de la feature qui la porte. */
+    what: string;
+}
+
+/**
  * Static catalog of the built-in feature widgets that can live on the home grid.
  * The grid itself is composed from the user's saved layout (see `stores/homeLayout`);
  * this is the source of truth for what each feature *is* (its card content, full
- * view, cache policy) and is also what the "add tile" picker lists.
+ * view, cache policy, rayon, liaisons) and is also what the add "marché" lists.
  */
 export interface FeatureCatalogEntry {
     id: HomeFeatureId;
     title: string;
     icon: string;
+    /** Une phrase : ce que la fonctionnalité fait. Sert le marché et l'« À propos ». */
+    description: string;
+    /** Son rayon dans le marché d'ajout. */
+    category: FeatureCategory;
+    /** Ce qu'elle relie ailleurs dans DevEye, quand elle relie quelque chose. */
+    links?: readonly FeatureLink[];
     /** Compact card body shown on the grid. */
     WidgetContent: ComponentType;
     /** Full view opened in the popup. */
@@ -74,6 +124,8 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         id: 'monitoring',
         title: 'Monitoring',
         icon: 'activity',
+        description: 'Supervision en direct de vos machines : charge, mémoire, disques, journaux, terminal.',
+        category: 'supervision',
         WidgetContent: MonitoringWidget,
         FullComponent: Monitoring,
         cacheDurationMinutes: 5,
@@ -84,6 +136,8 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         id: 'weather',
         title: 'Météo',
         icon: 'cloud',
+        description: 'Conditions et prévisions des villes que vous suivez.',
+        category: 'daily',
         WidgetContent: WeatherWidget,
         FullComponent: Weather,
         cacheDurationMinutes: 60,
@@ -93,6 +147,8 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         id: 'password',
         title: 'Mot de passe',
         icon: 'lock',
+        description: 'Coffre de mots de passe, chiffré par votre mot de passe maître.',
+        category: 'security',
         WidgetContent: PasswordWidget,
         FullComponent: FeaturePassword,
         cacheDurationMinutes: 0,
@@ -102,6 +158,8 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         id: 'notes',
         title: 'Notes',
         icon: 'notes',
+        description: 'Notes et documents chiffrés, rangés en dossiers.',
+        category: 'daily',
         WidgetContent: NotesWidget,
         FullComponent: FeatureNotes,
         cacheDurationMinutes: 0,
@@ -111,6 +169,9 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         id: 'uptime',
         title: 'Uptime',
         icon: 'uptime',
+        description: 'Disponibilité de vos services : sondes, incidents, historique.',
+        category: 'supervision',
+        links: [{ to: 'mail', what: 'envoie ses alertes par un compte Mail' }],
         WidgetContent: UptimeWidget,
         FullComponent: Uptime,
         // Unmounted as soon as it closes: the panel polls while it lives, and a
@@ -122,6 +183,9 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         id: 'sentinel',
         title: 'Sentinelle',
         icon: 'shield',
+        description: "Détection d'anomalies sur vos appareils : constats, posture, acquittement.",
+        category: 'security',
+        links: [{ to: 'mail', what: 'envoie ses alertes par un compte Mail' }],
         WidgetContent: SentinelWidget,
         FullComponent: Sentinel,
         // Démontée à la fermeture : la vue relit constats et posture à
@@ -134,6 +198,8 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         id: 'cloudsync',
         title: 'CloudSync',
         icon: 'cloud',
+        description: 'Synchronisation de dossiers entre vos appareils et votre espace.',
+        category: 'work',
         WidgetContent: CloudSyncWidget,
         FullComponent: CloudSync,
         cacheDurationMinutes: 5
@@ -142,6 +208,15 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         id: 'projects',
         title: 'Projets',
         icon: 'projects',
+        description: "Pilotage du travail : tableau, jalons, tâches, discussions. C'est là que le reste se raccroche.",
+        category: 'work',
+        links: [
+            { to: 'git', what: 'suit les dépôts du projet' },
+            { to: 'deploy', what: 'suit ses cibles de mise en production' },
+            { to: 'database', what: "suit les bases qu'il utilise" },
+            { to: 'audience', what: "suit les sites qu'il produit" },
+            { to: 'uptime', what: "suit les services qu'il fait tourner" }
+        ],
         WidgetContent: ProjectsWidget,
         FullComponent: FeatureProjects,
         // Démonté dès la fermeture, comme Mail et Uptime : le portefeuille, les
@@ -154,6 +229,8 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         id: 'git',
         title: 'Git',
         icon: 'branch',
+        description: 'Vos dépôts : branches, commits, pull requests, releases.',
+        category: 'dev',
         WidgetContent: GitWidget,
         FullComponent: FeatureGit,
         // Démonté dès la fermeture : la vue d'un dépôt sonde l'avancement d'une
@@ -166,6 +243,9 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         id: 'deploy',
         title: 'Déploiements',
         icon: 'rocket',
+        description: 'Cibles de déploiement et mises en production, avec leur historique.',
+        category: 'dev',
+        links: [{ to: 'mail', what: 'envoie ses alertes par un compte Mail' }],
         WidgetContent: DeployWidget,
         FullComponent: FeatureDeploy,
         // Démonté dès la fermeture, comme Git : la fiche d'une cible suit l'état
@@ -178,6 +258,9 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         id: 'database',
         title: 'Bases de données',
         icon: 'database',
+        description: 'Exploration et supervision de vos bases de données.',
+        category: 'dev',
+        links: [{ to: 'mail', what: 'envoie ses alertes par un compte Mail' }],
         WidgetContent: DatabaseWidget,
         FullComponent: FeatureDatabase,
         // Démonté dès la fermeture, comme Git : l'explorateur de tables tient
@@ -190,6 +273,8 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         id: 'finance',
         title: 'Finances',
         icon: 'finance',
+        description: "Le grand livre de l'espace : comptes, opérations, budgets, échéances.",
+        category: 'analysis',
         WidgetContent: FinanceWidget,
         FullComponent: FeatureFinance,
         // Démonté dès la fermeture, comme le journal des bases : le journal des
@@ -209,6 +294,8 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         // qu'on demande à une grille d'icônes. L'œil dit « des vues », là où la
         // courbe d'activité dit « une machine qui tourne ».
         icon: 'eye-open',
+        description: 'Usage des sites que vous livrez : visites, parcours, conversions.',
+        category: 'analysis',
         WidgetContent: AudienceWidget,
         FullComponent: FeatureAudience,
         // Démonté dès la fermeture, comme Git et les bases : la fiche tient des
@@ -221,6 +308,8 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         id: 'osint',
         title: 'OSINT',
         icon: 'search',
+        description: 'Recherche en sources ouvertes, avec un historique chiffré.',
+        category: 'security',
         WidgetContent: OsintWidget,
         FullComponent: FeatureOsint,
         // Démonté dès la fermeture, comme Git et Database : les cartes tiennent
@@ -237,6 +326,8 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         id: 'mail',
         title: 'Mail',
         icon: 'mail',
+        description: 'Vos boîtes de réception, et le canal par lequel les autres fonctionnalités alertent.',
+        category: 'work',
         WidgetContent: MailWidget,
         FullComponent: Mail,
         // Unmounted as soon as it closes, like Uptime: folders/messages are
@@ -311,4 +402,39 @@ export function usableFeatureIds(ids: readonly HomeFeatureId[], audience: HomeAu
 export function featureIdAllowed(id: string, audience: HomeAudience): boolean {
     const entry = FEATURE_CATALOG.find((f) => f.id === id);
     return !entry || featureAllowed(entry, audience);
+}
+
+/**
+ * Les liaisons d'une fonctionnalité, **dans les deux sens**.
+ *
+ * Une liaison n'est déclarée qu'une fois, du côté qui la porte (un projet
+ * pointe ses dépôts, pas l'inverse). La lire dans les deux sens est pourtant ce
+ * qu'on attend d'une fiche : posté sur Git, on veut savoir que les projets s'y
+ * raccrochent, sans avoir à parcourir toutes les autres entrées pour s'en
+ * assurer. `outgoing` distingue les deux, parce que la phrase ne se lit pas
+ * pareil selon le bout où l'on se trouve.
+ */
+export interface FeatureRelation {
+    entry: FeatureCatalogEntry;
+    what: string;
+    outgoing: boolean;
+}
+
+export function featureRelations(id: HomeFeatureId): FeatureRelation[] {
+    const out: FeatureRelation[] = [];
+    for (const link of featureCatalogEntry(id)?.links ?? []) {
+        const entry = featureCatalogEntry(link.to);
+        if (entry) out.push({ entry, what: link.what, outgoing: true });
+    }
+    for (const source of FEATURE_CATALOG) {
+        for (const link of source.links ?? []) {
+            if (link.to === id) out.push({ entry: source, what: link.what, outgoing: false });
+        }
+    }
+    return out;
+}
+
+/** Les entrées d'un rayon, dans l'ordre du catalogue. */
+export function featuresInCategory(entries: FeatureCatalogEntry[], category: FeatureCategory): FeatureCatalogEntry[] {
+    return entries.filter((f) => f.category === category);
 }

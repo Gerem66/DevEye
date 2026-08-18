@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     DndContext,
     DragOverlay,
@@ -24,18 +24,15 @@ import {
     type SortingStrategy
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { Device, HomeFeatureId, HomeFolder, HomeSection, ShortcutItem } from 'deveye-types';
-import { isHomeFolder } from 'deveye-types';
+import type { Device, HomeFolder, HomeSection, HomeTile, ShortcutItem } from 'deveye-types';
+import { homeTileId, isHomeFolder, isShortcutTile } from 'deveye-types';
 
 import { useDevices } from '@/stores/devices';
 import {
-    addFolder,
+    addSection,
     moveSectionItem,
-    removeDevice,
-    removeFeature,
-    removeFolder,
     removeSection,
-    removeShortcut,
+    removeTile,
     renameSection,
     setSectionCollapsed,
     setSectionCollapsible,
@@ -48,11 +45,9 @@ import Button from '@/Components/Button';
 import Checkbox from '@/Components/Checkbox';
 import { Dialog } from '@/Components/Dialog';
 import { Widget } from '@/Components/Widget';
-import { deviceTileVisual, featureTileVisual, shortcutTileVisual, type TileVisual } from '../tiles/tileVisual';
-import { AddSectionDialog } from './AddSectionDialog';
-import { AddTileDialog } from './AddTileDialog';
+import { homeTileVisual, type TileVisual } from '../tiles/tileVisual';
+import { AddTileMarket } from './AddTileMarket';
 import { FolderDialog } from './FolderDialog';
-import { ADD_TILE_LABEL, SECTION_KIND_LABEL } from './sectionKinds';
 import styles from './organize.module.css';
 
 /** A shortcut being edited, with the section it belongs to. */
@@ -69,9 +64,9 @@ interface FolderRemoval {
 
 /**
  * The usual grid sorting, but inert for a section the drag has nothing to do with
- * — the one the tile just left, or one whose kind rejects it. `overIndex` is -1
- * there, which the default strategy reads as a move and would answer by shuffling
- * that section's own tiles for nothing.
+ * — the one the tile just left. `overIndex` is -1 there, which the default
+ * strategy reads as a move and would answer by shuffling that section's own tiles
+ * for nothing.
  */
 const sortInSection: SortingStrategy = (args) => (args.overIndex < 0 ? null : rectSortingStrategy(args));
 
@@ -102,31 +97,9 @@ function resolveDropTarget(
     return owner ? { section: owner, beforeId: overId } : null;
 }
 
-/** One tile's card visuals — shared by the grid and the drag overlay so the
- *  floating copy is pixel-identical to the card it left behind. */
-function tileVisualFor(
-    section: HomeSection,
-    id: string,
-    devices: Device[]
-): { visual: TileVisual | null; compact: boolean } {
-    if (section.kind === 'feature') {
-        // Only features keep the full height; the rest use the shorter card.
-        const tile = section.items.find((t) => (isHomeFolder(t) ? t.id === id : t === id));
-        return { visual: tile === undefined ? null : featureTileVisual(tile), compact: false };
-    }
-    if (section.kind === 'device') {
-        const device = devices.find((d) => d.id === id);
-        return { visual: device ? deviceTileVisual(device, { editing: true }) : null, compact: true };
-    }
-    const item = section.items.find((s) => s.id === id);
-    return { visual: item ? shortcutTileVisual(item, { editing: true }) : null, compact: true };
-}
-
-/** Le dossier de cette section portant cet id de tuile, s'il y en a un. */
-function folderIn(section: HomeSection, id: string): HomeFolder | undefined {
-    if (section.kind !== 'feature') return undefined;
-    for (const tile of section.items) if (isHomeFolder(tile) && tile.id === id) return tile;
-    return undefined;
+/** La tuile de cette section portant cet identifiant, s'il y en a une. */
+function tileIn(section: HomeSection, id: string): HomeTile | undefined {
+    return section.items.find((tile) => homeTileId(tile) === id);
 }
 
 /** Wording of the "remove a populated section" confirmation. */
@@ -147,17 +120,16 @@ function folderRemovalWarning(folder: HomeFolder): string {
 
 /** The card on its own, no drag wiring — rendered both in the grid and, while
  *  dragging, inside the DragOverlay, so the floating copy is identical. */
-function TileCard({ visual, compact }: { visual: TileVisual | null; compact?: boolean }) {
+function TileCard({ visual }: { visual: TileVisual | null }) {
     if (!visual) {
-        return <div className={`${styles.missingTile} ${compact ? styles.missingCompact : ''}`}>Indisponible</div>;
+        return <div className={`${styles.missingTile} ${styles.missingCompact}`}>Indisponible</div>;
     }
     return (
         <Widget
             widgetId={visual.widgetId}
             title={visual.title}
             icon={visual.icon}
-            compact={compact}
-            slim={visual.slim}
+            compact={visual.compact}
             interactive={false}
         >
             {visual.body}
@@ -172,13 +144,11 @@ function TileCard({ visual, compact }: { visual: TileVisual | null; compact?: bo
 function SortableTile({
     id,
     visual,
-    compact,
     onEdit,
     onRemove
 }: {
     id: string;
     visual: TileVisual | null;
-    compact?: boolean;
     /** When set, shows a pencil button (e.g. to edit a shortcut). */
     onEdit?: () => void;
     onRemove: () => void;
@@ -196,7 +166,7 @@ function SortableTile({
             {...attributes}
             {...listeners}
         >
-            <TileCard visual={visual} compact={compact} />
+            <TileCard visual={visual} />
             <div className={styles.tileActions}>
                 {onEdit && (
                     <button
@@ -225,12 +195,11 @@ function SortableTile({
 
 /** The sortable grid of one section's tiles + its trailing "add" button. Its
  *  SortableContext shares the page-level DndContext, so a tile can be dragged out
- *  into another section of the same kind (see EditableHome's drag handlers). */
+ *  into any other section (see EditableHome's drag handlers). */
 function SectionTiles({
     section,
     devices,
     onAdd,
-    onAddFolder,
     onEditShortcut,
     onEditFolder,
     onRemoveFolder
@@ -238,68 +207,55 @@ function SectionTiles({
     section: HomeSection;
     devices: Device[];
     onAdd: () => void;
-    onAddFolder: () => void;
     onEditShortcut: (item: ShortcutItem) => void;
     onEditFolder: (folder: HomeFolder) => void;
     onRemoveFolder: (folder: HomeFolder) => void;
 }) {
-    const addClass =
-        section.kind === 'feature'
-            ? styles.addFeature
-            : section.kind === 'shortcut'
-              ? styles.addShortcut
-              : styles.addDevice;
-
     const ids = useMemo<string[]>(() => sectionTileIds(section), [section]);
 
     const renderTile = (id: string) => {
-        const { visual, compact } = tileVisualFor(section, id, devices);
-        const folder = folderIn(section, id);
-        const onRemove = () => {
-            if (folder) onRemoveFolder(folder);
-            else if (section.kind === 'feature') removeFeature(section.id, id as HomeFeatureId);
-            else if (section.kind === 'device') removeDevice(section.id, id);
-            else removeShortcut(section.id, id);
-        };
-        const item = section.kind === 'shortcut' ? section.items.find((s) => s.id === id) : undefined;
+        const tile = tileIn(section, id);
+        const visual = tile === undefined ? null : homeTileVisual(tile, devices, { editing: true });
         // Le crayon ouvre la fiche du dossier, comme il ouvre celle d'un
         // raccourci : dans les deux cas, la tuile porte un contenu que seul son
         // auteur peut décrire.
-        const onEdit = folder ? () => onEditFolder(folder) : item ? () => onEditShortcut(item) : undefined;
-        return <SortableTile key={id} id={id} compact={compact} visual={visual} onEdit={onEdit} onRemove={onRemove} />;
+        const onEdit =
+            tile === undefined
+                ? undefined
+                : isHomeFolder(tile)
+                  ? () => onEditFolder(tile)
+                  : isShortcutTile(tile)
+                    ? () => onEditShortcut(tile)
+                    : undefined;
+        // Un dossier plein prévient avant de partir ; tout le reste s'en va d'un
+        // clic, parce que le reposer en est un aussi.
+        const onRemove =
+            tile !== undefined && isHomeFolder(tile) ? () => onRemoveFolder(tile) : () => removeTile(section.id, id);
+        return <SortableTile key={id} id={id} visual={visual} onEdit={onEdit} onRemove={onRemove} />;
     };
 
     return (
         <SortableContext items={ids} strategy={sortInSection}>
             <div className={styles.tileGrid}>
                 {ids.map(renderTile)}
-                <button type='button' className={`${styles.addTile} ${addClass}`} onClick={onAdd}>
+                {/* Un seul bouton, quoi que la section tienne : c'est le marché
+                    qui range désormais les appareils, les fonctionnalités, les
+                    raccourcis et les dossiers par rayons. */}
+                <button type='button' className={styles.addTile} onClick={onAdd}>
                     <span className={`icon icon-plus ${styles.addTileIcon}`} />
-                    <span className={styles.addTileLabel}>{ADD_TILE_LABEL[section.kind]}</span>
+                    <span className={styles.addTileLabel}>Ajouter une tuile</span>
                 </button>
-                {/* Un dossier est une tuile de fonctionnalités : il ne se propose
-                    donc que là, et à côté de l'ajout plutôt que dedans. Le
-                    sélecteur de fonctionnalités reste ce qu'il est, une liste de
-                    widgets à poser, et rien n'oblige à passer par un dossier
-                    pour en ajouter un. */}
-                {section.kind === 'feature' && (
-                    <button type='button' className={`${styles.addTile} ${addClass}`} onClick={onAddFolder}>
-                        <span className={`icon icon-folder-plus ${styles.addTileIcon}`} />
-                        <span className={styles.addTileLabel}>Nouveau dossier</span>
-                    </button>
-                )}
             </div>
         </SortableContext>
     );
 }
 
-/** A section block: a header (drag handle, optional title, kind, count, remove)
+/** A section block: a header (drag handle, optional title, count, remove)
  *  + its tile grid. */
 function SortableSection({
     section,
     devices,
     onAdd,
-    onAddFolder,
     onEditShortcut,
     onEditFolder,
     onRemoveFolder,
@@ -308,7 +264,6 @@ function SortableSection({
     section: HomeSection;
     devices: Device[];
     onAdd: () => void;
-    onAddFolder: () => void;
     onEditShortcut: (item: ShortcutItem) => void;
     onEditFolder: (folder: HomeFolder) => void;
     onRemoveFolder: (folder: HomeFolder) => void;
@@ -371,7 +326,8 @@ function SortableSection({
                         Repliée au départ
                     </Checkbox>
                 )}
-                <span className={styles.sectionKind}>{SECTION_KIND_LABEL[section.kind]}</span>
+                {/* Plus de pastille de genre : une section n'en a plus. Reste le
+                    nombre de tuiles, qui dit quelque chose de vrai. */}
                 <span className={styles.sectionCount}>{section.items.length}</span>
                 <button
                     className={`${styles.tileAction} ${styles.tileRemove} ${styles.sectionRemove}`}
@@ -386,7 +342,6 @@ function SortableSection({
                 section={section}
                 devices={devices}
                 onAdd={onAdd}
-                onAddFolder={onAddFolder}
                 onEditShortcut={onEditShortcut}
                 onEditFolder={onEditFolder}
                 onRemoveFolder={onRemoveFolder}
@@ -396,23 +351,26 @@ function SortableSection({
 }
 
 export interface EditableHomeProps {
-    /** Open the "add a section" dialog straight away (entered from an empty home). */
+    /**
+     * Entré depuis un accueil vide : poser une première section et ouvrir le
+     * marché dessus, sans rien demander. Il n'y a plus de genre à choisir, donc
+     * plus rien à faire confirmer avant de montrer ce qu'on peut ajouter.
+     */
     autoOpenAdd?: boolean;
 }
 
 /**
  * Edit mode rendered straight onto the grid: the same tiles as the home, grouped
  * by section. A single DndContext drives both levels — sections reorder by their
- * header handle, tiles reorder inside their section *and* can be dragged into
- * another section of the same kind. A trailing "+" per section opens the matching
- * add dialog; a final "+" adds a whole section.
+ * header handle, tiles reorder inside their section *and* can be dragged into any
+ * other section. A trailing "+" per section opens the marché; a final "+" adds a
+ * whole section, sur-le-champ.
  */
 export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
     const layout = useHomeLayout();
     const { devices } = useDevices();
     const [addTarget, setAddTarget] = useState<string | null>(null);
     const [editShortcut, setEditShortcut] = useState<ShortcutEdit | null>(null);
-    const [addingSection, setAddingSection] = useState(autoOpenAdd);
     const [confirmRemove, setConfirmRemove] = useState<HomeSection | null>(null);
     /** Le dossier dont la fiche est ouverte, par son id (relu dans la disposition). */
     const [editFolder, setEditFolder] = useState<string | null>(null);
@@ -429,6 +387,20 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
      * pointeur n'a pas bougé, il n'a rien demandé de nouveau.
      */
     const lastHandover = useRef<string | null>(null);
+
+    /**
+     * L'entrée « accueil vide », jouée une fois.
+     *
+     * Le garde-fou n'est pas décoratif : cet effet **écrit** dans la disposition,
+     * et un second passage (montage-démontage-remontage) poserait une deuxième
+     * section vide sans que rien ne l'ait demandé.
+     */
+    const seeded = useRef(false);
+    useEffect(() => {
+        if (!autoOpenAdd || seeded.current) return;
+        seeded.current = true;
+        setAddTarget(addSection());
+    }, [autoOpenAdd]);
 
     // 8px activation distance: a plain click (e.g. the × button) never starts a
     // drag, and there's no stray text selection on press.
@@ -497,7 +469,8 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
     const activeTile = useMemo(() => {
         if (!activeTileId) return null;
         const owner = sectionOf(sections, activeTileId);
-        return owner ? tileVisualFor(owner, activeTileId, devices) : null;
+        const tile = owner ? tileIn(owner, activeTileId) : undefined;
+        return tile === undefined ? null : homeTileVisual(tile, devices, { editing: true });
     }, [activeTileId, sections, devices]);
 
     const onDragStart = (e: DragStartEvent) => {
@@ -549,9 +522,6 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
         const target = resolveDropTarget(sections, String(over.id));
         if (!source || !target) return;
         if (target.section.id === source.id) return;
-        // Kinds must match — transferSectionItem refuses anyway, but bailing here
-        // keeps the tile visibly anchored in its own section.
-        if (target.section.kind !== source.kind) return;
 
         const at = `${delta.x},${delta.y}`;
         if (lastHandover.current === at) return;
@@ -612,26 +582,17 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
     };
 
     /**
-     * Créer un dossier ouvre sa fiche dans la foulée : vide, il n'a rien à
-     * montrer, et le nommer puis le remplir est le geste qui suit de toute façon.
-     */
-    const startFolder = (sectionId: string) => {
-        const id = addFolder(sectionId);
-        if (id) setEditFolder(id);
-    };
-
-    /**
      * Un dossier vide s'en va sans rien demander (le recréer est un clic) ; un
      * dossier plein prévient, parce que son retrait emporte aussi les tuiles
      * qu'il tenait hors de l'accueil.
      */
     const requestRemoveFolder = (sectionId: string, folder: HomeFolder) => {
-        if (folder.items.length === 0) removeFolder(sectionId, folder.id);
+        if (folder.items.length === 0) removeTile(sectionId, folder.id);
         else setConfirmFolder({ sectionId, folder });
     };
 
     const doRemoveFolder = () => {
-        if (confirmFolder) removeFolder(confirmFolder.sectionId, confirmFolder.folder.id);
+        if (confirmFolder) removeTile(confirmFolder.sectionId, confirmFolder.folder.id);
         setConfirmFolder(null);
     };
 
@@ -655,7 +616,6 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
                             section={section}
                             devices={devices}
                             onAdd={() => setAddTarget(section.id)}
-                            onAddFolder={() => startFolder(section.id)}
                             onEditShortcut={(item) => setEditShortcut({ sectionId: section.id, item })}
                             onEditFolder={(folder) => setEditFolder(folder.id)}
                             onRemoveFolder={(folder) => requestRemoveFolder(section.id, folder)}
@@ -667,26 +627,28 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
                 <DragOverlay dropAnimation={{ duration: 200, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
                     {activeTile ? (
                         <div className={styles.overlayTile}>
-                            <TileCard visual={activeTile.visual} compact={activeTile.compact} />
+                            <TileCard visual={activeTile} />
                         </div>
                     ) : null}
                 </DragOverlay>
             </DndContext>
 
-            <button type='button' className={styles.addSection} onClick={() => setAddingSection(true)}>
+            {/* Ajoutée sur-le-champ : il n'y a plus de genre à choisir, donc plus
+                de question à poser. Le marché s'ouvre dans la foulée sur la
+                section neuve, qui n'a par définition rien à montrer. */}
+            <button type='button' className={styles.addSection} onClick={() => setAddTarget(addSection())}>
                 <span className={`icon icon-plus ${styles.addTileIcon}`} />
                 <span className={styles.addTileLabel}>Ajouter une section</span>
             </button>
 
-            <AddSectionDialog open={addingSection} onClose={() => setAddingSection(false)} />
-
-            <AddTileDialog
+            <AddTileMarket
                 section={editShortcut ? editTarget : addSectionTarget}
                 editShortcut={editShortcut?.item ?? null}
                 onClose={() => {
                     setAddTarget(null);
                     setEditShortcut(null);
                 }}
+                onFolderAdded={setEditFolder}
             />
 
             <FolderDialog folderId={editFolder} onClose={() => setEditFolder(null)} />

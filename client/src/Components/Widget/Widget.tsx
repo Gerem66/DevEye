@@ -17,10 +17,15 @@ export interface WidgetProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
     onExpand?: (e: React.MouseEvent<HTMLDivElement>) => void;
     /** Additional className for the outer wrapper. */
     className?: string;
-    /** Shorter card (e.g. device tiles), sized to their lighter content. */
+    /**
+     * Carte courte : appareils et raccourcis, dont le contenu est plus léger.
+     *
+     * Une seule hauteur pour les deux. Depuis que les sections tiennent
+     * n'importe quelle tuile, une ligne peut mêler une carte d'appareil et un
+     * raccourci : deux cartes courtes de hauteurs différentes côte à côte se
+     * lisaient comme un défaut d'alignement, pas comme une intention.
+     */
     compact?: boolean;
-    /** Even shorter "thin & long" card (shortcut tiles). */
-    slim?: boolean;
     /**
      * Interactive (default): morphs via `layoutId`, lifts on hover, opens on
      * click. Set false for edit-mode cards — drops the morph/hover/click and the
@@ -54,7 +59,6 @@ const Widget = forwardRef<HTMLDivElement, WidgetProps>(function Widget(
         onExpand,
         className,
         compact,
-        slim,
         interactive = true,
         href,
         adminOnly,
@@ -83,7 +87,7 @@ const Widget = forwardRef<HTMLDivElement, WidgetProps>(function Widget(
         <Tag
             ref={ref as never}
             layoutId={interactive ? layoutKey : undefined}
-            className={`${styles.widget} ${compact ? styles.compact : ''} ${slim ? styles.slim : ''} ${interactive ? '' : styles.static} ${className ?? ''}`}
+            className={`${styles.widget} ${compact ? styles.compact : ''} ${interactive ? '' : styles.static} ${className ?? ''}`}
             onClick={interactive && !href ? (e: MouseEvent<HTMLDivElement>) => onExpand?.(e) : undefined}
             whileHover={interactive ? { y: -4 } : undefined}
             whileTap={interactive ? { scale: 0.985 } : undefined}

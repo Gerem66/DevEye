@@ -1,4 +1,4 @@
-import { type MouseEvent as ReactMouseEvent, useState, useRef, useEffect } from 'react';
+import { type MouseEvent as ReactMouseEvent, type ReactNode, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Button from '@/Components/Button';
 import { openInfo } from '@/Components/InfoPopup';
@@ -8,7 +8,6 @@ import { DeploymentStatus } from './DeploymentStatus';
 import { ConnectionStatus } from './ConnectionStatus';
 import { TopbarWidgets } from './topbarWidgets';
 import { EditableTopbarWidgets } from './EditableTopbarWidgets';
-import AboutContent from './AboutContent';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import styles from './TopNavbar.module.css';
 
@@ -53,6 +52,15 @@ export interface TopNavbarProps {
     onOpenUsers?: (e: ReactMouseEvent) => void;
     /** Ouvrir la page de gestion de l'espace courant. */
     onManageWorkspace?: (e: React.MouseEvent) => void;
+    /**
+     * Le corps de la fiche « À propos », ouverte par la pastille de version.
+     *
+     * Reçu plutôt qu'importé : cette fiche décrit les fonctionnalités et leurs
+     * liaisons, donc elle lit le catalogue de l'accueil. Un composant partagé qui
+     * remonterait vers une page serait la première inversion de couches du
+     * dépôt, pour une chaîne de caractères.
+     */
+    aboutBody?: ReactNode;
 }
 
 /**
@@ -73,7 +81,8 @@ export default function TopNavbar({
     onSelectWorkspace,
     onCreateWorkspace,
     onManageWorkspace,
-    onOpenUsers
+    onOpenUsers,
+    aboutBody
 }: TopNavbarProps) {
     const { user, logout } = useAuth();
     const workspace = useActiveWorkspace();
@@ -159,8 +168,8 @@ export default function TopNavbar({
                                 onClick={() =>
                                     void openInfo({
                                         title: `À propos de DevEye · ${version}`,
-                                        body: <AboutContent />,
-                                        width: 560
+                                        body: aboutBody,
+                                        width: 640
                                     })
                                 }
                                 title='À propos de DevEye'
@@ -189,7 +198,7 @@ export default function TopNavbar({
                         <span className={`icon icon-edit ${styles.organizeBannerIcon}`} />
                         <span className={styles.organizeBannerText}>
                             <span className={styles.organizeBannerTitle}>Organisation de l’accueil</span>
-                            <span className={styles.organizeBannerHint}>Glissez les tuiles ou les catégories.</span>
+                            <span className={styles.organizeBannerHint}>Glissez les tuiles ou les sections.</span>
                         </span>
                         {onDoneOrganizing && (
                             <Button

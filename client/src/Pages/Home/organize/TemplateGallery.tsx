@@ -95,7 +95,7 @@ function GalleryRow({ template, label, url }: { template: ShortcutTemplate; labe
 
             {/* The actual final tile. */}
             <div className={styles.galleryRender}>
-                <Widget widgetId={item.id} slim interactive={false}>
+                <Widget widgetId={item.id} compact interactive={false}>
                     <ShortcutTile item={item} />
                 </Widget>
             </div>

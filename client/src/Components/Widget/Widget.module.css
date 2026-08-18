@@ -28,18 +28,13 @@
     color: inherit;
 }
 
-/* Shorter cards (devices) — and the even shorter "thin & long" shortcut cards.
-   `min-height` is the real card height (border-box, tighter padding). */
+/* Cartes courtes : appareils et raccourcis, une seule et même hauteur.
+   `min-height` est la hauteur réelle de la carte (border-box, marge intérieure
+   resserrée). 104px, c'est-à-dire de quoi loger un raccourci riche (avatar +
+   ligne + statistiques) : les deux genres se côtoient sur une même ligne depuis
+   l'unification des sections, et deux hauteurs presque égales voisines se
+   lisent comme un défaut d'alignement plutôt que comme une intention. */
 .widget.compact {
-    min-height: 88px;
-    padding: var(--space-md);
-    align-self: start;
-}
-
-/* Declared after `.compact` so it wins the min-height at equal (0,2,0) specificity.
-   Tall enough that a rich shortcut (GitHub-style: avatar + line + stats) fits, so
-   every shortcut card — simple or not — has the same height. */
-.widget.slim {
     min-height: 104px;
     padding: var(--space-md);
     align-self: start;

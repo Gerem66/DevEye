@@ -110,20 +110,12 @@
     color: var(--text-secondary);
 }
 
-.sectionKind,
 .sectionCount {
     flex-shrink: 0;
     font-size: 0.74rem;
     background: var(--glass-bg);
     border-radius: var(--radius-sm);
     padding: 1px 8px;
-}
-
-.sectionKind {
-    color: var(--text-secondary);
-}
-
-.sectionCount {
     color: var(--text-muted);
 }
 
@@ -234,11 +226,17 @@
 }
 
 .missingCompact {
-    min-height: 124px;
+    min-height: 104px;
 }
 
-/* ── "Add" tile — matches the footprint of the tiles in its category ─────── */
+/* ── Bouton « ajouter une tuile », au bout des tuiles d'une section ──────── */
+/* Une section tient désormais n'importe quelle tuile : le bouton ne peut donc
+   plus épouser « la » hauteur de sa catégorie. Il prend celle d'une carte courte
+   et ne s'étire pas, pour rester discret au bout d'une ligne de cartes hautes
+   comme au bout d'une ligne de cartes courtes. */
 .addTile {
+    min-height: 104px;
+    align-self: start;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -260,22 +258,6 @@
     border-color: var(--accent);
     color: var(--accent);
     background: var(--accent-bg);
-}
-
-/* Feature add button stretches to the (tall) feature tiles' row height. */
-.addFeature {
-    min-height: 158px;
-}
-
-/* Device / shortcut add buttons match their shorter, non-stretching tiles. */
-.addDevice {
-    min-height: 88px;
-    align-self: start;
-}
-
-.addShortcut {
-    min-height: 104px;
-    align-self: start;
 }
 
 .addTileIcon {
@@ -318,6 +300,192 @@
     margin: 0;
     font-size: 0.9rem;
     color: var(--text-secondary);
+}
+
+/* ── Marché d'ajout ─────────────────────────────────────────────────────── */
+/* Un rail de rayons à gauche, l'étal à droite. Le même écran sert les appareils,
+   les fonctionnalités, les raccourcis et les dossiers : c'est le rayon qui
+   change, pas la popup. */
+.market {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-height: 0;
+}
+
+.marketBody {
+    display: grid;
+    grid-template-columns: 172px minmax(0, 1fr);
+    gap: var(--space-md);
+    min-height: 0;
+}
+
+@media (max-width: 640px) {
+    .marketBody {
+        grid-template-columns: 1fr;
+    }
+}
+
+.marketRails {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    max-height: 52vh;
+    overflow-y: auto;
+    padding-right: var(--space-xs);
+}
+
+@media (max-width: 640px) {
+    .marketRails {
+        flex-direction: row;
+        flex-wrap: wrap;
+        max-height: none;
+        overflow: visible;
+    }
+}
+
+.marketRail {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 7px var(--space-sm);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.marketRail:hover {
+    background: var(--glass-bg-light);
+    color: var(--text-primary);
+}
+
+.marketRailOn {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.marketRailIcon {
+    width: 16px;
+    flex-shrink: 0;
+    color: var(--accent);
+}
+
+.marketRailLabel {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.marketRailCount {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.marketPane {
+    min-width: 0;
+    max-height: 52vh;
+    overflow-y: auto;
+    padding-right: var(--space-xs);
+}
+
+/* Deux colonnes tant que la place le permet : une carte de marché tient sur
+   deux lignes de texte, une seule colonne aurait donné une liste très haute. */
+.marketGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+    gap: var(--space-sm);
+}
+
+.marketCard {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    text-align: left;
+    cursor: pointer;
+    min-width: 0;
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.marketCard:hover {
+    background: var(--glass-bg);
+    border-color: var(--accent);
+}
+
+.marketCardHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    min-width: 0;
+}
+
+.marketCardIcon {
+    width: 18px;
+    flex-shrink: 0;
+    color: var(--accent);
+}
+
+.marketCardTitle {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.88rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.marketCardPlus {
+    width: 14px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.marketCard:hover .marketCardPlus {
+    color: var(--accent);
+}
+
+.marketCardDesc {
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    line-height: 1.45;
+}
+
+/* Le rayon d'une carte, quand l'étal les mélange (recherche, ou rayon « Tout »). */
+.marketCardRayon {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.marketFormTitle {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-sm) 0;
 }
 
 /* ── Add dialog: pickers ────────────────────────────────────────────────── */

@@ -1,0 +1,191 @@
+.sectionTitle {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-sm) 0;
+}
+
+/* ── Fonctionnalités, par rayon ─────────────────────────────────────────── */
+.category {
+    margin-bottom: var(--space-md);
+}
+
+.category:last-child {
+    margin-bottom: 0;
+}
+
+.categoryTitle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0 0 6px 0;
+}
+
+.categoryIcon {
+    width: 14px;
+    color: var(--accent);
+}
+
+.featureList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.feature {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+}
+
+.featureHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-width: 0;
+}
+
+.featureIcon {
+    width: 16px;
+    flex-shrink: 0;
+    color: var(--accent);
+}
+
+.featureTitle {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.featureAdmin {
+    width: 13px;
+    color: var(--text-muted);
+    opacity: 0.75;
+}
+
+.featureDesc {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+/* ── Liaisons ───────────────────────────────────────────────────────────── */
+/* Une ligne par liaison plutôt qu'une rangée de pastilles : c'est la phrase qui
+   dit ce que la liaison permet, et une pastille seule ne le dirait pas. */
+.links {
+    list-style: none;
+    margin: 4px 0 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.link {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.linkArrow {
+    width: 12px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.linkWhat {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    min-width: 0;
+}
+
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 2px;
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.73rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: var(--surface-subtle);
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    white-space: nowrap;
+}
+
+.chipIcon {
+    width: 12px;
+    color: var(--accent);
+}
+
+/* ── Socles partagés + services externes ────────────────────────────────── */
+.serviceList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.serviceItem {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+}
+
+.serviceItem strong {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.serviceItem span {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.serviceTags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 2px;
+}
+
+.serviceTag {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: var(--surface-subtle);
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+}
+
+.serviceItem .serviceNote {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
+}

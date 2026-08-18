@@ -1,14 +1,17 @@
 import { useSyncExternalStore } from 'react';
 import {
     homeLayoutSchema,
-    HOME_SECTION_MAX_TILES,
+    homeTileId,
+    homeTileKind,
+    isFeatureTile,
     isHomeFolder,
+    isShortcutTile,
+    HOME_SECTION_MAX_TILES,
     type HomeFeatureId,
-    type HomeFeatureTile,
     type HomeFolder,
     type HomeLayout,
     type HomeSection,
-    type HomeSectionKind,
+    type HomeTile,
     type HomeTopbarWidgetId,
     type ShortcutItem,
     type ShortcutTemplate
@@ -17,12 +20,14 @@ import { ws } from '@/api/ws';
 import { getActiveWorkspaceId } from './workspace';
 
 /**
- * Home grid layout: ordered **sections**, each holding ordered tiles of a single
- * kind. Sections are fully modular — none by default, added/removed/reordered by
- * the user, several of the same kind allowed — so a section is identified by its
- * `id`, never by its kind. Persisted in localStorage for an instant paint, and
- * synced to the server (debounced) so the arrangement follows the user across
- * devices. Mirrors {@link ./theme}.
+ * Home grid layout: ordered **sections**, each holding ordered tiles. Sections
+ * are fully modular — none by default, added/removed/reordered by the user —
+ * and, since the unification, **untyped**: appareils, fonctionnalités,
+ * raccourcis et dossiers cohabitent dans la même. Une section est donc
+ * identifiée par son `id`, et une tuile par ce qu'elle est.
+ * Persisted in localStorage for an instant paint, and synced to the server
+ * (debounced) so the arrangement follows the user across devices. Mirrors
+ * {@link ./theme}.
  *
  * Holds only non-sensitive personalization metadata (feature ids, device ids,
  * pinned link objects) — never zero-knowledge payload.
@@ -88,10 +93,10 @@ function commit(next: HomeLayout): void {
 }
 
 /** Replace one section's tiles (matched by id), keeping the others/order intact. */
-function replaceItems(sectionId: string, items: HomeSection['items']): void {
+function replaceItems(sectionId: string, items: HomeTile[]): void {
     commit({
         ...state,
-        sections: state.sections.map((s) => (s.id === sectionId ? ({ ...s, items } as HomeSection) : s))
+        sections: state.sections.map((s) => (s.id === sectionId ? { ...s, items } : s))
     });
 }
 
@@ -103,13 +108,20 @@ export function findSection(layout: HomeLayout, sectionId: string): HomeSection 
     return layout.sections.find((s) => s.id === sectionId);
 }
 
+/** Toutes les tuiles posées sur l'accueil, sections confondues. */
+function allTiles(layout: HomeLayout): HomeTile[] {
+    return layout.sections.flatMap((s) => s.items);
+}
+
 /**
  * Every device id on the grid, whichever section holds it. Used by the readers
  * that don't care where a tile sits: the device popup views, the prune pass, and
  * "already placed" filtering in the picker (a device belongs to one section).
  */
 export function placedDeviceIds(layout: HomeLayout): string[] {
-    return layout.sections.flatMap((s) => (s.kind === 'device' ? s.items : []));
+    return allTiles(layout)
+        .filter((tile) => homeTileKind(tile) === 'device')
+        .map((tile) => homeTileId(tile));
 }
 
 /**
@@ -123,9 +135,10 @@ export function placedDeviceIds(layout: HomeLayout): string[] {
  * dossiers.
  */
 export function placedFeatureIds(layout: HomeLayout): HomeFeatureId[] {
-    return layout.sections.flatMap((s) =>
-        s.kind === 'feature' ? s.items.flatMap((tile) => (isHomeFolder(tile) ? tile.items : [tile])) : []
-    );
+    return allTiles(layout).flatMap((tile) => {
+        if (isHomeFolder(tile)) return tile.items;
+        return isFeatureTile(tile) ? [tile] : [];
+    });
 }
 
 /**
@@ -135,9 +148,7 @@ export function placedFeatureIds(layout: HomeLayout): HomeFeatureId[] {
  * là-dedans se trouve sur la grille, et peut donc être déplacé dans un dossier.
  */
 export function foldedFeatureIds(layout: HomeLayout): HomeFeatureId[] {
-    return layout.sections.flatMap((s) =>
-        s.kind === 'feature' ? s.items.flatMap((tile) => (isHomeFolder(tile) ? tile.items : [])) : []
-    );
+    return allTiles(layout).flatMap((tile) => (isHomeFolder(tile) ? tile.items : []));
 }
 
 /**
@@ -150,7 +161,6 @@ export function foldedFeatureIds(layout: HomeLayout): HomeFeatureId[] {
  */
 export function findFolder(layout: HomeLayout, folderId: string): { section: HomeSection; folder: HomeFolder } | null {
     for (const section of layout.sections) {
-        if (section.kind !== 'feature') continue;
         for (const tile of section.items) {
             if (isHomeFolder(tile) && tile.id === folderId) return { section, folder: tile };
         }
@@ -159,10 +169,16 @@ export function findFolder(layout: HomeLayout, folderId: string): { section: Hom
 }
 
 // ── Sections ───────────────────────────────────────────────────────────────
-/** Append an empty section of `kind` and return its id (so the UI can focus it). */
-export function addSection(kind: HomeSectionKind): string {
+/**
+ * Append an empty section and return its id (so the UI can focus it).
+ *
+ * Plus rien à choisir avant : une section ne se distingue plus par ce qu'elle
+ * tient, donc le bouton l'ajoute sur-le-champ au lieu d'ouvrir une popup pour
+ * une question qui n'existe plus.
+ */
+export function addSection(): string {
     const id = uid();
-    commit({ ...state, sections: [...state.sections, { id, kind, items: [] } as HomeSection] });
+    commit({ ...state, sections: [...state.sections, { id, items: [] }] });
     return id;
 }
 
@@ -178,7 +194,7 @@ export function renameSection(sectionId: string, title: string): void {
         sections: state.sections.map((s) => {
             if (s.id !== sectionId) return s;
             const { title: _dropped, ...rest } = s;
-            return (next ? { ...rest, title: next } : rest) as HomeSection;
+            return next ? { ...rest, title: next } : rest;
         })
     });
 }
@@ -197,7 +213,7 @@ export function setSectionCollapsible(sectionId: string, collapsible: boolean): 
         sections: state.sections.map((s) => {
             if (s.id !== sectionId) return s;
             const { collapsible: _c, collapsed: _d, ...rest } = s;
-            return (collapsible ? { ...rest, collapsible: true } : rest) as HomeSection;
+            return collapsible ? { ...rest, collapsible: true } : rest;
         })
     });
 }
@@ -209,7 +225,7 @@ export function setSectionCollapsed(sectionId: string, collapsed: boolean): void
         sections: state.sections.map((s) => {
             if (s.id !== sectionId) return s;
             const { collapsed: _dropped, ...rest } = s;
-            return (collapsed ? { ...rest, collapsed: true } : rest) as HomeSection;
+            return collapsed ? { ...rest, collapsed: true } : rest;
         })
     });
 }
@@ -223,18 +239,14 @@ export function setSectionOrder(ids: string[]): void {
 }
 
 /**
- * L'identité d'une tuile, quel que soit le genre de sa section.
+ * L'identité des tuiles d'une section, dans l'ordre.
  *
- * Un raccourci et un dossier portent leur `id`, un appareil et une
- * fonctionnalité **sont** leur id. Une seule définition, ici, parce que c'est le
- * vocabulaire du déplacement : l'organiseur s'en sert pour ses identifiants de
- * glissé, le store pour retrouver une tuile. Deux copies auraient divergé au
- * premier genre ajouté.
+ * C'est le vocabulaire du déplacement : l'organiseur s'en sert pour ses
+ * identifiants de glissé, le store pour retrouver une tuile. La forme de
+ * l'union, elle, n'est lue que par `homeTileId` (voir `deveye-types`).
  */
 export function sectionTileIds(section: HomeSection): string[] {
-    if (section.kind === 'shortcut') return section.items.map((s) => s.id);
-    if (section.kind === 'feature') return section.items.map((tile) => (isHomeFolder(tile) ? tile.id : tile));
-    return [...section.items];
+    return section.items.map((tile) => homeTileId(tile));
 }
 
 /**
@@ -276,54 +288,78 @@ export function moveSectionItem(sectionId: string, tileId: string, beforeId: str
     const to = insertIndex(section, beforeId);
     if (from === to) return;
 
-    // The item type varies per kind and a permutation can't change it, so an
-    // untyped copy is safe here — and it keeps callers free of per-kind branches.
-    //
     // `to` est un rang de la liste **d'avant le retrait** : c'est la convention
     // d'`arrayMove`, celle que dnd-kit anime à l'écran. Le corriger du décalage
     // du retrait décalerait le résultat d'un cran par rapport à ce que le glissé
     // vient de montrer.
-    const items = section.items.slice() as unknown[];
+    const items = section.items.slice();
     const [moved] = items.splice(from, 1);
     items.splice(to, 0, moved);
-    replaceItems(sectionId, items as HomeSection['items']);
+    replaceItems(sectionId, items);
 }
 
 /**
- * Déplace une tuile vers une autre section du même genre (un glissé entre deux).
+ * Déplace une tuile vers une autre section (un glissé entre deux).
  *
- * Les genres doivent correspondre — une fonctionnalité n'a aucun sens dans une
- * section d'appareils — et la tuile est retirée avant d'être posée, donc le
- * déplacement ne peut pas la dupliquer. Mêmes garanties d'identité que
- * {@link moveSectionItem}.
+ * Plus aucune condition de genre : les sections tiennent toutes n'importe quelle
+ * tuile depuis l'unification, donc tout va partout. La tuile est retirée avant
+ * d'être posée, donc le déplacement ne peut pas la dupliquer. Mêmes garanties
+ * d'identité que {@link moveSectionItem}.
  */
 export function transferSectionItem(fromId: string, toId: string, tileId: string, beforeId: string | null): void {
     const source = findSection(state, fromId);
     const target = findSection(state, toId);
-    if (!source || !target || source.id === target.id || source.kind !== target.kind) return;
+    if (!source || !target || source.id === target.id) return;
 
     const from = sectionTileIds(source).indexOf(tileId);
     if (from < 0) return;
     const to = insertIndex(target, beforeId);
 
-    // Same reasoning as moveSectionItem: the item keeps its type, only its home
-    // changes, so both lists are spliced untyped and re-typed on the way out.
-    const sourceItems = source.items.slice() as unknown[];
+    const sourceItems = source.items.slice();
     const [moved] = sourceItems.splice(from, 1);
-    const targetItems = target.items.slice() as unknown[];
+    const targetItems = target.items.slice();
     targetItems.splice(to, 0, moved);
 
     commit({
         ...state,
         sections: state.sections.map((s) => {
-            if (s.id === fromId) return { ...s, items: sourceItems } as HomeSection;
-            if (s.id === toId) return { ...s, items: targetItems } as HomeSection;
+            if (s.id === fromId) return { ...s, items: sourceItems };
+            if (s.id === toId) return { ...s, items: targetItems };
             return s;
         })
     });
 }
 
 // ── Tiles ──────────────────────────────────────────────────────────────────
+/**
+ * Pose une tuile en fin de section.
+ *
+ * Le passage unique de tous les ajouts : le plafond du schéma est tenu **avant**
+ * l'écriture (une section trop longue ne se valide plus, donc le serveur la
+ * refuse et le prochain démarrage relit une disposition vide — un accueil effacé
+ * en silence), et l'appelant n'a qu'à décrire ce qu'il pose.
+ */
+function appendTile(sectionId: string, tile: HomeTile): boolean {
+    const section = findSection(state, sectionId);
+    if (!section || section.items.length >= HOME_SECTION_MAX_TILES) return false;
+    replaceItems(sectionId, [...section.items, tile]);
+    return true;
+}
+
+/**
+ * Retire une tuile de sa section, quel que soit son genre.
+ *
+ * Une seule fonction pour les quatre : la tuile se désigne par son identité, et
+ * la retirer ne demande rien de plus. C'est l'appelant qui décide s'il faut
+ * demander confirmation avant (voir l'organiseur, pour un dossier plein).
+ */
+export function removeTile(sectionId: string, tileId: string): void {
+    const section = findSection(state, sectionId);
+    if (!section) return;
+    const items = section.items.filter((tile) => homeTileId(tile) !== tileId);
+    if (items.length !== section.items.length) replaceItems(sectionId, items);
+}
+
 /**
  * Pose une fonctionnalité sur la grille.
  *
@@ -333,28 +369,25 @@ export function transferSectionItem(fromId: string, toId: string, tileId: string
  * règle vraie quel que soit le chemin.
  */
 export function addFeature(sectionId: string, featureId: HomeFeatureId): void {
-    const section = findSection(state, sectionId);
-    if (section?.kind !== 'feature' || placedFeatureIds(state).includes(featureId)) return;
-    replaceItems(sectionId, [...section.items, featureId]);
+    if (placedFeatureIds(state).includes(featureId)) return;
+    appendTile(sectionId, featureId);
 }
-export function removeFeature(sectionId: string, featureId: HomeFeatureId): void {
-    const section = findSection(state, sectionId);
-    if (section?.kind !== 'feature') return;
-    replaceItems(
-        sectionId,
-        section.items.filter((tile) => isHomeFolder(tile) || tile !== featureId)
-    );
+
+/** Même garde pour un appareil : une machine n'a qu'une carte sur l'accueil. */
+export function addDevice(sectionId: string, deviceId: string): void {
+    if (placedDeviceIds(state).includes(deviceId)) return;
+    appendTile(sectionId, deviceId);
 }
 
 // ── Dossiers ───────────────────────────────────────────────────────────────
 /**
  * Réécrit un dossier en place, en laissant tout le reste de la disposition
- * intact. Passage unique des quatre mutations ci-dessous : la forme de l'union
+ * intact. Passage unique des mutations ci-dessous : la forme de l'union
  * (chaîne ou objet) n'est lue qu'ici.
  */
 function updateFolder(sectionId: string, folderId: string, fn: (folder: HomeFolder) => HomeFolder): void {
     const section = findSection(state, sectionId);
-    if (section?.kind !== 'feature') return;
+    if (!section) return;
     let touched = false;
     const items = section.items.map((tile) => {
         if (!isHomeFolder(tile) || tile.id !== folderId) return tile;
@@ -370,32 +403,13 @@ function updateFolder(sectionId: string, folderId: string, fn: (folder: HomeFold
  * montrer, le remplir est le geste suivant.
  */
 export function addFolder(sectionId: string): string | null {
-    const section = findSection(state, sectionId);
-    if (section?.kind !== 'feature') return null;
-    // Le plafond du schéma, tenu **avant** l'écriture : une section trop longue
-    // ne se valide plus, donc le serveur la refuse et le prochain démarrage relit
-    // une disposition vide. Un bouton qui ne fait rien vaut mieux qu'un accueil
-    // effacé en silence. Rien n'y mène qu'une rafale de créations de dossiers,
-    // les fonctionnalités étant moins nombreuses que le plafond.
-    if (section.items.length >= HOME_SECTION_MAX_TILES) return null;
     const id = uid();
-    replaceItems(sectionId, [...section.items, { kind: 'folder', id, title: '', items: [] }]);
-    return id;
+    return appendTile(sectionId, { kind: 'folder', id, title: '', items: [] }) ? id : null;
 }
 
 /** Intitulé porté par la carte. Vide, l'affichage retombe sur « Dossier ». */
 export function renameFolder(sectionId: string, folderId: string, title: string): void {
     updateFolder(sectionId, folderId, (folder) => ({ ...folder, title: title.slice(0, 40) }));
-}
-
-/** Retire le dossier, et donc les fonctionnalités qu'il tenait, de l'accueil. */
-export function removeFolder(sectionId: string, folderId: string): void {
-    const section = findSection(state, sectionId);
-    if (section?.kind !== 'feature') return;
-    replaceItems(
-        sectionId,
-        section.items.filter((tile) => !isHomeFolder(tile) || tile.id !== folderId)
-    );
 }
 
 /**
@@ -412,15 +426,14 @@ export function addFeatureToFolder(sectionId: string, folderId: string, featureI
     if (foldedFeatureIds(state).includes(featureId)) return;
     let filed = false;
     const sections = state.sections.map((section) => {
-        if (section.kind !== 'feature') return section;
-        const items = section.items.flatMap<HomeFeatureTile>((tile) => {
+        const items = section.items.flatMap<HomeTile>((tile) => {
             // La tuile de la grille, s'il y en avait une : elle s'en va.
             if (!isHomeFolder(tile)) return tile === featureId ? [] : [tile];
             if (section.id !== sectionId || tile.id !== folderId) return [tile];
             filed = true;
             return [{ ...tile, items: [...tile.items, featureId] }];
         });
-        return { ...section, items } as HomeSection;
+        return { ...section, items };
     });
     // Sans dossier cible, rien : retirer la tuile de la grille pour la ranger
     // nulle part serait une disparition pure et simple.
@@ -439,20 +452,7 @@ export function removeFeatureFromFolder(sectionId: string, folderId: string, fea
     }));
 }
 
-export function addDevice(sectionId: string, deviceId: string): void {
-    const section = findSection(state, sectionId);
-    if (section?.kind !== 'device' || section.items.includes(deviceId)) return;
-    replaceItems(sectionId, [...section.items, deviceId]);
-}
-export function removeDevice(sectionId: string, deviceId: string): void {
-    const section = findSection(state, sectionId);
-    if (section?.kind !== 'device') return;
-    replaceItems(
-        sectionId,
-        section.items.filter((id) => id !== deviceId)
-    );
-}
-
+// ── Raccourcis ─────────────────────────────────────────────────────────────
 export interface ShortcutDraft {
     template: ShortcutTemplate;
     url: string;
@@ -473,24 +473,19 @@ function shortcutFrom(id: string, draft: ShortcutDraft): ShortcutItem {
 }
 
 export function addShortcut(sectionId: string, draft: ShortcutDraft): void {
-    const section = findSection(state, sectionId);
-    if (section?.kind !== 'shortcut') return;
-    replaceItems(sectionId, [...section.items, shortcutFrom(uid(), draft)]);
+    appendTile(sectionId, shortcutFrom(uid(), draft));
 }
+
 export function updateShortcut(sectionId: string, id: string, draft: ShortcutDraft): void {
     const section = findSection(state, sectionId);
-    if (section?.kind !== 'shortcut') return;
+    if (!section) return;
+    // La garde de genre n'est pas décorative : les identifiants de toutes les
+    // tuiles vivent désormais dans le même espace de noms, et écrire sans elle
+    // remplacerait une carte d'appareil par un raccourci si l'appelant se
+    // trompait de cible.
     replaceItems(
         sectionId,
-        section.items.map((s) => (s.id === id ? shortcutFrom(id, draft) : s))
-    );
-}
-export function removeShortcut(sectionId: string, id: string): void {
-    const section = findSection(state, sectionId);
-    if (section?.kind !== 'shortcut') return;
-    replaceItems(
-        sectionId,
-        section.items.filter((s) => s.id !== id)
+        section.items.map((tile) => (isShortcutTile(tile) && tile.id === id ? shortcutFrom(id, draft) : tile))
     );
 }
 
@@ -507,15 +502,14 @@ export function removeTopbarWidget(id: HomeTopbarWidgetId): void {
 }
 
 /**
- * Drop device tiles whose device no longer exists (deleted), across every device
+ * Drop device tiles whose device no longer exists (deleted), across every
  * section. No-op when nothing is stale. Only call once devices have actually
  * loaded, so a transient empty list can't wipe the layout.
  */
 export function pruneMissingDevices(validDeviceIds: Set<string>): void {
     let changed = false;
     const sections = state.sections.map((s) => {
-        if (s.kind !== 'device') return s;
-        const items = s.items.filter((id) => validDeviceIds.has(id));
+        const items = s.items.filter((tile) => homeTileKind(tile) !== 'device' || validDeviceIds.has(tile as string));
         if (items.length === s.items.length) return s;
         changed = true;
         return { ...s, items };

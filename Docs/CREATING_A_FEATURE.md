@@ -112,15 +112,18 @@ handler })` par commande. Le handler reçoit un `FeatureContext` (`ctx.db`,
       ferme **la couche la plus haute d'abord** (popup avant feature). N'ajoute
       **jamais** de listener `window` `keydown`/Escape dans une feature.
     - **Bouton principal dans un enfant** : si le formulaire est rendu _dans_ un
-      `Dialog` qu'il ne possède pas (ex. `ShortcutForm` dans `AddTileDialog`),
+      `Dialog` qu'il ne possède pas (ex. `ShortcutForm` dans `AddTileMarket`),
       enregistrer son action via `useDialogSubmit(submit)` au lieu de `onSubmit`.
     - **Cohérence d'ajout** : une popup/sous-formulaire d'ajout se ferme après un
       ajout réussi (appareils, raccourcis, features, formulaires — tous pareils).
 3. **Enregistrement** — - widget de grille → ajouter à `FEATURE_CATALOG` dans
-   **`src/Pages/Home/catalog.tsx`** (`{ id, title, icon, WidgetContent,
-   FullComponent, cacheDurationMinutes, preload?, holdSecrecy? }`). Cela suffit
-   à le faire apparaître dans la grille **et** dans le sélecteur « ajouter une
-   tuile » ; - page structurelle → ajouter à `STATIC_VIEWS` dans `src/Pages/Home/index.tsx`
+   **`src/Pages/Home/catalog.tsx`** (`{ id, title, icon, description, category,
+   links?, WidgetContent, FullComponent, cacheDurationMinutes, preload?,
+   holdSecrecy? }`). Cela suffit à le faire apparaître dans la grille, dans le
+   **marché d'ajout** (`organize/AddTileMarket.tsx` : `category` décide du rayon,
+   `description` du sous-titre de la carte) **et** dans la fiche « À propos »
+   (`Pages/Home/about/` : `links` y dessine les liaisons vers les autres
+   fonctionnalités, lues dans les deux sens) ; - page structurelle → ajouter à `STATIC_VIEWS` dans `src/Pages/Home/index.tsx`
    (avec `hasCard: false`) et passer un `onOpenX` au `TopNavbar`
    (gater par rôle si besoin : `user.role === 'admin' ? () => handleExpand('x') : undefined`).
 4. **Navbar** (page structurelle) — `src/Components/TopNavbar/TopNavbar.tsx` :

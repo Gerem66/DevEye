@@ -66,11 +66,12 @@ import {
     featureTileVisual,
     shortcutTileVisual
 } from './tiles/tileVisual';
+import { AboutContent } from './about';
 import { EditableHome } from './organize/EditableHome';
 import { FolderOverlay, folderTitle } from './folders';
 
 import type { HomeFeatureId, HomeLayout, HomeSection, WorkspaceFeatureId, WorkspacePermissions } from 'deveye-types';
-import { isHomeFolder, WORKSPACE_FEATURE_IDS } from 'deveye-types';
+import { isFeatureTile, isHomeFolder, isShortcutTile, WORKSPACE_FEATURE_IDS } from 'deveye-types';
 import type { FeatureProps } from '@/Features/types';
 import styles from './Dashboard.module.css';
 import type { Workspace } from 'deveye-types';
@@ -970,8 +971,8 @@ export default function HomePage() {
         })();
     };
 
-    /** `autoAdd` chains straight into the "add a section" dialog — used by the
-     *  empty-home prompt, where organizing is only a means to that end. */
+    /** `autoAdd` pose une première section et ouvre le marché dessus — utilisé
+     *  par l'invite d'accueil vide, où organiser n'est qu'un moyen d'y arriver. */
     const startOrganizing = (autoAdd = false) => {
         if (expandedWidget) handleClose();
         // Un dossier déployé n'a pas de place en mode organisation : la grille
@@ -981,57 +982,72 @@ export default function HomePage() {
         setEditing(true);
     };
 
-    /** Normal-mode rendering of one section as its own grid block. Returns null
-     *  for an empty section, so it never leaves a hole. Untitled sections read as
-     *  lightly-spaced groups; a title renders as a discreet heading above the
-     *  grid. Missing devices are skipped (pruned by the effect above). */
+    /**
+     * Le rendu d'une section, hors mode organisation.
+     *
+     * Une seule boucle pour tous les genres de tuiles : la section n'a plus de
+     * genre, et c'est `homeTileVisual` qui sait ce que chacune porte. Rend `null`
+     * pour une section vide, donc elle ne laisse jamais un trou. Une section sans
+     * titre se lit comme un groupe légèrement espacé ; avec un titre, ce dernier
+     * devient un intitulé discret au-dessus de la grille.
+     */
     const renderSection = (section: HomeSection): ReactNode => {
         const tiles: ReactNode[] = [];
-        if (section.kind === 'feature') {
-            for (const tile of section.items) {
-                if (isHomeFolder(tile)) {
-                    const v = featureTileVisual(tile);
-                    if (!v) continue;
-                    // Un dossier **rempli** dont ce contexte ne verrait rien
-                    // s'efface, comme une tuile réservée à l'administration :
-                    // promettre un écran qui n'a rien à montrer serait pire que
-                    // de ne rien montrer. Un dossier vraiment vide, lui, reste :
-                    // on vient de le créer, et le voir disparaître de l'accueil
-                    // se lirait comme une perte. Il est simplement inerte, et son
-                    // corps dit où le remplir.
-                    const visible = folderFeatures(tile.items, audience);
-                    if (visible.length === 0 && tile.items.length > 0) continue;
-                    const folderId = tile.id;
-                    tiles.push(
-                        <Widget
-                            key={folderId}
-                            widgetId={v.widgetId}
-                            title={v.title}
-                            icon={v.icon}
-                            interactive={visible.length > 0}
-                            // La tuile reste visible pendant le déploiement : elle
-                            // part avec le fond qui recule, et c'est ce qui dit
-                            // d'où viennent les cartes.
-                            onExpand={(e) => {
-                                setOpenFolder({
-                                    id: folderId,
-                                    source: e.currentTarget.getBoundingClientRect(),
-                                    offset: greetingRef.current?.offsetHeight ?? 0
-                                });
-                            }}
-                        >
-                            {v.body}
-                        </Widget>
-                    );
-                    continue;
-                }
-                const fid = tile;
+        for (const tile of section.items) {
+            if (isHomeFolder(tile)) {
+                const v = featureTileVisual(tile);
+                if (!v) continue;
+                // Un dossier **rempli** dont ce contexte ne verrait rien
+                // s'efface, comme une tuile réservée à l'administration :
+                // promettre un écran qui n'a rien à montrer serait pire que
+                // de ne rien montrer. Un dossier vraiment vide, lui, reste :
+                // on vient de le créer, et le voir disparaître de l'accueil
+                // se lirait comme une perte. Il est simplement inerte, et son
+                // corps dit où le remplir.
+                const visible = folderFeatures(tile.items, audience);
+                if (visible.length === 0 && tile.items.length > 0) continue;
+                const folderId = tile.id;
+                tiles.push(
+                    <Widget
+                        key={folderId}
+                        widgetId={v.widgetId}
+                        title={v.title}
+                        icon={v.icon}
+                        interactive={visible.length > 0}
+                        // La tuile reste visible pendant le déploiement : elle
+                        // part avec le fond qui recule, et c'est ce qui dit
+                        // d'où viennent les cartes.
+                        onExpand={(e) => {
+                            setOpenFolder({
+                                id: folderId,
+                                source: e.currentTarget.getBoundingClientRect(),
+                                offset: greetingRef.current?.offsetHeight ?? 0
+                            });
+                        }}
+                    >
+                        {v.body}
+                    </Widget>
+                );
+                continue;
+            }
+
+            if (isShortcutTile(tile)) {
+                const v = shortcutTileVisual(tile);
+                tiles.push(
+                    <Widget key={tile.id} widgetId={v.widgetId} compact={v.compact} href={v.href}>
+                        {v.body}
+                    </Widget>
+                );
+                continue;
+            }
+
+            if (isFeatureTile(tile)) {
                 // Retirée, et non grisée : « pas accessible » n'est pas « visible
                 // mais verrouillé ». Une disposition héritée d'un contexte où le
                 // widget était offert ne doit pas le faire réapparaître.
-                const entry = featureCatalogEntry(fid);
+                const entry = featureCatalogEntry(tile);
                 if (entry && !featureAllowed(entry, audience)) continue;
-                const v = featureTileVisual(fid);
+                const v = featureTileVisual(tile);
                 if (!v) continue;
                 // La tuile reste posée, en retrait : la retirer déplacerait les
                 // voisines et laisserait croire à une disposition abîmée. Elle dit
@@ -1040,7 +1056,7 @@ export default function HomePage() {
                 const locked = !allowedToOpen(v.widgetId);
                 tiles.push(
                     <Widget
-                        key={fid}
+                        key={tile}
                         widgetId={v.widgetId}
                         title={v.title}
                         icon={v.icon}
@@ -1057,38 +1073,30 @@ export default function HomePage() {
                         {locked ? <span className={styles.lockedBody}>Accès restreint</span> : v.body}
                     </Widget>
                 );
+                continue;
             }
-        } else if (section.kind === 'device') {
-            for (const id of section.items) {
-                const device = devices.find((d) => d.id === id);
-                if (!device) continue;
-                const v = deviceTileVisual(device);
-                tiles.push(
-                    <Widget
-                        key={id}
-                        widgetId={v.widgetId}
-                        title={v.title}
-                        icon={v.icon}
-                        compact
-                        // Hidden while its popup is open (the device tile re-renders
-                        // on usage/device polls, which would otherwise flash it back
-                        // behind the morphed popup).
-                        style={expandedWidget === v.widgetId ? { opacity: 0 } : undefined}
-                        onExpand={(e) => handleExpand(v.widgetId, isForceReload(e))}
-                    >
-                        {v.body}
-                    </Widget>
-                );
-            }
-        } else {
-            for (const item of section.items) {
-                const v = shortcutTileVisual(item);
-                tiles.push(
-                    <Widget key={item.id} widgetId={v.widgetId} slim={v.slim} href={v.href}>
-                        {v.body}
-                    </Widget>
-                );
-            }
+
+            // Un appareil. Escamoté quand il n'existe plus (l'effet d'élagage
+            // s'en charge de son côté), plutôt que de poser une carte creuse.
+            const device = devices.find((d) => d.id === tile);
+            if (!device) continue;
+            const v = deviceTileVisual(device);
+            tiles.push(
+                <Widget
+                    key={tile}
+                    widgetId={v.widgetId}
+                    title={v.title}
+                    icon={v.icon}
+                    compact={v.compact}
+                    // Hidden while its popup is open (the device tile re-renders
+                    // on usage/device polls, which would otherwise flash it back
+                    // behind the morphed popup).
+                    style={expandedWidget === v.widgetId ? { opacity: 0 } : undefined}
+                    onExpand={(e) => handleExpand(v.widgetId, isForceReload(e))}
+                >
+                    {v.body}
+                </Widget>
+            );
         }
         if (tiles.length === 0) return null;
         return (
@@ -1104,6 +1112,7 @@ export default function HomePage() {
                 <Wallpaper />
 
                 <TopNavbar
+                    aboutBody={<AboutContent />}
                     // Un dossier déployé prend la barre comme une vue : elle
                     // porte son intitulé et le retour, exactement comme pour un
                     // écran de fonctionnalité. Une vue ouverte par-dessus passe
@@ -1178,7 +1187,7 @@ export default function HomePage() {
                                     <span className={`icon icon-plus ${styles.emptyHomeIcon}`} />
                                     <span className={styles.emptyHomeTitle}>Votre accueil est vide</span>
                                     <span className={styles.emptyHomeHint}>
-                                        Ajoutez une section d’appareils, de fonctionnalités ou de raccourcis.
+                                        Composez une section : appareils, fonctionnalités et raccourcis y cohabitent.
                                     </span>
                                 </button>
                             ) : (
