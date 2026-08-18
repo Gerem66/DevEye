@@ -6,14 +6,7 @@ import TextInput from '@/Components/TextInput';
 import { useAuth } from '@/auth/AuthProvider';
 import { useDevices } from '@/stores/devices';
 import { useActiveWorkspace } from '@/stores/workspace';
-import {
-    addDevice,
-    addFeature,
-    addFolder,
-    placedDeviceIds,
-    placedFeatureIds,
-    useHomeLayout
-} from '@/stores/homeLayout';
+import { addDevice, addFeature, placedDeviceIds, placedFeatureIds, useHomeLayout } from '@/stores/homeLayout';
 import {
     availableFeatures,
     FEATURE_CATEGORIES,
@@ -34,21 +27,30 @@ import styles from './organize.module.css';
  * vide. Les six du milieu ne sont pas répétés ici : les tenir à deux endroits
  * serait la garantie qu'un futur rayon n'arrive que dans l'un des deux.
  */
-type Rayon = 'all' | 'devices' | FeatureCategory | 'shortcut' | 'folder';
+type Rayon = 'all' | 'devices' | FeatureCategory | 'shortcut';
 
-const RAYON_LABEL: Record<'all' | 'devices' | 'shortcut' | 'folder', string> = {
+const RAYON_LABEL: Record<'all' | 'devices' | 'shortcut', string> = {
     all: 'Tout',
     devices: 'Appareils',
-    shortcut: 'Raccourcis',
-    folder: 'Dossiers'
+    shortcut: 'Raccourcis'
 };
 
-const RAYON_ICON: Record<'all' | 'devices' | 'shortcut' | 'folder', string> = {
+const RAYON_ICON: Record<'all' | 'devices' | 'shortcut', string> = {
     all: 'list',
     devices: 'server',
-    shortcut: 'move-to-right',
-    folder: 'folder'
+    shortcut: 'move-to-right'
 };
+
+/**
+ * Le rail, en trois groupes séparés d'un filet.
+ *
+ * L'étal complet ; puis ce qui vient de **vous** — vos machines, vos liens ; puis
+ * les fonctionnalités de DevEye, rangées par usage. Sans ces deux filets, dix
+ * entrées de même poids se lisaient comme une liste plate où « Appareils » et
+ * « Sécurité » semblaient de même nature, alors que l'un désigne votre matériel
+ * et l'autre un rayon du catalogue.
+ */
+const RAIL_GROUPS: Rayon[][] = [['all'], ['devices', 'shortcut'], [...FEATURE_CATEGORIES]];
 
 function rayonLabel(rayon: Rayon): string {
     return rayon in RAYON_LABEL
@@ -94,8 +96,6 @@ export interface AddTileMarketProps {
     /** Quand renseigné, la popup édite ce raccourci au lieu d'ouvrir le marché. */
     editShortcut?: ShortcutItem | null;
     onClose: () => void;
-    /** Un dossier vient d'être posé : l'organiseur ouvre sa fiche dans la foulée. */
-    onFolderAdded: (folderId: string) => void;
 }
 
 /**
@@ -106,17 +106,18 @@ export interface AddTileMarketProps {
  * unifiées, la question « quel genre ? » n'a plus lieu d'être posée à l'avance :
  * on ouvre l'étal, on cherche, on prend. Les rayons ne sont plus qu'un rangement.
  *
- * Deux rayons ne présentent pas un catalogue mais un **geste de création** : un
- * raccourci se saisit (formulaire complet, avec son aperçu en direct), un
- * dossier se pose vide et s'ouvre aussitôt pour être rempli. Ils vivent au même
- * endroit que le reste parce que, vu de l'accueil, ce sont des tuiles comme les
- * autres.
+ * Un rayon ne présente pas un catalogue mais un **geste de création** : un
+ * raccourci se saisit, formulaire complet et aperçu en direct. Il vit au même
+ * endroit que le reste parce que, vu de l'accueil, c'en est une carte comme une
+ * autre. Les dossiers, eux, ne passent pas par ici : un dossier ne se remplit
+ * qu'en y tirant des cartes déjà posées, donc son bouton est au bout de la
+ * section, là où se trouvent justement ces cartes.
  *
  * Chaque ajout referme, comme partout ailleurs dans l'application. Seul le
  * formulaire de raccourci fait exception à la règle de fermeture immédiate quand
  * il sert à **éditer** : il se ferme aussi, mais après enregistrement.
  */
-export function AddTileMarket({ section, editShortcut, onClose, onFolderAdded }: AddTileMarketProps) {
+export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketProps) {
     const layout = useHomeLayout();
     const { devices } = useDevices();
     const { user } = useAuth();
@@ -208,21 +209,6 @@ export function AddTileMarket({ section, editShortcut, onClose, onFolderAdded }:
                 setRayon('shortcut');
             }
         });
-
-        items.push({
-            key: 'folder',
-            rayon: 'folder',
-            icon: 'folder-plus',
-            art: 'folder',
-            title: 'Nouveau dossier',
-            description: 'Range plusieurs fonctionnalités derrière une seule tuile.',
-            keywords: 'dossier rangement groupe',
-            onPick: () => {
-                const id = addFolder(sectionId);
-                onClose();
-                if (id) onFolderAdded(id);
-            }
-        });
     }
 
     const search = query.trim().toLowerCase();
@@ -248,7 +234,6 @@ export function AddTileMarket({ section, editShortcut, onClose, onFolderAdded }:
     for (const item of items) counts.set(item.rayon, (counts.get(item.rayon) ?? 0) + 1);
     counts.set('all', items.length);
 
-    const rails: Rayon[] = ['all', 'devices', ...FEATURE_CATEGORIES, 'shortcut', 'folder'];
     // Le rayon des raccourcis montre son formulaire, pas des cartes — sauf
     // pendant une recherche, qui traverse tout et reprend la main sur l'affichage.
     const showShortcutForm = !search && rayon === 'shortcut';
@@ -276,29 +261,36 @@ export function AddTileMarket({ section, editShortcut, onClose, onFolderAdded }:
 
                         <div className={styles.marketBody}>
                             <div className={styles.marketRails}>
-                                {rails.map((id) => {
-                                    // Les deux rayons de création ne comptent rien : « 1 » en
-                                    // face de « Raccourcis » se lirait comme un stock restant.
-                                    const count = id === 'shortcut' || id === 'folder' ? undefined : counts.get(id);
-                                    return (
-                                        <button
-                                            key={id}
-                                            type='button'
-                                            aria-pressed={!search && rayon === id}
-                                            className={`${styles.marketRail} ${!search && rayon === id ? styles.marketRailOn : ''}`}
-                                            onClick={() => {
-                                                setQuery('');
-                                                setRayon(id);
-                                            }}
-                                        >
-                                            <span className={`icon icon-${rayonIcon(id)} ${styles.marketRailIcon}`} />
-                                            <span className={styles.marketRailLabel}>{rayonLabel(id)}</span>
-                                            {count !== undefined && (
-                                                <span className={styles.marketRailCount}>{count}</span>
-                                            )}
-                                        </button>
-                                    );
-                                })}
+                                {RAIL_GROUPS.flatMap((group, groupIndex) => [
+                                    ...(groupIndex > 0
+                                        ? [<span key={`sep${groupIndex}`} className={styles.marketRailSep} />]
+                                        : []),
+                                    ...group.map((id) => {
+                                        // Le rayon de création ne compte rien : « 1 » en face de
+                                        // « Raccourcis » se lirait comme un stock restant.
+                                        const count = id === 'shortcut' ? undefined : counts.get(id);
+                                        return (
+                                            <button
+                                                key={id}
+                                                type='button'
+                                                aria-pressed={!search && rayon === id}
+                                                className={`${styles.marketRail} ${!search && rayon === id ? styles.marketRailOn : ''}`}
+                                                onClick={() => {
+                                                    setQuery('');
+                                                    setRayon(id);
+                                                }}
+                                            >
+                                                <span
+                                                    className={`icon icon-${rayonIcon(id)} ${styles.marketRailIcon}`}
+                                                />
+                                                <span className={styles.marketRailLabel}>{rayonLabel(id)}</span>
+                                                {count !== undefined && (
+                                                    <span className={styles.marketRailCount}>{count}</span>
+                                                )}
+                                            </button>
+                                        );
+                                    })
+                                ])}
                             </div>
 
                             <div className={styles.marketPane}>

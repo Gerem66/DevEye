@@ -229,14 +229,20 @@
     min-height: 104px;
 }
 
-/* ── Bouton « ajouter une tuile », au bout des tuiles d'une section ──────── */
-/* Une section tient désormais n'importe quelle tuile : le bouton ne peut donc
-   plus épouser « la » hauteur de sa catégorie. Il prend celle d'une carte courte
-   et ne s'étire pas, pour rester discret au bout d'une ligne de cartes hautes
-   comme au bout d'une ligne de cartes courtes. */
-.addTile {
-    min-height: 104px;
+/* ── Boutons d'ajout, au bout des tuiles d'une section ───────────────────── */
+/* Les deux occupent ensemble l'emprise exacte d'une carte de fonctionnalité
+   (206 px), scindée en deux moitiés égales : au bout d'une rangée, le bloc se
+   pose comme une carte de plus au lieu de laisser un demi-vide sous lui. */
+.addStack {
+    display: grid;
+    grid-template-rows: 1fr 1fr;
+    gap: var(--space-sm);
+    min-height: 206px;
     align-self: start;
+    min-width: 0;
+}
+
+.addTile {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -395,6 +401,24 @@
     font-size: 0.72rem;
     color: var(--text-muted);
     flex-shrink: 0;
+}
+
+/* Le filet entre deux groupes du rail : assez discret pour ne pas se lire comme
+   une entrée de plus, assez net pour dire que la nature change. */
+.marketRailSep {
+    height: 1px;
+    margin: var(--space-xs) var(--space-sm);
+    background: var(--glass-border);
+    flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+    .marketRailSep {
+        width: 1px;
+        height: auto;
+        margin: var(--space-xs) 2px;
+        align-self: stretch;
+    }
 }
 
 .marketPane {

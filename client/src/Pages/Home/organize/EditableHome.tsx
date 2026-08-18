@@ -30,6 +30,7 @@ import { homeTileId, isFeatureTile, isHomeFolder, isShortcutTile } from 'deveye-
 
 import { useDevices } from '@/stores/devices';
 import {
+    addFolder,
     addSection,
     fileInFolder,
     foldedFeatureIds,
@@ -393,6 +394,7 @@ function SectionTiles({
     section,
     devices,
     onAdd,
+    onAddFolder,
     onOpenFolder,
     onEditShortcut,
     onRemoveFolder
@@ -400,6 +402,7 @@ function SectionTiles({
     section: HomeSection;
     devices: Device[];
     onAdd: () => void;
+    onAddFolder: () => void;
     onOpenFolder: (folder: HomeFolder) => void;
     onEditShortcut: (item: ShortcutItem) => void;
     onRemoveFolder: (folder: HomeFolder) => void;
@@ -430,13 +433,26 @@ function SectionTiles({
         <SortableContext items={ids} strategy={sortInZone}>
             <div className={styles.tileGrid}>
                 {ids.map(renderTile)}
-                {/* Un seul bouton, quoi que la section tienne : c'est le marché
-                    qui range désormais les appareils, les fonctionnalités, les
-                    raccourcis et les dossiers par rayons. */}
-                <button type='button' className={styles.addTile} onClick={onAdd}>
-                    <span className={`icon icon-plus ${styles.addTileIcon}`} />
-                    <span className={styles.addTileLabel}>Ajouter une tuile</span>
-                </button>
+                {/*
+                 * Deux boutons dans l'emprise d'une seule carte pleine hauteur.
+                 *
+                 * Le premier ouvre le marché, qui range appareils, fonctionnalités
+                 * et raccourcis par rayons. Le second pose un dossier, et il est
+                 * **ici** plutôt qu'au marché : un dossier ne se remplit qu'en y
+                 * tirant des cartes déjà posées, donc il n'a de sens qu'à côté
+                 * d'elles. Empilés, ils occupent la place d'une carte au lieu de
+                 * laisser un demi-vide au bout de la rangée.
+                 */}
+                <div className={styles.addStack}>
+                    <button type='button' className={styles.addTile} onClick={onAdd}>
+                        <span className={`icon icon-plus ${styles.addTileIcon}`} />
+                        <span className={styles.addTileLabel}>Ajouter une carte</span>
+                    </button>
+                    <button type='button' className={styles.addTile} onClick={onAddFolder}>
+                        <span className={`icon icon-folder-plus ${styles.addTileIcon}`} />
+                        <span className={styles.addTileLabel}>Ajouter un dossier</span>
+                    </button>
+                </div>
             </div>
         </SortableContext>
     );
@@ -449,6 +465,7 @@ function SortableSection({
     devices,
     openFolder,
     onAdd,
+    onAddFolder,
     onOpenFolder,
     onCloseFolder,
     onEditShortcut,
@@ -460,6 +477,7 @@ function SortableSection({
     /** Le dossier déplié, quand il appartient à cette section. */
     openFolder: HomeFolder | null;
     onAdd: () => void;
+    onAddFolder: () => void;
     onOpenFolder: (folder: HomeFolder) => void;
     onCloseFolder: () => void;
     onEditShortcut: (item: ShortcutItem) => void;
@@ -539,6 +557,7 @@ function SortableSection({
                 section={section}
                 devices={devices}
                 onAdd={onAdd}
+                onAddFolder={onAddFolder}
                 onOpenFolder={onOpenFolder}
                 onEditShortcut={onEditShortcut}
                 onRemoveFolder={onRemoveFolder}
@@ -599,14 +618,16 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
     }, [openFolderId, openFolder]);
 
     /**
-     * Déplier un dossier neuf n'a de sens que s'il y a de quoi le remplir.
+     * Pose un dossier, et ne le déplie que s'il y a de quoi le remplir.
      *
-     * Un dossier ne se garnit plus qu'en y tirant une carte **déjà posée** sur
+     * Un dossier ne se garnit qu'en y tirant une carte **déjà posée** sur
      * l'accueil. Sur un accueil qui n'en porte aucune, l'ouvrir montrerait une
      * rangée vide et une consigne impossible à suivre : le dossier est alors
      * simplement ajouté, et attendra la première fonctionnalité.
      */
-    const openFolderIfFillable = useCallback((folderId: string) => {
+    const startFolder = useCallback((sectionId: string) => {
+        const folderId = addFolder(sectionId);
+        if (folderId === null) return;
         const current = getHomeLayout();
         const folded = new Set<string>(foldedFeatureIds(current));
         const onGrid = placedFeatureIds(current).filter((id) => !folded.has(id));
@@ -876,6 +897,7 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
                             devices={devices}
                             openFolder={openFolder?.sectionId === section.id ? openFolder.folder : null}
                             onAdd={() => setAddTarget(section.id)}
+                            onAddFolder={() => startFolder(section.id)}
                             onOpenFolder={(folder) =>
                                 setOpenFolderId((current) => (current === folder.id ? null : folder.id))
                             }
@@ -911,7 +933,6 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
                     setAddTarget(null);
                     setEditShortcut(null);
                 }}
-                onFolderAdded={openFolderIfFillable}
             />
 
             <Dialog
