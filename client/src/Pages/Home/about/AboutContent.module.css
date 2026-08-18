@@ -42,12 +42,36 @@
 
 .feature {
     display: flex;
-    flex-direction: column;
-    gap: 3px;
+    align-items: flex-start;
+    gap: var(--space-md);
     padding: var(--space-sm) var(--space-md);
     background: var(--glass-bg-light);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
+}
+
+/* Largeur fixe : les vignettes s'alignent d'une fiche à l'autre, et le texte
+   part toujours de la même colonne — c'est ce qui rend la liste parcourable. */
+.featureArt {
+    width: 116px;
+}
+
+.featureText {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    flex: 1;
+}
+
+@media (max-width: 520px) {
+    .feature {
+        flex-direction: column;
+    }
+
+    .featureArt {
+        width: 100%;
+    }
 }
 
 .featureHead {

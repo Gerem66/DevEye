@@ -6,6 +6,7 @@ import {
     isFeatureTile,
     isHomeFolder,
     isShortcutTile,
+    HOME_FOLDER_MAX_ITEMS,
     HOME_SECTION_MAX_TILES,
     type HomeFeatureId,
     type HomeFolder,
@@ -381,26 +382,30 @@ export function addDevice(sectionId: string, deviceId: string): void {
 
 // ── Dossiers ───────────────────────────────────────────────────────────────
 /**
- * Réécrit un dossier en place, en laissant tout le reste de la disposition
- * intact. Passage unique des mutations ci-dessous : la forme de l'union
- * (chaîne ou objet) n'est lue qu'ici.
+ * Réécrit un dossier en place, où qu'il soit, en laissant tout le reste de la
+ * disposition intact. Passage unique des mutations ci-dessous : la forme de
+ * l'union (chaîne ou objet) n'est lue qu'ici.
+ *
+ * Par le seul id du dossier : il est unique dans tout l'accueil, et ses
+ * appelants — l'organiseur, qui le déploie sous la section — n'ont aucune raison
+ * de tenir la section à jour de leur côté.
  */
-function updateFolder(sectionId: string, folderId: string, fn: (folder: HomeFolder) => HomeFolder): void {
-    const section = findSection(state, sectionId);
-    if (!section) return;
+function updateFolder(folderId: string, fn: (folder: HomeFolder) => HomeFolder): void {
     let touched = false;
-    const items = section.items.map((tile) => {
-        if (!isHomeFolder(tile) || tile.id !== folderId) return tile;
-        touched = true;
-        return fn(tile);
-    });
-    if (touched) replaceItems(sectionId, items);
+    const sections = state.sections.map((section) => ({
+        ...section,
+        items: section.items.map((tile) => {
+            if (!isHomeFolder(tile) || tile.id !== folderId) return tile;
+            touched = true;
+            return fn(tile);
+        })
+    }));
+    if (touched) commit({ ...state, sections });
 }
 
 /**
  * Ajoute un dossier vide en fin de section et rend son id, pour que
- * l'organiseur ouvre sa fiche dans la foulée : un dossier vide n'a rien à
- * montrer, le remplir est le geste suivant.
+ * l'organiseur le déploie dans la foulée.
  */
 export function addFolder(sectionId: string): string | null {
     const id = uid();
@@ -408,8 +413,15 @@ export function addFolder(sectionId: string): string | null {
 }
 
 /** Intitulé porté par la carte. Vide, l'affichage retombe sur « Dossier ». */
-export function renameFolder(sectionId: string, folderId: string, title: string): void {
-    updateFolder(sectionId, folderId, (folder) => ({ ...folder, title: title.slice(0, 40) }));
+export function renameFolder(folderId: string, title: string): void {
+    updateFolder(folderId, (folder) => ({ ...folder, title: title.slice(0, 40) }));
+}
+
+/** Où insérer dans un dossier, sachant devant quelle fonctionnalité on lâche. */
+function folderInsertIndex(folder: HomeFolder, beforeId: string | null): number {
+    if (beforeId === null) return folder.items.length;
+    const at = folder.items.indexOf(beforeId as HomeFeatureId);
+    return at < 0 ? folder.items.length : at;
 }
 
 /**
@@ -417,21 +429,34 @@ export function renameFolder(sectionId: string, folderId: string, title: string)
  *
  * Posée sur la grille, elle **quitte sa tuile dans la même écriture** : deux
  * mutations l'auraient laissée à deux endroits le temps d'un rendu, et surtout
- * la disposition partie au serveur entre les deux aurait porté le doublon. Ce
- * qui est déjà dans un **autre** dossier ne bouge pas : la fiche ne le propose
- * pas, et une demande venue d'ailleurs ne doit pas vider un dossier voisin sans
- * que personne l'ait demandé.
+ * la disposition partie au serveur entre les deux aurait porté le doublon.
+ * Venant d'un autre dossier, même chose : elle en sort et entre ici d'un seul
+ * coup.
  */
-export function addFeatureToFolder(sectionId: string, folderId: string, featureId: HomeFeatureId): void {
-    if (foldedFeatureIds(state).includes(featureId)) return;
+export function fileInFolder(folderId: string, featureId: HomeFeatureId, beforeId: string | null): void {
+    // Le plafond du schéma, tenu **avant** l'écriture. Un dossier trop plein ne
+    // se valide plus : le serveur refuse la disposition entière et le prochain
+    // démarrage la relit vide, c'est-à-dire un accueil effacé sans un mot. Une
+    // fonctionnalité déjà rangée ici ne compte pas — elle ne fait que changer
+    // de rang.
+    const target = findFolder(state, folderId)?.folder;
+    if (!target) return;
+    if (!target.items.includes(featureId) && target.items.length >= HOME_FOLDER_MAX_ITEMS) return;
+
     let filed = false;
     const sections = state.sections.map((section) => {
         const items = section.items.flatMap<HomeTile>((tile) => {
             // La tuile de la grille, s'il y en avait une : elle s'en va.
             if (!isHomeFolder(tile)) return tile === featureId ? [] : [tile];
-            if (section.id !== sectionId || tile.id !== folderId) return [tile];
+            if (tile.id !== folderId) {
+                // Un autre dossier qui la tenait : elle en sort.
+                const rest = tile.items.filter((id) => id !== featureId);
+                return [rest.length === tile.items.length ? tile : { ...tile, items: rest }];
+            }
             filed = true;
-            return [{ ...tile, items: [...tile.items, featureId] }];
+            const items = tile.items.filter((id) => id !== featureId);
+            items.splice(folderInsertIndex({ ...tile, items }, beforeId), 0, featureId);
+            return [{ ...tile, items }];
         });
         return { ...section, items };
     });
@@ -440,13 +465,64 @@ export function addFeatureToFolder(sectionId: string, folderId: string, featureI
     if (filed) commit({ ...state, sections });
 }
 
+/** Réordonne une fonctionnalité **dans** son dossier. */
+export function moveFolderItem(folderId: string, featureId: HomeFeatureId, beforeId: string | null): void {
+    updateFolder(folderId, (folder) => {
+        const from = folder.items.indexOf(featureId);
+        if (from < 0) return folder;
+        const to = folderInsertIndex(folder, beforeId);
+        if (from === to) return folder;
+        const items = folder.items.slice();
+        const [moved] = items.splice(from, 1);
+        // `to` est un rang d'avant le retrait, convention d'`arrayMove` : c'est
+        // ce que le glissé vient de montrer à l'écran.
+        items.splice(to, 0, moved);
+        return { ...folder, items };
+    });
+}
+
 /**
- * Sort une fonctionnalité de son dossier. Elle quitte l'accueil et redevient
- * proposable dans le sélecteur : la remettre sur la grille est un ajout normal,
- * ce qui évite un troisième geste (« sortir vers la section ») à comprendre.
+ * Sort une fonctionnalité de son dossier et la **repose sur la grille**.
+ *
+ * Le geste du téléphone : on ouvre le dossier, on tire une carte sur le côté,
+ * elle reprend sa place parmi les autres. En une seule écriture, pour la même
+ * raison que {@link fileInFolder} — le temps d'un rendu à deux endroits serait
+ * un doublon parti au serveur.
  */
-export function removeFeatureFromFolder(sectionId: string, folderId: string, featureId: HomeFeatureId): void {
-    updateFolder(sectionId, folderId, (folder) => ({
+export function unfileFromFolder(
+    folderId: string,
+    featureId: HomeFeatureId,
+    sectionId: string,
+    beforeId: string | null
+): void {
+    const target = findSection(state, sectionId);
+    if (!target || target.items.length >= HOME_SECTION_MAX_TILES) return;
+    let freed = false;
+    const sections = state.sections.map((section) => {
+        let items = section.items.map((tile) => {
+            if (!isHomeFolder(tile) || tile.id !== folderId) return tile;
+            const rest = tile.items.filter((id) => id !== featureId);
+            if (rest.length !== tile.items.length) freed = true;
+            return { ...tile, items: rest };
+        });
+        if (section.id === sectionId) {
+            items = items.slice();
+            items.splice(insertIndex({ ...section, items }, beforeId), 0, featureId);
+        }
+        return { ...section, items };
+    });
+    // Le dossier ne la tenait pas : la poser sur la grille l'aurait dupliquée.
+    if (freed) commit({ ...state, sections });
+}
+
+/**
+ * Retire une fonctionnalité d'un dossier **et de l'accueil**.
+ *
+ * Le × de la fiche du dossier, à distinguer du glissé vers la grille : ici elle
+ * s'en va pour de bon et redevient proposable au marché.
+ */
+export function removeFolderItem(folderId: string, featureId: HomeFeatureId): void {
+    updateFolder(folderId, (folder) => ({
         ...folder,
         items: folder.items.filter((id) => id !== featureId)
     }));

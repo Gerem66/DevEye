@@ -21,6 +21,7 @@ import {
     FEATURE_CATEGORY_LABEL,
     type FeatureCategory
 } from '../catalog';
+import { FeatureArt, type ArtId } from '../art';
 import { ShortcutForm } from './ShortcutForm';
 import styles from './organize.module.css';
 
@@ -66,12 +67,24 @@ interface MarketItem {
     key: string;
     rayon: Rayon;
     icon: string;
+    /** La vignette en tête de carte : ce à quoi ressemble l'écran qu'on ajoute. */
+    art: ArtId;
     title: string;
     description: string;
     /** Mots supplémentaires que la recherche doit trouver (plateforme d'un appareil…). */
     keywords?: string;
     /** Élément posé à droite du titre (la pastille d'état d'un appareil). */
     badge?: ReactNode;
+    /**
+     * Déjà sur l'accueil.
+     *
+     * La carte **reste à l'étal**, éteinte, au lieu d'en disparaître : un
+     * catalogue dont les articles s'effacent au fur et à mesure ne dit plus ce
+     * qui existe, et ne laisse pas voir qu'on possède déjà ce qu'on cherchait.
+     * Elle n'est simplement plus cliquable, et une seule tuile par
+     * fonctionnalité ou par appareil reste la règle.
+     */
+    placed?: boolean;
     onPick: () => void;
 }
 
@@ -136,15 +149,18 @@ export function AddTileMarket({ section, editShortcut, onClose, onFolderAdded }:
         // Un appareil déjà posé n'est pas reproposé : il n'a qu'une carte.
         const placedDevices = new Set<string>(placedDeviceIds(layout));
         for (const device of devices) {
-            if (device.status === 'archived' || placedDevices.has(device.id)) continue;
+            if (device.status === 'archived') continue;
+            const placed = placedDevices.has(device.id);
             items.push({
                 key: `device:${device.id}`,
                 rayon: 'devices',
                 icon: 'server',
+                art: 'device',
                 title: device.name,
                 description: device.online ? 'En ligne' : 'Hors ligne',
                 keywords: device.platform,
                 badge: <span className={`${styles.addDot} ${device.online ? styles.online : styles.offline}`} />,
+                placed,
                 onPick: () => {
                     addDevice(sectionId, device.id);
                     onClose();
@@ -152,19 +168,20 @@ export function AddTileMarket({ section, editShortcut, onClose, onFolderAdded }:
             });
         }
 
-        // Un widget qu'on n'a pas le droit d'ouvrir ici n'est pas non plus
-        // *proposé* : le montrer reviendrait à laisser poser une tuile que la
-        // grille refuserait ensuite de rendre. Une fonctionnalité déjà posée
-        // (dossiers compris) disparaît de l'étal pour la même raison.
+        // Un widget qu'on n'a pas le droit d'ouvrir ici n'est **pas** proposé,
+        // pas même éteint : le montrer reviendrait à annoncer une tuile que la
+        // grille refuserait ensuite de rendre. « Déjà posée » et « pas pour
+        // vous » sont deux choses différentes, et une seule des deux se montre.
         const placedFeatures = new Set<string>(placedFeatureIds(layout));
         for (const feature of availableFeatures({ kind: workspace?.kind, isAdmin: user?.role === 'admin' })) {
-            if (placedFeatures.has(feature.id)) continue;
             items.push({
                 key: `feature:${feature.id}`,
                 rayon: feature.category,
                 icon: feature.icon,
+                art: feature.id,
                 title: feature.title,
                 description: feature.description,
+                placed: placedFeatures.has(feature.id),
                 onPick: () => {
                     addFeature(sectionId, feature.id);
                     onClose();
@@ -179,6 +196,7 @@ export function AddTileMarket({ section, editShortcut, onClose, onFolderAdded }:
             key: 'shortcut',
             rayon: 'shortcut',
             icon: 'move-to-right',
+            art: 'shortcut',
             title: 'Créer un raccourci',
             description: 'Un lien épinglé, avec son aperçu récupéré automatiquement.',
             keywords: 'lien url site favori raccourci',
@@ -195,6 +213,7 @@ export function AddTileMarket({ section, editShortcut, onClose, onFolderAdded }:
             key: 'folder',
             rayon: 'folder',
             icon: 'folder-plus',
+            art: 'folder',
             title: 'Nouveau dossier',
             description: 'Range plusieurs fonctionnalités derrière une seule tuile.',
             keywords: 'dossier rangement groupe',
@@ -224,7 +243,7 @@ export function AddTileMarket({ section, editShortcut, onClose, onFolderAdded }:
           ? items
           : items.filter((item) => item.rayon === rayon);
 
-    /** Combien d'articles par rayon, pour que le rail dise où il reste à prendre. */
+    /** Combien d'articles par rayon, posés ou non : c'est un inventaire, pas un stock. */
     const counts = new Map<Rayon, number>();
     for (const item of items) counts.set(item.rayon, (counts.get(item.rayon) ?? 0) + 1);
     counts.set('all', items.length);
@@ -241,7 +260,7 @@ export function AddTileMarket({ section, editShortcut, onClose, onFolderAdded }:
             open={open}
             onClose={onClose}
             title={editing ? 'Modifier le raccourci' : "Ajouter à l'accueil"}
-            width={editing ? 520 : 780}
+            width={editing ? 520 : 860}
         >
             {section !== null &&
                 (editing ? (
@@ -287,13 +306,7 @@ export function AddTileMarket({ section, editShortcut, onClose, onFolderAdded }:
                                     <ShortcutForm sectionId={section.id} onDone={onClose} />
                                 ) : shown.length === 0 ? (
                                     <p className={styles.addEmpty}>
-                                        {search
-                                            ? 'Rien ne correspond à cette recherche.'
-                                            : rayon === 'devices'
-                                              ? devices.length === 0
-                                                  ? 'Aucun appareil connecté.'
-                                                  : 'Tous vos appareils sont déjà sur l’accueil.'
-                                              : 'Tout ce rayon est déjà sur l’accueil.'}
+                                        {search ? 'Rien ne correspond à cette recherche.' : 'Aucun appareil connecté.'}
                                     </p>
                                 ) : (
                                     <div className={styles.marketGrid}>
@@ -301,26 +314,41 @@ export function AddTileMarket({ section, editShortcut, onClose, onFolderAdded }:
                                             <button
                                                 key={item.key}
                                                 type='button'
-                                                className={styles.marketCard}
+                                                className={`${styles.marketCard} ${item.placed ? styles.marketCardPlaced : ''}`}
+                                                disabled={item.placed}
+                                                title={item.placed ? 'Déjà sur l’accueil' : undefined}
                                                 onClick={item.onPick}
                                             >
-                                                <span className={styles.marketCardHead}>
-                                                    <span
-                                                        className={`icon icon-${item.icon} ${styles.marketCardIcon}`}
-                                                    />
-                                                    <span className={styles.marketCardTitle}>{item.title}</span>
-                                                    {item.badge}
-                                                    <span className={`icon icon-plus ${styles.marketCardPlus}`} />
-                                                </span>
-                                                {/* Le rayon n'est rappelé que quand l'étal les mélange :
+                                                <FeatureArt id={item.art} className={styles.marketCardArt} />
+                                                <span className={styles.marketCardBody}>
+                                                    <span className={styles.marketCardHead}>
+                                                        <span
+                                                            className={`icon icon-${item.icon} ${styles.marketCardIcon}`}
+                                                        />
+                                                        <span className={styles.marketCardTitle}>{item.title}</span>
+                                                        {item.badge}
+                                                        {/* La coche remplace le « + » : ce n'est pas le même geste
+                                                        qui est offert, donc ce n'est pas la même icône. */}
+                                                        <span
+                                                            className={`icon icon-${item.placed ? 'success' : 'plus'} ${styles.marketCardPlus}`}
+                                                        />
+                                                    </span>
+                                                    {/* Le rayon n'est rappelé que quand l'étal les mélange :
                                                     dans un rayon donné, le répéter à chaque carte serait
                                                     une colonne de texte identique. */}
-                                                {(search || rayon === 'all') && (
-                                                    <span className={styles.marketCardRayon}>
-                                                        {rayonLabel(item.rayon)}
-                                                    </span>
-                                                )}
-                                                <span className={styles.marketCardDesc}>{item.description}</span>
+                                                    {item.placed ? (
+                                                        <span className={styles.marketCardRayon}>
+                                                            Déjà sur l’accueil
+                                                        </span>
+                                                    ) : (
+                                                        (search || rayon === 'all') && (
+                                                            <span className={styles.marketCardRayon}>
+                                                                {rayonLabel(item.rayon)}
+                                                            </span>
+                                                        )
+                                                    )}
+                                                    <span className={styles.marketCardDesc}>{item.description}</span>
+                                                </span>
                                             </button>
                                         ))}
                                     </div>

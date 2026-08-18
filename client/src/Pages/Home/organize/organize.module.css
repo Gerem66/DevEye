@@ -326,12 +326,15 @@
     }
 }
 
+/* Hauteur **fixe**, pas un maximum : le rail et l'étal sont deux colonnes de la
+   même hauteur, et la popup ne change plus de taille en passant d'un rayon de
+   deux articles à un rayon de cinq. */
 .marketRails {
     display: flex;
     flex-direction: column;
     gap: 2px;
     min-width: 0;
-    max-height: 52vh;
+    height: 56vh;
     overflow-y: auto;
     padding-right: var(--space-xs);
 }
@@ -340,7 +343,7 @@
     .marketRails {
         flex-direction: row;
         flex-wrap: wrap;
-        max-height: none;
+        height: auto;
         overflow: visible;
     }
 }
@@ -396,25 +399,30 @@
 
 .marketPane {
     min-width: 0;
-    max-height: 52vh;
+    height: 56vh;
     overflow-y: auto;
     padding-right: var(--space-xs);
+}
+
+@media (max-width: 640px) {
+    .marketPane {
+        height: 44vh;
+    }
 }
 
 /* Deux colonnes tant que la place le permet : une carte de marché tient sur
    deux lignes de texte, une seule colonne aurait donné une liste très haute. */
 .marketGrid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
     gap: var(--space-sm);
 }
 
 .marketCard {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-    padding: var(--space-sm) var(--space-md);
+    align-items: stretch;
+    padding: 0;
     background: var(--glass-bg-light);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
@@ -422,14 +430,41 @@
     text-align: left;
     cursor: pointer;
     min-width: 0;
+    overflow: hidden;
     transition:
         background var(--transition-fast),
         border-color var(--transition-fast);
 }
 
-.marketCard:hover {
+/* La vignette est à fleur du bord haut : elle porte déjà son propre cadre en
+   tant que composant, on le retire ici pour qu'elle épouse la carte. */
+.marketCardArt {
+    border: none;
+    border-radius: 0;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.marketCardBody {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: var(--space-sm) var(--space-md);
+    min-width: 0;
+}
+
+.marketCard:hover:not(:disabled) {
     background: var(--glass-bg);
     border-color: var(--accent);
+}
+
+/* Déjà posée : la carte reste lisible mais visiblement inerte. `filter` et non
+   `opacity` — une carte de cet étal peut porter un `motion` ailleurs, et c'est
+   la règle du dépôt (voir la tuile désactivée de la topbar). */
+.marketCardPlaced {
+    filter: opacity(0.45);
+    cursor: default;
+    border-style: dashed;
 }
 
 .marketCardHead {
@@ -462,8 +497,12 @@
     color: var(--text-muted);
 }
 
-.marketCard:hover .marketCardPlus {
+.marketCard:hover:not(:disabled) .marketCardPlus {
     color: var(--accent);
+}
+
+.marketCardPlaced .marketCardPlus {
+    color: var(--success);
 }
 
 .marketCardDesc {
@@ -488,62 +527,11 @@
     margin: 0 0 var(--space-sm) 0;
 }
 
-/* ── Add dialog: pickers ────────────────────────────────────────────────── */
+/* ── Étal : message quand il n'y a rien à montrer + pastille d'état ──────── */
 .addEmpty {
     font-size: 0.85rem;
     color: var(--text-muted);
     margin: 0;
-}
-
-.addList {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-xs);
-}
-
-.addItem {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    padding: var(--space-sm) var(--space-md);
-    background: var(--glass-bg-light);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    color: var(--text-primary);
-    text-align: left;
-    transition:
-        background var(--transition-fast),
-        border-color var(--transition-fast);
-}
-
-.addItem:hover {
-    background: var(--glass-bg);
-    border-color: var(--accent);
-}
-
-.addItemIcon {
-    width: 18px;
-    color: var(--accent);
-    flex-shrink: 0;
-}
-
-.addItemLabel {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-}
-
-.addItemSub {
-    font-size: 0.74rem;
-    color: var(--text-muted);
-}
-
-.addItemPlus {
-    width: 16px;
-    color: var(--text-secondary);
-    flex-shrink: 0;
 }
 
 .addDot {
@@ -869,46 +857,90 @@
     margin-top: var(--space-xs);
 }
 
-/* ── Fiche d'un dossier ──────────────────────────────────────────────────── */
-.folderForm {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-lg);
+/* ── Dossier : la cible « ranger dedans » et la rangée dépliée ───────────── */
+/* En retrait dans la carte, pour que ses bords restent des points d'insertion
+   ordinaires : viser le cœur range dedans, viser un bord pose à côté. Inerte au
+   clic — dnd-kit compare des coordonnées à un rectangle mesuré, il n'a pas
+   besoin de recevoir d'événement, et ouvrir le dossier reste un clic. */
+.folderDrop {
+    position: absolute;
+    inset: 14px;
+    border-radius: var(--radius-md, 10px);
+    border: 2px dashed transparent;
+    pointer-events: none;
+    transition:
+        border-color var(--transition-fast),
+        background var(--transition-fast);
 }
 
-.folderGroup {
+.folderDropOver {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+}
+
+/* Une carte de dossier s'ouvre au clic : le curseur le dit. */
+.openable {
+    cursor: pointer;
+}
+
+.openable:active {
+    cursor: grabbing;
+}
+
+/* La rangée dépliée, sous les tuiles de la section qui porte le dossier. Un
+   contenant de glissé comme une section — d'où la même carrosserie en pointillé,
+   simplement teintée pour qu'on voie qu'on est « dedans ». */
+.folderPanel {
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
+    margin-top: var(--space-sm);
+    padding: var(--space-sm) var(--space-md) var(--space-md);
+    border: 1px dashed var(--accent);
+    border-radius: var(--radius-lg);
+    background: var(--accent-bg);
 }
 
-/* Intitulé de rubrique, dans la même graisse que les titres de section de
-   l'accueil : deux listes se suivent dans cette fiche, et rien d'autre ne dit
-   laquelle est le contenu et laquelle est la réserve. */
-.folderGroupTitle {
-    font-size: 0.78rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--text-secondary);
-}
-
-.folderList {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-xs);
-}
-
-/* Même carrosserie qu'une ligne de sélecteur, mais ce n'est pas un bouton : la
-   ligne entière ne fait rien, seule la croix agit. Un dossier ne se remplit pas
-   en cliquant sur ce qu'il contient déjà. */
-.folderItem {
+.folderPanelHead {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
-    padding: var(--space-sm) var(--space-md);
-    background: var(--glass-bg-light);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
+    padding: 0 var(--space-xs);
+}
+
+.folderPanelIcon {
+    width: 18px;
+    flex-shrink: 0;
+    color: var(--accent);
+}
+
+/* `min-height` plutôt qu'une hauteur au contenu : un dossier vide doit rester
+   une cible visible, sinon il n'y aurait littéralement rien où lâcher la
+   première carte. */
+.folderGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: var(--space-lg);
+    width: 100%;
+    min-height: 120px;
+    border-radius: var(--radius-lg);
+    transition: background var(--transition-fast);
+}
+
+@media (max-width: 640px) {
+    .folderGrid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.folderGridOver {
+    background: var(--surface-subtle);
+}
+
+.folderHint {
+    margin: 0;
+    padding: 0 var(--space-xs);
+    font-size: 0.76rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
 }

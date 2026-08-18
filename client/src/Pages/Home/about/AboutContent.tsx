@@ -10,6 +10,7 @@ import {
     featuresInCategory,
     type FeatureCatalogEntry
 } from '../catalog';
+import { FeatureArt } from '../art';
 import styles from './AboutContent.module.css';
 
 interface ExternalService {
@@ -64,35 +65,41 @@ function FeatureRow({ entry }: { entry: FeatureCatalogEntry }) {
     const relations = featureRelations(entry.id);
     return (
         <li className={styles.feature}>
-            <span className={styles.featureHead}>
-                <span className={`icon icon-${entry.icon} ${styles.featureIcon}`} aria-hidden='true' />
-                <strong className={styles.featureTitle}>{entry.title}</strong>
-                {entry.adminOnly && (
-                    <span
-                        className={`icon icon-shield ${styles.featureAdmin}`}
-                        title='Réservé aux administrateurs'
-                        aria-label='Réservé aux administrateurs'
-                    />
-                )}
-            </span>
-            <span className={styles.featureDesc}>{entry.description}</span>
-            {relations.length > 0 && (
-                <ul className={styles.links}>
-                    {relations.map((rel) => (
-                        <li key={`${rel.entry.id}:${rel.outgoing ? 'out' : 'in'}`} className={styles.link}>
-                            {/* La flèche porte le sens, la pastille porte l'autre bout, et
+            {/* La vignette à côté du texte, pas au-dessus : quinze illustrations
+                empilées feraient de cette fiche un dépliant à dérouler, alors
+                qu'on y vient pour lire ce qui relie les fonctionnalités. */}
+            <FeatureArt id={entry.id} className={styles.featureArt} />
+            <div className={styles.featureText}>
+                <span className={styles.featureHead}>
+                    <span className={`icon icon-${entry.icon} ${styles.featureIcon}`} aria-hidden='true' />
+                    <strong className={styles.featureTitle}>{entry.title}</strong>
+                    {entry.adminOnly && (
+                        <span
+                            className={`icon icon-shield ${styles.featureAdmin}`}
+                            title='Réservé aux administrateurs'
+                            aria-label='Réservé aux administrateurs'
+                        />
+                    )}
+                </span>
+                <span className={styles.featureDesc}>{entry.description}</span>
+                {relations.length > 0 && (
+                    <ul className={styles.links}>
+                        {relations.map((rel) => (
+                            <li key={`${rel.entry.id}:${rel.outgoing ? 'out' : 'in'}`} className={styles.link}>
+                                {/* La flèche porte le sens, la pastille porte l'autre bout, et
                                 la phrase se lit pareil dans les deux cas : elle décrit
                                 toujours ce que fait celui qui a déclaré la liaison. */}
-                            <span
-                                className={`icon icon-${rel.outgoing ? 'arrow' : 'arrow-left'} ${styles.linkArrow}`}
-                                aria-hidden='true'
-                            />
-                            <FeatureChip entry={rel.entry} />
-                            <span className={styles.linkWhat}>{rel.what}</span>
-                        </li>
-                    ))}
-                </ul>
-            )}
+                                <span
+                                    className={`icon icon-${rel.outgoing ? 'arrow' : 'arrow-left'} ${styles.linkArrow}`}
+                                    aria-hidden='true'
+                                />
+                                <FeatureChip entry={rel.entry} />
+                                <span className={styles.linkWhat}>{rel.what}</span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
         </li>
     );
 }

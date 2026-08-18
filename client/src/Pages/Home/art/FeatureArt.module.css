@@ -1,0 +1,19 @@
+/* Le cadre d'une illustration : un rectangle allongé, teinté d'accent, où le
+   dessin est posé. Le fond vit ici et pas dans le SVG — une seule règle à
+   changer si la direction artistique bouge, et les quinze dessins suivent. */
+.art {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--glass-border);
+    background: linear-gradient(150deg, var(--accent-bg), var(--surface-subtle) 70%);
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
