@@ -590,8 +590,12 @@
     gap: var(--space-sm);
 }
 
+/* Un <button>, et non plus un <a> : le téléchargement passe par `fetch` pour
+   pouvoir vérifier la réponse avant d'enregistrer (voir DownloadAgent). D'où la
+   remise à zéro des styles propres au bouton natif. */
 .archRow {
     display: flex;
+    width: 100%;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-sm);
@@ -600,6 +604,8 @@
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
     color: var(--text-primary);
+    font: inherit;
+    text-align: left;
     text-decoration: none;
     cursor: pointer;
     transition:
@@ -607,7 +613,7 @@
         background var(--transition-fast);
 }
 
-.archRow:hover {
+.archRow:hover:not(:disabled) {
     border-color: var(--accent);
     background: var(--accent-bg);
 }
@@ -628,7 +634,10 @@
 .archRowDisabled,
 .archRowDisabled:hover {
     cursor: not-allowed;
-    opacity: 0.5;
+    /* `filter` plutôt qu'`opacity` : les surfaces animées par framer-motion
+       revendiquent l'opacity inline, et un état désactivé ne doit pas dépendre
+       d'une propriété qu'un autre système écrase. */
+    filter: opacity(0.5);
     border-color: var(--glass-border);
     background: var(--glass-bg-light);
 }

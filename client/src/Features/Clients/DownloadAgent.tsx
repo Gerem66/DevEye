@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { get } from '@/api/http';
+import { ensureFreshAccess, get } from '@/api/http';
 import { Dialog } from '@/Components/Dialog';
 import Button from '@/Components/Button';
 import {
@@ -39,6 +39,8 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
     const [agentVersion, setAgentVersion] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    /** Cible en cours de téléchargement (un seul à la fois suffit largement). */
+    const [downloading, setDownloading] = useState<string | null>(null);
 
     // Reset to the OS step and (re)load availability each time the dialog opens.
     useEffect(() => {
@@ -57,6 +59,47 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
 
     // id -> availability, to merge onto the static AGENT_TARGETS metadata.
     const statusById = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses]);
+
+    /**
+     * Télécharge un binaire, en récupérant d'abord un cookie d'accès frais.
+     *
+     * Le lien `<a href download>` d'origine était une NAVIGATION, pas un `fetch` :
+     * elle échappait entièrement au client HTTP, donc au rejeu sur 401. Passé le
+     * quart d'heure de vie du cookie, le navigateur enregistrait sagement
+     * l'enveloppe JSON du 401 sous le nom du binaire — un fichier corrompu, sans
+     * le moindre message. On passe donc par `fetch`, ce qui permet de VÉRIFIER la
+     * réponse avant d'enregistrer quoi que ce soit ; l'ancre n'est plus qu'un
+     * moyen de déclencher l'enregistrement du blob obtenu.
+     */
+    const download = async (id: string, filename: string) => {
+        setError(null);
+        setDownloading(id);
+        try {
+            await ensureFreshAccess();
+            const res = await fetch(`/api/agent/download/${id}`, { credentials: 'include' });
+            if (!res.ok) {
+                setError(
+                    res.status === 404
+                        ? 'Binaire indisponible pour cette plateforme sur ce serveur.'
+                        : `Téléchargement refusé par le serveur (${res.status}).`
+                );
+                return;
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            // Révoqué au tour suivant : révoquer tout de suite couperait
+            // l'enregistrement que le clic vient à peine de lancer.
+            setTimeout(() => URL.revokeObjectURL(url), 0);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Téléchargement impossible.');
+        } finally {
+            setDownloading(null);
+        }
+    };
 
     // Make sure, at download time, the agent matches the running DevEye version.
     // The *direction* of the gap decides the message: a served set NEWER than this
@@ -132,25 +175,24 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
                         const status = statusById.get(t.id);
                         const available = status?.available ?? false;
                         return (
-                            <a
+                            <button
                                 key={t.id}
+                                type='button'
                                 className={`${styles.archRow} ${available ? '' : styles.archRowDisabled}`}
-                                href={available ? `/api/agent/download/${t.id}` : undefined}
-                                download={available ? t.filename : undefined}
-                                aria-disabled={!available}
-                                onClick={(e) => {
-                                    if (!available) e.preventDefault();
-                                }}
+                                disabled={!available || downloading !== null}
+                                onClick={() => void download(t.id, t.filename)}
                             >
                                 <span className={styles.archLabel}>{t.label}</span>
-                                {loading && !status ? (
+                                {downloading === t.id ? (
+                                    <span className={styles.archMeta}>Téléchargement…</span>
+                                ) : loading && !status ? (
                                     <span className={styles.archMeta}>…</span>
                                 ) : available ? (
                                     <span className={styles.archMeta}>{formatSize(status?.sizeBytes ?? null)}</span>
                                 ) : (
                                     <span className={styles.archMeta}>Indisponible</span>
                                 )}
-                            </a>
+                            </button>
                         );
                     })}
                 </div>

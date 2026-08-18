@@ -31,7 +31,50 @@ export class ApiError extends Error {
     }
 }
 
-async function request<TOut>(path: string, init: RequestInit, outputSchema: z.ZodType<TOut>): Promise<TOut> {
+/**
+ * Routes d'authentification : elles ne doivent JAMAIS déclencher le
+ * rafraîchissement automatique ci-dessous, sous peine de boucle (un `/refresh`
+ * expiré relancerait un `/refresh`).
+ */
+const AUTH_PATHS = ['/api/auth/refresh', '/api/auth/login', '/api/auth/me', '/api/auth/logout'];
+
+/** Le jeton d'accès a expiré ou manque : les deux se rattrapent par un refresh. */
+const isExpiredCode = (code: string): boolean => code === 'auth_expired' || code === 'auth_required';
+
+/** Rafraîchissement en vol, partagé : plusieurs 401 simultanés n'en valent qu'un. */
+let refreshing: Promise<void> | null = null;
+
+/**
+ * Renouvelle le cookie d'accès, au plus une fois à la fois.
+ *
+ * Le cookie `dv_at` ne vit que `JWT_ACCESS_TTL_SECONDS` (quinze minutes par
+ * défaut) alors que la WebSocket, elle, reste ouverte des heures. Un onglet posé
+ * sur une socket saine ne repassait donc jamais par l'authentification HTTP :
+ * passé le quart d'heure, toute requête REST tombait en 401 pendant que le reste
+ * de l'application continuait de fonctionner. Le symptôme était incompréhensible
+ * — « Télécharger l'agent » indisponible sur un site manifestement connecté.
+ */
+export function ensureFreshAccess(): Promise<void> {
+    refreshing ??= (async () => {
+        try {
+            // Même query d'espace que `refresh()` : sans elle le serveur
+            // recalcule l'espace actif de son côté et peut renvoyer les droits
+            // d'un autre espace que celui affiché.
+            await request(`/api/auth/refresh${workspaceQuery()}`, { method: 'POST' }, refreshResponseSchema);
+        } finally {
+            refreshing = null;
+        }
+    })();
+    return refreshing;
+}
+
+async function request<TOut>(
+    path: string,
+    init: RequestInit,
+    outputSchema: z.ZodType<TOut>,
+    /** Interne : empêche le rejeu de se rejouer lui-même. */
+    retried = false
+): Promise<TOut> {
     let res: Response;
     try {
         res = await fetch(`${BASE_URL}${path}`, {
@@ -50,6 +93,18 @@ async function request<TOut>(path: string, init: RequestInit, outputSchema: z.Zo
     }
     if (!envelope.data.ok) {
         const { code, message, details } = envelope.data.error;
+        // Un jeton d'accès périmé se répare tout seul tant que le jeton de
+        // rafraîchissement tient : on renouvelle et on rejoue UNE fois. Un échec
+        // du renouvellement laisse remonter l'erreur d'origine, que
+        // `AuthProvider` traduira en déconnexion sur le prochain incident.
+        if (isExpiredCode(code) && !retried && !AUTH_PATHS.includes(path.split('?')[0])) {
+            try {
+                await ensureFreshAccess();
+            } catch {
+                throw new ApiError(code, message, res.status, details);
+            }
+            return request(path, init, outputSchema, true);
+        }
         throw new ApiError(code, message, res.status, details);
     }
     return envelope.data.data;
