@@ -1252,10 +1252,30 @@ export class SyncSession {
         }
     }
 
+    /**
+     * Crée la ligne de `sync_sessions` — À LA DEMANDE, et pas au démarrage.
+     *
+     * Un scan qui ne trouve rien à faire n'a rien à raconter, et depuis que le
+     * chemin rapide rend ces sessions quasi gratuites elles peuvent partir
+     * toutes les quelques secondes. Créer une ligne à chaque fois remplirait la
+     * table pour rien — d'autant qu'elle n'a longtemps eu AUCUNE rétention (voir
+     * `pruneCloudSync`).
+     */
+    private async ensureSessionRow(): Promise<void> {
+        if (this.sessionRowId !== 0) return;
+        const row = await this.host.db.syncSessions.create(this.share.id, this.deviceId);
+        this.sessionRowId = row.id;
+    }
+
     private async persistProgress(force = false): Promise<void> {
         const now = Date.now();
         if (!force && now - this.lastPersist < PROGRESS_PERSIST_MS) return;
+        // Tant que la session n'a rien à montrer, elle n'a rien à écrire. Le jour
+        // où elle devient visible (du vrai travail, ou un scan qui s'éternise),
+        // la ligne est créée et tout est persisté normalement.
+        if (this.sessionRowId === 0 && !this.isVisible) return;
         this.lastPersist = now;
+        await this.ensureSessionRow();
         await this.host.db.syncSessions.updateProgress(this.sessionRowId, {
             state: this.state,
             filesTotal: this.filesTotal,
@@ -1272,8 +1292,14 @@ export class SyncSession {
         this.currentPath = null;
         this.direction = null;
         this.endFile();
-        await this.persistProgress(true).catch(() => undefined);
-        await this.host.db.syncSessions.finish(this.sessionRowId, state, error);
+        // Un échec ou une annulation laisse TOUJOURS une trace, même s'il n'a
+        // jamais été montré : c'est précisément ce qu'on veut pouvoir relire. Une
+        // réussite sans travail, elle, ne mérite pas de ligne.
+        if (state !== 'done') await this.ensureSessionRow();
+        if (this.sessionRowId !== 0) {
+            await this.persistProgress(true).catch(() => undefined);
+            await this.host.db.syncSessions.finish(this.sessionRowId, state, error);
+        }
         this.host.publishProgress(this.snapshot(error));
     }
 

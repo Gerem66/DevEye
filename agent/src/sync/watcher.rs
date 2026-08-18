@@ -18,11 +18,27 @@ use crate::sync::paths::is_reserved_top;
 use crate::sync::SyncEvent;
 
 /// Fenêtre de silence avant d'émettre (une rafale de writes = un seul event).
-const QUIET: Duration = Duration::from_secs(2);
+///
+/// 750 ms, et surtout pas moins de ~500 ms. Tirer plus tôt attrape un fichier à
+/// moitié écrit : on le hache, on l'envoie, puis on le renvoie à l'événement
+/// suivant, en laissant une version parasite dans `sync_versions` et dans la
+/// corbeille de chaque pair. 750 ms passe au-dessus de tous les motifs
+/// d'enregistrement atomique (écrire un temporaire puis renommer est
+/// instantané) et de l'écart d'un « fichier annexe puis fichier principal ».
+///
+/// C'est le SEUL coût que le scan incrémental ne rend pas gratuit : une session
+/// à vide ne coûte plus rien, mais une session déclenchée trop tôt sur un
+/// fichier en cours d'écriture coûte un vrai transfert, puis un second.
+const QUIET: Duration = Duration::from_millis(750);
 /// Émission forcée si ça bouge sans interruption depuis aussi longtemps.
+///
+/// INCHANGÉ, volontairement : c'est le plafond pendant une activité CONTINUE,
+/// pas le bouton de latence. Le descendre transformerait une compilation d'une
+/// minute dans un dossier synchronisé en six sessions au lieu de deux, et
+/// celles-là sont réellement sales, donc réellement coûteuses.
 const MAX_WAIT: Duration = Duration::from_secs(30);
 /// Cadence de la boucle de debounce.
-const POLL: Duration = Duration::from_millis(500);
+const POLL: Duration = Duration::from_millis(250);
 
 #[derive(Default)]
 struct Pending {

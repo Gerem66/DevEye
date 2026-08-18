@@ -20,6 +20,14 @@ const STALE_SESSION_AGE_S = 6 * 60 * 60;
 const PRUNE_BATCH = 200;
 /** Rétention du journal d'événements (popup Logs). */
 const EVENT_RETENTION_S = 90 * 24 * 60 * 60;
+/**
+ * Rétention de l'historique des sessions.
+ *
+ * La table n'était purgée par RIEN : chaque session y laissait une ligne pour
+ * toujours. La création paresseuse (voir `SyncSession.ensureSessionRow`) a réglé
+ * la source, ce balayage règle l'accumulation déjà en place.
+ */
+const SESSION_RETENTION_S = 30 * 24 * 60 * 60;
 const HOUR_S = 60 * 60;
 const DAY_S = 24 * HOUR_S;
 /** En deçà de cet âge, TOUS les points de restauration sont conservés. */
@@ -125,7 +133,15 @@ export async function pruneCloudSync(
     // appareils divergents plus d'une heure (no-op quand tout est synchronisé).
     await engine.scheduleAllActive();
 
+    const sessionCutoff = Math.floor(Date.now() / 1000) - SESSION_RETENTION_S;
     for (const share of await db.syncShares.listAll()) {
+        // Borné à un lot par partage et par tour : la purge est un entretien de
+        // fond, pas une opération à faire attendre. Un retard éventuel se
+        // rattrape au tour d'après, toutes les heures.
+        await db.syncSessions.pruneOld(share.id, sessionCutoff, PRUNE_BATCH).catch((err) => {
+            logger.error({ err, shareId: share.id }, 'CloudSync: session history prune failed');
+        });
+
         await maintainSnapshots(db, engine, audit, logger, share).catch((err) => {
             logger.error({ err, shareId: share.id }, 'CloudSync: snapshot maintenance failed');
         });

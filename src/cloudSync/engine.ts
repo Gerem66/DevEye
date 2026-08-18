@@ -382,8 +382,17 @@ export class CloudSyncEngine {
                 this.publishShareState(shareId);
             },
             publishProgress: (progress) => {
+                // La mémoire, elle, est tenue à jour dans TOUS les cas : le bloc
+                // `finally` de `runSession` s'en sert pour reconnaître un échec,
+                // et l'oublier ferait passer une session en erreur pour un succès.
                 this.lastProgress.set(key, progress);
-                hub.publishSyncProgress(progress);
+                // Le fan-out vers les navigateurs, lui, ne concerne que les
+                // sessions VISIBLES. Un scan à vide traverse quatre états
+                // (scanning, planning, transferring, done) : c'était quatre
+                // trames poussées à chaque onglet abonné, à chaque réveil de
+                // watcher, pour un partage rigoureusement immobile. Jumeau côté
+                // web de la règle qui protège déjà le badge du partage.
+                if (session.isVisible) hub.publishSyncProgress(progress);
                 if (progress.state === 'done') {
                     this.lastError.delete(shareId);
                 } else if (progress.state === 'error' && progress.error !== null) {
@@ -468,7 +477,10 @@ export class CloudSyncEngine {
         const progress: CloudSyncProgress[] = [];
         for (const [key, p] of this.lastProgress) {
             const shareId = Number(key.split(':')[0]);
-            if (shareIds.includes(shareId) && this.running.has(key)) progress.push(p);
+            // Même règle que le fan-out : un abonné qui arrive pendant un scan à
+            // vide ne doit pas hériter d'un « synchronisation en cours » fantôme
+            // que plus aucune trame ne viendra effacer.
+            if (shareIds.includes(shareId) && this.running.get(key)?.isVisible === true) progress.push(p);
         }
         const states: CloudSyncShareState[] = [];
         for (const shareId of shareIds) states.push(await this.computeShareState(shareId));

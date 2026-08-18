@@ -23,6 +23,16 @@ export interface SyncSessionsRepo {
     finish(id: number, state: 'done' | 'error' | 'cancelled', error: string | null): Promise<void>;
     /** Marque en erreur toute session non finie démarrée avant `cutoff` (secondes unix). */
     failStale(cutoff: number): Promise<number>;
+    /**
+     * Supprime les sessions TERMINÉES d'un partage démarrées avant `cutoff`,
+     * par lots de `limit`. Rend le nombre de lignes retirées.
+     *
+     * Par partage, et non en une seule instruction globale : c'est ce qui laisse
+     * la suppression suivre `idx_sync_sessions_share (share_id, started)` au lieu
+     * de balayer toute la table. `finished IS NOT NULL` protège une session en
+     * cours d'une purge accidentelle.
+     */
+    pruneOld(shareId: number, cutoff: number, limit: number): Promise<number>;
 }
 
 export function syncSessionsRepo(pool: Q): SyncSessionsRepo {
@@ -55,6 +65,15 @@ export function syncSessionsRepo(pool: Q): SyncSessionsRepo {
                  SET state = 'error', error = 'Session interrompue (serveur redémarré ?)', finished = UNIX_TIMESTAMP()
                  WHERE finished IS NULL AND started < ?`,
                 [cutoff]
+            );
+            return r.rowCount;
+        },
+        async pruneOld(shareId, cutoff, limit) {
+            const r = await pool.query(
+                `DELETE FROM sync_sessions
+                 WHERE share_id = ? AND finished IS NOT NULL AND started < ?
+                 LIMIT ?`,
+                [shareId, cutoff, limit]
             );
             return r.rowCount;
         }
