@@ -606,12 +606,17 @@
     color: var(--accent);
 }
 
-/* ─── Navigateurs de listes (Sauvegardes, Logs) en dialogue « tall » ───
-   Colonne pleine hauteur : barre d'outils et pagination épinglées, la LISTE
-   seule défile. */
+/* ─── Navigateurs de listes (Sauvegardes, Restauration, Logs) en dialogue « fill » ───
+   La hauteur SUIT le contenu jusqu'au plafond du dialogue : barre d'outils et
+   pagination épinglées, la LISTE seule défile.
+
+   `flex: 1 1 auto` et non `flex: 1` (base nulle) : en hauteur `auto`, une base
+   nulle ne donne au navigateur aucune taille de contenu sur laquelle se caler.
+   La base `auto` fait partir la colonne de son contenu, et le `grow` ne sert
+   plus qu'à occuper la place restante quand le dialogue touche le plafond. */
 
 .browserCol {
-    flex: 1;
+    flex: 1 1 auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -619,8 +624,14 @@
 }
 
 .scrollRows {
-    flex: 1;
-    min-height: 0;
+    flex: 1 1 auto;
+    /* Plancher, et non `min-height: 0` : une liste de deux lignes ne doit pas
+       produire une fenêtre écrasée, et la hauteur ne doit pas sauter d'une page
+       de pagination à l'autre. Assez bas pour qu'un écran court garde quand
+       même le dialogue entier. Il remplace le `min-height: auto` implicite des
+       éléments flex, donc le défilement reste possible une fois le plafond
+       atteint. */
+    min-height: 180px;
     overflow-y: auto;
     padding-right: 2px; /* La scrollbar ne colle pas aux boutons de ligne. */
 }

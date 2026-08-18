@@ -67,7 +67,7 @@ export default function LogsDialog({ open, share, onClose, onChanged }: LogsDial
             title={`Logs — ${share.name}`}
             description={total === 0 ? 'Aucune anomalie enregistrée.' : `${total} événement(s)`}
             width={640}
-            tall
+            fill
         >
             <div className={styles.browserCol}>
                 <div className={`${styles.rows} ${styles.scrollRows}`}>

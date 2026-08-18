@@ -194,7 +194,7 @@ export default function VersionsBrowser({ open, share, onClose, onChanged }: Ver
             title={`Sauvegardes — ${share.name}`}
             description={`${total} sauvegarde(s) archivée(s) · ${formatBytesFr(totalBytes)}`}
             width={640}
-            tall
+            fill
         >
             <div className={styles.browserCol}>
                 {versions.length > 0 && (

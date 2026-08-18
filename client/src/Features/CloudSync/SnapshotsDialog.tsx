@@ -181,7 +181,7 @@ export default function SnapshotsDialog({ open, share, onClose, onChanged }: Sna
                     : `${total} point(s) — reviens à l’état exact du dossier à un instant donné.`
             }
             width={680}
-            tall
+            fill
         >
             <div className={styles.browserCol}>
                 <div className={styles.actions}>
