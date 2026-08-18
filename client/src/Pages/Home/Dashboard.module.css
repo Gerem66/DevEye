@@ -34,7 +34,25 @@
  * mesure que les transformations qu'il a écrites lui-même — et les tuiles
  * partaient alors se replacer à côté, voire hors de l'écran.
  */
+/*
+ * Le verre des tuiles est coupé le temps du retrait.
+ *
+ * `filter` fait de `main` un **backdrop root** (Filter Effects 2). Les
+ * `backdrop-filter` des cartes, à l'intérieur, se mettent alors à échantillonner
+ * un fond vide, puisque `main` n'a pas de fond à lui. Un moteur conforme y rend
+ * un no-op et la carte perd simplement son verre ; Firefox, lui, fait
+ * carrément disparaître une partie des cartes, et pas les mêmes selon leur
+ * taille et ce qu'il y a derrière, parce que le résultat dépend de la découpe
+ * en couches du compositeur. D'où le symptôme déroutant : deux tuiles
+ * s'évanouissaient, les dix autres non, alors que le flou est global.
+ *
+ * Couper le verre ici rend donc **exactement** ce qu'un moteur conforme rend
+ * déjà, en le disant nous-mêmes au lieu de le laisser au navigateur. Ça passe
+ * par un jeton parce que `.widget` vit dans un autre module CSS : la cascade
+ * traverse ce qu'un sélecteur ne peut pas atteindre.
+ */
 .recessed {
+    --glass-backdrop: none;
     filter: blur(7px);
     pointer-events: none;
 }

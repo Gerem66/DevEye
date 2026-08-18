@@ -6,6 +6,19 @@
   --glass-border: rgba(255, 255, 255, 0.09);
   --glass-border-strong: rgba(255, 255, 255, 0.16);
   --glass-blur: 16px;
+  /*
+   * Le verre d'une surface, en un jeton plutôt qu'en dur.
+   *
+   * `backdrop-filter` filtre l'image du **backdrop root**, et la spec (Filter
+   * Effects 2) fait de tout élément portant un `filter` un nouveau backdrop
+   * root. Une surface de verre posée sous un ancêtre flouté échantillonne donc
+   * un fond vide : dans le meilleur des cas elle perd son verre, dans Gecko elle
+   * s'efface pour de bon, et de façon inégale d'une carte à l'autre selon la
+   * découpe en couches. Passer par un jeton laisse à un tel ancêtre le moyen de
+   * couper le verre net (voir `.recessed`, `Pages/Home/Dashboard.module.css`)
+   * au lieu de s'en remettre au moteur.
+   */
+  --glass-backdrop: blur(var(--glass-blur));
 
   /* Surfaces */
   --surface-widget: var(--glass-bg);
