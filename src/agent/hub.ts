@@ -109,9 +109,20 @@ import { logger } from '@/logger';
 
 /**
  * Période du balayage de vivacité des agents. Deux tours sans `pong` ferment la
- * socket. Aligné sur celui de `LiveHub`, pour une seule cadence à retenir.
+ * socket, donc la détection tombe dans `[P, 2P]` : 10 à 20 s ici.
+ *
+ * DÉLIBÉRÉMENT plus rapide que celui de `LiveHub` (30 s), et il ne faut pas
+ * « corriger » la divergence. Les coûts d'une panne ne sont pas comparables :
+ * une socket d'agent morte fait passer une machine éteinte pour en ligne et
+ * avale en silence les commandes qu'on lui envoie, alors qu'une socket de
+ * navigateur morte ne laisse qu'un fantôme dans une liste de présence. Tripler
+ * la cadence de tous les onglets ouverts, téléphones en 4G compris, pour gagner
+ * quarante secondes sur une péremption cosmétique serait un mauvais marché.
+ *
+ * Miroir de `AGENT_PING_INTERVAL` côté agent : les deux sens détectent, parce
+ * qu'aucun des deux ne peut déduire la vivacité de l'autre de son propre ping.
  */
-const AGENT_HEARTBEAT_MS = 30_000;
+const AGENT_HEARTBEAT_MS = 10_000;
 
 /**
  * Fenêtre et seuil du signalement de reconnexions en rafale.

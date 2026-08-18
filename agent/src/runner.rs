@@ -20,6 +20,7 @@ use anyhow::{Context, Result};
 use base64::Engine as _;
 use futures_util::{SinkExt, StreamExt};
 use tokio::time::{interval_at, Instant, MissedTickBehavior};
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, info, warn};
 
@@ -43,12 +44,23 @@ const QUEUE_CAPACITY: usize = 2880;
 /// which is ~30x heavier — stays bounded to a few hours of memory.
 const PROCESS_QUEUE_LIMIT: usize = 240;
 const MIN_BACKOFF: Duration = Duration::from_secs(1);
-const MAX_BACKOFF: Duration = Duration::from_secs(60);
+/// Plafond du recul exponentiel. Trente secondes et non soixante : un agent qui
+/// n'arrive pas à se connecter est un agent INVISIBLE, donc ce plafond est la
+/// durée maximale d'aveuglement du tableau de bord. Le prix payé est une
+/// tentative de connexion échouée de plus par minute et par agent injoignable,
+/// ce qui n'est rien.
+const MAX_BACKOFF: Duration = Duration::from_secs(30);
 /// Pause after a *clean* close (server restart, network blip) before dialing
 /// again. Without it a server that accepts-then-closes puts the agent in a
 /// tight connect loop, and each connect used to fire a full snapshot +
 /// process sample — flooding the server with one snapshot per second.
-const RECONNECT_DELAY: Duration = Duration::from_secs(2);
+///
+/// Tirée au hasard dans cet intervalle, et c'est le point : le chemin qui crée
+/// réellement un troupeau n'est pas le recul exponentiel mais celui-ci. Après un
+/// redémarrage du serveur, TOUS les agents de la flotte revenaient exactement à
+/// la même seconde.
+const RECONNECT_DELAY_MIN: Duration = Duration::from_secs(1);
+const RECONNECT_DELAY_MAX: Duration = Duration::from_secs(4);
 /// The connect-time instant is skipped when the previous one is fresher than
 /// this: reconnect loops must not multiply snapshots. The server can still force
 /// one at any time via `agent.collect`.
@@ -58,11 +70,16 @@ const MIN_CONNECT_SNAPSHOT_GAP: Duration = Duration::from_secs(60);
 /// qu'un vrai démarrage perde quoi que ce soit (le jalon est alors `None`).
 /// Détail dans `Docs/SENTINEL.md`.
 const MIN_CONNECT_WORK_GAP: Duration = Duration::from_secs(15 * 60);
-/// Retry delay after the server *rejects* us at the handshake (revoked, unknown
-/// or not-yet-approved device). Much slower than a normal reconnect: a rejection
-/// won't clear on its own, so we back off to roughly hourly to avoid hammering
-/// the server (and to stay quiet from the outside).
-const REJECTED_RETRY: Duration = Duration::from_secs(60 * 60);
+/// Échelle de reprise après un VRAI refus du serveur (appareil révoqué, inconnu,
+/// ou pas encore approuvé), doublée à chaque refus consécutif et remise à zéro
+/// dès qu'une session s'établit.
+///
+/// Une heure ferme, comme avant, punissait surtout le cas le plus fréquent : un
+/// appareil qu'on vient d'approuver dans l'interface restait absent jusqu'à une
+/// heure sans que rien ne l'explique. Un refus permanent, lui, finit à un essai
+/// par quart d'heure, ce qui reste discret.
+const REJECTED_MIN: Duration = Duration::from_secs(60);
+const REJECTED_MAX: Duration = Duration::from_secs(15 * 60);
 /// How often to send the OS/security report.
 const REPORT_INTERVAL: Duration = Duration::from_secs(60 * 60);
 /// Default used until the server pushes `agent.config` (≈immediately on
@@ -75,7 +92,20 @@ const DEFAULT_CAPTURE: &str = "all";
 /// dans `stream.next()` indéfiniment quand le serveur disparaît sans fermer la
 /// socket — jusqu'au keepalive TCP du noyau, plus de deux heures. Il ne se
 /// reconnectait donc pas, et se croyait supervisé.
-const AGENT_PING_INTERVAL: Duration = Duration::from_secs(30);
+///
+/// Dix secondes : les deux côtés appliquent la même règle « deux tours sans
+/// réponse », donc la détection tombe dans `[P, 2P]`, soit 10 à 20 s au lieu de
+/// 30 à 60. Descendre à 5 s ne gagnerait rien de perceptible, alors que le cas
+/// qui paraît réellement cassé — la sortie de veille — est traité
+/// structurellement par `WAKE_SKEW_THRESHOLD` plutôt qu'en sondant plus fort.
+/// Dix secondes reste par ailleurs très en dessous du délai d'inactivité usuel
+/// d'un proxy inverse, donc le battement continue de servir de keepalive.
+const AGENT_PING_INTERVAL: Duration = Duration::from_secs(10);
+
+/// Cadence du contrôle de sortie de veille, et écart au-delà duquel on conclut
+/// que la machine a dormi. Voir le bras `wake_ticker` de la boucle.
+const WAKE_CHECK_INTERVAL: Duration = Duration::from_secs(1);
+const WAKE_SKEW_THRESHOLD: Duration = Duration::from_secs(10);
 
 /// Cadence par défaut du manifeste de persistance, jusqu'à ce que le serveur
 /// pousse la sienne. Six heures : empreinter cinq cents fichiers ne se fait pas
@@ -86,6 +116,19 @@ const DEFAULT_INTEGRITY_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 /// campagne de tentatives se compte en minutes, pas en heures — mais la fenêtre
 /// étant glissante, rien n'est perdu entre deux relevés.
 const AUTH_INTERVAL: Duration = Duration::from_secs(60 * 60);
+
+/// Tirage uniforme dans `[min, max]`, pour désynchroniser une flotte entière.
+///
+/// Sans lui, tous les agents reviennent à la même seconde après un redémarrage
+/// du serveur, et le recul exponentiel les garde en phase au lieu de les
+/// disperser (chacun double au même instant que les autres).
+fn jittered(min: Duration, max: Duration) -> Duration {
+    if max <= min {
+        return min;
+    }
+    let span = (max - min).as_millis() as u64;
+    min + Duration::from_millis(rand::Rng::gen_range(&mut rand::thread_rng(), 0..=span))
+}
 
 /// Un travail périodique fait À LA CONNEXION doit-il être rejoué ?
 ///
@@ -171,6 +214,10 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
     let mut collector = Collector::new();
     let mut queue: VecDeque<MetricSnapshot> = VecDeque::with_capacity(QUEUE_CAPACITY);
     let mut backoff = MIN_BACKOFF;
+    // Refus consécutifs, pour l'échelle `REJECTED_MIN` → `REJECTED_MAX`. Remis à
+    // zéro dès qu'une session s'établit : un appareil qu'on vient d'approuver ne
+    // doit pas hériter du recul accumulé pendant qu'il ne l'était pas.
+    let mut rejected_streak: u32 = 0;
     // Quand chaque travail de connexion a été fait pour la dernière fois, gardé
     // d'une session à l'autre pour qu'une boucle de reconnexion ne les multiplie
     // pas (voir `ConnectMarks` et les constantes de garde).
@@ -191,19 +238,35 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
         .await
         {
             Ok(SessionOutcome::Established) => {
+                let delay = jittered(RECONNECT_DELAY_MIN, RECONNECT_DELAY_MAX);
                 info!(
-                    delay_secs = RECONNECT_DELAY.as_secs(),
+                    delay_ms = delay.as_millis() as u64,
                     "connection closed by server, reconnecting"
                 );
                 backoff = MIN_BACKOFF;
-                tokio::time::sleep(RECONNECT_DELAY).await;
+                rejected_streak = 0;
+                tokio::time::sleep(delay).await;
+            }
+            Ok(SessionOutcome::Woke) => {
+                // Aucune attente : c'est le SEUL cas où l'on sait déjà que la
+                // session précédente ne vaut plus rien. `sink.send` sur une
+                // socket morte réussit (tampon du noyau), donc attendre le
+                // prochain ping reviendrait à parler dans le vide.
+                info!("resuming from sleep, reconnecting immediately");
+                backoff = MIN_BACKOFF;
+                rejected_streak = 0;
             }
             Ok(SessionOutcome::Rejected) => {
+                // Plafonné avant le décalage pour ne jamais déborder `u32`.
+                let step = REJECTED_MIN * 2u32.saturating_pow(rejected_streak.min(8));
+                let delay = jittered(REJECTED_MIN, step.min(REJECTED_MAX));
+                rejected_streak = rejected_streak.saturating_add(1);
                 warn!(
-                    retry_secs = REJECTED_RETRY.as_secs(),
+                    retry_secs = delay.as_secs(),
+                    streak = rejected_streak,
                     "server rejected this agent (revoked, removed or not yet approved); retrying later"
                 );
-                tokio::time::sleep(REJECTED_RETRY).await;
+                tokio::time::sleep(delay).await;
             }
             Ok(SessionOutcome::Stop) => {
                 info!("stop ordered by server; exiting (the service manager relaunches a supervised install)");
@@ -215,8 +278,12 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
                 crate::update::restart_and_exit(&exe);
             }
             Err(e) => {
-                warn!(error = %e, backoff_secs = backoff.as_secs(), "session error, retrying");
-                tokio::time::sleep(backoff).await;
+                // « Full jitter » : on dort dans `[MIN_BACKOFF, backoff]` plutôt
+                // que `backoff` tout rond. C'est ce qui disperse réellement une
+                // flotte, là où un recul exponentiel nu la garde en phase.
+                let delay = jittered(MIN_BACKOFF, backoff);
+                warn!(error = %e, backoff_secs = delay.as_secs(), "session error, retrying");
+                tokio::time::sleep(delay).await;
                 backoff = (backoff * 2).min(MAX_BACKOFF);
             }
         }
@@ -228,8 +295,16 @@ enum SessionOutcome {
     /// We authenticated and ran (normal close / server restart) → reconnect fast.
     Established,
     /// The server closed us at the handshake (auth/authorization refused) before
-    /// we ever received config → back off hard (`REJECTED_RETRY`).
+    /// we ever received config → back off hard (`REJECTED_MIN`..`REJECTED_MAX`).
+    ///
+    /// Réservé à une fermeture 1008, le SEUL code par lequel le serveur refuse un
+    /// agent (voir `deny()` dans `src/agent/ws.ts`). Confondre ce cas avec une
+    /// fermeture de transport coûtait une heure de silence à chaque « session
+    /// remplacée » ou redémarrage de serveur mal tombé.
     Rejected,
+    /// La machine sort de veille : la socket est presque certainement morte, et
+    /// on le sait sans attendre le prochain ping → reconnexion immédiate.
+    Woke,
     /// The server ordered `agent.lifecycle stop` → exit the process. A supervised
     /// install comes back through its service manager; standalone stays down.
     Stop,
@@ -348,11 +423,35 @@ async fn stream_session(
             Ok(Some(Ok(Message::Ping(payload)))) => {
                 sink.send(Message::Pong(payload)).await.ok();
             }
+            // Une fermeture pendant la fenêtre de config : c'est ICI que se
+            // décide « refusé » contre « incident de transport », et la
+            // distinction vaut cher. `1008` est le SEUL code par lequel le
+            // serveur refuse un agent (`deny()` dans `src/agent/ws.ts`, identique
+            // pour révoqué / inconnu / non approuvé — la discrétion voulue est
+            // préservée, un observateur extérieur ne distingue toujours pas les
+            // trois). Tout autre code est un accident : `1012` « session
+            // remplacée » quand une seconde instance évince celle-ci, `1001`
+            // quand le serveur s'arrête.
+            //
+            // Avant, cette trame tombait dans le fourre-tout ci-dessous, puis le
+            // tour suivant rendait `Ok(None)` qu'on lisait comme un refus : se
+            // faire remplacer coûtait UNE HEURE de silence.
+            Ok(Some(Ok(Message::Close(frame)))) => {
+                let code = frame.map(|f| f.code);
+                let rejected = code == Some(CloseCode::Policy);
+                warn!(?code, rejected, "server closed during the config window");
+                return Ok(if rejected {
+                    SessionOutcome::Rejected
+                } else {
+                    SessionOutcome::Established
+                });
+            }
             Ok(Some(Ok(_))) => {}
             Ok(Some(Err(e))) => return Err(e).context("WebSocket stream error"),
-            // Closed during the handshake, before any config: the server refused
-            // us (revoked / unknown / not approved) → caller backs off hard.
-            Ok(None) => return Ok(SessionOutcome::Rejected),
+            // Flux terminé sans trame de fermeture : c'est une fin de transport
+            // brutale, pas un refus. Un refus, lui, arrive toujours par un
+            // `Close(1008)` traité juste au-dessus.
+            Ok(None) => return Ok(SessionOutcome::Established),
             Err(_) => break, // timeout: fall back to defaults
         }
     }
@@ -404,6 +503,15 @@ async fn stream_session(
     let mut integrity_ticker = new_ticker(integrity_interval);
     let mut auth_ticker = new_ticker(AUTH_INTERVAL);
     let mut ping_ticker = new_ticker(AGENT_PING_INTERVAL);
+    // Détection de sortie de veille. `Instant` est monotone (CLOCK_MONOTONIC sur
+    // Linux, `mach_absolute_time` sur macOS) et n'avance PAS pendant la
+    // suspension ; `SystemTime` est relue de l'horloge matérielle au réveil.
+    // L'écart entre les deux est donc, à la seconde près, la durée du sommeil —
+    // sans dépendance système, sans code par plateforme, et sans avoir à
+    // s'abonner à logind, IOPMrootDomain ou WM_POWERBROADCAST.
+    let mut wake_ticker = new_ticker(WAKE_CHECK_INTERVAL);
+    let mut last_mono = Instant::now();
+    let mut last_wall = std::time::SystemTime::now();
     // Remis à `true` par chaque `Pong` ; deux tours sans réponse ferment la
     // session, qui se rétablit par la boucle de reconnexion habituelle.
     let mut server_alive = true;
@@ -497,6 +605,35 @@ async fn stream_session(
                 server_alive = false;
                 if sink.send(Message::Ping(Vec::new())).await.is_err() {
                     return Ok(SessionOutcome::Established);
+                }
+            }
+            _ = wake_ticker.tick() => {
+                let now_mono = Instant::now();
+                let now_wall = std::time::SystemTime::now();
+                let mono = now_mono.saturating_duration_since(last_mono);
+                // Un saut d'horloge EN ARRIÈRE (NTP qui recule) rend une erreur :
+                // on retombe alors sur l'écart monotone, donc on ne conclut rien.
+                // C'est le seul comportement honnête — reculer ne prouve pas une
+                // veille, et traiter le cas comme un réveil ferait reconnecter à
+                // chaque correction d'horloge.
+                let wall = now_wall.duration_since(last_wall).unwrap_or(mono);
+                last_mono = now_mono;
+                last_wall = now_wall;
+                if wall > mono + WAKE_SKEW_THRESHOLD {
+                    warn!(slept_secs = (wall - mono).as_secs(), "wake from sleep detected");
+                    // Le tableau de bord affiche encore l'état d'AVANT la veille :
+                    // on rouvre le droit à l'instant de connexion, que
+                    // MIN_CONNECT_SNAPSHOT_GAP supprimerait sinon pour une minute
+                    // de plus. On ne touche NI `marks.report` NI `marks.scan` :
+                    // un portable ouvert dix fois par jour rejouerait sinon dix
+                    // rapports lourds et dix passes Sentinelle, alors que la
+                    // machine dormait et que rien n'a bougé.
+                    marks.snapshot = None;
+                    // On ne tente PAS d'envoyer une trame de fermeture : `send`
+                    // sur une socket à moitié morte peut bloquer jusqu'au délai
+                    // de retransmission TCP. Sortir suffit — le sink et le stream
+                    // sont droppés, donc le descripteur est fermé.
+                    return Ok(SessionOutcome::Woke);
                 }
             }
             _ = integrity_ticker.tick(), if sentinel => {
@@ -851,6 +988,14 @@ async fn stream_session(
 /// A skip-on-miss interval ticker whose first tick fires one full period from
 /// now (the connect-time sample/report has already been sent), avoiding the
 /// immediate first tick of a plain `interval`.
+///
+/// `MissedTickBehavior::Skip` n'est PAS qu'une propreté : c'est lui qui rend la
+/// sortie de veille supportable. Les horloges de tokio n'avancent pas pendant la
+/// suspension, donc au réveil chaque ticker a un arriéré égal à la durée du
+/// sommeil. Avec le comportement par défaut (`Burst`), le contrôle de réveil
+/// cadencé à la seconde émettrait ~3600 tics d'affilée après une heure de veille,
+/// et le ticker de métriques autant de relevés. `Skip` réduit l'arriéré à un
+/// seul tic et réaligne l'échéance suivante sur maintenant.
 fn new_ticker(period: Duration) -> tokio::time::Interval {
     let mut t = interval_at(Instant::now() + period, period);
     t.set_missed_tick_behavior(MissedTickBehavior::Skip);
@@ -1155,5 +1300,27 @@ mod tests {
         // deux ordres s'inversait, le correctif perdrait son sens.
         assert!(MIN_CONNECT_SNAPSHOT_GAP < MIN_CONNECT_WORK_GAP);
         assert!(MIN_CONNECT_WORK_GAP < REPORT_INTERVAL);
+    }
+
+    #[test]
+    fn the_ping_stays_faster_than_the_snapshot_guard() {
+        // Un battement plus lent que le garde de l'instant de connexion voudrait
+        // dire qu'on détecte une socket morte moins vite qu'on ne s'interdit de
+        // renvoyer un instant : la reconnexion arriverait alors toujours trop
+        // tard pour rafraîchir le tableau de bord.
+        assert!(AGENT_PING_INTERVAL < MIN_CONNECT_SNAPSHOT_GAP);
+        assert!(WAKE_CHECK_INTERVAL < WAKE_SKEW_THRESHOLD);
+        assert!(REJECTED_MIN < REJECTED_MAX);
+        assert!(RECONNECT_DELAY_MIN < RECONNECT_DELAY_MAX);
+    }
+
+    #[test]
+    fn jitter_stays_inside_its_bounds() {
+        for _ in 0..200 {
+            let d = jittered(RECONNECT_DELAY_MIN, RECONNECT_DELAY_MAX);
+            assert!(d >= RECONNECT_DELAY_MIN && d <= RECONNECT_DELAY_MAX);
+        }
+        // Bornes inversées ou égales : on rend le minimum, jamais une panique.
+        assert_eq!(jittered(MAX_BACKOFF, MIN_BACKOFF), MAX_BACKOFF);
     }
 }
