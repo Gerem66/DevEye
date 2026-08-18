@@ -596,6 +596,8 @@ where
             share_id,
             entries,
             done,
+            scanned,
+            fingerprint,
             error,
         } => ClientMessage::SyncIndex {
             device_id: device_id.to_string(),
@@ -603,6 +605,8 @@ where
             share_id,
             entries,
             done,
+            scanned,
+            fingerprint,
             error,
         },
         SyncEvent::Chunk {

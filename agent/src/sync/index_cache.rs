@@ -10,12 +10,29 @@ use tracing::debug;
 
 use crate::config::Config;
 
+/// Une entrée du cache, qui porte EXACTEMENT les champs d'un `SyncIndexEntry`.
+///
+/// `kind` et `mode` ne servent pas au cache de hachage, ils servent à
+/// l'empreinte : sans eux, un `chmod` (qui déplace le ctime, pas le mtime) et un
+/// dossier vidé de son dernier fichier seraient invisibles à l'empreinte alors
+/// qu'un vrai scan les voit. L'empreinte cesserait alors de décrire ce que le
+/// scan produirait, ce qui est précisément la garantie à ne pas affaiblir.
+///
+/// Ces deux champs sont REQUIS, sans `serde(default)` : un cache écrit par une
+/// version antérieure cesse donc de se désérialiser, et `load` retombe sur un
+/// cache vide. C'est le chemin « cache corrompu » qui existe depuis toujours, il
+/// coûte un re-hachage unique par partage, et c'est très exactement ce qu'on
+/// veut — un cache muet sur `kind`/`mode` produirait une empreinte fausse.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CacheEntry {
     pub size: u64,
     /// Millisecondes unix.
     pub mtime: i64,
     pub hash: String,
+    /// `file` ou `dir` (un dossier n'est indexé que s'il est vide).
+    pub kind: String,
+    /// Bits de permission Unix ; `None` sous Windows, qui n'en a pas.
+    pub mode: Option<u32>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]

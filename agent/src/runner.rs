@@ -629,6 +629,11 @@ async fn stream_session(
                     // rapports lourds et dix passes Sentinelle, alors que la
                     // machine dormait et que rien n'a bougé.
                     marks.snapshot = None;
+                    // Rien ne garantit qu'une surveillance inotify / FSEvents ait
+                    // survécu à la suspension : on force un parcours complet au
+                    // prochain scan de chaque partage. Un scan de trop ne coûte
+                    // que du temps, un événement raté coûte une divergence.
+                    sync_mgr.mark_all_dirty();
                     // On ne tente PAS d'envoyer une trame de fermeture : `send`
                     // sur une socket à moitié morte peut bloquer jusqu'au délai
                     // de retransmission TCP. Sortir suffit — le sink et le stream
@@ -879,8 +884,8 @@ async fn stream_session(
                                 sync_mgr.apply_config(shares);
                             }
                             // CloudSync: scan the share's folder (off-loop; streams via sync_rx).
-                            Ok(ServerMessage::SyncScan { session_id, share_id }) => {
-                                sync_mgr.start_scan(session_id, share_id);
+                            Ok(ServerMessage::SyncScan { session_id, share_id, mode }) => {
+                                sync_mgr.start_scan(session_id, share_id, mode);
                             }
                             // CloudSync: upload one file (off-loop; streams via sync_rx).
                             Ok(ServerMessage::SyncPush { op_id, share_id, rel_path, start_offset }) => {

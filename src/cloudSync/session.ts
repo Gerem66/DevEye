@@ -1,10 +1,20 @@
 import crypto from 'crypto';
-import type { CloudSyncProgress, SyncDirection, SyncIndexEntry, SyncSessionState, SyncShareRow } from 'deveye-types';
+import type {
+    CloudSyncProgress,
+    SyncDeviceFileRow,
+    SyncDirection,
+    SyncFileRow,
+    SyncIndexEntry,
+    SyncScanMode,
+    SyncSessionState,
+    SyncShareRow
+} from 'deveye-types';
 import type { Logger } from 'pino';
 import type { Database } from '../db';
 import type { MonitorHub } from '../agent/hub';
 import { BlobHashMismatchError, type ShareBlobStore } from './blobStore';
 import { compileExclusions } from './exclusions';
+import { baselineFingerprint } from './fingerprint';
 import { makeBucket, type TokenBucket } from './rateLimit';
 import {
     planSession,
@@ -36,7 +46,16 @@ import { archiveBlobAsVersion, archiveCurrent } from './versions';
 
 /** Un événement agent routé vers la session (corrélé par sessionId/opId). */
 export type AgentSyncEvent =
-    | { type: 'index'; entries: SyncIndexEntry[]; done: boolean; error?: string }
+    | {
+          type: 'index';
+          entries: SyncIndexEntry[];
+          done: boolean;
+          /** `false` = réponse rapide : l'agent n'a pas parcouru le disque. */
+          scanned: boolean;
+          /** Empreinte de l'index détenu, portée par le lot final. */
+          fingerprint: string | null;
+          error?: string;
+      }
     | { type: 'chunk'; data: string; done: boolean; hash?: string; size?: number; mtime?: number; error?: string }
     | { type: 'ack'; seq: number }
     | {
@@ -93,6 +112,37 @@ class EventQueue {
         });
     }
 }
+
+/**
+ * Ce que `plan()` a besoin de lire en base, lu une fois par session et remonté
+ * au-dessus du scan pour que l'empreinte de la baseline serve à juger la réponse
+ * rapide de l'agent.
+ */
+interface PlanContext {
+    /** Chemins invisibles au merge (exclus ou non portables), des DEUX côtés. */
+    hidden: (relPath: string) => boolean;
+    baseline: SyncDeviceFileRow[];
+    server: SyncFileRow[];
+}
+
+/**
+ * Une ligne de baseline relue comme une entrée d'index.
+ *
+ * Utilisé uniquement quand l'empreinte a PROUVÉ que l'appareil détient
+ * exactement cette baseline. Le `mtime` reporté est donc celui de la baseline et
+ * pas forcément celui du disque, ce qui est sans conséquence : l'égalité des
+ * empreintes implique que tous les hachages coïncident, donc le planificateur ne
+ * peut produire ni montée, ni conflit, ni rafraîchissement de baseline — les
+ * trois seuls endroits où le mtime de l'appareil pèserait.
+ */
+const baselineToEntry = (b: SyncDeviceFileRow): SyncIndexEntry => ({
+    relPath: b.rel_path,
+    kind: b.kind,
+    hash: b.hash,
+    size: b.size,
+    mtime: b.mtime,
+    mode: b.mode
+});
 
 const OP_TIMEOUT_MS = 60_000;
 const PROGRESS_PUBLISH_MS = 250;
@@ -190,7 +240,16 @@ export class SyncSession {
         private readonly host: SessionHost,
         private readonly share: SyncShareRow,
         private readonly deviceId: string,
-        private readonly store: ShareBlobStore
+        private readonly store: ShareBlobStore,
+        /**
+         * Interdit la réponse rapide de l'agent : le disque DOIT être parcouru.
+         *
+         * Posé par le filet de sécurité horaire (`scheduleAllActive`). C'est lui
+         * qui garantit qu'un événement de watcher raté ne peut jamais laisser
+         * deux appareils divergents plus d'une heure — le chemin rapide rend le
+         * cas courant gratuit, il ne remplace pas le filet.
+         */
+        private readonly forceFull = false
     ) {
         this.downBucket = makeBucket(share.rate_down_bps);
     }
@@ -278,11 +337,10 @@ export class SyncSession {
     /** Exécute la session de bout en bout. Ne lève jamais : l'issue est persistée. */
     async run(): Promise<void> {
         const { db, logger } = this.host;
-        const row = await db.syncSessions.create(this.share.id, this.deviceId);
-        this.sessionRowId = row.id;
         try {
-            const index = await this.scan();
-            const plan = await this.plan(index);
+            const ctx = await this.loadPlanContext();
+            const index = await this.resolveDeviceIndex(ctx);
+            const plan = await this.plan(index, ctx);
             await this.transfer(plan);
             const outcome = this.failures.length > 0 ? 'error' : 'done';
             const error =
@@ -303,18 +361,77 @@ export class SyncSession {
 
     // ─── Étape 1 : scan ────────────────────────────────────────────────────────
 
-    private async scan(): Promise<SyncIndexEntry[]> {
+    /**
+     * Ce que le planificateur a besoin de savoir, lu UNE fois et avant le scan.
+     *
+     * Remonté au-dessus du scan exprès : l'empreinte de la baseline doit être
+     * connue pour pouvoir juger une réponse rapide de l'agent, et elle doit être
+     * calculée avec EXACTEMENT le filtre `hidden` que `plan()` applique — sinon
+     * les deux côtés compareraient des jeux d'entrées différents et le chemin
+     * rapide ne s'engagerait jamais.
+     */
+    private async loadPlanContext(): Promise<PlanContext> {
+        const { db } = this.host;
+        const excluded = compileExclusions(await db.syncShares.listExclusions(this.share.id));
+        // Les chemins exclus (même ajoutés après coup) et les chemins non
+        // portables sont invisibles au merge : ni propagés, ni téléchargés, ni
+        // supprimés. Le filtre DOIT être symétrique (index serveur ET scan
+        // appareil), sinon un chemin retiré d'un seul côté serait aussitôt
+        // ressuscité par l'autre.
+        const hidden = (relPath: string): boolean => excluded(relPath) || relPathProblem(relPath) !== null;
+        const baseline = await db.syncFiles.listBaseline(this.share.id, this.deviceId);
+        const server = (await db.syncFiles.listByShare(this.share.id)).filter((r) => !hidden(r.rel_path));
+        return { hidden, baseline, server };
+    }
+
+    /**
+     * L'index de l'appareil, obtenu au moindre coût.
+     *
+     * Le chemin rapide ne SUPPOSE jamais que l'appareil est à jour : l'agent
+     * annonce l'empreinte de ce qu'il détient, et le serveur la compare à celle
+     * de la baseline qu'il possède déjà. Égales, la baseline EST l'index de
+     * l'appareil, prouvé par un SHA-256 sur la même forme canonique — et le
+     * disque n'a pas été touché du tout. Différentes, on redemande un parcours
+     * complet : une vérification négative coûte un aller-retour, jamais une
+     * divergence.
+     */
+    private async resolveDeviceIndex(ctx: PlanContext): Promise<SyncIndexEntry[]> {
+        const first = await this.scan(this.forceFull ? 'full' : 'auto');
+        if (first.entries !== null) return first.entries;
+
+        const visible = ctx.baseline.filter((b) => !ctx.hidden(b.rel_path));
+        const expected = baselineFingerprint(visible);
+        if (first.fingerprint === expected) return visible.map(baselineToEntry);
+
+        // Écart d'empreinte sur une réponse rapide : l'agent se croit propre mais
+        // ne détient pas ce que la baseline décrit (session précédente en erreur,
+        // exclusions désaccordées, deux noms qui se normalisent pareil…). Rien de
+        // grave, mais ça mérite une trace : c'est le symptôme d'un chemin rapide
+        // qui ne s'engagera jamais, et un chemin rapide muet est indétectable.
+        this.host.logger.debug(
+            { shareId: this.share.id, deviceId: this.deviceId, agent: first.fingerprint, server: expected },
+            'CloudSync: fingerprint mismatch on a fast reply — falling back to a full scan'
+        );
+        const full = await this.scan('full');
+        if (full.entries === null) throw new SessionAbort('error', 'L’agent a refusé le scan complet');
+        return full.entries;
+    }
+
+    private async scan(mode: SyncScanMode): Promise<{ entries: SyncIndexEntry[] | null; fingerprint: string | null }> {
         this.setState('scanning');
         const queue = new EventQueue();
         this.host.claimOp(this.sessionId, this.deviceId, (ev) => queue.push(ev));
         try {
             const sent = this.host.hub.requestSyncScan(this.deviceId, {
                 sessionId: this.sessionId,
-                shareId: this.share.id
+                shareId: this.share.id,
+                mode
             });
             if (!sent) throw new SessionAbort('error', 'Agent hors ligne');
 
             const entries = new Map<string, SyncIndexEntry>();
+            let scanned = true;
+            let fingerprint: string | null = null;
             /** Chemins vus deux fois dans CE scan (voir plus bas) : écartés. */
             const duplicated = new Set<string>();
             for (;;) {
@@ -322,6 +439,8 @@ export class SyncSession {
                 const ev = await queue.next(OP_TIMEOUT_MS);
                 if (ev.type !== 'index') continue; // Frame parasite : ignorée.
                 if (ev.error) throw new SessionAbort('error', `Scan impossible : ${ev.error}`);
+                if (!ev.scanned) scanned = false;
+                if (ev.fingerprint !== null) fingerprint = ev.fingerprint;
                 for (const entry of ev.entries) {
                     // Défense en profondeur : l'agent a déjà filtré, on revalide.
                     const problem = relPathProblem(entry.relPath);
@@ -350,7 +469,11 @@ export class SyncSession {
                     'Deux fichiers locaux portent ce même nom à la normalisation Unicode près (NFC/NFD) — aucun des deux n’est synchronisé'
                 );
             }
-            return [...entries.values()];
+            // Réponse rapide : l'agent n'a rien parcouru, il n'a donc rien à dire
+            // du contenu — seule l'empreinte compte, et c'est à l'appelant de la
+            // juger.
+            if (!scanned) return { entries: null, fingerprint };
+            return { entries: [...entries.values()], fingerprint };
         } finally {
             this.host.releaseOp(this.sessionId);
         }
@@ -358,18 +481,9 @@ export class SyncSession {
 
     // ─── Étape 2 : plan ────────────────────────────────────────────────────────
 
-    private async plan(deviceIndex: SyncIndexEntry[]): Promise<Plan> {
+    private async plan(deviceIndex: SyncIndexEntry[], ctx: PlanContext): Promise<Plan> {
         this.setState('planning');
-        const { db } = this.host;
-        const excluded = compileExclusions(await db.syncShares.listExclusions(this.share.id));
-        const baseline = await db.syncFiles.listBaseline(this.share.id, this.deviceId);
-        // Les chemins exclus (même ajoutés après coup) et les chemins non
-        // portables sont invisibles au merge : ni propagés, ni téléchargés, ni
-        // supprimés. Le filtre DOIT être symétrique (index serveur ET scan
-        // appareil), sinon un chemin retiré d'un seul côté serait aussitôt
-        // ressuscité par l'autre.
-        const hidden = (relPath: string): boolean => excluded(relPath) || relPathProblem(relPath) !== null;
-        const server = (await db.syncFiles.listByShare(this.share.id)).filter((r) => !hidden(r.rel_path));
+        const { hidden, baseline, server } = ctx;
         const device = deviceIndex.filter((e) => !hidden(e.relPath));
 
         const plan = planSession(device, baseline, server);

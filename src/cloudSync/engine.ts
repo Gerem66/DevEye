@@ -77,6 +77,15 @@ export class CloudSyncEngine {
     private readonly running = new Map<string, SyncSession>();
     /** Une relance a été demandée pendant qu'une session tournait. */
     private readonly rerun = new Set<string>();
+    /**
+     * Paires dont la prochaine session doit imposer un scan COMPLET à l'agent.
+     *
+     * Collant, et c'est indispensable : une demande `full` (le filet horaire) qui
+     * tombe sur une paire déjà en file promeut celle-ci au lieu d'être avalée.
+     * Sans ça, un événement de watcher arrivé une milliseconde plus tôt suffisait
+     * à faire disparaître le filet de sécurité de l'heure.
+     */
+    private readonly fullPending = new Set<string>();
     /** opId/sessionId -> routeur d'événements de la session propriétaire. */
     private readonly ops = new Map<string, { deviceId: string; push: (ev: AgentSyncEvent) => void }>();
     /** Dernière progression connue par paire (snapshot des abonnés web). */
@@ -266,15 +275,24 @@ export class CloudSyncEngine {
         const suffix = `:${deviceId}`;
         for (const key of this.lastProgress.keys()) if (key.endsWith(suffix)) this.lastProgress.delete(key);
         for (const key of this.failedPlan.keys()) if (key.endsWith(suffix)) this.failedPlan.delete(key);
+        for (const key of this.fullPending) if (key.endsWith(suffix)) this.fullPending.delete(key);
         await this.pushConfigTo(deviceId);
     }
 
     // ─── Ordonnancement ────────────────────────────────────────────────────────
 
-    /** Planifie une session pour une paire ; coalesce si déjà en file ou en cours. */
-    schedule(shareId: number, deviceId: string): void {
+    /**
+     * Planifie une session pour une paire ; coalesce si déjà en file ou en cours.
+     *
+     * `full` interdit à l'agent sa réponse rapide et impose un parcours de disque.
+     * Il est POSÉ AVANT toute sortie anticipée : une session déjà en file ou en
+     * cours doit hériter de l'exigence, sinon le filet horaire se ferait avaler
+     * par un simple réveil de watcher.
+     */
+    schedule(shareId: number, deviceId: string, opts?: { full?: boolean }): void {
         if (!this.active) return; // Instance passive : la synchro appartient à l'autre.
         const key = pairKey(shareId, deviceId);
+        if (opts?.full === true) this.fullPending.add(key);
         if (this.running.has(key)) {
             this.rerun.add(key);
             return;
@@ -298,7 +316,12 @@ export class CloudSyncEngine {
         for (const share of await this.deps.db.syncShares.listAll()) {
             if (share.status !== 'active') continue;
             for (const d of await this.deps.db.syncShares.listDevices(share.id)) {
-                if (d.status === 'active') this.schedule(share.id, d.device_id);
+                // `full` : c'est CE passage qui est le filet de sécurité. Le
+                // chemin rapide rend le cas courant gratuit, il ne le remplace
+                // pas — un événement de watcher perdu (débordement inotify,
+                // agent redémarré au mauvais moment) doit être rattrapé ici, et
+                // il ne peut l'être que par un vrai parcours du disque.
+                if (d.status === 'active') this.schedule(share.id, d.device_id, { full: true });
             }
         }
     }
@@ -372,7 +395,12 @@ export class CloudSyncEngine {
             }
         };
 
-        const session = new SyncSession(host, share, deviceId, await this.storeFor(share));
+        // Consommé ici : l'exigence de parcours complet vaut pour CETTE session.
+        // Si elle échoue, la relance passera par `schedule` qui la reposera au
+        // besoin — on ne la garde pas indéfiniment, sinon un partage resterait
+        // en scan complet pour toujours après un seul passage du filet.
+        const full = this.fullPending.delete(key);
+        const session = new SyncSession(host, share, deviceId, await this.storeFor(share), full);
         this.running.set(key, session);
         this.publishShareState(shareId);
         try {
@@ -952,6 +980,7 @@ export class CloudSyncEngine {
             const prefix = `${share.id}:`;
             for (const key of this.lastProgress.keys()) if (key.startsWith(prefix)) this.lastProgress.delete(key);
             for (const key of this.failedPlan.keys()) if (key.startsWith(prefix)) this.failedPlan.delete(key);
+            for (const key of this.fullPending) if (key.startsWith(prefix)) this.fullPending.delete(key);
             if (deleteData) {
                 // On n'efface QUE ce que le store possède (`blobs/`, `tmp/`) —
                 // jamais un rm -rf du dossier de stockage entier, qui pourrait

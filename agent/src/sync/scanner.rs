@@ -4,6 +4,8 @@
 //! seuls les fichiers réguliers comptent, les symlinks sont ignorés.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
 
 use anyhow::{Context, Result};
@@ -13,10 +15,11 @@ use tokio::sync::mpsc::Sender;
 use tracing::{debug, warn};
 
 use crate::protocol::{SyncExclusion, SyncIndexEntry, SyncShareAssignment};
+use crate::sync::fingerprint::{Fingerprint, FingerprintEntry};
 use crate::sync::index_cache::{CacheEntry, IndexCache};
 use crate::sync::paths::{is_reserved_top, rel_path_of, rel_path_problem};
 use crate::sync::transfer::sweep_trash;
-use crate::sync::SyncEvent;
+use crate::sync::{CleanMark, SyncEvent};
 
 /// Taille des lots `sync.index` (miroir de `SYNC_INDEX_BATCH_MAX`).
 const BATCH: usize = 500;
@@ -122,17 +125,45 @@ pub fn hash_file(path: &std::path::Path) -> Result<String> {
 }
 
 /// Lance le scan sur un thread dédié (I/O + hashing intensifs, hors runtime).
-pub fn spawn_scan(session_id: String, assignment: SyncShareAssignment, tx: Sender<SyncEvent>) {
+///
+/// `clean` est la marque de propreté du partage : le scan la POSE en fin de
+/// course, avec l'empreinte de ce qu'il vient de produire et l'époque du
+/// compteur d'événements relevée AVANT le parcours. Prendre l'époque avant, et
+/// vérifier après qu'elle n'a pas bougé, est ce qui interdit de marquer propre un
+/// partage modifié pendant le scan.
+pub fn spawn_scan(
+    session_id: String,
+    assignment: SyncShareAssignment,
+    tx: Sender<SyncEvent>,
+    events: Option<Arc<AtomicU64>>,
+    clean: Arc<Mutex<CleanMark>>,
+) {
     std::thread::spawn(move || {
         let share_id = assignment.share_id;
+        let epoch = events.as_ref().map(|e| e.load(Ordering::Relaxed));
         match scan(&session_id, &assignment, &tx) {
-            Ok(()) => {}
+            Ok(fingerprint) => {
+                // Le partage n'est déclaré propre que si RIEN n'a bougé pendant
+                // le parcours, et jamais quand le watcher est absent (`events`
+                // à `None`) : sans surveillance, rien ne pourrait plus jamais
+                // invalider la marque.
+                if let (Some(events), Some(epoch)) = (events, epoch) {
+                    if events.load(Ordering::Relaxed) == epoch {
+                        *clean.lock().expect("clean lock") = CleanMark {
+                            epoch: Some(epoch),
+                            fingerprint,
+                        };
+                    }
+                }
+            }
             Err(e) => {
                 let _ = tx.blocking_send(SyncEvent::Index {
                     session_id,
                     share_id,
                     entries: Vec::new(),
                     done: true,
+                    scanned: true,
+                    fingerprint: None,
                     error: Some(e.to_string()),
                 });
             }
@@ -140,7 +171,11 @@ pub fn spawn_scan(session_id: String, assignment: SyncShareAssignment, tx: Sende
     });
 }
 
-fn scan(session_id: &str, assignment: &SyncShareAssignment, tx: &Sender<SyncEvent>) -> Result<()> {
+fn scan(
+    session_id: &str,
+    assignment: &SyncShareAssignment,
+    tx: &Sender<SyncEvent>,
+) -> Result<String> {
     let root = PathBuf::from(&assignment.local_path);
     // Un appareil fraîchement attaché n'a peut-être pas encore le dossier.
     std::fs::create_dir_all(&root).with_context(|| format!("création de {}", root.display()))?;
@@ -234,12 +269,15 @@ fn scan(session_id: &str, assignment: &SyncShareAssignment, tx: &Sender<SyncEven
                 },
             };
             kept += 1;
+            let mode = unix_mode(&meta);
             fresh.entries.insert(
                 rel.clone(),
                 CacheEntry {
                     size,
                     mtime,
                     hash: hash.clone(),
+                    kind: "file".to_string(),
+                    mode,
                 },
             );
 
@@ -249,7 +287,7 @@ fn scan(session_id: &str, assignment: &SyncShareAssignment, tx: &Sender<SyncEven
                 hash,
                 size,
                 mtime,
-                mode: unix_mode(&meta),
+                mode,
             });
             if batch.len() >= BATCH {
                 let full = std::mem::replace(&mut batch, Vec::with_capacity(BATCH));
@@ -258,6 +296,8 @@ fn scan(session_id: &str, assignment: &SyncShareAssignment, tx: &Sender<SyncEven
                     share_id: assignment.share_id,
                     entries: full,
                     done: false,
+                    scanned: true,
+                    fingerprint: None,
                     error: None,
                 })
                 .map_err(|_| anyhow::anyhow!("session terminée"))?;
@@ -271,13 +311,28 @@ fn scan(session_id: &str, assignment: &SyncShareAssignment, tx: &Sender<SyncEven
             if let Some(rel) = rel_path_of(&root, &dir) {
                 if rel_path_problem(&rel).is_none() {
                     let meta = std::fs::symlink_metadata(&dir).ok();
+                    let mtime = meta.as_ref().map(mtime_millis).unwrap_or(0);
+                    let mode = meta.as_ref().and_then(unix_mode);
+                    // Les dossiers vides entrent dans le cache comme les
+                    // fichiers : l'empreinte se calcule à partir de `fresh`, et
+                    // un dossier vidé de son dernier fichier doit la déplacer.
+                    fresh.entries.insert(
+                        rel.clone(),
+                        CacheEntry {
+                            size: 0,
+                            mtime,
+                            hash: SYNC_DIR_HASH.to_string(),
+                            kind: "dir".to_string(),
+                            mode,
+                        },
+                    );
                     batch.push(SyncIndexEntry {
                         rel_path: rel,
                         kind: "dir".to_string(),
                         hash: SYNC_DIR_HASH.to_string(),
                         size: 0,
-                        mtime: meta.as_ref().map(mtime_millis).unwrap_or(0),
-                        mode: meta.as_ref().and_then(unix_mode),
+                        mtime,
+                        mode,
                     });
                     // Vidange comme pour un fichier : sans elle, une arborescence
                     // de nombreux dossiers vides construisait UN lot géant, que le
@@ -289,6 +344,8 @@ fn scan(session_id: &str, assignment: &SyncShareAssignment, tx: &Sender<SyncEven
                             share_id: assignment.share_id,
                             entries: full,
                             done: false,
+                            scanned: true,
+                            fingerprint: None,
                             error: None,
                         })
                         .map_err(|_| anyhow::anyhow!("session terminée"))?;
@@ -298,14 +355,35 @@ fn scan(session_id: &str, assignment: &SyncShareAssignment, tx: &Sender<SyncEven
         }
     }
 
+    // L'empreinte se calcule sur `fresh`, c'est-à-dire sur EXACTEMENT ce que ce
+    // scan vient d'émettre. La calculer ailleurs (sur le cache chargé, sur le
+    // disque relu) la ferait décrire autre chose que ce que le serveur a reçu.
+    let fingerprint = fingerprint_of(&fresh);
     fresh.save(assignment.share_id);
     tx.blocking_send(SyncEvent::Index {
         session_id: session_id.to_string(),
         share_id: assignment.share_id,
         entries: batch,
         done: true,
+        scanned: true,
+        fingerprint: Some(fingerprint.clone()),
         error: None,
     })
     .map_err(|_| anyhow::anyhow!("session terminée"))?;
-    Ok(())
+    Ok(fingerprint)
+}
+
+/// Empreinte d'un cache d'index, dans la forme partagée avec le serveur.
+pub fn fingerprint_of(cache: &IndexCache) -> String {
+    let mut fp = Fingerprint::default();
+    for (rel_path, e) in &cache.entries {
+        fp.push(&FingerprintEntry {
+            rel_path,
+            kind: &e.kind,
+            hash: &e.hash,
+            size: e.size,
+            mode: e.mode,
+        });
+    }
+    fp.finish()
 }

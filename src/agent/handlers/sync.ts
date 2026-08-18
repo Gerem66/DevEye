@@ -26,6 +26,8 @@ export async function handleSyncIndex(s: AgentSession, payload: PayloadOf<typeof
         type: 'index',
         entries: payload.entries,
         done: payload.done,
+        scanned: payload.scanned,
+        fingerprint: payload.fingerprint,
         error: payload.error
     });
     ack(s, payload.entries.length);

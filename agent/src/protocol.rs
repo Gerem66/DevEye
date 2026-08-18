@@ -662,6 +662,12 @@ pub enum ClientMessage {
         share_id: i64,
         entries: Vec<SyncIndexEntry>,
         done: bool,
+        /// Le disque a-t-il réellement été parcouru ? Toujours sérialisé : un
+        /// serveur récent en a besoin pour distinguer « rien à signaler » d'un
+        /// scan complet qui n'a rien trouvé.
+        scanned: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fingerprint: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
@@ -890,6 +896,14 @@ pub enum ServerMessage {
         session_id: String,
         #[serde(rename = "shareId")]
         share_id: i64,
+        /// `auto` autorise la réponse rapide, `full` impose le parcours complet.
+        ///
+        /// `Option` plutôt qu'un défaut serde : champ ABSENT veut dire vieux
+        /// serveur, et un vieux serveur doit obtenir le comportement d'avant,
+        /// c'est-à-dire un scan complet. La dissymétrie de version dégrade donc
+        /// vers « on parcourt », jamais vers « on saute ».
+        #[serde(default)]
+        mode: Option<String>,
     },
     /// CloudSync: upload one local file (streams `sync.chunk`).
     #[serde(rename = "sync.push")]

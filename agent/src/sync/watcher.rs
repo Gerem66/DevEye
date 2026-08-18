@@ -5,7 +5,7 @@
 //! grave (le scan périodique rattrape) ; en émettre trop non plus (coalescé).
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -35,6 +35,22 @@ pub struct ShareWatcher {
     _watcher: RecommendedWatcher,
     stop: Arc<AtomicBool>,
     thread: Option<std::thread::JoinHandle<()>>,
+    events: Arc<AtomicU64>,
+}
+
+impl ShareWatcher {
+    /// Compteur monotone des événements vus depuis le démarrage du watcher.
+    ///
+    /// C'est la SEULE chose que le watcher ait le droit d'affirmer, et elle
+    /// survit à tout : un débordement de la file inotify l'incrémente aussi (on
+    /// a perdu des événements, donc « quelque chose a bougé »). Comparé à la
+    /// valeur relevée avant le dernier scan, il répond à la seule question qui
+    /// compte : « est-ce que quoi que ce soit a pu bouger depuis ? ».
+    ///
+    /// Il ne dit PAS quoi a bougé, et c'est délibéré — voir l'en-tête du module.
+    pub fn events(&self) -> Arc<AtomicU64> {
+        Arc::clone(&self.events)
+    }
 }
 
 impl Drop for ShareWatcher {
@@ -64,7 +80,9 @@ pub fn start(share_id: i64, root: PathBuf, tx: Sender<SyncEvent>) -> Result<Shar
     std::fs::create_dir_all(&root).with_context(|| format!("création de {}", root.display()))?;
 
     let pending = Arc::new(Mutex::new(Pending::default()));
+    let events = Arc::new(AtomicU64::new(0));
     let handler_pending = Arc::clone(&pending);
+    let handler_events = Arc::clone(&events);
     let handler_root = root.clone();
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
         // Une erreur du backend (débordement de la file inotify, typiquement)
@@ -76,6 +94,11 @@ pub fn start(share_id: i64, root: PathBuf, tx: Sender<SyncEvent>) -> Result<Shar
                 return;
             }
         }
+        // Incrémenté AVANT le débounce, et sans lui : le débounce sert à ne pas
+        // déclencher trop de sessions, le compteur sert à savoir si le disque a
+        // pu bouger. Confondre les deux ferait rater une modification arrivée
+        // pendant un scan, qui serait alors marqué propre à tort.
+        handler_events.fetch_add(1, Ordering::Relaxed);
         let mut p = handler_pending.lock().expect("pending lock");
         let now = Instant::now();
         p.first.get_or_insert(now);
@@ -118,5 +141,6 @@ pub fn start(share_id: i64, root: PathBuf, tx: Sender<SyncEvent>) -> Result<Shar
         _watcher: watcher,
         stop,
         thread: Some(thread),
+        events,
     })
 }

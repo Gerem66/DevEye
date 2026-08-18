@@ -6,6 +6,7 @@
 //! locale (`.deveye-trash/`) uniquement quand le serveur — qui a déjà archivé
 //! une version vérifiée — le demande.
 
+pub mod fingerprint;
 pub mod index_cache;
 pub mod paths;
 pub mod scanner;
@@ -14,6 +15,8 @@ mod watcher;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use tokio::sync::mpsc::Sender;
 use tracing::{info, warn};
@@ -32,6 +35,10 @@ pub enum SyncEvent {
         share_id: i64,
         entries: Vec<SyncIndexEntry>,
         done: bool,
+        /// Le disque a-t-il réellement été parcouru ? `false` = réponse rapide.
+        scanned: bool,
+        /// Empreinte de l'index détenu, portée par le lot final uniquement.
+        fingerprint: Option<String>,
         error: Option<String>,
     },
     /// Un chunk d'upload (`data` brut, encodé base64 à l'envoi).
@@ -58,10 +65,31 @@ pub enum SyncEvent {
     },
 }
 
+/// Ce que l'agent sait de la fraîcheur d'un partage.
+///
+/// « Propre » veut dire : le dernier scan complet s'est terminé sans qu'aucun
+/// événement de watcher ne soit survenu depuis, donc `fingerprint` décrit
+/// encore exactement ce qu'un nouveau scan produirait.
+///
+/// `epoch: None` est l'état de départ, et il porte tout le travail
+/// d'invalidation à lui seul : un partage tout juste attaché, un agent qui vient
+/// de démarrer (l'agent était peut-être éteint pendant trois jours), un chemin
+/// local qui a changé, un jeu d'exclusions modifié — tous ces cas remettent la
+/// marque à `None` et forcent donc un parcours complet, sans qu'aucun d'eux
+/// n'ait besoin d'un traitement particulier.
+#[derive(Default)]
+pub struct CleanMark {
+    pub epoch: Option<u64>,
+    pub fingerprint: String,
+}
+
 struct ShareState {
     assignment: SyncShareAssignment,
     /// Présent seulement quand le partage est actif.
     _watcher: Option<ShareWatcher>,
+    /// Compteur d'événements du watcher, `None` quand il n'a pas pu démarrer.
+    events: Option<Arc<AtomicU64>>,
+    clean: Arc<Mutex<CleanMark>>,
 }
 
 /// Possède les assignations, les watchers et les installs en cours. Vit dans
@@ -101,31 +129,76 @@ impl SyncManager {
                 index_cache::IndexCache::remove(share_id);
                 self.applier.invalidate_cache(share_id);
             }
+            // La marque de propreté ne survit qu'à une assignation RIGOUREUSEMENT
+            // identique. Les exclusions comptent autant que le chemin : le cache
+            // de l'agent a été produit sous les anciennes, donc son empreinte
+            // décrit un jeu d'entrées que le serveur ne calcule plus pareil.
+            //
+            // C'est bien ici, et surtout PAS dans le hachage, que se fait cette
+            // invalidation. Mélanger un digest de la config à l'empreinte ferait
+            // changer les deux copies au même instant alors que les jeux
+            // d'entrées, eux, diffèrent encore : une fausse égalité, c'est-à-dire
+            // une non-convergence silencieuse.
+            //
+            // Le cas « assignation identique » n'est pas une optimisation
+            // gratuite : `notifyConfigChanged` re-pousse la config à chaque
+            // attache et à chaque restauration, et repartir de zéro à chaque fois
+            // rendrait le chemin rapide inatteignable en pratique.
+            let same_shape = previous.as_ref().is_some_and(|s| {
+                s.assignment.local_path == assignment.local_path
+                    && s.assignment.exclusions.len() == assignment.exclusions.len()
+                    && s.assignment
+                        .exclusions
+                        .iter()
+                        .zip(assignment.exclusions.iter())
+                        .all(|(a, b)| a.kind == b.kind && a.pattern == b.pattern)
+            });
             let unchanged = previous.filter(|s| {
                 s.assignment.local_path == assignment.local_path && (s._watcher.is_some()) == active
             });
-            let watcher = match unchanged {
-                Some(prev) => prev._watcher, // Watcher conservé tel quel.
+            let (watcher, events, clean) = match unchanged {
+                Some(prev) => {
+                    // Watcher conservé tel quel : son compteur continue de courir,
+                    // donc la marque garde son sens.
+                    let events = prev.events;
+                    let clean = if same_shape {
+                        prev.clean
+                    } else {
+                        Arc::new(Mutex::new(CleanMark::default()))
+                    };
+                    (prev._watcher, events, clean)
+                }
                 None if active => {
                     match watcher::start(
                         share_id,
                         PathBuf::from(&assignment.local_path),
                         self.tx.clone(),
                     ) {
-                        Ok(w) => Some(w),
+                        Ok(w) => {
+                            let events = w.events();
+                            // Watcher tout neuf : son compteur repart de zéro, et
+                            // rien ne dit ce qui a bougé avant lui. `epoch: None`.
+                            (
+                                Some(w),
+                                Some(events),
+                                Arc::new(Mutex::new(CleanMark::default())),
+                            )
+                        }
                         Err(e) => {
                             warn!(share_id, error = %e, "sync: watcher start failed (periodic scans still cover)");
-                            None
+                            (None, None, Arc::new(Mutex::new(CleanMark::default())))
                         }
                     }
                 }
-                None => None,
+                None => (None, None, Arc::new(Mutex::new(CleanMark::default()))),
             };
             next.insert(
                 share_id,
                 ShareState {
                     assignment,
                     _watcher: watcher,
+                    events,
+                    clean,
                 },
             );
         }
@@ -143,15 +216,49 @@ impl SyncManager {
         self.shares.get(&share_id).map(|s| &s.assignment)
     }
 
-    /// Scan complet (thread dédié) ; partage inconnu/en pause → lot d'erreur.
+    /// Scan d'un partage ; partage inconnu/en pause → lot d'erreur.
+    ///
+    /// `mode` vient du serveur. En `auto`, un partage que le watcher sait intact
+    /// depuis son dernier scan répond immédiatement : aucune entrée, aucun
+    /// parcours de disque, juste l'empreinte de ce qu'il détient. C'est au
+    /// serveur de la comparer à sa propre baseline — l'agent ne conclut rien, il
+    /// rapporte un fait sur lui-même, et une réponse rapide qui se révélerait
+    /// fausse coûte au pire un scan complet de plus.
+    ///
+    /// En `full` (le filet de sécurité horaire), le parcours est obligatoire :
+    /// c'est ce qui garantit qu'un événement de watcher raté ne peut jamais
+    /// laisser deux appareils divergents indéfiniment.
     ///
     /// `&mut` : le scan va réécrire le cache d'index sur disque, donc la copie
     /// mémorisée par l'applier doit être oubliée maintenant.
-    pub fn start_scan(&mut self, session_id: String, share_id: i64) {
+    pub fn start_scan(&mut self, session_id: String, share_id: i64, mode: Option<String>) {
+        let full = mode.as_deref() != Some("auto");
+        // La réponse rapide ne touche pas au cache d'index : l'applier peut
+        // garder le sien, puisque rien ne sera réécrit.
+        if !full {
+            if let Some(fp) = self.clean_fingerprint(share_id) {
+                let _ = self.tx.try_send(SyncEvent::Index {
+                    session_id,
+                    share_id,
+                    entries: Vec::new(),
+                    done: true,
+                    scanned: false,
+                    fingerprint: Some(fp),
+                    error: None,
+                });
+                return;
+            }
+        }
         self.applier.invalidate_cache(share_id);
-        match self.assignment(share_id) {
-            Some(a) if a.status == "active" => {
-                scanner::spawn_scan(session_id, a.clone(), self.tx.clone());
+        match self.shares.get(&share_id) {
+            Some(s) if s.assignment.status == "active" => {
+                scanner::spawn_scan(
+                    session_id,
+                    s.assignment.clone(),
+                    self.tx.clone(),
+                    s.events.clone(),
+                    Arc::clone(&s.clean),
+                );
             }
             _ => {
                 let _ = self.tx.try_send(SyncEvent::Index {
@@ -159,9 +266,37 @@ impl SyncManager {
                     share_id,
                     entries: Vec::new(),
                     done: true,
+                    scanned: true,
+                    fingerprint: None,
                     error: Some("Partage inconnu ou en pause sur cet appareil".to_string()),
                 });
             }
+        }
+    }
+
+    /// L'empreinte d'un partage encore propre, ou `None` s'il faut re-scanner.
+    ///
+    /// Propre = le compteur d'événements du watcher n'a pas bougé d'un cran
+    /// depuis la fin du dernier scan complet. Sans watcher, jamais propre : rien
+    /// ne pourrait plus invalider la marque.
+    fn clean_fingerprint(&self, share_id: i64) -> Option<String> {
+        let state = self.shares.get(&share_id)?;
+        if state.assignment.status != "active" {
+            return None;
+        }
+        let now = state.events.as_ref()?.load(Ordering::Relaxed);
+        let mark = state.clean.lock().expect("clean lock");
+        (mark.epoch == Some(now)).then(|| mark.fingerprint.clone())
+    }
+
+    /// Force un parcours complet au prochain scan de TOUS les partages.
+    ///
+    /// Appelé à la sortie de veille : rien ne garantit qu'une surveillance
+    /// inotify / FSEvents / ReadDirectoryChangesW ait survécu à la suspension de
+    /// la machine, et un scan complet de trop ne coûte que du temps.
+    pub fn mark_all_dirty(&self) {
+        for state in self.shares.values() {
+            state.clean.lock().expect("clean lock").epoch = None;
         }
     }
 
