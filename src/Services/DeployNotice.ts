@@ -52,6 +52,16 @@ const DESCRIPTION_MAX = 4000;
 /** Discord refuse la valeur d'un champ au-delà de 1024 caractères. */
 const FIELD_MAX = 1000;
 
+/**
+ * Longueur au-delà de laquelle un intitulé de déploiement est coupé.
+ *
+ * Le titre vient de Dokploy, qui y met le **message de commit** — donc son sujet
+ * *et* son corps. Un commit correctement écrit tient son sujet sous 72
+ * caractères ; cent laisse de la marge à ceux qui n'en font qu'à leur tête, sans
+ * qu'une seule ligne mange l'écran d'un téléphone.
+ */
+const TITLE_MAX = 100;
+
 export interface NoticeState {
     /** Le projet Dokploy (« OxyFoo »). `null` si l'instance n'a pu être lue. */
     project: string | null;
@@ -138,6 +148,29 @@ export function tailOf(log: string, lines = LOG_LINES): string {
 
     while (clean.length > 0 && clean[clean.length - 1].trim() === '') clean.pop();
     return clean.slice(-lines).join('\n').trim();
+}
+
+/**
+ * Le sujet d'un message de commit : sa **première ligne**, et rien d'autre.
+ *
+ * Dokploy range le message de commit entier dans le titre du déploiement. Un
+ * commit bavard — sujet, ligne vide, quinze lignes de justification — remplissait
+ * donc le haut du message Discord et repoussait tout le reste vers le bas, à
+ * chaque rafraîchissement.
+ *
+ * Le corps n'est pas déplacé ailleurs, il est **abandonné** : Discord n'a aucune
+ * infobulle dans un embed (le seul survol possible passe par un lien masqué,
+ * ce qui obligerait à transformer l'intitulé en lien, et le lien vers Dokploy
+ * existe déjà dans son propre champ). Qui veut le message complet l'ouvre là-bas.
+ *
+ * Les points de suspension ne sont ajoutés que si la **ligne elle-même** a été
+ * coupée : signaler l'existence d'un corps de commit n'apprendrait rien à qui
+ * regarde un avis de déploiement.
+ */
+export function firstLine(text: string, max = TITLE_MAX): string {
+    const line = text.replace(/\r/g, '').split('\n')[0].trim();
+    if (line.length <= max) return line;
+    return `${line.slice(0, max - 1).trimEnd()}…`;
 }
 
 /** « 2 min 25 », « 45 s » — la même échelle que les corps d'alerte. */
@@ -239,7 +272,7 @@ export function buildNotice(state: NoticeState): DiscordMessage {
 
     // La description ne garde que ce qui doit être lu **avant** tout le reste :
     // le titre, l'avancement, et la raison d'un échec.
-    const parts: string[] = [`**${state.title || 'Déploiement'}**`];
+    const parts: string[] = [`**${firstLine(state.title) || 'Déploiement'}**`];
     if (running) parts.push(progressLine(state, elapsed));
     if (failed && state.error) parts.push(`⚠️ ${state.error.slice(0, FIELD_MAX)}`);
 

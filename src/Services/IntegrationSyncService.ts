@@ -25,7 +25,7 @@ import {
     type DokployDeployment,
     type DokployTarget
 } from './integrations/dokploy';
-import { buildNotice, estimateFromHistory } from '@/Services/DeployNotice';
+import { buildNotice, estimateFromHistory, firstLine } from '@/Services/DeployNotice';
 import { editMessage, isDiscordWebhook, postMessage } from '@/Services/discord';
 import {
     deliver,
@@ -1343,7 +1343,11 @@ export class IntegrationSyncService {
         item: { status: string; title: string; description: string; startedAt: number; finishedAt: number | null }
     ): Alert {
         const failed = item.status === 'failed';
-        const label = item.title || 'Déploiement';
+        // Même coupe que dans l'avis Discord, et pour la même raison : Dokploy
+        // range le message de commit entier dans le titre. Un corps de commit au
+        // milieu d'une phrase entre guillemets — ou, pire, dans un objet de mail,
+        // où un saut de ligne n'a rien à faire — ne rend service à personne.
+        const label = firstLine(item.title) || 'Déploiement';
         const lines = [
             failed
                 ? `Le déploiement « ${label} » de ${targetName} a échoué.`

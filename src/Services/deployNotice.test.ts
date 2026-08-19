@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { DeploymentRow } from 'deveye-types';
 
-import { buildNotice, estimateFromHistory, progressBar, tailOf } from './DeployNotice';
+import { buildNotice, estimateFromHistory, firstLine, progressBar, tailOf } from './DeployNotice';
 
 type DiscordNotice = ReturnType<typeof buildNotice>;
 
@@ -119,6 +119,34 @@ describe('tailOf — la queue du journal', () => {
     });
 });
 
+describe('firstLine — le sujet d’un message de commit', () => {
+    it('ne garde que la première ligne', () => {
+        // Dokploy range le message de commit ENTIER dans le titre : sujet, ligne
+        // vide, puis le corps. Sans coupe, un commit bavard remplissait le haut
+        // du message Discord et repoussait tout le reste.
+        assert.equal(firstLine('feat: le sujet\n\nUn corps\nsur deux lignes.'), 'feat: le sujet');
+    });
+
+    it('n’ajoute pas de points de suspension pour un simple corps', () => {
+        // Signaler qu'un commit a un corps n'apprend rien à qui lit un avis de
+        // déploiement : les points ne disent que « cette ligne a été coupée ».
+        assert.equal(firstLine('chore: bump to v0.14.2\n\ndétails'), 'chore: bump to v0.14.2');
+    });
+
+    it('coupe une première ligne trop longue, en le signalant', () => {
+        const long = `fix: ${'a'.repeat(200)}`;
+        const cut = firstLine(long, 40);
+        assert.equal(cut.length, 40);
+        assert.ok(cut.endsWith('…'));
+    });
+
+    it('survit aux fins de ligne Windows et au texte vide', () => {
+        assert.equal(firstLine('sujet\r\ncorps'), 'sujet');
+        assert.equal(firstLine(''), '');
+        assert.equal(firstLine('   \n corps'), '');
+    });
+});
+
 describe('buildNotice — ce que le lecteur voit', () => {
     const base = {
         project: 'DevEye',
@@ -133,6 +161,17 @@ describe('buildNotice — ce que le lecteur voit', () => {
         estimateSeconds: 100,
         now: 1_050
     } as const;
+
+    it('n’affiche que le sujet du commit, jamais son corps', () => {
+        const embed = buildNotice({
+            ...base,
+            title: 'feat: ajoute le suivi\n\nUn corps de commit\nqui prendrait dix lignes.',
+            status: 'running',
+            finishedAt: null
+        }).embeds![0] as { description: string };
+        assert.match(embed.description, /\*\*feat: ajoute le suivi\*\*/);
+        assert.doesNotMatch(embed.description, /corps de commit/);
+    });
 
     it('annonce le dépassement plutôt qu’une fin imminente', () => {
         // Le cœur du parti pris : passé la moyenne, la barre est pleine et le
