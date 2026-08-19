@@ -74,10 +74,13 @@ services:
       dokploy-network:
         aliases:
           - deveye-server
+      oxyfoo-network:
 
 volumes:
   agent-bin:
 
 networks:
   dokploy-network:
+    external: true
+  oxyfoo-network:
     external: true
