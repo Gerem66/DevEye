@@ -4,6 +4,8 @@ import type { DeploymentRow } from 'deveye-types';
 
 import { buildNotice, estimateFromHistory, progressBar, tailOf } from './DeployNotice';
 
+type DiscordNotice = ReturnType<typeof buildNotice>;
+
 /**
  * Le message de suivi d'un déploiement.
  *
@@ -119,7 +121,11 @@ describe('tailOf — la queue du journal', () => {
 
 describe('buildNotice — ce que le lecteur voit', () => {
     const base = {
-        targetName: 'DevEye',
+        project: 'DevEye',
+        service: 'server',
+        environment: 'production',
+        kind: 'compose',
+        url: null,
         title: 'Manual deployment',
         startedAt: 1_000,
         error: '',
@@ -165,13 +171,33 @@ describe('buildNotice — ce que le lecteur voit', () => {
         assert.ok(description.indexOf('exit code 1') < description.indexOf('ligne de build'));
     });
 
+    it('remplace « Écoulé » par « Durée » à la conclusion, à la même place', () => {
+        // Le même message se transforme : l'œil ne doit pas avoir à rechercher
+        // le temps ailleurs au moment où le déploiement se conclut.
+        const encours = buildNotice({ ...base, status: 'running', finishedAt: null });
+        const fini = buildNotice({ ...base, status: 'success', finishedAt: 1_100 });
+        const nameAt = (n: DiscordNotice, i: number) => (n.embeds![0] as { fields: { name: string }[] }).fields[i].name;
+        assert.equal(nameAt(encours, 5), '⏳ Écoulé');
+        assert.equal(nameAt(fini, 5), '⏱️ Durée');
+    });
+
+    it('ajoute le lien Dokploy seulement quand il est reconstructible', () => {
+        // Un lien faux enverrait le lecteur sur une page d'erreur au moment
+        // précis où il cherche à comprendre un échec.
+        const sans = buildNotice({ ...base, status: 'success', finishedAt: 1_100 });
+        const avec = buildNotice({ ...base, status: 'success', finishedAt: 1_100, url: 'https://x/y' });
+        const names = (n: DiscordNotice) => (n.embeds![0] as { fields: { name: string }[] }).fields.map((f) => f.name);
+        assert.ok(!names(sans).includes('🔗 Dokploy'));
+        assert.ok(names(avec).includes('🔗 Dokploy'));
+    });
+
     it('ne montre pas de barre une fois conclu', () => {
         const notice = buildNotice({ ...base, status: 'success', finishedAt: 1_100 });
         const embed = notice.embeds?.[0] as { description: string; fields: { name: string }[] };
         assert.doesNotMatch(embed.description, /▰|▱/);
         assert.deepEqual(
             embed.fields.map((f) => f.name),
-            ['Cible', 'Démarré', 'Terminé', 'Durée']
+            ['🛠️ Projet', '⚙️ Service', '🌍 Environnement', '📦 Type', '📅 Démarré', '⏱️ Durée']
         );
     });
 });

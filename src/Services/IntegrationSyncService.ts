@@ -17,7 +17,14 @@ import {
     type GitHubCommit,
     type GitHubSyncState
 } from './integrations/github';
-import { fetchDeploymentLog, listDeployments, type DokployDeployment } from './integrations/dokploy';
+import {
+    dashboardUrl,
+    fetchDeploymentLog,
+    listDeployments,
+    listTargets,
+    type DokployDeployment,
+    type DokployTarget
+} from './integrations/dokploy';
 import { buildNotice, estimateFromHistory } from '@/Services/DeployNotice';
 import { editMessage, isDiscordWebhook, postMessage } from '@/Services/discord';
 import {
@@ -174,6 +181,20 @@ const DEPLOY_TICK_SECONDS = 10;
 const DEPLOY_LOG_TIMEOUT_MS = 3_000;
 
 /**
+ * Durée de vie du catalogue d'une instance, en mémoire.
+ *
+ * Un avis nomme le projet, le service et l'environnement séparément, comme
+ * Dokploy le fait dans les siens — or DevEye ne retient d'une cible que son
+ * identifiant externe et le nom qu'on lui a donné. Le reste vient de
+ * `project.all`, un seul appel pour **toute** l'instance.
+ *
+ * Mémoïsé cinq minutes : ce sont des noms d'organisation, qui bougent une fois
+ * par trimestre, et les redemander à chaque battement de dix secondes coûterait
+ * un appel permanent pour une donnée immobile.
+ */
+const DEPLOY_PLACE_TTL_SECONDS = 300;
+
+/**
  * Lignes d'historique retenues par cible et par tour.
  *
  * Dokploy rend l'historique complet d'une application, qui peut compter des
@@ -300,6 +321,9 @@ export class IntegrationSyncService {
      * transformerait tout l'historique de la cible en avis au tour suivant.
      */
     private readonly deployBackoff = new Map<number, number>();
+
+    /** Le catalogue d'une instance, par jeton. Voir {@link DEPLOY_PLACE_TTL_SECONDS}. */
+    private readonly deployPlaces = new Map<number, { at: number; targets: DokployTarget[] }>();
 
     constructor(private readonly deps: IntegrationSyncDeps) {}
 
@@ -1054,6 +1078,13 @@ export class IntegrationSyncService {
      * L'identifiant du message vit dans le blob de la ligne, donc un serveur
      * redémarré en cours de route reprend le même message.
      *
+     * **Un déploiement trop court pour être vu en vol reçoit le même message**,
+     * publié une seule fois. Huit secondes suffisent à passer entre deux
+     * battements, et la première version renvoyait ces cas-là vers l'avis en
+     * texte brut : on obtenait une fiche complète pour un déploiement d'une
+     * minute et trois lignes de texte pour celui d'à côté, sans que rien
+     * n'explique la différence.
+     *
      * ## Les autres canaux ne perdent rien
      *
      * Un webhook Slack ou maison, et le mail, reçoivent ce qu'ils recevaient : un
@@ -1077,6 +1108,13 @@ export class IntegrationSyncService {
         // `now` n'est pas déstructuré : il n'est utile qu'au rendu du message,
         // qui le reçoit par le `...input` transmis à `renderNotice`.
         const { target, seen, firstImport } = input;
+        // Ce que `renderNotice` doit savoir de la cible, assemblé une fois :
+        // il en a besoin pour situer le service chez le fournisseur.
+        const place = {
+            credentialId: target.credential_id ?? 0,
+            externalId: target.external_id,
+            kind: (target.target_kind === 'compose' ? 'compose' : 'application') as 'application' | 'compose'
+        };
         // Passé {@link DEPLOY_STALE_SECONDS}, on cesse d'entretenir le message :
         // un déploiement que le fournisseur laisse « en cours » pour toujours —
         // une file bloquée, un agent mort sans le dire — ferait sinon une
@@ -1104,7 +1142,16 @@ export class IntegrationSyncService {
         if (discord) {
             await Promise.all(
                 inFlight.map((item) =>
-                    this.renderNotice({ ...input, item, name, webhook: discord, cipher, logger, final: false })
+                    this.renderNotice({
+                        ...input,
+                        ...place,
+                        item,
+                        name,
+                        webhook: discord,
+                        cipher,
+                        logger,
+                        final: false
+                    })
                 )
             );
         }
@@ -1114,6 +1161,7 @@ export class IntegrationSyncService {
                 const closed = discord
                     ? await this.renderNotice({
                           ...input,
+                          ...place,
                           item,
                           name,
                           webhook: discord,
@@ -1165,6 +1213,9 @@ export class IntegrationSyncService {
     private async renderNotice(input: {
         baseUrl: string;
         apiKey: string;
+        credentialId: number;
+        externalId: string;
+        kind: 'application' | 'compose';
         history: DeploymentRow[];
         item: { row: DeploymentRow; entry: DokployDeployment };
         name: string;
@@ -1178,19 +1229,24 @@ export class IntegrationSyncService {
         const blob = (await this.readJson<Record<string, unknown>>(cipher, item.row.content)) ?? {};
         const noticeId = typeof blob.noticeId === 'string' ? blob.noticeId : null;
 
-        // Rien à ouvrir pour un déploiement déjà terminé qu'on découvre : un
-        // message qui naîtrait avec sa conclusion n'aurait jamais rien suivi, et
-        // l'avis ordinaire dit la même chose en moins cher.
-        if (input.final && noticeId === null) return false;
-
-        const log = item.entry.logPath
-            ? await fetchDeploymentLog(input.baseUrl, input.apiKey, item.entry.logPath, {
-                  timeoutMs: DEPLOY_LOG_TIMEOUT_MS
-              }).catch(() => '')
-            : '';
+        const [log, place] = await Promise.all([
+            item.entry.logPath
+                ? fetchDeploymentLog(input.baseUrl, input.apiKey, item.entry.logPath, {
+                      timeoutMs: DEPLOY_LOG_TIMEOUT_MS
+                  }).catch(() => '')
+                : Promise.resolve(''),
+            this.deployPlace(input.credentialId, input.baseUrl, input.apiKey, input.externalId)
+        ]);
 
         const message = buildNotice({
-            targetName: input.name,
+            // Le nom donné à la cible dans DevEye sert de repli : une instance
+            // injoignable ou d'une autre version fait perdre le découpage en
+            // trois colonnes, jamais l'identité de ce qui a été déployé.
+            project: place?.projectName ?? null,
+            service: place?.name ?? input.name,
+            environment: place?.environmentName ?? null,
+            kind: input.kind,
+            url: place ? dashboardUrl(input.baseUrl, place) : null,
             title: item.entry.title,
             status: item.entry.status,
             startedAt: item.entry.startedAt,
@@ -1205,6 +1261,15 @@ export class IntegrationSyncService {
 
         const posted = await postMessage(input.webhook, message, logger);
         if (posted === null) return false;
+
+        // Un déploiement conclu qu'on découvre après coup — le cas d'un
+        // déploiement de huit secondes, commencé et fini entre deux battements —
+        // reçoit le **même** message, publié une seule fois. Il n'a jamais rien
+        // suivi, mais il n'y a aucune raison de le rendre plus pauvre que les
+        // autres : c'était le défaut de la première version, qui le renvoyait
+        // vers l'avis en texte brut.
+        if (input.final) return true;
+
         // Retenu tout de suite : le tour suivant doit modifier ce message, et
         // non en poser un second à côté.
         await this.deps.db.deploy.setDeploymentContent(
@@ -1212,6 +1277,37 @@ export class IntegrationSyncService {
             await cipher.encrypt(JSON.stringify({ ...blob, noticeId: posted }))
         );
         return true;
+    }
+
+    /**
+     * Où vit une cible chez le fournisseur : projet, environnement, et de quoi
+     * bâtir le lien vers sa fiche.
+     *
+     * Un seul appel `project.all` sert **toute** l'instance, et il est mémoïsé
+     * (voir {@link DEPLOY_PLACE_TTL_SECONDS}). `null` quand l'instance ne répond
+     * pas ou ne connaît plus la cible : l'avis retombe alors sur le nom donné
+     * dans DevEye, ce qui suffit à savoir de quoi on parle.
+     */
+    private async deployPlace(
+        credentialId: number,
+        baseUrl: string,
+        apiKey: string,
+        externalId: string
+    ): Promise<DokployTarget | null> {
+        const now = Math.floor(Date.now() / 1000);
+        let cached = this.deployPlaces.get(credentialId);
+        if (!cached || now - cached.at > DEPLOY_PLACE_TTL_SECONDS) {
+            try {
+                cached = { at: now, targets: await listTargets(baseUrl, apiKey) };
+                this.deployPlaces.set(credentialId, cached);
+            } catch {
+                // Le catalogue périmé vaut mieux que rien : les noms de projet
+                // ne bougent pas, et priver l'avis de ses colonnes parce que
+                // l'instance a hoqueté serait une perte pour rien.
+                if (!cached) return null;
+            }
+        }
+        return cached.targets.find((t) => t.externalId === externalId) ?? null;
     }
 
     /**

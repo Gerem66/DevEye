@@ -53,8 +53,15 @@ const DESCRIPTION_MAX = 4000;
 const FIELD_MAX = 1000;
 
 export interface NoticeState {
-    /** Le nom de la cible, tel que l'espace l'a nommée. */
-    targetName: string;
+    /** Le projet Dokploy (« OxyFoo »). `null` si l'instance n'a pu être lue. */
+    project: string | null;
+    /** Le service déployé (« server ») — à défaut, le nom de la cible DevEye. */
+    service: string;
+    /** L'environnement (« production »). */
+    environment: string | null;
+    kind: 'application' | 'compose';
+    /** La fiche dans le tableau de bord Dokploy ; `null` si non reconstructible. */
+    url: string | null;
     /** Le titre du déploiement chez le fournisseur (« Manual deployment »…). */
     title: string;
     status: 'queued' | 'running' | 'success' | 'failed';
@@ -171,26 +178,33 @@ export function buildNotice(state: NoticeState): DiscordMessage {
     const failed = state.status === 'failed';
     const elapsed = Math.max(0, (state.finishedAt ?? state.now) - state.startedAt);
 
+    // Trois par ligne : c'est ce que Discord place côte à côte, et c'est le
+    // rythme des avis de Dokploy — projet, service, environnement d'abord, ce
+    // qui répond à « où ? » avant de répondre à « quand ? ».
     const fields: Record<string, unknown>[] = [
-        { name: 'Cible', value: state.targetName.slice(0, FIELD_MAX), inline: true },
-        { name: 'Démarré', value: `${moment(state.startedAt, 'T')} · ${moment(state.startedAt, 'R')}`, inline: true }
+        { name: '🛠️ Projet', value: trim(state.project ?? '—'), inline: true },
+        { name: '⚙️ Service', value: trim(state.service), inline: true },
+        { name: '🌍 Environnement', value: trim(state.environment ?? '—'), inline: true },
+        { name: '📦 Type', value: state.kind === 'compose' ? 'compose' : 'application', inline: true },
+        { name: '📅 Démarré', value: moment(state.startedAt, 'f'), inline: true }
     ];
 
-    if (running) {
-        fields.push({ name: 'Écoulé', value: duration(elapsed), inline: true });
-    } else {
-        fields.push({
-            name: 'Terminé',
-            value: state.finishedAt === null ? '—' : moment(state.finishedAt, 'T'),
-            inline: true
-        });
-        fields.push({ name: 'Durée', value: duration(elapsed), inline: true });
+    // La troisième colonne de la seconde ligne dit le temps — écoulé tant que ça
+    // tourne, total une fois conclu. Le même emplacement dans les deux états :
+    // c'est le même message qui se transforme, l'œil ne doit pas avoir à le
+    // rechercher au moment de la conclusion.
+    fields.push(
+        running
+            ? { name: '⏳ Écoulé', value: duration(elapsed), inline: true }
+            : { name: '⏱️ Durée', value: duration(elapsed), inline: true }
+    );
+
+    if (state.url) {
+        fields.push({ name: '🔗 Dokploy', value: `[Ouvrir la fiche du service](${state.url})`, inline: false });
     }
 
     const parts: string[] = [`**${state.title || 'Déploiement'}**`];
-
     if (running) parts.push(progressLine(state, elapsed));
-
     // L'erreur avant le journal : c'est la ligne qui dit *pourquoi*, et la faire
     // suivre huit lignes de build reviendrait à la cacher.
     if (failed && state.error) parts.push(`⚠️ ${state.error.slice(0, FIELD_MAX)}`);
@@ -205,10 +219,21 @@ export function buildNotice(state: NoticeState): DiscordMessage {
                 description: parts.join('\n\n').slice(0, DESCRIPTION_MAX),
                 color: running ? COLOR_RUNNING : failed ? COLOR_FAILURE : COLOR_SUCCESS,
                 fields,
-                footer: { text: 'DevEye · Dokploy' }
+                footer: { text: 'DevEye · suivi de déploiement' },
+                // L'horodatage du pied : Discord le rend dans le fuseau du
+                // lecteur, et il marque l'instant du **dernier** état connu —
+                // donc il avance à chaque modification, ce qui donne à voir que
+                // le message est vivant.
+                timestamp: new Date((state.finishedAt ?? state.now) * 1000).toISOString()
             }
         ]
     };
+}
+
+/** Discord refuse une valeur de champ vide : un tiret vaut mieux qu'un rejet. */
+function trim(value: string): string {
+    const clean = value.trim().slice(0, FIELD_MAX);
+    return clean.length > 0 ? clean : '—';
 }
 
 /**

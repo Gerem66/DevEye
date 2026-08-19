@@ -40,6 +40,19 @@ export interface DokployTarget {
     name: string;
     /** « Projet / environnement », tel que Dokploy l'organise. */
     path: string | null;
+    /**
+     * Les trois niveaux séparés, en plus du chemin déjà assemblé.
+     *
+     * `path` sert à un sélecteur, où une seule ligne de texte suffit ; un avis
+     * Discord, lui, les montre en colonnes distinctes comme Dokploy le fait dans
+     * les siens. Les recomposer en découpant `path` sur un séparateur serait
+     * faux dès qu'un projet contient une barre oblique dans son nom.
+     */
+    projectName: string | null;
+    environmentName: string | null;
+    /** De quoi reconstruire l'adresse de la fiche dans le tableau de bord. */
+    projectId: string | null;
+    environmentId: string | null;
 }
 
 export interface DokployDeployment {
@@ -166,6 +179,14 @@ export function readTargets(payload: unknown): DokployTarget[] {
             const envName = pick(env, ['name']) ?? '';
             const path = [projectName, envName].filter(Boolean).join(' / ') || null;
 
+            const place = {
+                path,
+                projectName: projectName || null,
+                environmentName: envName || null,
+                projectId: pick(project, ['projectId', 'id']),
+                environmentId: pick(env, ['environmentId', 'id'])
+            };
+
             for (const app of asArray(env.applications)) {
                 const externalId = pick(app, ['applicationId', 'id']);
                 if (externalId) {
@@ -173,7 +194,7 @@ export function readTargets(payload: unknown): DokployTarget[] {
                         kind: 'application',
                         externalId,
                         name: pick(app, ['name', 'appName']) ?? externalId,
-                        path
+                        ...place
                     });
                 }
             }
@@ -184,7 +205,7 @@ export function readTargets(payload: unknown): DokployTarget[] {
                         kind: 'compose',
                         externalId,
                         name: pick(compose, ['name', 'appName']) ?? externalId,
-                        path
+                        ...place
                     });
                 }
             }
@@ -227,6 +248,25 @@ export function readDeployments(payload: unknown): DokployDeployment[] {
             logPath: pick(row, ['logPath'])
         };
     });
+}
+
+/**
+ * L'adresse de la fiche d'une cible dans le tableau de bord Dokploy.
+ *
+ * **Relevée sur l'instance, pas devinée** : cette forme répond `307` (la
+ * redirection d'authentification, donc la route existe), là où
+ * `/dashboard/project/{id}/services/compose/{id}` et `/dashboard/project/{id}`
+ * répondent `404`. Un lien faux dans un avis serait pire que pas de lien — on
+ * enverrait le lecteur sur une page d'erreur au moment précis où il cherche à
+ * comprendre un échec.
+ *
+ * `null` dès qu'un identifiant manque : une instance d'une autre version, dont
+ * le décodage n'aurait pas trouvé les siens, perd le lien et rien d'autre.
+ */
+export function dashboardUrl(baseUrl: string, target: DokployTarget): string | null {
+    if (!target.projectId || !target.environmentId) return null;
+    const root = baseUrl.replace(/\/+$/, '');
+    return `${root}/dashboard/project/${target.projectId}/environment/${target.environmentId}/services/${target.kind}/${target.externalId}`;
 }
 
 export async function listTargets(baseUrl: string, apiKey: string): Promise<DokployTarget[]> {
