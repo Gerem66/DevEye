@@ -90,6 +90,36 @@ interface MarketItem {
     onPick: () => void;
 }
 
+/**
+ * Le repère du coin d'une carte : ce qu'on peut y faire, ou ce qui est déjà fait.
+ *
+ * Dessiné ici plutôt que pris dans `Styles/icons.css` : `icon-plus` y pointe sur
+ * un glyphe très gras (une croix tracée dans un carré de 309 unités, ramenée à
+ * treize pixels), qui à cette taille rend un pâté plutôt qu'un signe. Deux
+ * traits arrondis et une coche, dans le même langage que les vignettes juste
+ * au-dessus, tiennent en quelques lignes et se règlent au pixel près.
+ *
+ * La pastille porte la couleur, pas le glyphe : un signe gris perdu dans un coin
+ * ne dit pas qu'il y a un geste à faire, un jeton teinté si. Le plein se remplit
+ * au survol de la carte, et l'état « déjà posée » passe au vert de succès.
+ */
+function MarketMark({ placed }: { placed: boolean }) {
+    return (
+        <span className={`${styles.marketMark} ${placed ? styles.marketMarkDone : ''}`} aria-hidden='true'>
+            <svg viewBox='0 0 16 16' className={styles.marketMarkGlyph} role='presentation' focusable='false'>
+                <path
+                    d={placed ? 'M3.6 8.4 6.6 11.4 12.4 4.8' : 'M8 3.6v8.8M3.6 8h8.8'}
+                    fill='none'
+                    stroke='currentColor'
+                    strokeWidth='2.2'
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                />
+            </svg>
+        </span>
+    );
+}
+
 export interface AddTileMarketProps {
     /** Section à garnir, ou `null` quand le marché est fermé. */
     section: HomeSection | null;
@@ -319,11 +349,7 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
                                                         />
                                                         <span className={styles.marketCardTitle}>{item.title}</span>
                                                         {item.badge}
-                                                        {/* La coche remplace le « + » : ce n'est pas le même geste
-                                                        qui est offert, donc ce n'est pas la même icône. */}
-                                                        <span
-                                                            className={`icon icon-${item.placed ? 'success' : 'plus'} ${styles.marketCardPlus}`}
-                                                        />
+                                                        <MarketMark placed={item.placed === true} />
                                                     </span>
                                                     {/* Le rayon n'est rappelé que quand l'étal les mélange :
                                                     dans un rayon donné, le répéter à chaque carte serait

@@ -446,7 +446,7 @@ function SectionTiles({
                 <div className={styles.addStack}>
                     <button type='button' className={styles.addTile} onClick={onAdd}>
                         <span className={`icon icon-plus ${styles.addTileIcon}`} />
-                        <span className={styles.addTileLabel}>Ajouter une carte</span>
+                        <span className={styles.addTileLabel}>Ajouter une fonctionnalité</span>
                     </button>
                     <button type='button' className={styles.addTile} onClick={onAddFolder}>
                         <span className={`icon icon-folder-plus ${styles.addTileIcon}`} />

@@ -482,19 +482,31 @@
     border-color: var(--accent);
 }
 
-/* Déjà posée : la carte reste lisible mais visiblement inerte. `filter` et non
-   `opacity` — une carte de cet étal peut porter un `motion` ailleurs, et c'est
-   la règle du dépôt (voir la tuile désactivée de la topbar). */
+/* Déjà posée : la carte reste lisible mais visiblement inerte. */
 .marketCardPlaced {
-    filter: opacity(0.45);
     cursor: default;
     border-style: dashed;
+}
+
+/* Ce qui s'éteint est **l'offre**, pas l'état : la vignette et le texte
+   reculent, la coche de confirmation garde son vert plein. Atténuer la carte
+   entière la faisait passer avec, et l'unique élément qui a quelque chose à dire
+   sur une carte grisée devenait le plus pâle de tous.
+
+   `filter` et non `opacity` — une carte de cet étal peut porter un `motion`
+   ailleurs, et c'est la règle du dépôt. */
+.marketCardPlaced .marketCardArt,
+.marketCardPlaced .marketCardIcon,
+.marketCardPlaced .marketCardTitle,
+.marketCardPlaced .marketCardRayon,
+.marketCardPlaced .marketCardDesc {
+    filter: opacity(0.45);
 }
 
 .marketCardHead {
     display: flex;
     align-items: center;
-    gap: var(--space-sm);
+    gap: 6px;
     width: 100%;
     min-width: 0;
 }
@@ -515,18 +527,38 @@
     white-space: nowrap;
 }
 
-.marketCardPlus {
-    width: 14px;
+/* Le repère du coin : un jeton rond qui porte la couleur, et un glyphe dessiné
+   dans le composant (voir `MarketMark`). Le plein se remplit au survol, pour que
+   le geste offert se voie avant même le clic. */
+.marketMark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
     flex-shrink: 0;
-    color: var(--text-muted);
-}
-
-.marketCard:hover:not(:disabled) .marketCardPlus {
+    background: var(--accent-bg);
     color: var(--accent);
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
 }
 
-.marketCardPlaced .marketCardPlus {
+.marketCard:hover:not(:disabled) .marketMark {
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
+.marketMarkDone {
+    background: var(--success-bg);
     color: var(--success);
+}
+
+.marketMarkGlyph {
+    display: block;
+    width: 12px;
+    height: 12px;
 }
 
 .marketCardDesc {
