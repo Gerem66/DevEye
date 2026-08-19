@@ -313,8 +313,19 @@ function logSocketUrl(baseUrl: string, logPath: string): string {
     return url.toString();
 }
 
-/** Un silence de ce temps referme la connexion et rend ce qui a été reçu. */
+/** Plafond absolu : au-delà, on rend ce qu'on a, quoi qu'il arrive. */
 const LOG_TIMEOUT_MS = 30_000;
+
+/**
+ * Silence après le dernier octet au bout duquel le journal est réputé complet.
+ *
+ * **C'est ce qui décide du temps d'ouverture de la popup**, et non le plafond
+ * ci-dessus. Mesuré sur l'instance de référence : les 22 ko d'un journal
+ * arrivent en **un seul message, 185 ms** après l'ouverture — puis plus rien,
+ * jamais. Une seconde de calme est donc un écart considérable à l'échelle d'un
+ * rejeu de fichier, tout en restant imperceptible à l'usage.
+ */
+const LOG_IDLE_MS = 1_000;
 
 /**
  * Rejoue le journal d'un déploiement, tel que Dokploy le stream.
@@ -330,17 +341,25 @@ const LOG_TIMEOUT_MS = 30_000;
  *    toute façon poser aucun en-tête sur un WebSocket, donc son propre trafic
  *    ne dit rien de ce que cette route attend vraiment. Une instance qui la
  *    refuse remonte une erreur normale, pas un crash.
- *  - {@link LOG_TIMEOUT_MS} de silence referme la connexion et rend ce qui a
- *    été reçu : un déploiement déjà terminé clôt son flux de lui-même une fois
- *    le fichier rejoué, mais rien ne garantit qu'un déploiement encore en
- *    cours le fasse un jour dans le temps d'une requête HTTP — le journal
- *    rendu serait alors partiel, jamais une erreur pour autant.
+ *  - **Le serveur ne referme jamais rien.** C'était l'hypothèse inverse qui
+ *    était écrite ici — « un déploiement déjà terminé clôt son flux de lui-même
+ *    une fois le fichier rejoué » — et elle est fausse : mesuré sur l'instance
+ *    de référence, les 22 ko d'un journal arrivent en un seul message 185 ms
+ *    après l'ouverture, puis la socket reste ouverte indéfiniment (toujours
+ *    vivante après 40 s). `/listen-deployment` est un `tail -f`, pas un
+ *    téléchargement.
  *
- * `timeoutMs` existe pour ce second cas. Le suivi vivant d'un déploiement lit la
- * queue du journal toutes les dix secondes : il ne peut pas attendre trente
- * secondes par lecture, et n'a de toute façon besoin que de ce qui est déjà
- * arrivé. La lecture à la demande, elle, garde le délai long — elle sert à
- * rapatrier un journal complet, pas à en prendre la température.
+ *    La conséquence se payait à chaque ouverture de la popup : le journal était
+ *    là en deux dixièmes de seconde, et l'on attendait les trente secondes du
+ *    plafond avant de le rendre. D'où {@link LOG_IDLE_MS} — c'est le **silence
+ *    après le dernier octet** qui conclut, plus l'attente d'une fermeture qui
+ *    ne vient pas.
+ *
+ * `timeoutMs` reste le plafond, et garde son sens pour un déploiement **en
+ * cours** : celui-là émet en continu, donc le silence n'arrive jamais et c'est
+ * le plafond qui tranche. Le suivi vivant s'en sert pour prendre la température
+ * du journal sans y passer plus de trois secondes ; la lecture à la demande
+ * garde trente secondes, puisqu'elle sert à rapatrier un journal complet.
  */
 export function fetchDeploymentLog(
     baseUrl: string,
@@ -352,13 +371,18 @@ export function fetchDeploymentLog(
         const socket = new WebSocket(logSocketUrl(baseUrl, logPath), { headers: { 'x-api-key': apiKey } });
         const chunks: string[] = [];
         let settled = false;
+        let idle: ReturnType<typeof setTimeout> | null = null;
 
-        const timer = setTimeout(() => finish(), options.timeoutMs ?? LOG_TIMEOUT_MS);
+        // Deux minuteurs, deux rôles. Le plafond borne le pire cas — un flux qui
+        // parle sans discontinuer, ou qui ne dit jamais rien. Le repos conclut
+        // le cas courant, dès que le fichier a fini d'être rejoué.
+        const cap = setTimeout(() => finish(), options.timeoutMs ?? LOG_TIMEOUT_MS);
 
         function finish(err?: Error): void {
             if (settled) return;
             settled = true;
-            clearTimeout(timer);
+            clearTimeout(cap);
+            if (idle) clearTimeout(idle);
             socket.terminate();
             // Un lot déjà reçu vaut mieux qu'une erreur : un journal partiel
             // reste lisible, une page vide sur une simple coupure ne l'est pas.
@@ -370,6 +394,10 @@ export function fetchDeploymentLog(
             chunks.push(
                 Buffer.isBuffer(data) ? data.toString('utf8') : Buffer.from(data as ArrayBuffer).toString('utf8')
             );
+            // Réarmé à chaque morceau : un journal qui arrive en plusieurs
+            // trames n'est conclu qu'après le silence qui suit la dernière.
+            if (idle) clearTimeout(idle);
+            idle = setTimeout(() => finish(), LOG_IDLE_MS);
         });
         socket.on('close', () => finish());
         socket.on('error', (err) => finish(err));
