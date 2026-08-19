@@ -40,6 +40,7 @@ import { audienceFunnelsRepo, type AudienceFunnelsRepo } from './repos/audienceF
 import { gitRepo, type GitRepo } from './repos/git';
 import { credentialsRepo, type CredentialsRepo } from './repos/credentials';
 import { deployRepo, type DeployRepo } from './repos/deploy';
+import { backupRepo, type BackupRepo } from './repos/backup';
 import { projectLinksRepo, type ProjectLinksRepo } from './repos/projectLinks';
 import { passwordsRepo, type PasswordsRepo } from './repos/passwords';
 import { refreshTokensRepo, type RefreshTokensRepo } from './repos/refreshTokens';
@@ -88,6 +89,12 @@ export interface Database {
     /** Les jetons d'accès de l'espace, partagés par Git et Déploiement. */
     credentials: CredentialsRepo;
     deploy: DeployRepo;
+    /**
+     * Sauvegardes : destinations, travaux et exécutions. Un seul dépôt pour les
+     * trois tables — elles ne se lisent jamais séparément, et la rétention les
+     * traverse toutes les trois.
+     */
+    backup: BackupRepo;
     databases: DatabaseRepo;
     /**
      * Le grand livre de l'espace: comptes, opérations, budgets, échéances.
@@ -159,6 +166,7 @@ export function createDatabase(q: Queryable): Database {
         git: gitRepo(q),
         credentials: credentialsRepo(q),
         deploy: deployRepo(q),
+        backup: backupRepo(q),
         databases: databaseRepo(q),
         finance: financeRepo(q),
         audience: audienceRepo(q),

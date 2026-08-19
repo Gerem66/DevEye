@@ -24,6 +24,10 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     // l'ingestion publique écrit sans socket et diffuse elle-même, coalescée à
     // une fois par minute et par espace (voir `Services/AudienceIngest.ts`).
     audience: 'audience',
+    // Même forme que `git`, `database` et `deploy` : préfixe unique, verbes en
+    // camelCase derrière le point. Le filet `MUTATION_VERB` n'en voit donc
+    // presque aucune — les `mutates` de cette feature se relisent à la main.
+    backup: 'backup',
     cloudSync: 'cloudsync',
     // Même forme que `git` : préfixe unique, verbes en camelCase derrière le
     // point. Le filet `MUTATION_VERB` n'en voit donc presque aucune — les
@@ -112,6 +116,11 @@ const NON_MUTATING = new Set([
     'mail.attachmentScan',
     'mail.attachmentDownload',
     'uptime.testNotification',
+    // Contrôle d'accessibilité et déclenchement : le premier écrit bien le
+    // verdict sur la ligne (il déclare donc `mutates`), le second ouvre une
+    // exécution. Aucun des deux n'a de verbe mutant dans son nom — ils sont ici
+    // pour que la liste reste le reflet exact de ce que le filet ne voit pas.
+    'backup.testNotification',
     'workspace.activate',
     'device.updateAgent',
     'device.upgradePackages',

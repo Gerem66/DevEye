@@ -33,7 +33,7 @@ import styles from './NotificationsDialog.module.css';
  */
 
 /** Les émetteurs qui savent notifier, côté client. Miroir de `notificationFeatureSchema`. */
-export type NotificationsFeature = 'uptime' | 'sentinel' | 'database' | 'deploy';
+export type NotificationsFeature = 'uptime' | 'sentinel' | 'database' | 'deploy' | 'backup';
 
 interface Props {
     open: boolean;

@@ -50,6 +50,11 @@ services:
     volumes:
       - agent-bin:/app/DevEye/agent/dist
       - ${CLOUDSYNC_STORAGE_ROOT:-./cloudsync-data}:/data/cloudsync
+      # Les sauvegardes locales, même logique de paire hôte/conteneur. Sans ce
+      # montage, une archive écrite par un travail « Dossier du serveur »
+      # disparaîtrait au redéploiement suivant — c'est-à-dire exactement le jour
+      # où on aurait pu en avoir besoin.
+      - ${BACKUP_STORAGE_ROOT:-./backup-data}:/data/backups
     ports:
       - '127.0.0.1:${LISTEN_PORT:-3000}:${LISTEN_PORT:-3000}'
     healthcheck:

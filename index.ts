@@ -29,7 +29,7 @@ async function main() {
     const db = createDatabase(getQueryable(pool));
     const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
 
-    const { app, cloudSync, uptime, mailSync, integrations, databases, audience, sentinel } = await buildApp({
+    const { app, cloudSync, uptime, mailSync, integrations, databases, audience, sentinel, backups } = await buildApp({
         db,
         crypt
     });
@@ -54,6 +54,7 @@ async function main() {
             databases.stop();
             audience.stop();
             sentinel.stop();
+            backups.stop();
             // Rend le bail CloudSync : sans ça, le processus qui redémarre ne
             // reconnaît pas son propre bail (identité neuve) et resterait passif
             // jusqu'à expiration.
@@ -113,6 +114,11 @@ async function main() {
     // publique a déposé, et tient l'agrégat journalier + la rétention par site.
     audience.start();
     sentinel.start();
+    // Sauvegardes : même forme que les cinq au-dessus, une cadence à part. Le
+    // démarrage solde d'abord les exécutions restées « en cours » d'un arrêt
+    // brutal — sans quoi un travail interrompu resterait éternellement en vol et
+    // tous ses passages suivants seraient sautés en silence.
+    backups.start();
 
     await app.listen({ port: env.LISTEN_PORT, host: '0.0.0.0' });
     logger.info({ port: env.LISTEN_PORT }, 'DevEye server ready');

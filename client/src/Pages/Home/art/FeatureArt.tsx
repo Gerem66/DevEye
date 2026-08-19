@@ -278,6 +278,24 @@ const ART: Record<ArtId, ReactNode> = {
             <line x1='113' y1='18' x2='113' y2='72' stroke={M} {...thin} />
         </>
     ),
+    // Trois copies empilées qui partent vers un disque : ce que la feature fait,
+    // dans l'ordre où elle le fait.
+    backup: (
+        <>
+            <rect x='16' y='20' width='52' height='14' rx='3' fill={A} opacity='0.22' />
+            <rect x='16' y='20' width='52' height='14' rx='3' stroke={A} {...thin} />
+            <rect x='16' y='38' width='52' height='14' rx='3' fill={A} opacity='0.35' />
+            <rect x='16' y='38' width='52' height='14' rx='3' stroke={A} {...thin} />
+            <rect x='16' y='56' width='52' height='14' rx='3' fill={A} opacity='0.5' />
+            <rect x='16' y='56' width='52' height='14' rx='3' stroke={A} {...stroke} />
+            <path d='M76 45h22' stroke={A} {...stroke} />
+            <path d='M92 39l7 6-7 6' stroke={A} {...stroke} />
+            <rect x='108' y='22' width='36' height='46' rx='5' fill={M} opacity='0.12' />
+            <rect x='108' y='22' width='36' height='46' rx='5' stroke={M} {...thin} />
+            <circle cx='126' cy='45' r='11' stroke={M} {...thin} />
+            <circle cx='126' cy='45' r='3' fill={M} opacity='0.6' />
+        </>
+    ),
     // Un solde qui monte, et le journal des opérations sous lui.
     finance: (
         <>

@@ -109,6 +109,20 @@ const COLUMNS: EncryptedColumn[] = [
     { table: 'database_connections', id: 'id', column: 'access_content', scope: 'workspace_id', tier: 'open' },
     { table: 'database_connections', id: 'id', column: 'access_secret_enc', scope: 'workspace_id', tier: 'open' },
     { table: 'database_alerts', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    // Sauvegardes (migration `086`). Même famille : l'objet appartient à
+    // l'espace et vit toujours à l'étage ouvert, parce que l'ordonnanceur écrit
+    // à 3 h du matin sans session.
+    //
+    // ⚠️ **Quatre colonnes**, dont un secret. `backup_destinations.secret_enc`
+    // est la clé secrète S3 : l'oublier ne se verrait pas tout de suite — les
+    // écrans continueraient d'afficher les destinations — mais la première
+    // sauvegarde d'après la conversion échouerait sur une erreur
+    // d'authentification incompréhensible. `backup_runs.content` porte le nom de
+    // l'archive écrite : sans lui, la rétention ne saurait plus quoi effacer.
+    { table: 'backup_destinations', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'backup_destinations', id: 'id', column: 'secret_enc', scope: 'workspace_id', tier: 'open' },
+    { table: 'backup_jobs', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
+    { table: 'backup_runs', id: 'id', column: 'content', scope: 'workspace_id', tier: 'open' },
     // Audience (migration `076`). Même famille que les dépôts et les bases : le
     // site appartient à l'espace et vit toujours à l'étage ouvert, parce que
     // l'ingestion publique le lit sans session.

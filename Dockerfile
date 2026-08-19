@@ -35,6 +35,19 @@ RUN cd DevEye/client && npm run build
 FROM node:22-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app/DevEye
+# `mysqldump` et `pg_dump` : les producteurs de vidage de la feature Sauvegardes.
+#
+# Écrire nous-mêmes un vidage aurait voulu dire reproduire, par dialecte, les
+# vues, les procédures, les déclencheurs, les séquences et l'échappement exact —
+# et surtout produire un fichier que seul DevEye saurait relire. Ces deux outils
+# rendent du SQL qui se restaure par `mysql <` ou `psql <`, sans DevEye, ce qui
+# est la définition même d'une sauvegarde.
+#
+# Sans eux, la feature n'échoue pas en silence : elle le dit, en nommant l'outil
+# manquant (voir `src/backup/sources.ts`).
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y default-mysql-client postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
 # App + installed dependencies + built client.
 COPY --from=build /app/DevEye ./
 EXPOSE 3000

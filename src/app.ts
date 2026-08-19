@@ -28,6 +28,7 @@ import { IntegrationSyncService } from '@/Services/IntegrationSyncService';
 import { DatabaseMonitor } from '@/Services/DatabaseMonitor';
 import { AudienceIngest } from '@/Services/AudienceIngest';
 import { SecurityMonitor } from '@/Services/SecurityMonitor';
+import { BackupService } from '@/Services/BackupService';
 import { mailAttachmentRoutes } from '@/mail/attachmentRoutes';
 import { mailOAuthRoutes } from '@/mail/oauthRoutes';
 import { status } from '@/status';
@@ -55,6 +56,8 @@ export interface BuiltApp {
     audience: AudienceIngest;
     /** Moteur Sentinelle — démarré/arrêté par index.ts. */
     sentinel: SecurityMonitor;
+    /** Ordonnanceur des sauvegardes — démarré/arrêté par index.ts. */
+    backups: BackupService;
     /** Synchro Mail en tâche de fond (comptes « open » uniquement) — démarrée/arrêtée par index.ts. */
     mailSync: MailSyncService;
 }
@@ -184,6 +187,23 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // arrivait alors sur un salon désigné pour la disponibilité, sans que rien
     // ne l'ait annoncé ni ne permette de l'éteindre séparément.
     const sentinel = new SecurityMonitor({ db: deps.db, crypt: deps.crypt, logger, audit, live });
+    // Sauvegardes. Le seul service de fond qui ait besoin des **trois** autres
+    // mondes à la fois : le hub d'agents (pour déposer une archive sur une
+    // machine), le moteur CloudSync (pour relire les blobs d'un partage) et le
+    // relevé des bases (pour déchiffrer la cible d'une connexion, seule à voir
+    // les secrets). Les lui passer plutôt que de recopier leur logique est ce
+    // qui garantit qu'une sauvegarde emprunte exactement le même chemin d'accès
+    // que la supervision — jusqu'au tunnel SSH.
+    const backups = new BackupService({
+        db: deps.db,
+        crypt: deps.crypt,
+        hub,
+        cloudSync,
+        databases,
+        audit,
+        logger,
+        live
+    });
 
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await agentRoutes(app, { db: deps.db, hub, live, audit });
@@ -201,6 +221,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         databases,
         audience,
         sentinel,
+        backups,
         audit
     });
     // Le moteur reçoit ce que les agents envoient — mais il n'évalue rien ici :
@@ -234,5 +255,5 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         app.log.debug({ clientDir }, 'No client build found; static serving disabled (host dev uses Vite)');
     }
 
-    return { app, cloudSync, uptime, mailSync, integrations, databases, audience, sentinel };
+    return { app, cloudSync, uptime, mailSync, integrations, databases, audience, sentinel, backups };
 }

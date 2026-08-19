@@ -53,6 +53,34 @@ export const env = {
      */
     CLOUDSYNC_STORAGE_DIR: getEnvVar('CLOUDSYNC_STORAGE_DIR', 'string', false) || '/data/cloudsync',
 
+    /**
+     * Racine des sauvegardes **locales**, vue par le serveur. Même distinction
+     * hôte/conteneur que `CLOUDSYNC_STORAGE_DIR`, et pour la même raison : la
+     * confondre revient à écrire dans la couche d'écriture du conteneur, donc à
+     * perdre les archives au redéploiement — ce qui, pour des sauvegardes, est
+     * la panne la plus coûteuse imaginable.
+     *
+     * ⚠️ Une destination `local` ne protège que d'une erreur logicielle, jamais
+     * d'une panne de la machine : elle vit sur le même disque que ce qu'elle
+     * sauvegarde. C'est un premier palier, pas le seul.
+     */
+    BACKUP_STORAGE_DIR: getEnvVar('BACKUP_STORAGE_DIR', 'string', false) || '/data/backups',
+
+    /**
+     * Cadence de l'ordonnanceur de sauvegardes : à quelle fréquence il regarde
+     * si un travail est dû. Pas la fréquence des sauvegardes elles-mêmes, qui
+     * est celle de chaque travail.
+     */
+    BACKUP_TICK_SECONDS: getEnvVar('BACKUP_TICK_SECONDS', 'number', false) || 60,
+
+    /**
+     * Au-delà, une sauvegarde est abandonnée et déclarée en échec. Large, parce
+     * qu'un vidage de plusieurs gigaoctets vers un Raspberry Pi au bout d'un
+     * VPN prend le temps qu'il prend ; mais borné, parce qu'un travail suspendu
+     * pour toujours tiendrait son verrou et empêcherait tous les suivants.
+     */
+    BACKUP_RUN_TIMEOUT_SECONDS: getEnvVar('BACKUP_RUN_TIMEOUT_SECONDS', 'number', false) || 6 * 60 * 60,
+
     SSL_PRIVATE_KEY_PATH: getEnvVar('SSL_PRIVATE_KEY_PATH', 'string', false),
     SSL_CERTIFICATE_PATH: getEnvVar('SSL_CERTIFICATE_PATH', 'string', false),
 

@@ -81,6 +81,13 @@ export type ResourceKey =
     | 'database.count'
     | 'database.list'
     | 'database.detail'
+    | 'backup.count'
+    | 'backup.destinationList'
+    | 'backup.jobList'
+    /** La fiche d'un travail : ses réglages et son historique d'exécutions. */
+    | 'backup.detail'
+    /** Le journal transverse : les dernières exécutions, tous travaux confondus. */
+    | 'backup.runs'
     | 'audience.count'
     | 'audience.list'
     /** La fiche d'un site : ses réglages, sa clé, les projets qui le suivent. */
@@ -165,6 +172,17 @@ const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
     // Un relevé qui aboutit touche la liste (état, taille, alertes franchies) et
     // la fiche ouverte. `database.count` suit pour la tuile de l'accueil.
     database: ['database.count', 'database.list', 'database.detail'],
+    /*
+     * Les cinq clés ensemble, parce qu'une seule exécution les remue toutes :
+     * elle change l'état du travail (liste), son historique (fiche), le journal
+     * transverse, et le compte d'échecs de la tuile d'accueil. Le contrôle d'une
+     * destination y touche aussi, en écrivant son verdict sur la ligne.
+     *
+     * Le sujet bat surtout au rythme de l'ordonnanceur, qui écrit sans qu'aucun
+     * navigateur n'ait rien demandé : c'est ce qui fait passer un travail de
+     * « en cours » à « réussi » sous les yeux, à 3 h du matin comme à midi.
+     */
+    backup: ['backup.count', 'backup.destinationList', 'backup.jobList', 'backup.detail', 'backup.runs'],
     /*
      * Les six clés ensemble, et c'est le sujet.
      *

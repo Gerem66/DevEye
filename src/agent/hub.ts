@@ -178,6 +178,16 @@ export class MonitorHub {
     /** deviceId -> connected agent socket. */
     private readonly agents = new Map<string, WebSocket>();
     /**
+     * Attentes de verdict d'une opération de fichier lancée **hors socket web**.
+     *
+     * Les commandes `device.files*` viennent d'un navigateur abonné, qui lit le
+     * résultat dans la diffusion. Les sauvegardes, elles, tournent à 3 h du
+     * matin sans personne d'abonné : il leur faut une promesse par `opId`, pas
+     * un événement poussé à un auditoire vide. Même mécanique que la table `ops`
+     * du moteur CloudSync, réduite à ce dont un dépôt de fichier a besoin.
+     */
+    private readonly fileOpWaiters = new Map<string, (result: { ok: boolean; error?: string }) => void>();
+    /**
      * Vivacité par socket agent, remise à `true` par l'événement `pong`.
      *
      * Sans elle, `online` valait « il y a une socket dans la Map », et rien ne
@@ -589,7 +599,52 @@ export class MonitorHub {
 
     /** Fan out a filesystem mutation outcome to a device's subscribers. */
     publishFilesOp(payload: DeviceFilesOpPush): void {
+        // Le verdict part aux abonnés **et** à qui l'attendait par promesse. Les
+        // deux, jamais l'un ou l'autre : une sauvegarde déclenchée à la main
+        // depuis un écran ouvert doit à la fois débloquer le moteur et se voir.
+        const waiter = this.fileOpWaiters.get(payload.opId);
+        if (waiter) {
+            this.fileOpWaiters.delete(payload.opId);
+            waiter({ ok: payload.ok, error: payload.error });
+        }
         this.publishToSubscribers(payload.deviceId, DEVICE_FILES_OP_EVENT, payload);
+    }
+
+    /**
+     * Attend le verdict d'une opération de fichier, pour un appelant sans socket.
+     *
+     * L'échéance n'est pas une commodité : un agent qui se déconnecte au milieu
+     * d'un dépôt n'enverra jamais de verdict, et sans elle le moteur de
+     * sauvegarde resterait suspendu pour toujours en tenant le travail.
+     */
+    awaitFilesOp(opId: string, timeoutMs: number): Promise<{ ok: boolean; error?: string }> {
+        return new Promise((resolve) => {
+            const timer = setTimeout(() => {
+                this.fileOpWaiters.delete(opId);
+                resolve({ ok: false, error: "L'agent n'a pas répondu dans le délai imparti." });
+            }, timeoutMs);
+            timer.unref();
+            this.fileOpWaiters.set(opId, (result) => {
+                clearTimeout(timer);
+                resolve(result);
+            });
+        });
+    }
+
+    /** Abandonne une attente (l'agent est tombé, ou l'envoi a échoué en amont). */
+    cancelFilesOp(opId: string): void {
+        this.fileOpWaiters.delete(opId);
+    }
+
+    /**
+     * Octets encore en attente d'envoi vers un agent.
+     *
+     * Sans cette lecture, pousser une archive de plusieurs gigaoctets remplirait
+     * le tampon d'envoi aussi vite que le disque produit les octets : la mémoire
+     * du serveur suivrait la taille de l'archive, pas celle d'un chunk.
+     */
+    agentBuffered(deviceId: string): number {
+        return this.agents.get(deviceId)?.bufferedAmount ?? 0;
     }
 
     /** Ask a connected agent to download a file (streams chunks). No-op if offline. */

@@ -1,0 +1,426 @@
+/*
+ * Sauvegardes — l'apparence.
+ *
+ * Aucune couleur en dur : tout passe par les variables du thème, donc l'écran
+ * suit l'apparence de l'espace sans une ligne de plus.
+ *
+ * La liste reprend la forme des cartes de Déploiement, Git et Audience : c'est
+ * la même chose montrée — des objets d'espace — et deux listes voisines n'ont
+ * pas à se distinguer par leur géométrie.
+ *
+ * ⚠️ Une classe ne doit être définie **qu'une fois** seule dans son sélecteur —
+ * `client/scripts/check-css-modules.mjs` échoue sinon.
+ */
+
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-height: 0;
+}
+
+/* ------------------------------------------------------------------ en-tête */
+
+.toolbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.toolbarInfo {
+    min-width: 0;
+}
+
+.toolbarActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.title {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+}
+
+.subtitle {
+    margin: 2px 0 0;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------- états communs */
+
+.error {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--danger-bg);
+    color: var(--danger);
+    font-size: 0.85rem;
+}
+
+.empty {
+    margin: 0;
+    padding: var(--space-md);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.statusDot {
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+    border-radius: var(--radius-pill);
+    background: var(--text-muted);
+}
+
+.statusDot[data-tone='online'] {
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success);
+}
+
+.statusDot[data-tone='danger'] {
+    background: var(--danger);
+    box-shadow: 0 0 6px var(--danger);
+}
+
+.statusTag {
+    flex-shrink: 0;
+    padding: 1px 8px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+}
+
+.statusTag[data-tone='online'] {
+    color: var(--success);
+    background: var(--success-bg);
+}
+
+.statusTag[data-tone='danger'] {
+    color: var(--danger);
+    background: var(--danger-bg);
+}
+
+/* ----------------------------------------------------------- liste des travaux */
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: var(--space-md);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.card {
+    position: relative;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-widget);
+    transition: border-color var(--transition-fast);
+}
+
+.card:hover {
+    border-color: var(--glass-border-strong);
+}
+
+/* `div role="button"` et non `<button>` : la carte contient des paragraphes,
+   c'est-à-dire du contenu de flux, interdit dans un bouton. */
+.cardBody {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: var(--space-md);
+    cursor: pointer;
+    min-width: 0;
+}
+
+.cardName {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cardMeta {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cardFoot {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+    margin-top: var(--space-xs);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+/* ------------------------------------------------------- fiche d'un travail */
+
+.detail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-width: 0;
+}
+
+.detailHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.detailActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.detailTitle {
+    margin: 0;
+    font-size: 1.15rem;
+    color: var(--text-primary);
+}
+
+.facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: var(--space-sm) var(--space-md);
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-widget);
+}
+
+.fact {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.factLabel {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.factValue {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.factWarn {
+    color: var(--danger);
+}
+
+.sectionTitle {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+/* ------------------------------------------------------------- exécutions */
+
+.runs {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.run {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+}
+
+.runMain {
+    flex: 1;
+    min-width: 0;
+}
+
+.runTitle {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.runPath {
+    margin: 2px 0 0;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+}
+
+/* Le condensé du clair : long, mais c'est ce qui permet de vérifier une
+   restauration. On le laisse sélectionnable et repliable plutôt que tronqué. */
+.runHash {
+    margin: 2px 0 0;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+}
+
+.runAgo {
+    flex-shrink: 0;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------ destinations */
+
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+}
+
+.rowIcon {
+    flex-shrink: 0;
+    margin-top: 2px;
+    color: var(--text-muted);
+}
+
+.rowMain {
+    flex: 1;
+    min-width: 0;
+}
+
+.rowName {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.rowMeta {
+    margin: 2px 0 0;
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+}
+
+.rowError {
+    margin: var(--space-xs) 0 0;
+    font-size: 0.76rem;
+    color: var(--danger);
+    overflow-wrap: anywhere;
+}
+
+.rowActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+    flex-shrink: 0;
+}
+
+/* ------------------------------------------------------------- formulaires */
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+}
+
+.fieldRow {
+    display: flex;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.fieldLabel {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.fieldHint {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+/* ------------------------------------------------------- carte de l'accueil */
+
+.widget {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+}
+
+.widgetStat {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+}
+
+.widgetValue {
+    font-size: 2rem;
+    line-height: 1;
+    color: var(--text-primary);
+}
+
+.widgetValue[data-tone='danger'] {
+    color: var(--danger);
+}
+
+.widgetLabel {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.widgetFoot {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}

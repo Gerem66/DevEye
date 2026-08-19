@@ -10,6 +10,7 @@ import type { IntegrationSyncService } from '@/Services/IntegrationSyncService';
 import type { DatabaseMonitor } from '@/Services/DatabaseMonitor';
 import type { AudienceIngest } from '@/Services/AudienceIngest';
 import type { SecurityMonitor } from '@/Services/SecurityMonitor';
+import type { BackupService } from '@/Services/BackupService';
 import type { ErrorCode, LiveTopic, LogLevelName } from 'deveye-types';
 import type { Logger } from 'pino';
 import type { FeatureAccess, WorkspaceCapability, WorkspaceFeatureId } from 'deveye-types';
@@ -143,6 +144,20 @@ export interface FeatureContext {
      * sorte qu'une réponse ne dépende jamais de l'état d'un tour de boucle.
      */
     sentinel?: SecurityMonitor;
+    /**
+     * Moteur de sauvegardes.
+     *
+     * Sert à trois choses, et à rien d'autre : contrôler une destination par le
+     * **même chemin** que l'ordonnanceur (`probeDestination`, de sorte qu'un
+     * contrôle manuel et un contrôle automatique ne puissent pas diverger),
+     * ouvrir une exécution à la demande (`trigger`), et savoir si un travail
+     * tourne déjà (`isRunning`) — une information qui n'existe qu'en mémoire du
+     * processus, donc introuvable par une lecture de dépôt.
+     *
+     * Aucune lecture d'écran ne passe par lui : les listes viennent des dépôts,
+     * pour qu'une réponse ne dépende jamais de l'état d'un tour de boucle.
+     */
+    backups?: BackupService;
 }
 
 /**
