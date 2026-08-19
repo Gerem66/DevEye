@@ -2,6 +2,7 @@ import type { Logger } from 'pino';
 import type { NotificationFeature } from 'deveye-types';
 
 import { decryptCredentials } from '@/features/mail/_shared';
+import { isDiscordWebhook } from '@/Services/discord';
 import * as mailClient from '@/Services/MailAccountClient';
 import type { Cipher } from '@/Services/SecureStore';
 import type { Database } from '@/db';
@@ -128,6 +129,14 @@ export interface Alert {
      * point d'entrée maison de filtrer sans analyser du texte.
      */
     payload: Record<string, unknown>;
+    /**
+     * La mise en page Discord de cette alerte, quand la feature en a une.
+     *
+     * Facultative, et c'est le point : une feature qui n'en fournit pas garde
+     * exactement l'envoi d'avant. Elle n'est de toute façon employée que si le
+     * webhook réglé est bien celui de Discord — voir {@link webhookBody}.
+     */
+    embeds?: Record<string, unknown>[];
 }
 
 /**
@@ -147,6 +156,34 @@ async function webhookRejection(response: Response): Promise<string> {
         .then((body) => body.slice(0, 200).trim())
         .catch(() => '');
     return detail ? `Le webhook a répondu ${response.status} : ${detail}` : `Le webhook a répondu ${response.status}`;
+}
+
+/**
+ * La charge utile envoyée au webhook.
+ *
+ * Charge utile à trois têtes : `content` pour Discord, `text` pour Slack, les
+ * champs structurés pour un point d'entrée maison. Aucun des trois ne gêne les
+ * autres, ce qui évite de demander « quel service ? » à la configuration.
+ *
+ * **Sauf pour Discord dès qu'une feature fournit des embeds** : là, `content`
+ * est retiré. Le garder ferait afficher deux fois la même alerte, le pavé de
+ * texte au-dessus de sa propre mise en page — et l'embed ne serait plus une
+ * amélioration, seulement une répétition. Le texte reste sur tous les autres
+ * canaux, qui ne savent pas rendre un embed.
+ *
+ * Le reconnaissement passe par `isDiscordWebhook`, qui analyse l'URL au lieu
+ * d'y chercher une sous-chaîne : un point d'entrée maison qui recevrait des
+ * embeds à la place de son texte serait une régression silencieuse.
+ *
+ * Séparée pour être vérifiable : le choix se juge sur l'objet rendu, sans
+ * réseau.
+ */
+export function webhookBody(url: string, alert: Alert): Record<string, unknown> {
+    const text = alert.body.slice(0, WEBHOOK_TEXT_MAX);
+    if (alert.embeds && alert.embeds.length > 0 && isDiscordWebhook(url)) {
+        return { embeds: alert.embeds, ...alert.payload };
+    }
+    return { content: text, text, ...alert.payload };
 }
 
 /**
@@ -187,15 +224,7 @@ export async function deliver(channels: Channels, alert: Alert, logger: Logger):
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
                 signal: AbortSignal.timeout(10_000),
-                // Charge utile à trois têtes : `content` pour Discord, `text`
-                // pour Slack, les champs structurés pour un point d'entrée
-                // maison. Aucun des trois ne gêne les autres, ce qui évite de
-                // demander « quel service ? » à la configuration.
-                body: JSON.stringify({
-                    content: alert.body.slice(0, WEBHOOK_TEXT_MAX),
-                    text: alert.body.slice(0, WEBHOOK_TEXT_MAX),
-                    ...alert.payload
-                })
+                body: JSON.stringify(webhookBody(channels.webhook, alert))
             });
             if (response.ok) delivered = true;
             else logger.warn({ reason: await webhookRejection(response) }, 'Alert webhook rejected');

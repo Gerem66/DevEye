@@ -3,6 +3,7 @@ import type { Logger } from 'pino';
 
 import { decryptError, decryptService, encryptError, type ServicePayload } from '@/features/uptime/_shared';
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
+import { buildNotice, type UptimeNotice } from '@/Services/UptimeNotice';
 import {
     deliver,
     formatDuration,
@@ -112,40 +113,22 @@ async function probeService(target: ServicePayload, row: UptimeServiceRow): Prom
 }
 
 /**
- * Discord truncates hard at 2000 characters and rejects anything longer; an
- * error string from an odd endpoint can be arbitrarily long.
+ * Les champs structurés d'une alerte, pour un point d'entrée maison qui veut
+ * filtrer sans analyser du texte.
+ *
+ * Le message lui-même n'est plus construit ici : `deliver` porte le texte
+ * (`content` pour Discord, `text` pour Slack) et `UptimeNotice` la mise en page
+ * Discord. Ce qui reste est ce que ni l'un ni l'autre ne dit — de quel service
+ * il s'agit, et quand.
  */
-const WEBHOOK_TEXT_MAX = 1900;
-
-/** Payload accepted by Discord, Slack and a homegrown endpoint alike. */
-interface WebhookAlert {
+function webhookPayload(alert: {
     event: 'down' | 'recovered' | 'test';
     /** Null on a test alert, which is about no service in particular. */
     service: string | null;
     url: string | null;
     at: number;
-    body: string;
-}
-
-/**
- * Build that one body.
- *
- * Discord refuses a payload carrying none of `content` / `embeds` / `file`
- * ("Cannot send an empty message", HTTP 400) and Slack reads `text`; both
- * ignore the keys they don't know. Carrying the message under both names — plus
- * the structured fields a custom endpoint wants — covers every target without
- * asking the user which service they pasted the URL from.
- */
-function webhookPayload(alert: WebhookAlert): Record<string, unknown> {
-    const text = alert.body.slice(0, WEBHOOK_TEXT_MAX);
-    return {
-        content: text,
-        text,
-        event: alert.event,
-        service: alert.service,
-        url: alert.url,
-        at: alert.at
-    };
+}): Record<string, unknown> {
+    return { event: alert.event, service: alert.service, url: alert.url, at: alert.at };
 }
 
 export class UptimeMonitor {
@@ -326,8 +309,14 @@ export class UptimeMonitor {
                     ]
                         .filter((line) => line !== null)
                         .join('\n'),
-                    event: 'down',
-                    at: probe.at
+                    notice: {
+                        event: 'down',
+                        service: target.name,
+                        url: target.url,
+                        at: probe.at,
+                        error: probe.error,
+                        httpStatus: probe.httpStatus
+                    }
                 });
                 if (sent) await db.uptimeHistory.markIncidentNotified(incident.id);
             }
@@ -350,6 +339,7 @@ export class UptimeMonitor {
             // outage (notifications off at the time) doesn't produce a lone
             // "back online" mail with no context.
             if (row.notify === 1 && open.notified === 1) {
+                const cause = await decryptError(cipher, open.error);
                 await this.notify(row, target, {
                     subject: `✅ ${target.name} est de retour`,
                     body: [
@@ -359,10 +349,17 @@ export class UptimeMonitor {
                         `Panne du        : ${formatMoment(open.started_at)}`,
                         `Rétabli le      : ${formatMoment(probe.at)}`,
                         `Durée           : ${formatDuration(duration)}`,
-                        `Cause initiale  : ${(await decryptError(cipher, open.error)) ?? 'inconnue'}`
+                        `Cause initiale  : ${cause ?? 'inconnue'}`
                     ].join('\n'),
-                    event: 'recovered',
-                    at: probe.at
+                    notice: {
+                        event: 'recovered',
+                        service: target.name,
+                        url: target.url,
+                        at: probe.at,
+                        startedAt: open.started_at,
+                        cause,
+                        responseMs: probe.responseMs
+                    }
                 });
             }
         }
@@ -380,7 +377,7 @@ export class UptimeMonitor {
     private async notify(
         row: UptimeServiceRow,
         target: ServicePayload,
-        alert: { subject: string; body: string; event: 'down' | 'recovered'; at: number }
+        alert: { subject: string; body: string; notice: Extract<UptimeNotice, { event: 'down' | 'recovered' }> }
     ): Promise<boolean> {
         return deliver(
             await this.resolveChannels(row.workspace_id),
@@ -388,12 +385,15 @@ export class UptimeMonitor {
                 subject: alert.subject,
                 body: alert.body,
                 payload: webhookPayload({
-                    event: alert.event,
+                    event: alert.notice.event,
                     service: target.name,
                     url: target.url,
-                    at: alert.at,
-                    body: alert.body
-                })
+                    at: alert.notice.at
+                }),
+                // La même alerte, mise en page pour Discord. Le corps en clair
+                // au-dessus reste ce que reçoivent le mail et les autres
+                // webhooks : rien n'est remplacé, une forme est ajoutée.
+                embeds: buildNotice(alert.notice)
             },
             this.deps.logger.child({ serviceId: row.id })
         );
@@ -435,7 +435,8 @@ export class UptimeMonitor {
             {
                 subject: 'DevEye — test de notification',
                 body,
-                payload: webhookPayload({ event: 'test', service: null, url: null, at, body })
+                payload: webhookPayload({ event: 'test', service: null, url: null, at }),
+                embeds: buildNotice({ event: 'test', at })
             },
             this.deps.logger.child({ workspaceId })
         );
