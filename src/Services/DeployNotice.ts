@@ -166,6 +166,34 @@ function block(body: string): string {
 }
 
 /**
+ * Le journal, en **champ** et non dans la description.
+ *
+ * Discord rend toujours les `fields` **après** la `description` : tant que le
+ * journal vivait dans la seconde, projet, service et durée se retrouvaient
+ * dessous, c'est-à-dire loin du titre et séparés de lui par dix lignes de build.
+ * Le déplacer est le seul moyen de les faire remonter — l'ordre des deux blocs
+ * n'est pas réglable.
+ *
+ * D'où le budget : la valeur d'un champ est plafonnée par Discord (1024
+ * caractères) là où une description en accepte 4096. On retire donc des lignes
+ * **par le haut** — les plus anciennes, les moins utiles — jusqu'à tenir, plutôt
+ * que de laisser Discord rejeter le message entier.
+ */
+function logField(log: string): string | null {
+    const tail = tailOf(log);
+    if (!tail) return null;
+
+    let lines = tail.split('\n');
+    while (lines.length > 1 && block(lines.join('\n')).length > FIELD_MAX) lines = lines.slice(1);
+
+    // Une seule ligne encore trop longue : on garde sa fin, où se trouve le
+    // message d'erreur d'un compilateur ou d'un `npm` qui a échoué.
+    let body = lines.join('\n');
+    if (block(body).length > FIELD_MAX) body = `…${body.slice(-(FIELD_MAX - 16))}`;
+    return block(body);
+}
+
+/**
  * Le message, dans l'état où il doit être vu maintenant.
  *
  * **Une seule fonction pour les trois états**, et c'est délibéré : c'est le même
@@ -199,18 +227,21 @@ export function buildNotice(state: NoticeState): DiscordMessage {
             : { name: '⏱️ Durée', value: duration(elapsed), inline: true }
     );
 
+    // Le journal **après** les six cases d'identité et de temps, et le lien
+    // après lui : on lit « quoi, où, combien de temps » avant d'entrer dans la
+    // sortie de build.
+    const tail = logField(state.log);
+    if (tail) fields.push({ name: '📄 Journal', value: tail, inline: false });
+
     if (state.url) {
         fields.push({ name: '🔗 Dokploy', value: `[Ouvrir la fiche du service](${state.url})`, inline: false });
     }
 
+    // La description ne garde que ce qui doit être lu **avant** tout le reste :
+    // le titre, l'avancement, et la raison d'un échec.
     const parts: string[] = [`**${state.title || 'Déploiement'}**`];
     if (running) parts.push(progressLine(state, elapsed));
-    // L'erreur avant le journal : c'est la ligne qui dit *pourquoi*, et la faire
-    // suivre huit lignes de build reviendrait à la cacher.
     if (failed && state.error) parts.push(`⚠️ ${state.error.slice(0, FIELD_MAX)}`);
-
-    const tail = tailOf(state.log);
-    if (tail) parts.push(block(tail));
 
     return {
         embeds: [

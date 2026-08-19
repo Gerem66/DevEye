@@ -157,18 +157,60 @@ describe('buildNotice — ce que le lecteur voit', () => {
         assert.doesNotMatch(description, /▰|▱/);
     });
 
-    it('met l’erreur avant le journal sur un échec', () => {
-        // C'est la ligne qui dit *pourquoi* : la faire suivre huit lignes de
-        // build reviendrait à la cacher.
-        const notice = buildNotice({
+    it('garde l’erreur en description et sort le journal en champ', () => {
+        // Discord rend les champs APRÈS la description : c'est le seul moyen de
+        // faire remonter projet / service / durée au-dessus de la sortie de
+        // build. L'erreur, elle, doit rester tout en haut — c'est la ligne qui
+        // dit *pourquoi*.
+        const embed = buildNotice({
             ...base,
             status: 'failed',
             finishedAt: 1_100,
             error: 'exit code 1',
             log: 'ligne de build'
-        });
-        const description = String((notice.embeds?.[0] as { description: string }).description);
-        assert.ok(description.indexOf('exit code 1') < description.indexOf('ligne de build'));
+        }).embeds![0] as { description: string; fields: { name: string; value: string }[] };
+
+        assert.match(embed.description, /exit code 1/);
+        assert.doesNotMatch(embed.description, /ligne de build/);
+        const journal = embed.fields.find((f) => f.name === '📄 Journal');
+        assert.match(String(journal?.value), /ligne de build/);
+    });
+
+    it('place les six cases avant le journal', () => {
+        const embed = buildNotice({
+            ...base,
+            status: 'success',
+            finishedAt: 1_100,
+            log: 'ligne de build',
+            url: 'https://x/y'
+        }).embeds![0] as { fields: { name: string }[] };
+        assert.deepEqual(
+            embed.fields.map((f) => f.name),
+            [
+                '🛠️ Projet',
+                '⚙️ Service',
+                '🌍 Environnement',
+                '📦 Type',
+                '📅 Démarré',
+                '⏱️ Durée',
+                '📄 Journal',
+                '🔗 Dokploy'
+            ]
+        );
+    });
+
+    it('rogne un journal trop long par le haut, pour tenir dans un champ', () => {
+        // Discord plafonne la valeur d'un champ à 1024 caractères là où une
+        // description en accepte 4096 : sans ce rognage, le message ENTIER
+        // serait rejeté. On retire les lignes les plus anciennes, jamais les
+        // dernières — ce sont elles qui portent l'erreur.
+        const log = Array.from({ length: 8 }, (_, i) => `${i} ${'x'.repeat(105)}`).join('\n');
+        const embed = buildNotice({ ...base, status: 'failed', finishedAt: 1_100, log }).embeds![0] as {
+            fields: { name: string; value: string }[];
+        };
+        const journal = String(embed.fields.find((f) => f.name === '📄 Journal')?.value);
+        assert.ok(journal.length <= 1024, `champ de ${journal.length} caractères`);
+        assert.match(journal, /^7 x+/m);
     });
 
     it('remplace « Écoulé » par « Durée » à la conclusion, à la même place', () => {
