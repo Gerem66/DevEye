@@ -305,7 +305,7 @@ export function FeatureDeploy({ workspace }: FeatureProps) {
                 feature='deploy'
                 title='Notifications de Déploiement'
                 description='Propres aux mises en production : un déploiement raté n’a ni les mêmes destinataires ni la même urgence qu’un service tombé (Uptime) ou qu’un constat de sécurité (Sentinelle).'
-                when='Envoyées à l’atterrissage d’un déploiement, échec comme succès, y compris ceux lancés depuis Dokploy, une CI ou un push git. Un déploiement est un fait ponctuel : il n’y a pas de « retour à la normale » à annoncer, la mise en production suivante le dira.'
+                when='Envoyées à l’atterrissage d’un déploiement, échec comme succès, y compris ceux lancés depuis Dokploy, une CI ou un push git. Sur un webhook Discord, un seul message s’ouvre au démarrage puis se met à jour tout seul — avancement, journal, puis issue et durée.'
             />
 
             <LogsDialog

@@ -111,6 +111,15 @@ export interface DeployRepo {
      *  avoir enregistré, pour qu'un envoi qui échoue ne se répète pas en boucle
      *  mais qu'un état perdu ne fasse pas non plus disparaître le déploiement. */
     markDeploymentNotified(id: number): Promise<void>;
+    /**
+     * Réécrit le seul blob, sans toucher à l'état.
+     *
+     * Sert à retenir l'identifiant du message de suivi dès qu'il est ouvert.
+     * Distincte de `updateDeployment` exprès : celle-ci réécrit aussi le statut
+     * et la date de fin, et s'en servir ici obligerait à les repasser — donc à
+     * risquer de les écraser avec ce qu'on croyait savoir.
+     */
+    setDeploymentContent(id: number, content: string): Promise<void>;
     listDeployments(targetId: number, workspaceId: number, limit: number): Promise<DeploymentRow[]>;
 }
 
@@ -312,6 +321,9 @@ export function deployRepo(pool: Q): DeployRepo {
         },
         async markDeploymentNotified(id) {
             await pool.query('UPDATE deployments SET notified = 1 WHERE id = ?', [id]);
+        },
+        async setDeploymentContent(id, content) {
+            await pool.query('UPDATE deployments SET content = ? WHERE id = ?', [content, id]);
         },
         async updateDeployment(id, { externalId, status, finishedAt, content }) {
             // Écriture simple : plus de garde atomique sur `security_tier`. Une

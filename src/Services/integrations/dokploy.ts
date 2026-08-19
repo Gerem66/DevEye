@@ -295,14 +295,25 @@ const LOG_TIMEOUT_MS = 30_000;
  *    le fichier rejoué, mais rien ne garantit qu'un déploiement encore en
  *    cours le fasse un jour dans le temps d'une requête HTTP — le journal
  *    rendu serait alors partiel, jamais une erreur pour autant.
+ *
+ * `timeoutMs` existe pour ce second cas. Le suivi vivant d'un déploiement lit la
+ * queue du journal toutes les dix secondes : il ne peut pas attendre trente
+ * secondes par lecture, et n'a de toute façon besoin que de ce qui est déjà
+ * arrivé. La lecture à la demande, elle, garde le délai long — elle sert à
+ * rapatrier un journal complet, pas à en prendre la température.
  */
-export function fetchDeploymentLog(baseUrl: string, apiKey: string, logPath: string): Promise<string> {
+export function fetchDeploymentLog(
+    baseUrl: string,
+    apiKey: string,
+    logPath: string,
+    options: { timeoutMs?: number } = {}
+): Promise<string> {
     return new Promise((resolve, reject) => {
         const socket = new WebSocket(logSocketUrl(baseUrl, logPath), { headers: { 'x-api-key': apiKey } });
         const chunks: string[] = [];
         let settled = false;
 
-        const timer = setTimeout(() => finish(), LOG_TIMEOUT_MS);
+        const timer = setTimeout(() => finish(), options.timeoutMs ?? LOG_TIMEOUT_MS);
 
         function finish(err?: Error): void {
             if (settled) return;

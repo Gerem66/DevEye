@@ -27,6 +27,19 @@ export interface StoredDeployment {
     title: string;
     description: string;
     url: string | null;
+    /**
+     * L'identifiant du message Discord qui suit ce déploiement en direct.
+     *
+     * Dans le blob et non dans une colonne : il n'est jamais un critère de
+     * recherche, seulement une donnée qu'on transporte avec la ligne — et le
+     * blob est déjà réécrit à chaque changement d'état. Une colonne aurait coûté
+     * une migration pour un champ que rien n'interroge.
+     *
+     * **Persisté, et c'est le point** : un serveur redémarré au milieu d'un
+     * déploiement retrouve le message qu'il avait ouvert et continue de le
+     * modifier, au lieu d'en poser un second à côté du premier.
+     */
+    noticeId?: string | null;
 }
 
 /** Déchiffre et parse, sans jamais lever : `null` dit simplement « illisible ». */

@@ -17,8 +17,17 @@ import {
     type GitHubCommit,
     type GitHubSyncState
 } from './integrations/github';
-import { listDeployments, type DokployDeployment } from './integrations/dokploy';
-import { deliver, formatDuration, formatMoment, hasChannel, resolveChannels } from '@/Services/notifications';
+import { fetchDeploymentLog, listDeployments, type DokployDeployment } from './integrations/dokploy';
+import { buildNotice, estimateFromHistory } from '@/Services/DeployNotice';
+import { editMessage, isDiscordWebhook, postMessage } from '@/Services/discord';
+import {
+    deliver,
+    formatDuration,
+    formatMoment,
+    hasChannel,
+    resolveChannels,
+    type Alert
+} from '@/Services/notifications';
 
 /**
  * Les intégrations externes, en tâche de fond : synchronisation des **dépôts
@@ -136,7 +145,33 @@ const DEPLOY_BATCH = 6;
  * plus souvent qu'un quart d'heure — un déploiement lancé ailleurs y apparaîtra
  * au plus tard à ce délai, et sa fiche, elle, interroge l'instance en direct.
  */
-const DEPLOY_MIN_INTERVAL_SECONDS = 900;
+const DEPLOY_MIN_INTERVAL_SECONDS = 60;
+
+/**
+ * Cadence propre au volet déploiement.
+ *
+ * Il tournait dans le tour de la synchronisation git, à 120 s — ce qui plafonnait
+ * tout : un intervalle au repos plus court que le tour n'aurait rien changé, et
+ * un message de suivi ne peut pas se rafraîchir moins souvent que la boucle qui
+ * l'alimente. D'où un minuteur à lui, dix fois plus rapide, pendant que les
+ * dépôts gardent le leur : les deux n'ont jamais eu la même urgence, ils
+ * partageaient un tour par accident d'implémentation.
+ *
+ * Dix secondes, c'est aussi la cadence de modification du message Discord.
+ * Discord tolère environ cinq requêtes par deux secondes et par webhook ; on en
+ * fait une par déploiement en vol, ce qui laisse une marge considérable.
+ */
+const DEPLOY_TICK_SECONDS = 10;
+
+/**
+ * Délai de lecture de la queue du journal, pendant un déploiement.
+ *
+ * Court, et il le faut : le flux d'un déploiement **en cours** ne se referme
+ * pas de lui-même, donc chaque lecture va au bout de son délai. Trente secondes
+ * — le régime de la lecture à la demande — feraient durer un tour plus longtemps
+ * que l'intervalle qui le déclenche.
+ */
+const DEPLOY_LOG_TIMEOUT_MS = 3_000;
 
 /**
  * Lignes d'historique retenues par cible et par tour.
@@ -228,7 +263,10 @@ export interface IntegrationSyncDeps {
 
 export class IntegrationSyncService {
     private timer: ReturnType<typeof setInterval> | null = null;
+    private deployTimer: ReturnType<typeof setInterval> | null = null;
     private ticking = false;
+    /** Garde de ré-entrance propre au déploiement : son tour a sa propre durée. */
+    private deployTicking = false;
     private readonly inFlight = new Map<number, Promise<void>>();
     private readonly ciphers = new Map<number, Cipher>();
     /** Dépôts à traiter en priorité, demandés à la main par `git.repoSyncNow`. */
@@ -269,12 +307,21 @@ export class IntegrationSyncService {
         if (this.timer) return;
         this.timer = setInterval(() => void this.tick(), TICK_SECONDS * 1000);
         this.timer.unref();
-        this.deps.logger.info({ tickSeconds: TICK_SECONDS }, 'Integration sync service started');
+        // Son propre minuteur : voir {@link DEPLOY_TICK_SECONDS}. Un déploiement
+        // se suit à la dizaine de secondes, un dépôt git à la dizaine de minutes.
+        this.deployTimer = setInterval(() => void this.deployTick(), DEPLOY_TICK_SECONDS * 1000);
+        this.deployTimer.unref();
+        this.deps.logger.info(
+            { tickSeconds: TICK_SECONDS, deployTickSeconds: DEPLOY_TICK_SECONDS },
+            'Integration sync service started'
+        );
     }
 
     stop(): void {
         if (this.timer) clearInterval(this.timer);
         this.timer = null;
+        if (this.deployTimer) clearInterval(this.deployTimer);
+        this.deployTimer = null;
     }
 
     /**
@@ -291,11 +338,14 @@ export class IntegrationSyncService {
      *
      * Sert au déclenchement d'un déploiement : il n'y a rien à synchroniser côté
      * git, seulement un suivi d'état à reprendre plus tôt que la cadence. La
-     * garde de ré-entrance de `tick()` rend l'appel inoffensif s'il en tourne
-     * déjà un.
+     * garde de ré-entrance de `deployTick()` rend l'appel inoffensif s'il en
+     * tourne déjà un.
+     *
+     * C'est aussi ce qui ouvre le message de suivi dans la seconde qui suit un
+     * déclenchement parti d'ici, sans attendre le prochain battement.
      */
     wake(): void {
-        void this.tick();
+        void this.deployTick();
     }
 
     /**
@@ -353,6 +403,27 @@ export class IntegrationSyncService {
         return cipher;
     }
 
+    /**
+     * Le tour du déploiement : rapprocher les cibles, entretenir les messages.
+     *
+     * Sa propre garde de ré-entrance, distincte de celle des dépôts. Un tour qui
+     * lit la queue du journal de plusieurs déploiements en vol peut dépasser son
+     * intervalle ; il saute alors un battement plutôt que de se chevaucher —
+     * deux tours concurrents publieraient deux messages pour le même
+     * déploiement, chacun ignorant l'identifiant que l'autre vient d'écrire.
+     */
+    private async deployTick(): Promise<void> {
+        if (this.deployTicking) return;
+        this.deployTicking = true;
+        try {
+            await this.syncDeployTargets();
+        } catch (e) {
+            this.deps.logger.error({ err: e }, 'Deploy sync: tick failed');
+        } finally {
+            this.deployTicking = false;
+        }
+    }
+
     private async tick(): Promise<void> {
         if (this.ticking) return;
         this.ticking = true;
@@ -367,10 +438,6 @@ export class IntegrationSyncService {
                 .slice(0, BATCH);
 
             await Promise.all(picked.map((row) => this.syncOne(row.id, row.workspace_id)));
-            // Les cibles de déploiement sont rapprochées à part : elles n'ont
-            // rien à voir avec la cadence des dépôts, et un déploiement dure des
-            // minutes là où une synchronisation git en prend dix.
-            await this.syncDeployTargets();
         } catch (e) {
             this.deps.logger.error({ err: e }, 'Integration sync: tick failed');
         } finally {
@@ -864,15 +931,16 @@ export class IntegrationSyncService {
         const recent = [...remote].sort((a, b) => b.startedAt - a.startedAt).slice(0, DEPLOY_IMPORT_LIMIT);
         /** Lignes locales déjà appariées : une ligne ne vaut que pour un distant. */
         const claimed = new Set<number>();
-        /** Ce qui vient d'atterrir et n'a pas encore été annoncé. */
-        const landed: {
-            id: number;
-            status: string;
-            title: string;
-            description: string;
-            startedAt: number;
-            finishedAt: number | null;
-        }[] = [];
+        /**
+         * Ce que ce tour a résolu : la ligne locale, et ce que le fournisseur en
+         * dit.
+         *
+         * Une seule liste pour les lignes appariées **et** créées, là où il n'y
+         * avait qu'une liste des atterrissages. Le suivi vivant a besoin des
+         * deux : un déploiement encore en cours n'atterrit pas, et c'est
+         * justement lui qu'il faut montrer.
+         */
+        const seen: { row: DeploymentRow; entry: DokployDeployment }[] = [];
         let changed = false;
 
         for (const entry of recent) {
@@ -897,19 +965,7 @@ export class IntegrationSyncService {
                     });
                     changed = true;
                 }
-                // L'atterrissage se juge sur `notified`, jamais sur « l'état
-                // vient de changer » : un déploiement terminé pendant que le
-                // serveur était arrêté n'aurait sinon jamais son avis.
-                if (isTerminal(entry.status) && match.notified === 0) {
-                    landed.push({
-                        id: match.id,
-                        status: entry.status,
-                        title: entry.title,
-                        description: entry.description,
-                        startedAt: entry.startedAt,
-                        finishedAt
-                    });
-                }
+                seen.push({ row: match, entry });
                 continue;
             }
 
@@ -937,16 +993,7 @@ export class IntegrationSyncService {
                 )
             });
             changed = true;
-            if (!firstImport && isTerminal(entry.status)) {
-                landed.push({
-                    id: row.id,
-                    status: entry.status,
-                    title: entry.title,
-                    description: entry.description,
-                    startedAt: entry.startedAt,
-                    finishedAt: entry.finishedAt
-                });
-            }
+            seen.push({ row, entry });
         }
 
         // Ce que DevEye croit en vol et que le fournisseur ne connaît pas : au
@@ -983,21 +1030,188 @@ export class IntegrationSyncService {
             this.deps.live?.changed(target.workspace_id, ['deploy', 'projects'], null);
         }
 
-        if (landed.length > 0) {
-            const name = (await this.readJson<{ name?: string }>(cipher, target.content))?.name ?? target.external_id;
-            for (const item of landed) {
-                // Le premier rapprochement ne prévient **jamais** — y compris
-                // pour une ligne locale restée en vol que le fournisseur dit
-                // terminée depuis trois semaines. On ne peut pas distinguer, ce
-                // jour-là, « vient d'atterrir » de « a atterri il y a longtemps » ;
-                // seule la marque part, pour que le tour suivant n'y revienne pas.
-                if (!firstImport) await this.announceDeployment(target.workspace_id, cipher, name, item);
-                // Marqué quoi qu'il advienne de l'envoi : `deliver` avale déjà
-                // ses erreurs, et réessayer à chaque tour un canal mal réglé
-                // produirait une boucle silencieuse plutôt qu'un rattrapage.
-                await this.deps.db.deploy.markDeploymentNotified(item.id);
-            }
+        await this.updateDeployNotices({
+            target,
+            baseUrl: credential.base_url,
+            apiKey,
+            history: local,
+            seen,
+            firstImport,
+            now
+        });
+    }
+
+    /**
+     * Ouvre, entretient et conclut les messages de suivi d'une cible.
+     *
+     * ## Un seul message par déploiement, du début à la fin
+     *
+     * Discord est le seul canal qui sache modifier ce qu'il a déjà envoyé (voir
+     * `Services/discord.ts`). Quand le webhook réglé en est un, un déploiement
+     * découvert **en vol** ouvre un message, que les tours suivants modifient —
+     * barre d'avancement, temps écoulé, queue du journal — jusqu'à la conclusion,
+     * qui remplace le tout par l'issue, la durée et l'erreur s'il y en a une.
+     * L'identifiant du message vit dans le blob de la ligne, donc un serveur
+     * redémarré en cours de route reprend le même message.
+     *
+     * ## Les autres canaux ne perdent rien
+     *
+     * Un webhook Slack ou maison, et le mail, reçoivent ce qu'ils recevaient : un
+     * message unique à l'atterrissage. Le suivi vivant est une **couche en plus**
+     * là où la plateforme le permet, jamais un remplacement — c'est ce qui permet
+     * de ne rien demander de nouveau à la configuration.
+     *
+     * Corollaire à ne pas manquer : quand le suivi vivant a conclu, le webhook
+     * est retiré de la livraison finale. Sans cela, Discord recevrait le message
+     * modifié **et** un second message en clair juste en dessous.
+     */
+    private async updateDeployNotices(input: {
+        target: DeployTargetSyncRow;
+        baseUrl: string;
+        apiKey: string;
+        history: DeploymentRow[];
+        seen: { row: DeploymentRow; entry: DokployDeployment }[];
+        firstImport: boolean;
+        now: number;
+    }): Promise<void> {
+        // `now` n'est pas déstructuré : il n'est utile qu'au rendu du message,
+        // qui le reçoit par le `...input` transmis à `renderNotice`.
+        const { target, seen, firstImport } = input;
+        // Passé {@link DEPLOY_STALE_SECONDS}, on cesse d'entretenir le message :
+        // un déploiement que le fournisseur laisse « en cours » pour toujours —
+        // une file bloquée, un agent mort sans le dire — ferait sinon une
+        // modification Discord toutes les dix secondes, indéfiniment. Le message
+        // reste à son dernier état, qui annonce déjà « plus long que d'habitude ».
+        const inFlight = seen.filter(
+            (item) => !isTerminal(item.entry.status) && item.entry.startedAt > input.now - DEPLOY_STALE_SECONDS
+        );
+        // Le premier rapprochement ne conclut **jamais** — on ne peut pas
+        // distinguer, ce jour-là, « vient d'atterrir » de « a atterri il y a
+        // trois semaines ». Seule la marque part, pour que le tour suivant n'y
+        // revienne pas.
+        const landed = seen.filter((item) => isTerminal(item.entry.status) && item.row.notified === 0);
+        if (inFlight.length === 0 && landed.length === 0) return;
+
+        const cipher = this.cipherFor(target.workspace_id);
+        const channels = await resolveChannels(this.deps.db, cipher, target.workspace_id, 'deploy');
+        const discord = channels.webhook && isDiscordWebhook(channels.webhook) ? channels.webhook : null;
+        const name = (await this.readJson<{ name?: string }>(cipher, target.content))?.name ?? target.external_id;
+        const logger = this.deps.logger.child({ workspaceId: target.workspace_id, targetId: target.id });
+
+        // Les journaux en parallèle : chaque lecture va au bout de son délai,
+        // le flux d'un déploiement en cours ne se refermant pas de lui-même.
+        // Les enchaîner ferait dépasser l'intervalle dès deux déploiements.
+        if (discord) {
+            await Promise.all(
+                inFlight.map((item) =>
+                    this.renderNotice({ ...input, item, name, webhook: discord, cipher, logger, final: false })
+                )
+            );
         }
+
+        for (const item of landed) {
+            if (!firstImport) {
+                const closed = discord
+                    ? await this.renderNotice({
+                          ...input,
+                          item,
+                          name,
+                          webhook: discord,
+                          cipher,
+                          logger,
+                          final: true
+                      })
+                    : false;
+                // Le message vivant a conclu : le webhook a déjà tout dit, seul
+                // le mail reste à servir. Sinon, l'avis ordinaire part sur tous
+                // les canaux, comme avant le suivi vivant.
+                if (closed) {
+                    await deliver(
+                        { ...channels, webhook: null },
+                        this.deployAlert(name, {
+                            status: item.entry.status,
+                            title: item.entry.title,
+                            description: item.entry.description,
+                            startedAt: item.entry.startedAt,
+                            finishedAt: item.entry.finishedAt
+                        }),
+                        logger
+                    );
+                } else if (hasChannel(channels)) {
+                    await this.announceDeployment(target.workspace_id, cipher, name, {
+                        status: item.entry.status,
+                        title: item.entry.title,
+                        description: item.entry.description,
+                        startedAt: item.entry.startedAt,
+                        finishedAt: item.entry.finishedAt
+                    });
+                }
+            }
+            // Marqué quoi qu'il advienne de l'envoi : `deliver` avale déjà ses
+            // erreurs, et réessayer à chaque tour un canal mal réglé produirait
+            // une boucle silencieuse plutôt qu'un rattrapage.
+            await this.deps.db.deploy.markDeploymentNotified(item.row.id);
+        }
+    }
+
+    /**
+     * Publie ou modifie le message d'un déploiement. Rend `true` si Discord l'a
+     * accepté.
+     *
+     * Le `false` compte : c'est lui qui fait retomber la conclusion sur l'avis
+     * ordinaire, plutôt que de laisser un déploiement passer sous silence parce
+     * que le message de suivi n'a pas pu s'ouvrir.
+     */
+    private async renderNotice(input: {
+        baseUrl: string;
+        apiKey: string;
+        history: DeploymentRow[];
+        item: { row: DeploymentRow; entry: DokployDeployment };
+        name: string;
+        webhook: string;
+        cipher: Cipher;
+        logger: Logger;
+        final: boolean;
+        now: number;
+    }): Promise<boolean> {
+        const { item, cipher, logger } = input;
+        const blob = (await this.readJson<Record<string, unknown>>(cipher, item.row.content)) ?? {};
+        const noticeId = typeof blob.noticeId === 'string' ? blob.noticeId : null;
+
+        // Rien à ouvrir pour un déploiement déjà terminé qu'on découvre : un
+        // message qui naîtrait avec sa conclusion n'aurait jamais rien suivi, et
+        // l'avis ordinaire dit la même chose en moins cher.
+        if (input.final && noticeId === null) return false;
+
+        const log = item.entry.logPath
+            ? await fetchDeploymentLog(input.baseUrl, input.apiKey, item.entry.logPath, {
+                  timeoutMs: DEPLOY_LOG_TIMEOUT_MS
+              }).catch(() => '')
+            : '';
+
+        const message = buildNotice({
+            targetName: input.name,
+            title: item.entry.title,
+            status: item.entry.status,
+            startedAt: item.entry.startedAt,
+            finishedAt: item.entry.finishedAt,
+            error: item.entry.description,
+            log,
+            estimateSeconds: estimateFromHistory(input.history, item.row.id),
+            now: input.now
+        });
+
+        if (noticeId !== null) return editMessage(input.webhook, noticeId, message, logger);
+
+        const posted = await postMessage(input.webhook, message, logger);
+        if (posted === null) return false;
+        // Retenu tout de suite : le tour suivant doit modifier ce message, et
+        // non en poser un second à côté.
+        await this.deps.db.deploy.setDeploymentContent(
+            item.row.id,
+            await cipher.encrypt(JSON.stringify({ ...blob, noticeId: posted }))
+        );
+        return true;
     }
 
     /**
@@ -1017,7 +1231,21 @@ export class IntegrationSyncService {
     ): Promise<void> {
         const channels = await resolveChannels(this.deps.db, cipher, workspaceId, 'deploy');
         if (!hasChannel(channels)) return;
+        await deliver(channels, this.deployAlert(targetName, item), this.deps.logger.child({ workspaceId }));
+    }
 
+    /**
+     * Le corps de l'avis, en texte — mail, Slack, point d'entrée maison.
+     *
+     * Séparé de son envoi parce qu'il sert deux fois : l'avis ordinaire, et le
+     * mail seul quand le suivi vivant a déjà conclu côté Discord. Le construire
+     * aux deux endroits aurait garanti que l'un des deux finisse par oublier une
+     * ligne.
+     */
+    private deployAlert(
+        targetName: string,
+        item: { status: string; title: string; description: string; startedAt: number; finishedAt: number | null }
+    ): Alert {
         const failed = item.status === 'failed';
         const label = item.title || 'Déploiement';
         const lines = [
@@ -1038,20 +1266,16 @@ export class IntegrationSyncService {
         // *pourquoi*, et la couper serait renvoyer l'utilisateur chez Dokploy.
         if (item.description) lines.push('', item.description);
 
-        await deliver(
-            channels,
-            {
-                subject: `[DevEye] ${failed ? 'Échec' : 'Succès'} du déploiement — ${targetName}`,
-                body: lines.join('\n'),
-                payload: {
-                    event: failed ? 'deploy_failed' : 'deploy_succeeded',
-                    target: targetName,
-                    title: label,
-                    at: item.finishedAt ?? item.startedAt
-                }
-            },
-            this.deps.logger.child({ workspaceId })
-        );
+        return {
+            subject: `[DevEye] ${failed ? 'Échec' : 'Succès'} du déploiement — ${targetName}`,
+            body: lines.join('\n'),
+            payload: {
+                event: failed ? 'deploy_failed' : 'deploy_succeeded',
+                target: targetName,
+                title: label,
+                at: item.finishedAt ?? item.startedAt
+            }
+        };
     }
 
     /**
