@@ -1,24 +1,30 @@
 import { useEffect, useState } from 'react';
 
+import { CountWidget, type CountState } from '@/Components/CountWidget';
 import { ws } from '@/api/ws';
 import { useResourceVersion } from '@/stores/invalidation';
 import { useActiveWorkspace } from '@/stores/workspace';
-import styles from './style.module.css';
 
 /**
  * Carte compacte de l'accueil : combien de travaux tournent, et combien sont
  * tombés.
  *
- * Contrairement aux autres tuiles de comptage, celle-ci montre **l'échec**, et
- * c'est toute sa raison d'être. Un compteur de sauvegardes qui affiche « 4
- * travaux » quand trois d'entre eux échouent depuis une semaine serait pire
- * qu'aucune carte : il donnerait la sensation d'être couvert. C'est le même
- * arbitrage que la carte Sentinelle, qui compte par gravité plutôt qu'en bloc.
+ * Rendue par le `CountWidget` partagé, comme toutes les autres cartes de
+ * comptage — même géométrie, même couleur d'accent, mêmes tailles. Elle ne
+ * passe pas par `useWorkspaceCount` pour autant : `backup.count` rend **deux**
+ * nombres, et celui qui compte n'est pas le plus gros.
+ *
+ * Le nombre vire au rouge dès qu'un travail a échoué à son dernier passage.
+ * C'est la seule carte de l'accueil à le faire, et c'est justifié : un compteur
+ * affichant « 4 travaux » pendant que trois d'entre eux échouent depuis une
+ * semaine serait pire qu'aucune carte — il donnerait la sensation d'être
+ * couvert.
  */
 export function BackupWidget() {
     const workspace = useActiveWorkspace();
     const version = useResourceVersion('backup.count');
-    const [state, setState] = useState<{ count: number; failing: number } | null>(null);
+    const [state, setState] = useState<CountState>({ kind: 'loading' });
+    const [failing, setFailing] = useState(0);
 
     useEffect(() => {
         if (!workspace) return;
@@ -27,7 +33,9 @@ export function BackupWidget() {
         const load = () => {
             ws.send('backup.count', {})
                 .then((res) => {
-                    if (!cancelled) setState({ count: res.count, failing: res.failing });
+                    if (cancelled) return;
+                    setState({ kind: 'ready', count: res.count });
+                    setFailing(res.failing);
                 })
                 // On garde la dernière valeur connue plutôt que de retomber sur
                 // « 0 » : un zéro trompeur sur une carte de sauvegardes se lit
@@ -45,28 +53,17 @@ export function BackupWidget() {
         };
     }, [workspace, version]);
 
-    const loading = state === null;
-    const count = state?.count ?? 0;
-    const failing = state?.failing ?? 0;
-
     return (
-        <div className={styles.widget}>
-            <div className={styles.widgetStat}>
-                <span className={styles.widgetValue} data-tone={failing > 0 ? 'danger' : 'neutral'}>
-                    {loading ? '—' : count}
-                </span>
-                <span className={styles.widgetLabel}>travail{count > 1 ? 'x' : ''}</span>
-            </div>
-            <span className={styles.widgetFoot}>
-                {loading
-                    ? 'Chargement…'
-                    : count === 0
-                      ? 'Aucune sauvegarde programmée'
-                      : failing > 0
-                        ? `${failing} en échec au dernier passage`
-                        : 'Dernier passage réussi'}
-            </span>
-        </div>
+        <CountWidget
+            state={state}
+            noun='travail'
+            plural='travaux'
+            tone={failing > 0 ? 'danger' : 'neutral'}
+            hint={
+                failing > 0 ? `${failing} erreur${failing > 1 ? 's' : ''} au dernier passage` : 'Dernier passage réussi'
+            }
+            empty='Aucune sauvegarde programmée'
+        />
     );
 }
 

@@ -66,10 +66,27 @@ interface CountWidgetProps {
     state: CountState;
     /** Singular noun, pluralized with a trailing "s" (e.g. "note" → "notes"). */
     noun: string;
+    /**
+     * Pluriel explicite, pour les mots que le « s » final ne suffit pas à
+     * accorder — « travail » → « travaux ». Le défaut couvre la quasi-totalité
+     * des cartes ; sans cette échappatoire, la seule issue serait de choisir un
+     * autre mot que le mot juste.
+     */
+    plural?: string;
     /** Secondary line shown under the count when there is at least one item. */
     hint: string;
     /** Secondary line shown when the count is zero. */
     empty: string;
+    /**
+     * Teinte du nombre. `neutral` (défaut) = la couleur d'accent du thème, celle
+     * de **toutes** les cartes de comptage ; `danger` la passe en rouge.
+     *
+     * Optionnelle et rare à dessein : une carte qui alerte n'est justifiée que
+     * si l'ignorer coûte quelque chose. Le cas qui l'a introduite est celui des
+     * sauvegardes — un compteur affichant « 4 travaux » pendant que trois
+     * échouent depuis une semaine donnerait la sensation d'être couvert.
+     */
+    tone?: 'neutral' | 'danger';
 }
 
 /**
@@ -77,18 +94,20 @@ interface CountWidgetProps {
  * secondary line. The layout is identical across loading/ready so nothing
  * shifts: the number sits top-left, the secondary line is pinned to the bottom.
  */
-export function CountWidget({ state, noun, hint, empty }: CountWidgetProps) {
+export function CountWidget({ state, noun, plural: pluralNoun, hint, empty, tone = 'neutral' }: CountWidgetProps) {
     const loading = state.kind === 'loading';
     const count = state.kind === 'ready' ? state.count : 0;
     const plural = loading || count !== 1;
     return (
         <div className={styles.widget}>
             <div className={styles.stat}>
-                <span className={styles.value}>{loading ? '—' : count}</span>
-                <span className={styles.label}>
-                    {noun}
-                    {plural ? 's' : ''}
+                {/* Jamais de teinte pendant le chargement : un tiret rouge
+                    annoncerait une panne là où il n'y a qu'une socket qui
+                    s'ouvre. */}
+                <span className={styles.value} data-tone={loading ? 'neutral' : tone}>
+                    {loading ? '—' : count}
                 </span>
+                <span className={styles.label}>{plural ? (pluralNoun ?? `${noun}s`) : noun}</span>
             </div>
             <span className={styles.foot}>{loading ? 'Chargement…' : count === 0 ? empty : hint}</span>
         </div>

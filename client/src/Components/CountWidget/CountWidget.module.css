@@ -19,6 +19,12 @@
     line-height: 1;
 }
 
+/* La seule dérogation à la couleur d'accent, et elle doit rester rare : voir
+   `tone` dans CountWidget.tsx. */
+.value[data-tone='danger'] {
+    color: var(--danger);
+}
+
 .label {
     font-size: 0.875rem;
     color: var(--text-secondary);

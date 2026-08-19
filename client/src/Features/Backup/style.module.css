@@ -389,38 +389,3 @@
     font-size: 0.72rem;
     color: var(--text-muted);
 }
-
-/* ------------------------------------------------------- carte de l'accueil */
-
-.widget {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    height: 100%;
-}
-
-.widgetStat {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-sm);
-}
-
-.widgetValue {
-    font-size: 2rem;
-    line-height: 1;
-    color: var(--text-primary);
-}
-
-.widgetValue[data-tone='danger'] {
-    color: var(--danger);
-}
-
-.widgetLabel {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-}
-
-.widgetFoot {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-}
