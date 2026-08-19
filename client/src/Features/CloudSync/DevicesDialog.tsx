@@ -2,8 +2,7 @@ import { useState } from 'react';
 import type { CloudSyncShare } from 'deveye-types';
 
 import { ws } from '@/api/ws';
-import { Button, Dialog, SelectInput, TextInput } from '@/Components';
-import DeviceFolderPicker from './DeviceFolderPicker';
+import { Button, DeviceFolderPicker, Dialog, SelectInput, TextInput } from '@/Components';
 import { useAttachableDevices, useShareDevices } from './useShareDevices';
 import styles from './style.module.css';
 
@@ -137,6 +136,7 @@ export default function DevicesDialog({ open, share, onClose, onChanged }: Devic
             </Dialog>
             {pickedDevice && (
                 <DeviceFolderPicker
+                    description='Choisis le dossier local à synchroniser avec le cloud.'
                     open={pickerOpen}
                     deviceId={pickedDevice.id}
                     deviceName={pickedDevice.name}

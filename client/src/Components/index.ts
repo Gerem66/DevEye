@@ -17,3 +17,4 @@ export { CountWidget, useWorkspaceCount } from './CountWidget';
 export { WidgetPopup } from './WidgetPopup';
 export { Wallpaper } from './Wallpaper';
 export { StatusBadge } from './StatusBadge';
+export { DeviceFolderPicker } from './DeviceFolderPicker';

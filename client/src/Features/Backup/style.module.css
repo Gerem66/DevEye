@@ -389,3 +389,23 @@
     font-size: 0.72rem;
     color: var(--text-muted);
 }
+
+/* Le champ de chemin et son bouton « Parcourir », sur une seule ligne.
+   `flex-end` aligne le bouton sur le bas du champ, et non sur le milieu du
+   couple libellé + champ. */
+.pathRow {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-sm);
+}
+
+/* Le champ prend la place restante. `min-width: 0` est indispensable : sans
+   lui, la base `auto` d'un élément flex ne descend jamais sous son contenu, et
+   un chemin profond pousserait le bouton hors du dialogue. */
+.pathLabel {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+}

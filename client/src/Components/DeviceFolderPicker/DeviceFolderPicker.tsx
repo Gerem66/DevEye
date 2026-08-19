@@ -8,10 +8,12 @@ import {
 } from 'deveye-types';
 
 import { ws } from '@/api/ws';
-import { Button, Dialog, TextInput } from '@/Components';
 import { joinPath } from '@/devicePath';
 import { acquireMetrics } from '@/stores/metricsSubscription';
-import styles from './style.module.css';
+import Button from '../Button';
+import { Dialog } from '../Dialog';
+import TextInput from '../TextInput';
+import styles from './DeviceFolderPicker.module.css';
 
 interface DeviceFolderPickerProps {
     open: boolean;
@@ -20,6 +22,14 @@ interface DeviceFolderPickerProps {
     onClose: () => void;
     /** Appelé avec le chemin absolu du dossier choisi sur l'appareil. */
     onPick: (path: string) => void;
+    /**
+     * À quoi le dossier va servir, dit par l'appelant.
+     *
+     * Le composant ne le sait pas : il sert la synchronisation d'un partage
+     * comme la destination d'une sauvegarde, et une phrase codée en dur pour
+     * l'un des deux mentirait à l'autre.
+     */
+    description?: string;
 }
 
 /**
@@ -27,8 +37,19 @@ interface DeviceFolderPickerProps {
  * l'explorateur de fichiers du Monitoring (`device.filesList` + push corrélé
  * par opId) — dossiers uniquement, avec « Choisir ce dossier », « Actualiser »
  * et « Nouveau dossier ».
+ *
+ * Partagé plutôt que rangé dans une feature : choisir un dossier sur une machine
+ * distante n'appartient ni à CloudSync ni aux Sauvegardes, et la troisième
+ * recopie aurait été celle de trop.
  */
-export default function DeviceFolderPicker({ open, deviceId, deviceName, onClose, onPick }: DeviceFolderPickerProps) {
+export function DeviceFolderPicker({
+    open,
+    deviceId,
+    deviceName,
+    onClose,
+    onPick,
+    description
+}: DeviceFolderPickerProps) {
     const [listing, setListing] = useState<FileListing | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -136,7 +157,7 @@ export default function DeviceFolderPicker({ open, deviceId, deviceName, onClose
                 open={open}
                 onClose={onClose}
                 title={`Dossier sur « ${deviceName} »`}
-                description='Choisis le dossier local à synchroniser avec le cloud.'
+                description={description}
                 width={520}
                 footer={
                     <>
@@ -227,3 +248,5 @@ export default function DeviceFolderPicker({ open, deviceId, deviceName, onClose
         </>
     );
 }
+
+export default DeviceFolderPicker;

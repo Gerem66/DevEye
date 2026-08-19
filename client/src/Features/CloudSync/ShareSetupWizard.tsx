@@ -1,9 +1,8 @@
 import { useState } from 'react';
 
 import { ws } from '@/api/ws';
-import { Button, Dialog, SelectInput, TextInput } from '@/Components';
+import { Button, DeviceFolderPicker, Dialog, SelectInput, TextInput } from '@/Components';
 import { useDevices } from '@/stores/devices';
-import DeviceFolderPicker from './DeviceFolderPicker';
 import styles from './style.module.css';
 
 interface ShareSetupWizardProps {
@@ -120,6 +119,7 @@ export default function ShareSetupWizard({ open, onClose, onCreated }: ShareSetu
             </Dialog>
             {pickedDevice && (
                 <DeviceFolderPicker
+                    description='Choisis le dossier local à synchroniser avec le cloud.'
                     open={pickerOpen}
                     deviceId={pickedDevice.id}
                     deviceName={pickedDevice.name}

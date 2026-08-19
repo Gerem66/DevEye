@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { BackupDestination, BackupDestinationKind } from 'deveye-types';
 
-import { Button, Dialog, SelectInput, Switch, TextInput } from '@/Components';
+import { Button, DeviceFolderPicker, Dialog, SelectInput, Switch, TextInput } from '@/Components';
 import { ws } from '@/api/ws';
 import { useDevices } from '@/stores/devices';
 import { backupError, DESTINATION_LABELS } from './format';
@@ -43,6 +43,7 @@ export function DestinationDialog({ open, destination, onClose, onSaved }: Desti
     const [encrypt, setEncrypt] = useState(true);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [pickerOpen, setPickerOpen] = useState(false);
 
     useEffect(() => {
         if (!open) return;
@@ -71,6 +72,7 @@ export function DestinationDialog({ open, destination, onClose, onSaved }: Desti
         setAccessKeyId('');
         setPathStyle(true);
         setEncrypt(true);
+        setPickerOpen(false);
     }, [open, destination]);
 
     // Le chiffrement suit le genre tant qu'on n'y a pas touché à la main : un
@@ -80,6 +82,8 @@ export function DestinationDialog({ open, destination, onClose, onSaved }: Desti
         if (destination) return;
         setEncrypt(kind !== 'local');
     }, [kind, destination]);
+
+    const selectedDevice = devices.find((d) => d.id === deviceId) ?? null;
 
     const submit = async () => {
         if (busy) return;
@@ -187,16 +191,40 @@ export function DestinationDialog({ open, destination, onClose, onSaved }: Desti
                     </label>
                 )}
 
-                <label className={styles.field}>
-                    <span className={styles.fieldLabel}>{kind === 's3' ? 'Préfixe' : 'Dossier'}</span>
-                    <TextInput
-                        value={path}
-                        maxLength={512}
-                        placeholder={
-                            kind === 'local' ? 'nuit' : kind === 'device' ? '/mnt/backup/deveye' : 'deveye/nuit'
-                        }
-                        onChange={(e) => setPath(e.target.value)}
-                    />
+                <div className={styles.field}>
+                    {/* Le bouton est **frère** du libellé, pas son enfant : dans
+                        un `<label>`, un clic sur le bouton activerait aussi le
+                        champ associé. Même découpage que le sélecteur de dossier
+                        de CloudSync. */}
+                    <div className={styles.pathRow}>
+                        <label className={styles.pathLabel}>
+                            <span className={styles.fieldLabel}>{kind === 's3' ? 'Préfixe' : 'Dossier'}</span>
+                            {/* Le champ reste saisissable même avec le sélecteur :
+                                coller un chemin qu'on connaît déjà ne doit pas
+                                obliger à naviguer, et la machine peut être hors
+                                ligne au moment où l'on déclare la destination. */}
+                            <TextInput
+                                value={path}
+                                maxLength={512}
+                                placeholder={
+                                    kind === 'local' ? 'nuit' : kind === 'device' ? '/mnt/backup/deveye' : 'deveye/nuit'
+                                }
+                                onChange={(e) => setPath(e.target.value)}
+                            />
+                        </label>
+                        {kind === 'device' && (
+                            <Button
+                                variant='secondary'
+                                icon='folder'
+                                type='button'
+                                disabled={deviceId === ''}
+                                title={deviceId === '' ? 'Choisissez d’abord une machine' : undefined}
+                                onClick={() => setPickerOpen(true)}
+                            >
+                                Parcourir
+                            </Button>
+                        )}
+                    </div>
                     <span className={styles.fieldHint}>
                         {kind === 'local'
                             ? 'Sous-dossier de la racine des sauvegardes du serveur. Laisser vide pour écrire à la racine.'
@@ -204,7 +232,7 @@ export function DestinationDialog({ open, destination, onClose, onSaved }: Desti
                               ? 'Chemin absolu sur la machine. Il est créé s’il n’existe pas.'
                               : 'Préfixe des clés dans le bucket. Laisser vide pour écrire à la racine.'}
                     </span>
-                </label>
+                </div>
 
                 {kind === 's3' && (
                     <>
@@ -277,6 +305,24 @@ export function DestinationDialog({ open, destination, onClose, onSaved }: Desti
 
                 {error && <p className={styles.error}>{error}</p>}
             </div>
+
+            {/* Empilé au-dessus du formulaire : il possède alors la couche de
+                fermeture, donc Échap referme le sélecteur sans perdre la saisie
+                derrière. Monté seulement quand une machine est choisie — il
+                s'abonne aux métriques de l'appareil dès l'ouverture. */}
+            {kind === 'device' && selectedDevice && (
+                <DeviceFolderPicker
+                    description='Choisis le dossier qui recevra les archives de sauvegarde. Il sera créé s’il n’existe pas.'
+                    open={pickerOpen}
+                    deviceId={selectedDevice.id}
+                    deviceName={selectedDevice.name}
+                    onClose={() => setPickerOpen(false)}
+                    onPick={(picked) => {
+                        setPath(picked);
+                        setPickerOpen(false);
+                    }}
+                />
+            )}
         </Dialog>
     );
 }

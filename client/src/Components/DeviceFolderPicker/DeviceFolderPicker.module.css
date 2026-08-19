@@ -1,0 +1,88 @@
+/*
+ * Sélecteur de dossier d'un appareil — l'apparence.
+ *
+ * Ces règles vivaient dans la feuille de CloudSync, seule feature à s'en servir
+ * à l'époque. Elles suivent le composant : une carte de sauvegarde n'a pas à
+ * importer la feuille de CloudSync pour dessiner un explorateur qui n'est
+ * propre ni à l'une ni à l'autre.
+ *
+ * ⚠️ Une classe ne doit être définie **qu'une fois** seule dans son sélecteur —
+ * `client/scripts/check-css-modules.mjs` échoue sinon.
+ */
+
+/* Barre du sélecteur : chemin courant à gauche, actions d'icône à droite. */
+.pickerBar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) 0;
+}
+
+.pickerPath {
+    /* `min-width: 0` avec `flex: 1` : sans lui, la base `auto` d'un élément flex
+       ne descend jamais sous son contenu, et un chemin profond pousserait les
+       deux boutons hors du dialogue au lieu de se couper. */
+    flex: 1;
+    min-width: 0;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    word-break: break-all;
+}
+
+.pickerIconBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.pickerIconBtn:hover:not(:disabled) {
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+}
+
+.pickerIconBtn:disabled {
+    /* `filter` et non `opacity` : les surfaces animées par framer-motion
+       écrasent l'opacity inline, et un état désactivé ne doit pas dépendre
+       d'une propriété qu'un autre système revendique. */
+    filter: opacity(0.45);
+    cursor: default;
+}
+
+.pickerList {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.pickerEntry {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.pickerEntry:hover {
+    background: var(--surface-subtle);
+}
+
+.mutedNote {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
