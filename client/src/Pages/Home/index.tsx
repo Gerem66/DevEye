@@ -385,11 +385,21 @@ export default function HomePage() {
     const [autoAddSection, setAutoAddSection] = useState(false);
     /**
      * Une bascule d'espace est en cours : la disposition affichée est encore
-     * celle de l'espace quitté, et les droits sont déjà remis à zéro. Sans cet
-     * état, ses tuiles restaient à l'écran le temps de l'aller-retour, toutes
-     * marquées « Accès restreint » : un instantané faux des deux espaces à la
-     * fois. On retire donc l'ancien contenu pendant le chargement, et l'accueil
-     * de la cible arrive d'un bloc.
+     * celle de l'espace quitté, et les droits sont déjà remis à zéro.
+     *
+     * Pendant cette fenêtre, la grille **reste montée et garde son visage** :
+     * marquer toutes les tuiles « Accès restreint » contre des droits vides
+     * était un instantané faux des deux espaces à la fois, donc le grisage est
+     * suspendu (et le clic avec, voir `handleExpand`).
+     *
+     * Rester à l'écran n'est pas qu'une politesse, c'est la condition de la
+     * glissade d'arrivée. L'identité de morphe d'une tuile est
+     * `époque:feature`, et l'époque vient de changer : les tuiles encore
+     * affichées se réinscrivent donc sous leur nouvelle identité, et celles que
+     * la cible partage viennent se poser dessus quand sa disposition remplace
+     * l'ancienne. Démonter la grille pendant l'aller-retour (un écran de
+     * chargement) laissait les tuiles sortantes inscrites sous l'ancienne
+     * époque : plus de paire, plus de mouvement.
      */
     const [switching, setSwitching] = useState(false);
     /**
@@ -526,6 +536,10 @@ export default function HomePage() {
 
     const handleExpand = useCallback(
         (widgetId: string, forceReset = false) => {
+            // Pendant une bascule d'espace, les droits affichés sont vides :
+            // ouvrir est impossible, et refuser serait mentir. Le clic ne fait
+            // rien, la fenêtre se compte en dixièmes de seconde.
+            if (switching) return;
             // Une seule garde, ici : la tuile de l'accueil, la navigation entre
             // features et le menu de la topbar y aboutissent tous. La poser dans
             // le rendu des tuiles n'aurait fermé qu'une porte sur trois.
@@ -550,7 +564,7 @@ export default function HomePage() {
             }
             doExpand(widgetId, forceReset);
         },
-        [expandedWidget, doExpand, allowedToOpen, viewTitleOf]
+        [switching, expandedWidget, doExpand, allowedToOpen, viewTitleOf]
     );
 
     const handleClose = useCallback(() => {
@@ -1034,8 +1048,11 @@ export default function HomePage() {
                 // La tuile reste posée, en retrait : la retirer déplacerait les
                 // voisines et laisserait croire à une disposition abîmée. Elle dit
                 // qu'il y a là quelque chose auquel on n'a pas droit, ce qui est
-                // vrai et se demande.
-                const locked = !allowedToOpen(v.widgetId);
+                // vrai et se demande. Pendant une bascule d'espace, en revanche,
+                // les droits vides ne sont ceux de personne : le retrait est
+                // suspendu et la tuile garde son visage jusqu'à la disposition
+                // de la cible.
+                const locked = !switching && !allowedToOpen(v.widgetId);
                 tiles.push(
                     <Widget
                         key={tile}
@@ -1155,41 +1172,41 @@ export default function HomePage() {
 
                         {editing ? (
                             <EditableHome autoOpenAdd={autoAddSection} />
+                        ) : layout.sections.length > 0 ? (
+                            // En tête des branches : pendant une bascule d'espace,
+                            // ce sont encore les sections de l'espace quitté, et
+                            // c'est voulu : elles restent en place, telles quelles,
+                            // et les tuiles communes glissent vers leur nouvelle
+                            // position à l'arrivée de la disposition de la cible
+                            // (voir `switching`).
+                            <div className={styles.sections}>{layout.sections.map(renderSection)}</div>
                         ) : switching ? (
-                            // Entre deux espaces : ni l'ancienne grille, qui serait
-                            // fausse, ni la nouvelle, pas encore arrivée. Un
-                            // battement sobre le temps d'un aller-retour.
+                            // Bascule en cours et rien à garder à l'écran : un
+                            // battement, plutôt que l'invite « accueil vide » de
+                            // l'espace quitté sous le nom du nouveau.
                             <div className={styles.switching} role='status' aria-label='Chargement de l’espace'>
                                 <span className={`icon icon-spinner ${styles.switchingSpinner}`} aria-hidden='true' />
                             </div>
-                        ) : layout.sections.length === 0 ? (
-                            // A fresh home has no section at all: point the way in
-                            // rather than showing a bare greeting. Sans le droit de
-                            // composer, le même bloc dit seulement pourquoi c'est
-                            // vide — inviter à un geste refusé serait pire que rien.
-                            canLayout ? (
-                                <button
-                                    type='button'
-                                    className={styles.emptyHome}
-                                    onClick={() => startOrganizing(true)}
-                                >
-                                    <span className={`icon icon-plus ${styles.emptyHomeIcon}`} />
-                                    <span className={styles.emptyHomeTitle}>Votre accueil est vide</span>
-                                    <span className={styles.emptyHomeHint}>
-                                        Composez une section : appareils, fonctionnalités et raccourcis y cohabitent.
-                                    </span>
-                                </button>
-                            ) : (
-                                <div className={styles.emptyHome}>
-                                    <span className={`icon icon-plus ${styles.emptyHomeIcon}`} />
-                                    <span className={styles.emptyHomeTitle}>L’accueil de cet espace est vide</span>
-                                    <span className={styles.emptyHomeHint}>
-                                        Votre rôle ne permet pas d’en modifier la disposition.
-                                    </span>
-                                </div>
-                            )
+                        ) : // A fresh home has no section at all: point the way in
+                        // rather than showing a bare greeting. Sans le droit de
+                        // composer, le même bloc dit seulement pourquoi c'est
+                        // vide — inviter à un geste refusé serait pire que rien.
+                        canLayout ? (
+                            <button type='button' className={styles.emptyHome} onClick={() => startOrganizing(true)}>
+                                <span className={`icon icon-plus ${styles.emptyHomeIcon}`} />
+                                <span className={styles.emptyHomeTitle}>Votre accueil est vide</span>
+                                <span className={styles.emptyHomeHint}>
+                                    Composez une section : appareils, fonctionnalités et raccourcis y cohabitent.
+                                </span>
+                            </button>
                         ) : (
-                            <div className={styles.sections}>{layout.sections.map(renderSection)}</div>
+                            <div className={styles.emptyHome}>
+                                <span className={`icon icon-plus ${styles.emptyHomeIcon}`} />
+                                <span className={styles.emptyHomeTitle}>L’accueil de cet espace est vide</span>
+                                <span className={styles.emptyHomeHint}>
+                                    Votre rôle ne permet pas d’en modifier la disposition.
+                                </span>
+                            </div>
                         )}
                     </div>
                 </motion.main>

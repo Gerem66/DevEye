@@ -139,8 +139,10 @@
     width: 100%;
 }
 
-/* Bascule d'espace en cours : la zone des sections ne montre qu'un battement.
-   Assez haut pour que la page ne se recroqueville pas le temps du chargement. */
+/* Bascule d'espace quand l'accueil quitté n'a rien à laisser à l'écran : un
+   battement. Quand il a des sections, elles restent affichées et glissent vers
+   la disposition de la cible, ce bloc ne sert pas. Assez haut pour que la page
+   ne se recroqueville pas le temps du chargement. */
 .switching {
     display: flex;
     align-items: center;
