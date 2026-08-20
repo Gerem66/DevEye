@@ -15,7 +15,7 @@ import {
 import type { UserColor } from 'deveye-types';
 import { fetchCommitDetail } from '@/Services/integrations/github';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
-import { gitCipher, loadRepo, READ, readJson, WRITE, type StoredRepo } from './_shared';
+import { loadHomeRepo, loadRepo, READ, readJson, repoCipher, WRITE, type StoredRepo } from './_shared';
 
 /**
  * Lecture du cache alimenté par le service de fond.
@@ -40,9 +40,10 @@ export const gitBranchListFeature: FeatureDefinition<
     ...gitBranchList,
     access: READ,
     handler: async (ctx, input) => {
-        await loadRepo(ctx, input.repoId);
-        const cipher = gitCipher(ctx);
-        const rows = await ctx.db.git.listBranches(input.repoId, ctx.workspaceId);
+        const repoRow = await loadRepo(ctx, input.repoId);
+        // Le cache d'un dépôt projeté vit chez lui, sous sa clé.
+        const cipher = await repoCipher(ctx, input.repoId);
+        const rows = await ctx.db.git.listBranches(input.repoId, repoRow.workspace_id);
         const base = rows.find((row) => row.is_default === 1);
         const branches = await Promise.all(
             rows.map(async (row) => {
@@ -78,9 +79,9 @@ export const gitPullRequestListFeature: FeatureDefinition<
     ...gitPullRequestList,
     access: READ,
     handler: async (ctx, input) => {
-        await loadRepo(ctx, input.repoId);
-        const cipher = gitCipher(ctx);
-        const rows = await ctx.db.git.listPullRequests(input.repoId, ctx.workspaceId);
+        const repoRow = await loadRepo(ctx, input.repoId);
+        const cipher = await repoCipher(ctx, input.repoId);
+        const rows = await ctx.db.git.listPullRequests(input.repoId, repoRow.workspace_id);
         const pullRequests = await Promise.all(
             rows.map(async (row) => {
                 const body = await readJson<{
@@ -136,11 +137,12 @@ export const gitCommitDetailFeature: FeatureDefinition<
             throw new FeatureError('validation', 'Le jeton d’accès a été retiré : le dépôt n’est plus lisible.');
         }
 
-        const cipher = gitCipher(ctx);
+        const cipher = await repoCipher(ctx, input.repoId);
         const target = await readJson<Partial<StoredRepo>>(cipher, repoRow.content);
         if (!target?.owner || !target.repo) throw new FeatureError('internal', 'Dépôt illisible');
 
-        const credential = await ctx.db.credentials.find(repoRow.credential_id, ctx.workspaceId, 'github');
+        // Le jeton du **domicile** du dépôt, scellé sous sa clé.
+        const credential = await ctx.db.credentials.find(repoRow.credential_id, repoRow.workspace_id, 'github');
         if (!credential) throw new FeatureError('not_found', 'Jeton introuvable');
         const token = await cipher.decrypt(credential.secret_enc);
 
@@ -178,16 +180,16 @@ export const gitCommitListFeature: FeatureDefinition<
     ...gitCommitList,
     access: READ,
     handler: async (ctx, input) => {
-        await loadRepo(ctx, input.repoId);
-        const cipher = gitCipher(ctx);
+        const repoRow = await loadRepo(ctx, input.repoId);
+        const cipher = await repoCipher(ctx, input.repoId);
 
         const limit = input.limit ?? 50;
-        const rows = await ctx.db.git.listCommits(input.repoId, ctx.workspaceId, input.before ?? null, limit + 1);
+        const rows = await ctx.db.git.listCommits(input.repoId, repoRow.workspace_id, input.before ?? null, limit + 1);
         const hasMore = rows.length > limit;
         const page = hasMore ? rows.slice(0, limit) : rows;
 
         const authors = new Map(
-            (await ctx.db.git.listAuthors(input.repoId, ctx.workspaceId)).map((a) => [a.author_ref, a])
+            (await ctx.db.git.listAuthors(input.repoId, repoRow.workspace_id)).map((a) => [a.author_ref, a])
         );
 
         const commits = await Promise.all(
@@ -239,17 +241,17 @@ export const gitCommitGraphFeature: FeatureDefinition<
     ...gitCommitGraph,
     access: READ,
     handler: async (ctx, input) => {
-        await loadRepo(ctx, input.repoId);
-        const cipher = gitCipher(ctx);
+        const repoRow = await loadRepo(ctx, input.repoId);
+        const cipher = await repoCipher(ctx, input.repoId);
 
         // Les points ne coûtent aucun déchiffrement : ce sont trois colonnes
         // claires. C'est tout l'intérêt d'avoir gardé `committed_at` et
         // `author_ref` en clair.
         const [points, stats, counts, authorRows] = await Promise.all([
-            ctx.db.git.listCommitPoints(input.repoId, ctx.workspaceId, GRAPH_MAX_POINTS),
-            ctx.db.git.commitStats(input.repoId, ctx.workspaceId),
-            ctx.db.git.authorStats(input.repoId, ctx.workspaceId),
-            ctx.db.git.listAuthors(input.repoId, ctx.workspaceId)
+            ctx.db.git.listCommitPoints(input.repoId, repoRow.workspace_id, GRAPH_MAX_POINTS),
+            ctx.db.git.commitStats(input.repoId, repoRow.workspace_id),
+            ctx.db.git.authorStats(input.repoId, repoRow.workspace_id),
+            ctx.db.git.listAuthors(input.repoId, repoRow.workspace_id)
         ]);
 
         const countByRef = new Map(counts.map((c) => [c.author_ref, c.commit_count]));
@@ -320,7 +322,9 @@ export const gitAuthorMapFeature: FeatureDefinition<
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        await loadRepo(ctx, input.repoId);
+        // Domicile seulement : le rattachement lie un auteur aux MEMBRES de
+        // l'espace du dépôt, que la fenêtre ne connaît pas.
+        await loadHomeRepo(ctx, input.repoId);
         if (input.userId !== null && !(await ctx.db.workspaceMembers.isMember(input.userId, ctx.workspaceId))) {
             throw new FeatureError('validation', 'Cette personne n’est pas membre de cet espace.');
         }
@@ -338,9 +342,9 @@ export const gitReleaseListFeature: FeatureDefinition<
     ...gitReleaseList,
     access: READ,
     handler: async (ctx, input) => {
-        await loadRepo(ctx, input.repoId);
-        const cipher = gitCipher(ctx);
-        const rows = await ctx.db.git.listReleases(input.repoId, ctx.workspaceId);
+        const repoRow = await loadRepo(ctx, input.repoId);
+        const cipher = await repoCipher(ctx, input.repoId);
+        const rows = await ctx.db.git.listReleases(input.repoId, repoRow.workspace_id);
         const releases = await Promise.all(
             rows.map(async (row) => {
                 const body = await readJson<{ tag?: string; name?: string; body?: string; url?: string }>(

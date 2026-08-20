@@ -109,7 +109,5 @@ qu'il faut en retenir ici :
 
 ## 6. Reste à faire
 
-- Brancher le filtrage `listVisible` au-delà d'Uptime et Bases de données (voir
-  `SHARE_WIRED`, SHARING.md §2).
 - `mail.oauthStart` est déclarée dans les contrats mais **n'a aucun handler**.
   Antérieur à ce chantier ; la commande est morte et devrait disparaître.

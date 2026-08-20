@@ -56,8 +56,13 @@ export interface BackupRepo {
 
     // -- travaux ------------------------------------------------------------
     listJobs(workspaceId: number): Promise<BackupJobWithStateRow[]>;
+    /** Comme `listJobs`, plus les travaux projetés vers cet espace. */
+    listVisibleJobs(workspaceId: number): Promise<BackupJobWithStateRow[]>;
     findJob(id: number, workspaceId: number): Promise<BackupJobRow | null>;
+    /** Comme `findJob`, mais accepte aussi un travail projeté vers cet espace. */
+    findVisibleJob(id: number, workspaceId: number): Promise<BackupJobRow | null>;
     findJobWithState(id: number, workspaceId: number): Promise<BackupJobWithStateRow | null>;
+    findVisibleJobWithState(id: number, workspaceId: number): Promise<BackupJobWithStateRow | null>;
     /** Sans filtre d'espace : l'ordonnanceur tient déjà l'identité de la ligne. */
     findJobById(id: number): Promise<BackupJobRow | null>;
     countJobs(workspaceId: number): Promise<{ count: number; failing: number }>;
@@ -269,11 +274,53 @@ export function backupRepo(q: Q): BackupRepo {
             return res.rows;
         },
 
+        async listVisibleJobs(workspaceId) {
+            const res = await q.query<BackupJobWithStateRow>(
+                `${JOB_SELECT} WHERE j.workspace_id = ?
+                 UNION
+                 ${JOB_SELECT}
+                  JOIN item_shares sh
+                    ON sh.feature = 'backup' AND sh.item_id = j.id AND sh.home_workspace_id = j.workspace_id
+                 WHERE sh.workspace_id = ?
+                 ORDER BY created ASC, id ASC`,
+                [workspaceId, workspaceId]
+            );
+            return res.rows;
+        },
+
         async findJob(id, workspaceId) {
             const res = await q.query<BackupJobRow>('SELECT * FROM backup_jobs WHERE id = ? AND workspace_id = ?', [
                 id,
                 workspaceId
             ]);
+            return res.rows[0] ?? null;
+        },
+
+        async findVisibleJob(id, workspaceId) {
+            const res = await q.query<BackupJobRow>(
+                `SELECT j.* FROM backup_jobs j
+                  WHERE j.id = ?
+                    AND (j.workspace_id = ?
+                         OR EXISTS (SELECT 1 FROM item_shares sh
+                                     WHERE sh.feature = 'backup' AND sh.item_id = j.id
+                                       AND sh.home_workspace_id = j.workspace_id
+                                       AND sh.workspace_id = ?))`,
+                [id, workspaceId, workspaceId]
+            );
+            return res.rows[0] ?? null;
+        },
+
+        async findVisibleJobWithState(id, workspaceId) {
+            const res = await q.query<BackupJobWithStateRow>(
+                `${JOB_SELECT}
+                  WHERE j.id = ?
+                    AND (j.workspace_id = ?
+                         OR EXISTS (SELECT 1 FROM item_shares sh
+                                     WHERE sh.feature = 'backup' AND sh.item_id = j.id
+                                       AND sh.home_workspace_id = j.workspace_id
+                                       AND sh.workspace_id = ?))`,
+                [id, workspaceId, workspaceId]
+            );
             return res.rows[0] ?? null;
         },
 

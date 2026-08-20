@@ -10,7 +10,7 @@ import {
 import type { AudienceBreakdownRow } from '@/db/repos/audience';
 import type { Cipher } from '@/Services/SecureStore';
 import { defineFeature, type FeatureDefinition } from '../_define';
-import { audienceCipher, loadSite, rangeWindow, READ, readLabel, toMetrics } from './_shared';
+import { loadSite, rangeWindow, READ, readLabel, siteCipher, toMetrics } from './_shared';
 
 /**
  * Ce qu'on lit d'un site.
@@ -98,7 +98,7 @@ export const audienceBreakdownFeature: FeatureDefinition<
         const window = rangeWindow(input.range, Math.floor(Date.now() / 1000));
         const limit = Math.min(input.limit ?? BREAKDOWN_DEFAULT, AUDIENCE_BREAKDOWN_MAX);
         const rows = await ctx.db.audience.breakdown(input.siteId, input.dimension, window.from, window.to, limit);
-        return { items: await toItems(audienceCipher(ctx), rows) };
+        return { items: await toItems(await siteCipher(ctx, input.siteId), rows) };
     }
 });
 
@@ -116,7 +116,7 @@ export const audienceActivityFeature: FeatureDefinition<
             ctx.db.audience.activity(input.siteId, window.from, window.to),
             ctx.db.audience.breakdown(input.siteId, 'timezone', window.from, window.to, BREAKDOWN_DEFAULT)
         ]);
-        return { cells, timezones: await toItems(audienceCipher(ctx), timezones) };
+        return { cells, timezones: await toItems(await siteCipher(ctx, input.siteId), timezones) };
     }
 });
 
@@ -134,6 +134,6 @@ export const audienceLiveFeature: FeatureDefinition<
             ctx.db.audience.liveVisitors(input.siteId, since),
             ctx.db.audience.livePages(input.siteId, since, 5)
         ]);
-        return { visitors, pages: await toItems(audienceCipher(ctx), pages) };
+        return { visitors, pages: await toItems(await siteCipher(ctx, input.siteId), pages) };
     }
 });

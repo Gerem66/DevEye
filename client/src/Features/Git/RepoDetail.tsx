@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { GitRepo, GitRepoUsage, MinimalUser } from 'deveye-types';
-import { Button } from '@/Components';
+import { Button, StatusBadge } from '@/Components';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { STATUS_LABELS } from '../Projects/api';
 import { RepoView } from './RepoView';
 import styles from './style.module.css';
@@ -58,6 +59,14 @@ export function RepoDetail({
                     <div className={styles.repoIdent}>
                         <p className={styles.repoName}>
                             <span className='icon icon-branch' /> {repo.owner}/{repo.repo}
+                            {/* Sans cette pastille, rien ne distingue un dépôt
+                                local d'une fenêtre sur l'espace voisin. */}
+                            {repo.foreign && (
+                                <span title='Ce dépôt appartient à un autre espace qui le partage ici'>
+                                    {' '}
+                                    <StatusBadge tone='accent'>partagé</StatusBadge>
+                                </span>
+                            )}
                         </p>
                         <p className={styles.repoMeta}>
                             {repo.defaultBranch && <span>branche {repo.defaultBranch}</span>}
@@ -74,8 +83,8 @@ export function RepoDetail({
                         {repo.lastSyncError && <p className={styles.error}>{repo.lastSyncError}</p>}
                     </div>
                 </div>
-                {canWrite && (
-                    <div className={styles.actions}>
+                <div className={styles.actions}>
+                    {canWrite && (
                         <Button
                             variant='secondary'
                             icon='refresh'
@@ -87,11 +96,27 @@ export function RepoDetail({
                         >
                             {syncing ? 'Synchronisation…' : 'Synchroniser'}
                         </Button>
+                    )}
+                    {/* `!repo.foreign` : le jeton d'un dépôt se choisit parmi les
+                        clés de SON espace — le serveur le refuse, l'écran ne le
+                        propose donc pas. Synchroniser, lui, reste permis. */}
+                    {canWrite && !repo.foreign && (
                         <Button variant='secondary' icon='edit' onClick={onEdit} disabled={busy || syncing}>
                             Modifier
                         </Button>
-                    </div>
-                )}
+                    )}
+                    {/* Les réglages de CE dépôt : partage vers d'autres espaces,
+                        restrictions par rôle. Le bouton se garde de lui-même
+                        (aucune section accessible ⇒ il ne s'affiche pas). */}
+                    <FeatureSettingsButton
+                        scope={{
+                            kind: 'item',
+                            feature: 'git',
+                            itemId: repo.id,
+                            itemLabel: `${repo.owner}/${repo.repo}`
+                        }}
+                    />
+                </div>
             </header>
 
             <RepoView

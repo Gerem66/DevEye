@@ -114,6 +114,14 @@ export function DatabaseHeader({
                     <p className={styles.cardName}>
                         <span className={styles.statusDot} data-tone={status.tone} aria-hidden='true' />
                         {database.name}
+                        {database.foreign && (
+                            <span
+                                className={styles.viaTag}
+                                title='Cette base appartient à un autre espace qui la partage ici'
+                            >
+                                partagé
+                            </span>
+                        )}
                     </p>
                     <p className={styles.cardMeta}>
                         {ENGINE_LABELS[database.engine]} · {database.host}:{database.port}/{database.database}
@@ -150,9 +158,14 @@ export function DatabaseHeader({
                             >
                                 <span className='icon icon-info' />
                             </button>
-                            <Button variant='secondary' icon='edit' onClick={onEdit} disabled={busy}>
-                                Modifier
-                            </Button>
+                            {/* `!database.foreign` : la ligne se réécrit sous la
+                                clé de SON espace — le serveur le refuse, l'écran
+                                ne le propose donc pas. */}
+                            {!database.foreign && (
+                                <Button variant='secondary' icon='edit' onClick={onEdit} disabled={busy}>
+                                    Modifier
+                                </Button>
+                            )}
                             {/* Les réglages **de cette base** : ses propres
                                 canaux d'alerte, ou ceux de la fonctionnalité
                                 tant qu'elle les suit. */}

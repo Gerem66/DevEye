@@ -3,7 +3,7 @@ import { featureDescriptor, type ItemShareState, type ShareBlocker } from 'devey
 
 import { ws } from '@/api/ws';
 import Switch from '@/Components/Switch';
-import { invalidate } from '@/stores/invalidation';
+import { invalidate, type ResourceKey } from '@/stores/invalidation';
 
 import type { SettingsScope } from '../scope';
 import styles from '../FeatureSettings.module.css';
@@ -29,11 +29,27 @@ import styles from '../FeatureSettings.module.css';
 
 const BLOCKER_TEXT: Record<ShareBlocker, string> = {
     feature:
-        'Cette fonctionnalité ne se partage pas encore entre espaces. Uptime et Bases de données le savent ; les autres attendent que leur listage sache aller chercher les éléments projetés.',
+        'Cette fonctionnalité ne se partage pas encore entre espaces : son listage ne sait pas aller chercher les éléments projetés.',
     item: 'Cet élément est chiffré au palier « gardé ». Le serveur ne peut pas le relire pour un autre espace, et il n’est donc pas projetable — passez-le au palier ouvert si sa nature s’y prête.',
     forbidden: 'Vous n’avez pas le droit de partager les éléments de cette fonctionnalité.',
     foreign:
         'Cet élément vient d’un autre espace : son partage s’y règle. On ne re-projette pas ce qu’on ne fait que voir — sinon son espace d’origine perdrait la maîtrise de sa donnée sans le savoir.'
+};
+
+/**
+ * Ce qu'un partage invalide, par fonctionnalité branchée.
+ *
+ * La clé était codée en dur sur `uptime.list` : partager une base ou une cible
+ * rafraîchissait… la liste des services. La table suit `SHARE_WIRED_FEATURES` —
+ * une feature qu'on branche au partage s'inscrit ici en même temps.
+ */
+const LIST_KEYS: Partial<Record<SettingsScope['feature'], ResourceKey[]>> = {
+    uptime: ['uptime.list', 'uptime.count'],
+    database: ['database.list', 'database.count'],
+    deploy: ['deploy.list', 'deploy.count'],
+    git: ['git.list', 'git.count'],
+    audience: ['audience.list', 'audience.count'],
+    backup: ['backup.jobList', 'backup.count']
 };
 
 interface Props {
@@ -66,7 +82,7 @@ export default function SharingSection({ scope }: Props) {
                 // La liste de la fonctionnalité change des deux côtés : ici on
                 // vient d'ouvrir ou de fermer une fenêtre, là-bas la ligne
                 // apparaît ou disparaît.
-                invalidate('uptime.list');
+                for (const key of LIST_KEYS[scope.feature] ?? []) invalidate(key);
             })
             .catch(() => setError('Modification impossible.'))
             .finally(() => setBusy(false));

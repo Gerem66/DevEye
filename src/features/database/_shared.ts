@@ -84,10 +84,11 @@ export async function databaseCipherFor(ctx: FeatureContext, row: { workspace_id
     return scope.cipherFor((row as DatabaseRow).id);
 }
 
-export async function toDatabase(cipher: Cipher, row: DatabaseWithStatsRow): Promise<Database> {
+export async function toDatabase(cipher: Cipher, row: DatabaseWithStatsRow, foreign: boolean): Promise<Database> {
     const body = await readJson<Partial<StoredDatabase>>(cipher, row.content);
     const access = await readJson<Partial<StoredAccess>>(cipher, row.access_content);
     return databaseSchema.parse({
+        foreign,
         id: row.id,
         engine: row.engine === 'postgres' ? 'postgres' : 'mysql',
         name: body?.name ?? '',
@@ -150,9 +151,9 @@ export async function toAlert(cipher: Cipher, row: DatabaseAlertRow): Promise<Da
  * aller-retour.
  */
 export async function reloadDatabase(ctx: FeatureContext, databaseId: number): Promise<Database> {
-    const row = await ctx.db.databases.findWithStats(databaseId, ctx.workspaceId);
+    const row = await ctx.db.databases.findVisibleWithStats(databaseId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Base de données introuvable');
-    return toDatabase(databaseCipher(ctx), row);
+    return toDatabase(await databaseCipherFor(ctx, row), row, row.workspace_id !== ctx.workspaceId);
 }
 
 /** Le service de relevé, ou une erreur claire s'il n'est pas monté (tests). */

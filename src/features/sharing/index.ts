@@ -68,6 +68,10 @@ async function itemHomeWorkspace(
             return (await ctx.db.databases.find(itemId, ctx.workspaceId))?.workspace_id ?? null;
         case 'deploy':
             return (await ctx.db.deploy.findTarget(itemId, ctx.workspaceId))?.workspace_id ?? null;
+        case 'git':
+            return (await ctx.db.git.findRepo(itemId, ctx.workspaceId))?.workspace_id ?? null;
+        case 'audience':
+            return (await ctx.db.audience.find(itemId, ctx.workspaceId))?.workspace_id ?? null;
         case 'backup':
             return (await ctx.db.backup.findJob(itemId, ctx.workspaceId))?.workspace_id ?? null;
         default:

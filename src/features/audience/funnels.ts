@@ -13,7 +13,17 @@ import type { ResolvedStep } from '@/db/repos/audienceFunnels';
 import type { Cipher } from '@/Services/SecureStore';
 import { labelRef, normalizePath } from '@/Services/audience/normalize';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
-import { audienceCipher, loadSite, nameRef, rangeWindow, READ, readLabel, WRITE } from './_shared';
+import {
+    audienceCipher,
+    loadHomeSite,
+    loadSite,
+    nameRef,
+    rangeWindow,
+    READ,
+    readLabel,
+    siteCipher,
+    WRITE
+} from './_shared';
 
 /**
  * Les entonnoirs d'un site : où les gens décrochent.
@@ -73,7 +83,8 @@ export const audienceFunnelListFeature: FeatureDefinition<
     access: READ,
     handler: async (ctx, input) => {
         await loadSite(ctx, input.siteId);
-        const cipher = audienceCipher(ctx);
+        // Le codec du domicile du site : ses entonnoirs sont chiffrés chez lui.
+        const cipher = await siteCipher(ctx, input.siteId);
         const window = rangeWindow(input.range, Math.floor(Date.now() / 1000));
 
         const [rows, stepRows] = await Promise.all([
@@ -123,7 +134,9 @@ export const audienceFunnelAddFeature: FeatureDefinition<
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        await loadSite(ctx, input.siteId);
+        // Domicile seulement : un entonnoir appartient au site, donc à son
+        // espace — comme ses autres réglages.
+        await loadHomeSite(ctx, input.siteId);
         if ((await ctx.db.audienceFunnels.count(input.siteId)) >= AUDIENCE_MAX_FUNNELS) {
             throw new FeatureError(
                 'validation',

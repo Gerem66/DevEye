@@ -13,12 +13,14 @@ import {
 } from 'deveye-types';
 import { fetchDeploymentLog, listDeployments, listTargets, triggerDeploy } from '@/Services/integrations/dokploy';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
+import { shareScope } from '../_sharing';
 import { deployCredentialFeatures } from './credentials';
 import {
     READ,
     WRITE,
     deployCipher,
     loadDokployCredential,
+    loadHomeTarget,
     loadTarget,
     reloadTarget,
     toDeployment,
@@ -53,9 +55,19 @@ export const deployListFeature: FeatureDefinition<
     ...deployList,
     access: READ,
     handler: async (ctx) => {
-        const cipher = deployCipher(ctx);
-        const rows = await ctx.db.deploy.listTargets(ctx.workspaceId);
-        return { targets: await Promise.all(rows.map((row) => toTarget(cipher, row))) };
+        const rows = await ctx.db.deploy.listVisibleTargets(ctx.workspaceId);
+        // Les cibles qu'une restriction masque pour ce rôle disparaissent de la
+        // liste plutôt que d'y figurer grisées.
+        const hidden = await ctx.itemRestrictions('deploy');
+        const visible = rows.filter((r) => hidden.get(r.id) !== 'none');
+        const shares = await shareScope(ctx, 'deploy');
+        return {
+            targets: await Promise.all(
+                visible.map(async (row) =>
+                    toTarget(await shares.cipherFor(row.id), row, row.workspace_id !== ctx.workspaceId)
+                )
+            )
+        };
     }
 });
 
@@ -77,10 +89,16 @@ export const deployGetFeature: FeatureDefinition<
     ...deployGet,
     access: READ,
     handler: async (ctx, input) => {
-        const cipher = deployCipher(ctx);
+        // La ligne d'abord : c'est elle qui dit où vivent l'historique et sa
+        // clé — chez la cible, pas forcément ici.
+        const home = await loadTarget(ctx, input.targetId);
+        const shares = await shareScope(ctx, 'deploy');
+        const cipher = await shares.cipherFor(home.id);
         const [target, rows, projectIds] = await Promise.all([
             reloadTarget(ctx, input.targetId),
-            ctx.db.deploy.listDeployments(input.targetId, ctx.workspaceId, input.limit ?? 20),
+            ctx.db.deploy.listDeployments(input.targetId, home.workspace_id, input.limit ?? 20),
+            // Les liaisons de **cet** espace : la fiche d'une cible projetée
+            // montre les projets d'ici qui la déploient, pas ceux de là-bas.
             ctx.db.deploy.listLinkedProjectIds(input.targetId, ctx.workspaceId)
         ]);
         return {
@@ -153,7 +171,10 @@ export const deployUpdateFeature: FeatureDefinition<
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        await loadTarget(ctx, input.targetId);
+        // Domicile seulement : le jeton d'une cible se choisit parmi les clés
+        // de SON espace, que la fenêtre ne voit pas — lui en proposer d'ici
+        // relierait la cible à une clé d'un autre monde.
+        await loadHomeTarget(ctx, input.targetId);
         if (input.credentialId !== null) await loadDokployCredential(ctx, input.credentialId);
 
         const body: StoredTarget = { name: input.name };
@@ -179,12 +200,16 @@ export const deployRemoveFeature: FeatureDefinition<
     mutates: ['deploy', 'projects'],
     access: WRITE,
     handler: async (ctx, input) => {
-        await loadTarget(ctx, input.targetId);
+        await loadHomeTarget(ctx, input.targetId);
         // L'historique et les liaisons partent en CASCADE. L'application chez le
         // fournisseur, elle, n'est évidemment jamais touchée : DevEye ne fait
         // que la pointer.
         const ok = await ctx.db.deploy.deleteTarget(input.targetId, ctx.workspaceId);
         if (!ok) throw new FeatureError('not_found', 'Cible de déploiement introuvable');
+        // Projections et restrictions ne tiennent à aucune clé étrangère : sans
+        // ce ménage, elles s'appliqueraient à la prochaine cible à hériter de
+        // l'identifiant.
+        await ctx.db.itemSharing.forgetItem('deploy', input.targetId, ctx.workspaceId);
         ctx.audit({
             action: 'deploy.remove',
             description: 'Cible de déploiement supprimée',
@@ -246,13 +271,16 @@ export const deployTriggerFeature: FeatureDefinition<
     mutates: ['deploy', 'projects'],
     access: WRITE,
     handler: async (ctx, input) => {
-        const target = await loadTarget(ctx, input.targetId);
+        // Déclencher depuis une fenêtre est permis — c'est tout l'intérêt de
+        // projeter une cible vers l'espace d'une équipe — mais tout ce qui
+        // s'écrit appartient au domicile : la ligne, sa clé, son suivi.
+        const target = await loadTarget(ctx, input.targetId, 'write');
         if (target.credential_id === null) {
             throw new FeatureError('validation', 'L’accès Dokploy a été retiré : reliez une clé.');
         }
-        const { baseUrl, apiKey } = await loadDokployCredential(ctx, target.credential_id);
+        const { baseUrl, apiKey } = await loadDokployCredential(ctx, target.credential_id, target);
 
-        const cipher = deployCipher(ctx);
+        const cipher = await (await shareScope(ctx, 'deploy')).cipherFor(target.id);
         const title = input.title || 'Déploiement depuis DevEye';
         const body: StoredDeployment = { title, description: input.description, url: baseUrl };
 
@@ -261,7 +289,7 @@ export const deployTriggerFeature: FeatureDefinition<
         // Un déploiement fantôme est moins grave qu'un déploiement invisible.
         const row = await ctx.db.deploy.createDeployment({
             targetId: target.id,
-            workspaceId: ctx.workspaceId,
+            workspaceId: target.workspace_id,
             externalId: null,
             triggeredByUserId: ctx.userId,
             content: await cipher.encrypt(JSON.stringify(body))
@@ -335,7 +363,7 @@ export const deployHistoryFeature: FeatureDefinition<
         // erreur — la fiche le dit déjà par ailleurs (« accès retiré »).
         if (target.credential_id === null) return { entries: [] };
 
-        const { baseUrl, apiKey } = await loadDokployCredential(ctx, target.credential_id);
+        const { baseUrl, apiKey } = await loadDokployCredential(ctx, target.credential_id, target);
         try {
             const remote = await listDeployments(
                 baseUrl,
@@ -370,7 +398,7 @@ export const deployLogFeature: FeatureDefinition<
         if (target.credential_id === null) {
             throw new FeatureError('validation', 'L’accès Dokploy a été retiré : reliez une clé.');
         }
-        const { baseUrl, apiKey } = await loadDokployCredential(ctx, target.credential_id);
+        const { baseUrl, apiKey } = await loadDokployCredential(ctx, target.credential_id, target);
 
         const remote = await listDeployments(
             baseUrl,

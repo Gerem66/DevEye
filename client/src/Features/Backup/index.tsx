@@ -185,6 +185,15 @@ export function FeatureBackup(_props: FeatureProps) {
                                                 aria-hidden='true'
                                             />
                                             {job.name}
+                                            {job.foreign && (
+                                                <span
+                                                    className={styles.statusTag}
+                                                    data-tone='neutral'
+                                                    title='Ce travail appartient à un autre espace qui le partage ici'
+                                                >
+                                                    partagé
+                                                </span>
+                                            )}
                                         </p>
                                         <p className={styles.cardMeta}>
                                             {SOURCE_LABELS[job.source]} → {job.destinationName} (

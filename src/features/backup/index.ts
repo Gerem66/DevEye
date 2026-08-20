@@ -19,7 +19,20 @@ import {
 import { BackupService, type StoredDestination, type StoredJob } from '@/Services/BackupService';
 import { safeRelPath } from '@/backup/sinks';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
-import { backupService, loadDestination, loadJob, readJson, READ, toDestination, toJob, toRun, WRITE } from './_shared';
+import { shareScope } from '../_sharing';
+import {
+    backupService,
+    loadDestination,
+    loadHomeJob,
+    loadJob,
+    readJson,
+    readJsonWith,
+    READ,
+    toDestination,
+    toJob,
+    toRun,
+    WRITE
+} from './_shared';
 
 /**
  * Sauvegardes — les destinations de l'espace et les travaux qui y écrivent.
@@ -237,8 +250,13 @@ const jobListFeature = defineFeature({
     ...backupJobList,
     access: READ,
     handler: async (ctx) => {
-        const rows = await ctx.db.backup.listJobs(ctx.workspaceId);
-        return { jobs: await Promise.all(rows.map((row) => toJob(ctx, row))) };
+        const rows = await ctx.db.backup.listVisibleJobs(ctx.workspaceId);
+        // Les travaux qu'une restriction masque pour ce rôle disparaissent de
+        // la liste plutôt que d'y figurer grisés.
+        const hidden = await ctx.itemRestrictions('backup');
+        const visible = rows.filter((r) => hidden.get(r.id) !== 'none');
+        const shares = await shareScope(ctx, 'backup');
+        return { jobs: await Promise.all(visible.map((row) => toJob(ctx, row, shares))) };
     }
 });
 
@@ -252,10 +270,18 @@ const jobGetFeature = defineFeature({
     ...backupJobGet,
     access: READ,
     handler: async (ctx, input) => {
-        const row = await ctx.db.backup.findJobWithState(input.jobId, ctx.workspaceId);
+        const row = await ctx.db.backup.findVisibleJobWithState(input.jobId, ctx.workspaceId);
         if (!row) throw new FeatureError('not_found', 'Travail de sauvegarde introuvable');
-        const runs = await ctx.db.backup.listRuns(input.jobId, ctx.workspaceId, input.limit ?? 20);
-        return { job: await toJob(ctx, row), runs: await Promise.all(runs.map((r) => toRun(ctx, r))) };
+        await ctx.assertItem('backup', input.jobId);
+        const shares = await shareScope(ctx, 'backup');
+        const cipher = await shares.cipherFor(row.id);
+        // L'historique vit chez le travail : pour un projeté, le chercher ici
+        // rendrait une fiche vide qu'on croirait jamais exécutée.
+        const runs = await ctx.db.backup.listRuns(input.jobId, row.workspace_id, input.limit ?? 20);
+        return {
+            job: await toJob(ctx, row, shares),
+            runs: await Promise.all(runs.map((r) => toRun(ctx, r, cipher)))
+        };
     }
 });
 
@@ -322,7 +348,9 @@ const jobUpdateFeature = defineFeature({
     access: WRITE,
     mutates: true,
     handler: async (ctx, input) => {
-        await loadJob(ctx, input.jobId);
+        // Domicile seulement : sa destination et sa source se choisissent parmi
+        // les objets de SON espace, que la fenêtre ne voit pas.
+        await loadHomeJob(ctx, input.jobId);
         await loadDestination(ctx, input.destinationId);
         await assertSource(ctx, input.source, input.sourceId);
 
@@ -367,12 +395,16 @@ const jobRemoveFeature = defineFeature({
     access: WRITE,
     mutates: true,
     handler: async (ctx, input) => {
-        const job = await loadJob(ctx, input.jobId);
+        const job = await loadHomeJob(ctx, input.jobId);
         if (backupService(ctx).isRunning(job.id)) {
             throw new FeatureError('conflict', 'Une sauvegarde de ce travail est en cours. Réessayez ensuite.');
         }
         const ok = await ctx.db.backup.deleteJob(input.jobId, ctx.workspaceId);
         if (!ok) throw new FeatureError('not_found', 'Travail de sauvegarde introuvable');
+        // Projections et restrictions ne tiennent à aucune clé étrangère : sans
+        // ce ménage, elles s'appliqueraient au prochain travail à hériter de
+        // l'identifiant.
+        await ctx.db.itemSharing.forgetItem('backup', input.jobId, ctx.workspaceId);
 
         ctx.audit({
             action: 'backup.jobRemove',
@@ -391,8 +423,12 @@ const jobRunFeature = defineFeature({
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        const job = await loadJob(ctx, input.jobId);
-        const name = (await readJson<StoredJob>(ctx, job.content)).name ?? 'Sauvegarde';
+        // Déclencher depuis une fenêtre est permis : le moteur lit tout — clé,
+        // destination, historique — depuis l'espace du travail (`job.workspace_id`),
+        // jamais depuis l'espace de l'appelant.
+        const job = await loadJob(ctx, input.jobId, 'write');
+        const cipher = await (await shareScope(ctx, 'backup')).cipherFor(job.id);
+        const name = (await readJsonWith<StoredJob>(cipher, job.content)).name ?? 'Sauvegarde';
         let run;
         try {
             run = await backupService(ctx).trigger(job, ctx.userId);
@@ -404,7 +440,7 @@ const jobRunFeature = defineFeature({
             description: `Sauvegarde « ${name} » déclenchée manuellement`,
             metadata: { jobId: job.id, runId: run.id }
         });
-        return { run: await toRun(ctx, run) };
+        return { run: await toRun(ctx, run, cipher) };
     }
 });
 

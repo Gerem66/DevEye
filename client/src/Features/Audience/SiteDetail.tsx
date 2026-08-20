@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { AudienceSite, AudienceUsage } from 'deveye-types';
 
-import { Button } from '@/Components';
+import { Button, StatusBadge } from '@/Components';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { invalidate } from '@/stores/invalidation';
 import { startTeleport } from '@/stores/live';
 import { getActiveWorkspaceId } from '@/stores/workspace';
@@ -71,7 +72,17 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onEdit
                 </Button>
 
                 <div className={styles.detailTitle}>
-                    <h2 className={styles.detailName}>{site.name}</h2>
+                    <h2 className={styles.detailName}>
+                        {site.name}
+                        {/* Sans cette pastille, rien ne distingue un site local
+                            d'une fenêtre sur l'espace voisin. */}
+                        {site.foreign && (
+                            <span title='Ce site appartient à un autre espace qui le partage ici'>
+                                {' '}
+                                <StatusBadge tone='accent'>partagé</StatusBadge>
+                            </span>
+                        )}
+                    </h2>
                     {site.description && <p className={styles.detailDesc}>{site.description}</p>}
                 </div>
 
@@ -104,11 +115,20 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onEdit
                     >
                         Installer
                     </Button>
-                    {canWrite && (
+                    {/* `!site.foreign` : les réglages d'un site — origines,
+                        rétention, clé — appartiennent à son espace. Le serveur
+                        le refuse, l'écran ne le propose donc pas ; les chiffres,
+                        eux, sont tout l'objet de la projection. */}
+                    {canWrite && !site.foreign && (
                         <Button variant='secondary' icon='settings' onClick={onEdit}>
                             Paramètres
                         </Button>
                     )}
+                    {/* Les réglages de CE site : partage vers d'autres espaces,
+                        restrictions par rôle. Le bouton se garde de lui-même. */}
+                    <FeatureSettingsButton
+                        scope={{ kind: 'item', feature: 'audience', itemId: site.id, itemLabel: site.name }}
+                    />
                 </div>
             </header>
 

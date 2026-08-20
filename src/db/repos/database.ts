@@ -44,6 +44,8 @@ export interface DatabaseRepo {
     /** Comme `find`, mais accepte aussi une base projetée vers cet espace. */
     findVisible(id: number, workspaceId: number): Promise<DatabaseRow | null>;
     findWithStats(id: number, workspaceId: number): Promise<DatabaseWithStatsRow | null>;
+    /** Comme `findWithStats`, mais accepte aussi une base projetée vers cet espace. */
+    findVisibleWithStats(id: number, workspaceId: number): Promise<DatabaseWithStatsRow | null>;
     /** L'unicité d'une base dans l'espace, ce que `content` chiffré ne peut porter. */
     findByName(workspaceId: number, nameRef: string): Promise<DatabaseRow | null>;
     count(workspaceId: number): Promise<number>;
@@ -196,6 +198,20 @@ export function databaseRepo(pool: Q): DatabaseRepo {
             const r = await pool.query<DatabaseWithStatsRow>(
                 `${SELECT_WITH_STATS} WHERE d.id = ? AND d.workspace_id = ?`,
                 [id, workspaceId]
+            );
+            const row = r.rows[0];
+            return row ? withNumbers(row) : null;
+        },
+        async findVisibleWithStats(id, workspaceId) {
+            const r = await pool.query<DatabaseWithStatsRow>(
+                `${SELECT_WITH_STATS}
+                  WHERE d.id = ?
+                    AND (d.workspace_id = ?
+                         OR EXISTS (SELECT 1 FROM item_shares sh
+                                     WHERE sh.feature = 'database' AND sh.item_id = d.id
+                                       AND sh.home_workspace_id = d.workspace_id
+                                       AND sh.workspace_id = ?))`,
+                [id, workspaceId, workspaceId]
             );
             const row = r.rows[0];
             return row ? withNumbers(row) : null;

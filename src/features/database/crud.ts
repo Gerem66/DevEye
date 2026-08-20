@@ -12,7 +12,17 @@ import type { StoredAccess, StoredDatabase } from '@/Services/DatabaseMonitor';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { shareScope } from '../_sharing';
 import { tryDecryptProject } from '../project/_shared';
-import { databaseCipher, loadDatabase, nameRef, READ, reloadDatabase, toAlert, toDatabase, WRITE } from './_shared';
+import {
+    databaseCipher,
+    databaseCipherFor,
+    loadDatabase,
+    nameRef,
+    READ,
+    reloadDatabase,
+    toAlert,
+    toDatabase,
+    WRITE
+} from './_shared';
 
 /**
  * Les bases de l'espace : inventaire, réglages, suppression, ordre.
@@ -48,7 +58,11 @@ export const databaseListFeature: FeatureDefinition<
         const visible = rows.filter((r) => hidden.get(r.id) !== 'none');
         const scope = await shareScope(ctx, 'database');
         return {
-            databases: await Promise.all(visible.map(async (row) => toDatabase(await scope.cipherFor(row.id), row)))
+            databases: await Promise.all(
+                visible.map(async (row) =>
+                    toDatabase(await scope.cipherFor(row.id), row, row.workspace_id !== ctx.workspaceId)
+                )
+            )
         };
     }
 });
@@ -61,9 +75,16 @@ export const databaseGetFeature: FeatureDefinition<
     ...databaseGet,
     access: READ,
     handler: async (ctx, input) => {
-        const row = await ctx.db.databases.findWithStats(input.databaseId, ctx.workspaceId);
+        // Visible, pas seulement locale : la fiche d'une base projetée doit
+        // s'ouvrir depuis la fenêtre — c'était le trou entre la liste (qui la
+        // montrait) et le détail (qui répondait « introuvable »).
+        const row = await ctx.db.databases.findVisibleWithStats(input.databaseId, ctx.workspaceId);
         if (!row) throw new FeatureError('not_found', 'Base de données introuvable');
+        await ctx.assertItem('database', input.databaseId);
+        // Deux codecs : la base est chiffrée chez ELLE, les projets liés listés
+        // ici sont ceux d'ICI.
         const cipher = databaseCipher(ctx);
+        const homeCipher = await databaseCipherFor(ctx, row);
 
         // Les projets liés, avec leur titre : c'est ce qui rend l'interconnexion
         // cliquable dans les deux sens. Ils sont tous à l'étage ouvert (la
@@ -76,11 +97,11 @@ export const databaseGetFeature: FeatureDefinition<
             }))
         );
 
-        const alertRows = await ctx.db.databases.listAlerts(input.databaseId, ctx.workspaceId);
+        const alertRows = await ctx.db.databases.listAlerts(input.databaseId, row.workspace_id);
         return {
-            database: await toDatabase(cipher, row),
+            database: await toDatabase(homeCipher, row, row.workspace_id !== ctx.workspaceId),
             usage,
-            alerts: await Promise.all(alertRows.map((a) => toAlert(cipher, a)))
+            alerts: await Promise.all(alertRows.map((a) => toAlert(homeCipher, a)))
         };
     }
 });
@@ -159,7 +180,17 @@ export const databaseUpdateFeature: FeatureDefinition<
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        await loadDatabase(ctx, input.databaseId);
+        // Domicile seulement : la ligne est réécrite sous la clé d'ICI, et le
+        // secret ressaisi y serait scellé — illisible chez elle. Le refus
+        // explicite vaut mieux que le « introuvable » qu'aurait rendu la
+        // requête scopée.
+        const home = await loadDatabase(ctx, input.databaseId, 'write');
+        if (home.workspace_id !== ctx.workspaceId) {
+            throw new FeatureError(
+                'forbidden',
+                'Cette base appartient à un autre espace : elle se modifie et se supprime depuis là-bas.'
+            );
+        }
         const cipher = databaseCipher(ctx);
         const ref = nameRef(input.name);
 
@@ -212,6 +243,10 @@ export const databaseRemoveFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         const ok = await ctx.db.databases.remove(input.databaseId, ctx.workspaceId);
         if (!ok) throw new FeatureError('not_found', 'Base de données introuvable');
+        // Projections et restrictions ne tiennent à aucune clé étrangère : sans
+        // ce ménage, elles s'appliqueraient à la prochaine base à hériter de
+        // l'identifiant. (Oubli du câblage d'origine, aligné sur Uptime.)
+        await ctx.db.itemSharing.forgetItem('database', input.databaseId, ctx.workspaceId);
         ctx.audit({
             action: 'database.remove',
             description: 'Base de données retirée de l’espace',

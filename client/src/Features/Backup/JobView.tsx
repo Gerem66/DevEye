@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { BackupJob, BackupRun } from 'deveye-types';
 
-import { Button } from '@/Components';
+import { Button, StatusBadge } from '@/Components';
 import { ws } from '@/api/ws';
 import { useResourceVersion } from '@/stores/invalidation';
 import {
@@ -64,15 +64,22 @@ export function JobView({ job, canWrite, onBack, onEdit, onRun, onRemove, runnin
                 </Button>
                 <div className={styles.detailActions}>
                     {canWrite && (
+                        <Button
+                            icon={running ? 'spinner' : 'play'}
+                            disabled={running}
+                            onClick={onRun}
+                            title='Lancer une sauvegarde maintenant'
+                        >
+                            {running ? 'En cours…' : 'Sauvegarder'}
+                        </Button>
+                    )}
+                    {/* `!job.foreign` : la destination et la source d'un travail
+                        se choisissent parmi les objets de SON espace — le
+                        serveur le refuse, l'écran ne le propose donc pas.
+                        Sauvegarder, lui, reste permis : c'est tout l'objet de
+                        la projection. */}
+                    {canWrite && !job.foreign && (
                         <>
-                            <Button
-                                icon={running ? 'spinner' : 'play'}
-                                disabled={running}
-                                onClick={onRun}
-                                title='Lancer une sauvegarde maintenant'
-                            >
-                                {running ? 'En cours…' : 'Sauvegarder'}
-                            </Button>
                             <Button variant='ghost' icon='edit' onClick={onEdit}>
                                 Modifier
                             </Button>
@@ -90,7 +97,17 @@ export function JobView({ job, canWrite, onBack, onEdit, onRun, onRemove, runnin
                 </div>
             </div>
 
-            <h2 className={styles.detailTitle}>{job.name}</h2>
+            <h2 className={styles.detailTitle}>
+                {job.name}
+                {/* Sans cette pastille, rien ne distingue un travail local d'une
+                    fenêtre sur l'espace voisin. */}
+                {job.foreign && (
+                    <span title='Ce travail appartient à un autre espace qui le partage ici'>
+                        {' '}
+                        <StatusBadge tone='accent'>partagé</StatusBadge>
+                    </span>
+                )}
+            </h2>
 
             <div className={styles.facts}>
                 <Fact label='Source'>

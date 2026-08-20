@@ -57,10 +57,32 @@ Un second garde-fou, dans `features/_sharing.ts`. Projeter suppose que le
 choisir le bon codec ligne par ligne. Tant que ce n'est pas fait, la case
 cocherait et rien n'apparaîtrait de l'autre côté.
 
-Aujourd'hui : **Uptime et Bases de données**. Les autres sont refusés
-franchement, avec la vraie raison affichée. Brancher une fonctionnalité de plus
-tient en trois gestes : `listVisible` / `findVisible` dans son dépôt, le codec
-par ligne dans son listage, une entrée dans `SHARE_WIRED`.
+Aujourd'hui : **tout l'étage `'open'`** — Uptime, Bases de données,
+Déploiement, Git, Audience, Sauvegardes. Les `'perItem'` (Notes, Mail, Projets)
+sont refusés franchement, avec la vraie raison affichée. Brancher une
+fonctionnalité de plus tient en trois gestes : `listVisible` / `findVisible`
+dans son dépôt, le codec par ligne dans son listage, une entrée dans
+`SHARE_WIRED`.
+
+### Ce qu'une fenêtre permet, par fonctionnalité
+
+La ligne de partage est la même partout : **une fenêtre lit et agit, le
+domicile configure.** Ce qui distingue les features est la nature de leurs
+gestes :
+
+| | Depuis la fenêtre | Domicile seulement |
+|---|---|---|
+| Uptime | tout (la ligne est autonome : réécrite sous SA clé) | supprimer |
+| Bases de données | consulter, explorer, relever | modifier, supprimer, alertes |
+| Déploiement | **déclencher**, historique, journal | modifier, supprimer (le jeton est une clé de SON espace) |
+| Git | commits, branches, PR, releases, **synchroniser** | réglages, supprimer, rattacher un auteur |
+| Audience | toutes les statistiques, entonnoirs en lecture | réglages, clé, entonnoirs, supprimer |
+| Sauvegardes | fiche, historique, **déclencher** | modifier, supprimer (destination et source vivent chez lui) |
+
+Le critère n'est pas le goût : un geste reste au domicile quand il **référence
+d'autres objets de l'espace d'origine** (une clé d'API, une destination, les
+membres) que la fenêtre ne voit pas — lui proposer les objets d'ici relierait
+la donnée à un autre monde. Le serveur refuse, et l'écran ne propose pas.
 
 ---
 
@@ -172,8 +194,15 @@ prochain élément à hériter de l'identifiant.
 
 ## 8. Reste à faire
 
-- Brancher `listVisible` sur Git, Déploiement, Audience, Sauvegardes (`'open'`),
-  puis sur les `'perItem'` avec leur test de palier ligne à ligne.
+- Brancher les `'perItem'` (Notes, Mail, Projets) avec leur test de palier
+  ligne à ligne — chacun est un chantier en soi : leurs objets sont des graphes
+  (dossiers, messages, cartes), pas des lignes.
+- **La diffusion live ne traverse pas la projection.** Une écriture faite
+  depuis la fenêtre n'avertit que l'espace de la fenêtre ; les écrans du
+  domicile (et des autres fenêtres) ne se rafraîchissent qu'à leur prochaine
+  occasion — souvent le service de fond, qui diffuse chez lui. Le corriger
+  demande un éventail par `item_shares` dans le dispatcheur, comme celui des
+  appareils.
 - L'ordonnanceur de fond n'a pas changé : il sonde les éléments **d'un espace**,
   pas ce qu'on y voit. C'est voulu — sonder deux fois le même service parce
   qu'il est projeté ailleurs doublerait requêtes et incidents.

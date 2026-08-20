@@ -100,6 +100,17 @@ function TargetCard({ target, outline, dragging, onOpen, onDragPointerDown }: Ta
                     <p className={styles.cardName}>
                         <span className={styles.statusDot} data-tone={tone} aria-hidden='true' />
                         {target.name}
+                        {/* Sans cette pastille, rien ne distingue une ligne
+                            locale d'une fenêtre sur l'espace voisin. */}
+                        {target.foreign && (
+                            <span
+                                className={styles.statusTag}
+                                data-tone='neutral'
+                                title='Cette cible appartient à un autre espace qui la partage ici'
+                            >
+                                partagé
+                            </span>
+                        )}
                     </p>
                     <p className={styles.cardMeta}>
                         {target.kind === 'compose' ? 'pile compose' : 'application'} · {hostOf(target.baseUrl)}

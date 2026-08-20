@@ -191,7 +191,11 @@ export function TargetView({
                                 Déployer
                             </Button>
                         )}
-                        {canWrite && onEdit && (
+                        {/* `!target.foreign` : modifier une cible exige les clés
+                            de SON espace — le serveur le refuse, l'écran ne le
+                            propose donc pas. Déployer, lui, reste permis : c'est
+                            tout l'objet de la projection. */}
+                        {canWrite && onEdit && !target.foreign && (
                             <Button variant='secondary' icon='edit' onClick={onEdit}>
                                 Modifier
                             </Button>
