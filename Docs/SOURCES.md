@@ -59,9 +59,12 @@ affaire de **surface** : une seule porte au lieu de cinq.
   panneau de la feature. Un panneau est **autonome** : il se charge
   (`useResourceVersion` sur la ressource de la feature), s'invalide et se
   rafraîchit tout seul ; la coquille ne lui passe rien. Il vit chez sa feature
-  (`Features/Backup/DestinationsSection`) ou dans `Components` quand deux
-  features le partagent (`Components/Credentials`, un `CredentialsKind` par
-  porte).
+  (`Features/Backup/DestinationsSection`) ou dans la coquille quand deux
+  features le partagent (`sections/CredentialsPanel`, un `CredentialsKind` par
+  porte). Tous partagent la même silhouette que la liste des canaux de la
+  section Notifications : rangée (icône, libellé, méta, badge d'usage, actions
+  en icônes), ajout et correction par un dialogue empilé, retrait par la
+  confirmation commune (`ConfirmDialog`) qui nomme ce qui va être coupé.
 - Dans le dialogue d'élément : le sélecteur sous `.fieldWithAction`, le « + »
   qui ouvre `FeatureSettingsDialog` avec `initialSection='sources'`, et
   l'adoption : l'ensemble des identifiants connus est photographié à

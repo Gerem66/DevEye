@@ -20,6 +20,11 @@ interface JobDialogProps {
     destinations: BackupDestination[];
     onClose: () => void;
     onSaved: () => void;
+    /**
+     * Le travail vient d'être supprimé ; la suppression vit dans la zone danger
+     * de ce dialogue, comme pour une cible ou un dépôt. Absent = pas proposée.
+     */
+    onRemoved?: () => void;
 }
 
 /** La clé d'un candidat, pour qu'un `<select>` porte à la fois le genre et l'id. */
@@ -33,7 +38,7 @@ const keyOf = (kind: BackupSourceKind, id: number | null): string => `${kind}:${
  * son propre droit, et les recomposer ici aurait demandé trois appels et trois
  * gardes à tenir en phase avec le serveur.
  */
-export function JobDialog({ open, job, destinations, onClose, onSaved }: JobDialogProps) {
+export function JobDialog({ open, job, destinations, onClose, onSaved, onRemoved }: JobDialogProps) {
     const [candidates, setCandidates] = useState<BackupSourceCandidate[]>([]);
     const [name, setName] = useState('');
     const [sourceKey, setSourceKey] = useState('');
@@ -46,6 +51,8 @@ export function JobDialog({ open, job, destinations, onClose, onSaved }: JobDial
     const [keepLast, setKeepLast] = useState(7);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    /** La suppression emporte l'historique : elle se confirme sur place. */
+    const [confirmRemove, setConfirmRemove] = useState(false);
     /** Les réglages de la feature, ouverts sur l'onglet Sources par le « + ». */
     const [manageOpen, setManageOpen] = useState(false);
     /**
@@ -63,6 +70,7 @@ export function JobDialog({ open, job, destinations, onClose, onSaved }: JobDial
     useEffect(() => {
         if (!open) return;
         setError(null);
+        setConfirmRemove(false);
         setManageOpen(false);
         knownIds.current = null;
         void ws
@@ -147,6 +155,20 @@ export function JobDialog({ open, job, destinations, onClose, onSaved }: JobDial
             onClose();
         } catch (e) {
             setError(backupError(e, 'Impossible d’enregistrer ce travail.'));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const remove = async () => {
+        if (!job || busy) return;
+        setBusy(true);
+        setError(null);
+        try {
+            await ws.send('backup.jobRemove', { jobId: job.id });
+            onRemoved?.();
+        } catch (e) {
+            setError(backupError(e, 'Impossible de supprimer ce travail.'));
         } finally {
             setBusy(false);
         }
@@ -311,6 +333,37 @@ export function JobDialog({ open, job, destinations, onClose, onSaved }: JobDial
                     label='Travail actif'
                     hint='Désactivé, il ne part plus tout seul mais reste déclenchable à la main.'
                 />
+
+                {job && onRemoved && (
+                    <div className={styles.dangerZone}>
+                        <div className={styles.dangerText}>
+                            <strong>Supprimer ce travail</strong>
+                            <span className={styles.fieldHint}>
+                                Son historique part avec lui. Les archives déjà écrites, elles, restent où elles sont :
+                                à vous de les effacer si vous le souhaitez.
+                            </span>
+                        </div>
+                        {confirmRemove ? (
+                            <div className={styles.dangerActions}>
+                                <Button variant='secondary' onClick={() => setConfirmRemove(false)} disabled={busy}>
+                                    Annuler
+                                </Button>
+                                <Button variant='danger' onClick={() => void remove()} disabled={busy}>
+                                    Confirmer
+                                </Button>
+                            </div>
+                        ) : (
+                            <Button
+                                variant='danger'
+                                icon='trash'
+                                onClick={() => setConfirmRemove(true)}
+                                disabled={busy}
+                            >
+                                Supprimer
+                            </Button>
+                        )}
+                    </div>
+                )}
 
                 {error && <p className={styles.error}>{error}</p>}
             </div>

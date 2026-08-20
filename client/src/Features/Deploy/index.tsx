@@ -14,7 +14,7 @@ import { dokployError, DOKPLOY_TIMEOUT_MS } from './format';
 import LogsDialog from './LogsDialog';
 import TargetDialog from './TargetDialog';
 import TargetList from './TargetList';
-import TargetView from './TargetView';
+import TargetView, { TargetActions } from './TargetView';
 import styles from './style.module.css';
 
 /**
@@ -220,10 +220,21 @@ export function FeatureDeploy({ workspace }: FeatureProps) {
                 <p className={styles.empty}>{error ?? 'Chargement…'}</p>
             ) : (
                 <>
+                    {/* Retour à gauche, actions à droite : la même rangée
+                        d'en-tête que la liste, et que les fiches des autres
+                        features. Les actions vivaient dans le bloc d'identité,
+                        plus bas, en décalage avec la page parente. */}
                     <header className={styles.head}>
                         <Button variant='ghost' icon='arrow-left' onClick={() => setOpenedId(null)}>
                             Déploiements
                         </Button>
+                        <div className={styles.actions}>
+                            <TargetActions
+                                target={opened.target}
+                                canWrite={canWrite}
+                                onEdit={() => setDialog({ target: opened.target })}
+                            />
+                        </div>
                     </header>
 
                     <TargetView
@@ -231,7 +242,7 @@ export function FeatureDeploy({ workspace }: FeatureProps) {
                         deployments={opened.deployments}
                         members={workspace.users}
                         canWrite={canWrite}
-                        onEdit={() => setDialog({ target: opened.target })}
+                        showActions={false}
                         fullHistory={history}
                         fullHistoryError={historyError}
                         onOpenLogs={setLogsFor}

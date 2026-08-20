@@ -60,7 +60,10 @@ export default function FleetHeader({ devices, minSeverity, onMinSeverity, showS
                  * flotte, qui n'en avait aucune.
                  */}
                 <div className={styles.headerActions}>
-                    <FeatureSettingsButton scope={{ kind: 'feature', feature: 'sentinel' }} variant='ghost' />
+                    {/* Même variante que dans les autres features : la
+                        silhouette du bouton Réglages ne change pas d'un écran
+                        à l'autre. */}
+                    <FeatureSettingsButton scope={{ kind: 'feature', feature: 'sentinel' }} />
                 </div>
             </div>
 

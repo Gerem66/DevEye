@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { BackupDestination, BackupJob } from 'deveye-types';
 
-import { Button, Dialog } from '@/Components';
+import { Button } from '@/Components';
 import { ws } from '@/api/ws';
 import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
@@ -48,7 +48,6 @@ export function FeatureBackup(_props: FeatureProps) {
 
     const [openedId, setOpenedId] = useState<number | null>(null);
     const [jobDialog, setJobDialog] = useState<{ job: BackupJob | null } | null>(null);
-    const [confirmRemove, setConfirmRemove] = useState<BackupJob | null>(null);
 
     const jobsVersion = useResourceVersion('backup.jobList');
     const destinationsVersion = useResourceVersion('backup.destinationList');
@@ -98,17 +97,6 @@ export function FeatureBackup(_props: FeatureProps) {
         }
     };
 
-    const removeJob = async (job: BackupJob) => {
-        try {
-            await ws.send('backup.jobRemove', { jobId: job.id });
-            setConfirmRemove(null);
-            setOpenedId(null);
-            refresh();
-        } catch (e) {
-            setError(backupError(e, 'Impossible de supprimer ce travail.'));
-        }
-    };
-
     const opened = jobs?.find((j) => j.id === openedId) ?? null;
 
     return (
@@ -128,7 +116,7 @@ export function FeatureBackup(_props: FeatureProps) {
                             {/* Les destinations vivaient derrière leur propre
                                 bouton : elles sont désormais dans Réglages →
                                 Sources, comme les sources de toute feature. */}
-                            <FeatureSettingsButton scope={{ kind: 'feature', feature: 'backup' }} variant='ghost' />
+                            <FeatureSettingsButton scope={{ kind: 'feature', feature: 'backup' }} />
                             {canWrite && (
                                 <Button icon='plus' onClick={() => setJobDialog({ job: null })}>
                                     Nouveau travail
@@ -212,7 +200,6 @@ export function FeatureBackup(_props: FeatureProps) {
                     onBack={() => setOpenedId(null)}
                     onEdit={() => setJobDialog({ job: opened })}
                     onRun={() => void runNow(opened)}
-                    onRemove={() => setConfirmRemove(opened)}
                 />
             )}
 
@@ -222,25 +209,11 @@ export function FeatureBackup(_props: FeatureProps) {
                 destinations={destinations}
                 onClose={() => setJobDialog(null)}
                 onSaved={refresh}
-            />
-
-            <Dialog
-                open={confirmRemove !== null}
-                onClose={() => setConfirmRemove(null)}
-                onSubmit={() => confirmRemove && void removeJob(confirmRemove)}
-                title='Supprimer ce travail ?'
-                description='Son historique part avec lui. Les archives déjà écrites, elles, restent où elles sont — à vous de les effacer si vous le souhaitez.'
-                width={480}
-                footer={
-                    <>
-                        <Button variant='ghost' onClick={() => setConfirmRemove(null)}>
-                            Annuler
-                        </Button>
-                        <Button variant='danger' onClick={() => confirmRemove && void removeJob(confirmRemove)}>
-                            Supprimer
-                        </Button>
-                    </>
-                }
+                onRemoved={() => {
+                    setJobDialog(null);
+                    setOpenedId(null);
+                    refresh();
+                }}
             />
         </div>
     );

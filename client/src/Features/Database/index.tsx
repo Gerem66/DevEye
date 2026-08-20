@@ -274,17 +274,21 @@ export function FeatureDatabase({ workspace }: FeatureProps) {
                         </p>
                     )}
                 </div>
-                {canWrite && (
-                    <div className={styles.actions}>
-                        {/* Réglage d'espace, pas d'une base : les alertes de
-                            toutes les bases partent sur les mêmes canaux, d'où
-                            sa place en tête de la feature. */}
-                        <FeatureSettingsButton scope={{ kind: 'feature', feature: 'database' }} />
+                <div className={styles.actions}>
+                    {/* Réglage d'espace, pas d'une base : les alertes de
+                        toutes les bases partent sur les mêmes canaux, d'où
+                        sa place en tête de la feature. Hors du `canWrite` :
+                        le bouton se garde de lui-même (aucune section
+                        accessible ⇒ il ne s'affiche pas), et un lecteur a le
+                        droit de voir où partent les alertes, comme dans les
+                        autres features. */}
+                    <FeatureSettingsButton scope={{ kind: 'feature', feature: 'database' }} />
+                    {canWrite && (
                         <Button icon='add' onClick={() => setDialog({ database: null })}>
                             Ajouter une base
                         </Button>
-                    </div>
-                )}
+                    )}
+                </div>
             </header>
 
             {error && <p className={styles.error}>{error}</p>}

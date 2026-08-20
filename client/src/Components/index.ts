@@ -6,8 +6,6 @@ export { default as Switch } from './Switch';
 export { default as TextInput } from './TextInput';
 
 export { Dialog } from './Dialog';
-export { CredentialsPanel, GIT_CREDENTIALS, DEPLOY_CREDENTIALS } from './Credentials';
-export type { CredentialsKind } from './Credentials';
 export { TopNavbar } from './TopNavbar';
 export { Widget } from './Widget';
 export { WidgetGrid } from './WidgetGrid';

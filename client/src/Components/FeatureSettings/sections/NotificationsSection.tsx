@@ -13,6 +13,7 @@ import {
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
 import Checkbox from '@/Components/Checkbox';
+import { Dialog } from '@/Components/Dialog';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import SelectInput from '@/Components/SelectInput';
 import Switch from '@/Components/Switch';
@@ -432,7 +433,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                 </p>
             )}
 
-            {scope.kind === 'feature' && canManage && draft === null && (
+            {scope.kind === 'feature' && canManage && (
                 <div className={styles.sectionActions}>
                     <Button
                         variant='secondary'
@@ -469,97 +470,22 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                 </div>
             )}
 
-            {scope.kind === 'feature' && canManage && draft !== null && (
-                <div className={styles.draft}>
-                    <span className={styles.sectionLabel}>
-                        {editing === null ? 'Nouveau canal' : 'Modifier le canal'}
-                    </span>
-
-                    <label className={styles.field}>
-                        <span className={styles.fieldLabel}>Type</span>
-                        <SelectInput
-                            value={draft.kind}
-                            onChange={(e) => setDraft({ ...draft, kind: e.target.value as NotificationChannelKind })}
-                        >
-                            <option value='discord'>Discord — mise en page riche, suivi vivant</option>
-                            <option value='webhook'>Webhook — POST JSON générique</option>
-                            <option value='email'>E-mail</option>
-                        </SelectInput>
-                        <span className={styles.fieldHint}>{KIND_HINT[draft.kind]}</span>
-                    </label>
-
-                    <label className={styles.field}>
-                        <span className={styles.fieldLabel}>Nom</span>
-                        <TextInput
-                            value={draft.label}
-                            maxLength={NOTIFICATION_LABEL_MAX}
-                            placeholder='Astreinte, #ops, Alertes production…'
-                            data-autofocus
-                            onChange={(e) => setDraft({ ...draft, label: e.target.value })}
-                        />
-                    </label>
-
-                    {draft.kind === 'email' ? (
-                        <>
-                            <label className={styles.field}>
-                                <span className={styles.fieldLabel}>Compte expéditeur</span>
-                                <SelectInput
-                                    value={draft.mailAccountId ?? ''}
-                                    onChange={(e) =>
-                                        setDraft({
-                                            ...draft,
-                                            mailAccountId: e.target.value ? Number(e.target.value) : null
-                                        })
-                                    }
-                                >
-                                    <option value=''>Aucun</option>
-                                    {openAccounts.map((a) => (
-                                        <option key={a.id} value={a.id}>
-                                            {a.displayName} ({a.emailAddress})
-                                        </option>
-                                    ))}
-                                </SelectInput>
-                                <span className={styles.fieldHint}>
-                                    {openAccounts.length === 0
-                                        ? 'Aucun compte mail « open » configuré — ajoutez-en un dans la feature Mail.'
-                                        : 'Seuls les comptes « open » peuvent envoyer sans intervention manuelle.'}
-                                </span>
-                            </label>
-                            <label className={styles.field}>
-                                <span className={styles.fieldLabel}>Destinataire</span>
-                                <TextInput
-                                    type='email'
-                                    value={draft.target}
-                                    placeholder='Adresse du compte expéditeur'
-                                    onChange={(e) => setDraft({ ...draft, target: e.target.value })}
-                                />
-                                <span className={styles.fieldHint}>
-                                    Laissez vide pour utiliser l’adresse du compte expéditeur.
-                                </span>
-                            </label>
-                        </>
-                    ) : (
-                        <label className={styles.field}>
-                            <span className={styles.fieldLabel}>URL appelée en POST</span>
-                            <TextInput
-                                value={draft.target}
-                                maxLength={NOTIFICATION_TARGET_MAX}
-                                placeholder='https://discord.com/api/webhooks/…'
-                                onChange={(e) => setDraft({ ...draft, target: e.target.value })}
-                            />
-                            {draft.kind === 'discord' &&
-                                draft.target.trim() !== '' &&
-                                !looksLikeDiscord(draft.target) && (
-                                    <span className={styles.warning}>
-                                        Cette URL ne ressemble pas à un webhook Discord. Les embeds y partiront quand
-                                        même, et un point d’entrée qui ne les attend pas les refusera — choisissez «
-                                        Webhook » pour lui envoyer du texte.
-                                    </span>
-                                )}
-                        </label>
-                    )}
-
-                    <div className={styles.sectionActions}>
+            {/* L'ajout et la correction passent par un dialogue empilé, comme
+                toutes les sources : un formulaire qui pousse la liste sous lui
+                faisait sauter le panneau, et deux méthodes d'ajout dans une
+                même popup de réglages étaient une de trop. */}
+            <Dialog
+                open={draft !== null}
+                onClose={() => {
+                    setDraft(null);
+                    setEditing(null);
+                }}
+                title={editing === null ? 'Nouveau canal' : 'Modifier le canal'}
+                description='Une destination de l’espace : toutes les fonctionnalités qui préviennent peuvent y écrire.'
+                width={520}
+                onSubmit={saveDraft}
+                footer={
+                    <>
                         <Button
                             variant='secondary'
                             disabled={busy}
@@ -570,12 +496,102 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                         >
                             Annuler
                         </Button>
-                        <Button disabled={busy || !draft.label.trim()} onClick={saveDraft}>
+                        <Button disabled={busy || draft === null || !draft.label.trim()} onClick={saveDraft}>
                             {editing === null ? 'Ajouter' : 'Enregistrer'}
                         </Button>
+                    </>
+                }
+            >
+                {draft !== null && (
+                    <div className={styles.section}>
+                        <label className={styles.field}>
+                            <span className={styles.fieldLabel}>Type</span>
+                            <SelectInput
+                                value={draft.kind}
+                                onChange={(e) =>
+                                    setDraft({ ...draft, kind: e.target.value as NotificationChannelKind })
+                                }
+                            >
+                                <option value='discord'>Discord — mise en page riche, suivi vivant</option>
+                                <option value='webhook'>Webhook — POST JSON générique</option>
+                                <option value='email'>E-mail</option>
+                            </SelectInput>
+                            <span className={styles.fieldHint}>{KIND_HINT[draft.kind]}</span>
+                        </label>
+
+                        <label className={styles.field}>
+                            <span className={styles.fieldLabel}>Nom</span>
+                            <TextInput
+                                value={draft.label}
+                                maxLength={NOTIFICATION_LABEL_MAX}
+                                placeholder='Astreinte, #ops, Alertes production…'
+                                data-autofocus
+                                onChange={(e) => setDraft({ ...draft, label: e.target.value })}
+                            />
+                        </label>
+
+                        {draft.kind === 'email' ? (
+                            <>
+                                <label className={styles.field}>
+                                    <span className={styles.fieldLabel}>Compte expéditeur</span>
+                                    <SelectInput
+                                        value={draft.mailAccountId ?? ''}
+                                        onChange={(e) =>
+                                            setDraft({
+                                                ...draft,
+                                                mailAccountId: e.target.value ? Number(e.target.value) : null
+                                            })
+                                        }
+                                    >
+                                        <option value=''>Aucun</option>
+                                        {openAccounts.map((a) => (
+                                            <option key={a.id} value={a.id}>
+                                                {a.displayName} ({a.emailAddress})
+                                            </option>
+                                        ))}
+                                    </SelectInput>
+                                    <span className={styles.fieldHint}>
+                                        {openAccounts.length === 0
+                                            ? 'Aucun compte mail « open » configuré — ajoutez-en un dans la feature Mail.'
+                                            : 'Seuls les comptes « open » peuvent envoyer sans intervention manuelle.'}
+                                    </span>
+                                </label>
+                                <label className={styles.field}>
+                                    <span className={styles.fieldLabel}>Destinataire</span>
+                                    <TextInput
+                                        type='email'
+                                        value={draft.target}
+                                        placeholder='Adresse du compte expéditeur'
+                                        onChange={(e) => setDraft({ ...draft, target: e.target.value })}
+                                    />
+                                    <span className={styles.fieldHint}>
+                                        Laissez vide pour utiliser l’adresse du compte expéditeur.
+                                    </span>
+                                </label>
+                            </>
+                        ) : (
+                            <label className={styles.field}>
+                                <span className={styles.fieldLabel}>URL appelée en POST</span>
+                                <TextInput
+                                    value={draft.target}
+                                    maxLength={NOTIFICATION_TARGET_MAX}
+                                    placeholder='https://discord.com/api/webhooks/…'
+                                    onChange={(e) => setDraft({ ...draft, target: e.target.value })}
+                                />
+                                {draft.kind === 'discord' &&
+                                    draft.target.trim() !== '' &&
+                                    !looksLikeDiscord(draft.target) && (
+                                        <span className={styles.warning}>
+                                            Cette URL ne ressemble pas à un webhook Discord. Les embeds y partiront
+                                            quand même, et un point d’entrée qui ne les attend pas les refusera —
+                                            choisissez « Webhook » pour lui envoyer du texte.
+                                        </span>
+                                    )}
+                            </label>
+                        )}
                     </div>
-                </div>
-            )}
+                )}
+            </Dialog>
 
             {status && <p className={styles.notice}>{status}</p>}
 

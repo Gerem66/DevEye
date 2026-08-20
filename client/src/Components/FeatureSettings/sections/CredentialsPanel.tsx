@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Credential } from 'deveye-types';
 import { CREDENTIAL_LABEL_MAX_LENGTH } from 'deveye-types';
-import Button from '@/Components/Button';
-import TextInput from '@/Components/TextInput';
+
 import { ws } from '@/api/ws';
+import Button from '@/Components/Button';
+import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
+import { Dialog } from '@/Components/Dialog';
+import TextInput from '@/Components/TextInput';
 import { invalidate, useResourceVersion, type ResourceKey } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
 import { humanizeError } from '@/Features/Projects/api';
-import styles from './Credentials.module.css';
+
+import styles from '../FeatureSettings.module.css';
 
 /**
  * Ce qui distingue les jetons d'une feature de ceux de l'autre.
@@ -34,10 +38,10 @@ export interface CredentialsKind {
      * sélecteurs des dialogues d'élément) suivent par le même canal.
      */
     listResource: ResourceKey;
-    title: string;
-    description: string;
     /** Ce qu'un jeton dessert, au singulier : « dépôt », « cible ». */
     noun: string;
+    /** Sous le titre du dialogue d'ajout : à quoi ce jeton va servir. */
+    formHint: string;
     labelPlaceholder: string;
     secretPlaceholder: string;
     /** Le service est auto-hébergé : son adresse fait partie du jeton. */
@@ -53,9 +57,8 @@ export const GIT_CREDENTIALS: CredentialsKind = {
         remove: 'git.credentialRemove'
     },
     listResource: 'git.list',
-    title: 'Jetons GitHub',
-    description: 'Partagés par tous les dépôts de cet espace.',
     noun: 'dépôt',
+    formHint: 'Il servira à tous les dépôts de cet espace.',
     labelPlaceholder: 'GitHub — perso',
     secretPlaceholder: 'ghp_…',
     needsBaseUrl: false
@@ -70,17 +73,12 @@ export const DEPLOY_CREDENTIALS: CredentialsKind = {
         remove: 'deploy.credentialRemove'
     },
     listResource: 'deploy.list',
-    title: 'Accès Dokploy',
-    description: 'Partagés par toutes les cibles de déploiement de cet espace.',
     noun: 'cible',
+    formHint: 'Il servira à toutes les cibles de déploiement de cet espace.',
     labelPlaceholder: 'Dokploy — prod',
     secretPlaceholder: 'clé d’API',
     needsBaseUrl: true
 };
-
-interface CredentialsPanelProps {
-    kind: CredentialsKind;
-}
 
 /** Le formulaire ouvert : un jeton existant, ou un nouveau. */
 type Editing = { credential: Credential | null } | null;
@@ -91,21 +89,19 @@ type Editing = { credential: Credential | null } | null;
  * **Un seul panneau, deux propriétaires.** Les jetons GitHub appartiennent à la
  * feature Git, les clés Dokploy à la feature Déploiement : ce sont deux droits
  * distincts (lire des dépôts n'autorise pas à poser la clé qui met en
- * production), mais un seul geste. Le composant vit donc hors des deux features,
- * et chacune lui passe son {@link CredentialsKind}.
+ * production), mais un seul geste. Le panneau vit donc dans la coquille, et
+ * `SourcesSection` lui passe son {@link CredentialsKind}.
  *
- * C'était un dialogue à part, derrière son propre bouton d'en-tête (« Accès
- * Dokploy », « Jetons GitHub »), un troisième endroit à connaître, à côté des
- * réglages. Les sources d'une fonctionnalité vivent désormais toutes au même
- * endroit : Réglages → Sources, où ce panneau est monté. Il se charge et se
- * rafraîchit tout seul, condition pour que la coquille de réglages n'ait rien à
- * savoir de lui.
+ * Rangées, dialogue d'ajout empilé et confirmation : les mêmes formes que la
+ * liste des canaux de la section Notifications, exprès. C'est la rangée
+ * canonique des réglages, et deux méthodes d'ajout dans une même popup étaient
+ * une de trop. Les classes `channel*` sont partagées pour la même raison.
  *
  * Un secret n'est **jamais relu** — le serveur ne le renvoie pas. Le champ reste
  * donc vide à la ré-ouverture, et le laisser vide veut dire « garder celui en
  * place ».
  */
-export function CredentialsPanel({ kind }: CredentialsPanelProps) {
+export function CredentialsPanel({ kind }: { kind: CredentialsKind }) {
     const permissions = useWorkspacePermissions();
     const canWrite = permissions.canFeature(kind.feature, 'write');
     const listVersion = useResourceVersion(kind.listResource);
@@ -117,7 +113,7 @@ export function CredentialsPanel({ kind }: CredentialsPanelProps) {
     const [secret, setSecret] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [confirmRemove, setConfirmRemove] = useState<number | null>(null);
+    const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
     const reload = useCallback(async () => {
         try {
@@ -181,27 +177,37 @@ export function CredentialsPanel({ kind }: CredentialsPanelProps) {
         }
     };
 
-    const remove = async (credentialId: number) => {
-        setBusy(true);
-        try {
-            await ws.send(kind.commands.remove, { credentialId });
-            setConfirmRemove(null);
-            // Un jeton retiré rend ses cibles / dépôts orphelins : la liste de
-            // la feature doit le dire sans attendre.
-            invalidate(kind.listResource);
-        } catch (e) {
-            setError(humanizeError(e, 'Le retrait a échoué.'));
-        } finally {
-            setBusy(false);
-        }
+    /** La confirmation nomme ce que le retrait va couper, avant de cliquer. */
+    const askRemove = (credential: Credential) => {
+        const plural = credential.useCount > 1 ? 's' : '';
+        setConfirm({
+            title: `Retirer « ${credential.label} » ?`,
+            description:
+                credential.useCount === 0
+                    ? 'Personne ne le désigne : son retrait ne change rien à ce qui tourne.'
+                    : `${credential.useCount} ${kind.noun}${plural} le désignent encore et perdront leur accès, jusqu’à en désigner un autre.`,
+            confirmLabel: 'Retirer le jeton',
+            onConfirm: () =>
+                void (async () => {
+                    setBusy(true);
+                    try {
+                        await ws.send(kind.commands.remove, { credentialId: credential.id });
+                        // Un jeton retiré rend ses cibles / dépôts orphelins :
+                        // la liste de la feature doit le dire sans attendre.
+                        invalidate(kind.listResource);
+                    } catch (e) {
+                        setError(humanizeError(e, 'Le retrait a échoué.'));
+                    } finally {
+                        setBusy(false);
+                    }
+                })()
+        });
     };
 
     return (
-        <div className={styles.form}>
-            {error && <p className={styles.error}>{error}</p>}
-
+        <div className={styles.section}>
             {credentials === null && <p className={styles.empty}>Chargement…</p>}
-            {credentials?.length === 0 && !editing && (
+            {credentials?.length === 0 && (
                 <p className={styles.empty}>
                     {canWrite
                         ? 'Aucun jeton enregistré. Ajoutez-en un ci-dessous.'
@@ -209,54 +215,83 @@ export function CredentialsPanel({ kind }: CredentialsPanelProps) {
                 </p>
             )}
 
-            <ul className={styles.list}>
+            <div className={styles.channelList}>
                 {(credentials ?? []).map((c) => (
-                    <li key={c.id}>
-                        <span className={styles.ident}>
-                            <span className={styles.name}>{c.label}</span>
-                            <span className={styles.hint}>
-                                {c.baseUrl ?? 'API publique'}
-                                {/* Ce que la suppression va couper, lisible
-                                    avant de cliquer plutôt qu'après. */}
-                                {c.useCount > 0
-                                    ? ` · ${c.useCount} ${kind.noun}${c.useCount > 1 ? 's' : ''}`
-                                    : ' · inutilisé'}
-                            </span>
+                    <div key={c.id} className={styles.channelRow}>
+                        <span className={`icon icon-key ${styles.channelIcon}`} aria-hidden='true' />
+                        <span className={styles.channelText}>
+                            <span className={styles.channelLabel}>{c.label}</span>
+                            <span className={styles.channelMeta}>{c.baseUrl ?? 'API publique'}</span>
                         </span>
-                        {canWrite &&
-                            (confirmRemove === c.id ? (
-                                <span className={styles.actions}>
-                                    <Button variant='secondary' onClick={() => setConfirmRemove(null)} disabled={busy}>
-                                        Annuler
-                                    </Button>
-                                    <Button variant='danger' onClick={() => void remove(c.id)} disabled={busy}>
-                                        Confirmer
-                                    </Button>
-                                </span>
-                            ) : (
-                                <span className={styles.actions}>
-                                    <Button variant='ghost' icon='edit' onClick={() => openForm(c)}>
-                                        Modifier
-                                    </Button>
-                                    <Button variant='ghost' icon='trash' onClick={() => setConfirmRemove(c.id)}>
-                                        Retirer
-                                    </Button>
-                                </span>
-                            ))}
-                    </li>
+                        <span
+                            className={`${styles.channelUsage} ${c.useCount === 0 ? styles.channelUsageIdle : ''}`}
+                            title={
+                                c.useCount === 0
+                                    ? 'Désigné par personne'
+                                    : `Désigné par ${c.useCount} ${kind.noun}${c.useCount > 1 ? 's' : ''}`
+                            }
+                        >
+                            {c.useCount === 0 ? 'inutilisé' : `${c.useCount}×`}
+                        </span>
+                        {canWrite && (
+                            <span className={styles.channelActions}>
+                                <button
+                                    type='button'
+                                    className={styles.rowAction}
+                                    title='Modifier ce jeton'
+                                    aria-label={`Modifier ${c.label}`}
+                                    disabled={busy}
+                                    onClick={() => openForm(c)}
+                                >
+                                    <span className='icon icon-edit' />
+                                </button>
+                                <button
+                                    type='button'
+                                    className={`${styles.rowAction} ${styles.rowActionDanger}`}
+                                    title='Retirer ce jeton'
+                                    aria-label={`Retirer ${c.label}`}
+                                    disabled={busy}
+                                    onClick={() => askRemove(c)}
+                                >
+                                    <span className='icon icon-trash' />
+                                </button>
+                            </span>
+                        )}
+                    </div>
                 ))}
-            </ul>
+            </div>
 
-            {canWrite && !editing && (
-                <Button variant='ghost' icon='add' onClick={() => openForm(null)}>
-                    Ajouter un jeton
-                </Button>
+            {error && <p className={styles.notice}>{error}</p>}
+
+            {canWrite && (
+                <div className={styles.sectionActions}>
+                    <Button variant='secondary' icon='plus' disabled={busy} onClick={() => openForm(null)}>
+                        Ajouter un jeton
+                    </Button>
+                </div>
             )}
 
-            {editing && (
-                <div className={styles.box}>
+            <Dialog
+                open={editing !== null}
+                onClose={() => setEditing(null)}
+                title={editing?.credential ? 'Modifier le jeton' : 'Nouveau jeton'}
+                description={kind.formHint}
+                width={520}
+                onSubmit={submit}
+                footer={
+                    <>
+                        <Button variant='secondary' onClick={() => setEditing(null)} disabled={busy}>
+                            Annuler
+                        </Button>
+                        <Button onClick={submit} disabled={busy || !label.trim()}>
+                            {busy ? 'Enregistrement…' : 'Enregistrer'}
+                        </Button>
+                    </>
+                }
+            >
+                <div className={styles.section}>
                     <label className={styles.field}>
-                        <span className={styles.label}>Nom du jeton</span>
+                        <span className={styles.fieldLabel}>Nom du jeton</span>
                         <TextInput
                             data-autofocus
                             value={label}
@@ -268,7 +303,7 @@ export function CredentialsPanel({ kind }: CredentialsPanelProps) {
 
                     {kind.needsBaseUrl && (
                         <label className={styles.field}>
-                            <span className={styles.label}>Adresse de l’instance</span>
+                            <span className={styles.fieldLabel}>Adresse de l’instance</span>
                             <TextInput
                                 value={baseUrl}
                                 placeholder='https://dokploy.exemple.fr'
@@ -278,11 +313,11 @@ export function CredentialsPanel({ kind }: CredentialsPanelProps) {
                     )}
 
                     <label className={styles.field}>
-                        <span className={styles.label}>
-                            {editing.credential ? 'Nouveau secret (facultatif)' : 'Secret'}
+                        <span className={styles.fieldLabel}>
+                            {editing?.credential ? 'Nouveau secret (facultatif)' : 'Secret'}
                         </span>
-                        {/* `enableShowHideButton` : un secret se relit une
-                            fois à la saisie, jamais après. */}
+                        {/* `enableShowHideButton` : un secret se relit une fois à
+                            la saisie, jamais après. */}
                         <TextInput
                             type='password'
                             enableShowHideButton
@@ -290,23 +325,16 @@ export function CredentialsPanel({ kind }: CredentialsPanelProps) {
                             placeholder={kind.secretPlaceholder}
                             onChange={(e) => setSecret(e.target.value)}
                         />
-                        {editing.credential && (
-                            <span className={styles.hint}>
+                        {editing?.credential && (
+                            <span className={styles.fieldHint}>
                                 Laissez vide pour conserver le secret en place — il n’est jamais renvoyé.
                             </span>
                         )}
                     </label>
-
-                    <div className={styles.actions}>
-                        <Button variant='secondary' onClick={() => setEditing(null)} disabled={busy}>
-                            Annuler
-                        </Button>
-                        <Button onClick={submit} disabled={busy || !label.trim()}>
-                            {busy ? 'Enregistrement…' : 'Enregistrer'}
-                        </Button>
-                    </div>
                 </div>
-            )}
+            </Dialog>
+
+            <ConfirmDialog request={confirm} busy={busy} onClose={() => setConfirm(null)} />
         </div>
     );
 }

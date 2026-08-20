@@ -118,10 +118,15 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onEdit
                     {/* `!site.foreign` : les réglages d'un site — origines,
                         rétention, clé — appartiennent à son espace. Le serveur
                         le refuse, l'écran ne le propose donc pas ; les chiffres,
-                        eux, sont tout l'objet de la projection. */}
+                        eux, sont tout l'objet de la projection.
+
+                        « Modifier » + icône `edit`, comme dans toutes les
+                        fiches : « Paramètres » avec un engrenage, à côté du
+                        bouton « Réglages » et son même engrenage, se lisait
+                        comme deux fois le même bouton. */}
                     {canWrite && !site.foreign && (
-                        <Button variant='secondary' icon='settings' onClick={onEdit}>
-                            Paramètres
+                        <Button variant='secondary' icon='edit' onClick={onEdit}>
+                            Modifier
                         </Button>
                     )}
                     {/* Les réglages de CE site : partage vers d'autres espaces,

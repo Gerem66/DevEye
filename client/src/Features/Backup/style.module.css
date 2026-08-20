@@ -196,10 +196,18 @@
     flex-wrap: wrap;
 }
 
+/* Dans la rangée d'en-tête, entre le retour et les actions : la même place
+   que dans les fiches des autres features. `min-width: 0` + ellipse pour qu'un
+   nom long rétrécisse, jamais ne pousse les boutons. */
 .detailTitle {
     margin: 0;
+    flex: 1;
+    min-width: 0;
     font-size: 1.15rem;
     color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .facts {
@@ -298,64 +306,11 @@
     color: var(--text-muted);
 }
 
-/* ------------------------------------------------------------ destinations */
-
-.list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
-}
-
-.row {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-md);
-    padding: var(--space-md);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-md);
-    background: var(--surface-subtle);
-}
-
-.rowIcon {
-    flex-shrink: 0;
-    margin-top: 2px;
-    color: var(--text-muted);
-}
-
-.rowMain {
-    flex: 1;
-    min-width: 0;
-}
-
-.rowName {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    margin: 0;
-    font-size: 0.9rem;
-    color: var(--text-primary);
-}
-
-.rowMeta {
-    margin: 2px 0 0;
-    font-size: 0.76rem;
-    color: var(--text-muted);
-    overflow-wrap: anywhere;
-}
-
 .rowError {
     margin: var(--space-xs) 0 0;
     font-size: 0.76rem;
     color: var(--danger);
     overflow-wrap: anywhere;
-}
-
-.rowActions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
-    flex-wrap: wrap;
-    flex-shrink: 0;
 }
 
 /* ------------------------------------------------------------- formulaires */
@@ -422,4 +377,32 @@
 .fieldWithAction > select {
     flex: 1;
     min-width: 0;
+}
+
+/* Bloc d'action destructrice au pied d'un dialogue : il se signale de lui-même
+   plutôt que de côtoyer les boutons ordinaires. Même forme que celui des
+   dialogues de cible et de dépôt. */
+.dangerZone {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+    border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+    background: var(--danger-bg);
+}
+
+.dangerText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.dangerActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
 }

@@ -1,6 +1,6 @@
 import { featureDescriptor } from 'deveye-types';
 
-import CredentialsPanel, { DEPLOY_CREDENTIALS, GIT_CREDENTIALS } from '@/Components/Credentials';
+import CredentialsPanel, { DEPLOY_CREDENTIALS, GIT_CREDENTIALS } from './CredentialsPanel';
 import DestinationsSection from '@/Features/Backup/DestinationsSection';
 
 import type { SettingsScope } from '../scope';
