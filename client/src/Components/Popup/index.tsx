@@ -11,22 +11,37 @@ import type { ReactNode } from 'react';
  * drives it with `OpenPopup(id, input)` / `ClosePopup(id, result)`. `OpenPopup`
  * returns a promise that resolves with whatever `ClosePopup` passes, which keeps
  * request/response flows (unlock, add/edit password…) linear and readable.
+ *
+ * ## Une pile par identifiant, pas une case
+ *
+ * Deux montages d'un même `id` coexistent réellement : la feature Mail reste
+ * vivante en arrière-plan (`FeatureKeepAlive`) avec son `AccountPopup`, pendant
+ * que la section Notifications en monte un second à la demande pour le « + »
+ * du compte expéditeur. Avec une case unique, le second montage écrasait
+ * l'inscription du premier et son démontage la **supprimait** : le dialogue de
+ * Mail ne s'ouvrait plus jusqu'au remontage de la feature. Le dernier monté
+ * répond donc, et son démontage rend la main au précédent.
  */
-const PopupEvents: Record<
-    string,
-    {
-        setInputData: (data: unknown) => void;
-        setOpened: React.Dispatch<React.SetStateAction<boolean>>;
-        callback?: (data: unknown) => void;
-    }
-> = {};
+interface PopupEntry {
+    setInputData: (data: unknown) => void;
+    setOpened: React.Dispatch<React.SetStateAction<boolean>>;
+    callback?: (data: unknown) => void;
+}
+
+const PopupEvents: Record<string, PopupEntry[]> = {};
+
+function topEntry(id: string): PopupEntry | undefined {
+    const stack = PopupEvents[id];
+    return stack && stack.length > 0 ? stack[stack.length - 1] : undefined;
+}
 
 function OpenPopup<T = object>(id: string, inputData: unknown = null): Promise<T | null> {
-    if (PopupEvents[id]) {
+    const entry = topEntry(id);
+    if (entry) {
         return new Promise((resolve) => {
-            PopupEvents[id].setInputData(inputData);
-            PopupEvents[id].setOpened(true);
-            PopupEvents[id].callback = (data) => {
+            entry.setInputData(inputData);
+            entry.setOpened(true);
+            entry.callback = (data) => {
                 resolve(data as T);
             };
         });
@@ -35,11 +50,12 @@ function OpenPopup<T = object>(id: string, inputData: unknown = null): Promise<T
 }
 
 function ClosePopup(id: string, data: unknown = null) {
-    if (PopupEvents[id]) {
-        PopupEvents[id].setInputData(null);
-        PopupEvents[id].setOpened(false);
-        if (PopupEvents[id].callback) {
-            PopupEvents[id].callback(data);
+    const entry = topEntry(id);
+    if (entry) {
+        entry.setInputData(null);
+        entry.setOpened(false);
+        if (entry.callback) {
+            entry.callback(data);
         }
     }
 }
@@ -87,16 +103,21 @@ function Popup<TInput = unknown>({
     const [opened, setOpened] = React.useState(false);
 
     React.useEffect(() => {
-        PopupEvents[id] = {
+        const entry: PopupEntry = {
             setInputData: (data) => {
                 onInputChange?.(data as TInput);
             },
             setOpened,
             callback: () => {}
         };
+        (PopupEvents[id] ??= []).push(entry);
 
         return () => {
-            delete PopupEvents[id];
+            const stack = PopupEvents[id];
+            if (!stack) return;
+            const index = stack.indexOf(entry);
+            if (index !== -1) stack.splice(index, 1);
+            if (stack.length === 0) delete PopupEvents[id];
         };
     }, [id]);
 

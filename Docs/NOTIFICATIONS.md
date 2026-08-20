@@ -27,11 +27,19 @@ personne n'a demandé. Mais la forme gardait trois limites, toutes rencontrées 
 3. **Aucun routage par élément.** Toutes les bases d'un espace prévenaient les
    mêmes gens, quel que soit le projet derrière.
 
-Un canal est donc devenu une **entité de l'espace**. Une fonctionnalité — ou un
-de ses éléments — n'en garde qu'une **liaison**.
+Un canal est donc devenu une **entité à part entière**, qu'une route ne fait
+que **lier**.
 
-C'est la même forme que celle des dépôts git, des bases, des sites et des cibles
-de déploiement : des objets d'espace, pas des propriétés d'une feature.
+Depuis la 091, il appartient à **une fonctionnalité** : c'est une source de
+cette feature (`Docs/SOURCES.md`), déclarée et corrigée dans ses réglages,
+comme un jeton Dokploy l'est du Déploiement. La 087 l'avait fait vivre à
+l'échelle de l'espace, partagé par les cinq émetteurs (la réponse directe au
+point 1 ci-dessus), mais à l'usage c'était l'inverse du patron des sources :
+une même liste gérée depuis les réglages de cinq features, où « ajouter un
+canal » dans Uptime le faisait apparaître dans Sauvegardes. Le prix du retour,
+assumé : un salon servi par deux features s'y déclare deux fois. Les points 2
+et 3, eux, restent acquis : plusieurs canaux par émetteur, routage par
+élément.
 
 ---
 
@@ -130,15 +138,17 @@ les doublons de la reprise comme des doublons.
 | | Qui |
 |---|---|
 | Déclarer, corriger, supprimer un canal | capacité `workspace.notifications` |
-| Lire la **liste** des canaux | tout membre |
+| Lire la **liste** des canaux d'une feature | `<feature>: read` |
 | Lire la **destination** d'un canal | capacité `workspace.notifications` |
 | Router une fonctionnalité vers un canal | `<feature>: write` |
 
-La liste est ouverte parce qu'**on ne peut pas router vers des destinations
-qu'on ne voit pas**. Leur contenu ne l'est pas : confier le réglage d'Uptime ne
-confie pas l'adresse de l'astreinte ni l'URL du salon de production. On voit
-donc « Astreinte · e-mail », on peut y router, on ne peut ni la lire ni la
-modifier — `describeChannel` vide `target` pour qui n'a pas la capacité.
+La liste s'ouvre avec la lecture de sa fonctionnalité parce qu'**on ne peut pas
+router vers des destinations qu'on ne voit pas**, et voir où Uptime prévient
+fait partie de lire Uptime. Leur contenu, lui, reste gardé : confier le réglage
+d'Uptime ne confie pas l'adresse de l'astreinte ni l'URL du salon de
+production. On voit donc « Astreinte · e-mail », on peut y router, on ne peut
+ni la lire ni la modifier : `describeChannel` vide `target` pour qui n'a pas la
+capacité.
 
 `notify.routeGet` / `routeSet` sont les **seules** commandes du dépôt dont
 l'autorisation ne peut pas être déclarative : la fonctionnalité visée est une
@@ -234,7 +244,24 @@ canaux liés aux deux routes. `position` porte donc une place déterministe,
 Aucune commande, aucun handler, aucun écran : c'était trois commandes et trois
 handlers avant ce chantier.
 
-## 9. Un seul interrupteur par cible (migration 090)
+## 9. Chaque émetteur a ses canaux (migration 091)
+
+`notification_channels.feature` : un canal appartient à sa fonctionnalité, et
+`notify.channelList` / `channelAdd` la prennent en argument. La répartition de
+l'existant suit les routes : un canal routé par une seule feature devient le
+sien ; routé par plusieurs, il est recopié (les cryptogrammes se déplacent tels
+quels, pas d'AAD) et les liaisons re-pointées ; routé par personne, il est
+supprimé ; rien ne partait par lui, le comportement est préservé à
+l'identique. Une route ne peut désigner que des canaux de sa feature : le dépôt
+ignore les identifiants d'un autre émetteur comme il ignorait déjà ceux d'un
+autre espace.
+
+Dans le formulaire d'un canal e-mail, le « + » à côté du compte expéditeur
+ouvre le **vrai** dialogue de la feature Mail (permis par la pile du registre
+des Popup, voir `Components/Popup`) et la boîte créée est sélectionnée au
+retour, si son palier le permet.
+
+## 10. Un seul interrupteur par cible (migration 090)
 
 Uptime a longtemps porté **deux** interrupteurs : sa route, et une case
 « M'alerter » par service, d'avant la 087, rendue dans un autre dialogue. Une

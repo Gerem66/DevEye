@@ -24,11 +24,13 @@ portes, et aucun endroit qui se déduise des autres.
    l'élément **adopte** la source créée au retour, même principe que les
    dialogues de liaison des Projets, qui relient ce qu'ils viennent de créer.
 
-Les canaux de notification suivent le même contrat par l'onglet
-**Notifications** : gestion à l'échelle de la fonctionnalité seulement,
-sélection (héritage + cases) à l'échelle de l'élément, « Gérer les canaux »
-comme saut. Ils ne passent pas par l'onglet Sources parce qu'un canal appartient
-à l'espace entier, pas à une fonctionnalité (`Docs/NOTIFICATIONS.md` §6).
+Les canaux de notification sont des sources à part entière : **chaque émetteur
+a les siens** (migration 091), déclarés dans ses réglages. Ils suivent le
+contrat par l'onglet **Notifications** plutôt que par l'onglet Sources, parce
+que gestion et routage (héritage + cases, « Gérer les canaux » comme saut) sont
+un seul écran (`Docs/NOTIFICATIONS.md` §6 et §9). Et une source peut en appeler
+une autre : le « + » du compte expéditeur, dans le formulaire d'un canal
+e-mail, ouvre le vrai dialogue de la feature Mail et adopte la boîte créée.
 
 ## Ce qui est branché
 
@@ -37,7 +39,7 @@ comme saut. Ils ne passent pas par l'onglet Sources parce qu'un canal appartient
 | Déploiements | accès Dokploy (adresse + clé d'API) | `workspace_credentials` | `TargetDialog`, champ « Instance Dokploy » |
 | Git | jetons GitHub | `workspace_credentials` | `RepoPicker` / `RepoDialog`, champ « Jeton d'accès » |
 | Sauvegardes | destinations d'archives | `backup_destinations` | `JobDialog`, champ « Où l'écrire » |
-| (tous les émetteurs) | canaux d'alerte | `notification_channels` | section Notifications (cases) |
+| chaque émetteur | ses canaux d'alerte | `notification_channels` (colonne `feature`) | section Notifications (cases) |
 
 Candidat connu, non branché : **Météo**, dont la clé d'API se saisit encore par
 lieu ; la ranger en source d'espace suivrait exactement ce patron.

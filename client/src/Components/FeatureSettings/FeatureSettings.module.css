@@ -350,6 +350,20 @@
     line-height: 1.45;
 }
 
+/* Un sélecteur et son « + » : le champ prend la place, le geste qui crée ce
+   que le sélecteur attend reste collé à lui. Même forme que dans les dialogues
+   d'élément des features. */
+.fieldWithAction {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.fieldWithAction > select {
+    flex: 1;
+    min-width: 0;
+}
+
 @media (max-width: 720px) {
     .layout {
         grid-template-columns: 1fr;

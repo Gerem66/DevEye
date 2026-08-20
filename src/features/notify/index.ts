@@ -155,7 +155,12 @@ function testAlert(label: string) {
  */
 const channelList = defineFeature({
     ...notifyChannelList,
-    handler: async (ctx) => ({ channels: await listChannels(ctx) })
+    handler: async (ctx, input) => {
+        // Les canaux d'une feature se lisent avec elle (091) : voir ceux
+        // d'Uptime fait partie de lire Uptime, comme sa route.
+        assertRouteAccess(ctx, input.feature, 'read');
+        return { channels: await listChannels(ctx, input.feature) };
+    }
 });
 
 const channelAdd = defineFeature({
@@ -163,8 +168,16 @@ const channelAdd = defineFeature({
     access: MANAGE,
     mutates: true,
     handler: async (ctx, input) => {
-        const channel = await createChannel(ctx, input);
-        ctx.audit({ action: 'notify.channelAdd', description: `Canal d’alerte « ${channel.label} » ajouté` });
+        // La capacité donne la gestion des destinations ; la feature
+        // propriétaire doit au moins être lisible : on ne déclare pas de
+        // canal sur une fonctionnalité qu'on ne voit pas.
+        assertRouteAccess(ctx, input.feature, 'read');
+        const { feature, ...draft } = input;
+        const channel = await createChannel(ctx, feature, draft);
+        ctx.audit({
+            action: 'notify.channelAdd',
+            description: `Canal d’alerte « ${channel.label} » ajouté (${feature})`
+        });
         return { channel };
     }
 });
@@ -251,7 +264,7 @@ const routeGet = defineFeature({
         // élément qui prévient bel et bien. Rendues masquées — le genre, jamais
         // l'adresse.
         const managedHere = home === ctx.workspaceId;
-        const foreign = managedHere ? [] : await foreignChannels(ctx, home, route.channelIds);
+        const foreign = managedHere ? [] : await foreignChannels(ctx, home, input.feature, route.channelIds);
         return { route, foreign, managedHere };
     }
 });

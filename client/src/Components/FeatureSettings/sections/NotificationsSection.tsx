@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     NOTIFICATION_LABEL_MAX,
     NOTIFICATION_TARGET_MAX,
@@ -15,11 +15,16 @@ import Button from '@/Components/Button';
 import Checkbox from '@/Components/Checkbox';
 import { Dialog } from '@/Components/Dialog';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
+import { OpenPopup } from '@/Components/Popup';
 import SelectInput from '@/Components/SelectInput';
 import Switch from '@/Components/Switch';
 import TextInput from '@/Components/TextInput';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
+/* Le vrai dialogue de la feature Mail, jamais une copie réduite (le patron des
+   dialogues de liaison des Projets). Chemins directs des deux côtés : ni lui ni
+   ses imports ne passent par le baril `@/Components`, pas de cycle. */
+import AccountPopup, { ACCOUNT_POPUP, type AccountPopupResult } from '@/Features/Mail/AccountPopup';
 
 import type { SettingsScope } from '../scope';
 import styles from '../FeatureSettings.module.css';
@@ -35,10 +40,12 @@ import styles from '../FeatureSettings.module.css';
  * à corriger se corrigeait cinq fois, et router deux bases vers deux
  * destinataires différents était impossible.
  *
- * Ici les destinations sont des **entités de l'espace**, listées une fois. On
- * coche celles que la cible courante doit servir. « Utilisé par N » dit
- * immédiatement lesquelles portent tout le trafic — et, sur les doublons que la
- * reprise de la migration 087 a forcément créés, lesquelles font double emploi.
+ * Ici les destinations sont les **sources de la fonctionnalité** : chaque
+ * émetteur a les siennes (091), déclarées dans ses réglages, comme un jeton
+ * Dokploy est une source du Déploiement. On coche celles que la cible courante
+ * doit servir. « Utilisé par N » dit immédiatement lesquelles portent tout le
+ * trafic. La 087 les avait faites communes aux cinq émetteurs : on retrouvait
+ * une même liste gérée depuis cinq endroits, l'inverse du patron des sources.
  *
  * ## Deux droits, deux moitiés d'écran
  *
@@ -128,6 +135,14 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     const [status, setStatus] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
+    /** Le dialogue de compte Mail, monté à la demande par le « + » du formulaire. */
+    const [mailAdd, setMailAdd] = useState(false);
+    /**
+     * Les boîtes connues au moment d'ouvrir le dialogue Mail : celle qui
+     * apparaît ensuite vient d'y être créée, et c'est pour ce canal-ci ; elle
+     * se sélectionne donc toute seule au retour.
+     */
+    const knownMailIds = useRef<Set<number> | null>(null);
 
     /**
      * Le droit fin, pas `write` : c'est ce qui permet de confier le routage des
@@ -143,7 +158,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
 
     const reload = useCallback(async () => {
         const [list, route] = await Promise.all([
-            ws.send('notify.channelList', {}),
+            ws.send('notify.channelList', { feature }),
             ws.send('notify.routeGet', { feature, itemId })
         ]);
         setChannels(list.channels);
@@ -205,7 +220,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
     const saveDraft = (): void => {
         if (!draft || !draft.label.trim()) return;
         void run(async () => {
-            if (editing === null) await ws.send('notify.channelAdd', draft);
+            if (editing === null) await ws.send('notify.channelAdd', { ...draft, feature });
             else await ws.send('notify.channelUpdate', { ...draft, id: editing, enabled: true });
             setDraft(null);
             setEditing(null);
@@ -274,6 +289,38 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
         });
     };
 
+    const openMailAdd = (): void => {
+        knownMailIds.current = new Set(accounts.map((a) => a.id));
+        setMailAdd(true);
+    };
+
+    /** Retour du dialogue Mail : relire les boîtes, adopter celle qui vient de naître. */
+    const onMailAddDone = useCallback((result: AccountPopupResult): void => {
+        setMailAdd(false);
+        // `saved` pour une connexion manuelle, `oauth-connected` pour un
+        // consentement Google/Microsoft abouti puis simplement refermé.
+        if (result !== 'saved' && result !== 'oauth-connected') {
+            knownMailIds.current = null;
+            return;
+        }
+        void ws
+            .send('mail.accountList', {})
+            .then((r) => {
+                setAccounts(r.accounts);
+                const fresh = r.accounts.find((a) => !knownMailIds.current?.has(a.id));
+                knownMailIds.current = null;
+                if (!fresh) return;
+                if (fresh.securityTier === 'open' && fresh.enabled) {
+                    setDraft((prev) => (prev ? { ...prev, mailAccountId: fresh.id } : prev));
+                } else {
+                    // Créée au palier gardé : sélectionnable nulle part ici, et
+                    // le dire vaut mieux qu'un sélecteur qui l'ignore en silence.
+                    setStatus('La boîte créée n’est pas au palier « ouvert » : elle ne peut pas expédier ces alertes.');
+                }
+            })
+            .catch(() => undefined);
+    }, []);
+
     return (
         <div className={styles.section}>
             <p className={styles.sectionHint}>{WHEN[feature]}</p>
@@ -315,11 +362,11 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
             >
                 {channels.length === 0 && foreign.length === 0 && (
                     <p className={styles.empty}>
-                        Aucun canal dans cet espace.
+                        {`Aucun canal pour ${descriptor.label}.`}
                         {!canManage
                             ? ' Demandez à un gestionnaire de l’espace d’en déclarer un.'
                             : scope.kind === 'feature'
-                              ? ' Ajoutez-en un ci-dessous : il servira à toutes les fonctionnalités qui préviennent.'
+                              ? ' Ajoutez-en un ci-dessous : il recevra ses alertes.'
                               : ' « Gérer les canaux » ci-dessous ouvre les réglages de la fonctionnalité, où ils se déclarent.'}
                     </p>
                 )}
@@ -481,7 +528,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                     setEditing(null);
                 }}
                 title={editing === null ? 'Nouveau canal' : 'Modifier le canal'}
-                description='Une destination de l’espace : toutes les fonctionnalités qui préviennent peuvent y écrire.'
+                description={`Une destination propre à ${descriptor.label} : ses alertes, et seulement les siennes, partent là.`}
                 width={520}
                 onSubmit={saveDraft}
                 footer={
@@ -534,25 +581,38 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                             <>
                                 <label className={styles.field}>
                                     <span className={styles.fieldLabel}>Compte expéditeur</span>
-                                    <SelectInput
-                                        value={draft.mailAccountId ?? ''}
-                                        onChange={(e) =>
-                                            setDraft({
-                                                ...draft,
-                                                mailAccountId: e.target.value ? Number(e.target.value) : null
-                                            })
-                                        }
-                                    >
-                                        <option value=''>Aucun</option>
-                                        {openAccounts.map((a) => (
-                                            <option key={a.id} value={a.id}>
-                                                {a.displayName} ({a.emailAddress})
-                                            </option>
-                                        ))}
-                                    </SelectInput>
+                                    <div className={styles.fieldWithAction}>
+                                        <SelectInput
+                                            value={draft.mailAccountId ?? ''}
+                                            onChange={(e) =>
+                                                setDraft({
+                                                    ...draft,
+                                                    mailAccountId: e.target.value ? Number(e.target.value) : null
+                                                })
+                                            }
+                                        >
+                                            <option value=''>Aucun</option>
+                                            {openAccounts.map((a) => (
+                                                <option key={a.id} value={a.id}>
+                                                    {a.displayName} ({a.emailAddress})
+                                                </option>
+                                            ))}
+                                        </SelectInput>
+                                        {/* Le vrai dialogue de la feature Mail,
+                                            par-dessus ; la boîte créée est
+                                            sélectionnée ici au retour. */}
+                                        <Button
+                                            variant='ghost'
+                                            icon='plus'
+                                            aria-label='Ajouter une boîte mail'
+                                            title='Ajouter une boîte mail : elle sera sélectionnée ici une fois créée'
+                                            disabled={busy}
+                                            onClick={openMailAdd}
+                                        />
+                                    </div>
                                     <span className={styles.fieldHint}>
                                         {openAccounts.length === 0
-                                            ? 'Aucun compte mail « open » configuré — ajoutez-en un dans la feature Mail.'
+                                            ? 'Aucun compte mail « open » configuré : le « + » ci-contre en crée un.'
                                             : 'Seuls les comptes « open » peuvent envoyer sans intervention manuelle.'}
                                     </span>
                                 </label>
@@ -595,9 +655,41 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
 
             {status && <p className={styles.notice}>{status}</p>}
 
+            {mailAdd && <MailAccountLauncher onDone={onMailAddDone} />}
+
             <ConfirmDialog request={confirm} busy={busy} onClose={() => setConfirm(null)} />
         </div>
     );
+}
+
+/**
+ * Monte le dialogue de compte Mail **à la demande**, l'ouvre, rend le résultat.
+ *
+ * `AccountPopup` passe par le registre impératif des Popup : il faut qu'une
+ * instance soit montée pour qu'`OpenPopup` la trouve, et la feature Mail n'est
+ * pas forcément vivante quand on règle un canal. D'où ce lanceur : monter,
+ * ouvrir, démonter au retour. Le registre est une pile, et l'instance de Mail
+ * (si sa feature est gardée vivante en arrière-plan) reprend la main ensuite.
+ *
+ * L'ouverture vit dans l'effet du **parent** : React exécute les effets des
+ * enfants d'abord, donc `AccountPopup` est déjà inscrit quand `OpenPopup` le
+ * vise ; aucun tour d'attente à bricoler.
+ */
+function MailAccountLauncher({ onDone }: { onDone: (result: AccountPopupResult) => void }) {
+    const doneRef = useRef(onDone);
+    doneRef.current = onDone;
+
+    useEffect(() => {
+        let live = true;
+        void OpenPopup<AccountPopupResult>(ACCOUNT_POPUP, null).then((result) => {
+            if (live) doneRef.current(result);
+        });
+        return () => {
+            live = false;
+        };
+    }, []);
+
+    return <AccountPopup />;
 }
 
 /**

@@ -37,10 +37,15 @@ export interface NotificationChannelWrite {
 }
 
 export interface NotificationChannelsRepo {
-    /** Les canaux de l'espace, dans l'ordre d'affichage. */
-    list(workspaceId: number): Promise<NotificationChannelRow[]>;
+    /** Les canaux d'une fonctionnalité de l'espace, dans l'ordre d'affichage (091 : chaque émetteur a les siens). */
+    list(workspaceId: number, feature: NotificationFeature): Promise<NotificationChannelRow[]>;
     findById(id: number, workspaceId: number): Promise<NotificationChannelRow | null>;
-    create(workspaceId: number, input: NotificationChannelWrite): Promise<NotificationChannelRow>;
+    /** `feature` est la propriétaire du canal, immuable ensuite (l'update ne la touche pas). */
+    create(
+        workspaceId: number,
+        feature: NotificationFeature,
+        input: NotificationChannelWrite
+    ): Promise<NotificationChannelRow>;
     update(id: number, workspaceId: number, input: NotificationChannelWrite): Promise<NotificationChannelRow | null>;
     /** Les liaisons partent en cascade ; les routes devenues vides restent, et disent le silence. */
     remove(id: number, workspaceId: number): Promise<boolean>;
@@ -101,31 +106,33 @@ export function notificationChannelsRepo(pool: Q): NotificationChannelsRepo {
         findById,
         findRoute,
 
-        async list(workspaceId) {
+        async list(workspaceId, feature) {
             const r = await pool.query<NotificationChannelRow>(
-                'SELECT * FROM notification_channels WHERE workspace_id = ? ORDER BY position, id',
-                [workspaceId]
+                'SELECT * FROM notification_channels WHERE workspace_id = ? AND feature = ? ORDER BY position, id',
+                [workspaceId, feature]
             );
             return r.rows;
         },
 
-        async create(workspaceId, input) {
+        async create(workspaceId, feature, input) {
             // La place suit la dernière : un canal ajouté apparaît en bas, là où
             // on vient de le créer, et non en tête d'une liste qu'on relit.
             const res = await pool.query(
                 `INSERT INTO notification_channels
-                     (workspace_id, kind, label_enc, target_enc, mail_account_id, enabled, position)
-                 VALUES (?, ?, ?, ?, ?, ?,
+                     (workspace_id, feature, kind, label_enc, target_enc, mail_account_id, enabled, position)
+                 VALUES (?, ?, ?, ?, ?, ?, ?,
                      (SELECT COALESCE(MAX(c.position) + 1, 0)
-                        FROM (SELECT position FROM notification_channels WHERE workspace_id = ?) c))`,
+                        FROM (SELECT position FROM notification_channels WHERE workspace_id = ? AND feature = ?) c))`,
                 [
                     workspaceId,
+                    feature,
                     input.kind,
                     input.labelEnc,
                     input.targetEnc,
                     input.mailAccountId,
                     input.enabled ? 1 : 0,
-                    workspaceId
+                    workspaceId,
+                    feature
                 ]
             );
             const row = await findById(res.insertId, workspaceId);
@@ -221,12 +228,17 @@ export function notificationChannelsRepo(pool: Q): NotificationChannelsRepo {
             // Effacer puis réécrire : l'ensemble des canaux d'une route est une
             // valeur, pas une collection à réconcilier. Un différentiel coûterait
             // deux lectures et deux écritures pour le même résultat.
+            //
+            // `c.feature = ?` : une route ne peut désigner que des canaux de SA
+            // fonctionnalité (091) — un identifiant d'un autre émetteur glissé
+            // dans la liste est ignoré comme le serait celui d'un autre espace.
             await pool.query('DELETE FROM notification_route_channels WHERE route_id = ?', [route.id]);
             for (const channelId of channelIds) {
                 await pool.query(
                     `INSERT IGNORE INTO notification_route_channels (route_id, channel_id)
-                     SELECT ?, c.id FROM notification_channels c WHERE c.id = ? AND c.workspace_id = ?`,
-                    [route.id, channelId, workspaceId]
+                     SELECT ?, c.id FROM notification_channels c
+                      WHERE c.id = ? AND c.workspace_id = ? AND c.feature = ?`,
+                    [route.id, channelId, workspaceId, feature]
                 );
             }
             return route;

@@ -223,7 +223,7 @@ export async function resolveRoute(
     const ids = await db.notificationChannels.routeChannelIds(route.id);
     if (ids.length === 0) return [];
 
-    const rows = await db.notificationChannels.list(workspaceId);
+    const rows = await db.notificationChannels.list(workspaceId, feature);
     const wanted = new Set(ids);
     const resolved = await Promise.all(rows.filter((r) => wanted.has(r.id)).map((r) => resolveChannel(db, cipher, r)));
     return resolved.filter((c): c is ResolvedChannel => c !== null);
@@ -236,8 +236,9 @@ export async function resolveRoute(
  * enregistrée. C'est ce qui supprime le détour de l'ancien dialogue, qui devait
  * enregistrer avant de tester sous peine d'éprouver les réglages précédents.
  *
- * Les identifiants étrangers à l'espace tombent d'eux-mêmes : la liste est lue
- * pour cet espace, et l'intersection ne peut rien contenir d'autre.
+ * Les identifiants étrangers à l'espace tombent d'eux-mêmes : chaque ligne est
+ * relue pour cet espace, et une absence ne résout rien. La feature n'entre pas
+ * en jeu : on vise des lignes précises, quelle que soit leur propriétaire.
  */
 export async function resolveChannelIds(
     db: Database,
@@ -246,9 +247,10 @@ export async function resolveChannelIds(
     ids: number[]
 ): Promise<ResolvedChannel[]> {
     if (ids.length === 0) return [];
-    const wanted = new Set(ids);
-    const rows = await db.notificationChannels.list(workspaceId);
-    const resolved = await Promise.all(rows.filter((r) => wanted.has(r.id)).map((r) => resolveChannel(db, cipher, r)));
+    const rows = await Promise.all(ids.map((id) => db.notificationChannels.findById(id, workspaceId)));
+    const resolved = await Promise.all(
+        rows.filter((r): r is NonNullable<typeof r> => r !== null).map((r) => resolveChannel(db, cipher, r))
+    );
     return resolved.filter((c): c is ResolvedChannel => c !== null);
 }
 

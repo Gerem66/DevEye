@@ -23,9 +23,9 @@ import { FeatureError, type FeatureContext } from './_define';
  * l'alerte ne partirait jamais, en silence (voir `Docs/SECURITY_MODEL.md`).
  */
 
-/** Les canaux de l'espace, avec leur nombre d'usages, prêts pour l'écran. */
-export async function listChannels(ctx: FeatureContext): Promise<NotificationChannel[]> {
-    const rows = await ctx.db.notificationChannels.list(ctx.workspaceId);
+/** Les canaux d'une fonctionnalité, avec leur nombre d'usages, prêts pour l'écran. */
+export async function listChannels(ctx: FeatureContext, feature: NotificationFeature): Promise<NotificationChannel[]> {
+    const rows = await ctx.db.notificationChannels.list(ctx.workspaceId, feature);
     const usage = await ctx.db.notificationChannels.usageCounts(ctx.workspaceId);
     // La liste est ouverte à tout membre — on ne peut pas router vers des
     // destinations qu'on ne voit pas. Les adresses, elles, restent derrière la
@@ -91,9 +91,10 @@ async function encodeInput(ctx: FeatureContext, input: NotificationChannelInput,
 
 export async function createChannel(
     ctx: FeatureContext,
+    feature: NotificationFeature,
     input: NotificationChannelInput
 ): Promise<NotificationChannel> {
-    const row = await ctx.db.notificationChannels.create(ctx.workspaceId, await encodeInput(ctx, input, true));
+    const row = await ctx.db.notificationChannels.create(ctx.workspaceId, feature, await encodeInput(ctx, input, true));
     return describeChannel(ctx.db, ctx.secure.open, row, 0, true);
 }
 
@@ -155,11 +156,12 @@ export async function getRoute(
 export async function foreignChannels(
     ctx: FeatureContext,
     homeWorkspaceId: number,
+    feature: NotificationFeature,
     channelIds: number[]
 ): Promise<NotificationChannel[]> {
     if (channelIds.length === 0) return [];
     const wanted = new Set(channelIds);
-    const rows = (await ctx.db.notificationChannels.list(homeWorkspaceId)).filter((r) => wanted.has(r.id));
+    const rows = (await ctx.db.notificationChannels.list(homeWorkspaceId, feature)).filter((r) => wanted.has(r.id));
     return rows.map((row) => ({
         id: row.id,
         kind: row.kind,
