@@ -28,7 +28,6 @@ export interface UptimeServiceConfig {
     timeoutSeconds: number;
     failureThreshold: number;
     retentionDays: number | null;
-    notify: boolean;
     enabled: boolean;
 }
 
@@ -150,7 +149,7 @@ export interface UptimeHistoryRepo {
 }
 
 const SERVICE_COLUMNS = `content = ?, method = ?, expected_status = ?, interval_seconds = ?,
-     timeout_seconds = ?, failure_threshold = ?, retention_days = ?, notify = ?, enabled = ?`;
+     timeout_seconds = ?, failure_threshold = ?, retention_days = ?, enabled = ?`;
 
 function configParams(c: UptimeServiceConfig): unknown[] {
     return [
@@ -161,7 +160,6 @@ function configParams(c: UptimeServiceConfig): unknown[] {
         c.timeoutSeconds,
         c.failureThreshold,
         c.retentionDays,
-        c.notify ? 1 : 0,
         c.enabled ? 1 : 0
     ];
 }
@@ -265,8 +263,8 @@ export function uptimeServicesRepo(pool: Q): UptimeServicesRepo {
             const res = await pool.query(
                 `INSERT INTO uptime_services
                      (user_id, workspace_id, content, method, expected_status, interval_seconds,
-                      timeout_seconds, failure_threshold, retention_days, notify, enabled, sort_order)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                      timeout_seconds, failure_threshold, retention_days, enabled, sort_order)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [userId, workspaceId, ...configParams(config), Number(posRow.rows[0]?.next ?? 0)]
             );
             const r = await pool.query<UptimeServiceRow>('SELECT * FROM uptime_services WHERE id = ?', [res.insertId]);

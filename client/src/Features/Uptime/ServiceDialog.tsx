@@ -28,7 +28,6 @@ interface ServiceDraft {
     timeoutSeconds: number;
     failureThreshold: number;
     retentionDays: number | null;
-    notify: boolean;
     enabled: boolean;
 }
 
@@ -82,7 +81,6 @@ const DEFAULTS: ServiceDraft = {
     timeoutSeconds: 10,
     failureThreshold: 2,
     retentionDays: null,
-    notify: true,
     enabled: true
 };
 
@@ -119,7 +117,6 @@ export function ServiceDialog({ open, service, onClose, onSaved, onRemoved }: Se
                   timeoutSeconds: service.timeoutSeconds,
                   failureThreshold: service.failureThreshold,
                   retentionDays: service.retentionDays,
-                  notify: service.notify,
                   enabled: service.enabled
               }
             : DEFAULTS;
@@ -292,9 +289,12 @@ export function ServiceDialog({ open, service, onClose, onSaved, onRemoved }: Se
                     </span>
                 </label>
 
-                <Checkbox checked={draft.notify} onChange={(v) => set('notify', v)}>
-                    M’alerter quand ce service tombe ou revient
-                </Checkbox>
+                {/* « M'alerter quand ce service tombe » vivait ici, en doublon
+                    muet de la section Notifications des réglages du service :
+                    une route réglée pouvait rester silencieuse à cause d'une
+                    case que rien ne signalait. Les canaux et le silence se
+                    règlent désormais à un seul endroit : Réglages →
+                    Notifications. */}
                 <Checkbox checked={draft.enabled} onChange={(v) => set('enabled', v)}>
                     Surveillance active
                 </Checkbox>

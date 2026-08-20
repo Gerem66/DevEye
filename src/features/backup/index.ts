@@ -413,10 +413,11 @@ const jobRemoveFeature = defineFeature({
         }
         const ok = await ctx.db.backup.deleteJob(input.jobId, ctx.workspaceId);
         if (!ok) throw new FeatureError('not_found', 'Travail de sauvegarde introuvable');
-        // Projections et restrictions ne tiennent à aucune clé étrangère : sans
-        // ce ménage, elles s'appliqueraient au prochain travail à hériter de
-        // l'identifiant.
+        // Projections, restrictions et route de notification ne tiennent à
+        // aucune clé étrangère : sans ce ménage, elles s'appliqueraient au
+        // prochain travail à hériter de l'identifiant.
         await ctx.db.itemSharing.forgetItem('backup', input.jobId, ctx.workspaceId);
+        await ctx.db.notificationChannels.clearRoute(ctx.workspaceId, 'backup', input.jobId);
 
         ctx.audit({
             action: 'backup.jobRemove',

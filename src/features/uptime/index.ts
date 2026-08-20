@@ -182,7 +182,6 @@ export const uptimeAddFeature: FeatureDefinition<
             timeoutSeconds: draft.timeoutSeconds,
             failureThreshold: draft.failureThreshold,
             retentionDays: draft.retentionDays,
-            notify: draft.notify,
             enabled: draft.enabled
         });
         ctx.audit({
@@ -225,7 +224,6 @@ export const uptimeUpdateFeature: FeatureDefinition<
             timeoutSeconds: draft.timeoutSeconds,
             failureThreshold: draft.failureThreshold,
             retentionDays: draft.retentionDays,
-            notify: draft.notify,
             enabled: draft.enabled
         });
         if (!row) throw new FeatureError('not_found', 'Uptime service not found');
@@ -281,11 +279,13 @@ export const uptimeRemoveFeature: FeatureDefinition<
         }
         // History, rollup and incidents go with it (ON DELETE CASCADE).
         await ctx.db.uptimeServices.delete(input.id, ctx.workspaceId);
-        // Les projections et les restrictions ne sont rattachées par aucune clé
-        // étrangère — l'élément vit dans une table différente selon la feature.
-        // Sans ce ménage, une ligne orpheline s'appliquerait au prochain service
-        // à hériter de l'identifiant.
+        // Projections, restrictions et route de notification ne sont rattachées
+        // par aucune clé étrangère : l'élément vit dans une table différente
+        // selon la feature. Sans ce ménage, une ligne orpheline s'appliquerait
+        // au prochain service à hériter de l'identifiant ; pour la route, avec
+        // en prime un « réglé à la main » qui l'empêcherait d'hériter d'Uptime.
         await ctx.db.itemSharing.forgetItem('uptime', input.id, ctx.workspaceId);
+        await ctx.db.notificationChannels.clearRoute(ctx.workspaceId, 'uptime', input.id);
         ctx.audit({
             action: 'uptime.remove',
             description: 'Service surveillé supprimé',

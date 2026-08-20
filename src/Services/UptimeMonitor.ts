@@ -289,30 +289,33 @@ export class UptimeMonitor {
                 description: `Service « ${target.name} » injoignable`,
                 metadata: { serviceId: row.id, httpStatus: probe.httpStatus }
             });
-            if (row.notify === 1) {
-                const sent = await this.notify(row, target, {
-                    subject: `⚠️ ${target.name} est hors ligne`,
-                    body: [
-                        `Le service « ${target.name} » ne répond plus.`,
-                        '',
-                        `URL         : ${target.url}`,
-                        `Depuis      : ${formatMoment(probe.at)}`,
-                        `Erreur      : ${probe.error ?? 'inconnue'}`,
-                        probe.httpStatus === null ? null : `Statut HTTP : ${probe.httpStatus}`
-                    ]
-                        .filter((line) => line !== null)
-                        .join('\n'),
-                    notice: {
-                        event: 'down',
-                        service: target.name,
-                        url: target.url,
-                        at: probe.at,
-                        error: probe.error,
-                        httpStatus: probe.httpStatus
-                    }
-                });
-                if (sent) await db.uptimeHistory.markIncidentNotified(incident.id);
-            }
+            // Toujours tenté : c'est la route qui décide. Un service réglé
+            // « silencieux » a une route sans canal, `deliver` ne fait alors
+            // rien et l'incident reste non-notifié, donc pas de « c'est
+            // revenu » orphelin. (L'interrupteur `notify` par service a été
+            // retiré : deux endroits décidaient d'une même alerte, migration 090.)
+            const sent = await this.notify(row, target, {
+                subject: `⚠️ ${target.name} est hors ligne`,
+                body: [
+                    `Le service « ${target.name} » ne répond plus.`,
+                    '',
+                    `URL         : ${target.url}`,
+                    `Depuis      : ${formatMoment(probe.at)}`,
+                    `Erreur      : ${probe.error ?? 'inconnue'}`,
+                    probe.httpStatus === null ? null : `Statut HTTP : ${probe.httpStatus}`
+                ]
+                    .filter((line) => line !== null)
+                    .join('\n'),
+                notice: {
+                    event: 'down',
+                    service: target.name,
+                    url: target.url,
+                    at: probe.at,
+                    error: probe.error,
+                    httpStatus: probe.httpStatus
+                }
+            });
+            if (sent) await db.uptimeHistory.markIncidentNotified(incident.id);
             return;
         }
 
@@ -329,9 +332,9 @@ export class UptimeMonitor {
                 metadata: { serviceId: row.id, downtimeSeconds: duration }
             });
             // Only announce a recovery the user was told about, so a silent
-            // outage (notifications off at the time) doesn't produce a lone
+            // outage (no channel reached at the time) doesn't produce a lone
             // "back online" mail with no context.
-            if (row.notify === 1 && open.notified === 1) {
+            if (open.notified === 1) {
                 const cause = await decryptError(cipher, open.error);
                 await this.notify(row, target, {
                     subject: `✅ ${target.name} est de retour`,

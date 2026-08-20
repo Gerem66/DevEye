@@ -212,10 +212,11 @@ export const deployRemoveFeature: FeatureDefinition<
         // que la pointer.
         const ok = await ctx.db.deploy.deleteTarget(input.targetId, ctx.workspaceId);
         if (!ok) throw new FeatureError('not_found', 'Cible de déploiement introuvable');
-        // Projections et restrictions ne tiennent à aucune clé étrangère : sans
-        // ce ménage, elles s'appliqueraient à la prochaine cible à hériter de
-        // l'identifiant.
+        // Projections, restrictions et route de notification ne tiennent à
+        // aucune clé étrangère : sans ce ménage, elles s'appliqueraient à la
+        // prochaine cible à hériter de l'identifiant.
         await ctx.db.itemSharing.forgetItem('deploy', input.targetId, ctx.workspaceId);
+        await ctx.db.notificationChannels.clearRoute(ctx.workspaceId, 'deploy', input.targetId);
         ctx.audit({
             action: 'deploy.remove',
             description: 'Cible de déploiement supprimée',

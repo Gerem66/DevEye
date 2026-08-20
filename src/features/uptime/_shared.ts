@@ -77,7 +77,6 @@ export async function toService(
         timeoutSeconds: row.timeout_seconds,
         failureThreshold: row.failure_threshold,
         retentionDays: row.retention_days,
-        notify: row.notify === 1,
         enabled: row.enabled === 1,
         sortOrder: row.sort_order,
         foreign,

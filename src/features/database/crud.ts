@@ -249,10 +249,12 @@ export const databaseRemoveFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         const ok = await ctx.db.databases.remove(input.databaseId, ctx.workspaceId);
         if (!ok) throw new FeatureError('not_found', 'Base de données introuvable');
-        // Projections et restrictions ne tiennent à aucune clé étrangère : sans
-        // ce ménage, elles s'appliqueraient à la prochaine base à hériter de
-        // l'identifiant. (Oubli du câblage d'origine, aligné sur Uptime.)
+        // Projections, restrictions et route de notification ne tiennent à
+        // aucune clé étrangère : sans ce ménage, elles s'appliqueraient à la
+        // prochaine base à hériter de l'identifiant. (Oubli du câblage
+        // d'origine, aligné sur Uptime.)
         await ctx.db.itemSharing.forgetItem('database', input.databaseId, ctx.workspaceId);
+        await ctx.db.notificationChannels.clearRoute(ctx.workspaceId, 'database', input.databaseId);
         ctx.audit({
             action: 'database.remove',
             description: 'Base de données retirée de l’espace',
