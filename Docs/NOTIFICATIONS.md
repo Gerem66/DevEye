@@ -51,24 +51,34 @@ et 3, eux, restent acquis : plusieurs canaux par émetteur, routage par
 | `notification_routes` | une cible de routage : `(espace, feature, item_id)` |
 | `notification_route_channels` | quels canaux cette route sert |
 
-La liaison est séparée pour **une** raison, et elle est structurante : la
-*présence* d'une ligne `notification_routes` pour un élément vaut « réglé à la
-main », son *absence* vaut « hérite de sa fonctionnalité ». Une route existante
-sans aucune liaison exprime donc **le silence**, ce qu'un tableau d'identifiants
-rangé dans une colonne ne saurait pas distinguer de « pas encore réglé ».
+La liaison est séparée parce qu'une sélection est un ensemble : plusieurs
+canaux par route, un canal dans plusieurs routes. Une route dont la sélection
+se vide est **retirée** : depuis la 092, une sélection vide et une sélection
+jamais faite disent la même chose, le silence.
 
-`item_id = 0` désigne la fonctionnalité elle-même : une colonne d'une clé unique
-ne peut pas être nulle. Le contrat, lui, rend simplement `itemId` absent — la
-sentinelle est une contrainte de stockage, elle n'a pas à remonter.
+`item_id = 0` désigne la fonctionnalité elle-même : le cas des émetteurs
+**sans éléments** (Sentinelle), dont les alertes ne visent rien de plus fin.
+(Zéro et non NULL : une colonne d'une clé unique ne peut pas être nulle ; le
+contrat rend simplement `itemId` absent.)
 
-### La règle de résolution, dans l'ordre
+Pour les émetteurs à éléments, **la sélection vit sur l'élément** : chaque
+cible coche un ou plusieurs canaux de sa feature dans ses propres réglages. La
+route « par défaut » de la fonctionnalité, dont les éléments héritaient (087),
+a été retirée par la 092 : cocher à l'échelle de la feature ne visait aucun
+élément nommable, et les cases des éléments, grisées tant qu'ils « suivaient »
+leur feature, semblaient ne jamais pouvoir se cocher. La 092 a matérialisé
+l'héritage sur chaque élément avant de supprimer ces routes : ce qui prévenait
+la veille prévient le lendemain. Un élément créé depuis naît silencieux
+jusqu'à ce qu'on lui coche des canaux : rien ne part sans qu'on l'ait choisi.
 
-1. l'élément a une route → **ses** canaux, silence compris ;
-2. sinon → la route de sa fonctionnalité ;
-3. sinon → aucun canal.
+### La règle de résolution
 
-Rien n'est deviné. Sans route enregistrée, rien ne part — c'est le défaut qui
-compte, et celui que la 075 avait déjà posé.
+1. la cible (élément, ou fonctionnalité sans éléments) a une route → **ses**
+   canaux ;
+2. sinon → aucun canal.
+
+Rien n'est deviné ni hérité. Sans sélection enregistrée, rien ne part : c'est
+le défaut qui compte, et celui que la 075 avait déjà posé.
 
 ---
 

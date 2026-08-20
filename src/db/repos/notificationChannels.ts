@@ -13,12 +13,11 @@ type Q = Queryable;
  * Les canaux d'alerte d'un espace, et les routes qui pointent dessus.
  *
  * Remplace `notificationSettings`, qui portait deux canaux binaires par couple
- * `(espace, feature)`. Trois tables plutôt qu'une, et la raison tient dans la
- * table de liaison : la **présence** d'une ligne de route pour un élément vaut
- * « réglé à la main », son absence vaut « hérite de sa fonctionnalité ». Une
- * route sans aucune liaison exprime donc le silence, ce qu'un tableau
- * d'identifiants rangé dans une colonne ne saurait pas distinguer de « pas
- * encore réglé ».
+ * `(espace, feature)`. Trois tables plutôt qu'une : la liaison est un ensemble
+ * (plusieurs canaux par route, un canal dans plusieurs routes). Une route est
+ * la **sélection** de sa cible — un élément, ou la fonctionnalité elle-même
+ * pour un émetteur sans éléments — et il n'y a pas d'héritage (092) : sans
+ * route, une cible est silencieuse.
  *
  * Tout ce qui est lisible — libellé, adresse, URL — est **chiffré par
  * l'appelant** avant d'arriver ici : le dépôt ne voit que des cryptogrammes, et
@@ -47,7 +46,7 @@ export interface NotificationChannelsRepo {
         input: NotificationChannelWrite
     ): Promise<NotificationChannelRow>;
     update(id: number, workspaceId: number, input: NotificationChannelWrite): Promise<NotificationChannelRow | null>;
-    /** Les liaisons partent en cascade ; les routes devenues vides restent, et disent le silence. */
+    /** Les liaisons partent en cascade ; une route laissée vide reste inerte (vide = silence, 092). */
     remove(id: number, workspaceId: number): Promise<boolean>;
     reorder(workspaceId: number, ids: number[]): Promise<void>;
 
@@ -77,7 +76,7 @@ export interface NotificationChannelsRepo {
         itemId: number,
         channelIds: number[]
     ): Promise<NotificationRouteRow>;
-    /** Efface la route d'une cible : elle repasse en héritage. */
+    /** Efface la route d'une cible : plus de sélection, elle ne prévient personne. */
     clearRoute(workspaceId: number, feature: NotificationFeature, itemId: number): Promise<void>;
 }
 

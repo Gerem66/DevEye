@@ -17,7 +17,6 @@ import { Dialog } from '@/Components/Dialog';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { OpenPopup } from '@/Components/Popup';
 import SelectInput from '@/Components/SelectInput';
-import Switch from '@/Components/Switch';
 import TextInput from '@/Components/TextInput';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
@@ -56,15 +55,18 @@ import styles from '../FeatureSettings.module.css';
  *
  * ## Deux échelles, deux gestes
  *
- * La **gestion** des canaux (ajouter, corriger, tester, supprimer) ne se rend
- * qu'à l'échelle de la **fonctionnalité**, le contrat des sources : elles se
- * créent et se corrigent à un seul endroit. À l'échelle d'un élément, l'écran
- * ne fait que **choisir** (héritage et cases), et le bouton « Gérer les
- * canaux » ouvre les réglages de la fonctionnalité par-dessus
- * (`onManageChannels`). Avant cette coupe, le formulaire d'ajout se rendait aux
- * deux échelles : on pouvait déclarer l'astreinte de tout l'espace depuis les
- * réglages d'une base, et chaque écran d'élément redevenait un endroit où les
- * canaux se gèrent : cinq portes de plus pour une même liste.
+ * À l'échelle de la **fonctionnalité** : la liste de ses canaux (ses sources
+ * disponibles) et leur gestion (ajouter, corriger, tester, supprimer). Pas de
+ * cases à cocher : une sélection à cette échelle ne viserait aucun élément
+ * nommable (092). À l'échelle d'un **élément** : les cases, directement
+ * actives (cocher un ou plusieurs canaux est LE geste de cet écran), et le
+ * bouton « Gérer les canaux » qui ouvre les réglages de la fonctionnalité
+ * par-dessus (`onManageChannels`). L'interrupteur « Suivre la fonctionnalité »
+ * a été retiré avec l'héritage : il grisait les cases par défaut, et l'écran
+ * semblait interdire précisément ce qu'il servait à faire.
+ *
+ * Exception mécanique : un émetteur **sans éléments** (Sentinelle) garde ses
+ * cases à l'échelle de la fonctionnalité — il n'a pas d'échelle plus fine.
  */
 
 const KIND_LABEL: Record<NotificationChannelKind, string> = {
@@ -129,7 +131,6 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
     const [managedHere, setManagedHere] = useState(true);
     const [accounts, setAccounts] = useState<MailAccount[]>([]);
     const [selected, setSelected] = useState<number[]>([]);
-    const [inherits, setInherits] = useState(false);
     const [draft, setDraft] = useState<NotificationChannelInput | null>(null);
     const [editing, setEditing] = useState<number | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
@@ -156,7 +157,23 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
 
     const itemId = scope.kind === 'item' ? scope.itemId : undefined;
 
+    /**
+     * La sélection se rend-elle ici ? Sur un élément toujours ; à l'échelle de
+     * la fonctionnalité seulement quand elle n'a pas d'éléments (Sentinelle) —
+     * sinon cette échelle ne fait que lister les sources disponibles.
+     */
+    const showSelection = scope.kind === 'item' || !descriptor.hasItems;
+
     const reload = useCallback(async () => {
+        if (!showSelection) {
+            // Rien à router à cette échelle : la route n'est même pas demandée.
+            const list = await ws.send('notify.channelList', { feature });
+            setChannels(list.channels);
+            setForeign([]);
+            setManagedHere(true);
+            setSelected([]);
+            return;
+        }
         const [list, route] = await Promise.all([
             ws.send('notify.channelList', { feature }),
             ws.send('notify.routeGet', { feature, itemId })
@@ -165,8 +182,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
         setForeign(route.foreign);
         setManagedHere(route.managedHere);
         setSelected(route.route.channelIds);
-        setInherits(route.route.inherits);
-    }, [feature, itemId]);
+    }, [feature, itemId, showSelection]);
 
     useEffect(() => {
         void reload().catch(() => setStatus('Chargement impossible.'));
@@ -202,18 +218,8 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
         const next = on ? [...selected, id] : selected.filter((c) => c !== id);
         setSelected(next);
         void run(async () => {
-            await ws.send('notify.routeSet', { feature, itemId, inherits: false, channelIds: next });
-            setInherits(false);
+            await ws.send('notify.routeSet', { feature, itemId, channelIds: next });
             invalidate('notify.routeGet');
-        }, 'Enregistrement impossible.');
-    };
-
-    const setInheritance = (on: boolean): void => {
-        setInherits(on);
-        void run(async () => {
-            await ws.send('notify.routeSet', { feature, itemId, inherits: on, channelIds: selected });
-            invalidate('notify.routeGet');
-            await reload();
         }, 'Enregistrement impossible.');
     };
 
@@ -325,41 +331,24 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
         <div className={styles.section}>
             <p className={styles.sectionHint}>{WHEN[feature]}</p>
 
-            {scope.kind === 'item' && (
-                <label className={styles.inheritRow}>
-                    <Switch
-                        checked={inherits}
-                        disabled={!canRoute || busy}
-                        onChange={setInheritance}
-                        aria-label={`Suivre les canaux de ${descriptor.label}`}
-                    />
-                    <span>
-                        <span className={styles.inheritLabel}>Suivre {descriptor.label}</span>
-                        <span className={styles.inheritHint}>
-                            {!managedHere
-                                ? `Réglé dans l’espace d’origine de ce ${descriptor.itemNoun ?? 'élément'}.`
-                                : inherits
-                                  ? `Ce ${descriptor.itemNoun ?? 'élément'} prévient là où la fonctionnalité prévient. Décochez pour lui donner ses propres canaux.`
-                                  : `Ce ${descriptor.itemNoun ?? 'élément'} a ses propres canaux. Sans aucun coché, il ne prévient personne.`}
-                        </span>
-                    </span>
-                </label>
+            {/* À cette échelle on déclare les sources ; le choix se fait sur
+                chaque élément, et le dire évite de chercher des cases ici. */}
+            {!showSelection && (
+                <p className={styles.sectionHint}>
+                    Les canaux déclarés ici sont les sources disponibles : chaque {descriptor.itemNoun ?? 'élément'}{' '}
+                    choisit les siens dans ses propres réglages.
+                </p>
             )}
 
-            {channels.length > 0 && (
+            {showSelection && channels.length > 0 && (
                 <span className={styles.sectionLabel}>
-                    Cochez les canaux vers lesquels {scope.kind === 'item' ? 'cet élément' : 'cette fonctionnalité'}{' '}
-                    écrit
+                    Cochez les canaux vers lesquels{' '}
+                    {scope.kind === 'item' ? `ce ${descriptor.itemNoun ?? 'élément'}` : descriptor.label} écrit. Sans
+                    aucun coché, rien ne part.
                 </span>
             )}
 
-            {/* Atténuée tant que l'élément hérite : les cases y sont déjà
-                désactivées, mais une case cochée et une case cochée-mais-héritée
-                se ressemblent trop. `filter: opacity()` et non `opacity`, comme
-                partout dans l'app — la propriété appartient aux animations. */}
-            <div
-                className={`${styles.channelList} ${scope.kind === 'item' && inherits ? styles.channelListInherited : ''}`}
-            >
+            <div className={styles.channelList}>
                 {channels.length === 0 && foreign.length === 0 && (
                     <p className={styles.empty}>
                         {`Aucun canal pour ${descriptor.label}.`}
@@ -373,12 +362,14 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
 
                 {channels.map((channel) => (
                     <div key={channel.id} className={styles.channelRow}>
-                        <Checkbox
-                            checked={selected.includes(channel.id)}
-                            disabled={!canRoute || busy || (scope.kind === 'item' && inherits)}
-                            onChange={(on) => toggleChannel(channel.id, on)}
-                            aria-label={`Envoyer vers ${channel.label}`}
-                        />
+                        {showSelection && (
+                            <Checkbox
+                                checked={selected.includes(channel.id)}
+                                disabled={!canRoute || busy}
+                                onChange={(on) => toggleChannel(channel.id, on)}
+                                aria-label={`Envoyer vers ${channel.label}`}
+                            />
+                        )}
                         <span className={`icon icon-${KIND_ICON[channel.kind]} ${styles.channelIcon}`} />
                         <span className={styles.channelText}>
                             <span className={styles.channelLabel}>
@@ -493,9 +484,14 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                     >
                         Ajouter un canal
                     </Button>
-                    <Button variant='ghost' icon='play' disabled={busy} onClick={testRoute}>
-                        Tester cet envoi
-                    </Button>
+                    {/* « Tester cet envoi » éprouve une **sélection** : elle
+                        n'existe à cette échelle que sans éléments (Sentinelle).
+                        Chaque canal garde son essai individuel sur sa ligne. */}
+                    {showSelection && (
+                        <Button variant='ghost' icon='play' disabled={busy} onClick={testRoute}>
+                            Tester cet envoi
+                        </Button>
+                    )}
                 </div>
             )}
 

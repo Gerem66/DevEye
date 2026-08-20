@@ -195,15 +195,13 @@ async function resolveChannel(
 }
 
 /**
- * Les canaux d'une cible, **héritage compris**.
+ * Les canaux d'une cible : sa sélection, ou rien.
  *
- * La règle, dans cet ordre :
- *
- *  1. l'élément a une route → ce sont ses canaux, et **une route vide vaut le
- *     silence**. C'est ce que la présence d'une ligne exprime, et pourquoi la
- *     liaison vit dans sa propre table ;
- *  2. sinon → la route de sa fonctionnalité ;
- *  3. sinon → aucun canal.
+ * La règle tient en une ligne depuis la 092 : la cible (un élément, ou la
+ * fonctionnalité elle-même pour un émetteur sans éléments comme Sentinelle) a
+ * une route → ses canaux ; sinon rien ne part. L'héritage « élément → route de
+ * sa fonctionnalité » a été retiré : la sélection se fait sur l'élément, et un
+ * élément qui n'a rien coché est silencieux.
  *
  * Rien n'est deviné : sans route enregistrée, rien ne part. C'est le défaut qui
  * compte — une fonctionnalité qui se met à écrire à des gens sans qu'ils
@@ -216,8 +214,7 @@ export async function resolveRoute(
     feature: NotificationFeature,
     itemId?: number
 ): Promise<ResolvedChannel[]> {
-    let route = itemId ? await db.notificationChannels.findRoute(workspaceId, feature, itemId) : null;
-    if (!route) route = await db.notificationChannels.findRoute(workspaceId, feature, 0);
+    const route = await db.notificationChannels.findRoute(workspaceId, feature, itemId ?? 0);
     if (!route) return [];
 
     const ids = await db.notificationChannels.routeChannelIds(route.id);

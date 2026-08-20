@@ -111,12 +111,11 @@ export async function updateChannel(
 }
 
 /**
- * La route d'une cible, telle que l'écran la montre.
+ * La route d'une cible, telle que l'écran la montre : sa sélection, ou rien.
  *
- * Sur un élément sans route propre, `inherits` est vrai et `channelIds` porte
- * **ce dont il hérite** — l'écran l'affiche grisé plutôt que vide, sans quoi
- * « hérite » aurait l'air de « rien ». Sur une fonctionnalité, `inherits` est
- * toujours faux : il n'y a rien au-dessus d'elle.
+ * Pas d'héritage (092) : un élément sans route a une sélection vide, point.
+ * `itemId` absent lit la route de la fonctionnalité elle-même — le cas des
+ * émetteurs sans éléments (Sentinelle).
  */
 export async function getRoute(
     ctx: FeatureContext,
@@ -134,12 +133,9 @@ export async function getRoute(
     homeWorkspaceId?: number
 ): Promise<NotificationRoute> {
     const scope = homeWorkspaceId ?? ctx.workspaceId;
-    const own = itemId ? await ctx.db.notificationChannels.findRoute(scope, feature, itemId) : null;
-    if (own) return { inherits: false, channelIds: await ctx.db.notificationChannels.routeChannelIds(own.id) };
-
-    const parent = await ctx.db.notificationChannels.findRoute(scope, feature, 0);
-    const channelIds = parent ? await ctx.db.notificationChannels.routeChannelIds(parent.id) : [];
-    return { inherits: itemId !== undefined, channelIds };
+    const route = await ctx.db.notificationChannels.findRoute(scope, feature, itemId ?? 0);
+    if (!route) return { channelIds: [] };
+    return { channelIds: await ctx.db.notificationChannels.routeChannelIds(route.id) };
 }
 
 /**
@@ -183,22 +179,21 @@ const LABEL_OF: Record<NotificationChannel['kind'], string> = {
 };
 
 /**
- * Écrit la route d'une cible.
+ * Écrit la sélection d'une cible.
  *
- * `inherits` sur un élément **supprime** sa ligne : c'est l'absence qui exprime
- * l'héritage, et laisser une ligne vide dirait le silence. Sur une
- * fonctionnalité, l'héritage n'existe pas et l'argument est ignoré.
+ * Une sélection **vide** efface la ligne : depuis la 092, une route vide et une
+ * route absente disent la même chose (le silence), et garder des lignes mortes
+ * ne ferait que compter des fantômes dans « utilisé par N ».
  */
 export async function setRoute(
     ctx: FeatureContext,
     feature: NotificationFeature,
     itemId: number | undefined,
-    inherits: boolean,
     channelIds: number[]
 ): Promise<NotificationRoute> {
-    if (itemId !== undefined && inherits) {
-        await ctx.db.notificationChannels.clearRoute(ctx.workspaceId, feature, itemId);
-        return getRoute(ctx, feature, itemId);
+    if (channelIds.length === 0) {
+        await ctx.db.notificationChannels.clearRoute(ctx.workspaceId, feature, itemId ?? 0);
+        return { channelIds: [] };
     }
     await ctx.db.notificationChannels.setRoute(ctx.workspaceId, feature, itemId ?? 0, channelIds);
     return getRoute(ctx, feature, itemId);

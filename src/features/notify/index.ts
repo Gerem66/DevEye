@@ -1,5 +1,6 @@
 import type { NotificationFeature } from 'deveye-types';
 import {
+    featureDescriptor,
     notifyChannelAdd,
     notifyChannelDelete,
     notifyChannelList,
@@ -215,11 +216,9 @@ const channelDelete = defineFeature({
     access: MANAGE,
     mutates: true,
     handler: async (ctx, input) => {
-        // Les liaisons partent en cascade. Les routes qu'elles laissent vides
-        // **restent** : sur un élément, une route vide dit « silencieux », et la
-        // supprimer le ferait retomber en héritage — donc se remettre à prévenir
-        // par le canal de sa fonctionnalité, ce que personne n'a demandé en
-        // supprimant celui-ci.
+        // Les liaisons partent en cascade. Une route laissée vide reste, et
+        // c'est sans conséquence depuis la 092 : vide ou absente, la cible est
+        // silencieuse ; la prochaine sélection écrite la réutilise ou l'efface.
         if (!(await ctx.db.notificationChannels.remove(input.id, ctx.workspaceId))) {
             throw new FeatureError('not_found', 'Canal introuvable');
         }
@@ -287,7 +286,16 @@ const routeSet = defineFeature({
                 );
             }
         }
-        const route = await setRoute(ctx, input.feature, input.itemId, input.inherits, input.channelIds);
+        // La sélection vit sur l'élément (092) : une route de fonctionnalité ne
+        // subsiste que pour les émetteurs sans éléments (Sentinelle). Sur les
+        // autres, elle ne viserait rien de nommable.
+        if (input.itemId === undefined && featureDescriptor(input.feature).hasItems) {
+            throw new FeatureError(
+                'validation',
+                'Les canaux se choisissent sur chaque élément de cette fonctionnalité, dans ses réglages.'
+            );
+        }
+        const route = await setRoute(ctx, input.feature, input.itemId, input.channelIds);
         ctx.audit({
             action: 'notify.routeSet',
             description: `Canaux de ${input.feature}${input.itemId ? ` #${input.itemId}` : ''} mis à jour`

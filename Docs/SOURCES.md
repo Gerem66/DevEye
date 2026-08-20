@@ -24,13 +24,16 @@ portes, et aucun endroit qui se déduise des autres.
    l'élément **adopte** la source créée au retour, même principe que les
    dialogues de liaison des Projets, qui relient ce qu'ils viennent de créer.
 
-Les canaux de notification sont des sources à part entière : **chaque émetteur
-a les siens** (migration 091), déclarés dans ses réglages. Ils suivent le
-contrat par l'onglet **Notifications** plutôt que par l'onglet Sources, parce
-que gestion et routage (héritage + cases, « Gérer les canaux » comme saut) sont
-un seul écran (`Docs/NOTIFICATIONS.md` §6 et §9). Et une source peut en appeler
-une autre : le « + » du compte expéditeur, dans le formulaire d'un canal
-e-mail, ouvre le vrai dialogue de la feature Mail et adopte la boîte créée.
+Les canaux de notification sont des sources à part entière et suivent le
+contrat à la lettre : **chaque émetteur a les siens** (091), déclarés et gérés
+dans ses réglages à l'échelle de la fonctionnalité, et **chaque élément coche
+les siens** dans les siens (092) ; à l'échelle de la feature on liste, on ne
+sélectionne pas, une sélection n'y viserait aucun élément nommable. Ils vivent
+dans l'onglet **Notifications** plutôt que Sources parce que liste et cases
+partagent le même écran (`Docs/NOTIFICATIONS.md` §2, §6, §9). Et une source
+peut en appeler une autre : le « + » du compte expéditeur, dans le formulaire
+d'un canal e-mail, ouvre le vrai dialogue de la feature Mail et adopte la
+boîte créée.
 
 ## Ce qui est branché
 

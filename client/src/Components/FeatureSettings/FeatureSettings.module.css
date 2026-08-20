@@ -135,34 +135,6 @@
     line-height: 1.45;
 }
 
-/* ------------------------------------------------------- héritage (élément) */
-
-.inheritRow {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-md);
-    padding: var(--space-md);
-    background: var(--glass-bg-light);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-}
-
-.inheritLabel {
-    display: block;
-    color: var(--text-primary);
-    font-size: 0.9rem;
-    font-weight: 600;
-}
-
-.inheritHint {
-    display: block;
-    margin-top: 2px;
-    color: var(--text-muted);
-    font-size: 0.78rem;
-    line-height: 1.45;
-}
-
 /* --------------------------------------------------------- liste de canaux */
 
 .channelList {
@@ -176,12 +148,6 @@
 
 .channelList:empty {
     display: none;
-}
-
-/* Hérité : ce qu'on voit est ce que la fonctionnalité impose, pas un choix
-   propre à cet élément. */
-.channelListInherited {
-    filter: opacity(0.55);
 }
 
 .channelRow {
