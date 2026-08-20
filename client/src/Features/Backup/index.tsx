@@ -7,8 +7,6 @@ import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
 import type { FeatureProps } from '@/Features/types';
-import DestinationDialog from './DestinationDialog';
-import DestinationsPanel from './DestinationsPanel';
 import JobDialog from './JobDialog';
 import JobView from './JobView';
 import {
@@ -29,8 +27,8 @@ import styles from './style.module.css';
  *
  * Feature d'espace de premier rang, comme Git, Bases de données et Déploiement.
  * Deux moitiés qui ne se recouvrent pas : les **destinations** (rarement
- * touchées, rangées dans leur propre dialogue) et les **travaux**, qui sont ce
- * qu'on vient regarder.
+ * touchées ; ce sont les sources de la feature, gérées dans Réglages → Sources)
+ * et les **travaux**, qui sont ce qu'on vient regarder.
  *
  * L'écran est construit autour d'une seule question : « est-ce que mes
  * sauvegardes tournent ? ». Le dernier état de chaque travail est donc en
@@ -49,8 +47,6 @@ export function FeatureBackup(_props: FeatureProps) {
     const [error, setError] = useState<string | null>(null);
 
     const [openedId, setOpenedId] = useState<number | null>(null);
-    const [destinationsOpen, setDestinationsOpen] = useState(false);
-    const [destinationDialog, setDestinationDialog] = useState<{ destination: BackupDestination | null } | null>(null);
     const [jobDialog, setJobDialog] = useState<{ job: BackupJob | null } | null>(null);
     const [confirmRemove, setConfirmRemove] = useState<BackupJob | null>(null);
 
@@ -124,31 +120,19 @@ export function FeatureBackup(_props: FeatureProps) {
                             <h2 className={styles.title}>Sauvegardes</h2>
                             <p className={styles.subtitle}>
                                 {destinations.length === 0
-                                    ? 'Commencez par déclarer une destination : un dossier du serveur, une machine, ou un bucket S3.'
+                                    ? 'Aucune destination pour l’instant : le premier travail vous proposera d’en déclarer une, ou passez par Réglages → Sources.'
                                     : `${destinations.length} destination${destinations.length > 1 ? 's' : ''} déclarée${destinations.length > 1 ? 's' : ''}`}
                             </p>
                         </div>
                         <div className={styles.toolbarActions}>
-                            <Button variant='ghost' icon='server' onClick={() => setDestinationsOpen(true)}>
-                                Destinations
-                            </Button>
+                            {/* Les destinations vivaient derrière leur propre
+                                bouton : elles sont désormais dans Réglages →
+                                Sources, comme les sources de toute feature. */}
+                            <FeatureSettingsButton scope={{ kind: 'feature', feature: 'backup' }} variant='ghost' />
                             {canWrite && (
-                                <>
-                                    <FeatureSettingsButton
-                                        scope={{ kind: 'feature', feature: 'backup' }}
-                                        variant='ghost'
-                                    />
-                                    <Button
-                                        icon='plus'
-                                        disabled={destinations.length === 0}
-                                        title={
-                                            destinations.length === 0 ? 'Déclarez d’abord une destination' : undefined
-                                        }
-                                        onClick={() => setJobDialog({ job: null })}
-                                    >
-                                        Nouveau travail
-                                    </Button>
-                                </>
+                                <Button icon='plus' onClick={() => setJobDialog({ job: null })}>
+                                    Nouveau travail
+                                </Button>
                             )}
                         </div>
                     </div>
@@ -231,23 +215,6 @@ export function FeatureBackup(_props: FeatureProps) {
                     onRemove={() => setConfirmRemove(opened)}
                 />
             )}
-
-            <DestinationsPanel
-                open={destinationsOpen}
-                destinations={destinations}
-                canWrite={canWrite}
-                onClose={() => setDestinationsOpen(false)}
-                onCreate={() => setDestinationDialog({ destination: null })}
-                onEdit={(destination) => setDestinationDialog({ destination })}
-                onChanged={refresh}
-            />
-
-            <DestinationDialog
-                open={destinationDialog !== null}
-                destination={destinationDialog?.destination ?? null}
-                onClose={() => setDestinationDialog(null)}
-                onSaved={refresh}
-            />
 
             <JobDialog
                 open={jobDialog !== null}

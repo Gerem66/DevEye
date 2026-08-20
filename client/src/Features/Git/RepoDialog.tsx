@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Credential, GitRepo } from 'deveye-types';
 import { Button, Checkbox, Dialog, SelectInput } from '@/Components';
+import { FeatureSettingsDialog } from '@/Components/FeatureSettings';
 import { ws } from '@/api/ws';
 import { humanizeError } from '../Projects/api';
 import { RepoPicker, type RepoTarget } from './RepoPicker';
@@ -25,8 +26,9 @@ interface RepoDialogProps {
  * existante un autre dépôt, avec le cache du précédent — on en ajoute un
  * nouveau, et on supprime l'ancien si l'on veut.
  *
- * Les jetons ne se créent pas ici : ils appartiennent à l'espace et se gèrent
- * dans « Jetons d'accès ». Le sélecteur, lui, reste — c'est le geste courant.
+ * Les jetons ne se créent pas ici : ce sont les sources de la feature, gérées
+ * dans Réglages → Sources. Le sélecteur, lui, reste (c'est le geste courant),
+ * et son « + » ouvre ces réglages par-dessus, le jeton créé étant adopté.
  */
 export function RepoDialog({ open, repo, credentials, onClose, onSaved, onRemove }: RepoDialogProps) {
     const [target, setTarget] = useState<RepoTarget>({ owner: '', repo: '', credentialId: null });
@@ -37,11 +39,21 @@ export function RepoDialog({ open, repo, credentials, onClose, onSaved, onRemove
     const [confirmRemove, setConfirmRemove] = useState(false);
     /** La relecture complète coûte du temps et du quota : elle aussi. */
     const [confirmResync, setConfirmResync] = useState(false);
+    /** Les réglages de la feature, ouverts sur l'onglet Sources par le « + ». */
+    const [manageOpen, setManageOpen] = useState(false);
+    /**
+     * Les jetons connus au moment d'ouvrir les réglages : celui qui apparaît
+     * ensuite vient d'y être créé, et c'est pour ce dépôt-ci ; il se
+     * sélectionne donc tout seul au retour.
+     */
+    const knownIds = useRef<Set<number> | null>(null);
 
     useEffect(() => {
         if (!open) return;
         setConfirmRemove(false);
         setConfirmResync(false);
+        setManageOpen(false);
+        knownIds.current = null;
         setTarget({
             owner: repo?.owner ?? '',
             repo: repo?.repo ?? '',
@@ -50,6 +62,23 @@ export function RepoDialog({ open, repo, credentials, onClose, onSaved, onRemove
         setEnabled(repo?.enabled ?? true);
         setError(null);
     }, [open, repo]);
+
+    // L'adoption : un jeton apparu pendant que les réglages étaient ouverts
+    // vient d'y être créé ; il se sélectionne, comme les dialogues de liaison
+    // des Projets relient ce qu'ils viennent de créer. La liste arrive par le
+    // parent, qui la relit sur l'invalidation de `git.list`.
+    useEffect(() => {
+        if (knownIds.current === null) return;
+        const fresh = credentials.find((c) => c.provider === 'github' && !knownIds.current?.has(c.id));
+        if (!fresh) return;
+        knownIds.current = new Set(credentials.map((c) => c.id));
+        setTarget((prev) => ({ ...prev, credentialId: fresh.id }));
+    }, [credentials]);
+
+    const openManage = () => {
+        knownIds.current = new Set(credentials.map((c) => c.id));
+        setManageOpen(true);
+    };
 
     const canSubmit = target.owner.trim() !== '' && target.repo.trim() !== '';
 
@@ -120,7 +149,15 @@ export function RepoDialog({ open, repo, credentials, onClose, onSaved, onRemove
             <div className={styles.form}>
                 {/* À la création, le trio jeton → propriétaire → dépôt, dans cet
                     ordre : le jeton décide de ce que la liste peut montrer. */}
-                {!repo && <RepoPicker credentials={credentials} value={target} onChange={setTarget} autoFocus />}
+                {!repo && (
+                    <RepoPicker
+                        credentials={credentials}
+                        value={target}
+                        onChange={setTarget}
+                        onManageCredentials={openManage}
+                        autoFocus
+                    />
+                )}
 
                 {/* En modification, `owner/repo` est figé — c'est l'identité du
                     dépôt (voir `slug_ref`) — et seul le jeton reste réglable. */}
@@ -135,27 +172,36 @@ export function RepoDialog({ open, repo, credentials, onClose, onSaved, onRemove
 
                         <label className={styles.field}>
                             <span className={styles.label}>Jeton d’accès</span>
-                            <SelectInput
-                                value={target.credentialId === null ? '' : String(target.credentialId)}
-                                onChange={(e) =>
-                                    setTarget({
-                                        ...target,
-                                        credentialId: e.target.value ? Number(e.target.value) : null
-                                    })
-                                }
-                            >
-                                <option value=''>Aucun — synchronisation inactive</option>
-                                {credentials
-                                    .filter((c) => c.provider === 'github')
-                                    .map((c) => (
-                                        <option key={c.id} value={c.id}>
-                                            {c.label}
-                                        </option>
-                                    ))}
-                            </SelectInput>
+                            <div className={styles.fieldWithAction}>
+                                <SelectInput
+                                    value={target.credentialId === null ? '' : String(target.credentialId)}
+                                    onChange={(e) =>
+                                        setTarget({
+                                            ...target,
+                                            credentialId: e.target.value ? Number(e.target.value) : null
+                                        })
+                                    }
+                                >
+                                    <option value=''>Aucun — synchronisation inactive</option>
+                                    {credentials
+                                        .filter((c) => c.provider === 'github')
+                                        .map((c) => (
+                                            <option key={c.id} value={c.id}>
+                                                {c.label}
+                                            </option>
+                                        ))}
+                                </SelectInput>
+                                <Button
+                                    variant='ghost'
+                                    icon='plus'
+                                    aria-label='Gérer les jetons GitHub'
+                                    title='Gérer les jetons GitHub (Réglages → Sources)'
+                                    onClick={openManage}
+                                />
+                            </div>
                             <span className={styles.hint}>
-                                Un jeton en lecture seule suffit (<code>contents: read</code>). Les jetons se créent
-                                dans « Jetons d’accès », en haut de la feature Git : ils servent à tous les dépôts.
+                                Un jeton en lecture seule suffit (<code>contents: read</code>). Les jetons se gèrent
+                                dans Réglages → Sources (le « + » y mène) et servent à tous les dépôts.
                             </span>
                         </label>
                     </>
@@ -245,6 +291,15 @@ export function RepoDialog({ open, repo, credentials, onClose, onSaved, onRemove
 
                 {error && <p className={styles.error}>{error}</p>}
             </div>
+
+            {/* Empilé par-dessus (les Dialog passent par un portail) ; ouvert
+                sur l'onglet Sources, là où les jetons se gèrent. */}
+            <FeatureSettingsDialog
+                open={manageOpen}
+                onClose={() => setManageOpen(false)}
+                scope={{ kind: 'feature', feature: 'git' }}
+                initialSection='sources'
+            />
         </Dialog>
     );
 }

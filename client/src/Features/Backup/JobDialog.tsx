@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
     BackupDestination,
     BackupJob,
@@ -8,6 +8,7 @@ import type {
 } from 'deveye-types';
 
 import { Button, Dialog, SelectInput, Switch, TextInput } from '@/Components';
+import { FeatureSettingsDialog } from '@/Components/FeatureSettings';
 import { ws } from '@/api/ws';
 import { backupError, DESTINATION_LABELS, SCHEDULE_LABELS, WEEKDAYS } from './format';
 import styles from './style.module.css';
@@ -45,10 +46,25 @@ export function JobDialog({ open, job, destinations, onClose, onSaved }: JobDial
     const [keepLast, setKeepLast] = useState(7);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    /** Les réglages de la feature, ouverts sur l'onglet Sources par le « + ». */
+    const [manageOpen, setManageOpen] = useState(false);
+    /**
+     * Les destinations connues au moment d'ouvrir les réglages : celle qui
+     * apparaît ensuite vient d'y être créée, et c'est pour ce travail-ci qu'on
+     * l'a créée ; elle se sélectionne donc toute seule au retour.
+     */
+    const knownIds = useRef<Set<number> | null>(null);
 
+    // À l'ouverture seule, surtout pas quand `destinations` bouge : la liste
+    // se recharge au rythme du sujet Live (chaque exécution nocturne la fait
+    // battre), et remettre le formulaire à zéro sous les doigts effacerait la
+    // saisie en cours. Le choix de la destination par défaut vit dans les deux
+    // effets qui suivent.
     useEffect(() => {
         if (!open) return;
         setError(null);
+        setManageOpen(false);
+        knownIds.current = null;
         void ws
             .send('backup.sources', {})
             .then((res) => setCandidates(res.candidates))
@@ -68,14 +84,33 @@ export function JobDialog({ open, job, destinations, onClose, onSaved }: JobDial
         }
         setName('');
         setSourceKey('');
-        setDestinationId(destinations[0]?.id ?? 0);
+        setDestinationId(0);
         setEnabled(true);
         setSchedule('daily');
         setHour(3);
         setWeekday(0);
         setDay(1);
         setKeepLast(7);
-    }, [open, job, destinations]);
+    }, [open, job]);
+
+    // Sans destination choisie, la première de la liste : couvre l'ouverture
+    // (l'ancien défaut) comme l'arrivée de la toute première destination.
+    useEffect(() => {
+        if (!open) return;
+        setDestinationId((prev) => (prev !== 0 ? prev : (destinations[0]?.id ?? 0)));
+    }, [open, destinations]);
+
+    // L'adoption : une destination apparue pendant que les réglages étaient
+    // ouverts vient d'y être créée, et c'est pour ce travail-ci ; elle se
+    // sélectionne toute seule, comme les dialogues de liaison des Projets
+    // relient ce qu'ils viennent de créer.
+    useEffect(() => {
+        if (knownIds.current === null) return;
+        const fresh = destinations.find((d) => !knownIds.current?.has(d.id));
+        if (!fresh) return;
+        knownIds.current = new Set(destinations.map((d) => d.id));
+        setDestinationId(fresh.id);
+    }, [destinations]);
 
     const selected = useMemo(
         () => candidates.find((c) => keyOf(c.kind, c.id) === sourceKey) ?? null,
@@ -165,15 +200,35 @@ export function JobDialog({ open, job, destinations, onClose, onSaved }: JobDial
 
                 <label className={styles.field}>
                     <span className={styles.fieldLabel}>Où l’écrire</span>
-                    <SelectInput value={destinationId} onChange={(e) => setDestinationId(Number(e.target.value))}>
-                        {destinations.length === 0 && <option value={0}>Aucune destination déclarée</option>}
-                        {destinations.map((d) => (
-                            <option key={d.id} value={d.id}>
-                                {d.name} — {DESTINATION_LABELS[d.kind]}
-                                {d.encrypt ? ' (chiffrée)' : ''}
-                            </option>
-                        ))}
-                    </SelectInput>
+                    <div className={styles.fieldWithAction}>
+                        <SelectInput value={destinationId} onChange={(e) => setDestinationId(Number(e.target.value))}>
+                            {destinations.length === 0 && <option value={0}>Aucune destination déclarée</option>}
+                            {destinations.map((d) => (
+                                <option key={d.id} value={d.id}>
+                                    {d.name} — {DESTINATION_LABELS[d.kind]}
+                                    {d.encrypt ? ' (chiffrée)' : ''}
+                                </option>
+                            ))}
+                        </SelectInput>
+                        {/* Le « + » : les destinations se gèrent dans Réglages →
+                            Sources, jamais ici. On ouvre donc ces réglages
+                            par-dessus, et la destination créée est adoptée. */}
+                        <Button
+                            variant='ghost'
+                            icon='plus'
+                            aria-label='Gérer les destinations'
+                            title='Gérer les destinations (Réglages → Sources)'
+                            onClick={() => {
+                                knownIds.current = new Set(destinations.map((d) => d.id));
+                                setManageOpen(true);
+                            }}
+                        />
+                    </div>
+                    {destinations.length === 0 && (
+                        <span className={styles.fieldHint}>
+                            Aucune destination dans cet espace : le « + » ouvre les réglages pour en déclarer une.
+                        </span>
+                    )}
                 </label>
 
                 <div className={styles.fieldRow}>
@@ -259,6 +314,15 @@ export function JobDialog({ open, job, destinations, onClose, onSaved }: JobDial
 
                 {error && <p className={styles.error}>{error}</p>}
             </div>
+
+            {/* Les Dialog passent par un portail : celui-ci s'empile simplement
+                au-dessus, et la pile de couches route Échap vers lui seul. */}
+            <FeatureSettingsDialog
+                open={manageOpen}
+                onClose={() => setManageOpen(false)}
+                scope={{ kind: 'feature', feature: 'backup' }}
+                initialSection='sources'
+            />
         </Dialog>
     );
 }

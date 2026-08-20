@@ -17,7 +17,7 @@ export type SettingsScope =
     | { kind: 'item'; feature: WorkspaceFeatureId; itemId: number; itemLabel: string };
 
 /** Les sections que la coquille sait rendre. */
-export type SettingsSectionId = 'notifications' | 'permissions' | 'sharing';
+export type SettingsSectionId = 'sources' | 'notifications' | 'permissions' | 'sharing';
 
 /** Le titre du dialogue : le nom de l'élément, ou celui de la fonctionnalité. */
 export function scopeTitle(scope: SettingsScope): string {

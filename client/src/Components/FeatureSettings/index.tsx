@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { SHARE_WIRED_FEATURES, featureDescriptor } from 'deveye-types';
 
 import Button from '@/Components/Button';
@@ -8,6 +8,7 @@ import { useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace'
 import NotificationsSection from './sections/NotificationsSection';
 import ItemPermissionsSection from './sections/ItemPermissionsSection';
 import SharingSection from './sections/SharingSection';
+import SourcesSection from './sections/SourcesSection';
 import SideNav, { type SideNavItem } from './SideNav';
 import { scopeDescription, scopeTitle, type SettingsScope, type SettingsSectionId } from './scope';
 import styles from './FeatureSettings.module.css';
@@ -53,6 +54,15 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
         if (!canRead) return [];
         const descriptor = featureDescriptor(scope.feature);
         const sections: SectionDef[] = [];
+
+        // Sources : à l'échelle de la **fonctionnalité** seulement. C'est le
+        // seul endroit où les réglages réutilisables (jetons, destinations) se
+        // créent et se corrigent. Les dialogues d'élément ne font que choisir
+        // dans la liste, avec un bouton qui mène ici. En tête : on déclare ses
+        // sources avant de s'en servir.
+        if (scope.kind === 'feature' && descriptor.sources) {
+            sections.push({ id: 'sources', label: 'Sources', icon: 'key' });
+        }
 
         // Notifications : réservé aux émetteurs, et à l'échelle d'un élément
         // seulement quand la fonctionnalité en a de réglables.
@@ -100,12 +110,32 @@ export interface FeatureSettingsDialogProps {
     open: boolean;
     onClose: () => void;
     scope: SettingsScope;
+    /**
+     * La section à montrer à l'ouverture.
+     *
+     * C'est ce qui permet aux dialogues d'élément de **mener quelque part** :
+     * le « + » d'un sélecteur de source ouvre ces réglages directement sur
+     * l'onglet Sources, plutôt que de laisser chercher.
+     */
+    initialSection?: SettingsSectionId;
 }
 
-export function FeatureSettingsDialog({ open, onClose, scope }: FeatureSettingsDialogProps) {
+export function FeatureSettingsDialog({ open, onClose, scope, initialSection }: FeatureSettingsDialogProps) {
     const sections = useSettingsSections(scope);
-    const [active, setActive] = useState<SettingsSectionId>('notifications');
+    const [active, setActive] = useState<SettingsSectionId>(initialSection ?? 'notifications');
+    /**
+     * Depuis les réglages d'un élément, « Gérer les canaux » ouvre ceux de sa
+     * fonctionnalité, par-dessus. La récursion s'arrête là : la coquille d'une
+     * fonctionnalité ne propose pas ce saut.
+     */
+    const [manageChannels, setManageChannels] = useState(false);
     const current = sections.some((s) => s.id === active) ? active : (sections[0]?.id ?? 'notifications');
+
+    // À chaque ouverture, revenir à la section demandée : un dialogue réutilisé
+    // (celui du « + ») doit retomber sur Sources, pas sur le dernier onglet vu.
+    useEffect(() => {
+        if (open && initialSection) setActive(initialSection);
+    }, [open, initialSection]);
 
     const items: SideNavItem<SettingsSectionId>[] = sections.map((s) => ({
         id: s.id,
@@ -114,33 +144,54 @@ export function FeatureSettingsDialog({ open, onClose, scope }: FeatureSettingsD
     }));
 
     return (
-        <Dialog
-            open={open && sections.length > 0}
-            onClose={onClose}
-            title={scopeTitle(scope)}
-            description={scopeDescription(scope)}
-            width={880}
-            fill
-        >
-            <div className={styles.layout}>
-                {/* Toujours visible, même à une seule section : tous les
-                    dialogues de réglages ont la même silhouette, et c'est cette
-                    constance qui fait qu'on s'y retrouve — un panneau qui
-                    apparaît et disparaît selon le nombre de sections ferait
-                    chercher les réglages à deux endroits selon la feature. */}
-                <SideNav
-                    items={items}
-                    active={current}
-                    onSelect={setActive}
-                    label={`Réglages · ${scopeTitle(scope)}`}
-                />
-                <div className={styles.panel}>
-                    {current === 'notifications' && <NotificationsSection scope={scope} />}
-                    {current === 'permissions' && scope.kind === 'item' && <ItemPermissionsSection scope={scope} />}
-                    {current === 'sharing' && <SharingSection scope={scope} />}
+        <>
+            <Dialog
+                open={open && sections.length > 0}
+                onClose={onClose}
+                title={scopeTitle(scope)}
+                description={scopeDescription(scope)}
+                width={880}
+                fill
+            >
+                <div className={styles.layout}>
+                    {/* Toujours visible, même à une seule section : tous les
+                        dialogues de réglages ont la même silhouette, et c'est
+                        cette constance qui fait qu'on s'y retrouve — un panneau
+                        qui apparaît et disparaît selon le nombre de sections
+                        ferait chercher les réglages à deux endroits selon la
+                        feature. */}
+                    <SideNav
+                        items={items}
+                        active={current}
+                        onSelect={setActive}
+                        label={`Réglages · ${scopeTitle(scope)}`}
+                    />
+                    <div className={styles.panel}>
+                        {current === 'sources' && scope.kind === 'feature' && <SourcesSection scope={scope} />}
+                        {current === 'notifications' && (
+                            <NotificationsSection
+                                scope={scope}
+                                onManageChannels={scope.kind === 'item' ? () => setManageChannels(true) : undefined}
+                            />
+                        )}
+                        {current === 'permissions' && scope.kind === 'item' && <ItemPermissionsSection scope={scope} />}
+                        {current === 'sharing' && <SharingSection scope={scope} />}
+                    </div>
                 </div>
-            </div>
-        </Dialog>
+            </Dialog>
+            {/* Les réglages de la fonctionnalité, empilés par-dessus ceux de
+                l'élément : le geste « je règle cette base » qui débouche sur
+                « il me manque un canal » ne doit pas faire fermer, chercher,
+                rouvrir. La pile de couches route Échap vers le plus haut. */}
+            {scope.kind === 'item' && (
+                <FeatureSettingsDialog
+                    open={manageChannels}
+                    onClose={() => setManageChannels(false)}
+                    scope={{ kind: 'feature', feature: scope.feature }}
+                    initialSection='notifications'
+                />
+            )}
+        </>
     );
 }
 

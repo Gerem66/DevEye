@@ -164,6 +164,14 @@ Points d'appel : la barre d'outils de chaque émetteur (échelle fonctionnalité
 et l'en-tête de fiche d'un service, d'une base, d'une cible, d'un travail
 (échelle élément).
 
+**La gestion des canaux ne se rend qu'à l'échelle de la fonctionnalité.** À
+l'échelle d'un élément, la section ne fait que choisir (héritage et cases), et
+« Gérer les canaux » ouvre les réglages de la fonctionnalité par-dessus, sur ce
+même onglet. C'est le contrat des sources (`Docs/SOURCES.md`) : une chose
+réutilisable se crée et se corrige à un seul endroit, les éléments la désignent.
+Avant cette coupe, le formulaire d'ajout se rendait aux deux échelles : chaque
+écran d'élément était une porte de plus vers la même liste.
+
 ---
 
 ## 7. Reprise de l'existant (migration 087)
@@ -215,7 +223,24 @@ canaux liés aux deux routes. `position` porte donc une place déterministe,
    module refuse le démarrage si les deux divergent ;
 3. un module dans `Services/notices/` s'il mérite une mise en page Discord ;
 4. l'appel à `resolveRoute(db, cipher, workspaceId, feature, itemId?)` puis
-   `deliver(...)` dans son service de fond.
+   `deliver(...)` dans son service de fond ;
+5. s'il a des éléments : `ctx.db.notificationChannels.clearRoute(...)` dans son
+   handler de suppression, à côté d'`itemSharing.forgetItem`. Rien ne rattache
+   une route à son élément (pas de FK : la cible change de table selon la
+   feature), et une route orpheline vaut « réglé à la main » : le prochain
+   élément à hériter de l'identifiant adopterait le routage du mort. La 090 a
+   résorbé les orphelines accumulées avant ce câblage.
 
 Aucune commande, aucun handler, aucun écran : c'était trois commandes et trois
 handlers avant ce chantier.
+
+## 9. Un seul interrupteur par cible (migration 090)
+
+Uptime a longtemps porté **deux** interrupteurs : sa route, et une case
+« M'alerter » par service, d'avant la 087, rendue dans un autre dialogue. Une
+route parfaitement réglée pouvait rester muette à cause d'une case que rien ne
+signalait. La 090 a fait entrer la case dans la sémantique des routes (un
+service silencieux est devenu une route explicite sans canal), puis a supprimé
+la colonne. La règle vaut pour tout émetteur : **la route est le seul endroit
+qui décide**, et `deliver` sans canal rend `false`, ce qui suffit à retenir le
+« c'est revenu » d'une panne jamais annoncée.

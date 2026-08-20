@@ -45,6 +45,18 @@ import styles from '../FeatureSettings.module.css';
  * supprimer un canal relève de l'espace (`workspace.notifications`) — et sans
  * cette capacité, la destination elle-même n'est pas rendue par le serveur : on
  * voit « Astreinte · e-mail », on peut y router, on ne peut pas lire l'adresse.
+ *
+ * ## Deux échelles, deux gestes
+ *
+ * La **gestion** des canaux (ajouter, corriger, tester, supprimer) ne se rend
+ * qu'à l'échelle de la **fonctionnalité**, le contrat des sources : elles se
+ * créent et se corrigent à un seul endroit. À l'échelle d'un élément, l'écran
+ * ne fait que **choisir** (héritage et cases), et le bouton « Gérer les
+ * canaux » ouvre les réglages de la fonctionnalité par-dessus
+ * (`onManageChannels`). Avant cette coupe, le formulaire d'ajout se rendait aux
+ * deux échelles : on pouvait déclarer l'astreinte de tout l'espace depuis les
+ * réglages d'une base, et chaque écran d'élément redevenait un endroit où les
+ * canaux se gèrent : cinq portes de plus pour une même liste.
  */
 
 const KIND_LABEL: Record<NotificationChannelKind, string> = {
@@ -71,9 +83,15 @@ const EMPTY_DRAFT: NotificationChannelInput = { kind: 'discord', label: '', targ
 
 interface Props {
     scope: SettingsScope;
+    /**
+     * Ouvre les réglages de la **fonctionnalité** sur cet onglet, fourni par
+     * la coquille à l'échelle d'un élément seulement, où les canaux ne se
+     * gèrent pas sur place.
+     */
+    onManageChannels?: () => void;
 }
 
-export default function NotificationsSection({ scope }: Props) {
+export default function NotificationsSection({ scope, onManageChannels }: Props) {
     const feature = scope.feature as NotificationFeature;
     const descriptor = featureDescriptor(scope.feature);
     const permissions = useWorkspacePermissions();
@@ -297,9 +315,11 @@ export default function NotificationsSection({ scope }: Props) {
                 {channels.length === 0 && foreign.length === 0 && (
                     <p className={styles.empty}>
                         Aucun canal dans cet espace.
-                        {canManage
-                            ? ' Ajoutez-en un ci-dessous : il servira à toutes les fonctionnalités qui préviennent.'
-                            : ' Demandez à un gestionnaire de l’espace d’en déclarer un.'}
+                        {!canManage
+                            ? ' Demandez à un gestionnaire de l’espace d’en déclarer un.'
+                            : scope.kind === 'feature'
+                              ? ' Ajoutez-en un ci-dessous : il servira à toutes les fonctionnalités qui préviennent.'
+                              : ' « Gérer les canaux » ci-dessous ouvre les réglages de la fonctionnalité, où ils se déclarent.'}
                     </p>
                 )}
 
@@ -342,7 +362,10 @@ export default function NotificationsSection({ scope }: Props) {
                         >
                             {channel.usageCount === 0 ? 'inutilisé' : `${channel.usageCount}×`}
                         </span>
-                        {canManage && (
+                        {/* Gestion à l'échelle de la fonctionnalité seulement :
+                            depuis un élément on choisit, on ne corrige pas ;
+                            « Gérer les canaux » mène au bon endroit. */}
+                        {scope.kind === 'feature' && canManage && (
                             <span className={styles.channelActions}>
                                 {/* Icônes seules : trois boutons libellés prenaient
                                     361 px des 554 de la ligne et étouffaient ce
@@ -409,7 +432,7 @@ export default function NotificationsSection({ scope }: Props) {
                 </p>
             )}
 
-            {managedHere && canManage && draft === null && (
+            {scope.kind === 'feature' && canManage && draft === null && (
                 <div className={styles.sectionActions}>
                     <Button
                         variant='secondary'
@@ -428,7 +451,25 @@ export default function NotificationsSection({ scope }: Props) {
                 </div>
             )}
 
-            {canManage && draft !== null && (
+            {/* À l'échelle d'un élément : tester **sa** route (le droit est
+                celui du routage, pas de la gestion), et rejoindre l'endroit où
+                les canaux se gèrent. */}
+            {scope.kind === 'item' && managedHere && (
+                <div className={styles.sectionActions}>
+                    {canRoute && (
+                        <Button variant='ghost' icon='play' disabled={busy} onClick={testRoute}>
+                            Tester cet envoi
+                        </Button>
+                    )}
+                    {canManage && onManageChannels && (
+                        <Button variant='ghost' icon='settings' disabled={busy} onClick={onManageChannels}>
+                            Gérer les canaux
+                        </Button>
+                    )}
+                </div>
+            )}
+
+            {scope.kind === 'feature' && canManage && draft !== null && (
                 <div className={styles.draft}>
                     <span className={styles.sectionLabel}>
                         {editing === null ? 'Nouveau canal' : 'Modifier le canal'}

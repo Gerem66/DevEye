@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Credential, DeployCandidate, DeployTarget, DeployTargetKind } from 'deveye-types';
 import { DEPLOY_TARGET_NAME_MAX_LENGTH } from 'deveye-types';
 import { Button, Dialog, SelectInput, TextInput } from '@/Components';
+import { FeatureSettingsDialog } from '@/Components/FeatureSettings';
 import { ws } from '@/api/ws';
 import { invalidate } from '@/stores/invalidation';
 import { humanizeError } from '@/Features/Projects/api';
@@ -41,6 +42,26 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
     const [loadingCandidates, setLoadingCandidates] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [confirmRemove, setConfirmRemove] = useState(false);
+    /** Les réglages de la feature, ouverts sur l'onglet Sources par le « + ». */
+    const [manageOpen, setManageOpen] = useState(false);
+    /**
+     * Les accès connus au moment d'ouvrir les réglages : celui qui apparaît
+     * ensuite vient d'y être créé, et c'est pour cette cible-ci ; il se
+     * sélectionne donc tout seul au retour.
+     */
+    const knownIds = useRef<Set<number> | null>(null);
+
+    const reloadCredentials = useCallback(async (): Promise<Credential[]> => {
+        try {
+            const res = await ws.send('deploy.credentialList', {});
+            setCredentials(res.credentials);
+            return res.credentials;
+        } catch (e) {
+            setCredentials([]);
+            setError(humanizeError(e, 'Impossible de charger les accès de l’espace.'));
+            return [];
+        }
+    }, []);
 
     useEffect(() => {
         if (!open) return;
@@ -48,20 +69,24 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
         setName(target?.name ?? '');
         setKind(target?.kind ?? 'application');
         setConfirmRemove(false);
+        setManageOpen(false);
+        knownIds.current = null;
         setError(null);
-        void (async () => {
-            try {
-                const res = await ws.send('deploy.credentialList', {});
-                setCredentials(res.credentials);
-                setCredentialId(
-                    target?.credentialId ? String(target.credentialId) : String(res.credentials[0]?.id ?? '')
-                );
-            } catch (e) {
-                setCredentials([]);
-                setError(humanizeError(e, 'Impossible de charger les accès de l’espace.'));
-            }
-        })();
-    }, [open, target]);
+        void reloadCredentials().then((list) => {
+            setCredentialId(target?.credentialId ? String(target.credentialId) : String(list[0]?.id ?? ''));
+        });
+    }, [open, target, reloadCredentials]);
+
+    /** Retour des réglages : relire les accès, adopter celui qui vient de naître. */
+    const closeManage = () => {
+        setManageOpen(false);
+        void reloadCredentials().then((list) => {
+            const fresh = list.find((c) => !knownIds.current?.has(c.id));
+            knownIds.current = null;
+            if (fresh) setCredentialId(String(fresh.id));
+            else if (!credentialId && list[0]) setCredentialId(String(list[0].id));
+        });
+    };
 
     /*
      * Les applications de l'instance, chargées **d'elles-mêmes**.
@@ -186,21 +211,51 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
         >
             <div className={styles.form}>
                 {nothingToUse ? (
-                    <p className={styles.hint}>
-                        Aucun accès Dokploy dans cet espace. Ajoutez-en un (adresse de l’instance + clé d’API) depuis le
-                        bouton « Accès Dokploy », en tête de la feature, puis revenez ici.
-                    </p>
+                    <>
+                        <p className={styles.hint}>
+                            Aucun accès Dokploy dans cet espace. Déclarez-en un (adresse de l’instance + clé d’API) : il
+                            sera sélectionné ici à votre retour.
+                        </p>
+                        <div>
+                            <Button
+                                variant='secondary'
+                                icon='plus'
+                                onClick={() => {
+                                    knownIds.current = new Set();
+                                    setManageOpen(true);
+                                }}
+                            >
+                                Déclarer un accès Dokploy
+                            </Button>
+                        </div>
+                    </>
                 ) : (
                     <>
                         <label className={styles.field}>
                             <span className={styles.label}>Instance Dokploy</span>
-                            <SelectInput value={credentialId} onChange={(e) => setCredentialId(e.target.value)}>
-                                {(credentials ?? []).map((c) => (
-                                    <option key={c.id} value={c.id}>
-                                        {c.label} — {c.baseUrl}
-                                    </option>
-                                ))}
-                            </SelectInput>
+                            <div className={styles.fieldWithAction}>
+                                <SelectInput value={credentialId} onChange={(e) => setCredentialId(e.target.value)}>
+                                    {(credentials ?? []).map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.label} — {c.baseUrl}
+                                        </option>
+                                    ))}
+                                </SelectInput>
+                                {/* Le « + » : les accès se gèrent dans Réglages →
+                                    Sources, jamais ici. On ouvre donc ces
+                                    réglages par-dessus, et l'accès créé est
+                                    adopté au retour. */}
+                                <Button
+                                    variant='ghost'
+                                    icon='plus'
+                                    aria-label='Gérer les accès Dokploy'
+                                    title='Gérer les accès Dokploy (Réglages → Sources)'
+                                    onClick={() => {
+                                        knownIds.current = new Set((credentials ?? []).map((c) => c.id));
+                                        setManageOpen(true);
+                                    }}
+                                />
+                            </div>
                         </label>
 
                         {/* Toujours présent, y compris vide : c'est le champ par
@@ -309,6 +364,15 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
                     </div>
                 )}
             </div>
+
+            {/* Empilé par-dessus (les Dialog passent par un portail) ; ouvert
+                sur l'onglet Sources, là où les accès se gèrent. */}
+            <FeatureSettingsDialog
+                open={manageOpen}
+                onClose={closeManage}
+                scope={{ kind: 'feature', feature: 'deploy' }}
+                initialSection='sources'
+            />
         </Dialog>
     );
 }

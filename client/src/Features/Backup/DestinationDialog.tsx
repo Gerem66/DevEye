@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react';
 import type { BackupDestination, BackupDestinationKind } from 'deveye-types';
 
-import { Button, DeviceFolderPicker, Dialog, SelectInput, Switch, TextInput } from '@/Components';
+/* Chemins directs et non le baril `@/Components` : ce dialogue est monté par le
+   panneau Sources de la coquille de réglages, que le baril réexporte ; passer
+   par lui fermerait un cycle de modules. */
+import Button from '@/Components/Button';
+import { DeviceFolderPicker } from '@/Components/DeviceFolderPicker';
+import { Dialog } from '@/Components/Dialog';
+import SelectInput from '@/Components/SelectInput';
+import Switch from '@/Components/Switch';
+import TextInput from '@/Components/TextInput';
 import { ws } from '@/api/ws';
 import { useDevices } from '@/stores/devices';
 import { backupError, DESTINATION_LABELS } from './format';
