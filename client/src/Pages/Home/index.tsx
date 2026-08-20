@@ -237,15 +237,6 @@ function getGreeting(): string {
 const FOLD_EASE = [0.32, 0.72, 0, 1] as const;
 
 /**
- * À quelle distance du bas on considère qu'on **est** en bas.
- *
- * Quelques pixels de jeu : un défilement fluide s'arrête rarement à zéro exact,
- * et exiger l'égalité stricte ferait rater le cas courant d'une page qu'on vient
- * de dérouler jusqu'au bout.
- */
-const BOTTOM_SLACK = 8;
-
-/**
  * Une section de l'accueil, repliable ou non.
  *
  * Le repli est **local et éphémère** : l'état enregistré (`section.collapsed`)
@@ -264,9 +255,6 @@ function CollapsibleSection({ section, children }: { section: HomeSection; child
     /** Le dépliage est terminé : la boîte peut cesser de découper son contenu. */
     const [settled, setSettled] = useState(true);
     const reduced = useReducedMotion() === true;
-    const groupRef = useRef<HTMLDivElement>(null);
-    /** On était au bas de la page en dépliant : il faut y rester. */
-    const pinBottom = useRef(false);
 
     // L'organiseur peut changer les deux réglages sous nos pieds : on repart de
     // l'état déclaré plutôt que de garder un repli devenu impossible.
@@ -274,30 +262,7 @@ function CollapsibleSection({ section, children }: { section: HomeSection; child
         setFolded(section.collapsible === true && section.collapsed === true);
     }, [section.collapsible, section.collapsed]);
 
-    /**
-     * Déplier une section du bas de page ne doit pas laisser son contenu dessous.
-     *
-     * La section grandit *sous* le point où l'on regarde : ce qu'elle révèle
-     * naît donc hors de l'écran, et il faudrait défiler pour le voir — alors
-     * qu'on vient précisément de demander à le voir. Si l'on était déjà au bas
-     * de la page, le défilement suit la croissance, image par image, et l'on
-     * arrive à la fin de l'animation avec les tuiles sous les yeux.
-     *
-     * Seulement dans ce cas : accrocher le bas depuis le milieu de la page
-     * arracherait la lecture d'un contenu qu'on n'a pas quitté.
-     */
-    const toggle = () => {
-        const scroller = groupRef.current?.closest('main');
-        pinBottom.current =
-            folded && !!scroller && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < BOTTOM_SLACK;
-        setFolded((v) => !v);
-    };
-
-    const keepBottom = () => {
-        if (!pinBottom.current) return;
-        const scroller = groupRef.current?.closest('main');
-        if (scroller) scroller.scrollTop = scroller.scrollHeight;
-    };
+    const toggle = () => setFolded((v) => !v);
 
     if (!foldable) {
         return (
@@ -309,7 +274,7 @@ function CollapsibleSection({ section, children }: { section: HomeSection; child
     }
 
     return (
-        <div className={styles.sectionGroup} ref={groupRef}>
+        <div className={styles.sectionGroup}>
             {/* Le bouton **est** l'intitulé : une cible séparée du titre serait
                 minuscule, et le titre resterait un texte mort à côté. Une
                 section repliable sans titre reste cliquable — elle affiche
@@ -350,12 +315,7 @@ function CollapsibleSection({ section, children }: { section: HomeSection; child
                                 : { height: { duration: 0.3, ease: FOLD_EASE }, opacity: { duration: 0.18 } }
                         }
                         onAnimationStart={() => setSettled(false)}
-                        onUpdate={keepBottom}
-                        onAnimationComplete={() => {
-                            setSettled(true);
-                            keepBottom();
-                            pinBottom.current = false;
-                        }}
+                        onAnimationComplete={() => setSettled(true)}
                     >
                         {children}
                     </motion.div>
@@ -423,6 +383,15 @@ export default function HomePage() {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [editing, setEditing] = useState(false);
     const [autoAddSection, setAutoAddSection] = useState(false);
+    /**
+     * Une bascule d'espace est en cours : la disposition affichée est encore
+     * celle de l'espace quitté, et les droits sont déjà remis à zéro. Sans cet
+     * état, ses tuiles restaient à l'écran le temps de l'aller-retour, toutes
+     * marquées « Accès restreint » : un instantané faux des deux espaces à la
+     * fois. On retire donc l'ancien contenu pendant le chargement, et l'accueil
+     * de la cible arrive d'un bloc.
+     */
+    const [switching, setSwitching] = useState(false);
     /**
      * Le dossier déployé : son id, et la tuile d'où il sort.
      *
@@ -911,8 +880,18 @@ export default function HomePage() {
      * si la vue reste.
      */
     const handleSelectWorkspace = (workspaceId: number) => {
+        // Re-choisir l'espace courant n'est pas une bascule : rien à recharger,
+        // et l'écran de transition n'a pas à clignoter pour rien.
+        if (workspaceId === getWorkspaceState().activeId) return;
         const openView = expandedWidget;
         if (openView) unmountFeature(openView);
+        // Ce qui appartient à l'espace quitté sort de scène avec lui : un
+        // dossier déployé montrerait ses anciennes cartes par-dessus le
+        // chargement, et l'organiseur écrirait la vieille grille dans le nouvel
+        // espace, puisque les commandes portent déjà son id.
+        setOpenFolder(null);
+        setEditing(false);
+        setSwitching(true);
         // Vider la liste d'appareils AVANT de basculer : sinon l'effet d'élagage
         // ci-dessus tourne encore contre ceux de l'espace précédent alors que la
         // nouvelle disposition est déjà en place, et supprime définitivement ses
@@ -948,9 +927,12 @@ export default function HomePage() {
                 } else handleClose();
             } catch {
                 // Accès perdu entre-temps : recharger la session remet le client
-                // sur un espace valide.
+                // sur un espace valide. Attendu, pour que l'écran de bascule ne
+                // se lève pas sur la disposition de l'espace qu'on vient de rater.
                 if (openView) handleClose();
-                void refresh();
+                await refresh().catch(() => {});
+            } finally {
+                setSwitching(false);
             }
         })();
     };
@@ -1173,6 +1155,13 @@ export default function HomePage() {
 
                         {editing ? (
                             <EditableHome autoOpenAdd={autoAddSection} />
+                        ) : switching ? (
+                            // Entre deux espaces : ni l'ancienne grille, qui serait
+                            // fausse, ni la nouvelle, pas encore arrivée. Un
+                            // battement sobre le temps d'un aller-retour.
+                            <div className={styles.switching} role='status' aria-label='Chargement de l’espace'>
+                                <span className={`icon icon-spinner ${styles.switchingSpinner}`} aria-hidden='true' />
+                            </div>
                         ) : layout.sections.length === 0 ? (
                             // A fresh home has no section at all: point the way in
                             // rather than showing a bare greeting. Sans le droit de

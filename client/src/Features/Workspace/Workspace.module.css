@@ -175,6 +175,21 @@
     font-size: 0.875rem;
 }
 
+/* L'onglet Rôles vide : la phrase, le geste qui débloque, ce qu'il fera. */
+.emptyBlock {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) 0 var(--space-sm);
+    text-align: center;
+}
+
+/* La phrase porte déjà le rythme du bloc : son padding vertical ferait double. */
+.emptyBlock .empty {
+    padding: 0;
+}
+
 .hint {
     font-size: 0.8rem;
     color: var(--text-muted);
@@ -263,9 +278,9 @@
     color: var(--text-primary);
 }
 
-/* Une feature et le niveau qu'un rôle y accorde. C'est le sélecteur, le plus haut
-   des deux enfants, qui donne sa hauteur à la ligne ; le padding — symétrique —
-   n'ajoute qu'une respiration égale de part et d'autre du trait. */
+/* Une feature et le niveau qu'un rôle y accorde : le libellé et sa phrase d'un
+   côté, les trois boutons du niveau de l'autre. Le padding, symétrique, n'ajoute
+   qu'une respiration égale de part et d'autre du trait. */
 .grantRow {
     display: flex;
     align-items: center;
@@ -314,20 +329,10 @@
     white-space: normal;
 }
 
-.grantSelect {
-    width: auto;
-    flex-shrink: 0;
-    /* `padding-right` de SelectInput réserve 48px pour la flèche native ; on
-       resserre, la liste ici tient en un mot. */
-    padding-right: 32px;
-}
-
-/* Espace entre les blocs d'un formulaire de rôle : sans ça les intitulés
-   viennent coller la carte précédente et tout se lit comme un seul pavé. */
-.formSection {
-    display: block;
-    margin-top: var(--space-lg);
-    margin-bottom: var(--space-xs);
+/* La barre d'onglets d'un dialogue (formulaire de rôle) : de l'air au-dessus,
+   pour ne pas coller la rangée du nom, et en dessous, avant le premier volet. */
+.dialogTabs {
+    margin: var(--space-md) 0;
 }
 
 /*

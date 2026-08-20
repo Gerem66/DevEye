@@ -162,6 +162,17 @@ export interface LiveTransport {
     /** L'espace disparaît : tout le monde sort. */
     evictRoom(workspaceId: number): void;
     /**
+     * Prévenir UN compte, où que ses connexions soient assises.
+     *
+     * `changed` s'arrête aux connexions de la salle, et c'est son rôle. Mais
+     * gagner ou perdre un espace se décide depuis CET espace, pendant que
+     * l'intéressé est assis ailleurs : sans cette voie, sa liste d'espaces
+     * resterait figée jusqu'au rechargement. Réservé aux sujets sans droit de
+     * feature (`TOPIC_FEATURE` à `null`, comme `workspace`) : la projection par
+     * droits d'une salle n'a pas de sens pour qui n'y est pas.
+     */
+    userChanged(userId: number, workspaceId: number, topics: readonly LiveTopic[], byUserId: number | null): void;
+    /**
      * Un rôle a changé sans que personne ne perde l'espace : les droits sont
      * re-résolus sur place. Sans ça les membres présents verraient tous leurs
      * pairs « ailleurs » jusqu'à leur prochaine commande.
@@ -376,6 +387,22 @@ export class LiveHub {
             conn.grants.delete(workspaceId);
             this.leaveRoom(conn);
             this.send(conn, LIVE_PEERS_EVENT, { workspaceId, peers: [] });
+        }
+    }
+
+    /**
+     * Prévenir un compte précis, quelle que soit sa salle (voir l'interface).
+     *
+     * Toutes ses connexions, salle ou pas : l'onglet ouvert sur un autre
+     * espace est précisément celui qui doit apprendre que sa liste vient de
+     * changer. Pas de plancher de débit ici, l'événement est rare par nature
+     * (on ne gagne pas un espace vingt fois par seconde).
+     */
+    userChanged(userId: number, workspaceId: number, topics: readonly LiveTopic[], byUserId: number | null): void {
+        if (topics.length === 0) return;
+        for (const conn of this.bySocket.values()) {
+            if (conn.userId !== userId) continue;
+            this.send(conn, LIVE_CHANGED_EVENT, { workspaceId, topics, by: byUserId });
         }
     }
 
@@ -809,6 +836,7 @@ export function createLiveTransport(hub: LiveHub, socket: WebSocket): LiveTransp
         evict: (workspaceId, userId) => hub.evict(workspaceId, userId),
         evictEverywhere: (userId) => hub.evictEverywhere(userId),
         evictRoom: (workspaceId) => hub.evictRoom(workspaceId),
+        userChanged: (userId, workspaceId, topics, byUserId) => hub.userChanged(userId, workspaceId, topics, byUserId),
         resync: (db, workspaceId) => hub.resync(db, workspaceId)
     };
 }

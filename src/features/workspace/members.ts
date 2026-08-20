@@ -92,6 +92,9 @@ export const workspaceRemoveMemberFeature: FeatureDefinition<
         await clearFavoriteIfPointingAt(ctx, input.userId, ctx.workspaceId);
         invalidateAccess();
         ctx.live?.evict(ctx.workspaceId, input.userId);
+        // Miroir de l'ajout : assis dans un autre espace, l'exclu ne recevrait
+        // pas la diffusion de celui-ci, et l'entrée resterait dans son menu.
+        ctx.live?.userChanged(input.userId, ctx.workspaceId, ['workspace'], ctx.userId);
         ctx.audit({
             action: 'workspace.member.remove',
             level: 'warning',
@@ -139,6 +142,10 @@ export const workspaceAddMemberFeature: FeatureDefinition<
         }
 
         invalidateAccess();
+        // L'arrivant, lui, n'est PAS dans la salle de cet espace : la diffusion
+        // ordinaire ne l'atteint pas. S'il est connecté ailleurs, on le vise par
+        // compte pour que l'espace apparaisse dans son menu sans rechargement.
+        ctx.live?.userChanged(target.id, ctx.workspaceId, ['workspace'], ctx.userId);
         ctx.audit({
             action: 'workspace.member.add',
             level: 'warning',

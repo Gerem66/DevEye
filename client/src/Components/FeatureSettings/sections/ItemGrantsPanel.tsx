@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { featureDescriptor, type ItemAccess, type ItemGrantState, type WorkspaceFeatureId } from 'deveye-types';
 
 import { ws } from '@/api/ws';
-import SelectInput from '@/Components/SelectInput';
+import SegmentedControl from '@/Components/SegmentedControl';
 import { useResourceVersion } from '@/stores/invalidation';
 
 import styles from '../FeatureSettings.module.css';
@@ -115,22 +115,29 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
                             <span className={styles.channelLabel}>{role.name}</span>
                             <span className={styles.channelMeta}>{effectiveOf(role)}</span>
                         </span>
-                        <SelectInput
-                            className={styles.grantSelect}
+                        {/* Trois choix fixes : des boutons collés plutôt qu'un
+                            menu déroulant qui les cachait derrière un clic. Ce
+                            que « Hérité » vaut pour CE rôle est dans l'infobulle
+                            et dans la phrase sous son nom. */}
+                        <SegmentedControl
                             value={role.access ?? 'inherit'}
                             disabled={busy || role.featureAccess === 'none'}
                             aria-label={`Accès de ${role.name} à ce ${noun}`}
-                            onChange={(e) => set(role.roleId, e.target.value as ItemAccess | 'inherit')}
-                        >
-                            {/* L'hérité est nommé DANS l'option : le menu fermé
-                                dit déjà ce que « comme la fonctionnalité »
-                                vaut pour ce rôle-là. */}
-                            <option value='inherit'>
-                                Comme la fonctionnalité ({FEATURE_ACCESS_LABEL[role.featureAccess]})
-                            </option>
-                            <option value='read'>Lecture seule</option>
-                            <option value='none'>Masqué</option>
-                        </SelectInput>
+                            onChange={(v) => set(role.roleId, v)}
+                            options={[
+                                {
+                                    value: 'inherit',
+                                    label: 'Hérité',
+                                    title: `Comme la fonctionnalité : ${FEATURE_ACCESS_LABEL[role.featureAccess]}`
+                                },
+                                {
+                                    value: 'read',
+                                    label: 'Lecture seule',
+                                    title: 'Consulter ce ' + noun + ', sans le modifier'
+                                },
+                                { value: 'none', label: 'Masqué', title: 'Ce ' + noun + ' n’apparaît pas pour ce rôle' }
+                            ]}
+                        />
                     </div>
                 ))}
             </div>

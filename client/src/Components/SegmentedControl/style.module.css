@@ -1,0 +1,54 @@
+/*
+ * Boutons collés : un seul cadre, des séparateurs intérieurs, l'actif en teinte
+ * d'accent. Mêmes jetons que les champs de saisie voisins pour s'aligner sans
+ * effort dans un formulaire.
+ */
+.group {
+    display: inline-flex;
+    align-items: stretch;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.segment {
+    padding: 0.4rem 0.75rem;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: 0.82rem;
+    line-height: 1.4;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.segment + .segment {
+    border-left: 1px solid var(--input-border);
+}
+
+.segment:hover:not(:disabled) {
+    color: var(--text-primary);
+}
+
+.segment:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.active,
+.active:hover:not(:disabled) {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .segment {
+        transition: none;
+    }
+}

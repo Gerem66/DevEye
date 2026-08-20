@@ -275,9 +275,24 @@ export default function FeatureWorkspace() {
                         <p className={styles.hint}>Le propriétaire n’en porte jamais : il a tout par construction.</p>
                         <div className={styles.card}>
                             {admin.roles.length === 0 ? (
-                                <p className={styles.empty}>
-                                    Aucun rôle. Sans rôle, un membre invité n’a accès à rien.
-                                </p>
+                                // L'onglet vide n'est pas une impasse : un geste pose
+                                // deux rôles génériques, à ajuster ensuite si besoin.
+                                <div className={styles.emptyBlock}>
+                                    <p className={styles.empty}>
+                                        Aucun rôle. Sans rôle, un membre invité n’a accès à rien.
+                                    </p>
+                                    <Button
+                                        icon='add'
+                                        onClick={() => void admin.createPresetRoles()}
+                                        disabled={admin.busy}
+                                    >
+                                        {admin.busy ? 'Création…' : 'Créer les rôles de départ'}
+                                    </Button>
+                                    <p className={styles.hint}>
+                                        « Admin » peut tout ; « Membre » a toutes les fonctionnalités sans
+                                        l’administration, et devient le rôle attribué d’office.
+                                    </p>
+                                </div>
                             ) : (
                                 admin.roles.map((r) => (
                                     <div key={r.id} className={styles.row}>
