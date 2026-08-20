@@ -5,12 +5,14 @@ import {
     itemGrantSet,
     shareGet,
     shareSet,
+    type ItemGrantState,
     type ItemShareState,
     type ShareBlocker,
+    type WorkspaceFeatureGrant,
     type WorkspaceFeatureId
 } from 'deveye-types';
 
-import { invalidateAccess } from '../_access';
+import { grantsFor, invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { shareBlockerFor } from '../_sharing';
 
@@ -31,6 +33,23 @@ import { shareBlockerFor } from '../_sharing';
  * `device.setConfig`, même remède : la garde est la première ligne, et le
  * fichier figure dans `ACCESS_EXEMPT` avec sa raison.
  */
+
+/**
+ * L'appelant peut-il régler ce que les rôles d'un espace voient ?
+ *
+ * La même réponse que `workspace.roles` dans cet espace-là — résolue à la
+ * demande parce que l'espace visé n'est pas forcément l'actif : c'est ce qui
+ * permet de gérer les permissions de toutes les fenêtres depuis l'onglet
+ * Partage du domicile. Un espace personnel rend toujours `false` : il n'a pas
+ * de rôles, donc rien à régler.
+ */
+async function canManageRolesIn(ctx: FeatureContext, workspaceId: number): Promise<boolean> {
+    const workspace = await ctx.db.workspaces.findById(workspaceId);
+    if (!workspace || workspace.kind !== 'shared') return false;
+    if (workspace.owner_user_id === ctx.userId) return true;
+    const role = await ctx.db.workspaceRoles.findForMember(ctx.userId, workspaceId);
+    return grantsFor(false, role).capabilities.has('workspace.roles');
+}
 
 /** Où vit cet élément, et l'appelant peut-il en disposer ? */
 async function loadHome(ctx: FeatureContext, feature: WorkspaceFeatureId, itemId: number): Promise<number> {
@@ -103,18 +122,31 @@ async function shareState(
     // n'entre pas contournerait l'appartenance, qui est la frontière absolue du
     // modèle — et déposerait une donnée dont on ne pourrait plus répondre.
     const mine = await ctx.db.workspaces.findAccessibleByUser(ctx.userId);
-    const shares = blocker ? [] : await ctx.db.itemSharing.sharesOf(feature, itemId, ctx.workspaceId).catch(() => []);
+    // Les projections sont indexées par le DOMICILE — jamais par l'espace
+    // actif. Les lire par l'actif rendait l'écran instable : depuis une
+    // fenêtre, seule l'origine paraissait cochée, et la fenêtre où l'on se
+    // trouvait semblait ne pas exister.
+    const shares =
+        blocker === 'feature' || blocker === 'forbidden'
+            ? []
+            : await ctx.db.itemSharing.sharesOf(feature, itemId, homeWorkspaceId).catch(() => []);
     const sharedTo = new Set(shares.map((s) => s.workspace_id));
 
     return {
-        workspaces: mine.map((w) => ({
-            workspaceId: w.id,
-            workspaceName: w.name,
-            isHome: w.id === homeWorkspaceId,
-            // L'origine est toujours « cochée » et jamais décochable : l'élément
-            // y est chez lui, pas projeté.
-            shared: w.id === homeWorkspaceId || sharedTo.has(w.id)
-        })),
+        workspaces: await Promise.all(
+            mine.map(async (w) => {
+                // L'origine est toujours « cochée » et jamais décochable :
+                // l'élément y est chez lui, pas projeté.
+                const shared = w.id === homeWorkspaceId || sharedTo.has(w.id);
+                return {
+                    workspaceId: w.id,
+                    workspaceName: w.name,
+                    isHome: w.id === homeWorkspaceId,
+                    shared,
+                    grantsManageable: shared && !blocker && (await canManageRolesIn(ctx, w.id))
+                };
+            })
+        ),
         blocker
     };
 }
@@ -125,6 +157,9 @@ const getFeature = defineFeature({
         ctx.assertFeature(input.feature, 'read');
         const blocker = shareBlockerFor(ctx, input.feature);
         if (blocker) return shareState(ctx, input.feature, input.itemId, blocker, ctx.workspaceId);
+        // L'accès à l'élément lui-même, restrictions de rôle comprises : un
+        // membre à qui il est masqué n'a pas à savoir où il est projeté.
+        await ctx.assertItem(input.feature, input.itemId);
         // Un élément qu'on ne fait que voir : on répond, on n'échoue pas. Lever
         // ici afficherait « chargement impossible », qui se lit comme une panne
         // alors que c'est une règle — et une règle qui mérite d'être dite.
@@ -144,6 +179,11 @@ const setFeature = defineFeature({
         ctx.assertFeature(input.feature, 'write');
         const blocker = shareBlockerFor(ctx, input.feature);
         if (blocker) throw new FeatureError('validation', 'Cette fonctionnalité ne se partage pas entre espaces.');
+        // Partager exige l'accès **à l'élément**, pas seulement à la
+        // fonctionnalité : sans cette garde, un rôle restreint sur cette ligne
+        // (masquée, ou en lecture seule) pouvait la projeter vers son espace
+        // personnel et lire par la fenêtre ce que la restriction lui fermait.
+        await ctx.assertItem(input.feature, input.itemId, 'write');
         const home = await loadHome(ctx, input.feature, input.itemId);
 
         if (input.workspaceId === ctx.workspaceId) {
@@ -179,12 +219,109 @@ const setFeature = defineFeature({
     }
 });
 
+/**
+ * L'espace **visé** par une lecture ou une écriture de restrictions, vérifié.
+ *
+ * Trois gardes, dans cet ordre :
+ *
+ *  1. l'appelant voit l'élément depuis son espace actif (`assertItem`) — un
+ *     membre à qui une restriction le masque ne règle pas ce qu'en voient les
+ *     autres ;
+ *  2. l'espace visé est un des siens — on ne règle pas les rôles d'un espace
+ *     où l'on n'entre pas ;
+ *  3. l'élément y est réellement visible : son domicile, ou une projection.
+ *     Une restriction posée là où l'élément n'apparaît pas serait une ligne
+ *     morte qui mordrait le jour d'un futur partage, sans que rien ne le dise.
+ */
+async function resolveGrantTarget(
+    ctx: FeatureContext,
+    input: { feature: WorkspaceFeatureId; itemId: number; workspaceId?: number },
+    level: 'read' | 'write'
+): Promise<{ workspaceId: number; workspaceName: string }> {
+    ctx.assertFeature(input.feature, level);
+    if (!SHARE_WIRED_FEATURES.includes(input.feature)) {
+        throw new FeatureError(
+            'validation',
+            `Les restrictions par élément ne sont pas encore branchées sur ${featureDescriptor(input.feature).label}.`
+        );
+    }
+    await ctx.assertItem(input.feature, input.itemId, level);
+
+    const targetId = input.workspaceId ?? ctx.workspaceId;
+    const target = await ctx.db.workspaces.findById(targetId);
+    if (!target) throw new FeatureError('not_found', 'Espace introuvable');
+    if (target.kind !== 'shared') {
+        throw new FeatureError('validation', 'Un espace personnel n’a pas de rôles à restreindre.');
+    }
+    if (!(await ctx.db.workspaceMembers.isMember(ctx.userId, targetId))) {
+        throw new FeatureError('forbidden', 'Vous n’êtes pas membre de cet espace.');
+    }
+
+    // L'élément doit exister LÀ-BAS : chez lui, ou par projection.
+    const home = await itemHomeWorkspace(ctx, input.feature, input.itemId);
+    const share =
+        home === null ? await ctx.db.itemSharing.findShare(ctx.workspaceId, input.feature, input.itemId) : null;
+    const realHome = home ?? share?.home_workspace_id ?? null;
+    if (realHome === null) throw new FeatureError('not_found', 'Élément introuvable');
+    if (realHome !== targetId && !(await ctx.db.itemSharing.findShare(targetId, input.feature, input.itemId))) {
+        throw new FeatureError('validation', 'Cet élément n’est pas visible dans cet espace.');
+    }
+
+    return { workspaceId: targetId, workspaceName: target.name };
+}
+
+/**
+ * L'état complet des restrictions d'un élément dans un espace : chaque rôle,
+ * ce que la fonctionnalité lui donne (l'hérité — affiché même sans exception,
+ * pour que la vue d'ensemble n'oblige jamais à deviner), et l'exception posée.
+ */
+async function grantState(
+    ctx: FeatureContext,
+    feature: WorkspaceFeatureId,
+    itemId: number,
+    target: { workspaceId: number; workspaceName: string }
+): Promise<ItemGrantState> {
+    const [roles, grants] = await Promise.all([
+        ctx.db.workspaceRoles.listByWorkspace(target.workspaceId),
+        ctx.db.itemSharing.grantsOf(target.workspaceId, feature, itemId)
+    ]);
+    const byRole = new Map(grants.map((g) => [g.role_id, g.access]));
+    return {
+        workspaceId: target.workspaceId,
+        workspaceName: target.workspaceName,
+        roles: roles.map((role) => {
+            const featureGrants = parseGrants(role.features);
+            return {
+                roleId: role.id,
+                name: role.name,
+                color: role.color,
+                featureAccess: featureGrants.find((g) => g.feature === feature)?.access ?? 'none',
+                access: byRole.get(role.id) ?? null
+            };
+        })
+    };
+}
+
+function parseGrants(raw: unknown): WorkspaceFeatureGrant[] {
+    if (Array.isArray(raw)) return raw as WorkspaceFeatureGrant[];
+    if (typeof raw === 'string') {
+        try {
+            const parsed: unknown = JSON.parse(raw);
+            return Array.isArray(parsed) ? (parsed as WorkspaceFeatureGrant[]) : [];
+        } catch {
+            return [];
+        }
+    }
+    return [];
+}
+
 const grantListFeature = defineFeature({
     ...itemGrantList,
     handler: async (ctx, input) => {
-        ctx.assertFeature(input.feature, 'read');
-        const rows = await ctx.db.itemSharing.grantsOf(ctx.workspaceId, input.feature, input.itemId);
-        return { grants: rows.map((r) => ({ roleId: r.role_id, access: r.access })) };
+        // Lire exige d'être membre de l'espace visé et de voir l'élément ;
+        // c'est `resolveGrantTarget` qui le vérifie.
+        const target = await resolveGrantTarget(ctx, input, 'read');
+        return grantState(ctx, input.feature, input.itemId, target);
     }
 });
 
@@ -192,28 +329,17 @@ const grantSetFeature = defineFeature({
     ...itemGrantSet,
     mutates: true,
     handler: async (ctx, input) => {
-        ctx.assertFeature(input.feature, 'write');
-        // Poser une restriction, c'est régler ce qu'un rôle peut voir : la
-        // même capacité que l'écran des rôles.
-        ctx.assertCan('workspace.roles');
-        // Une restriction n'existe que si les listages de la fonctionnalité la
-        // FONT RESPECTER (`itemRestrictions` + `assertItem`). Écrire la ligne
-        // sans ça serait le pire des mensonges : l'écran dirait « masqué » et le
-        // rôle continuerait de tout voir. Même câblage que la projection —
-        // les deux s'ouvrent fonctionnalité par fonctionnalité, ensemble.
-        if (!SHARE_WIRED_FEATURES.includes(input.feature)) {
-            throw new FeatureError(
-                'validation',
-                `Les restrictions par élément ne sont pas encore branchées sur ${featureDescriptor(input.feature).label}.`
-            );
+        const target = await resolveGrantTarget(ctx, input, 'write');
+        // Poser une restriction, c'est régler ce qu'un rôle voit : la capacité
+        // de l'écran des rôles, **dans l'espace visé** — pas dans l'actif, qui
+        // peut être le domicile d'où l'on règle une fenêtre.
+        if (!(await canManageRolesIn(ctx, target.workspaceId))) {
+            throw new FeatureError('forbidden', 'Vous ne gérez pas les rôles de cet espace.');
         }
-        if (ctx.workspace.kind === 'personal') {
-            throw new FeatureError('validation', 'L’espace personnel n’a pas de rôles à restreindre.');
-        }
-        const role = await ctx.db.workspaceRoles.findById(input.roleId, ctx.workspaceId);
+        const role = await ctx.db.workspaceRoles.findById(input.roleId, target.workspaceId);
         if (!role) throw new FeatureError('not_found', 'Rôle introuvable');
 
-        await ctx.db.itemSharing.setGrant(ctx.workspaceId, input.feature, input.itemId, input.roleId, input.access);
+        await ctx.db.itemSharing.setGrant(target.workspaceId, input.feature, input.itemId, input.roleId, input.access);
         // Les droits de tous ceux qui portent ce rôle viennent de changer, et le
         // scope les mémoïse sous l'époque : sans ce bump, la restriction ne
         // mordrait qu'à la reconnexion suivante.
@@ -222,12 +348,11 @@ const grantSetFeature = defineFeature({
         ctx.audit({
             action: 'share.grantSet',
             level: 'warning',
-            description: `« ${role.name} » sur ${featureDescriptor(input.feature).label} #${input.itemId} : ${
+            description: `« ${role.name} » sur ${featureDescriptor(input.feature).label} #${input.itemId} (espace « ${target.workspaceName} ») : ${
                 input.access ?? 'comme la fonctionnalité'
             }`
         });
-        const rows = await ctx.db.itemSharing.grantsOf(ctx.workspaceId, input.feature, input.itemId);
-        return { grants: rows.map((r) => ({ roleId: r.role_id, access: r.access })) };
+        return grantState(ctx, input.feature, input.itemId, target);
     }
 });
 

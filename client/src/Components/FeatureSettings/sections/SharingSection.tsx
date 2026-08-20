@@ -2,11 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { featureDescriptor, type ItemShareState, type ShareBlocker } from 'deveye-types';
 
 import { ws } from '@/api/ws';
+import Button from '@/Components/Button';
+import { Dialog } from '@/Components/Dialog';
 import Switch from '@/Components/Switch';
 import { invalidate, type ResourceKey } from '@/stores/invalidation';
 
 import type { SettingsScope } from '../scope';
 import styles from '../FeatureSettings.module.css';
+import ItemGrantsPanel from './ItemGrantsPanel';
 
 /**
  * Où cet élément est visible — **ses espaces, et seulement les siens**.
@@ -60,6 +63,8 @@ export default function SharingSection({ scope }: Props) {
     const [state, setState] = useState<ItemShareState | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    /** L'espace dont on règle les permissions ; `null` = aucun dialogue ouvert. */
+    const [grantsFor, setGrantsFor] = useState<{ workspaceId: number; workspaceName: string } | null>(null);
 
     const itemId = scope.kind === 'item' ? scope.itemId : 0;
 
@@ -128,6 +133,22 @@ export default function SharingSection({ scope }: Props) {
                                 </span>
                             )}
                         </span>
+                        {/* Régler ce que chaque rôle de CET espace voit de
+                            l'élément, sans avoir à y basculer : le même panneau
+                            que son onglet Permissions, ni plus ni moins. Le
+                            serveur dit qui peut (`grantsManageable`) — membre de
+                            l'espace, et ses rôles en main. */}
+                        {w.grantsManageable && (
+                            <Button
+                                variant='ghost'
+                                icon='lock'
+                                onClick={() =>
+                                    setGrantsFor({ workspaceId: w.workspaceId, workspaceName: w.workspaceName })
+                                }
+                            >
+                                Permissions
+                            </Button>
+                        )}
                     </div>
                 ))}
             </div>
@@ -138,6 +159,21 @@ export default function SharingSection({ scope }: Props) {
             </p>
 
             {error && <p className={styles.notice}>{error}</p>}
+
+            {/* Empilé au-dessus des réglages : il possède alors la couche de
+                fermeture, donc Échap le referme sans emporter le dialogue de
+                réglages derrière. */}
+            <Dialog
+                open={grantsFor !== null}
+                onClose={() => setGrantsFor(null)}
+                title={grantsFor ? `Permissions — ${grantsFor.workspaceName}` : ''}
+                description={`Ce que chaque rôle de cet espace voit de ce ${noun}. On ne peut qu’abaisser ce que son rôle y donne.`}
+                width={560}
+            >
+                {grantsFor && (
+                    <ItemGrantsPanel feature={scope.feature} itemId={itemId} workspaceId={grantsFor.workspaceId} />
+                )}
+            </Dialog>
         </div>
     );
 }

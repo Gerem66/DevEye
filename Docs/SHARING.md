@@ -161,6 +161,33 @@ cocher produirait un réglage muet.
 `item_role_grants` — **restrictif seulement**. `none` masque, `read` passe en
 lecture seule ; rien n'élève. Le droit de feature reste le plafond.
 
+### Une vue d'ensemble, pas une liste d'exceptions
+
+L'écran (`ItemGrantsPanel`, un seul composant pour ses deux points de montage)
+affiche **chaque rôle avec son droit effectif** : l'exception posée, ou, à
+défaut, ce que la fonctionnalité lui donne — « Comme la fonctionnalité
+(lecture et écriture) ». Une vue qui ne montrerait que les exceptions
+obligerait à deviner le reste. Le serveur rend tout en une commande
+(`share.grantList` : rôles de l'espace visé, hérité, exception), pour que
+l'écran n'ait aucun recoupement à faire.
+
+### Se règle d'où l'on est
+
+`share.grantList` / `share.grantSet` prennent un `workspaceId` : l'espace visé,
+qui n'est pas forcément l'actif. Depuis l'onglet Partage du domicile, chaque
+espace coché porte un bouton **Permissions** qui ouvre le même panneau pour ce
+côté-là — on règle toutes les fenêtres sans changer d'espace. Trois gardes :
+membre de l'espace visé, l'élément y est réellement visible, et — pour écrire —
+y tenir `workspace.roles` (`grantsManageable` dans `share.get` dit au client
+quand montrer le bouton).
+
+### Partager exige l'accès à l'élément
+
+`share.get` et `share.set` passent par `assertItem` : un rôle **restreint sur
+la ligne** (masquée, ou en lecture seule) ne peut ni voir où elle est projetée
+ni la projeter. Sans cette garde, la restriction se contournait en projetant
+l'élément vers son espace personnel et en lisant par la fenêtre.
+
 L'alternative — permettre d'élever — a été écartée : l'accès effectif à une
 fonctionnalité deviendrait « le maximum entre le rôle et le meilleur droit
 d'élément », donc une requête de plus dans la résolution d'accès, et surtout un

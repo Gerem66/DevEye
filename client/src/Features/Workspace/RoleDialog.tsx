@@ -88,7 +88,7 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
             open={open}
             onClose={onClose}
             title={role ? `Modifier « ${role.name} »` : 'Nouveau rôle'}
-            width={520}
+            width={620}
             onSubmit={submit}
             footer={
                 <>
@@ -139,7 +139,14 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                 {FEATURE_REGISTRY.map((f) => (
                     <div key={f.id} className={styles.grantRow}>
                         <span className={styles.grantLabel}>
-                            <span className={`icon icon-${f.icon}`} aria-hidden='true' /> {f.label}
+                            <span className={styles.grantTitle}>
+                                <span className={`icon icon-${f.icon}`} aria-hidden='true' />
+                                {f.label}
+                            </span>
+                            {/* Ce que le droit recouvre, du registre : la ligne
+                                « Déploiement » ne dit pas seule que `write`
+                                permet une mise en production. */}
+                            <span className={styles.grantHint}>{f.description}</span>
                         </span>
                         <SelectInput
                             className={styles.grantSelect}

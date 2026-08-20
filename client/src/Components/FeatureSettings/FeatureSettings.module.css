@@ -7,6 +7,10 @@
     gap: var(--space-lg);
     flex: 1;
     min-height: 0;
+    /* Hauteur FIXE, pas minimale : chaque section a la sienne, et un dialogue
+       qui se redimensionne à chaque clic de la barre latérale fait danser tout
+       l'écran. Le panneau défile à l'intérieur (`overflow-y` sur `.panel`). */
+    height: min(540px, 70vh);
 }
 
 .layout:has(> .panel:only-child) {
@@ -390,4 +394,13 @@
     justify-content: center;
     width: 18px;
     color: var(--text-muted);
+}
+
+/* Le panneau de restrictions d'un élément, seul (réutilisé par l'onglet
+   Permissions et par le dialogue « Permissions » de l'onglet Partage). */
+.grantPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    min-width: 0;
 }

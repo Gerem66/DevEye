@@ -280,13 +280,38 @@
 /* Le libellé prend la place restante, le sélecteur garde la sienne : sans ça le
    `width: 100%` de SelectInput écrase le texte jusqu'aux points de suspension. */
 .grantLabel {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
     flex: 1;
     min-width: 0;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+}
+
+/* L'icône et l'intitulé sur une même ligne de base : `align-items: center`
+   plutôt qu'un glyphe en ligne, qui flottait au-dessus du texte. */
+.grantTitle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 0.875rem;
-    color: var(--text-primary);
+}
+
+.grantTitle .icon {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+
+/* Ce que le droit recouvre — peut tenir sur deux lignes, jamais tronqué : une
+   phrase coupée aux points de suspension ne renseigne personne. */
+.grantHint {
+    font-size: 0.72rem;
+    line-height: 1.35;
+    color: var(--text-muted);
+    white-space: normal;
 }
 
 .grantSelect {
