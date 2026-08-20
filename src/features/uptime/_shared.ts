@@ -61,7 +61,9 @@ export async function toService(
     cipher: Cipher,
     row: UptimeServiceRow,
     stats: ServiceStats,
-    downSince: number | null
+    downSince: number | null,
+    /** Vrai quand le service vient d'un autre espace qui le projette ici. */
+    foreign = false
 ): Promise<UptimeService> {
     const payload = await decryptService(cipher, row.content);
     return {
@@ -78,6 +80,7 @@ export async function toService(
         notify: row.notify === 1,
         enabled: row.enabled === 1,
         sortOrder: row.sort_order,
+        foreign,
         status: row.status,
         lastCheckedAt: row.last_checked_at,
         lastResponseMs: row.last_response_ms,

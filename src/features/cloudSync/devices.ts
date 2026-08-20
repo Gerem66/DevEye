@@ -41,6 +41,7 @@ async function setDeviceStatus(
 
 export const cloudSyncAttachDeviceFeature = defineFeature({
     ...cloudSyncAttachDevice,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const share = await authorizeShare(ctx, input.shareId);
@@ -67,6 +68,7 @@ export const cloudSyncAttachDeviceFeature = defineFeature({
 
 export const cloudSyncDetachDeviceFeature = defineFeature({
     ...cloudSyncDetachDevice,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const share = await authorizeShare(ctx, input.shareId);
@@ -89,6 +91,7 @@ export const cloudSyncDetachDeviceFeature = defineFeature({
 
 export const cloudSyncPauseDeviceFeature = defineFeature({
     ...cloudSyncPauseDevice,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         await setDeviceStatus(ctx, input.shareId, input.deviceId, 'paused');
@@ -98,6 +101,7 @@ export const cloudSyncPauseDeviceFeature = defineFeature({
 
 export const cloudSyncResumeDeviceFeature = defineFeature({
     ...cloudSyncResumeDevice,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         await setDeviceStatus(ctx, input.shareId, input.deviceId, 'active');

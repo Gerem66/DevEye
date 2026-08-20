@@ -5,6 +5,7 @@ import { authorizeShare, toClientEvent } from './_shared';
 
 export const cloudSyncListEventsFeature = defineFeature({
     ...cloudSyncListEvents,
+    access: { feature: 'cloudsync', level: 'read' },
     handler: async (ctx, input) => {
         const share = await authorizeShare(ctx, input.shareId);
         const [rows, total] = await Promise.all([

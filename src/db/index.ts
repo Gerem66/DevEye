@@ -12,7 +12,8 @@ import {
     type MailSettingsRepo
 } from './repos/mail';
 import { metricsRepo, type MetricsRepo } from './repos/metrics';
-import { notificationSettingsRepo, type NotificationSettingsRepo } from './repos/notificationSettings';
+import { itemSharingRepo, type ItemSharingRepo } from './repos/itemSharing';
+import { notificationChannelsRepo, type NotificationChannelsRepo } from './repos/notificationChannels';
 import { presenceRepo, type PresenceRepo } from './repos/presence';
 import { processSamplesRepo, type ProcessSamplesRepo } from './repos/processSamples';
 import {
@@ -130,7 +131,8 @@ export interface Database {
     uptimeServices: UptimeServicesRepo;
     uptimeHistory: UptimeHistoryRepo;
     /** Canaux d'alerte, par espace **et par feature** (voir `Services/notifications.ts`). */
-    notificationSettings: NotificationSettingsRepo;
+    itemSharing: ItemSharingRepo;
+    notificationChannels: NotificationChannelsRepo;
     mailAccounts: MailAccountsRepo;
     mailFolders: MailFoldersRepo;
     mailMessages: MailMessagesRepo;
@@ -188,7 +190,8 @@ export function createDatabase(q: Queryable): Database {
         osint: osintRepo(q),
         uptimeServices: uptimeServicesRepo(q),
         uptimeHistory: uptimeHistoryRepo(q),
-        notificationSettings: notificationSettingsRepo(q),
+        itemSharing: itemSharingRepo(q),
+        notificationChannels: notificationChannelsRepo(q),
         mailAccounts: mailAccountsRepo(q),
         mailFolders: mailFoldersRepo(q),
         mailMessages: mailMessagesRepo(q),

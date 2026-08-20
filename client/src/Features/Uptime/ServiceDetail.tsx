@@ -7,6 +7,7 @@ import { StatusBadge } from '@/Components/StatusBadge';
 import { formatAgo, formatDuration, formatMoment, formatMs, formatRatio, rangeWindow, RANGES } from './format';
 import MeasuresBrowser from './MeasuresBrowser';
 import Pane from './Pane';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import StatusBars from './StatusBars';
 import UptimeChart from './UptimeChart';
 import styles from './style.module.css';
@@ -159,6 +160,16 @@ export function ServiceDetail({ service, onBack, onEdit, onCheckNow }: ServiceDe
                     <Button variant='secondary' icon='edit' onClick={onEdit}>
                         Modifier
                     </Button>
+                    {/* Les réglages **de ce service** : ses propres canaux
+                        d'alerte, ou ceux d'Uptime tant qu'il les suit. */}
+                    <FeatureSettingsButton
+                        scope={{
+                            kind: 'item',
+                            feature: 'uptime',
+                            itemId: service.id,
+                            itemLabel: service.name
+                        }}
+                    />
                 </div>
             </div>
 

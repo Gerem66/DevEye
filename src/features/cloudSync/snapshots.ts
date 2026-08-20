@@ -39,6 +39,7 @@ async function authorizeSnapshot(ctx: FeatureContext, snapshotId: number): Promi
 
 export const cloudSyncListSnapshotsFeature = defineFeature({
     ...cloudSyncListSnapshots,
+    access: { feature: 'cloudsync', level: 'read' },
     handler: async (ctx, input) => {
         const share = await authorizeShare(ctx, input.shareId);
         const [rows, total] = await Promise.all([
@@ -51,6 +52,7 @@ export const cloudSyncListSnapshotsFeature = defineFeature({
 
 export const cloudSyncCreateSnapshotFeature = defineFeature({
     ...cloudSyncCreateSnapshot,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const engine = requireActiveEngine(ctx);
@@ -71,6 +73,7 @@ export const cloudSyncCreateSnapshotFeature = defineFeature({
 
 export const cloudSyncDiffSnapshotFeature = defineFeature({
     ...cloudSyncDiffSnapshot,
+    access: { feature: 'cloudsync', level: 'read' },
     handler: async (ctx, input) => {
         const engine = requireEngine(ctx);
         const snapshot = await authorizeSnapshot(ctx, input.snapshotId);
@@ -81,6 +84,7 @@ export const cloudSyncDiffSnapshotFeature = defineFeature({
 
 export const cloudSyncRestoreSnapshotFeature = defineFeature({
     ...cloudSyncRestoreSnapshot,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const engine = requireActiveEngine(ctx);
@@ -94,6 +98,7 @@ export const cloudSyncRestoreSnapshotFeature = defineFeature({
 
 export const cloudSyncDeleteSnapshotFeature = defineFeature({
     ...cloudSyncDeleteSnapshot,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const engine = requireActiveEngine(ctx);
@@ -113,6 +118,7 @@ export const cloudSyncDeleteSnapshotFeature = defineFeature({
 
 export const cloudSyncVerifyIntegrityFeature = defineFeature({
     ...cloudSyncVerifyIntegrity,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const engine = requireActiveEngine(ctx);

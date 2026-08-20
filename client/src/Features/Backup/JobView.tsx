@@ -17,6 +17,7 @@ import {
     SOURCE_LABELS
 } from './format';
 import styles from './style.module.css';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 
 interface JobViewProps {
     job: BackupJob;
@@ -80,6 +81,12 @@ export function JobView({ job, canWrite, onBack, onEdit, onRun, onRemove, runnin
                             </Button>
                         </>
                     )}
+                    {/* Les réglages **de ce travail** : ses propres canaux, ou
+                        ceux des Sauvegardes tant qu'il les suit. */}
+                    <FeatureSettingsButton
+                        scope={{ kind: 'item', feature: 'backup', itemId: job.id, itemLabel: job.name }}
+                        variant='ghost'
+                    />
                 </div>
             </div>
 

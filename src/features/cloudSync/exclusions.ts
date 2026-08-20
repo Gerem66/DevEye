@@ -6,6 +6,7 @@ import { authorizeShare, requireActiveEngine, toClientExclusion } from './_share
 
 export const cloudSyncAddExclusionFeature = defineFeature({
     ...cloudSyncAddExclusion,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const share = await authorizeShare(ctx, input.shareId);
@@ -34,6 +35,7 @@ export const cloudSyncAddExclusionFeature = defineFeature({
 
 export const cloudSyncRemoveExclusionFeature = defineFeature({
     ...cloudSyncRemoveExclusion,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const share = await authorizeShare(ctx, input.shareId);

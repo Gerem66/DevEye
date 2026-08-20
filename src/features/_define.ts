@@ -13,7 +13,7 @@ import type { SecurityMonitor } from '@/Services/SecurityMonitor';
 import type { BackupService } from '@/Services/BackupService';
 import type { ErrorCode, LiveTopic, LogLevelName } from 'deveye-types';
 import type { Logger } from 'pino';
-import type { FeatureAccess, WorkspaceCapability, WorkspaceFeatureId } from 'deveye-types';
+import type { FeatureAccess, ItemAccess, WorkspaceCapability, WorkspaceFeatureId } from 'deveye-types';
 import type { WorkspaceContext } from './_access';
 import type { z } from 'zod';
 
@@ -70,6 +70,26 @@ export interface FeatureContext {
     canFeature: (feature: WorkspaceFeatureId, level?: FeatureAccess) => boolean;
     /** Lève `forbidden` si la feature n'est pas accessible à ce niveau. */
     assertFeature: (feature: WorkspaceFeatureId, level?: FeatureAccess) => void;
+    /**
+     * Les éléments d'une feature que le rôle de l'appelant voit autrement que
+     * les autres : `'none'` masqué, `'read'` en lecture seule.
+     *
+     * **Restrictif seulement** : la carte ne peut qu'abaisser ce que
+     * `canFeature` accorde, jamais l'élever. Les listages s'en servent pour
+     * filtrer ; les commandes visant un élément passent par `assertItem`.
+     *
+     * Vide pour le propriétaire et pour un membre sans rôle — le premier passe
+     * outre, le second n'a déjà rien.
+     */
+    itemRestrictions: (feature: WorkspaceFeatureId) => Promise<ReadonlyMap<number, ItemAccess>>;
+    /**
+     * Lève `forbidden` si cet **élément précis** n'est pas accessible au niveau
+     * demandé, restriction de rôle comprise.
+     *
+     * Vérifie d'abord la feature : une restriction d'élément n'ouvre jamais ce
+     * qu'un droit de feature ferme.
+     */
+    assertItem: (feature: WorkspaceFeatureId, itemId: number, level?: FeatureAccess) => Promise<void>;
     /**
      * Caller holds the global `admin` role. Resolved by the dispatcher before the
      * handler runs, so guards read it synchronously and never query the role.

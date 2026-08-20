@@ -1,0 +1,393 @@
+/* La coquille : navigation à gauche, panneau à droite.
+   Les deux colonnes se replient en une seule sur mobile, où une barre latérale
+   de 180 px prendrait la moitié de l'écran pour deux intitulés. */
+.layout {
+    display: grid;
+    grid-template-columns: 190px 1fr;
+    gap: var(--space-lg);
+    flex: 1;
+    min-height: 0;
+}
+
+.layout:has(> .panel:only-child) {
+    grid-template-columns: 1fr;
+}
+
+.nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    border-right: 1px solid var(--glass-border);
+    padding-right: var(--space-sm);
+}
+
+.navItem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.navItem:hover {
+    color: var(--text-primary);
+    background: var(--surface-subtle);
+}
+
+.navItemActive {
+    color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.navLabel {
+    flex: 1;
+}
+
+.navBadge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.navItemActive .navBadge {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.panel {
+    min-width: 0;
+    overflow-y: auto;
+}
+
+/* ------------------------------------------------------------- une section */
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.sectionLabel {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.sectionHint {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.sectionActions {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.empty {
+    margin: 0;
+    padding: var(--space-md);
+    border: 1px dashed var(--glass-border);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.notice {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.warning {
+    color: var(--warning);
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+/* ------------------------------------------------------- héritage (élément) */
+
+.inheritRow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+}
+
+.inheritLabel {
+    display: block;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.inheritHint {
+    display: block;
+    margin-top: 2px;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+/* --------------------------------------------------------- liste de canaux */
+
+.channelList {
+    display: flex;
+    flex-direction: column;
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.channelList:empty {
+    display: none;
+}
+
+/* Hérité : ce qu'on voit est ce que la fonctionnalité impose, pas un choix
+   propre à cet élément. */
+.channelListInherited {
+    filter: opacity(0.55);
+}
+
+.channelRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.channelRow:last-child {
+    border-bottom: none;
+}
+
+.channelRow:hover {
+    background: var(--surface-subtle);
+}
+
+.channelIcon {
+    flex: none;
+    color: var(--text-muted);
+}
+
+.channelText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.channelLabel {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+/* Les deux pastilles d'état. Elles disent pourquoi un canal coché n'enverra
+   rien — sans elles, un canal muet a exactement l'air d'un canal qui marche. */
+.channelOff,
+.channelBroken {
+    padding: 1px 6px;
+    border-radius: var(--radius-pill);
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: lowercase;
+}
+
+.channelOff {
+    background: var(--surface-subtle);
+    color: var(--text-muted);
+}
+
+.channelBroken {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+.channelMeta {
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.channelActions {
+    display: flex;
+    flex: none;
+    gap: 2px;
+}
+
+/* Combien de cibles écrivent vers ce canal.
+   Hors de `.channelMeta`, qui tronque : une URL de webhook est longue par
+   nature, et le compteur se faisait manger avant d'être lu. */
+.channelUsage {
+    flex: none;
+    min-width: 44px;
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+.channelUsageIdle {
+    background: var(--surface-subtle);
+    color: var(--text-muted);
+}
+
+/* Action de ligne : icône seule, la cible de clic reste confortable.
+   Même forme que `.actionBtn` de l'écran Espace. */
+.rowAction {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.rowAction:hover:not(:disabled) {
+    color: var(--text-primary);
+    background: var(--surface-subtle);
+}
+
+.rowActionDanger:hover:not(:disabled) {
+    color: var(--danger);
+    background: var(--danger-bg);
+}
+
+.rowAction:disabled {
+    /* framer-motion n'intervient pas ici, mais on garde le même levier que
+       partout ailleurs : `filter` plutôt qu'`opacity`, pour ne pas entrer en
+       conflit avec une animation ajoutée plus tard. */
+    filter: opacity(0.4);
+    cursor: default;
+}
+
+.usageList {
+    margin: var(--space-sm) 0 0;
+    padding-left: var(--space-md);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
+/* ------------------------------------------------------- formulaire d'ajout */
+
+.draft {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.fieldLabel {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.fieldHint {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1.45;
+}
+
+@media (max-width: 720px) {
+    .layout {
+        grid-template-columns: 1fr;
+    }
+
+    .nav {
+        flex-direction: row;
+        overflow-x: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--glass-border);
+        padding: 0 0 var(--space-sm);
+        scrollbar-width: none;
+    }
+
+    .channelActions {
+        flex-direction: column;
+    }
+}
+
+/* Pastille de rôle, reprise du même repère que la matrice et la liste des
+   membres : une couleur y identifie un rôle partout dans l'app. */
+.roleDot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.grantSelect {
+    flex: none;
+    width: auto;
+    min-width: 190px;
+}
+
+/* Une destination d'un autre espace : présente, inerte, sans identité. */
+.channelRowForeign {
+    background: var(--surface-subtle);
+}
+
+.foreignMark {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    color: var(--text-muted);
+}

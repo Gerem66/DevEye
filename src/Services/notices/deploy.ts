@@ -1,6 +1,7 @@
 import type { DeploymentRow } from 'deveye-types';
 
 import type { DiscordMessage } from '@/Services/discord';
+import { COLOR_DANGER, COLOR_INFO, COLOR_SUCCESS, FIELD_MAX, block, duration, moment, trim } from './shared';
 
 /**
  * Le message de suivi d'un déploiement : ce qu'il montre, et comment il le dit.
@@ -29,11 +30,6 @@ import type { DiscordMessage } from '@/Services/discord';
  * a pas de barre du tout, seulement le temps écoulé. C'est le cas honnête.
  */
 
-/** Couleurs de la charte Discord : la bordure dit l'issue avant la lecture. */
-const COLOR_RUNNING = 0x5865f2;
-const COLOR_SUCCESS = 0x57f287;
-const COLOR_FAILURE = 0xed4245;
-
 /** Segments de la barre. Dix : lisible sur mobile, sans passer à la ligne. */
 const BAR_SEGMENTS = 10;
 
@@ -48,9 +44,6 @@ const LOG_LINE_MAX = 110;
 
 /** Discord refuse une description au-delà de 4096 caractères. */
 const DESCRIPTION_MAX = 4000;
-
-/** Discord refuse la valeur d'un champ au-delà de 1024 caractères. */
-const FIELD_MAX = 1000;
 
 /**
  * Longueur au-delà de laquelle un intitulé de déploiement est coupé.
@@ -173,31 +166,6 @@ export function firstLine(text: string, max = TITLE_MAX): string {
     return `${line.slice(0, max - 1).trimEnd()}…`;
 }
 
-/** « 2 min 25 », « 45 s » — la même échelle que les corps d'alerte. */
-function duration(seconds: number): string {
-    if (seconds < 60) return `${seconds} s`;
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes} min ${String(seconds % 60).padStart(2, '0')} s`;
-    const hours = Math.floor(minutes / 60);
-    return `${hours} h ${String(minutes % 60).padStart(2, '0')} min`;
-}
-
-/**
- * Un instant, rendu par Discord dans le fuseau **du lecteur**.
- *
- * `<t:epoch:f>` plutôt qu'une date que nous formaterions : chacun lit l'heure
- * chez lui, et le message reste juste pour une équipe répartie. `:R` donne le
- * relatif (« il y a 2 minutes »), qui se met à jour tout seul même entre deux
- * modifications du message.
- */
-function moment(epochSeconds: number, style: 'f' | 'R' | 'T' = 'f'): string {
-    return `<t:${epochSeconds}:${style}>`;
-}
-
-function block(body: string): string {
-    return `\`\`\`\n${body}\n\`\`\``;
-}
-
 /**
  * Le journal, en **champ** et non dans la description.
  *
@@ -281,7 +249,7 @@ export function buildNotice(state: NoticeState): DiscordMessage {
             {
                 title: running ? '🚀 Déploiement en cours' : failed ? '❌ Déploiement échoué' : '✅ Déploiement réussi',
                 description: parts.join('\n\n').slice(0, DESCRIPTION_MAX),
-                color: running ? COLOR_RUNNING : failed ? COLOR_FAILURE : COLOR_SUCCESS,
+                color: running ? COLOR_INFO : failed ? COLOR_DANGER : COLOR_SUCCESS,
                 fields,
                 footer: { text: 'DevEye · suivi de déploiement' },
                 // L'horodatage du pied : Discord le rend dans le fuseau du
@@ -292,12 +260,6 @@ export function buildNotice(state: NoticeState): DiscordMessage {
             }
         ]
     };
-}
-
-/** Discord refuse une valeur de champ vide : un tiret vaut mieux qu'un rejet. */
-function trim(value: string): string {
-    const clean = value.trim().slice(0, FIELD_MAX);
-    return clean.length > 0 ? clean : '—';
 }
 
 /**

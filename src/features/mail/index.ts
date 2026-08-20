@@ -177,6 +177,7 @@ export const mailAccountListFeature: FeatureDefinition<
     typeof mailAccountList.output
 > = defineFeature({
     ...mailAccountList,
+    access: { feature: 'mail', level: 'read' },
     handler: async (ctx) => {
         const rows = await ctx.db.mailAccounts.listByWorkspace(ctx.workspaceId);
         const accounts = await Promise.all(rows.map((row) => toAccountDTO(cipherFor(ctx, row.security_tier), row)));
@@ -190,6 +191,7 @@ export const mailAccountCountFeature: FeatureDefinition<
     typeof mailAccountCount.output
 > = defineFeature({
     ...mailAccountCount,
+    access: { feature: 'mail', level: 'read' },
     handler: async (ctx) => ({ count: await ctx.db.mailAccounts.count(ctx.workspaceId) })
 });
 
@@ -199,6 +201,7 @@ export const mailAccountAddFeature: FeatureDefinition<
     typeof mailAccountAdd.output
 > = defineFeature({
     ...mailAccountAdd,
+    access: { feature: 'mail', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         await assertMailUnlocked(ctx, input.draft.securityTier);
@@ -235,6 +238,7 @@ export const mailAccountUpdateFeature: FeatureDefinition<
     typeof mailAccountUpdate.output
 > = defineFeature({
     ...mailAccountUpdate,
+    access: { feature: 'mail', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const existing = await loadAccount(ctx, input.id);
@@ -296,6 +300,7 @@ export const mailAccountSetProfileFeature: FeatureDefinition<
     typeof mailAccountSetProfile.output
 > = defineFeature({
     ...mailAccountSetProfile,
+    access: { feature: 'mail', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const existing = await loadAccount(ctx, input.id);
@@ -342,6 +347,7 @@ export const mailAccountDeleteFeature: FeatureDefinition<
     typeof mailAccountDelete.output
 > = defineFeature({
     ...mailAccountDelete,
+    access: { feature: 'mail', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         await loadAccount(ctx, input.id);
@@ -362,6 +368,7 @@ export const mailAccountReorderFeature: FeatureDefinition<
     typeof mailAccountReorder.output
 > = defineFeature({
     ...mailAccountReorder,
+    access: { feature: 'mail', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         await ctx.db.mailAccounts.reorder(ctx.workspaceId, input.ids);
@@ -375,6 +382,7 @@ export const mailAccountSetEnabledFeature: FeatureDefinition<
     typeof mailAccountSetEnabled.output
 > = defineFeature({
     ...mailAccountSetEnabled,
+    access: { feature: 'mail', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const row = await ctx.db.mailAccounts.setEnabled(input.id, ctx.workspaceId, input.enabled);
@@ -389,6 +397,7 @@ export const mailAccountTestConnectionFeature: FeatureDefinition<
     typeof mailAccountTestConnection.output
 > = defineFeature({
     ...mailAccountTestConnection,
+    access: { feature: 'mail', level: 'write' },
     handler: async (ctx, input) => {
         if (input.draft) {
             const credentials: MailCredentials = {
@@ -416,6 +425,7 @@ export const mailOAuthStartFeature: FeatureDefinition<
     typeof mailOAuthStart.output
 > = defineFeature({
     ...mailOAuthStart,
+    access: { feature: 'mail', level: 'write' },
     handler: async (ctx, input) => {
         if (!isOAuthConfigured(input.provider)) {
             throw new FeatureError('validation', `OAuth ${input.provider} n'est pas configuré sur ce serveur`);
@@ -437,6 +447,7 @@ export const mailFolderListFeature: FeatureDefinition<
     typeof mailFolderList.output
 > = defineFeature({
     ...mailFolderList,
+    access: { feature: 'mail', level: 'read' },
     handler: async (ctx, input) => {
         const account = await loadAccount(ctx, input.accountId);
         await assertMailUnlocked(ctx, account.security_tier);
@@ -475,6 +486,7 @@ export const mailFolderReorderFeature: FeatureDefinition<
     typeof mailFolderReorder.output
 > = defineFeature({
     ...mailFolderReorder,
+    access: { feature: 'mail', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         await loadAccount(ctx, input.accountId);
@@ -489,6 +501,7 @@ export const mailFolderSyncFeature: FeatureDefinition<
     typeof mailFolderSync.output
 > = defineFeature({
     ...mailFolderSync,
+    access: { feature: 'mail', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const { folder, account } = await loadFolderWithAccount(ctx, input.folderId);
@@ -507,6 +520,7 @@ export const mailFolderBackfillFeature: FeatureDefinition<
     typeof mailFolderBackfill.output
 > = defineFeature({
     ...mailFolderBackfill,
+    access: { feature: 'mail', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const { folder, account } = await loadFolderWithAccount(ctx, input.folderId);
@@ -524,6 +538,7 @@ export const mailFolderResetFeature: FeatureDefinition<
     typeof mailFolderReset.output
 > = defineFeature({
     ...mailFolderReset,
+    access: { feature: 'mail', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const { folder, account } = await loadFolderWithAccount(ctx, input.folderId);
@@ -539,6 +554,7 @@ export const mailMessageListFeature: FeatureDefinition<
     typeof mailMessageList.output
 > = defineFeature({
     ...mailMessageList,
+    access: { feature: 'mail', level: 'read' },
     handler: async (ctx, input) => {
         const { folder, account } = await loadFolderWithAccount(ctx, input.folderId);
         await assertMailUnlocked(ctx, account.security_tier);
@@ -590,6 +606,7 @@ export const mailMessageSearchFeature: FeatureDefinition<
     typeof mailMessageSearch.output
 > = defineFeature({
     ...mailMessageSearch,
+    access: { feature: 'mail', level: 'read' },
     handler: async (ctx, input) => {
         const { folder, account } = await loadFolderWithAccount(ctx, input.folderId);
         await assertMailUnlocked(ctx, account.security_tier);
@@ -667,6 +684,7 @@ export const mailMessageGetFeature: FeatureDefinition<
     typeof mailMessageGet.output
 > = defineFeature({
     ...mailMessageGet,
+    access: { feature: 'mail', level: 'read' },
     handler: async (ctx, input) => {
         const { message, folder, account } = await loadMessageChain(ctx, input.messageId);
         await assertMailUnlocked(ctx, account.security_tier);
@@ -717,6 +735,7 @@ export const mailMessageSetFlagsFeature: FeatureDefinition<
     typeof mailMessageSetFlags.output
 > = defineFeature({
     ...mailMessageSetFlags,
+    access: { feature: 'mail', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const { message, folder, account } = await loadMessageChain(ctx, input.messageId);
@@ -743,6 +762,7 @@ export const mailMessageMoveFeature: FeatureDefinition<
     typeof mailMessageMove.output
 > = defineFeature({
     ...mailMessageMove,
+    access: { feature: 'mail', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const { message, folder, account } = await loadMessageChain(ctx, input.messageId);
@@ -771,6 +791,7 @@ export const mailMessageDeleteFeature: FeatureDefinition<
     typeof mailMessageDelete.output
 > = defineFeature({
     ...mailMessageDelete,
+    access: { feature: 'mail', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const { message, folder, account } = await loadMessageChain(ctx, input.messageId);
@@ -805,6 +826,7 @@ export const mailAttachmentDownloadFeature: FeatureDefinition<
     typeof mailAttachmentDownload.output
 > = defineFeature({
     ...mailAttachmentDownload,
+    access: { feature: 'mail', level: 'read' },
     handler: async (ctx, input) => {
         await loadMessageChain(ctx, input.messageId);
         const token = await signMailAttachmentToken({
@@ -824,6 +846,7 @@ export const mailAttachmentScanFeature: FeatureDefinition<
     typeof mailAttachmentScan.output
 > = defineFeature({
     ...mailAttachmentScan,
+    access: { feature: 'mail', level: 'read' },
     handler: async (ctx, input) => {
         await loadMessageChain(ctx, input.messageId);
         const settings = await ctx.db.mailSettings.get(ctx.workspaceId);
@@ -846,6 +869,7 @@ export const mailSendFeature: FeatureDefinition<
     typeof mailSend.output
 > = defineFeature({
     ...mailSend,
+    access: { feature: 'mail', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const account = await loadAccount(ctx, input.accountId);
@@ -890,6 +914,7 @@ export const mailGetSettingsFeature: FeatureDefinition<
     typeof mailGetSettings.output
 > = defineFeature({
     ...mailGetSettings,
+    access: { feature: 'mail', level: 'read' },
     handler: async (ctx) => {
         const row = await ctx.db.mailSettings.get(ctx.workspaceId);
         return { settings: toSettingsDTO(row) };
@@ -902,6 +927,7 @@ export const mailSetSettingsFeature: FeatureDefinition<
     typeof mailSetSettings.output
 > = defineFeature({
     ...mailSetSettings,
+    access: { feature: 'mail', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const row = await ctx.db.mailSettings.set(ctx.workspaceId, {

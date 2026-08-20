@@ -28,6 +28,7 @@ async function setShareStatus(ctx: FeatureContext, shareId: number, status: Sync
 
 export const cloudSyncPauseShareFeature = defineFeature({
     ...cloudSyncPauseShare,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         await setShareStatus(ctx, input.shareId, 'paused');
@@ -37,6 +38,7 @@ export const cloudSyncPauseShareFeature = defineFeature({
 
 export const cloudSyncResumeShareFeature = defineFeature({
     ...cloudSyncResumeShare,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         await setShareStatus(ctx, input.shareId, 'active');
@@ -46,6 +48,7 @@ export const cloudSyncResumeShareFeature = defineFeature({
 
 export const cloudSyncSyncNowFeature = defineFeature({
     ...cloudSyncSyncNow,
+    access: { feature: 'cloudsync', level: 'write' },
     handler: async (ctx, input) => {
         await authorizeShare(ctx, input.shareId);
         const started = await requireEngine(ctx).syncNow(input.shareId, input.deviceId);
@@ -55,6 +58,7 @@ export const cloudSyncSyncNowFeature = defineFeature({
 
 export const cloudSyncSubscribeFeature = defineFeature({
     ...cloudSyncSubscribe,
+    access: { feature: 'cloudsync', level: 'read' },
     handler: async (ctx, input) => {
         if (!ctx.monitor) throw new FeatureError('internal', 'Connexion temps réel requise');
         for (const shareId of input.shareIds) await authorizeShare(ctx, shareId);
@@ -65,6 +69,7 @@ export const cloudSyncSubscribeFeature = defineFeature({
 
 export const cloudSyncUnsubscribeFeature = defineFeature({
     ...cloudSyncUnsubscribe,
+    access: { feature: 'cloudsync', level: 'read' },
     handler: async (ctx, input) => {
         ctx.monitor?.unsubscribeSync(input.shareIds);
         return { ok: true };
@@ -73,6 +78,7 @@ export const cloudSyncUnsubscribeFeature = defineFeature({
 
 export const cloudSyncBrowseFeature = defineFeature({
     ...cloudSyncBrowse,
+    access: { feature: 'cloudsync', level: 'read' },
     handler: async (ctx, input) => {
         const share = await authorizeShare(ctx, input.shareId);
         const dir = input.dir === '' ? '' : safeRelPath(input.dir);

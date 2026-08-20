@@ -16,7 +16,8 @@ import type { CloudSyncEngine } from '@/cloudSync/engine';
 import type { AuditLog } from '@/Services/AuditLog';
 import type { DatabaseMonitor } from '@/Services/DatabaseMonitor';
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
-import { deliver, hasChannel, resolveChannels } from '@/Services/notifications';
+import { deliver, hasChannel, resolveRoute } from '@/Services/notifications';
+import { buildNotice } from '@/Services/notices/backup';
 import { env } from '@/Utils/Env';
 import { backupKey, sealStream } from '@/backup/crypto';
 import { DeviceSink, LocalSink, S3Sink, type BackupSink } from '@/backup/sinks';
@@ -476,7 +477,7 @@ export class BackupService {
         });
 
         if (error === null) await this.prune(job, destination);
-        else await this.notifyFailure(job.workspace_id, jobName, error);
+        else await this.notifyFailure(job.workspace_id, job.id, jobName, error);
 
         this.deps.live?.changed(job.workspace_id, ['backup'], null);
     }
@@ -553,16 +554,39 @@ export class BackupService {
         }
     }
 
-    private async notifyFailure(workspaceId: number, jobName: string, error: string): Promise<void> {
+    private async notifyFailure(
+        workspaceId: number,
+        // Le travail concerné : sa route l'emporte sur celle de la
+        // fonctionnalité, de sorte qu'une sauvegarde critique puisse réveiller
+        // quelqu'un d'autre que les copies de routine.
+        jobId: number,
+        jobName: string,
+        error: string
+    ): Promise<void> {
         try {
-            const channels = await resolveChannels(this.deps.db, this.cipherFor(workspaceId), workspaceId, 'backup');
+            const channels = await resolveRoute(
+                this.deps.db,
+                this.cipherFor(workspaceId),
+                workspaceId,
+                'backup',
+                jobId
+            );
             if (!hasChannel(channels)) return;
             await deliver(
                 channels,
                 {
                     subject: `DevEye — sauvegarde « ${jobName} » en échec`,
                     body: `La sauvegarde « ${jobName} » a échoué.\n\n${error}`,
-                    payload: { feature: 'backup', job: jobName, error }
+                    payload: { feature: 'backup', job: jobName, error },
+                    // La même alerte, mise en page pour Discord. Seuls les
+                    // échecs sont annoncés : un canal rempli de succès
+                    // quotidiens finirait par noyer celui qui compte.
+                    embeds: buildNotice({
+                        job: jobName,
+                        destination: null,
+                        error,
+                        at: Math.floor(Date.now() / 1000)
+                    })
                 },
                 this.deps.logger
             );

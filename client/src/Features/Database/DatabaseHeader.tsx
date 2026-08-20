@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Database } from 'deveye-types';
 import { Button } from '@/Components';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { openInfo } from '@/Components/InfoPopup';
 import { ENGINE_LABELS, STATUS_META } from './format';
 import styles from './style.module.css';
@@ -152,6 +153,17 @@ export function DatabaseHeader({
                             <Button variant='secondary' icon='edit' onClick={onEdit} disabled={busy}>
                                 Modifier
                             </Button>
+                            {/* Les réglages **de cette base** : ses propres
+                                canaux d'alerte, ou ceux de la fonctionnalité
+                                tant qu'elle les suit. */}
+                            <FeatureSettingsButton
+                                scope={{
+                                    kind: 'item',
+                                    feature: 'database',
+                                    itemId: database.id,
+                                    itemLabel: database.name
+                                }}
+                            />
                         </>
                     )}
                     {/* Toujours l'avant-dernier : les trois onglets d'un projet

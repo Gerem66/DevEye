@@ -53,6 +53,7 @@ export const weatherListFeature: FeatureDefinition<
     typeof weatherList.output
 > = defineFeature({
     ...weatherList,
+    access: { feature: 'weather', level: 'read' },
     handler: async (ctx) => {
         const rows = await ctx.db.weather.listLocations(ctx.workspaceId);
         return { locations: rows.map(toLocation) };
@@ -65,6 +66,7 @@ export const weatherAddFeature: FeatureDefinition<
     typeof weatherAdd.output
 > = defineFeature({
     ...weatherAdd,
+    access: { feature: 'weather', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const apiKey = input.apiKey?.trim() || null;
@@ -100,6 +102,7 @@ export const weatherUpdateFeature: FeatureDefinition<
     typeof weatherUpdate.output
 > = defineFeature({
     ...weatherUpdate,
+    access: { feature: 'weather', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         // apiKey: undefined = leave; "" = clear; non-empty = encrypt + store.
@@ -131,6 +134,7 @@ export const weatherRemoveFeature: FeatureDefinition<
     typeof weatherRemove.output
 > = defineFeature({
     ...weatherRemove,
+    access: { feature: 'weather', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const deleted = await ctx.db.weather.deleteLocation(input.id, ctx.workspaceId);
@@ -151,6 +155,7 @@ export const weatherReorderFeature: FeatureDefinition<
     typeof weatherReorder.output
 > = defineFeature({
     ...weatherReorder,
+    access: { feature: 'weather', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const rows = await ctx.db.weather.reorderLocations(ctx.workspaceId, input.ids);
@@ -164,6 +169,7 @@ export const weatherSetPrimaryFeature: FeatureDefinition<
     typeof weatherSetPrimary.output
 > = defineFeature({
     ...weatherSetPrimary,
+    access: { feature: 'weather', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const target = await ctx.db.weather.findLocation(input.id, ctx.workspaceId);
@@ -179,6 +185,7 @@ export const weatherGetFeature: FeatureDefinition<
     typeof weatherGet.output
 > = defineFeature({
     ...weatherGet,
+    access: { feature: 'weather', level: 'read' },
     handler: async (ctx, input) => {
         const row = await ctx.db.weather.findLocation(input.id, ctx.workspaceId);
         if (!row) throw new FeatureError('not_found', 'Weather location not found');
@@ -207,6 +214,7 @@ export const weatherSetKeyFeature: FeatureDefinition<
     typeof weatherSetKey.output
 > = defineFeature({
     ...weatherSetKey,
+    access: { feature: 'weather', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const key = input.key.trim();

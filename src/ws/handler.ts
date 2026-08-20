@@ -284,6 +284,22 @@ export async function registerWS(
                         throw new FeatureError('forbidden', 'Cette fonctionnalité ne vous est pas ouverte ici');
                     }
                 };
+                const assertItem = async (
+                    f: WorkspaceFeatureId,
+                    itemId: number,
+                    level: FeatureAccess = 'read'
+                ): Promise<void> => {
+                    // La feature d'abord : une restriction d'élément ne peut
+                    // qu'abaisser, jamais ouvrir ce que la feature ferme.
+                    assertFeature(f, level);
+                    const restriction = (await scope.itemRestrictions(f)).get(itemId);
+                    if (restriction === 'none') {
+                        throw new FeatureError('forbidden', 'Cet élément ne vous est pas accessible');
+                    }
+                    if (restriction === 'read' && level === 'write') {
+                        throw new FeatureError('forbidden', 'Cet élément est en lecture seule pour votre rôle');
+                    }
+                };
 
                 // Declared authorization (see `FeatureAccessSpec`), enforced here
                 // so a command can never ship without its guard.
@@ -308,6 +324,8 @@ export async function registerWS(
                         assertCan,
                         canFeature,
                         assertFeature,
+                        itemRestrictions: scope.itemRestrictions,
+                        assertItem,
                         ip,
                         logger: reqLogger.child({ command, requestId: replyId }),
                         requestId: replyId,

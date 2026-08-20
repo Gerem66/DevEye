@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Credential, DeployHistoryEntry, DeployTarget, Deployment } from 'deveye-types';
 
-import { Button, CredentialsDialog, DEPLOY_CREDENTIALS, NotificationsDialog } from '@/Components';
+import { Button, CredentialsDialog, DEPLOY_CREDENTIALS } from '@/Components';
 import { ws } from '@/api/ws';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { useLiveOutlines } from '@/live/useLiveOutline';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
@@ -53,7 +54,6 @@ export function FeatureDeploy({ workspace }: FeatureProps) {
 
     const [dialog, setDialog] = useState<{ target: DeployTarget | null } | null>(null);
     const [credentialsOpen, setCredentialsOpen] = useState(false);
-    const [notificationsOpen, setNotificationsOpen] = useState(false);
     const [credentials, setCredentials] = useState<Credential[]>([]);
     /** L'identifiant Dokploy dont on regarde le journal ; `null` = popup fermée. */
     const [logsFor, setLogsFor] = useState<string | null>(null);
@@ -206,9 +206,7 @@ export function FeatureDeploy({ workspace }: FeatureProps) {
                             {/* Réglage d'espace comme les clés, donc en tête de
                                 la feature : ces canaux ne dépendent d'aucune
                                 cible en particulier. */}
-                            <Button variant='secondary' icon='mail' onClick={() => setNotificationsOpen(true)}>
-                                Notifications
-                            </Button>
+                            <FeatureSettingsButton scope={{ kind: 'feature', feature: 'deploy' }} />
                             {canWrite && (
                                 <Button icon='add' onClick={() => setDialog({ target: null })}>
                                     Déclarer une cible
@@ -297,15 +295,6 @@ export function FeatureDeploy({ workspace }: FeatureProps) {
                     // doit le dire sans attendre.
                     invalidate('deploy.list');
                 }}
-            />
-
-            <NotificationsDialog
-                open={notificationsOpen}
-                onClose={() => setNotificationsOpen(false)}
-                feature='deploy'
-                title='Notifications de Déploiement'
-                description='Propres aux mises en production : un déploiement raté n’a ni les mêmes destinataires ni la même urgence qu’un service tombé (Uptime) ou qu’un constat de sécurité (Sentinelle).'
-                when='Envoyées à l’atterrissage d’un déploiement, échec comme succès, y compris ceux lancés depuis Dokploy, une CI ou un push git. Sur un webhook Discord, un seul message s’ouvre au démarrage puis se met à jour tout seul — avancement, journal, puis issue et durée.'
             />
 
             <LogsDialog

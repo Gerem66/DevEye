@@ -183,7 +183,8 @@ utilise donc systématiquement l'**étage ouvert** :
   n'expose *que* cet étage — l'étage gardé n'a aucun sens sans session) : le nom
   du service, son URL, le mot-clé attendu, les messages d'erreur (ligne du
   service, ligne de chaque ping, ligne d'incident) et les canaux de notification
-  (adresse mail, URL de webhook) ;
+  — libellé, adresse mail, URL de webhook, dans `notification_channels`
+  (voir [NOTIFICATIONS.md](./NOTIFICATIONS.md)) ;
 - en clair : ce qui pilote la planification (`interval_seconds`,
   `timeout_seconds`, `enabled`, `last_checked_at`) et ce qu'agrègent les
   graphiques (`status`, `response_ms`, `http_status`, horodatages, agrégat

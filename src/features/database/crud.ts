@@ -10,6 +10,7 @@ import {
 import type { DatabaseUsage } from 'deveye-types';
 import type { StoredAccess, StoredDatabase } from '@/Services/DatabaseMonitor';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
+import { shareScope } from '../_sharing';
 import { tryDecryptProject } from '../project/_shared';
 import { databaseCipher, loadDatabase, nameRef, READ, reloadDatabase, toAlert, toDatabase, WRITE } from './_shared';
 
@@ -39,9 +40,16 @@ export const databaseListFeature: FeatureDefinition<
     ...databaseList,
     access: READ,
     handler: async (ctx) => {
-        const cipher = databaseCipher(ctx);
-        const rows = await ctx.db.databases.list(ctx.workspaceId);
-        return { databases: await Promise.all(rows.map((row) => toDatabase(cipher, row))) };
+        const rows = await ctx.db.databases.listVisible(ctx.workspaceId);
+        // Les bases qu'une restriction masque pour ce rôle disparaissent de la
+        // liste plutôt que d'y figurer grisées : une ligne qu'on voit sans
+        // pouvoir l'ouvrir apprend déjà qu'elle existe.
+        const hidden = await ctx.itemRestrictions('database');
+        const visible = rows.filter((r) => hidden.get(r.id) !== 'none');
+        const scope = await shareScope(ctx, 'database');
+        return {
+            databases: await Promise.all(visible.map(async (row) => toDatabase(await scope.cipherFor(row.id), row)))
+        };
     }
 });
 

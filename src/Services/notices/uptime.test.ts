@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { webhookBody, type Alert } from './notifications';
-import { buildNotice } from './UptimeNotice';
+import { webhookBody, type Alert } from '../notifications';
+import { buildNotice } from './uptime';
 
 /**
  * L'avis de disponibilité tel que Discord le reçoit.
@@ -163,32 +163,39 @@ describe('webhookBody — quel canal reçoit quoi', () => {
         embeds: [{ title: '🔴 Service hors ligne' }]
     };
 
-    it('envoie l’embed seul à Discord', () => {
+    it('envoie l’embed seul à un canal Discord', () => {
         // Garder `content` afficherait deux fois la même alerte : le pavé de
         // texte au-dessus de sa propre mise en page.
-        const body = webhookBody('https://discord.com/api/webhooks/1/abc', alert);
+        const body = webhookBody('discord', alert);
         assert.deepEqual(body.embeds, alert.embeds);
         assert.equal(body.content, undefined);
         assert.equal(body.event, 'down');
     });
 
-    it('garde le texte pour tout le reste', () => {
+    it('garde le texte sur un canal webhook générique', () => {
         // Slack lit `text`, un point d'entrée maison lit ses champs : ni l'un ni
         // l'autre ne sait rendre un embed.
-        const body = webhookBody('https://exemple.fr/hook', alert);
+        const body = webhookBody('webhook', alert);
         assert.equal(body.content, 'le corps en clair');
         assert.equal(body.text, 'le corps en clair');
         assert.equal(body.embeds, undefined);
     });
 
-    it('ne se laisse pas prendre à une URL qui parle de Discord', () => {
-        const body = webhookBody('https://exemple.fr/?ref=discord.com/api/webhooks/', alert);
+    it('ne décide plus d’après l’URL, mais d’après le type déclaré', () => {
+        // Le reniflage d'URL décidait à la place de l'utilisateur : un point
+        // d'entrée maison servi depuis un domaine Discord recevait des embeds
+        // au lieu de son texte, et rien ne permettait de demander l'inverse.
+        // Un canal déclaré `webhook` garde son texte, quelle que soit son URL.
+        const body = webhookBody('webhook', alert);
         assert.equal(body.content, 'le corps en clair');
+        assert.equal(body.embeds, undefined);
     });
 
     it('garde le texte pour une feature qui ne fournit pas d’embed', () => {
+        // Mieux vaut un message simple qu'aucun : un canal Discord sans mise en
+        // page reçoit l'alerte comme n'importe quel webhook.
         const plain: Alert = { subject: 's', body: 'corps', payload: {} };
-        const body = webhookBody('https://discord.com/api/webhooks/1/abc', plain);
+        const body = webhookBody('discord', plain);
         assert.equal(body.content, 'corps');
     });
 });

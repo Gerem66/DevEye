@@ -18,6 +18,16 @@ import { ws } from '@/api/ws';
  * Par convention, une clé est la commande WS dont elle met en cache le résultat.
  */
 export type ResourceKey =
+    /**
+     * Les canaux d'alerte de l'espace.
+     *
+     * Une seule clé pour toutes les fonctionnalités : un canal appartient à
+     * l'espace, donc le corriger change ce que voit l'écran de réglages de
+     * chacune d'elles. Le routage suit dans `notify.routeGet`, relu par la
+     * coquille ouverte.
+     */
+    | 'notify.channelList'
+    | 'notify.routeGet'
     | 'note.count'
     | 'note.list'
     | 'password.count'
@@ -112,6 +122,7 @@ export type ResourceKey =
  * penser à s'y inscrire.
  */
 const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
+    notify: ['notify.channelList', 'notify.routeGet'],
     notes: ['note.count', 'note.list'],
     password: ['password.count', 'password.list'],
     cloudsync: ['cloudSync.listShares'],

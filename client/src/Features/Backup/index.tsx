@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { BackupDestination, BackupJob } from 'deveye-types';
 
-import { Button, Dialog, NotificationsDialog } from '@/Components';
+import { Button, Dialog } from '@/Components';
 import { ws } from '@/api/ws';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
 import type { FeatureProps } from '@/Features/types';
@@ -51,7 +52,6 @@ export function FeatureBackup(_props: FeatureProps) {
     const [destinationsOpen, setDestinationsOpen] = useState(false);
     const [destinationDialog, setDestinationDialog] = useState<{ destination: BackupDestination | null } | null>(null);
     const [jobDialog, setJobDialog] = useState<{ job: BackupJob | null } | null>(null);
-    const [notificationsOpen, setNotificationsOpen] = useState(false);
     const [confirmRemove, setConfirmRemove] = useState<BackupJob | null>(null);
 
     const jobsVersion = useResourceVersion('backup.jobList');
@@ -134,9 +134,10 @@ export function FeatureBackup(_props: FeatureProps) {
                             </Button>
                             {canWrite && (
                                 <>
-                                    <Button variant='ghost' icon='mail' onClick={() => setNotificationsOpen(true)}>
-                                        Alertes
-                                    </Button>
+                                    <FeatureSettingsButton
+                                        scope={{ kind: 'feature', feature: 'backup' }}
+                                        variant='ghost'
+                                    />
                                     <Button
                                         icon='plus'
                                         disabled={destinations.length === 0}
@@ -245,15 +246,6 @@ export function FeatureBackup(_props: FeatureProps) {
                 destinations={destinations}
                 onClose={() => setJobDialog(null)}
                 onSaved={refresh}
-            />
-
-            <NotificationsDialog
-                open={notificationsOpen}
-                feature='backup'
-                title='Notifications de sauvegarde'
-                description='Propres aux sauvegardes : ces canaux sont les leurs, indépendants de ceux d’Uptime, de Sentinelle, du Déploiement et des bases. Les régler ici ne touche à rien d’autre.'
-                when='Un avis part à chaque échec de sauvegarde. Les réussites ne sont jamais notifiées : sinon le canal se remplirait de succès et l’échec s’y perdrait.'
-                onClose={() => setNotificationsOpen(false)}
             />
 
             <Dialog

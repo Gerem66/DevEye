@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { WORKSPACE_CAPABILITIES, WORKSPACE_FEATURE_IDS } from 'deveye-types';
+import { FEATURE_REGISTRY, WORKSPACE_CAPABILITIES } from 'deveye-types';
 import type { FeatureAccess, WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole } from 'deveye-types';
 
 import Button from '@/Components/Button';
@@ -9,32 +9,28 @@ import SelectInput from '@/Components/SelectInput';
 import TextInput from '@/Components/TextInput';
 import styles from './Workspace.module.css';
 
+/**
+ * Édition d'un rôle : son identité **et** ses droits, dans une seule popup.
+ *
+ * Un détour a existé — l'identité ici, les droits dans une matrice globale
+ * rôles × droits sous un onglet Permissions. Retiré : la grille répondait à
+ * « qui peut ceci ? » mais l'usage réel est « configurer CE rôle », et couper un
+ * rôle en deux écrans obligeait à savoir lequel des deux détenait quoi. Un rôle
+ * se règle entier, là où on l'a créé.
+ *
+ * Les intitulés des features viennent du **registre** (`FEATURE_REGISTRY`),
+ * plus d'une table locale : c'est ce qui garantit qu'une fonctionnalité ajoutée
+ * apparaît ici sans qu'on y pense.
+ */
+
 /** Intitulés en clair : l'enum technique ne se montre pas à l'utilisateur. */
 const CAPABILITY_LABELS: Record<WorkspaceCapability, string> = {
     'workspace.manage': 'Renommer et supprimer l’espace',
     'workspace.members': 'Inviter et exclure des membres',
-    'workspace.roles': 'Gérer les rôles',
+    'workspace.roles': 'Gérer les rôles et ce que chacun voit',
     'workspace.appearance': 'Modifier l’apparence',
-    'workspace.layout': 'Modifier la disposition de l’accueil'
-};
-
-const FEATURE_LABELS: Record<(typeof WORKSPACE_FEATURE_IDS)[number], string> = {
-    devices: 'Appareils',
-    sentinel: 'Sentinelle',
-    weather: 'Météo',
-    password: 'Mots de passe',
-    notes: 'Notes',
-    cloudsync: 'CloudSync',
-    uptime: 'Uptime',
-    mail: 'Mail',
-    projects: 'Projets',
-    git: 'Git',
-    deploy: 'Déploiement',
-    database: 'Bases de données',
-    backup: 'Sauvegardes',
-    finance: 'Finances',
-    audience: 'Audience',
-    osint: 'OSINT'
+    'workspace.layout': 'Modifier la disposition de l’accueil',
+    'workspace.notifications': 'Gérer les canaux d’alerte'
 };
 
 export interface RoleDraft {
@@ -53,14 +49,6 @@ export interface RoleDialogProps {
     onSubmit: (draft: RoleDraft) => void;
 }
 
-/**
- * Édition d'un rôle : son nom, sa couleur, ses capacités et le niveau accordé
- * sur chaque feature.
- *
- * Les features sont toutes listées, y compris celles qui ne sont pas accordées —
- * « Aucun accès » est un choix explicite, pas une absence de ligne. C'est ce qui
- * rend le formulaire lisible d'un coup d'œil.
- */
 export default function RoleDialog({ open, role, busy, onClose, onSubmit }: RoleDialogProps) {
     const [name, setName] = useState('');
     const [color, setColor] = useState('#22d3ee');
@@ -74,7 +62,7 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
         setCapabilities(role?.capabilities ?? []);
         setFeatures(
             Object.fromEntries(
-                WORKSPACE_FEATURE_IDS.map((f) => [f, role?.features.find((g) => g.feature === f)?.access ?? 'none'])
+                FEATURE_REGISTRY.map((f) => [f.id, role?.features.find((g) => g.feature === f.id)?.access ?? 'none'])
             )
         );
     }, [open, role]);
@@ -88,9 +76,9 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
             name: name.trim(),
             color,
             capabilities,
-            features: WORKSPACE_FEATURE_IDS.flatMap<WorkspaceFeatureGrant>((f) => {
-                const a = features[f];
-                return a === 'read' || a === 'write' ? [{ feature: f, access: a }] : [];
+            features: FEATURE_REGISTRY.flatMap<WorkspaceFeatureGrant>((f) => {
+                const a = features[f.id];
+                return a === 'read' || a === 'write' ? [{ feature: f.id, access: a }] : [];
             })
         });
     };
@@ -143,19 +131,27 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
             </div>
 
             <span className={`${styles.sectionLabel} ${styles.formSection}`}>Fonctionnalités</span>
+            {/* Toutes listées, y compris les non accordées — « Aucun accès » est
+                un choix explicite, pas une absence de ligne. Les exceptions par
+                élément (masquer une base à un rôle, un service en lecture
+                seule) se règlent sur l'élément lui-même, dans ses réglages. */}
             <div className={`${styles.card} ${styles.rowList}`}>
-                {WORKSPACE_FEATURE_IDS.map((f) => (
-                    <div key={f} className={styles.grantRow}>
-                        <span className={styles.grantLabel}>{FEATURE_LABELS[f]}</span>
+                {FEATURE_REGISTRY.map((f) => (
+                    <div key={f.id} className={styles.grantRow}>
+                        <span className={styles.grantLabel}>
+                            <span className={`icon icon-${f.icon}`} aria-hidden='true' /> {f.label}
+                        </span>
                         <SelectInput
                             className={styles.grantSelect}
-                            value={features[f] ?? 'none'}
-                            onChange={(e) => setFeatures((prev) => ({ ...prev, [f]: e.target.value as FeatureAccess }))}
-                            aria-label={`Accès à ${FEATURE_LABELS[f]}`}
+                            value={features[f.id] ?? 'none'}
+                            aria-label={`Accès à ${f.label}`}
+                            onChange={(e) =>
+                                setFeatures((prev) => ({ ...prev, [f.id]: e.target.value as FeatureAccess | 'none' }))
+                            }
                         >
                             <option value='none'>Aucun accès</option>
                             <option value='read'>Lecture</option>
-                            <option value='write'>Écriture</option>
+                            <option value='write'>Lecture et écriture</option>
                         </SelectInput>
                     </div>
                 ))}

@@ -94,6 +94,16 @@ export function ServiceCard({ service, onOpen, onEdit, dragging, onDragPointerDo
                 <div className={styles.cardHead}>
                     <h4 className={styles.cardName}>{service.name}</h4>
                     <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>
+                    {/* Projeté depuis un autre espace : il se lit et se modifie
+                        comme les autres, mais le supprimer d'ici toucherait la
+                        donnée d'ailleurs — et le serveur le refuse. Sans cette
+                        pastille, rien ne distingue une ligne locale d'une
+                        fenêtre sur l'espace voisin. */}
+                    {service.foreign && (
+                        <span title='Ce service appartient à un autre espace qui le partage ici'>
+                            <StatusBadge tone='accent'>partagé</StatusBadge>
+                        </span>
+                    )}
                 </div>
                 <p className={styles.cardUrl}>{service.url}</p>
                 <p className={styles.cardMeta}>

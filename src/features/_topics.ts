@@ -54,6 +54,15 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     metrics: 'devices',
     note: 'notes',
     // Même forme que `git` et `database` : préfixe unique, verbes en camelCase
+    // derrière le point. Le filet `MUTATION_VERB` n'en voit donc **aucune** —
+    // les `mutates` de cette feature se relisent à la main.
+    notify: 'notify',
+    // Une projection change ce qui est visible dans **deux** espaces, et une
+    // restriction change ce que voit un rôle. Faute d'un sujet qui dise « les
+    // deux à la fois », il retombe sur celui de l'espace — c'est le plus large,
+    // et ces mutations sont rares.
+    share: 'workspace',
+    // Même forme que `git` et `database` : préfixe unique, verbes en camelCase
     // derrière le point. Le filet `MUTATION_VERB` n'en voit donc presque aucune
     // — les `mutates` de cette feature se relisent à la main.
     osint: 'osint',

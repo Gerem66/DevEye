@@ -1,5 +1,6 @@
 import type {
     FeatureAccess,
+    ItemAccess,
     WorkspaceCapability,
     WorkspaceFeatureGrant,
     WorkspaceFeatureId,
@@ -81,6 +82,15 @@ export interface ResolvedScope {
     capabilities: ReadonlySet<WorkspaceCapability>;
     /** Droits par feature accordés par son rôle, absents = aucun accès. */
     features: ReadonlyMap<WorkspaceFeatureId, FeatureAccess>;
+    /**
+     * Les restrictions posées sur des éléments précis, pour le rôle de
+     * l'appelant. Chargées **paresseusement, par feature** : la plupart des
+     * commandes n'en ont pas besoin, et un espace qui n'en pose aucune n'a
+     * aucune ligne à lire.
+     *
+     * Vide pour le propriétaire, qui passe outre — comme partout ailleurs.
+     */
+    itemRestrictions: (feature: WorkspaceFeatureId) => Promise<ReadonlyMap<number, ItemAccess>>;
     /** Coffre chiffré de cet espace, lié à cette session. */
     secure: SecureStore;
     secretKeys: SecretKeyService;
@@ -231,12 +241,36 @@ export function createAccessResolver(
             sessionId
         );
 
+        /**
+         * Les restrictions d'éléments du rôle de l'appelant, par feature.
+         *
+         * Mémoïsées dans le scope, lui-même mémoïsé sous `accessEpoch` : une
+         * restriction modifiée doit donc bumper l'époque
+         * (`share.grantSet` appelle `invalidateAccess()`), sinon elle ne
+         * mordrait qu'à la reconnexion suivante.
+         *
+         * Le propriétaire n'en a jamais : il n'a pas de rôle, et les
+         * restrictions se posent sur des rôles.
+         */
+        const restrictionCache = new Map<string, Promise<ReadonlyMap<number, ItemAccess>>>();
+        const itemRestrictions = (feature: WorkspaceFeatureId): Promise<ReadonlyMap<number, ItemAccess>> => {
+            if (isOwner || !role) return Promise.resolve(new Map());
+            const hit = restrictionCache.get(feature);
+            if (hit) return hit;
+            const loaded = db.itemSharing
+                .grantsForRole(row.id, feature, role.id)
+                .then((rows) => new Map(rows.map((g) => [g.item_id, g.access])) as ReadonlyMap<number, ItemAccess>);
+            restrictionCache.set(feature, loaded);
+            return loaded;
+        };
+
         return {
             workspace: toContext(row),
             isAdmin: user.role === 'admin',
             isOwner,
             capabilities,
             features,
+            itemRestrictions,
             secure: store,
             secretKeys: keys
         };

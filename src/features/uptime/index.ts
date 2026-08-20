@@ -4,30 +4,39 @@ import {
     uptimeCheckStats,
     uptimeChecks,
     uptimeCount,
-    uptimeGetSettings,
     uptimeHistory,
     uptimeIncidents,
     uptimeList,
     uptimeRemove,
     uptimeReorder,
     uptimeSetEnabled,
-    uptimeSetSettings,
-    uptimeTestNotification,
     uptimeUpdate
 } from 'deveye-types';
 import type { UptimePoint, UptimeRange, UptimeResolution, UptimeService, UptimeServiceRow } from 'deveye-types';
 
 import type { UptimeWindowStat } from '@/db/repos/uptime';
-import { getNotificationSettings, setNotificationSettings } from '../_notifications';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
+import { shareScope } from '../_sharing';
 import { decryptError, encryptService, toIncident, toService, EMPTY_STATS, type ServiceStats } from './_shared';
 
 const DAY = 86400;
 
 /** Load one service of the active workspace, or throw `not_found`. */
-async function loadService(ctx: FeatureContext, id: number): Promise<UptimeServiceRow> {
-    const row = await ctx.db.uptimeServices.findById(id, ctx.workspaceId);
+/**
+ * Un service visible depuis cet espace — le sien, ou un que l'on y projette.
+ *
+ * `level` décide de la garde : `assertItem` refuse en plus les services qu'une
+ * restriction de rôle masque ou passe en lecture seule. La feature seule ne
+ * suffit plus à répondre « ce service-là m'est-il ouvert ? ».
+ */
+async function loadService(
+    ctx: FeatureContext,
+    id: number,
+    level: 'read' | 'write' = 'read'
+): Promise<UptimeServiceRow> {
+    const row = await ctx.db.uptimeServices.findVisible(id, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Uptime service not found');
+    await ctx.assertItem('uptime', id, level);
     return row;
 }
 
@@ -74,17 +83,31 @@ async function loadStats(ctx: FeatureContext, now: number): Promise<Map<number, 
     return out;
 }
 
-/** Build the DTOs for a set of rows, folding in stats and ongoing outages. */
+/**
+ * Build the DTOs for a set of rows, folding in stats and ongoing outages.
+ *
+ * **Le codec est choisi ligne par ligne** : un service projeté depuis un autre
+ * espace reste chiffré sous la clé de cet espace-là, et le déchiffrer avec celle
+ * d'ici rendrait un nom vide plutôt qu'une erreur — un service sans nom, qu'on
+ * croirait mal enregistré.
+ */
 async function toServices(ctx: FeatureContext, rows: UptimeServiceRow[]): Promise<UptimeService[]> {
     const now = Math.floor(Date.now() / 1000);
-    const [stats, open] = await Promise.all([
+    const [stats, open, shares] = await Promise.all([
         loadStats(ctx, now),
-        ctx.db.uptimeHistory.listOpenIncidents(ctx.workspaceId)
+        ctx.db.uptimeHistory.listOpenIncidents(ctx.workspaceId),
+        shareScope(ctx, 'uptime')
     ]);
     const downSince = new Map(open.map((i) => [i.service_id, i.started_at]));
     return Promise.all(
-        rows.map((row) =>
-            toService(ctx.secure.open, row, stats.get(row.id) ?? EMPTY_STATS, downSince.get(row.id) ?? null)
+        rows.map(async (row) =>
+            toService(
+                await shares.cipherFor(row.id),
+                row,
+                stats.get(row.id) ?? EMPTY_STATS,
+                downSince.get(row.id) ?? null,
+                row.workspace_id !== ctx.workspaceId
+            )
         )
     );
 }
@@ -101,9 +124,15 @@ export const uptimeListFeature: FeatureDefinition<
     typeof uptimeList.output
 > = defineFeature({
     ...uptimeList,
+    access: { feature: 'uptime', level: 'read' },
     handler: async (ctx) => {
-        const rows = await ctx.db.uptimeServices.listByWorkspace(ctx.workspaceId);
-        return { services: await toServices(ctx, rows) };
+        const rows = await ctx.db.uptimeServices.listVisible(ctx.workspaceId);
+        // Les services qu'une restriction masque pour ce rôle disparaissent de
+        // la liste plutôt que d'y figurer grisés : une ligne qu'on voit sans
+        // pouvoir l'ouvrir apprend déjà qu'elle existe.
+        const hidden = await ctx.itemRestrictions('uptime');
+        const visible = rows.filter((r) => hidden.get(r.id) !== 'none');
+        return { services: await toServices(ctx, visible) };
     }
 });
 
@@ -113,6 +142,7 @@ export const uptimeCountFeature: FeatureDefinition<
     typeof uptimeCount.output
 > = defineFeature({
     ...uptimeCount,
+    access: { feature: 'uptime', level: 'read' },
     handler: async (ctx) => ctx.db.uptimeServices.countByWorkspace(ctx.workspaceId)
 });
 
@@ -122,6 +152,7 @@ export const uptimeAddFeature: FeatureDefinition<
     typeof uptimeAdd.output
 > = defineFeature({
     ...uptimeAdd,
+    access: { feature: 'uptime', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const draft = input.service;
@@ -161,12 +192,17 @@ export const uptimeUpdateFeature: FeatureDefinition<
     typeof uptimeUpdate.output
 > = defineFeature({
     ...uptimeUpdate,
+    access: { feature: 'uptime', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
-        await loadService(ctx, input.id);
+        const existing = await loadService(ctx, input.id, 'write');
         const draft = input.service;
-        const row = await ctx.db.uptimeServices.update(input.id, ctx.workspaceId, {
-            content: await encryptService(ctx.secure.open, {
+        // Réécrit sous la clé de son espace d'origine : le chiffrer avec celle
+        // d'ici le rendrait illisible chez lui, c'est-à-dire perdu pour tout le
+        // monde y compris l'ordonnanceur qui le sonde.
+        const shares = await shareScope(ctx, 'uptime');
+        const row = await ctx.db.uptimeServices.update(input.id, existing.workspace_id, {
+            content: await encryptService(await shares.cipherFor(input.id), {
                 name: draft.name,
                 url: draft.url,
                 keyword: draft.keyword
@@ -196,6 +232,7 @@ export const uptimeSetEnabledFeature: FeatureDefinition<
     typeof uptimeSetEnabled.output
 > = defineFeature({
     ...uptimeSetEnabled,
+    access: { feature: 'uptime', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         await loadService(ctx, input.id);
@@ -217,11 +254,26 @@ export const uptimeRemoveFeature: FeatureDefinition<
     typeof uptimeRemove.output
 > = defineFeature({
     ...uptimeRemove,
+    access: { feature: 'uptime', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
-        await loadService(ctx, input.id);
+        const existing = await loadService(ctx, input.id, 'write');
+        // Supprimer depuis un espace qui ne fait que le **voir** détruirait la
+        // donnée d'un autre. Retirer la projection, oui — c'est `share.set` ;
+        // détruire l'élément, non, et pas depuis ici.
+        if (existing.workspace_id !== ctx.workspaceId) {
+            throw new FeatureError(
+                'forbidden',
+                'Ce service appartient à un autre espace. Retirez-le d’ici depuis ses réglages de partage, ou supprimez-le depuis son espace d’origine.'
+            );
+        }
         // History, rollup and incidents go with it (ON DELETE CASCADE).
         await ctx.db.uptimeServices.delete(input.id, ctx.workspaceId);
+        // Les projections et les restrictions ne sont rattachées par aucune clé
+        // étrangère — l'élément vit dans une table différente selon la feature.
+        // Sans ce ménage, une ligne orpheline s'appliquerait au prochain service
+        // à hériter de l'identifiant.
+        await ctx.db.itemSharing.forgetItem('uptime', input.id, ctx.workspaceId);
         ctx.audit({
             action: 'uptime.remove',
             description: 'Service surveillé supprimé',
@@ -237,6 +289,7 @@ export const uptimeReorderFeature: FeatureDefinition<
     typeof uptimeReorder.output
 > = defineFeature({
     ...uptimeReorder,
+    access: { feature: 'uptime', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         await ctx.db.uptimeServices.reorder(ctx.workspaceId, input.ids);
@@ -250,6 +303,7 @@ export const uptimeCheckNowFeature: FeatureDefinition<
     typeof uptimeCheckNow.output
 > = defineFeature({
     ...uptimeCheckNow,
+    access: { feature: 'uptime', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const row = await loadService(ctx, input.id);
@@ -287,6 +341,7 @@ export const uptimeHistoryFeature: FeatureDefinition<
     typeof uptimeHistory.output
 > = defineFeature({
     ...uptimeHistory,
+    access: { feature: 'uptime', level: 'read' },
     handler: async (ctx, input) => {
         await loadService(ctx, input.id);
         const now = Math.floor(Date.now() / 1000);
@@ -306,6 +361,7 @@ export const uptimeChecksFeature: FeatureDefinition<
     typeof uptimeChecks.output
 > = defineFeature({
     ...uptimeChecks,
+    access: { feature: 'uptime', level: 'read' },
     handler: async (ctx, input) => {
         await loadService(ctx, input.id);
         const rows = await ctx.db.uptimeHistory.listChecks(input.id, input.filter, input.limit, input.before);
@@ -329,6 +385,7 @@ export const uptimeCheckStatsFeature: FeatureDefinition<
     typeof uptimeCheckStats.output
 > = defineFeature({
     ...uptimeCheckStats,
+    access: { feature: 'uptime', level: 'read' },
     handler: async (ctx, input) => {
         await loadService(ctx, input.id);
         return { stats: await ctx.db.uptimeHistory.checkStats(input.id, input.filter) };
@@ -341,57 +398,12 @@ export const uptimeIncidentsFeature: FeatureDefinition<
     typeof uptimeIncidents.output
 > = defineFeature({
     ...uptimeIncidents,
+    access: { feature: 'uptime', level: 'read' },
     handler: async (ctx, input) => {
         await loadService(ctx, input.id);
         const rows = await ctx.db.uptimeHistory.listIncidents(input.id, input.limit);
         return { incidents: await Promise.all(rows.map((row) => toIncident(ctx.secure.open, row))) };
     }
-});
-
-export const uptimeGetSettingsFeature: FeatureDefinition<
-    typeof uptimeGetSettings.command,
-    typeof uptimeGetSettings.input,
-    typeof uptimeGetSettings.output
-> = defineFeature({
-    ...uptimeGetSettings,
-    handler: async (ctx) => ({ settings: await getNotificationSettings(ctx, 'uptime') })
-});
-
-export const uptimeSetSettingsFeature: FeatureDefinition<
-    typeof uptimeSetSettings.command,
-    typeof uptimeSetSettings.input,
-    typeof uptimeSetSettings.output
-> = defineFeature({
-    ...uptimeSetSettings,
-    mutates: true,
-    handler: async (ctx, input) => {
-        if (input.mailAccountId !== null) {
-            const account = await ctx.db.mailAccounts.findById(input.mailAccountId, ctx.workspaceId);
-            if (!account) throw new FeatureError('not_found', 'Compte mail introuvable');
-            if (account.security_tier !== 'open') {
-                throw new FeatureError(
-                    'validation',
-                    'Un compte « guarded » ne peut pas envoyer d’alertes automatiques : choisissez un compte « open »'
-                );
-            }
-        }
-        const settings = await setNotificationSettings(ctx, 'uptime', input);
-        ctx.audit({
-            action: 'uptime.setSettings',
-            description: 'Notifications de disponibilité modifiées',
-            metadata: { email: input.emailEnabled, webhook: input.webhookEnabled }
-        });
-        return { settings };
-    }
-});
-
-export const uptimeTestNotificationFeature: FeatureDefinition<
-    typeof uptimeTestNotification.command,
-    typeof uptimeTestNotification.input,
-    typeof uptimeTestNotification.output
-> = defineFeature({
-    ...uptimeTestNotification,
-    handler: async (ctx) => monitor(ctx).sendTestAlert(ctx.workspaceId)
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -407,8 +419,5 @@ export const uptimeFeatures: FeatureDefinition<string, any, any>[] = [
     uptimeHistoryFeature,
     uptimeChecksFeature,
     uptimeCheckStatsFeature,
-    uptimeIncidentsFeature,
-    uptimeGetSettingsFeature,
-    uptimeSetSettingsFeature,
-    uptimeTestNotificationFeature
+    uptimeIncidentsFeature
 ];

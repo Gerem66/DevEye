@@ -1,4 +1,5 @@
 import type { DiscordMessage } from '@/Services/discord';
+import { COLOR_DANGER, COLOR_INFO, COLOR_SUCCESS, block, duration, moment, trim } from './shared';
 
 /**
  * L'avis de disponibilité tel que Discord doit le montrer.
@@ -30,14 +31,6 @@ import type { DiscordMessage } from '@/Services/discord';
  * n'existent pas.
  */
 
-/** Couleurs de la charte Discord : la bordure dit l'état avant la lecture. */
-const COLOR_DOWN = 0xed4245;
-const COLOR_UP = 0x57f287;
-const COLOR_TEST = 0x5865f2;
-
-/** Discord refuse la valeur d'un champ au-delà de 1024 caractères. */
-const FIELD_MAX = 1000;
-
 /** Ce qu'un avis de disponibilité peut annoncer. */
 export type UptimeNotice =
     | {
@@ -63,47 +56,6 @@ export type UptimeNotice =
           responseMs: number | null;
       }
     | { event: 'test'; at: number };
-
-/**
- * Un instant, rendu par Discord dans le fuseau **du lecteur**.
- *
- * `<t:epoch:f>` plutôt qu'une date que nous formaterions ici : le message reste
- * juste pour qui le lit d'un autre fuseau, et `:R` (« il y a 4 minutes ») se met
- * à jour tout seul, ce qu'aucune chaîne figée ne sait faire.
- */
-function moment(epochSeconds: number, style: 'f' | 'R' = 'f'): string {
-    return `<t:${epochSeconds}:${style}>`;
-}
-
-/** « 2 h 5 min », « 45 s » — la même échelle que les corps d'alerte. */
-function duration(seconds: number): string {
-    if (seconds < 60) return `${seconds} s`;
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes} min ${String(seconds % 60).padStart(2, '0')} s`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} h ${String(minutes % 60).padStart(2, '0')} min`;
-    return `${Math.floor(hours / 24)} j ${String(hours % 24).padStart(2, '0')} h`;
-}
-
-/** Discord refuse une valeur de champ vide : un tiret vaut mieux qu'un rejet. */
-function trim(value: string): string {
-    const clean = value.trim().slice(0, FIELD_MAX);
-    return clean.length > 0 ? clean : '—';
-}
-
-/**
- * Un message d'erreur, en bloc de code.
- *
- * Le bloc n'est pas décoratif : une erreur vient d'un point d'entrée
- * quelconque et peut contenir n'importe quoi — des `*`, des `_`, un `#` en
- * début de ligne. Rendue en Markdown, elle arriverait à moitié en gras et à
- * moitié en titre. Le code la montre telle qu'elle est.
- */
-function block(body: string): string {
-    const clean = body.replace(/```/g, "'''").trim();
-    const room = FIELD_MAX - 10;
-    return `\`\`\`\n${clean.length > room ? `${clean.slice(0, room)}…` : clean}\n\`\`\``;
-}
 
 /**
  * L'adresse surveillée, en lien cliquable quand elle s'y prête.
@@ -161,20 +113,20 @@ function headline(notice: UptimeNotice): { title: string; description: string; c
         return {
             title: '🔴 Service hors ligne',
             description: `**${trim(notice.service)}** ne répond plus.`,
-            color: COLOR_DOWN
+            color: COLOR_DANGER
         };
     }
     if (notice.event === 'recovered') {
         return {
             title: '🟢 Service rétabli',
             description: `**${trim(notice.service)}** répond de nouveau.`,
-            color: COLOR_UP
+            color: COLOR_SUCCESS
         };
     }
     return {
         title: '🔔 Test de notification',
         description: 'Si vous lisez ce message, les alertes de disponibilité vous parviendront bien.',
-        color: COLOR_TEST
+        color: COLOR_INFO
     };
 }
 

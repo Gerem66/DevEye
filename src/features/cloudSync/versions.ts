@@ -26,6 +26,7 @@ async function authorizeVersion(
 
 export const cloudSyncListVersionsFeature = defineFeature({
     ...cloudSyncListVersions,
+    access: { feature: 'cloudsync', level: 'read' },
     handler: async (ctx, input) => {
         const share = await authorizeShare(ctx, input.shareId);
         const relPath = input.relPath === undefined ? null : safeRelPath(input.relPath);
@@ -42,6 +43,7 @@ export const cloudSyncListVersionsFeature = defineFeature({
 
 export const cloudSyncRestoreVersionFeature = defineFeature({
     ...cloudSyncRestoreVersion,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const engine = requireActiveEngine(ctx);
@@ -60,6 +62,7 @@ export const cloudSyncRestoreVersionFeature = defineFeature({
 
 export const cloudSyncDeleteVersionFeature = defineFeature({
     ...cloudSyncDeleteVersion,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const engine = requireActiveEngine(ctx);
@@ -79,6 +82,7 @@ export const cloudSyncDeleteVersionFeature = defineFeature({
 
 export const cloudSyncDeleteVersionsFeature = defineFeature({
     ...cloudSyncDeleteVersions,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const engine = requireActiveEngine(ctx);
@@ -97,6 +101,7 @@ export const cloudSyncDeleteVersionsFeature = defineFeature({
 
 export const cloudSyncClearVersionsFeature = defineFeature({
     ...cloudSyncClearVersions,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const engine = requireActiveEngine(ctx);
@@ -115,6 +120,7 @@ export const cloudSyncClearVersionsFeature = defineFeature({
 
 export const cloudSyncDownloadVersionFeature = defineFeature({
     ...cloudSyncDownloadVersion,
+    access: { feature: 'cloudsync', level: 'read' },
     handler: async (ctx, input) => {
         const engine = requireEngine(ctx);
         if (!ctx.monitor) throw new FeatureError('internal', 'Connexion temps réel requise');
@@ -128,6 +134,7 @@ export const cloudSyncDownloadVersionFeature = defineFeature({
 
 export const cloudSyncDownloadFileFeature = defineFeature({
     ...cloudSyncDownloadFile,
+    access: { feature: 'cloudsync', level: 'read' },
     handler: async (ctx, input) => {
         const engine = requireEngine(ctx);
         if (!ctx.monitor) throw new FeatureError('internal', 'Connexion temps réel requise');

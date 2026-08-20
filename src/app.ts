@@ -15,6 +15,8 @@ import { audienceRoutes } from '@/audience/routes';
 import { registerAgentWS } from '@/agent/ws';
 import { MonitorHub } from '@/agent/hub';
 import { LiveHub } from '@/live/hub';
+import { assertAccessDeclared } from '@/features/_permissions';
+import { featureHandlers } from '@/features/registry';
 import { buildTopicIndex } from '@/features/_topics';
 import { authRoutes } from '@/auth/routes';
 import { CloudSyncEngine } from '@/cloudSync/engine';
@@ -165,6 +167,10 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // Résout « quelle commande touche à quoi » une fois pour toutes, et signale
     // les commandes mutantes qui auraient oublié de le déclarer.
     buildTopicIndex();
+    // Et le contrôle d'autorisation : aucune commande sans garde déclarée.
+    // Lever ici plutôt qu'avertir — un `access` oublié ouvre une commande en
+    // silence, et l'interface qui masque la donnée fait croire à une garde.
+    assertAccessDeclared(featureHandlers);
     const audit = createAuditLog(deps.db);
     const cloudSync = new CloudSyncEngine({ db: deps.db, hub, crypt: deps.crypt, audit, logger });
     await cloudSync.start();

@@ -12,6 +12,7 @@ import { authorizeShare, requireActiveEngine, toClientShare } from './_shared';
 
 export const cloudSyncListSharesFeature = defineFeature({
     ...cloudSyncListShares,
+    access: { feature: 'cloudsync', level: 'read' },
     handler: async (ctx) => {
         const rows = await ctx.db.syncShares.listByWorkspace(ctx.workspaceId);
         return { shares: await Promise.all(rows.map((r) => toClientShare(ctx, r))) };
@@ -20,6 +21,7 @@ export const cloudSyncListSharesFeature = defineFeature({
 
 export const cloudSyncCreateShareFeature = defineFeature({
     ...cloudSyncCreateShare,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const engine = requireActiveEngine(ctx);
@@ -55,6 +57,7 @@ export const cloudSyncCreateShareFeature = defineFeature({
 
 export const cloudSyncUpdateShareFeature = defineFeature({
     ...cloudSyncUpdateShare,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const row = await authorizeShare(ctx, input.shareId);
@@ -89,6 +92,7 @@ export const cloudSyncUpdateShareFeature = defineFeature({
 
 export const cloudSyncReorderSharesFeature = defineFeature({
     ...cloudSyncReorderShares,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         // Volontairement SANS `requireActiveEngine` : ranger sa liste ne touche
@@ -106,6 +110,7 @@ export const cloudSyncReorderSharesFeature = defineFeature({
 
 export const cloudSyncDeleteShareFeature = defineFeature({
     ...cloudSyncDeleteShare,
+    access: { feature: 'cloudsync', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
         const engine = requireActiveEngine(ctx);

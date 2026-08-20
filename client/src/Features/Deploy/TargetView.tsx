@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import type { DeployHistoryEntry, DeployStatus, DeployTarget, Deployment, MinimalUser } from 'deveye-types';
 import { DEPLOY_TITLE_MAX_LENGTH } from 'deveye-types';
 import { Button, Dialog, TextInput } from '@/Components';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { ws } from '@/api/ws';
 import { invalidate } from '@/stores/invalidation';
 import { humanizeError } from '@/Features/Projects/api';
@@ -195,6 +196,23 @@ export function TargetView({
                                 Modifier
                             </Button>
                         )}
+                        {/* Les réglages **de cette cible** : ses propres canaux,
+                            ou ceux du Déploiement tant qu'elle les suit — un
+                            salon par application devient possible.
+
+                            Hors du `canWrite && onEdit` qui précède : la fiche
+                            est aussi rendue dans l'onglet d'un projet, où
+                            `onEdit` est absent, et les réglages y valent autant.
+                            Le bouton se garde de lui-même (aucune section
+                            accessible ⇒ il ne s'affiche pas). */}
+                        <FeatureSettingsButton
+                            scope={{
+                                kind: 'item',
+                                feature: 'deploy',
+                                itemId: target.id,
+                                itemLabel: target.name
+                            }}
+                        />
                         {after}
                     </div>
                 </header>

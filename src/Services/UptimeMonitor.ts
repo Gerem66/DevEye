@@ -3,15 +3,8 @@ import type { Logger } from 'pino';
 
 import { decryptError, decryptService, encryptError, type ServicePayload } from '@/features/uptime/_shared';
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
-import { buildNotice, type UptimeNotice } from '@/Services/UptimeNotice';
-import {
-    deliver,
-    formatDuration,
-    formatMoment,
-    resolveChannels,
-    sendTest,
-    type Channels
-} from '@/Services/notifications';
+import { buildNotice, type UptimeNotice } from '@/Services/notices/uptime';
+import { deliver, formatDuration, formatMoment, resolveRoute, type ResolvedChannel } from '@/Services/notifications';
 import { env } from '@/Utils/Env';
 
 import type { LiveHub } from '@/live/hub';
@@ -380,7 +373,7 @@ export class UptimeMonitor {
         alert: { subject: string; body: string; notice: Extract<UptimeNotice, { event: 'down' | 'recovered' }> }
     ): Promise<boolean> {
         return deliver(
-            await this.resolveChannels(row.workspace_id),
+            await this.resolveChannels(row.workspace_id, row.id),
             {
                 subject: alert.subject,
                 body: alert.body,
@@ -400,45 +393,14 @@ export class UptimeMonitor {
     }
 
     /**
-     * The user's enabled alert channels. The mail recipient defaults to the
-     * sending account's own address. `sendAccount` is null whenever no usable
-     * "open"-tier account is configured — the caller must skip mail delivery
-     * (never a hard failure: the webhook channel is independent).
-     */
-    /**
-     * Les canaux d'Uptime pour cet espace.
+     * Les canaux d'un service surveillé.
      *
-     * La résolution vit dans `Services/notifications.ts` : les quatre émetteurs
-     * lisent la même table à des lignes différentes, et quatre implémentations
-     * jumelles auraient dérivé. Cette méthode n'est plus qu'un raccourci interne
-     * — `DatabaseMonitor` l'appelait, faute d'avoir ses propres canaux avant la
-     * migration 085 ; il lit désormais la ligne `database` comme les autres.
+     * `serviceId` est passé, et c'est ce qui active la surcharge par élément :
+     * un service qui a sa propre route écrit là où elle dit, les autres suivent
+     * celle d'Uptime. Sans cet argument la fonctionnalité entière partagerait
+     * un seul jeu de destinations, ce qui était précisément la limite d'avant.
      */
-    private async resolveChannels(workspaceId: number): Promise<Channels> {
-        return resolveChannels(this.deps.db, this.cipherFor(workspaceId), workspaceId, 'uptime');
-    }
-
-    /** Envoie une alerte d'exemple sur chaque canal réglé (bouton « Tester »). */
-    async sendTestAlert(workspaceId: number): Promise<{ sent: boolean; error: string | null }> {
-        const at = Math.floor(Date.now() / 1000);
-        const body = [
-            'Ceci est un test de notification DevEye Uptime.',
-            '',
-            `Envoyé le : ${formatMoment(at)}`,
-            'Si vous lisez ce message, les alertes de disponibilité vous parviendront bien.'
-        ].join('\n');
-        return sendTest(
-            this.deps.db,
-            this.cipherFor(workspaceId),
-            workspaceId,
-            'uptime',
-            {
-                subject: 'DevEye — test de notification',
-                body,
-                payload: webhookPayload({ event: 'test', service: null, url: null, at }),
-                embeds: buildNotice({ event: 'test', at })
-            },
-            this.deps.logger.child({ workspaceId })
-        );
+    private async resolveChannels(workspaceId: number, serviceId?: number): Promise<ResolvedChannel[]> {
+        return resolveRoute(this.deps.db, this.cipherFor(workspaceId), workspaceId, 'uptime', serviceId);
     }
 }

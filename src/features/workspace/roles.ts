@@ -108,6 +108,10 @@ export const workspaceRoleUpdateFeature: FeatureDefinition<
 > = defineFeature({
     ...workspaceRoleUpdate,
     mutates: true,
+    // Identité et droits d'un rôle relèvent de la même capacité : c'est le
+    // choix qui garde UN écran et UNE règle. Le découpage plus fin (identité vs
+    // contenu, `workspace.permissions`) a été essayé puis retiré — deux
+    // capacités pour un même formulaire produisaient des demi-refus illisibles.
     access: { capabilities: ['workspace.roles'] },
     handler: async (ctx, input) => {
         assertShared(ctx);

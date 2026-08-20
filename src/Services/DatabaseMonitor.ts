@@ -3,7 +3,8 @@ import type { Database as Db } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import type { LiveHub } from '@/live/hub';
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
-import { deliver, hasChannel, resolveChannels } from '@/Services/notifications';
+import { deliver, hasChannel, resolveRoute } from '@/Services/notifications';
+import { buildNotice } from '@/Services/notices/database';
 import type { DatabaseComparator, DatabaseCondition, DatabaseProbe, DatabaseRow } from 'deveye-types';
 import { explainError, openSession, singleNumber, type EngineTarget, type Session } from './databases/engine';
 import type { TunnelConfig } from './databases/tunnel';
@@ -352,7 +353,7 @@ export class DatabaseMonitor {
                 // Aux transitions seulement — dans les deux sens, pour qu'un
                 // retour à la normale se sache sans avoir à aller vérifier.
                 if (firing !== wasFiring) {
-                    await this.notify(row.workspace_id, {
+                    await this.notify(row.workspace_id, row.id, {
                         databaseName: name,
                         alertName: stored.name,
                         firing,
@@ -394,9 +395,18 @@ export class DatabaseMonitor {
      */
     private async notify(
         workspaceId: number,
+        // La base concernée : c'est elle qui décide de la route, et donc ce qui
+        // permet d'envoyer les alertes de deux bases à deux endroits différents.
+        databaseId: number,
         alert: { databaseName: string; alertName: string; firing: boolean; body: string; at: number }
     ): Promise<void> {
-        const channels = await resolveChannels(this.deps.db, this.cipherFor(workspaceId), workspaceId, 'database');
+        const channels = await resolveRoute(
+            this.deps.db,
+            this.cipherFor(workspaceId),
+            workspaceId,
+            'database',
+            databaseId
+        );
         if (!hasChannel(channels)) return;
 
         await deliver(
@@ -411,7 +421,17 @@ export class DatabaseMonitor {
                     database: alert.databaseName,
                     alert: alert.alertName,
                     at: alert.at
-                }
+                },
+                // La même alerte, mise en page pour Discord. Elle n'en avait pas :
+                // les bases empruntaient les canaux d'Uptime jusqu'à la 085, et
+                // n'ont jamais eu de forme propre depuis.
+                embeds: buildNotice({
+                    database: alert.databaseName,
+                    alert: alert.alertName,
+                    firing: alert.firing,
+                    message: alert.body,
+                    at: alert.at
+                })
             },
             this.deps.logger.child({ workspaceId })
         );

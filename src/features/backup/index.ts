@@ -5,7 +5,6 @@ import {
     backupDestinationRemove,
     backupDestinationTest,
     backupDestinationUpdate,
-    backupGetSettings,
     backupJobAdd,
     backupJobGet,
     backupJobList,
@@ -13,15 +12,11 @@ import {
     backupJobRun,
     backupJobUpdate,
     backupRuns,
-    backupSetSettings,
     backupSources,
-    backupTestNotification,
     type BackupSourceCandidate
 } from 'deveye-types';
 
 import { BackupService, type StoredDestination, type StoredJob } from '@/Services/BackupService';
-import { formatMoment, sendTest } from '@/Services/notifications';
-import { getNotificationSettings, setNotificationSettings } from '../_notifications';
 import { safeRelPath } from '@/backup/sinks';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { backupService, loadDestination, loadJob, readJson, READ, toDestination, toJob, toRun, WRITE } from './_shared';
@@ -467,70 +462,6 @@ const runsFeature = defineFeature({
     }
 });
 
-// --------------------------------------------------------- notifications
-
-const getSettingsFeature = defineFeature({
-    ...backupGetSettings,
-    access: READ,
-    handler: async (ctx) => ({ settings: await getNotificationSettings(ctx, 'backup') })
-});
-
-const setSettingsFeature = defineFeature({
-    ...backupSetSettings,
-    access: WRITE,
-    mutates: true,
-    handler: async (ctx, input) => {
-        // Même garde que les quatre autres émetteurs : un compte « guarded »
-        // exige un déverrouillage que l'ordonnanceur n'a jamais, et l'accepter
-        // ici produirait un canal qui ne part jamais, en silence — c'est-à-dire
-        // exactement le scénario où l'on croit être prévenu et ne l'est pas.
-        if (input.emailEnabled && input.mailAccountId !== null) {
-            const account = await ctx.db.mailAccounts.findById(input.mailAccountId, ctx.workspaceId);
-            if (!account) throw new FeatureError('not_found', 'Compte mail introuvable');
-            if (account.security_tier !== 'open') {
-                throw new FeatureError(
-                    'validation',
-                    'Un compte « guarded » ne peut pas envoyer d’alertes automatiques : choisissez un compte « open »'
-                );
-            }
-        }
-        const settings = await setNotificationSettings(ctx, 'backup', input);
-        ctx.audit({
-            action: 'backup.setSettings',
-            description: 'Notifications de sauvegarde modifiées',
-            metadata: { email: input.emailEnabled, webhook: input.webhookEnabled }
-        });
-        return { settings };
-    }
-});
-
-const testNotificationFeature = defineFeature({
-    ...backupTestNotification,
-    access: WRITE,
-    handler: async (ctx) => {
-        const at = Math.floor(Date.now() / 1000);
-        return sendTest(
-            ctx.db,
-            ctx.secure.open,
-            ctx.workspaceId,
-            'backup',
-            {
-                subject: '[DevEye] Test de notification — Sauvegardes',
-                body: [
-                    'Ceci est un test des notifications de Sauvegardes.',
-                    '',
-                    `Envoyé le : ${formatMoment(at)}`,
-                    'Si vous lisez ce message, un échec de sauvegarde vous parviendra bien.',
-                    'Seuls les échecs sont notifiés : une sauvegarde qui réussit ne dit rien,',
-                    'sinon le canal se remplirait de succès et l’échec s’y perdrait.'
-                ].join('\n'),
-                payload: { event: 'backup_test', at }
-            },
-            ctx.logger
-        );
-    }
-});
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const backupFeatures: FeatureDefinition<string, any, any>[] = [
     destinationListFeature,
@@ -546,8 +477,5 @@ export const backupFeatures: FeatureDefinition<string, any, any>[] = [
     jobRemoveFeature,
     jobRunFeature,
     sourcesFeature,
-    runsFeature,
-    getSettingsFeature,
-    setSettingsFeature,
-    testNotificationFeature
+    runsFeature
 ];

@@ -28,18 +28,24 @@ export interface StoredDeployment {
     description: string;
     url: string | null;
     /**
-     * L'identifiant du message Discord qui suit ce déploiement en direct.
+     * Les messages Discord qui suivent ce déploiement en direct, **un par
+     * canal** : `identifiant de canal → identifiant de message`.
      *
-     * Dans le blob et non dans une colonne : il n'est jamais un critère de
-     * recherche, seulement une donnée qu'on transporte avec la ligne — et le
-     * blob est déjà réécrit à chaque changement d'état. Une colonne aurait coûté
-     * une migration pour un champ que rien n'interroge.
+     * C'était une seule chaîne tant qu'un espace n'avait qu'un webhook. Depuis
+     * que les canaux sont une liste, un déploiement peut être suivi dans deux
+     * salons à la fois, et chacun a son propre message à modifier — les
+     * confondre ferait éditer, dans le second salon, un identifiant qui
+     * appartient au premier.
+     *
+     * Dans le blob et non dans une colonne : jamais un critère de recherche,
+     * seulement une donnée transportée avec la ligne, et le blob est déjà
+     * réécrit à chaque changement d'état.
      *
      * **Persisté, et c'est le point** : un serveur redémarré au milieu d'un
-     * déploiement retrouve le message qu'il avait ouvert et continue de le
-     * modifier, au lieu d'en poser un second à côté du premier.
+     * déploiement retrouve les messages qu'il avait ouverts et continue de les
+     * modifier, au lieu d'en poser de seconds à côté.
      */
-    noticeId?: string | null;
+    noticeIds?: Record<string, string> | null;
 }
 
 /** Déchiffre et parse, sans jamais lever : `null` dit simplement « illisible ». */

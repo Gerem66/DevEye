@@ -13,7 +13,6 @@ import DeviceHeader from './DeviceHeader';
 import FindingDetail from './FindingDetail';
 import FindingsList from './FindingsList';
 import FleetHeader from './FleetHeader';
-import { NotificationsDialog } from '@/Components/NotificationsDialog';
 import PostureGrid from './PostureGrid';
 import SentinelDialog from './SentinelDialog';
 import styles from './style.module.css';
@@ -58,7 +57,6 @@ export default function Sentinel({ workspace }: FeatureProps) {
     const [minSeverity, setMinSeverity] = useState<FindingSeverity | null>(null);
     const [showSettled, setShowSettled] = useState(false);
     const [settingsFor, setSettingsFor] = useState<DeviceSentinelState | null>(null);
-    const [notificationsOpen, setNotificationsOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -276,7 +274,6 @@ export default function Sentinel({ workspace }: FeatureProps) {
                     <DeviceHeader device={device} onOpenSettings={() => setSettingsFor(device)} onScanNow={scanNow} />
                 ) : (
                     <FleetHeader
-                        onOpenNotifications={() => setNotificationsOpen(true)}
                         devices={devices}
                         minSeverity={minSeverity}
                         onMinSeverity={setMinSeverity}
@@ -385,15 +382,6 @@ export default function Sentinel({ workspace }: FeatureProps) {
                     </div>
                 )}
             </main>
-
-            <NotificationsDialog
-                open={notificationsOpen}
-                onClose={() => setNotificationsOpen(false)}
-                feature='sentinel'
-                title='Notifications de Sentinelle'
-                description='Distinctes de celles d’Uptime : une alerte de sécurité n’a ni les mêmes destinataires ni la même urgence qu’un service tombé.'
-                when='Envoyées à l’ouverture d’un constat de gravité « élevé » ou plus, et regroupées par appareil : une machine compromise déclenche plusieurs règles d’un coup, qui partent en un seul message.'
-            />
 
             <SentinelDialog
                 open={settingsFor !== null}

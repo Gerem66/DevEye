@@ -5,6 +5,7 @@ import type { Cipher } from '@/Services/SecureStore';
 import type { DatabaseWithStatsRow } from '@/db/repos/database';
 import type { StoredAccess, StoredAlert, StoredDatabase } from '@/Services/DatabaseMonitor';
 import { FeatureError, type FeatureContext } from '../_define';
+import { shareScope } from '../_sharing';
 
 /**
  * Le socle de la feature Bases de données.
@@ -53,10 +54,34 @@ export async function readJson<T>(cipher: Cipher, blob: string | null): Promise<
  * C'est **la** frontière d'espace de la feature : toute commande qui prend un
  * `databaseId` commence par là, sans quoi elle répondrait sur la base d'autrui.
  */
-export async function loadDatabase(ctx: FeatureContext, databaseId: number): Promise<DatabaseRow> {
-    const row = await ctx.db.databases.find(databaseId, ctx.workspaceId);
+/**
+ * Une base visible depuis cet espace — la sienne, ou une qu'on y projette.
+ *
+ * `level` décide de la garde : `assertItem` refuse en plus les bases qu'une
+ * restriction de rôle masque ou passe en lecture seule.
+ */
+export async function loadDatabase(
+    ctx: FeatureContext,
+    databaseId: number,
+    level: 'read' | 'write' = 'read'
+): Promise<DatabaseRow> {
+    const row = await ctx.db.databases.findVisible(databaseId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Base de données introuvable');
+    await ctx.assertItem('database', databaseId, level);
     return row;
+}
+
+/**
+ * Le codec d'une base **là où elle vit**.
+ *
+ * Une base projetée reste chiffrée sous la clé de son espace d'origine : la
+ * déchiffrer avec celle d'ici rendrait un nom vide et une cible illisible — une
+ * base qu'on croirait mal enregistrée plutôt qu'une base d'ailleurs.
+ */
+export async function databaseCipherFor(ctx: FeatureContext, row: { workspace_id: number }): Promise<Cipher> {
+    if (row.workspace_id === ctx.workspaceId) return ctx.secure.open;
+    const scope = await shareScope(ctx, 'database');
+    return scope.cipherFor((row as DatabaseRow).id);
 }
 
 export async function toDatabase(cipher: Cipher, row: DatabaseWithStatsRow): Promise<Database> {
