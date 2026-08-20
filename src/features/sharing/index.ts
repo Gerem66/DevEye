@@ -51,6 +51,36 @@ async function canManageRolesIn(ctx: FeatureContext, workspaceId: number): Promi
     return grantsFor(false, role).capabilities.has('workspace.roles');
 }
 
+/**
+ * L'appelant peut-il **écrire** cet élément dans un espace donné — qui n'est
+ * pas forcément l'actif ?
+ *
+ * La question se pose depuis une fenêtre : membre de B qui regarde un élément
+ * de A, a-t-il le droit d'en régler le partage ? La réponse est celle qu'il
+ * aurait EN A : membre, écriture sur la fonctionnalité, et aucune restriction
+ * posée sur cette ligne pour son rôle. C'est la définition de « avoir accès à
+ * l'élément racine » — et c'est elle qui décide, pas l'espace où l'on se
+ * trouve.
+ */
+async function canWriteItemIn(
+    ctx: FeatureContext,
+    workspaceId: number,
+    feature: WorkspaceFeatureId,
+    itemId: number
+): Promise<boolean> {
+    const workspace = await ctx.db.workspaces.findById(workspaceId);
+    if (!workspace) return false;
+    if (workspace.owner_user_id === ctx.userId) return true;
+    if (!(await ctx.db.workspaceMembers.isMember(ctx.userId, workspaceId))) return false;
+    const role = await ctx.db.workspaceRoles.findForMember(ctx.userId, workspaceId);
+    if (grantsFor(false, role).features.get(feature) !== 'write') return false;
+    if (!role) return false;
+    // La restriction d'élément posée là-bas s'applique là-bas : masqué ou en
+    // lecture seule chez lui, on ne gère pas son partage depuis ailleurs.
+    const restrictions = await ctx.db.itemSharing.grantsForRole(workspaceId, feature, role.id);
+    return !restrictions.some((g) => g.item_id === itemId);
+}
+
 /** Où vit cet élément, et l'appelant peut-il en disposer ? */
 async function loadHome(ctx: FeatureContext, feature: WorkspaceFeatureId, itemId: number): Promise<number> {
     // L'élément doit être **chez l'appelant** pour qu'il en dispose : on ne
@@ -160,12 +190,16 @@ const getFeature = defineFeature({
         // L'accès à l'élément lui-même, restrictions de rôle comprises : un
         // membre à qui il est masqué n'a pas à savoir où il est projeté.
         await ctx.assertItem(input.feature, input.itemId);
-        // Un élément qu'on ne fait que voir : on répond, on n'échoue pas. Lever
-        // ici afficherait « chargement impossible », qui se lit comme une panne
-        // alors que c'est une règle — et une règle qui mérite d'être dite.
         const share = await ctx.db.itemSharing.findShare(ctx.workspaceId, input.feature, input.itemId);
         if (share && share.home_workspace_id !== ctx.workspaceId) {
-            return shareState(ctx, input.feature, input.itemId, 'foreign', share.home_workspace_id);
+            // Depuis une fenêtre, c'est le droit AU DOMICILE qui décide : qui a
+            // l'écriture de l'élément chez lui règle son partage d'où il veut —
+            // c'est la même personne devant la même donnée. Sans ce droit, on
+            // répond quand même, cases inertes : lever afficherait
+            // « chargement impossible », qui se lit comme une panne alors que
+            // c'est une règle.
+            const manageable = await canWriteItemIn(ctx, share.home_workspace_id, input.feature, input.itemId);
+            return shareState(ctx, input.feature, input.itemId, manageable ? null : 'foreign', share.home_workspace_id);
         }
         const home = await loadHome(ctx, input.feature, input.itemId);
         return shareState(ctx, input.feature, input.itemId, null, home);
@@ -184,9 +218,26 @@ const setFeature = defineFeature({
         // (masquée, ou en lecture seule) pouvait la projeter vers son espace
         // personnel et lire par la fenêtre ce que la restriction lui fermait.
         await ctx.assertItem(input.feature, input.itemId, 'write');
-        const home = await loadHome(ctx, input.feature, input.itemId);
 
-        if (input.workspaceId === ctx.workspaceId) {
+        // Le domicile réel : l'espace actif, ou celui d'une projection qu'on
+        // regarde. Depuis une fenêtre, c'est le droit AU DOMICILE qui autorise —
+        // membre de l'espace d'origine, écriture sur la fonctionnalité là-bas,
+        // aucune restriction sur la ligne. La même personne devant la même
+        // donnée n'a pas à retraverser pour cocher une case.
+        let home = await itemHomeWorkspace(ctx, input.feature, input.itemId);
+        if (home === null) {
+            const share = await ctx.db.itemSharing.findShare(ctx.workspaceId, input.feature, input.itemId);
+            home = share?.home_workspace_id ?? null;
+        }
+        if (home === null) throw new FeatureError('not_found', 'Élément introuvable');
+        if (home !== ctx.workspaceId && !(await canWriteItemIn(ctx, home, input.feature, input.itemId))) {
+            throw new FeatureError(
+                'forbidden',
+                'Cet élément appartient à un autre espace, où vous n’avez pas le droit de le modifier : son partage s’y règle.'
+            );
+        }
+
+        if (input.workspaceId === home) {
             throw new FeatureError('validation', 'Un élément est toujours visible dans son espace d’origine.');
         }
         // La cible doit être un espace de l'appelant. Vérifié ici et pas

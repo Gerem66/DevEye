@@ -7,6 +7,7 @@ import {
     LIVE_TYPERS_EVENT,
     livePathGate,
     ok,
+    SHARE_WIRED_FEATURES,
     TOPIC_FEATURE,
     type FeatureAccess,
     type LiveCursor,
@@ -180,6 +181,23 @@ export class LiveHub {
 
     /** `${workspaceId}:${topic}` -> dernier envoi, pour le plancher de débit. */
     private readonly topicSentAt = new Map<string, number>();
+
+    /**
+     * Les espaces reliés à un espace par des projections d'éléments, pour une
+     * feature — posé par `app.ts` (`db.itemSharing.linkedWorkspaces`).
+     *
+     * C'est ce qui fait TRAVERSER la projection à la diffusion : chaque
+     * `changed` sur un sujet de feature branchée au partage est rejoué dans les
+     * espaces reliés. Le point est d'être ICI et pas chez les appelants — le
+     * dispatcheur, cinq services de fond, le moteur de sauvegardes appellent
+     * tous `changed`, et aucun n'a à connaître la règle.
+     */
+    private shareLinks: ((workspaceId: number, feature: string) => Promise<number[]>) | null = null;
+
+    /** Branche le résolveur d'espaces reliés. Sans lui, aucune traversée. */
+    setShareLinks(resolver: (workspaceId: number, feature: string) => Promise<number[]>): void {
+        this.shareLinks = resolver;
+    }
 
     private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -430,6 +448,37 @@ export class LiveHub {
      * qui écrivent sans commande et n'ont pas de socket.
      */
     changed(workspaceId: number, topics: readonly LiveTopic[], byUserId: number | null, exclude?: WebSocket): void {
+        this.changedHere(workspaceId, topics, byUserId, exclude);
+
+        // Puis les espaces reliés par des projections, pour les sujets qui s'y
+        // prêtent : une sonde qui écrit chez elle doit rafraîchir ses fenêtres,
+        // une écriture faite depuis une fenêtre doit rafraîchir le domicile.
+        // Asynchrone et sans attente : la diffusion locale ne dépend jamais
+        // d'une requête de plus, et un échec ici ne casse rien — il retarde.
+        if (this.shareLinks === null) return;
+        for (const topic of topics) {
+            const feature = TOPIC_FEATURE[topic];
+            if (feature === null || !SHARE_WIRED_FEATURES.includes(feature)) continue;
+            void this.shareLinks(workspaceId, feature)
+                .then((linked) => {
+                    for (const other of linked) {
+                        if (other !== workspaceId) this.changedHere(other, [topic], byUserId, exclude);
+                    }
+                })
+                .catch(() => {
+                    // Un raté de résolution retarde un rafraîchissement, il ne
+                    // mérite pas de bruit : la prochaine écriture repassera.
+                });
+        }
+    }
+
+    /** La diffusion dans UN espace — le corps historique de `changed`. */
+    private changedHere(
+        workspaceId: number,
+        topics: readonly LiveTopic[],
+        byUserId: number | null,
+        exclude?: WebSocket
+    ): void {
         const room = this.byWorkspace.get(workspaceId);
         if (!room || room.size === 0 || topics.length === 0) return;
 

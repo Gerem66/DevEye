@@ -124,10 +124,16 @@ frontière absolue du modèle (`WORKSPACES.md` §3).
 
 Deux corollaires, gardés côté serveur :
 
-- **on ne re-projette pas ce qu'on ne fait que voir.** Régler le partage d'un
-  élément se fait depuis son espace d'origine. Sinon un membre de B pourrait
-  diffuser vers C une donnée de A dont il n'est que spectateur, et A perdrait la
-  maîtrise de sa donnée sans le savoir.
+- **c'est le droit au domicile qui autorise le partage, pas l'endroit où l'on
+  se trouve.** Qui tient l'écriture de l'élément chez lui — membre de son
+  espace d'origine, écriture sur la fonctionnalité, aucune restriction sur la
+  ligne — règle son partage depuis n'importe quelle fenêtre : c'est la même
+  personne devant la même donnée. Un simple spectateur de B, lui, ne peut pas
+  re-projeter vers C une donnée de A : il n'a pas ce droit chez elle, et A
+  garderait sinon la maîtrise de rien. Partager exige aussi l'accès à
+  l'élément **lui-même** (`assertItem`) : un rôle restreint sur la ligne ne la
+  projette pas vers son espace personnel pour lire par la fenêtre ce qui lui
+  est fermé.
 - **on ne supprime pas depuis une fenêtre.** Retirer la projection, oui ;
   détruire l'élément, seulement depuis chez lui.
 
@@ -219,17 +225,30 @@ il vit dans une table différente selon la feature. Le nettoyage est **applicati
 `notification_routes` (087). Sans lui, une ligne orpheline s'appliquerait au
 prochain élément à hériter de l'identifiant.
 
-## 8. Reste à faire
+## 8. La diffusion traverse la projection
+
+`LiveHub.changed` rejoue chaque sujet de feature branchée au partage dans les
+espaces **reliés** par `item_shares`, dans les deux sens (résolveur posé par
+`app.ts`). C'est fait dans le hub et pas chez les appelants, exprès : le
+dispatcheur, les services de fond et le moteur de sauvegardes appellent tous
+`changed`, et aucun n'a à connaître la règle. Une sonde qui écrit chez elle
+rafraîchit ses fenêtres ; un déclenchement fait depuis une fenêtre rafraîchit
+le domicile.
+
+Les commandes `share.*` portent leur fonctionnalité en entrée : le dispatcheur
+lit le sujet dans la requête et prévient aussi l'espace visé — nécessaire au
+retrait, que la table ne relie déjà plus.
+
+Les **compteurs** suivent la même règle que les listes : les cartes de
+l'accueil comptent les éléments visibles — projetés compris, restrictions
+déduites. Une carte qui compte autre chose que la liste qu'elle ouvre se lit
+comme un bug.
+
+## 9. Reste à faire
 
 - Brancher les `'perItem'` (Notes, Mail, Projets) avec leur test de palier
   ligne à ligne — chacun est un chantier en soi : leurs objets sont des graphes
   (dossiers, messages, cartes), pas des lignes.
-- **La diffusion live ne traverse pas la projection.** Une écriture faite
-  depuis la fenêtre n'avertit que l'espace de la fenêtre ; les écrans du
-  domicile (et des autres fenêtres) ne se rafraîchissent qu'à leur prochaine
-  occasion — souvent le service de fond, qui diffuse chez lui. Le corriger
-  demande un éventail par `item_shares` dans le dispatcheur, comme celui des
-  appareils.
 - L'ordonnanceur de fond n'a pas changé : il sonde les éléments **d'un espace**,
   pas ce qu'on y voit. C'est voulu — sonder deux fois le même service parce
   qu'il est projeté ailleurs doublerait requêtes et incidents.

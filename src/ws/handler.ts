@@ -11,7 +11,8 @@ import {
     type FeatureAccess,
     type ServerMessage,
     type WorkspaceCapability,
-    type WorkspaceFeatureId
+    type WorkspaceFeatureId,
+    liveTopicSchema
 } from 'deveye-types';
 import type { FastifyInstance } from 'fastify';
 
@@ -365,9 +366,25 @@ export async function registerWS(
                 // l'espace **personnel** de l'appelant.
                 //
                 // L'émetteur est exclu : il tient déjà sa propre réponse.
-                const topics = topicsOf(command);
+                let topics = topicsOf(command);
+                let extraWorkspace: number | null = null;
+                // Les commandes de partage portent leur fonctionnalité en
+                // ENTRÉE : leur préfixe ne peut pas dire quel sujet diffuser.
+                // On le lit dans la requête — le sujet d'une feature branchée
+                // au partage porte le même nom qu'elle — et on prévient aussi
+                // l'espace visé : après un retrait, la table ne le relie plus,
+                // donc l'éventail des projections ne le trouverait pas.
+                if (topics && command.startsWith('share.')) {
+                    const body = inputParse.data as { feature?: string; workspaceId?: number };
+                    const asTopic = liveTopicSchema.safeParse(body.feature);
+                    if (asTopic.success) topics = [...topics, asTopic.data];
+                    extraWorkspace = body.workspaceId ?? null;
+                }
                 if (topics) {
                     liveHub.changed(auditWorkspaceId, topics, session!.userId, socket);
+                    if (extraWorkspace !== null && extraWorkspace !== auditWorkspaceId) {
+                        liveHub.changed(extraWorkspace, topics, session!.userId);
+                    }
                     // Un appareil est partageable entre plusieurs espaces, et le
                     // dispatcheur ne connaît que celui de l'enveloppe : sans cet
                     // éventail, les autres destinataires resteraient sur une

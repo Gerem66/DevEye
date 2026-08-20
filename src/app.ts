@@ -160,6 +160,9 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // Construit avant les services de fond : ils lui adressent leurs changements
     // (ils écrivent sans commande utilisateur, donc sans socket pour diffuser).
     const live = new LiveHub();
+    // La diffusion traverse les projections : un espace est prévenu des
+    // écritures faites chez ceux qui partagent avec lui, dans les deux sens.
+    live.setShareLinks((workspaceId, feature) => deps.db.itemSharing.linkedWorkspaces(workspaceId, feature));
     live.startHeartbeat();
     // Même battement pour les sockets agent : une machine éteinte ne referme
     // jamais la sienne, et restait « en ligne » jusqu'au keepalive TCP du noyau.

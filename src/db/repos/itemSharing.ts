@@ -28,6 +28,16 @@ export interface ItemSharingRepo {
     unshare(workspaceId: number, feature: string, itemId: number): Promise<void>;
     /** Retire toutes les projections d'un élément — à sa suppression. */
     forgetItem(feature: string, itemId: number, homeWorkspaceId: number): Promise<void>;
+    /**
+     * Les espaces reliés à celui-ci par au moins une projection de cette
+     * feature, dans les deux sens : ceux qui regardent ses éléments, et ceux
+     * dont il regarde les éléments.
+     *
+     * C'est l'éventail de la diffusion live : une écriture ici doit rafraîchir
+     * les fenêtres, et une écriture faite depuis une fenêtre doit rafraîchir le
+     * domicile et les autres fenêtres.
+     */
+    linkedWorkspaces(workspaceId: number, feature: string): Promise<number[]>;
 
     /** Les restrictions posées depuis cet espace sur cet élément. */
     grantsOf(workspaceId: number, feature: string, itemId: number): Promise<ItemRoleGrantRow[]>;
@@ -89,6 +99,18 @@ export function itemSharingRepo(pool: Q): ItemSharingRepo {
                 feature,
                 itemId
             ]);
+        },
+
+        async linkedWorkspaces(workspaceId, feature) {
+            const r = await pool.query<{ id: number }>(
+                `SELECT DISTINCT workspace_id AS id FROM item_shares
+                  WHERE home_workspace_id = ? AND feature = ?
+                 UNION
+                 SELECT DISTINCT home_workspace_id AS id FROM item_shares
+                  WHERE workspace_id = ? AND feature = ?`,
+                [workspaceId, feature, workspaceId, feature]
+            );
+            return r.rows.map((row) => row.id);
         },
 
         async forgetItem(feature, itemId, homeWorkspaceId) {

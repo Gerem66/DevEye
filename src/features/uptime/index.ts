@@ -143,7 +143,19 @@ export const uptimeCountFeature: FeatureDefinition<
 > = defineFeature({
     ...uptimeCount,
     access: { feature: 'uptime', level: 'read' },
-    handler: async (ctx) => ctx.db.uptimeServices.countByWorkspace(ctx.workspaceId)
+    handler: async (ctx) => {
+        // Les mêmes lignes que la liste — projetées comprises, restrictions
+        // déduites : une carte qui compte moins que la liste qu'elle ouvre se
+        // lit comme un bug, dans un sens comme dans l'autre.
+        const rows = await ctx.db.uptimeServices.listVisible(ctx.workspaceId);
+        const hidden = await ctx.itemRestrictions('uptime');
+        const visible = rows.filter((r) => hidden.get(r.id) !== 'none' && r.enabled === 1);
+        return {
+            total: visible.length,
+            up: visible.filter((r) => r.status === 'up').length,
+            down: visible.filter((r) => r.status === 'down').length
+        };
+    }
 });
 
 export const uptimeAddFeature: FeatureDefinition<

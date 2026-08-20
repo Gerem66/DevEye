@@ -5,11 +5,15 @@
     display: grid;
     grid-template-columns: 190px 1fr;
     gap: var(--space-lg);
-    flex: 1;
     min-height: 0;
     /* Hauteur FIXE, pas minimale : chaque section a la sienne, et un dialogue
        qui se redimensionne à chaque clic de la barre latérale fait danser tout
-       l'écran. Le panneau défile à l'intérieur (`overflow-y` sur `.panel`). */
+       l'écran. Le panneau défile à l'intérieur (`overflow-y` sur `.panel`).
+
+       ⚠️ Surtout pas de `flex: 1` ici : dans la colonne flex du corps du
+       dialogue, sa base à 0 ÉCRASE la hauteur explicite, et le dialogue
+       reprenait la taille du contenu — précisément ce que cette règle
+       interdit. C'est le bug qui a fait poser ce commentaire. */
     height: min(540px, 70vh);
 }
 
@@ -403,4 +407,7 @@
     flex-direction: column;
     gap: var(--space-sm);
     min-width: 0;
+    /* Plancher : le passage « Chargement… » → liste des rôles ne doit pas
+       faire sauter le dialogue qui le porte. */
+    min-height: 220px;
 }

@@ -39,7 +39,13 @@ export const databaseCountFeature: FeatureDefinition<
 > = defineFeature({
     ...databaseCount,
     access: READ,
-    handler: async (ctx) => ({ count: await ctx.db.databases.count(ctx.workspaceId) })
+    handler: async (ctx) => {
+        // Les mêmes lignes que la liste — projetées comprises, restrictions
+        // déduites : la carte doit compter ce que la liste montre.
+        const rows = await ctx.db.databases.listVisible(ctx.workspaceId);
+        const hidden = await ctx.itemRestrictions('database');
+        return { count: rows.filter((r) => hidden.get(r.id) !== 'none').length };
+    }
 });
 
 export const databaseListFeature: FeatureDefinition<

@@ -36,7 +36,7 @@ const BLOCKER_TEXT: Record<ShareBlocker, string> = {
     item: 'Cet élément est chiffré au palier « gardé ». Le serveur ne peut pas le relire pour un autre espace, et il n’est donc pas projetable — passez-le au palier ouvert si sa nature s’y prête.',
     forbidden: 'Vous n’avez pas le droit de partager les éléments de cette fonctionnalité.',
     foreign:
-        'Cet élément vient d’un autre espace : son partage s’y règle. On ne re-projette pas ce qu’on ne fait que voir — sinon son espace d’origine perdrait la maîtrise de sa donnée sans le savoir.'
+        'Cet élément vient d’un autre espace, où vous n’avez pas le droit de le modifier : son partage se règle par ceux qui l’ont. Qui tient l’écriture de l’élément chez lui peut, en revanche, régler son partage d’ici.'
 };
 
 /**

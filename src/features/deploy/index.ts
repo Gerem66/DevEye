@@ -78,7 +78,13 @@ export const deployCountFeature: FeatureDefinition<
 > = defineFeature({
     ...deployCount,
     access: READ,
-    handler: async (ctx) => ({ count: await ctx.db.deploy.countTargets(ctx.workspaceId) })
+    handler: async (ctx) => {
+        // Les mêmes lignes que la liste — projetées comprises, restrictions
+        // déduites : la carte doit compter ce que la liste montre.
+        const rows = await ctx.db.deploy.listVisibleTargets(ctx.workspaceId);
+        const hidden = await ctx.itemRestrictions('deploy');
+        return { count: rows.filter((r) => hidden.get(r.id) !== 'none').length };
+    }
 });
 
 export const deployGetFeature: FeatureDefinition<

@@ -263,7 +263,19 @@ const jobListFeature = defineFeature({
 const countFeature = defineFeature({
     ...backupCount,
     access: READ,
-    handler: async (ctx) => ctx.db.backup.countJobs(ctx.workspaceId)
+    handler: async (ctx) => {
+        // Les mêmes lignes que la liste — projetées comprises, restrictions
+        // déduites : la carte doit compter ce que la liste montre, et un échec
+        // survenu chez le voisin sur un travail qu'on regarde d'ici mérite
+        // autant le rouge qu'un échec local.
+        const rows = await ctx.db.backup.listVisibleJobs(ctx.workspaceId);
+        const hidden = await ctx.itemRestrictions('backup');
+        const visible = rows.filter((r) => hidden.get(r.id) !== 'none' && r.enabled === 1);
+        return {
+            count: visible.length,
+            failing: visible.filter((r) => r.last_status === 'failed').length
+        };
+    }
 });
 
 const jobGetFeature = defineFeature({

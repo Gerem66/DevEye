@@ -45,7 +45,13 @@ export const gitCountFeature: FeatureDefinition<
 > = defineFeature({
     ...gitCount,
     access: READ,
-    handler: async (ctx) => ({ count: await ctx.db.git.countRepos(ctx.workspaceId) })
+    handler: async (ctx) => {
+        // Les mêmes lignes que la liste — projetées comprises, restrictions
+        // déduites : la carte doit compter ce que la liste montre.
+        const rows = await ctx.db.git.listVisibleRepos(ctx.workspaceId);
+        const hidden = await ctx.itemRestrictions('git');
+        return { count: rows.filter((r) => hidden.get(r.id) !== 'none').length };
+    }
 });
 
 export const gitRepoListFeature: FeatureDefinition<
