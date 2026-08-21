@@ -82,11 +82,7 @@ export default function WidgetPopup({
                     />
 
                     {/* Panel — morphs from the grid card when a `layoutId` is
-                        given, otherwise fades + rises in (structural pages).
-                        Translation et fondu, jamais d'échelle : une échelle
-                        animée rastérise le contenu à des tailles fractionnaires
-                        et les bordures de 1 px y disparaissent jusqu'au repaint
-                        suivant (voir le commentaire du panneau de Dialog). */}
+                        given, otherwise fades + scales in (structural pages). */}
                     <motion.div
                         layoutId={layoutId}
                         className={styles.popup}
@@ -102,9 +98,9 @@ export default function WidgetPopup({
                          */
                         data-popup-frame=''
                         style={{ maxWidth }}
-                        initial={layoutId ? false : { opacity: 0, y: 16 }}
-                        animate={layoutId ? undefined : { opacity: 1, y: 0 }}
-                        exit={layoutId ? undefined : { opacity: 0, y: 16 }}
+                        initial={layoutId ? false : { opacity: 0, scale: 0.95 }}
+                        animate={layoutId ? undefined : { opacity: 1, scale: 1 }}
+                        exit={layoutId ? undefined : { opacity: 0, scale: 0.95 }}
                         transition={{ type: 'spring', stiffness: 280, damping: 32, mass: 0.9 }}
                     >
                         <div className={styles.body}>

@@ -131,20 +131,18 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                         onClick={onClose}
                     />
                     {/* Le centrage (`translate(-50%, -50%)`) vit sur un cadre
-                        STATIQUE, hors de framer : le panneau lui-même n'anime que
-                        translation et fondu, jamais d'échelle. Une échelle animée
-                        rastérise le contenu à des tailles fractionnaires et les
-                        bordures de 1 px y disparaissent jusqu'au repaint suivant
-                        (voir le commentaire du panneau de Dialog). */}
+                        statique : framer n'a plus à trimballer les -50% dans
+                        chaque état, le panneau n'anime que son échelle et son
+                        opacité, comme les dialogues. */}
                     <div className={styles.modalPlace}>
                         <motion.div
                             className={styles.modal}
                             role='dialog'
                             aria-modal='true'
                             aria-label='Apparence'
-                            initial={{ opacity: 0, y: 14 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: 14 }}
+                            initial={{ opacity: 0, scale: 0.94 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.94 }}
                             transition={{ type: 'spring', stiffness: 320, damping: 30 }}
                         >
                             <div className={styles.header}>
