@@ -267,7 +267,7 @@ const routeGet = defineFeature({
         // l'adresse.
         const managedHere = home === ctx.workspaceId;
         const foreign = managedHere ? [] : await foreignChannels(ctx, home, input.feature, route.channelIds);
-        return { route, foreign, managedHere };
+        return { route, foreign, managedHere, homeWorkspaceId: home };
     }
 });
 

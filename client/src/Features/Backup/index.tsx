@@ -6,6 +6,7 @@ import { ws } from '@/api/ws';
 import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
+import { useLiveSegment } from '@/live/useLiveSegment';
 import type { FeatureProps } from '@/Features/types';
 import JobDialog from './JobDialog';
 import JobView from './JobView';
@@ -98,6 +99,22 @@ export function FeatureBackup(_props: FeatureProps) {
     };
 
     const opened = jobs?.find((j) => j.id === openedId) ?? null;
+
+    // La fiche ouverte est un lieu : déclarée à la présence (même format que
+    // Deploy « target:x »), donc rejoignable, et atteignable par la
+    // téléportation de « Régler dans <espace> » d'un élément projeté.
+    const liveTarget = useLiveSegment('l1', openedId === null ? null : `job:${openedId}`);
+    useEffect(() => {
+        if (!liveTarget || jobs === null) return;
+        if (liveTarget.value === null) {
+            setOpenedId(null);
+            return;
+        }
+        const id = Number(liveTarget.value.replace(/^job:/, ''));
+        // Pas encore chargé : la cible reste posée, le rendu suivant la relit.
+        if (!Number.isInteger(id) || !jobs.some((j) => j.id === id)) return;
+        setOpenedId(id);
+    }, [liveTarget, jobs]);
 
     return (
         <div className={styles.root}>

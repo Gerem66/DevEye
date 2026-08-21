@@ -9,6 +9,7 @@ import { invalidate, type ResourceKey } from '@/stores/invalidation';
 
 import type { SettingsScope } from '../scope';
 import styles from '../FeatureSettings.module.css';
+import { goToItemSettings } from '../goToHome';
 import ItemGrantsPanel from './ItemGrantsPanel';
 
 /**
@@ -103,6 +104,10 @@ export default function SharingSection({ scope }: Props) {
     // pourquoi ça ne se règle pas d'ici.
     if (state.blocker === 'forbidden' || state.blocker === 'foreign') {
         const visible = state.workspaces.filter((w) => w.shared).map((w) => w.workspaceName);
+        // Le domicile, s'il est parmi les espaces de l'appelant : c'est là que
+        // le partage se règle, et on peut alors proposer d'y aller plutôt que
+        // d'en rester à l'explication du refus.
+        const home = state.workspaces.find((w) => w.isHome) ?? null;
         return (
             <div className={styles.section}>
                 <p className={styles.sectionHint}>
@@ -110,7 +115,21 @@ export default function SharingSection({ scope }: Props) {
                         ? `Ce ${noun} est visible dans : ${visible.join(', ')}.`
                         : `Ce ${noun} n’est visible que dans ${visible[0] ?? 'cet espace'}.`}
                 </p>
-                <p className={styles.sectionHint}>{BLOCKER_TEXT[state.blocker]}</p>
+                <p className={styles.sectionHint}>
+                    {BLOCKER_TEXT[state.blocker]}
+                    {state.blocker === 'foreign' && home !== null && (
+                        <>
+                            {' '}
+                            <button
+                                type='button'
+                                className={styles.jumpBtn}
+                                onClick={() => goToItemSettings(home.workspaceId, scope.feature, itemId, 'sharing')}
+                            >
+                                Régler dans « {home.workspaceName} »
+                            </button>
+                        </>
+                    )}
+                </p>
             </div>
         );
     }

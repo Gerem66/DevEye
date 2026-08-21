@@ -20,6 +20,7 @@ import SelectInput from '@/Components/SelectInput';
 import TextInput from '@/Components/TextInput';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
+import { accessibleWorkspaceName, goToItemSettings } from '../goToHome';
 /* Le vrai dialogue de la feature Mail, jamais une copie réduite (le patron des
    dialogues de liaison des Projets). Chemins directs des deux côtés : ni lui ni
    ses imports ne passent par le baril `@/Components`, pas de cycle. */
@@ -130,6 +131,8 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
      * « Ajouter un canal » que le serveur refuse — un écran qui ment.
      */
     const [managedHere, setManagedHere] = useState(true);
+    /** L'espace où la route se règle : le domicile de l'élément. */
+    const [homeWorkspaceId, setHomeWorkspaceId] = useState<number | null>(null);
     const [accounts, setAccounts] = useState<MailAccount[]>([]);
     const [selected, setSelected] = useState<number[]>([]);
     const [draft, setDraft] = useState<NotificationChannelInput | null>(null);
@@ -182,6 +185,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
         setChannels(list.channels);
         setForeign(route.foreign);
         setManagedHere(route.managedHere);
+        setHomeWorkspaceId(route.homeWorkspaceId);
         setSelected(route.route.channelIds);
     }, [feature, itemId, showSelection]);
 
@@ -351,14 +355,31 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
 
             <div className={styles.channelList}>
                 {channels.length === 0 && foreign.length === 0 && (
-                    <p className={styles.empty}>
-                        {`Aucun canal pour ${descriptor.label}.`}
-                        {!canManage
-                            ? ' Demandez à un gestionnaire de l’espace d’en déclarer un.'
-                            : scope.kind === 'feature'
-                              ? ' Ajoutez-en un ci-dessous : il recevra ses alertes.'
-                              : ' « Gérer les canaux » ci-dessous ouvre les réglages de la fonctionnalité, où ils se déclarent.'}
-                    </p>
+                    // L'état vide porte le geste : le « + » ouvre les réglages
+                    // de la fonctionnalité sur cet onglet, où les canaux se
+                    // déclarent. Offert même sans le droit de gérer : le
+                    // chemin reste le même, on y lira simplement sans ajouter.
+                    <div className={styles.emptyRow}>
+                        <span>
+                            {`Aucun canal pour ${descriptor.label}.`}
+                            {onManageChannels
+                                ? ' Le « + » ouvre les réglages de la fonctionnalité, où ils se déclarent.'
+                                : canManage
+                                  ? ' Ajoutez-en un ci-dessous : il recevra ses alertes.'
+                                  : ' Demandez à un gestionnaire de l’espace d’en déclarer un.'}
+                        </span>
+                        {onManageChannels && (
+                            <button
+                                type='button'
+                                className={styles.rowAction}
+                                title='Ouvrir les réglages de la fonctionnalité, où les canaux se déclarent'
+                                aria-label='Déclarer un canal dans les réglages de la fonctionnalité'
+                                onClick={onManageChannels}
+                            >
+                                <span className='icon icon-plus' />
+                            </button>
+                        )}
+                    </div>
                 )}
 
                 {channels.map((channel) => (
@@ -469,6 +490,25 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                 <p className={styles.sectionHint}>
                     Ce {descriptor.itemNoun ?? 'élément'} vient d’un autre espace : ses canaux s’y règlent, et
                     l’ordonnanceur qui le surveille y tourne. Un canal ajouté ici ne le concernerait pas.
+                    {/* Le refus expliqué devient un chemin : si l'appelant est
+                        membre de l'espace d'origine, on l'y emmène, fiche
+                        ouverte, réglages rouverts sur ce même onglet. */}
+                    {scope.kind === 'item' &&
+                        homeWorkspaceId !== null &&
+                        accessibleWorkspaceName(homeWorkspaceId) !== null && (
+                            <>
+                                {' '}
+                                <button
+                                    type='button'
+                                    className={styles.jumpBtn}
+                                    onClick={() =>
+                                        goToItemSettings(homeWorkspaceId, feature, scope.itemId, 'notifications')
+                                    }
+                                >
+                                    Régler dans « {accessibleWorkspaceName(homeWorkspaceId)} »
+                                </button>
+                            </>
+                        )}
                 </p>
             )}
 

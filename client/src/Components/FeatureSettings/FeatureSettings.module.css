@@ -129,6 +129,41 @@
     font-size: 0.85rem;
 }
 
+/* Un état vide qui porte le geste : la phrase à gauche, l'action à droite.
+   Même boîte pointillée que `.empty`, en rangée. */
+.emptyRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border: 1px dashed var(--glass-border);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.emptyRow > span {
+    flex: 1;
+}
+
+/* Bouton-texte de saut : « aller régler ça là où ça se règle ». En ligne dans
+   la phrase qui explique le refus, pour que l'explication débouche sur un
+   geste. */
+.jumpBtn {
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-family: var(--font-sans);
+    font-size: inherit;
+    cursor: pointer;
+}
+
+.jumpBtn:hover {
+    text-decoration: underline;
+}
+
 .warning {
     color: var(--warning);
     font-size: 0.78rem;

@@ -3,7 +3,8 @@ import { SHARE_WIRED_FEATURES, featureDescriptor } from 'deveye-types';
 
 import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
-import { useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
+import { consumeItemSettings } from '@/stores/settingsRequest';
+import { getActiveWorkspaceId, useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
 
 import NotificationsSection from './sections/NotificationsSection';
 import ItemPermissionsSection from './sections/ItemPermissionsSection';
@@ -215,15 +216,42 @@ export function FeatureSettingsButton({
 }: FeatureSettingsButtonProps) {
     const sections = useSettingsSections(scope);
     const [open, setOpen] = useState(false);
+    const [section, setSection] = useState<SettingsSectionId | undefined>(undefined);
+
+    /**
+     * L'intention « ouvrir les réglages de cet élément » posée avant une
+     * bascule d'espace (« Régler dans <espace> » d'un élément projeté). La
+     * consommer ICI, dans le bouton commun, est ce qui rend le saut gratuit
+     * pour toutes les features : monter le bouton suffit, aucune n'a de code à
+     * écrire. L'intention périmée ou visant un autre élément rend `null`.
+     */
+    const itemId = scope.kind === 'item' ? scope.itemId : null;
+    useEffect(() => {
+        if (itemId === null) return;
+        const wanted = consumeItemSettings(getActiveWorkspaceId(), scope.feature, itemId);
+        if (wanted) {
+            setSection(wanted as SettingsSectionId);
+            setOpen(true);
+        }
+    }, [scope.feature, itemId]);
 
     if (sections.length === 0) return null;
 
     return (
         <>
-            <Button variant={variant} icon='settings' onClick={() => setOpen(true)}>
+            <Button
+                variant={variant}
+                icon='settings'
+                onClick={() => {
+                    // Une ouverture manuelle repart de la première section :
+                    // l'onglet d'une intention passée n'a plus rien de demandé.
+                    setSection(undefined);
+                    setOpen(true);
+                }}
+            >
                 {label}
             </Button>
-            <FeatureSettingsDialog open={open} onClose={() => setOpen(false)} scope={scope} />
+            <FeatureSettingsDialog open={open} onClose={() => setOpen(false)} scope={scope} initialSection={section} />
         </>
     );
 }
