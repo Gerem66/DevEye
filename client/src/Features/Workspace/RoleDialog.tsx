@@ -239,6 +239,21 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                                 (hiddenGranted === 1 ? ' (dont 1 accordée)' : ` (dont ${hiddenGranted} accordées)`)}
                         </button>
                     )}
+                    {/* Le geste inverse : revenir aux seules fonctionnalités de
+                        l'accueil. La sélection suit, une entrée repliée ne peut
+                        pas rester la section affichée. */}
+                    {showAll && onHome.length > 0 && onHome.length < FEATURE_REGISTRY.length && (
+                        <button
+                            type='button'
+                            className={styles.showAllBtn}
+                            onClick={() => {
+                                setShowAll(false);
+                                if (section !== 'space' && !placed.has(section)) setSection('space');
+                            }}
+                        >
+                            Replier les autres
+                        </button>
+                    )}
                 </nav>
 
                 <div className={shell.panel}>

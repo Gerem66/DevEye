@@ -156,8 +156,14 @@ async function shareState(
     // actif. Les lire par l'actif rendait l'écran instable : depuis une
     // fenêtre, seule l'origine paraissait cochée, et la fenêtre où l'on se
     // trouvait semblait ne pas exister.
+    //
+    // Elles se lisent aussi sous le blocage `forbidden` : qui ne peut pas
+    // régler le partage voit quand même OÙ l'élément est visible, parmi ses
+    // propres espaces (il l'y verrait de toute façon en s'y rendant), et
+    // l'écran en lecture seule n'a que ça à dire. Seul `feature` (partage non
+    // branché) n'a rien à lire.
     const shares =
-        blocker === 'feature' || blocker === 'forbidden'
+        blocker === 'feature'
             ? []
             : await ctx.db.itemSharing.sharesOf(feature, itemId, homeWorkspaceId).catch(() => []);
     const sharedTo = new Set(shares.map((s) => s.workspace_id));
@@ -186,7 +192,17 @@ const getFeature = defineFeature({
     handler: async (ctx, input) => {
         ctx.assertFeature(input.feature, 'read');
         const blocker = shareBlockerFor(ctx, input.feature);
-        if (blocker) return shareState(ctx, input.feature, input.itemId, blocker, ctx.workspaceId);
+        if (blocker) {
+            // Même bloqué, l'écran doit dire où l'élément est visible : le
+            // domicile est résolu pour de vrai, sinon un élément regardé
+            // depuis une fenêtre lirait ses projections sous le mauvais index
+            // et paraîtrait n'exister qu'ici.
+            const share =
+                blocker === 'feature'
+                    ? null
+                    : await ctx.db.itemSharing.findShare(ctx.workspaceId, input.feature, input.itemId);
+            return shareState(ctx, input.feature, input.itemId, blocker, share?.home_workspace_id ?? ctx.workspaceId);
+        }
         // L'accès à l'élément lui-même, restrictions de rôle comprises : un
         // membre à qui il est masqué n'a pas à savoir où il est projeté.
         await ctx.assertItem(input.feature, input.itemId);

@@ -97,6 +97,24 @@ export default function SharingSection({ scope }: Props) {
 
     const noun = featureDescriptor(scope.feature).itemNoun ?? 'élément';
 
+    // Sans le droit de régler le partage, la table d'interrupteurs inertes
+    // n'apprenait rien : elle promettait un geste refusé. On dit simplement où
+    // l'élément est visible, parmi les espaces auxquels l'appelant a accès, et
+    // pourquoi ça ne se règle pas d'ici.
+    if (state.blocker === 'forbidden' || state.blocker === 'foreign') {
+        const visible = state.workspaces.filter((w) => w.shared).map((w) => w.workspaceName);
+        return (
+            <div className={styles.section}>
+                <p className={styles.sectionHint}>
+                    {visible.length > 1
+                        ? `Ce ${noun} est visible dans : ${visible.join(', ')}.`
+                        : `Ce ${noun} n’est visible que dans ${visible[0] ?? 'cet espace'}.`}
+                </p>
+                <p className={styles.sectionHint}>{BLOCKER_TEXT[state.blocker]}</p>
+            </div>
+        );
+    }
+
     return (
         <div className={styles.section}>
             <p className={styles.sectionHint}>

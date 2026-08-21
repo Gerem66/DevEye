@@ -85,12 +85,13 @@
     border-radius: var(--radius-md);
 }
 
-/* Une ligne = un membre, ou un lien d'invitation. */
+/* Une ligne = un membre, ou un lien d'invitation. Padding vertical minimal :
+   l'avatar donne déjà sa hauteur à la ligne, en rajouter aérait trop. */
 .row {
     display: flex;
     align-items: center;
     gap: var(--space-md);
-    padding: var(--space-sm) 0;
+    padding: var(--space-xs) 0;
 }
 
 .row + .row {
@@ -298,6 +299,14 @@
 .roleLayout {
     margin-top: var(--space-md);
     min-height: 0;
+}
+
+/* La navigation défile pour elle-même : registre déplié, ses entrées dépassent
+   la hauteur de la coquille, et sans ça la fin de la liste était hors
+   d'atteinte. Le panneau a déjà son propre défilement, chacun le sien. */
+.roleLayout > nav {
+    min-height: 0;
+    overflow-y: auto;
 }
 
 /* Le trait qui sépare le gouvernement de l'espace des fonctionnalités. */
