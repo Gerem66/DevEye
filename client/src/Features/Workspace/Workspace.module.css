@@ -291,72 +291,58 @@
     color: var(--text-primary);
 }
 
-/* Une feature et le niveau qu'un rôle y accorde : le libellé et sa phrase d'un
-   côté, les trois boutons du niveau de l'autre. Le padding, symétrique, n'ajoute
-   qu'une respiration égale de part et d'autre du trait. */
-.grantRow {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-    padding: var(--space-xs) 0;
+/* La coquille du formulaire de rôle (mêmes classes que FeatureSettings : nav à
+   gauche, panneau à droite). De l'air au-dessus pour ne pas coller la rangée du
+   nom, et `min-height: 0` pour que la hauteur fixe de la coquille puisse céder
+   quand l'écran manque, le dialogue étant en mode `fill`. */
+.roleLayout {
+    margin-top: var(--space-md);
+    min-height: 0;
 }
 
-.grantRow + .grantRow {
+/* Le trait qui sépare le gouvernement de l'espace des fonctionnalités. */
+.navSpacer {
+    margin: var(--space-sm) 0;
     border-top: 1px solid var(--glass-border);
 }
 
-/* Le libellé prend la place restante, le sélecteur garde la sienne : sans ça le
-   `width: 100%` de SelectInput écrase le texte jusqu'aux points de suspension. */
-.grantLabel {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    flex: 1;
-    min-width: 0;
-    font-size: 0.875rem;
-    color: var(--text-primary);
+/* L'état du droit sur une ligne de nav : accent = écriture, éteint = lecture,
+   absent = aucun accès. */
+.navDot {
+    width: 7px;
+    height: 7px;
+    border-radius: var(--radius-pill);
+    flex-shrink: 0;
 }
 
-/* L'icône et l'intitulé sur une même ligne de base : `align-items: center`
-   plutôt qu'un glyphe en ligne, qui flottait au-dessus du texte. */
-.grantTitle {
+.navDot[data-access='write'] {
+    background: var(--accent);
+}
+
+.navDot[data-access='read'] {
+    background: var(--text-muted);
+}
+
+/* Une ligne de réglage du panneau : l'intitulé à gauche, le contrôle à droite. */
+.grantField {
     display: flex;
     align-items: center;
-    gap: var(--space-sm);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    justify-content: space-between;
+    gap: var(--space-md);
 }
 
-.grantTitle .icon {
-    flex-shrink: 0;
-    color: var(--text-secondary);
+.grantFieldLabel {
+    color: var(--text-primary);
+    font-size: 0.875rem;
 }
 
-/* Ce que le droit recouvre — peut tenir sur deux lignes, jamais tronqué : une
-   phrase coupée aux points de suspension ne renseigne personne. */
-.grantHint {
-    font-size: 0.72rem;
-    line-height: 1.35;
-    color: var(--text-muted);
-    white-space: normal;
-}
-
-/* La barre d'onglets d'un dialogue (formulaire de rôle) : de l'air au-dessus,
-   pour ne pas coller la rangée du nom, et en dessous, avant le premier volet. */
-.dialogTabs {
-    margin: var(--space-md) 0;
-    flex-shrink: 0;
-}
-
-/* Le volet actif du formulaire de rôle, seule zone qui défile (mode `fill` du
-   dialogue : nom, onglets et pied restent en place). `min-height: 0` est ce qui
-   l'autorise à rétrécir quand l'écran manque ; sans lui, le minimum implicite
-   des éléments flex vaut leur contenu et rien ne défile jamais. */
-.roleVolet {
-    min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
+/* Les réglages propres à la fonctionnalité, sous le niveau d'accès. */
+.grantExtra {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--glass-border);
 }
 
 /* Le bouton-texte qui déplie le reste du registre des fonctionnalités :
@@ -375,13 +361,6 @@
 
 .showAllBtn:hover {
     text-decoration: underline;
-}
-
-/* Le cadre dont framer anime la hauteur d'un volet à l'autre : il découpe le
-   contenu le temps du mouvement, et au repos sa hauteur est exactement celle
-   du volet, donc il ne rogne rien. */
-.voletClip {
-    overflow: hidden;
 }
 
 /*

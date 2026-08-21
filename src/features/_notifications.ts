@@ -27,10 +27,11 @@ import { FeatureError, type FeatureContext } from './_define';
 export async function listChannels(ctx: FeatureContext, feature: NotificationFeature): Promise<NotificationChannel[]> {
     const rows = await ctx.db.notificationChannels.list(ctx.workspaceId, feature);
     const usage = await ctx.db.notificationChannels.usageCounts(ctx.workspaceId);
-    // La liste est ouverte à tout membre — on ne peut pas router vers des
+    // La liste s'ouvre avec la fonctionnalité : on ne peut pas router vers des
     // destinations qu'on ne voit pas. Les adresses, elles, restent derrière la
-    // capacité : voir « Astreinte · e-mail » suffit pour cocher une case.
-    const reveal = ctx.can('workspace.notifications');
+    // gestion des canaux de CETTE fonctionnalité (grant `channels`, 093) :
+    // voir « Astreinte · e-mail » suffit pour cocher une case.
+    const reveal = ctx.canChannels(feature);
     return Promise.all(
         rows.map((row) => describeChannel(ctx.db, ctx.secure.open, row, usage.get(row.id) ?? 0, reveal))
     );

@@ -71,6 +71,14 @@ export interface FeatureContext {
     /** Lève `forbidden` si la feature n'est pas accessible à ce niveau. */
     assertFeature: (feature: WorkspaceFeatureId, level?: FeatureAccess) => void;
     /**
+     * L'appelant gère-t-il les **canaux d'alerte** de cette feature ? Exige la
+     * lecture de la feature en plus du champ `channels` de son grant : on ne
+     * gère pas les destinations d'une fonctionnalité qu'on ne voit pas.
+     */
+    canChannels: (feature: WorkspaceFeatureId) => boolean;
+    /** Lève `forbidden` si l'appelant ne gère pas les canaux de cette feature. */
+    assertChannels: (feature: WorkspaceFeatureId) => void;
+    /**
      * Les éléments d'une feature que le rôle de l'appelant voit autrement que
      * les autres : `'none'` masqué, `'read'` en lecture seule.
      *

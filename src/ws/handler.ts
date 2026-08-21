@@ -285,6 +285,17 @@ export async function registerWS(
                         throw new FeatureError('forbidden', 'Cette fonctionnalité ne vous est pas ouverte ici');
                     }
                 };
+                // La lecture de la feature est incluse : gérer les destinations
+                // d'une fonctionnalité qu'on ne voit pas n'a pas de sens.
+                const canChannels = (f: WorkspaceFeatureId): boolean => canFeature(f) && scope.channels.has(f);
+                const assertChannels = (f: WorkspaceFeatureId): void => {
+                    if (!canChannels(f)) {
+                        throw new FeatureError(
+                            'forbidden',
+                            'La gestion des canaux de cette fonctionnalité ne vous est pas confiée'
+                        );
+                    }
+                };
                 const assertItem = async (
                     f: WorkspaceFeatureId,
                     itemId: number,
@@ -325,6 +336,8 @@ export async function registerWS(
                         assertCan,
                         canFeature,
                         assertFeature,
+                        canChannels,
+                        assertChannels,
                         itemRestrictions: scope.itemRestrictions,
                         assertItem,
                         ip,

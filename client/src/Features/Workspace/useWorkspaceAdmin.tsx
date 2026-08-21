@@ -138,21 +138,26 @@ export function useWorkspaceAdmin() {
          */
         createPresetRoles: () =>
             run(async () => {
-                const everyFeature = FEATURE_REGISTRY.map<WorkspaceFeatureGrant>((f) => ({
-                    feature: f.id,
-                    access: 'write'
-                }));
+                // Les canaux d'alerte (adresses d'astreinte, salons) suivent la
+                // ligne du preset : l'Admin les gère, le Membre s'en sert sans
+                // pouvoir les modifier.
+                const grants = (channels: boolean) =>
+                    FEATURE_REGISTRY.map<WorkspaceFeatureGrant>((f) => ({
+                        feature: f.id,
+                        access: 'write',
+                        channels
+                    }));
                 await ws.send('workspace.roleCreate', {
                     name: 'Admin',
                     color: '#f97316',
                     capabilities: [...WORKSPACE_CAPABILITIES],
-                    features: everyFeature
+                    features: grants(true)
                 });
                 const member = await ws.send('workspace.roleCreate', {
                     name: 'Membre',
                     color: '#22d3ee',
                     capabilities: [],
-                    features: everyFeature
+                    features: grants(false)
                 });
                 await ws.send('workspace.roleSetDefault', { roleId: member.role.id });
                 await loadRoles();

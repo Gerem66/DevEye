@@ -166,6 +166,8 @@ export function useWorkspacePermissions(): {
     isOwner: boolean;
     can: (c: WorkspaceCapability) => boolean;
     canFeature: (f: WorkspaceFeatureId, level?: FeatureAccess) => boolean;
+    /** Gérer les canaux d'alerte de CETTE feature (grant `channels`, 093). */
+    canChannels: (f: WorkspaceFeatureId) => boolean;
 } {
     const { permissions } = useWorkspaceState();
     return {
@@ -175,6 +177,7 @@ export function useWorkspacePermissions(): {
             const granted = permissions.features.find((g) => g.feature === f);
             if (!granted) return false;
             return level === 'read' || granted.access === 'write';
-        }
+        },
+        canChannels: (f) => permissions.features.find((g) => g.feature === f)?.channels === true
     };
 }

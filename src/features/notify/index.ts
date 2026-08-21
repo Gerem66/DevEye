@@ -15,13 +15,7 @@ import {
 
 import { formatMoment, resolveChannelIds, sendTest } from '@/Services/notifications';
 
-import {
-    defineFeature,
-    FeatureError,
-    type FeatureAccessSpec,
-    type FeatureContext,
-    type FeatureDefinition
-} from '../_define';
+import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import {
     createChannel,
     foreignChannels,
@@ -33,35 +27,41 @@ import {
 } from '../_notifications';
 
 /**
- * Les canaux d'alerte de l'espace, et les routes qui pointent dessus.
+ * Les canaux d'alerte, et les routes qui pointent dessus.
  *
  * ## Deux étages d'autorisation, et ils ne se confondent pas
  *
- * **Les canaux** appartiennent à l'espace : les gérer relève de
- * `workspace.notifications`, comme renommer l'espace relève de
- * `workspace.manage`. L'adresse de l'astreinte ou le salon de la production
- * n'ont pas à s'ouvrir parce qu'on a confié le réglage d'une fonctionnalité.
+ * **Les canaux** appartiennent à leur fonctionnalité (091) : les gérer relève
+ * du champ `channels` du grant de rôle sur CETTE fonctionnalité
+ * (`ctx.assertChannels`, migration 093). L'adresse de l'astreinte d'Uptime ne
+ * s'ouvre ni parce qu'on a confié le réglage d'Uptime, ni parce qu'on gère les
+ * canaux des sauvegardes.
  *
  * **Les routes** relèvent de la fonctionnalité visée — `{ feature, level:
  * 'write' }`, résolu par commande depuis l'argument. Décider où Uptime écrit
  * fait partie du réglage d'Uptime.
  *
- * Cette seconde moitié ne peut pas être déclarée dans `access` : la
- * fonctionnalité visée est une **donnée d'entrée**, pas une constante de la
- * commande. Le dispatcheur ne peut donc pas la vérifier avant le handler, et
- * `assertRouteAccess` la vérifie en première ligne — le seul cas du module, et
- * la raison est la même que pour `device.setConfig` : le contrôle dépend de ce
+ * Aucun de ces contrôles ne peut être déclaré dans `access` : la fonctionnalité
+ * visée est une **donnée d'entrée** (l'argument `feature`, ou celle du canal
+ * visé par son id), pas une constante de la commande. Le dispatcheur ne peut
+ * donc pas la vérifier avant le handler ; chaque handler la vérifie en première
+ * ligne, pour la même raison que `device.setConfig` : le contrôle dépend de ce
  * qu'on touche.
  */
 
-const MANAGE: FeatureAccessSpec = { capabilities: ['workspace.notifications'] };
+/** La fonctionnalité propriétaire d'un canal, ou `not_found`. */
+async function channelFeatureOf(ctx: FeatureContext, id: number): Promise<NotificationFeature> {
+    const row = await ctx.db.notificationChannels.findById(id, ctx.workspaceId);
+    if (!row) throw new FeatureError('not_found', 'Canal introuvable');
+    return row.feature;
+}
 
 /**
  * Le droit de régler où une fonctionnalité écrit.
  *
  * **Lecture** : le droit de lire la fonctionnalité suffit. Savoir vers quels
  * canaux elle pointe fait partie de la comprendre — et les canaux eux-mêmes ne
- * livrent pas leur adresse sans `workspace.notifications`.
+ * livrent pas leur adresse sans la gestion des canaux de la fonctionnalité.
  *
  * **Écriture** : le droit d'écriture de la fonctionnalité. Régler où Uptime
  * prévient est un réglage d'Uptime, ni plus ni moins — l'étage de « droits
@@ -146,10 +146,10 @@ function testAlert(label: string) {
 }
 
 /**
- * Volontairement **sans capacité** — comme `workspace.roleList`.
+ * La liste s'ouvre avec la lecture de la fonctionnalité, rien de plus.
  *
  * On ne peut pas router une fonctionnalité vers des destinations qu'on ne voit
- * pas. Ce que la capacité garde, c'est le **contenu** des destinations :
+ * pas. Ce que la gestion des canaux garde, c'est leur **contenu** :
  * `listChannels` vide `target` pour qui ne l'a pas, si bien qu'un membre voit
  * « Astreinte · e-mail », peut y router, et ne peut ni lire l'adresse ni la
  * modifier.
@@ -166,13 +166,11 @@ const channelList = defineFeature({
 
 const channelAdd = defineFeature({
     ...notifyChannelAdd,
-    access: MANAGE,
     mutates: true,
     handler: async (ctx, input) => {
-        // La capacité donne la gestion des destinations ; la feature
-        // propriétaire doit au moins être lisible : on ne déclare pas de
-        // canal sur une fonctionnalité qu'on ne voit pas.
-        assertRouteAccess(ctx, input.feature, 'read');
+        // La gestion des canaux de la fonctionnalité visée, qui emporte sa
+        // lecture : on ne déclare pas de canal sur ce qu'on ne voit pas.
+        ctx.assertChannels(input.feature);
         const { feature, ...draft } = input;
         const channel = await createChannel(ctx, feature, draft);
         ctx.audit({
@@ -185,9 +183,9 @@ const channelAdd = defineFeature({
 
 const channelUpdate = defineFeature({
     ...notifyChannelUpdate,
-    access: MANAGE,
     mutates: true,
     handler: async (ctx, input) => {
+        ctx.assertChannels(await channelFeatureOf(ctx, input.id));
         const { id, enabled, ...rest } = input;
         const channel = await updateChannel(ctx, id, rest, enabled);
         ctx.audit({ action: 'notify.channelUpdate', description: `Canal d’alerte « ${channel.label} » modifié` });
@@ -197,8 +195,8 @@ const channelUpdate = defineFeature({
 
 const channelUsage = defineFeature({
     ...notifyChannelUsage,
-    access: MANAGE,
     handler: async (ctx, input) => {
+        ctx.assertChannels(await channelFeatureOf(ctx, input.id));
         const rows = await ctx.db.notificationChannels.usageDetail(input.id, ctx.workspaceId);
         const routes = await Promise.all(
             rows.map(async (r) => ({
@@ -213,9 +211,9 @@ const channelUsage = defineFeature({
 
 const channelDelete = defineFeature({
     ...notifyChannelDelete,
-    access: MANAGE,
     mutates: true,
     handler: async (ctx, input) => {
+        ctx.assertChannels(await channelFeatureOf(ctx, input.id));
         // Les liaisons partent en cascade. Une route laissée vide reste, et
         // c'est sans conséquence depuis la 092 : vide ou absente, la cible est
         // silencieuse ; la prochaine sélection écrite la réutilise ou l'efface.
@@ -229,9 +227,14 @@ const channelDelete = defineFeature({
 
 const channelReorder = defineFeature({
     ...notifyChannelReorder,
-    access: MANAGE,
     mutates: true,
     handler: async (ctx, input) => {
+        // Un réordonnancement vise en pratique la liste d'UNE fonctionnalité,
+        // mais l'entrée ne le garantit pas : chaque fonctionnalité touchée doit
+        // être gérée par l'appelant.
+        const touched = new Set<NotificationFeature>();
+        for (const id of input.ids) touched.add(await channelFeatureOf(ctx, id));
+        for (const f of touched) ctx.assertChannels(f);
         await ctx.db.notificationChannels.reorder(ctx.workspaceId, input.ids);
         return { ok: true as const };
     }
@@ -239,10 +242,10 @@ const channelReorder = defineFeature({
 
 const channelTest = defineFeature({
     ...notifyChannelTest,
-    access: MANAGE,
     handler: async (ctx, input) => {
         const row = await ctx.db.notificationChannels.findById(input.id, ctx.workspaceId);
         if (!row) throw new FeatureError('not_found', 'Canal introuvable');
+        ctx.assertChannels(row.feature);
         const channels = await resolveChannelIds(ctx.db, ctx.secure.open, ctx.workspaceId, [row.id]);
         return sendTest(channels, testAlert(channels[0]?.label ?? 'canal'), ctx.logger);
     }

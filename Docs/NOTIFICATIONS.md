@@ -147,23 +147,29 @@ les doublons de la reprise comme des doublons.
 
 | | Qui |
 |---|---|
-| Déclarer, corriger, supprimer un canal | capacité `workspace.notifications` |
+| Déclarer, corriger, supprimer un canal | gestion des canaux de SA feature (`channels`) |
 | Lire la **liste** des canaux d'une feature | `<feature>: read` |
-| Lire la **destination** d'un canal | capacité `workspace.notifications` |
+| Lire la **destination** d'un canal | gestion des canaux de SA feature (`channels`) |
 | Router une fonctionnalité vers un canal | `<feature>: write` |
+
+La gestion des canaux est **par fonctionnalité** depuis la migration 093 : le
+champ `channels` du grant de feature du rôle, qui exige aussi la lecture de la
+fonctionnalité (on ne gère pas les destinations de ce qu'on ne voit pas). La
+capacité d'espace `workspace.notifications`, qui confiait d'un bloc l'astreinte
+d'Uptime et le salon des sauvegardes, a disparu avec elle.
 
 La liste s'ouvre avec la lecture de sa fonctionnalité parce qu'**on ne peut pas
 router vers des destinations qu'on ne voit pas**, et voir où Uptime prévient
 fait partie de lire Uptime. Leur contenu, lui, reste gardé : confier le réglage
 d'Uptime ne confie pas l'adresse de l'astreinte ni l'URL du salon de
 production. On voit donc « Astreinte · e-mail », on peut y router, on ne peut
-ni la lire ni la modifier : `describeChannel` vide `target` pour qui n'a pas la
-capacité.
+ni la lire ni la modifier : `describeChannel` vide `target` pour qui ne gère
+pas les canaux de la fonctionnalité.
 
-`notify.routeGet` / `routeSet` sont les **seules** commandes du dépôt dont
-l'autorisation ne peut pas être déclarative : la fonctionnalité visée est une
-donnée d'entrée, pas une constante de la commande. Le contrôle est donc en
-première ligne de handler, comme pour `device.setConfig`, et pour la même raison.
+Aucune commande du module n'a d'autorisation déclarative : la fonctionnalité
+visée est une donnée d'entrée (l'argument `feature`, ou celle du canal visé par
+son id), pas une constante de la commande. Le contrôle est donc en première
+ligne de chaque handler, comme pour `device.setConfig`, et pour la même raison.
 
 ---
 

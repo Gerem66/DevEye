@@ -47,17 +47,30 @@ indépendamment de l'étage :
   une fois, au lieu de trois copies qui divergent ;
 - **les restrictions par élément** (§5) — le vrai quatrième étage.
 
+La frontière exacte de cette décision : ce sont les droits par **geste** qui
+ont été retirés, pas les réglages par fonctionnalité. Un grant de feature peut
+porter des champs en plus de `access` quand la chose réglée appartient à la
+fonctionnalité : `channels` (« gérer ses canaux d'alerte », migration 093) en
+est le premier, né quand la capacité d'espace `workspace.notifications` s'est
+mise à confier d'un bloc l'astreinte d'Uptime et le salon des sauvegardes,
+alors que chaque émetteur possède ses canaux depuis la 091. La règle de tri :
+un **verbe** d'une fonctionnalité (`deploy.trigger`) reste couvert par
+`read`/`write` ; une **ressource** de la fonctionnalité (ses canaux) peut
+recevoir son propre champ.
+
 ## 3. Le rôle s'édite entier, dans sa popup
 
 Un détour a existé : l'identité du rôle dans sa popup, ses droits dans une
 matrice globale. Retiré aussi — l'usage réel est « configurer CE rôle », et
 couper un rôle en deux écrans obligeait à savoir lequel des deux détenait quoi.
 
-`RoleDialog` porte donc tout : nom, couleur, capacités, accès par
-fonctionnalité. Les intitulés viennent du registre, jamais d'une table locale.
-Une seule capacité gouverne les rôles, `workspace.roles` — existence **et**
-contenu : le découpage plus fin produisait des demi-refus illisibles sur un même
-formulaire.
+`RoleDialog` porte donc tout : nom, couleur, capacités, accès et réglages par
+fonctionnalité. Sa forme est celle de la coquille de réglages (navigation à
+gauche : « Espace » en tête, puis une entrée par fonctionnalité, repliées sur
+celles que l'accueil montre). Les intitulés viennent du registre, jamais d'une
+table locale. Une seule capacité gouverne les rôles, `workspace.roles` :
+existence **et** contenu : le découpage plus fin produisait des demi-refus
+illisibles sur un même formulaire.
 
 ## 4. Une déclaration, pas une garde écrite à la main
 

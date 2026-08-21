@@ -49,9 +49,10 @@ import styles from '../FeatureSettings.module.css';
  * ## Deux droits, deux moitiés d'écran
  *
  * Cocher relève de la fonctionnalité (`<feature>: write`). Ajouter, corriger ou
- * supprimer un canal relève de l'espace (`workspace.notifications`) — et sans
- * cette capacité, la destination elle-même n'est pas rendue par le serveur : on
- * voit « Astreinte · e-mail », on peut y router, on ne peut pas lire l'adresse.
+ * supprimer un canal relève de la gestion des canaux de CETTE fonctionnalité
+ * (le champ `channels` de son grant de rôle, migration 093) : sans elle, la
+ * destination elle-même n'est pas rendue par le serveur, on voit
+ * « Astreinte · e-mail », on peut y router, on ne peut pas lire l'adresse.
  *
  * ## Deux échelles, deux gestes
  *
@@ -105,7 +106,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
     const feature = scope.feature as NotificationFeature;
     const descriptor = featureDescriptor(scope.feature);
     const permissions = useWorkspacePermissions();
-    const canManage = permissions.can('workspace.notifications');
+    const canManage = permissions.canChannels(scope.feature);
     // Le droit fin, pas `write` : c'est ce qui permet de confier le routage des
     // alertes sans confier la modification des services surveillés.
 

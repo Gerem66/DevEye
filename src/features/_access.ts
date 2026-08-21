@@ -83,6 +83,13 @@ export interface ResolvedScope {
     /** Droits par feature accordés par son rôle, absents = aucun accès. */
     features: ReadonlyMap<WorkspaceFeatureId, FeatureAccess>;
     /**
+     * Fonctionnalités dont le rôle gère les **canaux d'alerte** (le champ
+     * `channels` de ses grants, migration 093). Distinct de `features` : régler
+     * où Uptime écrit relève de `write`, gérer l'adresse de l'astreinte
+     * relève d'ici.
+     */
+    channels: ReadonlySet<WorkspaceFeatureId>;
+    /**
      * Les restrictions posées sur des éléments précis, pour le rôle de
      * l'appelant. Chargées **paresseusement, par feature** : la plupart des
      * commandes n'en ont pas besoin, et un espace qui n'en pose aucune n'a
@@ -115,20 +122,27 @@ export interface ResolvedScope {
 export function grantsFor(
     isOwner: boolean,
     role: WorkspaceRoleRow | null
-): { capabilities: Set<WorkspaceCapability>; features: Map<WorkspaceFeatureId, FeatureAccess> } {
+): {
+    capabilities: Set<WorkspaceCapability>;
+    features: Map<WorkspaceFeatureId, FeatureAccess>;
+    channels: Set<WorkspaceFeatureId>;
+} {
     if (isOwner) {
         return {
             capabilities: new Set(WORKSPACE_CAPABILITIES),
-            features: new Map(WORKSPACE_FEATURE_IDS.map((f) => [f, 'write']))
+            features: new Map(WORKSPACE_FEATURE_IDS.map((f) => [f, 'write'])),
+            channels: new Set(WORKSPACE_FEATURE_IDS)
         };
     }
-    if (!role) return { capabilities: new Set(), features: new Map() };
+    if (!role) return { capabilities: new Set(), features: new Map(), channels: new Set() };
 
     const features = new Map<WorkspaceFeatureId, FeatureAccess>();
+    const channels = new Set<WorkspaceFeatureId>();
     for (const g of parseJsonArray<WorkspaceFeatureGrant>(role.features)) {
         features.set(g.feature, g.access);
+        if (g.channels) channels.add(g.feature);
     }
-    return { capabilities: new Set(parseJsonArray<WorkspaceCapability>(role.capabilities)), features };
+    return { capabilities: new Set(parseJsonArray<WorkspaceCapability>(role.capabilities)), features, channels };
 }
 
 function parseJsonArray<T>(raw: unknown): T[] {
@@ -229,7 +243,7 @@ export function createAccessResolver(
         // Le propriétaire n'a pas de rôle : il passe outre, et lui en donner un
         // laisserait croire qu'on peut le lui retirer.
         const role = isOwner ? null : await db.workspaceRoles.findForMember(userId, row.id);
-        const { capabilities, features } = grantsFor(isOwner, role);
+        const { capabilities, features, channels } = grantsFor(isOwner, role);
 
         const keyService = new SecretKeyService(db, crypt);
         const workspaceDekId = row.kind === 'shared' && (await keyService.hasWorkspaceDek(row.id)) ? row.id : null;
@@ -270,6 +284,7 @@ export function createAccessResolver(
             isOwner,
             capabilities,
             features,
+            channels,
             itemRestrictions,
             secure: store,
             secretKeys: keys
@@ -309,10 +324,10 @@ export async function permissionsFor(
 ): Promise<WorkspacePermissions> {
     const isOwner = workspace.owner_user_id === userId;
     const role = isOwner ? null : await db.workspaceRoles.findForMember(userId, workspace.id);
-    const { capabilities, features } = grantsFor(isOwner, role);
+    const { capabilities, features, channels } = grantsFor(isOwner, role);
     return {
         isOwner,
         capabilities: [...capabilities],
-        features: [...features].map(([feature, access]) => ({ feature, access }))
+        features: [...features].map(([feature, access]) => ({ feature, access, channels: channels.has(feature) }))
     };
 }
