@@ -14,7 +14,8 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "deveye-sdk-client": ["./src/sdk/index.ts"]
     }
   },
   "include": ["src"],

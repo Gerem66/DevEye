@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { allFeatureDescriptors, nativeNotificationFeatureSchema, WORKSPACE_CAPABILITIES } from 'deveye-types';
+import { allFeatureDescriptors, WORKSPACE_CAPABILITIES } from 'deveye-types';
 import type { FeatureAccess, FeatureId, WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole } from 'deveye-types';
 
 import Button from '@/Components/Button';
 import Checkbox from '@/Components/Checkbox';
 import { Dialog } from '@/Components/Dialog';
 import SegmentedControl from '@/Components/SegmentedControl';
+import SelectInput from '@/Components/SelectInput';
 import TextInput from '@/Components/TextInput';
 import { placedFeatureIds, useHomeLayout } from '@/stores/homeLayout';
+import { moduleManifest } from '@/sdk/modules';
 import shell from '@/Components/FeatureSettings/FeatureSettings.module.css';
 import styles from './Workspace.module.css';
 
@@ -52,9 +54,6 @@ const ACCESS_OPTIONS = [
     { value: 'write', label: 'Écriture', title: 'Lecture et écriture' }
 ] as const;
 
-/** Les fonctionnalités qui émettent des notifications : les seules à canaux. */
-const NOTIFYING = new Set<string>(nativeNotificationFeatureSchema.options);
-
 /** La section affichée : le gouvernement de l'espace, ou une fonctionnalité. */
 type RoleSection = 'space' | FeatureId;
 
@@ -81,6 +80,8 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
     const [features, setFeatures] = useState<Record<string, FeatureAccess | 'none'>>({});
     /** Gestion des canaux d'alerte, par fonctionnalité émettrice. */
     const [channels, setChannels] = useState<Record<string, boolean>>({});
+    /** Permissions déclarées par les features (manifest `extraPermissions`), par feature puis par clé. */
+    const [extras, setExtras] = useState<Record<string, Record<string, boolean | string>>>({});
     const [section, setSection] = useState<RoleSection>('space');
     /** La navigation dépliée sur tout le registre, pas seulement l'accueil. */
     const [showAll, setShowAll] = useState(false);
@@ -123,10 +124,28 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                 registry.map((f) => [f.id, role?.features.find((g) => g.feature === f.id)?.channels ?? false])
             )
         );
+        setExtras(
+            Object.fromEntries(
+                registry.map((f) => [f.id, role?.features.find((g) => g.feature === f.id)?.extras ?? {}])
+            )
+        );
     }, [open, role]);
 
     const toggle = (c: WorkspaceCapability): void =>
         setCapabilities((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
+
+    /**
+     * Les extras à écrire pour cette feature : seules les clés que son manifest
+     * déclare encore, avec leur valeur choisie. Le serveur revalide de toute
+     * façon (`validateGrantExtras`), ceci évite juste d'envoyer des restes.
+     */
+    const grantExtras = (featureId: string): Record<string, boolean | string> => {
+        const specs = moduleManifest(featureId)?.extraPermissions ?? [];
+        const chosen = extras[featureId] ?? {};
+        return Object.fromEntries(
+            specs.filter((spec) => spec.key in chosen).map((spec) => [spec.key, chosen[spec.key]])
+        );
+    };
 
     const submit = (): void => {
         if (!name.trim()) return;
@@ -141,7 +160,12 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                 // émet pas, ni sur une qu'on ne voit pas : le champ est alors
                 // rangé à false plutôt que laissé à un état sans objet.
                 return [
-                    { feature: f.id, access: a, channels: NOTIFYING.has(f.id) && (channels[f.id] ?? false), extras: {} }
+                    {
+                        feature: f.id,
+                        access: a,
+                        channels: f.notifies && (channels[f.id] ?? false),
+                        extras: grantExtras(f.id)
+                    }
                 ];
             })
         });
@@ -304,7 +328,7 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                                 />
                             </div>
 
-                            {NOTIFYING.has(active.id) && (
+                            {active.notifies && (
                                 <div className={styles.grantExtra}>
                                     <Checkbox
                                         className={styles.checkRow}
@@ -328,6 +352,54 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                                     </p>
                                 </div>
                             )}
+
+                            {/* Les permissions que la feature déclare elle-même
+                                (manifest `extraPermissions`) : rendues
+                                génériquement, mêmes règles que les canaux
+                                (désactivées sans accès, fermées par défaut). */}
+                            {(moduleManifest(active.id)?.extraPermissions ?? []).map((spec) => {
+                                const none = (features[active.id] ?? 'none') === 'none';
+                                const chosen = extras[active.id] ?? {};
+                                const setExtra = (value: boolean | string) =>
+                                    setExtras((prev) => ({
+                                        ...prev,
+                                        [active.id]: { ...(prev[active.id] ?? {}), [spec.key]: value }
+                                    }));
+                                return (
+                                    <div key={spec.key} className={styles.grantExtra}>
+                                        {spec.type === 'toggle' ? (
+                                            <Checkbox
+                                                className={styles.checkRow}
+                                                checked={!none && chosen[spec.key] === true}
+                                                disabled={none}
+                                                onChange={() => setExtra(!(chosen[spec.key] === true))}
+                                            >
+                                                {spec.label}
+                                            </Checkbox>
+                                        ) : (
+                                            <div className={styles.grantField}>
+                                                <span className={styles.grantFieldLabel}>{spec.label}</span>
+                                                <SelectInput
+                                                    value={
+                                                        typeof chosen[spec.key] === 'string'
+                                                            ? (chosen[spec.key] as string)
+                                                            : spec.default
+                                                    }
+                                                    disabled={none}
+                                                    onChange={(e) => setExtra(e.target.value)}
+                                                >
+                                                    {spec.options.map((o) => (
+                                                        <option key={o.value} value={o.value}>
+                                                            {o.label}
+                                                        </option>
+                                                    ))}
+                                                </SelectInput>
+                                            </div>
+                                        )}
+                                        <p className={shell.fieldHint}>{spec.description}</p>
+                                    </div>
+                                );
+                            })}
                         </section>
                     )}
                 </div>

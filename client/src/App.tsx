@@ -11,6 +11,8 @@ import './Styles/theme.css';
 import './Styles/fonts.css';
 import './Styles/icons.css';
 import './Styles/icons.generated.css';
+// L'enregistrement des modules installés (descripteurs + invalidation), avant tout rendu.
+import '@/sdk/modules';
 import './Styles/live.css';
 import './Styles/input.css';
 

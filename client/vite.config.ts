@@ -26,6 +26,33 @@ const { version: appVersion } = JSON.parse(readFileSync(path.resolve(__dirname, 
  * alias simply doesn't apply when it isn't there.
  */
 const TYPES_SOURCE_ENTRY = path.resolve(__dirname, '../../DevEye-Types/src/index.ts');
+const TYPES_SOURCE_DIR = path.resolve(__dirname, '../../DevEye-Types/src');
+
+/**
+ * Les modules de features installés (features.config.json), et pour chacun, en
+ * dev, l'éventuel checkout frère à la racine du chantier : même logique que
+ * `deveye-types` ci-dessus, un package publié qui s'édite en place et que le
+ * pré-bundling servirait rassis. Un module in-repo (`features/*`, lien de
+ * workspace) n'a pas besoin d'alias : c'est déjà de la source ordinaire.
+ */
+function installedFeaturePackages(): string[] {
+    const configPath = path.resolve(__dirname, '../features.config.json');
+    if (!existsSync(configPath)) return [];
+    const config = JSON.parse(readFileSync(configPath, 'utf-8')) as { features?: { package: string }[] };
+    return (config.features ?? []).map((f) => f.package);
+}
+
+function siblingFeatureAliases(): Record<string, string> {
+    const aliases: Record<string, string> = {};
+    for (const pkg of installedFeaturePackages()) {
+        const src = path.resolve(__dirname, '../../', pkg, 'src');
+        if (!existsSync(path.join(src, 'index.ts'))) continue;
+        aliases[`${pkg}/server`] = path.join(src, 'server', 'index.ts');
+        aliases[`${pkg}/client`] = path.join(src, 'client', 'index.ts');
+        aliases[pkg] = path.join(src, 'index.ts');
+    }
+    return aliases;
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => {
@@ -45,7 +72,7 @@ export default defineConfig(({ command }) => {
             // exist on disk, with no hint as to why. Excluding it from pre-bundling
             // routes it through the normal transform pipeline, where edits are picked
             // up like any other source file.
-            exclude: ['deveye-types']
+            exclude: ['deveye-types', ...installedFeaturePackages()]
         },
         server: {
             port: 5173,
@@ -72,6 +99,14 @@ export default defineConfig(({ command }) => {
                     // Split heavy third-party libs into their own long-lived chunks so the
                     // app bundle stays small and vendor code is cached across deploys.
                     manualChunks(id) {
+                        // Chaque module de feature dans son propre chunk : son code ne
+                        // pèse pas sur la première peinture, et se met en cache seul.
+                        // Deux formes de chemin selon la provenance (package installé,
+                        // ou workspace `features/*` résolu à son vrai chemin).
+                        const feature =
+                            id.match(/deveye-feature-([a-z0-9]+)/) ??
+                            /[/\\]features[/\\]([a-z0-9]+)[/\\]src[/\\]/.exec(id);
+                        if (feature) return `feature-${feature[1]}`;
                         if (!id.includes('node_modules')) return undefined;
                         if (id.includes('framer-motion')) return 'framer-motion';
                         // xterm is only pulled in by the lazily-loaded terminal panel; keep
@@ -86,7 +121,21 @@ export default defineConfig(({ command }) => {
         resolve: {
             alias: {
                 '@': path.resolve(__dirname, 'src'),
-                ...(useTypesSource ? { 'deveye-types': TYPES_SOURCE_ENTRY } : {})
+                // La surface client du SDK des modules : un vrai module de l'app,
+                // servi sous son nom de contrat (voir src/sdk/index.ts).
+                'deveye-sdk-client': path.resolve(__dirname, 'src/sdk/index.ts'),
+                // Les sous-chemins AVANT le nu : l'alias remplace par préfixe, et
+                // `deveye-types/sdk` ne doit pas devenir `src/index.ts/sdk`.
+                ...(useTypesSource
+                    ? {
+                          'deveye-types/sdk/server': path.join(TYPES_SOURCE_DIR, 'sdk', 'server.ts'),
+                          'deveye-types/sdk/client': path.join(TYPES_SOURCE_DIR, 'sdk', 'client.ts'),
+                          'deveye-types/sdk/testing': path.join(TYPES_SOURCE_DIR, 'sdk', 'testing.ts'),
+                          'deveye-types/sdk': path.join(TYPES_SOURCE_DIR, 'sdk', 'index.ts'),
+                          'deveye-types': TYPES_SOURCE_ENTRY
+                      }
+                    : {}),
+                ...(command === 'serve' ? siblingFeatureAliases() : {})
             }
         }
     };

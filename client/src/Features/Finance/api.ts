@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FinanceSummary } from 'deveye-types';
 
-import { ws, WsError } from '@/api/ws';
+import { ws } from '@/api/ws';
+import { useResource } from '@/api/useResource';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useActiveWorkspace } from '@/stores/workspace';
+
+export { humanizeError } from '@/api/useResource';
 
 /**
  * Le raccordement des finances au reste de l'application.
@@ -23,19 +26,6 @@ export function refreshFinance(): void {
     invalidate('finance.overview');
     invalidate('finance.budgetList');
     invalidate('finance.recurringList');
-}
-
-/** Traduit un échec WS en une phrase courte pour un bandeau d'erreur. */
-export function humanizeError(error: unknown, fallback: string): string {
-    if (error instanceof WsError) {
-        if (error.code === 'forbidden') return 'Accès refusé.';
-        // Le serveur renvoie déjà une phrase en français sur ces deux codes, et
-        // elle est plus précise que tout ce qu'on pourrait écrire ici (quel
-        // compte, combien d'opérations, quelle date déjà prise).
-        if (error.code === 'validation' || error.code === 'conflict') return error.message;
-        if (error.code === 'not_found') return 'Introuvable: la donnée a peut-être été supprimée entre-temps.';
-    }
-    return fallback;
 }
 
 /**
@@ -86,59 +76,8 @@ export function useFinanceSummary(): { summary: FinanceSummary | null; loading: 
 }
 
 /**
- * Un chargement qui se relit tout seul.
- *
- * Trois déclencheurs, et pas un de plus: le montage, la (re)connexion de la
- * socket, et l'invalidation de la ressource (locale après une écriture, ou
- * distante quand quelqu'un d'autre écrit dans l'espace). Aucun minuteur: un
- * livre de comptes ne bouge que si quelqu'un l'écrit, et il le dit.
+ * Un chargement qui se relit tout seul. Désormais le hook commun
+ * `useResource` (`@/api/useResource`), né ici puis promu pour servir toutes
+ * les features ; l'alias reste pour les écrans de Finance.
  */
-export function useFinanceResource<T>(
-    key: Parameters<typeof useResourceVersion>[0],
-    load: () => Promise<T>,
-    fallback: string,
-    /** Ce qui, en changeant, change la requête elle-même (filtres, fenêtre). */
-    deps: readonly unknown[] = []
-): { data: T | null; error: string | null; loading: boolean; reload: () => void } {
-    const version = useResourceVersion(key);
-    const [data, setData] = useState<T | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [nonce, setNonce] = useState(0);
-
-    const reload = useCallback(() => setNonce((n) => n + 1), []);
-
-    useEffect(() => {
-        let cancelled = false;
-
-        const run = () => {
-            load()
-                .then((next) => {
-                    if (cancelled) return;
-                    setData(next);
-                    setError(null);
-                    setLoading(false);
-                })
-                .catch((e: unknown) => {
-                    if (cancelled) return;
-                    setError(humanizeError(e, fallback));
-                    setLoading(false);
-                });
-        };
-
-        if (ws.state === 'open') run();
-        const off = ws.onStateChange((state) => {
-            if (state === 'open') run();
-        });
-        return () => {
-            cancelled = true;
-            off();
-        };
-        // `load` est recréé à chaque rendu par ses appelants (il capture des
-        // filtres): l'inscrire ici relancerait la requête en boucle. Ce sont
-        // `version`, `nonce` et les dépendances annoncées qui décident de
-        // relire, et elles seules.
-    }, [version, nonce, ...deps]);
-
-    return { data, error, loading, reload };
-}
+export const useFinanceResource = useResource;

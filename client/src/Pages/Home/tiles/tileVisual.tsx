@@ -48,7 +48,13 @@ export function featureTileVisual(tile: HomeTile): TileVisual | null {
     }
     const entry = isFeatureTile(tile) ? featureCatalogEntry(tile) : undefined;
     if (!entry) return null;
-    return { widgetId: entry.id, title: entry.title, icon: entry.icon, body: <entry.WidgetContent /> };
+    return {
+        widgetId: entry.id,
+        title: entry.title,
+        icon: entry.icon,
+        compact: entry.compact,
+        body: <entry.WidgetContent />
+    };
 }
 
 export function deviceTileVisual(device: Device, opts?: { editing?: boolean }): TileVisual {

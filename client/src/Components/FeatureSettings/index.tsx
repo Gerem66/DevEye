@@ -14,6 +14,7 @@ import SharingSection from './sections/SharingSection';
 import SourcesSection from './sections/SourcesSection';
 import SyncSection, { SYNC_WIRED } from './sections/SyncSection';
 import SideNav, { type SideNavItem } from './SideNav';
+import { moduleClient, moduleManifest } from '@/sdk/modules';
 import { scopeDescription, scopeTitle, type SettingsScope, type SettingsSectionId } from './scope';
 import styles from './FeatureSettings.module.css';
 
@@ -58,6 +59,25 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
         if (!canRead) return [];
         const descriptor = featureDescriptor(scope.feature);
         const sections: SectionDef[] = [];
+
+        // Un module installé déclare ses onglets dans son manifest ; la seule
+        // règle que la coquille ajoute d'elle-même est celle des émetteurs
+        // (l'onglet Notifications suit `notifies`, comme pour les natives).
+        const manifest = moduleManifest(scope.feature);
+        if (manifest) {
+            for (const tab of manifest.settings?.[scope.kind] ?? []) {
+                if (tab === 'general') sections.push({ id: 'general', label: 'Général', icon: 'settings' });
+                else if (tab === 'sources' && scope.kind === 'feature') {
+                    sections.push({ id: 'sources', label: 'Sources', icon: 'key' });
+                } else if (typeof tab === 'object') {
+                    sections.push({ id: tab.id, label: tab.label, icon: tab.icon ?? 'settings' });
+                }
+            }
+            if (descriptor.notifies && (scope.kind === 'feature' || descriptor.hasItems)) {
+                sections.push({ id: 'notifications', label: 'Notifications', icon: 'mail' });
+            }
+            return sections;
+        }
 
         // Général : les réglages de la fonctionnalité qui ne sont ni des
         // sources ni des notifications (l'affichage des messages de Mail, ses
@@ -192,18 +212,42 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection }: 
                         label={`Réglages · ${scopeTitle(scope)}`}
                     />
                     <div className={styles.panel}>
-                        {current === 'general' && <GeneralSection scope={scope} />}
-                        {current === 'sources' && scope.kind === 'feature' && <SourcesSection scope={scope} />}
-                        {current === 'sync' && <SyncSection scope={scope} />}
-                        {current === 'encryption' && <EncryptionSection scope={scope} />}
-                        {current === 'notifications' && (
-                            <NotificationsSection
-                                scope={scope}
-                                onManageChannels={scope.kind === 'item' ? () => setManageChannels(true) : undefined}
-                            />
+                        {moduleManifest(scope.feature) ? (
+                            /* Un module : ses panneaux viennent de son entrée
+                               client ; seul Notifications reste le générique de
+                               la coquille, comme chez les natives. */
+                            <>
+                                {current === 'notifications' ? (
+                                    <NotificationsSection
+                                        scope={scope}
+                                        onManageChannels={
+                                            scope.kind === 'item' ? () => setManageChannels(true) : undefined
+                                        }
+                                    />
+                                ) : (
+                                    <ModulePanel scope={scope} section={current} />
+                                )}
+                            </>
+                        ) : (
+                            <>
+                                {current === 'general' && <GeneralSection scope={scope} />}
+                                {current === 'sources' && scope.kind === 'feature' && <SourcesSection scope={scope} />}
+                                {current === 'sync' && <SyncSection scope={scope} />}
+                                {current === 'encryption' && <EncryptionSection scope={scope} />}
+                                {current === 'notifications' && (
+                                    <NotificationsSection
+                                        scope={scope}
+                                        onManageChannels={
+                                            scope.kind === 'item' ? () => setManageChannels(true) : undefined
+                                        }
+                                    />
+                                )}
+                                {current === 'permissions' && scope.kind === 'item' && (
+                                    <ItemPermissionsSection scope={scope} />
+                                )}
+                                {current === 'sharing' && <SharingSection scope={scope} />}
+                            </>
                         )}
-                        {current === 'permissions' && scope.kind === 'item' && <ItemPermissionsSection scope={scope} />}
-                        {current === 'sharing' && <SharingSection scope={scope} />}
                     </div>
                 </div>
             </Dialog>
@@ -284,3 +328,27 @@ export function FeatureSettingsButton({
 }
 
 export type { SettingsScope, SettingsSectionId } from './scope';
+
+/**
+ * Le panneau d'un module pour la section courante : fourni par son entrée
+ * client (`settingsPanels`), qui reçoit la portée réduite du SDK et le droit
+ * d'écriture. Rien à rendre si le module n'a pas fourni ce panneau : la
+ * section ne devrait alors pas être proposée, mais un manifest et une entrée
+ * client peuvent brièvement diverger pendant un développement.
+ */
+function ModulePanel({ scope, section }: { scope: SettingsScope; section: SettingsSectionId }) {
+    const permissions = useWorkspacePermissions();
+    const client = moduleClient(scope.feature);
+    const Panel = client?.settingsPanels?.[section];
+    if (!Panel) return null;
+    return (
+        <Panel
+            scope={
+                scope.kind === 'feature'
+                    ? { kind: 'feature' }
+                    : { kind: 'item', itemId: scope.itemId, itemLabel: scope.itemLabel }
+            }
+            canWrite={permissions.canFeature(scope.feature, 'write')}
+        />
+    );
+}

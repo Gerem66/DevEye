@@ -1,4 +1,4 @@
-import { LIVE_CHANGED_EVENT, liveChangedPushSchema, type LiveTopic } from 'deveye-types';
+import { LIVE_CHANGED_EVENT, liveChangedPushSchema, type ExternalFeatureId, type LiveTopic } from 'deveye-types';
 import { useCallback, useSyncExternalStore } from 'react';
 
 import { ws } from '@/api/ws';
@@ -113,7 +113,16 @@ export type ResourceKey =
      * aurait fait relire les réglages — et rouvrir la liste des projets liés —
      * à chaque battement de l'audience.
      */
-    | 'audience.stats';
+    | 'audience.stats'
+    /**
+     * Les clés d'un module externe : `<id>.<nom>`, déclarées par son manifest
+     * (`resources`) et enregistrées au chargement par la glue générée. Le type
+     * reste nominal pour les natives et structurel pour les modules : la liste
+     * des modules dépend de l'installation, pas de ce fichier.
+     */
+    | ExternalResourceKey;
+
+export type ExternalResourceKey = `x-${string}.${string}`;
 
 /**
  * Ce qu'un sujet du serveur invalide chez nous.
@@ -124,7 +133,7 @@ export type ResourceKey =
  * est le bon défaut, mais explique pourquoi une nouvelle vue en cache doit
  * penser à s'y inscrire.
  */
-const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
+const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
     notify: ['notify.channelList', 'notify.routeGet'],
     notes: ['note.count', 'note.list'],
     password: ['password.count', 'password.list'],
@@ -327,6 +336,21 @@ let wired = false;
 let pending = new Set<ResourceKey>();
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
+/** Ce que le sujet d'un module externe invalide, enregistré par la glue générée. */
+const EXTERNAL_TOPIC_KEYS = new Map<string, ExternalResourceKey[]>();
+
+/**
+ * Déclare les ressources d'un module externe : son sujet live (= son id)
+ * invalide les clés listées. L'équivalent, pour un module, d'une entrée dans
+ * `TOPIC_KEYS` ; personne d'autre que la glue générée ne devrait l'appeler.
+ */
+export function registerFeatureResources(
+    featureId: ExternalFeatureId,
+    invalidatedByTopic: readonly ExternalResourceKey[]
+): void {
+    EXTERNAL_TOPIC_KEYS.set(featureId, [...invalidatedByTopic]);
+}
+
 /**
  * Branché à la première lecture, jamais au chargement du module : sans
  * abonné, il n'y a rien à invalider.
@@ -341,7 +365,7 @@ export function ensureWired(): void {
         if (!push.success) return;
 
         for (const topic of push.data.topics) {
-            for (const key of TOPIC_KEYS[topic]) pending.add(key);
+            for (const key of TOPIC_KEYS[topic] ?? EXTERNAL_TOPIC_KEYS.get(topic) ?? []) pending.add(key);
         }
         if (pending.size === 0) return;
 

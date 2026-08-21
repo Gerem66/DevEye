@@ -36,6 +36,7 @@ import FeatureAudience from '@/Features/Audience';
 import FeatureOsint from '@/Features/Osint';
 
 import type { FeatureProps } from '@/Features/types';
+import { clientModules } from '@/sdk/modules';
 
 /**
  * Le rayon du marché où la fonctionnalité est rangée.
@@ -119,9 +120,11 @@ export interface FeatureCatalogEntry {
      * de la topbar, pour que la restriction se voie sans avoir à cliquer.
      */
     adminOnly?: true;
+    /** Carte basse (demi-hauteur), comme les tuiles d'appareil. Déclarée par les modules. */
+    compact?: boolean;
 }
 
-export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
+const NATIVE_CATALOG: FeatureCatalogEntry[] = [
     {
         id: 'monitoring',
         title: 'Monitoring',
@@ -357,6 +360,40 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         cacheDurationMinutes: 0,
         holdSecrecy: true
     }
+];
+
+/**
+ * L'adaptateur de vue d'un module : sa `Full` ne reçoit que `closeFeature`,
+ * tout le reste passe par les hooks du SDK, comme chez les natives modernes.
+ */
+function moduleFull(Full: ComponentType<{ closeFeature(): void }>): ComponentType<FeatureProps> {
+    return function ModuleFull(props: FeatureProps) {
+        return <Full closeFeature={props.closeFeature} />;
+    };
+}
+
+/**
+ * Le catalogue complet : les seize natives, puis les modules installés,
+ * projetés depuis leur manifest + leur entrée client. Même contrat partout :
+ * la grille, le marché d'ajout et l'« À propos » ne savent pas qui est qui.
+ */
+export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
+    ...NATIVE_CATALOG,
+    ...clientModules().map(({ manifest, client }): FeatureCatalogEntry => ({
+        // Un module est externe par construction (vérifié à l'enregistrement),
+        // et un id externe est une tuile d'accueil valide depuis l'élargissement.
+        id: manifest.id as HomeFeatureId,
+        title: manifest.label,
+        icon: manifest.icon,
+        description: manifest.description,
+        category: manifest.category,
+        WidgetContent: client.Widget,
+        FullComponent: moduleFull(client.Full),
+        cacheDurationMinutes: client.cacheDurationMinutes,
+        preload: client.preload,
+        holdSecrecy: client.holdSecrecy,
+        compact: manifest.tile?.compact
+    }))
 ];
 
 export function featureCatalogEntry(id: HomeFeatureId): FeatureCatalogEntry | undefined {

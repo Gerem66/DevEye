@@ -18,7 +18,17 @@ export type SettingsScope =
 
 /** Les sections que la coquille sait rendre, dans leur ordre d'affichage. */
 export type SettingsSectionId =
-    'general' | 'sources' | 'notifications' | 'sync' | 'encryption' | 'sharing' | 'permissions';
+    | 'general'
+    | 'sources'
+    | 'notifications'
+    | 'sync'
+    | 'encryption'
+    | 'sharing'
+    | 'permissions'
+    // Les onglets personnalisés d'un module (manifest.settings, CustomTabRef) :
+    // la coquille ne connaît pas leurs ids à l'avance, le panneau vient du
+    // module. L'intersection garde l'autocomplétion des sept natifs.
+    | (string & {});
 
 /** Le titre du dialogue : le nom de l'élément, ou celui de la fonctionnalité. */
 export function scopeTitle(scope: SettingsScope): string {

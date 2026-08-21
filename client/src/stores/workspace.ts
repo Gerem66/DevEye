@@ -168,6 +168,14 @@ export function useWorkspacePermissions(): {
     canFeature: (f: FeatureId, level?: FeatureAccess) => boolean;
     /** Gérer les canaux d'alerte de CETTE feature (grant `channels`, 093). */
     canChannels: (f: FeatureId) => boolean;
+    /** Permission déclarée de type `toggle` : absente = refusée, propriétaire = accordée. */
+    canExtra: (f: FeatureId, key: string) => boolean;
+    /**
+     * Permission déclarée de type `choice`. Le défaut (le moins privilégié) et
+     * la valeur du propriétaire viennent des specs du manifest, que l'appelant
+     * fournit : ce magasin ne connaît pas les modules.
+     */
+    extraValue: (f: FeatureId, key: string, spec: { default: string; ownerValue: string }) => string;
 } {
     const { permissions } = useWorkspaceState();
     return {
@@ -178,6 +186,13 @@ export function useWorkspacePermissions(): {
             if (!granted) return false;
             return level === 'read' || granted.access === 'write';
         },
-        canChannels: (f) => permissions.features.find((g) => g.feature === f)?.channels === true
+        canChannels: (f) => permissions.features.find((g) => g.feature === f)?.channels === true,
+        canExtra: (f, key) =>
+            permissions.isOwner || permissions.features.find((g) => g.feature === f)?.extras[key] === true,
+        extraValue: (f, key, spec) => {
+            if (permissions.isOwner) return spec.ownerValue;
+            const value = permissions.features.find((g) => g.feature === f)?.extras[key];
+            return typeof value === 'string' ? value : spec.default;
+        }
     };
 }

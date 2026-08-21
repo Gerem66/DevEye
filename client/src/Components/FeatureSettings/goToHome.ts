@@ -4,6 +4,7 @@ import { startTeleport } from '@/stores/live';
 import { requestItemSettings } from '@/stores/settingsRequest';
 import { requestSelectWorkspace } from '@/stores/viewRequest';
 import { getWorkspaceState } from '@/stores/workspace';
+import { moduleManifest } from '@/sdk/modules';
 
 /**
  * « Aller régler ça là où ça se règle. »
@@ -43,9 +44,9 @@ export function accessibleWorkspaceName(workspaceId: number | null): string | nu
 
 export function goToItemSettings(workspaceId: number, feature: FeatureId, itemId: number, section: string): void {
     requestItemSettings({ workspaceId, feature, itemId, section });
-    // La table ne connaît que les natives ; un module externe apportera son
-    // `itemSegment` par son manifest (branchement de la coquille, phase 3).
-    const segment = isExternalFeatureId(feature) ? undefined : ITEM_SEGMENT[feature];
+    // La table ne connaît que les natives ; un module apporte le sien par son
+    // manifest (`itemSegment`), même contrat de rendez-vous octet pour octet.
+    const segment = isExternalFeatureId(feature) ? moduleManifest(feature)?.itemSegment : ITEM_SEGMENT[feature];
     startTeleport(workspaceId, segment ? [`view:${feature}`, `l1:${segment(itemId)}`] : [`view:${feature}`]);
     requestSelectWorkspace(workspaceId);
 }
