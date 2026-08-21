@@ -207,7 +207,11 @@ export default function FeatureWorkspace() {
                                 </Button>
                             )}
                         </div>
-                        <div className={styles.card}>
+                        {/* `rowList` : le gap de la carte tombe et son padding
+                            vertical se resserre, pour que l'air au-dessus de la
+                            première ligne (carte + ligne) égale les côtés, et
+                            que le trait entre deux lignes soit à mi-chemin. */}
+                        <div className={`${styles.card} ${styles.rowList}`}>
                             {workspace.users.map((u) => {
                                 const owner = u.id === workspace.ownerUserId;
                                 return (
@@ -273,7 +277,10 @@ export default function FeatureWorkspace() {
                             </Button>
                         </div>
                         <p className={styles.hint}>Le propriétaire n’en porte jamais : il a tout par construction.</p>
-                        <div className={styles.card}>
+                        {/* Même resserrement que la liste des membres, mais
+                            seulement quand il y a des lignes : l'état vide
+                            porte sa propre respiration. */}
+                        <div className={admin.roles.length === 0 ? styles.card : `${styles.card} ${styles.rowList}`}>
                             {admin.roles.length === 0 ? (
                                 // L'onglet vide n'est pas une impasse : un geste pose
                                 // deux rôles génériques, à ajuster ensuite si besoin.

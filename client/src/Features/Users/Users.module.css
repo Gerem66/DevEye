@@ -75,11 +75,14 @@
     color: var(--text-muted);
 }
 
+/* Les deux cartes de cette page sont des listes de lignes : pas de gap (le
+   trait de séparation doit tomber à mi-chemin entre deux lignes, pas décalé
+   d'un côté), et un padding vertical resserré pour que l'air au-dessus de la
+   première ligne (carte + ligne, 8 + 8) égale les 16 px des côtés. */
 .card {
     display: flex;
     flex-direction: column;
-    gap: var(--space-sm);
-    padding: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
     background: var(--glass-bg-light);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
