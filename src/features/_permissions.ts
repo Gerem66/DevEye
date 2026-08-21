@@ -26,10 +26,11 @@
  *  - **ce que tout membre doit pouvoir lire** — la liste des rôles (chacun doit
  *    connaître ses propres droits), la liste des canaux (on ne route pas vers
  *    ce qu'on ne voit pas), sa propre présence ;
- *  - **ce dont la cible est un argument** — `notify.route*`, dont la
- *    fonctionnalité visée arrive dans l'entrée. Le dispatcheur ne peut pas
- *    vérifier avant le handler ce qu'il ne connaît pas encore ; le contrôle est
- *    en première ligne, comme pour `device.setConfig`.
+ *  - **ce dont la cible est un argument** — tout `notify.*` : la
+ *    fonctionnalité visée arrive dans l'entrée (routes comme canaux, la
+ *    gestion des canaux étant par fonctionnalité depuis la 093). Le
+ *    dispatcheur ne peut pas vérifier avant le handler ce qu'il ne connaît pas
+ *    encore ; le contrôle est en première ligne, comme pour `device.setConfig`.
  *
  * Toute autre commande doit déclarer son `access`. Ajouter une entrée ici est un
  * geste délibéré, qui se voit en revue — c'est tout l'objet de la liste.
@@ -49,6 +50,16 @@ const ACCESS_EXEMPT = new Set([
     'notify.routeGet',
     'notify.routeSet',
     'notify.routeTest',
+    // Même raison encore, depuis que la gestion des canaux est PAR
+    // fonctionnalité (grant `channels`, 093) : la fonctionnalité visée arrive
+    // dans l'entrée (`feature` pour l'ajout, l'id du canal pour le reste), et
+    // chaque handler ouvre sur `ctx.assertChannels(...)`.
+    'notify.channelAdd',
+    'notify.channelUpdate',
+    'notify.channelUsage',
+    'notify.channelDelete',
+    'notify.channelReorder',
+    'notify.channelTest',
     // Même raison : la fonctionnalité visée arrive dans l'entrée. Le partage
     // vérifie en tête de handler l'accès à cette feature, l'appartenance à
     // l'espace cible et — pour les restrictions — `workspace.roles`.
