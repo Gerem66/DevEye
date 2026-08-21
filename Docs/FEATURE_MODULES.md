@@ -1,7 +1,13 @@
 # Features modulaires — la cible d'architecture
 
-> Écrit le 20 août 2026. Document de **direction** : il décrit où l'on va, ce
-> qui existe déjà, et le chemin. Rien ici n'est un engagement de calendrier.
+> Écrit le 20 août 2026. **La cible décrite ici est atteinte le 22 août 2026**,
+> sous une forme voisine : le SDK des modules (packages compilés déclarés dans
+> `features.config.json`, glue générée, Météo rapatriée en preuve). L'état
+> livré est documenté dans [FEATURE_SDK.md](./FEATURE_SDK.md) côté mainteneur
+> et dans le repo
+> [DevEye-Feature-Template](https://github.com/Gerem66/DevEye-Feature-Template)
+> côté développeur tiers. Ce document reste comme trace du raisonnement (les
+> besoins, la friction mesurée, les choix écartés dont l'import à chaud du §5).
 >
 > Documents voisins : [CREATING_A_FEATURE.md](./CREATING_A_FEATURE.md) (l'état
 > actuel, et la mesure de la friction), [PERMISSIONS.md](./PERMISSIONS.md),

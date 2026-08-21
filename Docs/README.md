@@ -9,7 +9,8 @@ quand elles ont été relues depuis, la date de relecture.
 | Doc | Quoi |
 |---|---|
 | [CREATING_A_FEATURE.md](./CREATING_A_FEATURE.md) | la checklist d'une nouvelle feature, fichier par fichier |
-| [FEATURE_MODULES.md](./FEATURE_MODULES.md) | la cible : une feature = un module autonome |
+| [FEATURE_SDK.md](./FEATURE_SDK.md) | le SDK des modules de features, côté mainteneur |
+| [FEATURE_MODULES.md](./FEATURE_MODULES.md) | la cible d'hier, atteinte : la trace du raisonnement |
 
 ## Systèmes transverses
 

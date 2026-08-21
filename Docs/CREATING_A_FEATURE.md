@@ -1,5 +1,13 @@
 # Créer une nouvelle fonctionnalité — checklist complète
 
+> **Une feature de tiers, ou une nouvelle feature « moderne » ?** Passe par le
+> **SDK des modules** : repo
+> [DevEye-Feature-Template](https://github.com/Gerem66/DevEye-Feature-Template)
+> (doc anglaise complète) côté développeur, [FEATURE_SDK.md](./FEATURE_SDK.md)
+> côté mainteneur. La checklist ci-dessous reste celle du chemin **natif
+> historique**, encore suivi par quinze features sur seize (Météo est passée au
+> format module).
+
 Ce document liste **tout** ce qu'implique l'ajout d'une fonctionnalité dans DevEye,
 dans l'ordre, à travers les trois bases de code. Suis-le de haut en bas pour ne
 rien oublier.
