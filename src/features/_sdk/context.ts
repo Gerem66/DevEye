@@ -1,0 +1,66 @@
+import type { SdkFeatureContext } from 'deveye-types/sdk/server';
+import type { ExtraPermissionSpec, FeatureManifest } from 'deveye-types/sdk';
+
+import type { FeatureContext } from '@/features/_define';
+import { createFacade } from './facade';
+import { createFeatureStore } from './store';
+
+/**
+ * Adapte le contexte natif en contexte SDK, par requête.
+ *
+ * C'est ici que la frontière se tient : rien de ce qui n'est pas listé dans
+ * `SdkFeatureContext` ne traverse. Le repo du module est construit une fois
+ * par processus (voir `register.ts`) et injecté ; le store et la façade se
+ * construisent par requête, liés à l'espace de l'enveloppe.
+ */
+export function createSdkContext(ctx: FeatureContext, manifest: FeatureManifest, repo: unknown): SdkFeatureContext {
+    const specs = new Map<string, ExtraPermissionSpec>((manifest.extraPermissions ?? []).map((s) => [s.key, s]));
+    const granted = ctx.extrasFor(manifest.id);
+
+    const canExtra = (key: string): boolean => {
+        const spec = specs.get(key);
+        if (!spec || spec.type !== 'toggle') return false;
+        if (ctx.isOwner) return true;
+        return granted[key] === true;
+    };
+    const extraValue = (key: string): string => {
+        const spec = specs.get(key);
+        if (!spec || spec.type !== 'choice') return '';
+        if (ctx.isOwner) return spec.ownerValue;
+        const value = granted[key];
+        return typeof value === 'string' && spec.options.some((o) => o.value === value) ? value : spec.default;
+    };
+
+    return {
+        userId: ctx.userId,
+        workspaceId: ctx.workspaceId,
+        workspace: { id: ctx.workspace.id, kind: ctx.workspace.kind, name: ctx.workspace.name },
+        isOwner: ctx.isOwner,
+        canWrite: ctx.canFeature(manifest.id, 'write'),
+        canExtra,
+        extraValue,
+        repo,
+        store: createFeatureStore(ctx.db.featureKv, manifest.id, ctx.workspaceId, {
+            open: ctx.secure.open,
+            guarded: ctx.secure
+        }),
+        cipher: (mode) => (mode === 'private' ? ctx.secure : ctx.secure.open),
+        deveye: createFacade({
+            db: ctx.db,
+            cipher: ctx.secure.open,
+            workspaceId: ctx.workspaceId,
+            ownerUserId: ctx.workspace.ownerUserId,
+            manifest,
+            logger: ctx.logger
+        }),
+        audit: (entry) =>
+            ctx.audit({
+                action: entry.action,
+                description: entry.description,
+                level: entry.level,
+                metadata: entry.metadata ?? null
+            }),
+        logger: ctx.logger,
+        requestId: ctx.requestId
+    };
+}

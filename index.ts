@@ -11,6 +11,10 @@ import { createDatabase } from '@/db';
 import { runMigrations } from '@/db/migrate';
 import { createDbPool, getQueryable, testConnection } from '@/db/pool';
 import { seedDevAccount } from '@/db/seedDev';
+import { createModuleServices, moduleMigrationDirs } from '@/features/_sdk/register';
+// L'import du registre déclenche l'enregistrement des modules installés :
+// leurs migrations et services deviennent visibles ci-dessous.
+import '@/features/registry';
 
 async function main() {
     const pool = createDbPool();
@@ -20,7 +24,7 @@ async function main() {
         process.exit(1);
     }
 
-    await runMigrations(pool);
+    await runMigrations(pool, moduleMigrationDirs());
 
     if (process.env.SEED_DEV === 'true') {
         await seedDevAccount(pool);
@@ -34,6 +38,10 @@ async function main() {
         crypt
     });
     const audit = createAuditLog(db);
+
+    // Les services d'arrière-plan des modules installés : même cycle de vie
+    // que les sept natifs (start après l'écoute, stop au signal).
+    const moduleServices = createModuleServices({ db, crypt, logger });
 
     /**
      * Le second écouteur, sur son propre port, quand il est réglé.
@@ -55,6 +63,7 @@ async function main() {
             audience.stop();
             sentinel.stop();
             backups.stop();
+            for (const svc of moduleServices) void svc.stop();
             // Rend le bail CloudSync : sans ça, le processus qui redémarre ne
             // reconnaît pas son propre bail (identité neuve) et resterait passif
             // jusqu'à expiration.
@@ -119,6 +128,7 @@ async function main() {
     // brutal — sans quoi un travail interrompu resterait éternellement en vol et
     // tous ses passages suivants seraient sautés en silence.
     backups.start();
+    for (const svc of moduleServices) svc.start();
 
     await app.listen({ port: env.LISTEN_PORT, host: '0.0.0.0' });
     logger.info({ port: env.LISTEN_PORT }, 'DevEye server ready');

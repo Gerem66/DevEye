@@ -54,9 +54,17 @@ import {
 } from './workspace/roles';
 import { workspaceAddFeature } from './workspace/add';
 import { workspaceDeleteFeature } from './workspace/delete';
+import { INSTALLED_MODULES } from './_generated/installed';
+import { moduleFeatureHandlers, registerModules } from './_sdk/register';
+
+// Les modules installés s'enregistrent au chargement du registre : manifests
+// validés, descripteurs déclarés, définitions projetées en natives. Une
+// violation lève ici, avant même les sentinelles du boot.
+registerModules(INSTALLED_MODULES);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>> = [
+    ...moduleFeatureHandlers(),
     workspaceAddFeature,
     workspaceDeleteFeature,
     workspaceActivateFeature,

@@ -5,7 +5,8 @@
   "main": "dist/index.js",
   "type": "module",
   "workspaces": [
-    "client"
+    "client",
+    "features/*"
   ],
   "scripts": {
     "install:all": "npm install",
@@ -18,11 +19,12 @@
     "lint": "eslint index.ts src",
     "lint:fix": "eslint index.ts src --fix",
     "typecheck": "tsc --noEmit",
-    "ci": "npm run lint && npm run typecheck && npm run ci:rules",
+    "ci": "npm run lint && npm run typecheck && npm run ci:rules && npm run gen:features -- --check",
     "ci:rules": "tsx scripts/check-rules.ts",
     "ci:agent": "cd agent; /usr/bin/cargo fmt --check && cargo clippy --all-targets -- -D warnings",
     "clean": "rm -rf node_modules client/node_modules client/build package-lock.json",
-    "test": "tsx --test \"src/**/*.test.ts\""
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "gen:features": "tsx scripts/gen-features.ts"
   },
   "author": "Gerem",
   "license": "ISC",

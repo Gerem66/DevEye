@@ -340,6 +340,7 @@ export async function registerWS(
                         assertChannels,
                         itemRestrictions: scope.itemRestrictions,
                         assertItem,
+                        extrasFor: (f) => scope.extras.get(f) ?? {},
                         ip,
                         logger: reqLogger.child({ command, requestId: replyId }),
                         requestId: replyId,
@@ -413,6 +414,20 @@ export async function registerWS(
                     }
                 }
             } catch (e) {
+                // Le duck-typing double l'instanceof exprès : si un module et
+                // l'app résolvent deux instances distinctes de deveye-types
+                // (miroir node_modules d'un côté, alias de l'autre), l'erreur
+                // typée d'un module resterait sinon un `internal` opaque.
+                if (!(e instanceof FeatureError) && e instanceof Error && e.name === 'FeatureError' && 'code' in e) {
+                    const dup = e as Error & { code: string; details?: unknown };
+                    reqLogger.warn({ command, code: dup.code, msg: dup.message }, 'Feature error');
+                    send(socket, {
+                        requestId: replyId,
+                        command,
+                        payload: err(dup.code as Parameters<typeof err>[0], dup.message, dup.details)
+                    });
+                    return;
+                }
                 if (e instanceof FeatureError) {
                     reqLogger.warn({ command, code: e.code, msg: e.message }, 'Feature error');
                     send(socket, {

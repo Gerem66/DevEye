@@ -1,4 +1,4 @@
-import type { LiveTopic } from 'deveye-types';
+import { isExternalFeatureId, type LiveTopic } from 'deveye-types';
 
 import { logger } from '@/logger';
 import { featureHandlers } from './registry';
@@ -166,7 +166,11 @@ export function buildTopicIndex(): void {
 
     for (const def of featureHandlers) {
         const prefix = prefixOf(def.command);
-        if (!(prefix in COMMAND_PREFIX_TOPIC)) {
+        // Un module externe n'a pas d'entrée dans la table : son préfixe EST
+        // son id, et son sujet aussi (contrat du manifest, validé à
+        // l'enregistrement). La règle est structurelle, pas déclarative.
+        const external = isExternalFeatureId(prefix);
+        if (!external && !(prefix in COMMAND_PREFIX_TOPIC)) {
             throw new Error(
                 `Préfixe de commande inconnu de COMMAND_PREFIX_TOPIC : « ${prefix} » (${def.command}). ` +
                     'Ajoutez-le à src/features/_topics.ts.'
@@ -181,7 +185,7 @@ export function buildTopicIndex(): void {
         }
 
         if (def.mutates === true) {
-            const topic = COMMAND_PREFIX_TOPIC[prefix];
+            const topic = external ? (prefix as LiveTopic) : COMMAND_PREFIX_TOPIC[prefix];
             if (topic === null) {
                 throw new Error(
                     `« ${def.command} » déclare mutates: true, mais son préfixe « ${prefix} » ne porte aucun sujet. ` +

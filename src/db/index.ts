@@ -12,6 +12,7 @@ import {
     type MailSettingsRepo
 } from './repos/mail';
 import { metricsRepo, type MetricsRepo } from './repos/metrics';
+import { featureKvRepo, type FeatureKvRepo } from './repos/featureKv';
 import { itemSharingRepo, type ItemSharingRepo } from './repos/itemSharing';
 import { notificationChannelsRepo, type NotificationChannelsRepo } from './repos/notificationChannels';
 import { presenceRepo, type PresenceRepo } from './repos/presence';
@@ -69,6 +70,12 @@ import { workspaceRolesRepo, type WorkspaceRolesRepo } from './repos/workspaceRo
 import { userInvitesRepo, type UserInvitesRepo } from './repos/userInvites';
 
 export interface Database {
+    /**
+     * Le Queryable brut, pour les fabriques de repos des MODULES uniquement :
+     * un repo de module se construit avec, un handler natif n'a aucune raison
+     * d'y toucher (ses repos sont déjà là).
+     */
+    queryable: Queryable;
     users: UsersRepo;
     workspaces: WorkspacesRepo;
     workspaceMembers: WorkspaceMembersRepo;
@@ -127,6 +134,8 @@ export interface Database {
     twoFactor: TwoFactorRepo;
     userSecretKeys: UserSecretKeysRepo;
     weather: WeatherRepo;
+    /** Le magasin clé-valeur des modules de features (SDK). */
+    featureKv: FeatureKvRepo;
     osint: OsintRepo;
     uptimeServices: UptimeServicesRepo;
     uptimeHistory: UptimeHistoryRepo;
@@ -148,6 +157,7 @@ export interface Database {
 
 export function createDatabase(q: Queryable): Database {
     return {
+        queryable: q,
         users: usersRepo(q),
         workspaces: workspacesRepo(q),
         workspaceMembers: workspaceMembersRepo(q),
@@ -187,6 +197,7 @@ export function createDatabase(q: Queryable): Database {
         twoFactor: twoFactorRepo(q),
         userSecretKeys: userSecretKeysRepo(q),
         weather: weatherRepo(q),
+        featureKv: featureKvRepo(q),
         osint: osintRepo(q),
         uptimeServices: uptimeServicesRepo(q),
         uptimeHistory: uptimeHistoryRepo(q),

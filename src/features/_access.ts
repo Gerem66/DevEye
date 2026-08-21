@@ -90,6 +90,12 @@ export interface ResolvedScope {
      */
     channels: ReadonlySet<FeatureId>;
     /**
+     * Les permissions déclarées par les features elles-mêmes (`extras` des
+     * grants, manifests des modules). Brutes ici : la résolution des défauts et
+     * du propriétaire se fait à la lecture, contre les specs du manifest.
+     */
+    extras: ReadonlyMap<FeatureId, Record<string, boolean | string>>;
+    /**
      * Les restrictions posées sur des éléments précis, pour le rôle de
      * l'appelant. Chargées **paresseusement, par feature** : la plupart des
      * commandes n'en ont pas besoin, et un espace qui n'en pose aucune n'a
@@ -255,7 +261,7 @@ export function createAccessResolver(
         // Le propriétaire n'a pas de rôle : il passe outre, et lui en donner un
         // laisserait croire qu'on peut le lui retirer.
         const role = isOwner ? null : await db.workspaceRoles.findForMember(userId, row.id);
-        const { capabilities, features, channels } = grantsFor(isOwner, role);
+        const { capabilities, features, channels, extras } = grantsFor(isOwner, role);
 
         const keyService = new SecretKeyService(db, crypt);
         const workspaceDekId = row.kind === 'shared' && (await keyService.hasWorkspaceDek(row.id)) ? row.id : null;
@@ -297,6 +303,7 @@ export function createAccessResolver(
             capabilities,
             features,
             channels,
+            extras,
             itemRestrictions,
             secure: store,
             secretKeys: keys

@@ -11,6 +11,7 @@ import {
 import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole, WorkspaceRoleRow } from 'deveye-types';
 
 import { invalidateAccess } from '../_access';
+import { validateGrantExtras } from '../_sdk/register';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
 /**
@@ -94,6 +95,7 @@ export const workspaceRoleCreateFeature: FeatureDefinition<
     access: { capabilities: ['workspace.roles'] },
     handler: async (ctx, input) => {
         assertShared(ctx);
+        validateGrantExtras(input.features);
         const row = await ctx.db.workspaceRoles.create(ctx.workspaceId, {
             name: input.name.trim(),
             color: input.color,
@@ -119,6 +121,7 @@ export const workspaceRoleUpdateFeature: FeatureDefinition<
     access: { capabilities: ['workspace.roles'] },
     handler: async (ctx, input) => {
         assertShared(ctx);
+        validateGrantExtras(input.features);
         const row = await ctx.db.workspaceRoles.update(input.roleId, ctx.workspaceId, {
             name: input.name.trim(),
             color: input.color,
