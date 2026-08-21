@@ -130,185 +130,196 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                         transition={{ duration: 0.18 }}
                         onClick={onClose}
                     />
-                    <motion.div
-                        className={styles.modal}
-                        role='dialog'
-                        aria-modal='true'
-                        aria-label='Apparence'
-                        initial={{ opacity: 0, scale: 0.94, x: '-50%', y: '-50%' }}
-                        animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
-                        exit={{ opacity: 0, scale: 0.94, x: '-50%', y: '-50%' }}
-                        transition={{ type: 'spring', stiffness: 320, damping: 30 }}
-                    >
-                        <div className={styles.header}>
-                            <h2 className={styles.title}>
-                                <span className='icon icon-appearance' /> Apparence
-                            </h2>
-                            <button className={styles.closeBtn} onClick={onClose} aria-label='Fermer'>
-                                <span className='icon icon-x' />
-                            </button>
-                        </div>
-
-                        <div className={styles.section}>
-                            <span className={styles.sectionLabel}>Couleur d&apos;accent</span>
-                            <div className={styles.swatchRow}>
-                                {ACCENT_PRESETS.map((p) => (
-                                    <button
-                                        key={p.key}
-                                        type='button'
-                                        className={`${styles.swatch} ${activeAccent === p.hex.toLowerCase() ? styles.active : ''}`}
-                                        style={{ background: p.hex }}
-                                        onClick={() => setTheme({ accent: p.hex })}
-                                        title={p.label}
-                                        aria-label={p.label}
-                                    />
-                                ))}
+                    {/* Le centrage (`translate(-50%, -50%)`) vit sur un cadre
+                        STATIQUE, hors de framer : le panneau lui-même n'anime que
+                        translation et fondu, jamais d'échelle. Une échelle animée
+                        rastérise le contenu à des tailles fractionnaires et les
+                        bordures de 1 px y disparaissent jusqu'au repaint suivant
+                        (voir le commentaire du panneau de Dialog). */}
+                    <div className={styles.modalPlace}>
+                        <motion.div
+                            className={styles.modal}
+                            role='dialog'
+                            aria-modal='true'
+                            aria-label='Apparence'
+                            initial={{ opacity: 0, y: 14 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 14 }}
+                            transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+                        >
+                            <div className={styles.header}>
+                                <h2 className={styles.title}>
+                                    <span className='icon icon-appearance' /> Apparence
+                                </h2>
+                                <button className={styles.closeBtn} onClick={onClose} aria-label='Fermer'>
+                                    <span className='icon icon-x' />
+                                </button>
                             </div>
-                        </div>
 
-                        <div className={styles.section}>
-                            <span className={styles.sectionLabel}>Fond d&apos;écran</span>
-                            <div className={styles.bgGrid}>
-                                {BG_PRESETS.map((p) => {
-                                    const active = !theme.bgImage && (theme.bgPreset ?? 'auto') === p.key;
-                                    const preview =
-                                        p.css ??
-                                        `radial-gradient(120px circle at 28% -10%, var(--accent-glow), transparent 60%), linear-gradient(160deg, #06080f, #0a1622)`;
-                                    return (
+                            <div className={styles.section}>
+                                <span className={styles.sectionLabel}>Couleur d&apos;accent</span>
+                                <div className={styles.swatchRow}>
+                                    {ACCENT_PRESETS.map((p) => (
                                         <button
                                             key={p.key}
                                             type='button'
-                                            className={`${styles.bgSwatch} ${active ? styles.active : ''}`}
-                                            style={{ background: preview }}
-                                            onClick={() =>
-                                                setTheme({ bgPreset: p.key === 'auto' ? null : p.key, bgImage: null })
-                                            }
-                                        >
-                                            <span className={styles.bgLabel}>{p.label}</span>
-                                        </button>
-                                    );
-                                })}
+                                            className={`${styles.swatch} ${activeAccent === p.hex.toLowerCase() ? styles.active : ''}`}
+                                            style={{ background: p.hex }}
+                                            onClick={() => setTheme({ accent: p.hex })}
+                                            title={p.label}
+                                            aria-label={p.label}
+                                        />
+                                    ))}
+                                </div>
                             </div>
 
-                            <p className={styles.sectionHint}>
-                                Ajoutez un fond depuis une URL ou un fichier local (jusqu&apos;à {THEME_SLOT_COUNT}{' '}
-                                conservés) :
-                            </p>
-                            <div className={styles.inputRow}>
-                                <input
-                                    type='url'
-                                    className={styles.input}
-                                    placeholder='https://exemple.com/image.jpg'
-                                    value={draftUrl}
-                                    disabled={busy}
-                                    onChange={(e) => setDraftUrl(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                            e.preventDefault();
-                                            void addFromUrl();
-                                        }
-                                    }}
-                                />
-                                <button
-                                    type='button'
-                                    className={styles.fileBtn}
-                                    onClick={() => void addFromUrl()}
-                                    disabled={busy || !draftUrl.trim()}
-                                >
-                                    Ajouter
-                                </button>
-                            </div>
-                            <input
-                                ref={fileInputRef}
-                                type='file'
-                                accept='image/*'
-                                className={styles.fileInput}
-                                onChange={onFileChange}
-                            />
-                            <button type='button' className={styles.fileBtnWide} onClick={pickFile} disabled={busy}>
-                                Parcourir un fichier…
-                            </button>
-
-                            {busy && <span className={styles.imageActive}>Traitement de l&apos;image…</span>}
-                            {error && <span className={styles.fileError}>{error}</span>}
-                            {!busy && notice && <span className={styles.imageActive}>{notice}</span>}
-
-                            {showGallery && (
-                                <div className={styles.gallery}>
-                                    {theme.bgImages.map((slot, i) =>
-                                        slot ? (
-                                            <div
-                                                key={i}
-                                                className={`${styles.slot} ${slot === theme.bgImage ? styles.slotActive : ''}`}
+                            <div className={styles.section}>
+                                <span className={styles.sectionLabel}>Fond d&apos;écran</span>
+                                <div className={styles.bgGrid}>
+                                    {BG_PRESETS.map((p) => {
+                                        const active = !theme.bgImage && (theme.bgPreset ?? 'auto') === p.key;
+                                        const preview =
+                                            p.css ??
+                                            `radial-gradient(120px circle at 28% -10%, var(--accent-glow), transparent 60%), linear-gradient(160deg, #06080f, #0a1622)`;
+                                        return (
+                                            <button
+                                                key={p.key}
+                                                type='button'
+                                                className={`${styles.bgSwatch} ${active ? styles.active : ''}`}
+                                                style={{ background: preview }}
+                                                onClick={() =>
+                                                    setTheme({
+                                                        bgPreset: p.key === 'auto' ? null : p.key,
+                                                        bgImage: null
+                                                    })
+                                                }
                                             >
-                                                <button
-                                                    type='button'
-                                                    className={styles.slotPick}
-                                                    style={{
-                                                        backgroundImage: `url("${slot.replace(/"/g, '%22')}")`
-                                                    }}
-                                                    onClick={() => setTheme({ bgImage: slot })}
-                                                    title='Utiliser ce fond'
-                                                    aria-label={`Utiliser le fond ${i + 1}`}
-                                                    aria-pressed={slot === theme.bgImage}
-                                                />
-                                                <button
-                                                    type='button'
-                                                    className={styles.slotDelete}
-                                                    onClick={() => clearBackgroundSlot(i)}
-                                                    title='Vider cet emplacement'
-                                                    aria-label={`Vider l'emplacement ${i + 1}`}
+                                                <span className={styles.bgLabel}>{p.label}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                <p className={styles.sectionHint}>
+                                    Ajoutez un fond depuis une URL ou un fichier local (jusqu&apos;à {THEME_SLOT_COUNT}{' '}
+                                    conservés) :
+                                </p>
+                                <div className={styles.inputRow}>
+                                    <input
+                                        type='url'
+                                        className={styles.input}
+                                        placeholder='https://exemple.com/image.jpg'
+                                        value={draftUrl}
+                                        disabled={busy}
+                                        onChange={(e) => setDraftUrl(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                void addFromUrl();
+                                            }
+                                        }}
+                                    />
+                                    <button
+                                        type='button'
+                                        className={styles.fileBtn}
+                                        onClick={() => void addFromUrl()}
+                                        disabled={busy || !draftUrl.trim()}
+                                    >
+                                        Ajouter
+                                    </button>
+                                </div>
+                                <input
+                                    ref={fileInputRef}
+                                    type='file'
+                                    accept='image/*'
+                                    className={styles.fileInput}
+                                    onChange={onFileChange}
+                                />
+                                <button type='button' className={styles.fileBtnWide} onClick={pickFile} disabled={busy}>
+                                    Parcourir un fichier…
+                                </button>
+
+                                {busy && <span className={styles.imageActive}>Traitement de l&apos;image…</span>}
+                                {error && <span className={styles.fileError}>{error}</span>}
+                                {!busy && notice && <span className={styles.imageActive}>{notice}</span>}
+
+                                {showGallery && (
+                                    <div className={styles.gallery}>
+                                        {theme.bgImages.map((slot, i) =>
+                                            slot ? (
+                                                <div
+                                                    key={i}
+                                                    className={`${styles.slot} ${slot === theme.bgImage ? styles.slotActive : ''}`}
                                                 >
-                                                    <span className='icon icon-x' />
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <div
-                                                key={i}
-                                                className={`${styles.slot} ${styles.slotEmpty}`}
-                                                aria-hidden='true'
+                                                    <button
+                                                        type='button'
+                                                        className={styles.slotPick}
+                                                        style={{
+                                                            backgroundImage: `url("${slot.replace(/"/g, '%22')}")`
+                                                        }}
+                                                        onClick={() => setTheme({ bgImage: slot })}
+                                                        title='Utiliser ce fond'
+                                                        aria-label={`Utiliser le fond ${i + 1}`}
+                                                        aria-pressed={slot === theme.bgImage}
+                                                    />
+                                                    <button
+                                                        type='button'
+                                                        className={styles.slotDelete}
+                                                        onClick={() => clearBackgroundSlot(i)}
+                                                        title='Vider cet emplacement'
+                                                        aria-label={`Vider l'emplacement ${i + 1}`}
+                                                    >
+                                                        <span className='icon icon-x' />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div
+                                                    key={i}
+                                                    className={`${styles.slot} ${styles.slotEmpty}`}
+                                                    aria-hidden='true'
+                                                />
+                                            )
+                                        )}
+                                    </div>
+                                )}
+
+                                {theme.bgImage && (
+                                    <div className={styles.bgTune}>
+                                        <div className={styles.sliderRow}>
+                                            <span className={styles.sliderLabel}>Assombrir le fond</span>
+                                            <input
+                                                type='range'
+                                                min={0}
+                                                max={100}
+                                                step={1}
+                                                value={theme.bgDim}
+                                                className={styles.slider}
+                                                onChange={(e) => setTheme({ bgDim: Number(e.target.value) })}
                                             />
-                                        )
-                                    )}
-                                </div>
-                            )}
-
-                            {theme.bgImage && (
-                                <div className={styles.bgTune}>
-                                    <div className={styles.sliderRow}>
-                                        <span className={styles.sliderLabel}>Assombrir le fond</span>
-                                        <input
-                                            type='range'
-                                            min={0}
-                                            max={100}
-                                            step={1}
-                                            value={theme.bgDim}
-                                            className={styles.slider}
-                                            onChange={(e) => setTheme({ bgDim: Number(e.target.value) })}
-                                        />
+                                        </div>
+                                        <div className={styles.sliderRow}>
+                                            <span className={styles.sliderLabel}>Flouter le fond</span>
+                                            <input
+                                                type='range'
+                                                min={0}
+                                                max={100}
+                                                step={1}
+                                                value={theme.bgBlur}
+                                                className={styles.slider}
+                                                onChange={(e) => setTheme({ bgBlur: Number(e.target.value) })}
+                                            />
+                                        </div>
                                     </div>
-                                    <div className={styles.sliderRow}>
-                                        <span className={styles.sliderLabel}>Flouter le fond</span>
-                                        <input
-                                            type='range'
-                                            min={0}
-                                            max={100}
-                                            step={1}
-                                            value={theme.bgBlur}
-                                            className={styles.slider}
-                                            onChange={(e) => setTheme({ bgBlur: Number(e.target.value) })}
-                                        />
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                                )}
+                            </div>
 
-                        {customized && (
-                            <button className={styles.resetBtn} onClick={resetAll}>
-                                Réinitialiser
-                            </button>
-                        )}
-                    </motion.div>
+                            {customized && (
+                                <button className={styles.resetBtn} onClick={resetAll}>
+                                    Réinitialiser
+                                </button>
+                            )}
+                        </motion.div>
+                    </div>
                 </>
             )}
         </AnimatePresence>

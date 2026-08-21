@@ -227,6 +227,22 @@ export default function Dialog({
                         transition={{ duration: 0.2, ease: 'easeOut' }}
                         onClick={dismissible ? attemptClose : undefined}
                     />
+                    {/*
+                     * L'entrée se fait par translation et fondu, jamais par
+                     * échelle, et c'est une règle de rendu avant d'être un choix
+                     * d'ambiance. Pendant une animation d'échelle, le panneau
+                     * entier est rastérisé à des échelles fractionnaires où une
+                     * bordure de 1 px peut tomber sous le seuil de couverture du
+                     * rastériseur, et cette image reste affichée jusqu'à la
+                     * prochaine invalidation (la surface reste composited par son
+                     * backdrop-filter). À l'écran : la première rangée de pixels
+                     * des panneaux « mangée » à l'ouverture, réparée au premier
+                     * défilement ou changement d'onglet. Au repos, le rendu est
+                     * net même aux positions fractionnaires, transform compris
+                     * (mesuré en headless sur Gecko et Blink) : seule l'échelle
+                     * animée produit le défaut. Une translation, elle, déplace le
+                     * raster sans jamais le ré-échantillonner.
+                     */}
                     <motion.div
                         ref={dialogRef}
                         tabIndex={-1}
@@ -234,9 +250,9 @@ export default function Dialog({
                         className={`${styles.dialog} ${tall ? styles.dialogTall : ''} ${fill ? styles.dialogFill : ''}`}
                         role='dialog'
                         aria-modal='true'
-                        initial={{ opacity: 0, scale: 0.94, maxWidth: width, height: tall ? tallHeight : 'auto' }}
-                        animate={{ opacity: 1, scale: 1, maxWidth: width, height: tall ? tallHeight : 'auto' }}
-                        exit={{ opacity: 0, scale: 0.94 }}
+                        initial={{ opacity: 0, y: 14, maxWidth: width, height: tall ? tallHeight : 'auto' }}
+                        animate={{ opacity: 1, y: 0, maxWidth: width, height: tall ? tallHeight : 'auto' }}
+                        exit={{ opacity: 0, y: 14 }}
                         transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.9 }}
                     >
                         <div className={styles.corner}>

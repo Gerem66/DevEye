@@ -7,15 +7,20 @@
     z-index: var(--z-modal);
 }
 
-.modal {
+/* Le cadre qui centre : transform statique, jamais animé. Le panneau anime sa
+   translation et son opacité à l'intérieur, sans toucher au centrage. */
+.modalPlace {
     position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
+    z-index: calc(var(--z-modal) + 1);
+}
+
+.modal {
     width: min(92vw, 480px);
     max-height: 86vh;
     overflow-y: auto;
-    z-index: calc(var(--z-modal) + 1);
     background: var(--surface-popup);
     backdrop-filter: blur(var(--glass-blur));
     -webkit-backdrop-filter: blur(var(--glass-blur));
