@@ -1,33 +1,49 @@
 /**
- * Génère la glue des modules de features depuis `features.config.json`.
+ * Génère la glue des modules de features.
  *
- * Sorties (commitées, le serveur n'ayant aucune étape de build) :
- *  - `src/features/_generated/installed.ts` (manifests + entrées serveur) ;
- *  - `client/src/generated/features.ts` (manifests + entrées client) ;
- *  - `client/src/Styles/icons.generated.css` + copie des SVG des modules dans
- *    `client/public/icons/` sous leur nom préfixé (`<id>-<icône>.svg`).
+ * Deux configs, deux jeux de sorties :
  *
- * `--check` régénère en mémoire et compare aux fichiers du dépôt : toute
- * dérive fait échouer la CI avec le remède en une ligne.
+ *  - `features.config.json` (COMMITTÉE) : les modules publics. Sorties
+ *    committées : `src/features/_generated/installed.ts`,
+ *    `client/src/generated/features.ts`, `client/src/Styles/icons.generated.css`
+ *    (+ copie des SVG). La CI (`--check`) refuse toute dérive.
+ *  - `features.local.json` (GITIGNORÉE) : les modules PRIVÉS de cette
+ *    installation, résolus par chemin (`{ "package": ..., "path": "../X" }`).
+ *    Sorties gitignorées mais TOUJOURS présentes (stubs vides sans config) :
+ *    `installed.local.ts`, `features.local.ts`, `icons.local.css`, importées
+ *    statiquement par la glue committée. La CI publique ne voit jamais un
+ *    module privé et reste verte sans lui.
  *
- * Le générateur est aussi la première sentinelle : ids valides et uniques,
- * version minimale de deveye-types, et préfixe de table `ft_<slug>_` vérifié
- * par balayage statique des migrations SQL (allowlist `deveye-feature.json`
- * pour les tables historiques d'une native rapatriée).
+ * Modes : défaut = tout ; `--ensure-local` = seulement les trois fichiers
+ * locaux (rapide, tourne en prestart et en tête de ci) ; `--check` = vérifie
+ * les sorties committées, RÉPARE les locales.
+ *
+ * Le générateur est aussi la première sentinelle : ids valides et uniques (les
+ * deux configs confondues), version minimale de deveye-types, préfixe de table
+ * `ft_<slug>_` vérifié par balayage statique des migrations SQL (allowlist
+ * `deveye-feature.json` pour les tables historiques d'une native rapatriée).
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { validateManifest, type FeatureManifest } from 'deveye-types/sdk';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(path.join(ROOT, 'package.json'));
 const CHECK = process.argv.includes('--check');
+const ENSURE_LOCAL = process.argv.includes('--ensure-local');
+
+const SERVER_GEN = path.join(ROOT, 'src', 'features', '_generated');
+const CLIENT_GEN = path.join(ROOT, 'client', 'src', 'generated');
+const STYLES_DIR = path.join(ROOT, 'client', 'src', 'Styles');
+const ICONS_DIR = path.join(ROOT, 'client', 'public', 'icons');
 
 interface ConfigEntry {
     package: string;
+    /** Module privé : dossier relatif à la racine de l'app, hors node_modules. */
+    path?: string;
 }
 
 interface BuildMeta {
@@ -43,6 +59,8 @@ interface ResolvedModule {
     /** L'icône finale (préfixée si le module embarque son SVG). */
     icon: string;
     iconSource: string | null;
+    /** Résolu par chemin (module privé) : la glue l'importe en relatif. */
+    localPath: string | null;
 }
 
 function fail(message: string): never {
@@ -80,13 +98,23 @@ function sqlTableTargets(sql: string): string[] {
 }
 
 async function resolveModule(entry: ConfigEntry): Promise<ResolvedModule> {
-    let pkgJsonPath: string;
-    try {
-        pkgJsonPath = require.resolve(`${entry.package}/package.json`);
-    } catch {
-        fail(`« ${entry.package} » est dans features.config.json mais introuvable dans node_modules (npm install ?)`);
+    let dir: string;
+    let localPath: string | null = null;
+    if (entry.path) {
+        dir = path.resolve(ROOT, entry.path);
+        localPath = dir;
+        if (!fs.existsSync(path.join(dir, 'package.json'))) {
+            fail(`« ${entry.package} » : dossier introuvable ou sans package.json (${entry.path})`);
+        }
+        const name = (JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')) as { name?: string }).name;
+        if (name !== entry.package) fail(`${entry.path}: le package s'appelle « ${name} », pas « ${entry.package} »`);
+    } else {
+        try {
+            dir = path.dirname(require.resolve(`${entry.package}/package.json`));
+        } catch {
+            fail(`« ${entry.package} » est dans la config mais introuvable dans node_modules (npm install ?)`);
+        }
     }
-    const dir = path.dirname(pkgJsonPath);
 
     const metaPath = path.join(dir, 'deveye-feature.json');
     if (!fs.existsSync(metaPath)) fail(`${entry.package}: deveye-feature.json manquant`);
@@ -101,7 +129,8 @@ async function resolveModule(entry: ConfigEntry): Promise<ResolvedModule> {
         }
     }
 
-    const { manifest } = (await import(entry.package)) as { manifest?: FeatureManifest };
+    const entryFile = entry.path ? pathToFileURL(path.join(dir, 'src', 'index.ts')).href : entry.package;
+    const { manifest } = (await import(entryFile)) as { manifest?: FeatureManifest };
     if (!manifest) fail(`${entry.package}: l'entrée racine n'exporte pas « manifest »`);
     try {
         validateManifest(manifest);
@@ -138,9 +167,9 @@ async function resolveModule(entry: ConfigEntry): Promise<ResolvedModule> {
     // classe déjà existante de l'app (une native rapatriée garde la sienne).
     const iconSource = path.join(dir, 'assets', 'icons', `${manifest.icon}.svg`);
     if (fs.existsSync(iconSource)) {
-        return { pkg: entry.package, dir, manifest, icon: `${manifest.id}-${manifest.icon}`, iconSource };
+        return { pkg: entry.package, dir, manifest, icon: `${manifest.id}-${manifest.icon}`, iconSource, localPath };
     }
-    return { pkg: entry.package, dir, manifest, icon: manifest.icon, iconSource: null };
+    return { pkg: entry.package, dir, manifest, icon: manifest.icon, iconSource: null, localPath };
 }
 
 const HEADER = `/*
@@ -149,18 +178,31 @@ const HEADER = `/*
  * (\`gen:features --check\`) refuse un fichier qui ne correspond plus à la config.
  */`;
 
-function serverFile(mods: ResolvedModule[]): string {
-    if (mods.length === 0) {
-        return `${HEADER}
-import type { InstalledFeatureModule } from '@/features/_sdk/register';
+const HEADER_LOCAL = `/*
+ * GÉNÉRÉ par \`npm run gen:features\` depuis features.local.json (ou stub vide
+ * sans elle). GITIGNORÉ : les modules privés de cette installation ne laissent
+ * aucune trace dans le dépôt public. Ne pas éditer, ne pas committer.
+ */`;
 
-export const INSTALLED_MODULES: readonly InstalledFeatureModule[] = [];
-`;
-    }
+/** L'import d'un module : spécifieur de package, ou chemin relatif au fichier généré. */
+function importPath(m: ResolvedModule, fromDir: string, sub: '' | '/server' | '/client'): string {
+    if (m.localPath === null) return `${m.pkg}${sub}`;
+    const target =
+        sub === ''
+            ? path.join(m.localPath, 'src', 'index.ts')
+            : sub === '/server'
+              ? path.join(m.localPath, 'src', 'server', 'index.ts')
+              : path.join(m.localPath, 'src', 'client', 'index.tsx');
+    const rel = path.relative(fromDir, target).split(path.sep).join('/');
+    return rel.startsWith('.') ? rel : `./${rel}`;
+}
+
+function serverFile(mods: ResolvedModule[]): string {
     const imports = mods
         .map(
             (m, i) =>
-                `import { manifest as manifest${i} } from '${m.pkg}';\nimport { serverEntry as server${i} } from '${m.pkg}/server';`
+                `import { manifest as manifest${i} } from '${importPath(m, SERVER_GEN, '')}';\n` +
+                `import { serverEntry as server${i} } from '${importPath(m, SERVER_GEN, '/server')}';`
         )
         .join('\n');
     const entries = mods
@@ -168,51 +210,112 @@ export const INSTALLED_MODULES: readonly InstalledFeatureModule[] = [];
         .join(',\n');
     return `${HEADER}
 import type { InstalledFeatureModule } from '@/features/_sdk/register';
+import { LOCAL_MODULES } from './installed.local';
 ${imports}
 
 export const INSTALLED_MODULES: readonly InstalledFeatureModule[] = [
+${entries}${entries ? ',' : ''}
+    ...LOCAL_MODULES
+];
+`;
+}
+
+function serverLocalFile(mods: ResolvedModule[]): string {
+    if (mods.length === 0) {
+        return `${HEADER_LOCAL}
+import type { InstalledFeatureModule } from '@/features/_sdk/register';
+
+export const LOCAL_MODULES: readonly InstalledFeatureModule[] = [];
+`;
+    }
+    const imports = mods
+        .map(
+            (m, i) =>
+                `import { manifest as manifest${i} } from '${importPath(m, SERVER_GEN, '')}';\n` +
+                `import { serverEntry as server${i} } from '${importPath(m, SERVER_GEN, '/server')}';`
+        )
+        .join('\n');
+    const entries = mods
+        .map((m, i) => `    { manifest: { ...manifest${i}, icon: '${m.icon}' }, server: server${i} }`)
+        .join(',\n');
+    return `${HEADER_LOCAL}
+import type { InstalledFeatureModule } from '@/features/_sdk/register';
+${imports}
+
+export const LOCAL_MODULES: readonly InstalledFeatureModule[] = [
 ${entries}
 ];
 `;
 }
 
 function clientFile(mods: ResolvedModule[]): string {
-    const base = `${HEADER}
-import type { FeatureManifest } from 'deveye-types/sdk';
-import type { FeatureClient } from 'deveye-types/sdk/client';
-
-export interface InstalledClientFeature {
-    manifest: FeatureManifest;
-    client: FeatureClient;
-}
-`;
-    if (mods.length === 0) {
-        return `${base}
-export const INSTALLED_CLIENT_FEATURES: readonly InstalledClientFeature[] = [];
-`;
-    }
     const imports = mods
         .map(
             (m, i) =>
-                `import { manifest as manifest${i} } from '${m.pkg}';\nimport { clientEntry as client${i} } from '${m.pkg}/client';`
+                `import { manifest as manifest${i} } from '${importPath(m, CLIENT_GEN, '')}';\n` +
+                `import { clientEntry as client${i} } from '${importPath(m, CLIENT_GEN, '/client')}';`
         )
         .join('\n');
     const entries = mods
         .map((m, i) => `    { manifest: { ...manifest${i}, icon: '${m.icon}' }, client: client${i} }`)
         .join(',\n');
-    return `${base}${imports}
+    return `${HEADER}
+import type { FeatureManifest } from 'deveye-types/sdk';
+import type { FeatureClient } from 'deveye-types/sdk/client';
+
+import { LOCAL_CLIENT_FEATURES } from './features.local';
+${imports ? `${imports}\n` : ''}
+export interface InstalledClientFeature {
+    manifest: FeatureManifest;
+    client: FeatureClient;
+}
 
 export const INSTALLED_CLIENT_FEATURES: readonly InstalledClientFeature[] = [
+${entries}${entries ? ',' : ''}
+    ...LOCAL_CLIENT_FEATURES
+];
+`;
+}
+
+function clientLocalFile(mods: ResolvedModule[]): string {
+    if (mods.length === 0) {
+        return `${HEADER_LOCAL}
+import type { InstalledClientFeature } from './features';
+
+export const LOCAL_CLIENT_FEATURES: readonly InstalledClientFeature[] = [];
+`;
+    }
+    const imports = mods
+        .map(
+            (m, i) =>
+                `import { manifest as manifest${i} } from '${importPath(m, CLIENT_GEN, '')}';\n` +
+                `import { clientEntry as client${i} } from '${importPath(m, CLIENT_GEN, '/client')}';`
+        )
+        .join('\n');
+    const entries = mods
+        .map((m, i) => `    { manifest: { ...manifest${i}, icon: '${m.icon}' }, client: client${i} }`)
+        .join(',\n');
+    return `${HEADER_LOCAL}
+import type { InstalledClientFeature } from './features';
+${imports}
+
+export const LOCAL_CLIENT_FEATURES: readonly InstalledClientFeature[] = [
 ${entries}
 ];
 `;
 }
 
-function iconsCss(mods: ResolvedModule[]): string {
-    const header = `/*
+function iconsCss(mods: ResolvedModule[], local: boolean): string {
+    const header = local
+        ? `/*
+ * GÉNÉRÉ : les icônes des modules PRIVÉS de cette installation. Gitignoré.
+ */
+`
+        : `/*
  * GÉNÉRÉ par \`npm run gen:features\` : les icônes des modules installés,
  * copiées dans public/icons/ sous leur nom préfixé. Ne pas éditer.
  */
+@import url(./icons.local.css);
 `;
     const rules = mods
         .filter((m) => m.iconSource !== null)
@@ -224,38 +327,77 @@ function iconsCss(mods: ResolvedModule[]): string {
     return rules.length > 0 ? `${header}\n${rules}` : header;
 }
 
-async function main(): Promise<void> {
-    const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'features.config.json'), 'utf8')) as {
-        features: ConfigEntry[];
-    };
+interface Output {
+    file: string;
+    content: string;
+}
+
+function readConfig(file: string): ConfigEntry[] {
+    const full = path.join(ROOT, file);
+    if (!fs.existsSync(full)) return [];
+    return (JSON.parse(fs.readFileSync(full, 'utf8')) as { features?: ConfigEntry[] }).features ?? [];
+}
+
+async function resolveAll(entries: ConfigEntry[], forceLocal: boolean): Promise<ResolvedModule[]> {
     const mods: ResolvedModule[] = [];
-    const seen = new Set<string>();
-    for (const entry of config.features) {
+    for (const entry of entries) {
         const mod = await resolveModule(entry);
-        if (seen.has(mod.manifest.id)) fail(`id « ${mod.manifest.id} » déclaré deux fois`);
-        seen.add(mod.manifest.id);
+        if (forceLocal && mod.localPath === null) {
+            fail(`${entry.package}: une entrée de features.local.json doit porter un « path »`);
+        }
         mods.push(mod);
     }
+    return mods;
+}
 
-    const outputs: { file: string; content: string }[] = [
-        { file: path.join(ROOT, 'src', 'features', '_generated', 'installed.ts'), content: serverFile(mods) },
-        { file: path.join(ROOT, 'client', 'src', 'generated', 'features.ts'), content: clientFile(mods) },
-        { file: path.join(ROOT, 'client', 'src', 'Styles', 'icons.generated.css'), content: iconsCss(mods) }
-    ];
-    const icons = mods
+function writeOutputs(outputs: Output[], icons: { from: string; to: string }[]): void {
+    for (const out of outputs) {
+        fs.mkdirSync(path.dirname(out.file), { recursive: true });
+        fs.writeFileSync(out.file, out.content);
+    }
+    for (const icon of icons) fs.copyFileSync(icon.from, icon.to);
+}
+
+function iconCopies(mods: ResolvedModule[]): { from: string; to: string }[] {
+    return mods
         .filter((m) => m.iconSource !== null)
-        .map((m) => ({
-            from: m.iconSource as string,
-            to: path.join(ROOT, 'client', 'public', 'icons', `${m.icon}.svg`)
-        }));
+        .map((m) => ({ from: m.iconSource as string, to: path.join(ICONS_DIR, `${m.icon}.svg`) }));
+}
+
+async function main(): Promise<void> {
+    const localMods = await resolveAll(readConfig('features.local.json'), true);
+    const localOutputs: Output[] = [
+        { file: path.join(SERVER_GEN, 'installed.local.ts'), content: serverLocalFile(localMods) },
+        { file: path.join(CLIENT_GEN, 'features.local.ts'), content: clientLocalFile(localMods) },
+        { file: path.join(STYLES_DIR, 'icons.local.css'), content: iconsCss(localMods, true) }
+    ];
+
+    if (ENSURE_LOCAL) {
+        writeOutputs(localOutputs, iconCopies(localMods));
+        console.log(`gen-features: fichiers locaux à jour (${localMods.length} module(s) privé(s))`);
+        return;
+    }
+
+    const mods = await resolveAll(readConfig('features.config.json'), false);
+    const seen = new Set<string>();
+    for (const mod of [...mods, ...localMods]) {
+        if (seen.has(mod.manifest.id)) fail(`id « ${mod.manifest.id} » déclaré deux fois (configs confondues)`);
+        seen.add(mod.manifest.id);
+    }
+
+    const committedOutputs: Output[] = [
+        { file: path.join(SERVER_GEN, 'installed.ts'), content: serverFile(mods) },
+        { file: path.join(CLIENT_GEN, 'features.ts'), content: clientFile(mods) },
+        { file: path.join(STYLES_DIR, 'icons.generated.css'), content: iconsCss(mods, false) }
+    ];
 
     if (CHECK) {
         const stale: string[] = [];
-        for (const out of outputs) {
+        for (const out of committedOutputs) {
             const current = fs.existsSync(out.file) ? fs.readFileSync(out.file, 'utf8') : '';
             if (current !== out.content) stale.push(path.relative(ROOT, out.file));
         }
-        for (const icon of icons) {
+        for (const icon of iconCopies(mods)) {
             const same =
                 fs.existsSync(icon.to) && fs.readFileSync(icon.to, 'utf8') === fs.readFileSync(icon.from, 'utf8');
             if (!same) stale.push(path.relative(ROOT, icon.to));
@@ -263,16 +405,16 @@ async function main(): Promise<void> {
         if (stale.length > 0) {
             fail(`fichiers générés en retard sur la config : ${stale.join(', ')}. Lancez \`npm run gen:features\`.`);
         }
-        console.log(`gen-features: à jour (${mods.length} module(s))`);
+        // Les locaux ne se vérifient pas, ils se réparent : gitignorés, ils ne
+        // peuvent pas mettre la CI en échec, mais le typecheck qui suit exige
+        // leur présence.
+        writeOutputs(localOutputs, iconCopies(localMods));
+        console.log(`gen-features: à jour (${mods.length} module(s), ${localMods.length} privé(s))`);
         return;
     }
 
-    for (const out of outputs) {
-        fs.mkdirSync(path.dirname(out.file), { recursive: true });
-        fs.writeFileSync(out.file, out.content);
-    }
-    for (const icon of icons) fs.copyFileSync(icon.from, icon.to);
-    console.log(`gen-features: ${mods.length} module(s), ${outputs.length} fichiers générés`);
+    writeOutputs([...committedOutputs, ...localOutputs], [...iconCopies(mods), ...iconCopies(localMods)]);
+    console.log(`gen-features: ${mods.length} module(s) + ${localMods.length} privé(s), glue régénérée`);
 }
 
 void main();

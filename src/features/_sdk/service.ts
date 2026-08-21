@@ -1,11 +1,13 @@
-import type { FeatureService, FeatureServiceDeps, SdkCipher } from 'deveye-types/sdk/server';
+import type { FeatureService, FeatureServiceDeps, SdkCipher, SdkServerKeys } from 'deveye-types/sdk/server';
 import type { FeatureManifest } from 'deveye-types/sdk';
 
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import { createOpenCipher } from '@/Services/SecureStore';
 import type { Logger } from 'pino';
-import { createFacade } from './facade';
+import EncryptionStatics from '@/Services/Encryption';
+import type { AuditLog } from '@/Services/AuditLog';
+import { agentsFacade, createFacade } from './facade';
 import { createFeatureStore } from './store';
 
 /**
@@ -16,8 +18,17 @@ import { createFeatureStore } from './store';
 export interface ModuleServiceHost {
     db: Database;
     crypt: Encryption;
+    audit: AuditLog;
     logger: Logger;
 }
+
+/**
+ * L'alias de catégorie d'audit : la continuité des lignes persistées prime
+ * sur la convention (les audits CloudSync ont toujours porté `cloudSync`,
+ * l'id de la feature est `cloudsync`). Table courte, côté app exprès : le SDK
+ * n'expose pas la catégorie.
+ */
+const AUDIT_CATEGORY: Record<string, string> = { cloudsync: 'cloudSync' };
 
 export function createServiceDeps(
     host: ModuleServiceHost,
@@ -34,6 +45,17 @@ export function createServiceDeps(
         const cipher = createOpenCipher(host.db, host.crypt, workspaceId);
         ciphers.set(workspaceId, cipher);
         return cipher;
+    };
+
+    const capabilities = new Set(manifest.nativeCapabilities ?? []);
+    const gateAgents = (): void => {
+        if (!capabilities.has('agents')) {
+            throw new Error(`Module « ${manifest.id} » : declare 'agents' in nativeCapabilities`);
+        }
+    };
+    const keys: SdkServerKeys = {
+        sealBytes: (plain) => EncryptionStatics.encryptWithKey(host.crypt.serverKey(), Buffer.from(plain)),
+        openBytes: (sealed) => EncryptionStatics.decryptWithKeyRaw(host.crypt.serverKey(), sealed)
     };
 
     return {
@@ -56,6 +78,7 @@ export function createServiceDeps(
                 db: host.db,
                 cipher: cipherFor(workspaceId),
                 workspaceId,
+                isAdmin: false,
                 // Sans session, le propriétaire n'entre pas en jeu : la façade
                 // sessionless n'expose que notify, qui ne lit pas les membres.
                 ownerUserId: 0,
@@ -64,6 +87,28 @@ export function createServiceDeps(
             });
             return { notify: facade.notify };
         },
+        devicesFor: (workspaceId) => ({
+            list: async () => {
+                const rows = await host.db.devices.listByWorkspace(workspaceId);
+                return rows.map((r) => ({ id: r.id, name: r.name, online: false }));
+            },
+            isOnline: () => false
+        }),
+        audit: (entry) => {
+            host.audit.record({
+                action: entry.action,
+                description: entry.description,
+                level: entry.level ?? 'info',
+                category: AUDIT_CATEGORY[manifest.id] ?? manifest.id,
+                source: 'system',
+                // 0 = le système, la convention d'AuditEvent.
+                uid: entry.userId ?? 0,
+                ip: '',
+                metadata: entry.metadata ?? null
+            });
+        },
+        agents: agentsFacade(gateAgents),
+        keys,
         createTicker: ({ intervalMs, tick }): FeatureService => {
             // Le patron des sept services natifs : setInterval + garde de
             // réentrance + unref, et rien d'autre. Pas de cron, pas de file.

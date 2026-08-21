@@ -31,16 +31,21 @@ export {
 export type { ConfirmRequest } from '@/Components';
 export { useDialogClose, useDialogSubmit, useDismissLayer } from '@/Components/Dialog';
 export { FeatureSettingsButton, useSettingsSections } from '@/Components/FeatureSettings';
+export { DeviceFolderPicker } from '@/Components';
+export { useDevices } from '@/stores/devices';
 /** Les classes de rangées canoniques des écrans de réglages (channelRow, etc.). */
 export { default as settingsStyles } from '@/Components/FeatureSettings/FeatureSettings.module.css';
 
 // ── Les données ────────────────────────────────────────────────────────────
 export { humanizeError, useResource } from '@/api/useResource';
+export { onServerEvent, onSocketOpen } from './events';
+export { formatBytesFr } from '@/format';
 export { invalidate, useResourceVersion, type ExternalResourceKey, type ResourceKey } from '@/stores/invalidation';
 
 // ── Le live ────────────────────────────────────────────────────────────────
 export { useLiveSegment } from '@/live/useLiveSegment';
 export { useLiveOutline, useLiveOutlines } from '@/live/useLiveOutline';
+export type { LiveOutlineProps } from '@/live/useLiveOutline';
 export { useTypers, useTypingSignal } from '@/live/useTyping';
 
 // ── Les droits et l'espace ─────────────────────────────────────────────────

@@ -339,6 +339,19 @@ let flushTimer: ReturnType<typeof setTimeout> | null = null;
 const EXTERNAL_TOPIC_KEYS = new Map<string, ResourceKey[]>();
 
 /**
+ * Les invalidations CROISÉES déclarées par les modules (`alsoInvalidatedBy`) :
+ * le sujet d'une AUTRE feature ravive des clés du module. L'exemple fondateur :
+ * les lignes de partage CloudSync portent le nom de leurs appareils, donc le
+ * sujet `devices` doit raviver la liste des partages.
+ */
+const CROSS_TOPIC_KEYS = new Map<string, ResourceKey[]>();
+
+/** Déclare des invalidations croisées. Réservé à l'enregistrement des modules. */
+export function registerCrossTopicKeys(topic: string, keys: readonly ResourceKey[]): void {
+    CROSS_TOPIC_KEYS.set(topic, [...(CROSS_TOPIC_KEYS.get(topic) ?? []), ...keys]);
+}
+
+/**
  * Déclare les ressources d'un module : son sujet live (= son id) invalide les
  * clés listées. L'équivalent, pour un module, d'une entrée dans `TOPIC_KEYS` ;
  * personne d'autre que la glue générée ne devrait l'appeler. Accepte aussi une
@@ -362,7 +375,12 @@ export function ensureWired(): void {
         if (!push.success) return;
 
         for (const topic of push.data.topics) {
-            for (const key of TOPIC_KEYS[topic] ?? EXTERNAL_TOPIC_KEYS.get(topic) ?? []) pending.add(key);
+            const keys = [
+                ...(TOPIC_KEYS[topic] ?? []),
+                ...(EXTERNAL_TOPIC_KEYS.get(topic) ?? []),
+                ...(CROSS_TOPIC_KEYS.get(topic) ?? [])
+            ];
+            for (const key of keys) pending.add(key);
         }
         if (pending.size === 0) return;
 

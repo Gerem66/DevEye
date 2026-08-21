@@ -23,6 +23,9 @@ import { CloudSyncEngine } from '@/cloudSync/engine';
 import { logger } from '@/logger';
 import { env, isDev } from '@/Utils/Env';
 import { registerWS } from '@/ws/handler';
+import { createModuleServices } from '@/features/_sdk/register';
+import { setSdkHub } from '@/features/_sdk/host';
+import type { FeatureService } from 'deveye-types/sdk/server';
 import { createAuditLog } from '@/Services/AuditLog';
 import { MailSyncService } from '@/Services/MailSyncService';
 import { UptimeMonitor } from '@/Services/UptimeMonitor';
@@ -50,6 +53,8 @@ export interface BuiltApp {
     app: FastifyInstance;
     /** Moteur CloudSync — exposé pour le prune horaire de index.ts. */
     cloudSync: CloudSyncEngine;
+    /** Services des modules installés — démarrés ici, arrêtés par index.ts. */
+    moduleServices: readonly FeatureService[];
     /** Ordonnanceur Uptime — démarré/arrêté par index.ts. */
     uptime: UptimeMonitor;
     integrations: IntegrationSyncService;
@@ -178,6 +183,15 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     const cloudSync = new CloudSyncEngine({ db: deps.db, hub, crypt: deps.crypt, audit, logger });
     await cloudSync.start();
 
+    // Le hub se dépose pour l'assemblage SDK (façade agents des modules),
+    // puis les services des modules installés démarrent ICI, awaités, avant
+    // l'enregistrement des sockets : un module d'infrastructure (bail, clés)
+    // doit être prêt avant la première trame d'agent, exactement comme le
+    // moteur CloudSync natif ci-dessus.
+    setSdkHub(hub);
+    const moduleServices = createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger });
+    for (const svc of moduleServices) await svc.start();
+
     const uptime = new UptimeMonitor({ db: deps.db, crypt: deps.crypt, audit, logger, live });
     const mailSync = new MailSyncService({ db: deps.db, crypt: deps.crypt, logger, live });
     const integrations = new IntegrationSyncService({ db: deps.db, crypt: deps.crypt, logger, live });
@@ -264,5 +278,5 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         app.log.debug({ clientDir }, 'No client build found; static serving disabled (host dev uses Vite)');
     }
 
-    return { app, cloudSync, uptime, mailSync, integrations, databases, audience, sentinel, backups };
+    return { app, cloudSync, uptime, mailSync, integrations, databases, audience, sentinel, backups, moduleServices };
 }

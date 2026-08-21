@@ -6,13 +6,16 @@
 import type { FeatureManifest } from 'deveye-types/sdk';
 import type { FeatureClient } from 'deveye-types/sdk/client';
 
+import { LOCAL_CLIENT_FEATURES } from './features.local';
+import { manifest as manifest0 } from 'deveye-feature-weather';
+import { clientEntry as client0 } from 'deveye-feature-weather/client';
+
 export interface InstalledClientFeature {
     manifest: FeatureManifest;
     client: FeatureClient;
 }
-import { manifest as manifest0 } from 'deveye-feature-weather';
-import { clientEntry as client0 } from 'deveye-feature-weather/client';
 
 export const INSTALLED_CLIENT_FEATURES: readonly InstalledClientFeature[] = [
-    { manifest: { ...manifest0, icon: 'cloud' }, client: client0 }
+    { manifest: { ...manifest0, icon: 'cloud' }, client: client0 },
+    ...LOCAL_CLIENT_FEATURES
 ];

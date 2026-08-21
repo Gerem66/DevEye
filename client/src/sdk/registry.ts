@@ -2,7 +2,7 @@ import { isExternalFeatureId, registerExternalFeature, type ExternalFeatureId } 
 import { validateManifest, type FeatureManifest } from 'deveye-types/sdk';
 import type { FeatureClient } from 'deveye-types/sdk/client';
 
-import { registerFeatureResources, type ResourceKey } from '@/stores/invalidation';
+import { registerCrossTopicKeys, registerFeatureResources, type ResourceKey } from '@/stores/invalidation';
 
 /**
  * Le registre des modules installés, côté client.
@@ -54,6 +54,9 @@ export function registerClientModules(installed: readonly InstalledClientFeature
             mod.manifest.id,
             (mod.manifest.invalidatedByTopic ?? mod.manifest.resources) as ResourceKey[]
         );
+        for (const cross of mod.manifest.alsoInvalidatedBy ?? []) {
+            registerCrossTopicKeys(cross.topic, cross.keys as ResourceKey[]);
+        }
         MODULES.push(mod);
         BY_ID.set(mod.manifest.id, mod);
     }

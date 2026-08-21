@@ -17,13 +17,9 @@ export function formatRate(bytesPerSec: number): string {
     return `${formatBytes(Math.max(0, Math.round(bytesPerSec)))}/s`;
 }
 
-/** Byte size with French units (o / Ko / Mo / Go) — used for DB footprint. */
-export function formatBytesFr(bytes: number): string {
-    if (bytes < 1024) return `${bytes} o`;
-    if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} Ko`;
-    if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} Mo`;
-    return `${(bytes / 1024 ** 3).toFixed(2)} Go`;
-}
+// Promu dans `@/format` (CloudSync et Backup s'en servent aussi) ; ré-exporté
+// ici pour que les écrans de Monitoring ne bougent pas.
+export { formatBytesFr } from '@/format';
 
 export function formatUptime(seconds: number): string {
     const d = Math.floor(seconds / 86400);

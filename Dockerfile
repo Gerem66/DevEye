@@ -29,6 +29,11 @@ RUN --mount=type=cache,target=/root/.npm \
 FROM deps AS build
 WORKDIR /app
 COPY ./ ./DevEye/
+
+# La glue des modules privés doit exister avant le build client (imports
+# statiques) : stubs vides ici, l'image publique n'embarque aucun module privé.
+# Un build privé écrit features.local.json et relance gen:features avant.
+RUN cd DevEye && npx tsx scripts/gen-features.ts --ensure-local
 # Build the web client (Vite -> DevEye/client/build). node_modules come from deps.
 RUN cd DevEye/client && npm run build
 

@@ -14,3 +14,9 @@ node_modules
 # Logs
 /logs/
 *.log
+
+# Modules privés : la config et sa glue ne laissent aucune trace publique.
+features.local.json
+src/features/_generated/installed.local.ts
+client/src/generated/features.local.ts
+client/src/Styles/icons.local.css

@@ -4,9 +4,11 @@
  * (`gen:features --check`) refuse un fichier qui ne correspond plus à la config.
  */
 import type { InstalledFeatureModule } from '@/features/_sdk/register';
+import { LOCAL_MODULES } from './installed.local';
 import { manifest as manifest0 } from 'deveye-feature-weather';
 import { serverEntry as server0 } from 'deveye-feature-weather/server';
 
 export const INSTALLED_MODULES: readonly InstalledFeatureModule[] = [
-    { manifest: { ...manifest0, icon: 'cloud' }, server: server0 }
+    { manifest: { ...manifest0, icon: 'cloud' }, server: server0 },
+    ...LOCAL_MODULES
 ];

@@ -1,6 +1,6 @@
 import { isExternalFeatureId, registerExternalFeature, type ExternalFeatureId } from 'deveye-types';
 import { validateManifest, type FeatureManifest } from 'deveye-types/sdk';
-import type { FeatureServer, FeatureService, SdkQueryable } from 'deveye-types/sdk/server';
+import type { FeatureAgentHooks, FeatureServer, FeatureService, SdkQueryable } from 'deveye-types/sdk/server';
 import { FeatureError } from 'deveye-types/sdk/server';
 
 import type { Database } from '@/db';
@@ -135,12 +135,67 @@ export function moduleMigrationDirs(): { id: string; dir: string }[] {
     return MODULES.flatMap((m) => (m.server.migrationsDir ? [{ id: m.manifest.id, dir: m.server.migrationsDir }] : []));
 }
 
-/** Les services d'arrière-plan des modules, à démarrer avec les natifs. */
+/**
+ * Les services créés, gardés pour les regards transverses : les hooks agent
+ * (`moduleAgentHooks`) et les contrats offerts (`moduleProvider`) se lisent
+ * dessus à la demande, jamais à la construction, pour que l'ordre de boot ne
+ * compte pas.
+ */
+const SERVICES: { manifest: FeatureManifest; service: FeatureService }[] = [];
+
+/** Les services d'arrière-plan des modules, créés une fois, démarrés par le boot. */
 export function createModuleServices(host: ModuleServiceHost): FeatureService[] {
     return MODULES.flatMap((m) => {
         if (!m.server.createService) return [];
-        return [m.server.createService(createServiceDeps(host, m.manifest, m.repoFor(host.db)))];
+        const service = m.server.createService(createServiceDeps(host, m.manifest, m.repoFor(host.db)));
+        SERVICES.push({ manifest: m.manifest, service });
+        return [service];
     });
+}
+
+/**
+ * L'agrégat des hooks agent des modules qui déclarent la capacité 'agents' :
+ * la couche socket agent appelle ceci sans savoir quels modules existent.
+ * Chaque hook est isolé (try/catch) : un module qui trébuche sur une trame ne
+ * prive pas les autres, ni la couche socket.
+ */
+export function moduleAgentHooks(): Required<FeatureAgentHooks> {
+    const targets = (): FeatureAgentHooks[] =>
+        SERVICES.filter((s) => (s.manifest.nativeCapabilities ?? []).includes('agents')).map(
+            (s) => s.service.agentHooks ?? {}
+        );
+    const each = (run: (hooks: FeatureAgentHooks) => void | Promise<void>): void => {
+        for (const hooks of targets()) {
+            try {
+                const out = run(hooks);
+                if (out instanceof Promise) out.catch(() => undefined);
+            } catch {
+                // Isolé exprès : la trame est perdue pour ce module, pas pour le socket.
+            }
+        }
+    };
+    return {
+        onAgentConnect: (deviceId) => each((h) => h.onAgentConnect?.(deviceId)),
+        onAgentOffline: (deviceId) => each((h) => h.onAgentOffline?.(deviceId)),
+        onSyncChanged: (payload) => each((h) => h.onSyncChanged?.(payload)),
+        onSyncIndex: (deviceId, payload) => each((h) => h.onSyncIndex?.(deviceId, payload)),
+        onSyncChunk: (deviceId, payload) => each((h) => h.onSyncChunk?.(deviceId, payload)),
+        onSyncAck: (deviceId, payload) => each((h) => h.onSyncAck?.(deviceId, payload)),
+        onSyncOpResult: (deviceId, payload) => each((h) => h.onSyncOpResult?.(deviceId, payload))
+    };
+}
+
+/**
+ * Le contrat nommé qu'un module offre à l'app (voir deveye-types/sdk/providers) :
+ * recherche à l'appel, `undefined` quand le module est absent, et c'est à
+ * l'appelant de dégrader proprement.
+ */
+export function moduleProvider<T>(key: string): T | undefined {
+    for (const s of SERVICES) {
+        const value = s.service.providers?.[key];
+        if (value !== undefined) return value as T;
+    }
+    return undefined;
 }
 
 /**

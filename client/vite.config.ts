@@ -76,6 +76,12 @@ export default defineConfig(({ command }) => {
         },
         server: {
             port: 5173,
+            fs: {
+                // La glue locale des modules privés importe des checkouts
+                // frères (../DevEye-CloudSync/...) : le dev-serve doit pouvoir
+                // les lire. Sans dossier frère, la permission est inerte.
+                allow: [path.resolve(__dirname, '..', '..')]
+            },
             open: true,
             // Same-origin dev: proxy API + WebSocket to the Fastify server so the
             // browser only ever talks to localhost:5173 (no CORS, cookies just work).

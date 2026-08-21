@@ -19,12 +19,14 @@
     "lint": "eslint index.ts src features scripts",
     "lint:fix": "eslint index.ts src --fix",
     "typecheck": "tsc --noEmit",
-    "ci": "npm run lint && npm run typecheck && npm run ci:rules && npm run gen:features -- --check",
+    "ci": "npm run gen:features:local && npm run lint && npm run typecheck && npm run ci:rules && npm run gen:features -- --check",
     "ci:rules": "tsx scripts/check-rules.ts",
     "ci:agent": "cd agent; /usr/bin/cargo fmt --check && cargo clippy --all-targets -- -D warnings",
     "clean": "rm -rf node_modules client/node_modules client/build package-lock.json",
     "test": "tsx --test \"src/**/*.test.ts\"",
-    "gen:features": "tsx scripts/gen-features.ts"
+    "gen:features": "tsx scripts/gen-features.ts",
+    "gen:features:local": "tsx scripts/gen-features.ts --ensure-local",
+    "prestart": "npm run gen:features:local"
   },
   "author": "Gerem",
   "license": "ISC",

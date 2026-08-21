@@ -1,4 +1,5 @@
-import type { SdkFeatureContext } from 'deveye-types/sdk/server';
+import type { SdkFeatureContext, SdkSocketTransport } from 'deveye-types/sdk/server';
+import { FeatureError } from 'deveye-types/sdk/server';
 import type { ExtraPermissionSpec, FeatureManifest } from 'deveye-types/sdk';
 
 import type { FeatureContext } from '@/features/_define';
@@ -50,9 +51,11 @@ export function createSdkContext(ctx: FeatureContext, manifest: FeatureManifest,
             cipher: ctx.secure.open,
             workspaceId: ctx.workspaceId,
             ownerUserId: ctx.workspace.ownerUserId,
+            isAdmin: ctx.isAdmin,
             manifest,
             logger: ctx.logger
         }),
+        transport: socketTransport(ctx, manifest),
         audit: (entry) =>
             ctx.audit({
                 action: entry.action,
@@ -62,5 +65,25 @@ export function createSdkContext(ctx: FeatureContext, manifest: FeatureManifest,
             }),
         logger: ctx.logger,
         requestId: ctx.requestId
+    };
+}
+
+/**
+ * Le transport du socket appelant : le `monitor` natif, réduit à sa part sync
+ * et gardé par la capacité 'agents'. Hors socket (tests), chaque appel lève.
+ */
+function socketTransport(ctx: FeatureContext, manifest: FeatureManifest): SdkSocketTransport {
+    const monitor = (): NonNullable<FeatureContext['monitor']> => {
+        if (!(manifest.nativeCapabilities ?? []).includes('agents')) {
+            throw new FeatureError('forbidden', "Declare 'agents' in the manifest's nativeCapabilities");
+        }
+        if (!ctx.monitor) throw new FeatureError('internal', 'Transport indisponible hors socket');
+        return ctx.monitor;
+    };
+    return {
+        subscribeSync: (shareIds) => monitor().subscribeSync(shareIds),
+        unsubscribeSync: (shareIds) => monitor().unsubscribeSync(shareIds),
+        sendSyncChunk: (payload) => monitor().sendSyncChunk(payload),
+        syncChunkBuffered: () => monitor().syncChunkBuffered()
     };
 }
