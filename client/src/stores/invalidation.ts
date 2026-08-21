@@ -1,4 +1,4 @@
-import { LIVE_CHANGED_EVENT, liveChangedPushSchema, type ExternalFeatureId, type LiveTopic } from 'deveye-types';
+import { LIVE_CHANGED_EVENT, liveChangedPushSchema, type FeatureId, type LiveTopic } from 'deveye-types';
 import { useCallback, useSyncExternalStore } from 'react';
 
 import { ws } from '@/api/ws';
@@ -168,7 +168,6 @@ const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
      * la pastille de Monitoring écoutent, et celle qui doit bouger le plus vite.
      */
     sentinel: ['sentinel.count', 'sentinel.overview', 'sentinel.findings', 'sentinel.baseline'],
-    weather: ['weather.list'],
     // Une seule clé : les résultats de sonde ne sont pas une ressource partagée
     // (ils se relisent à la demande, depuis le cache du serveur). Seul
     // l'historique est un état d'espace, donc seul lui se diffuse.
@@ -337,17 +336,15 @@ let pending = new Set<ResourceKey>();
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Ce que le sujet d'un module externe invalide, enregistré par la glue générée. */
-const EXTERNAL_TOPIC_KEYS = new Map<string, ExternalResourceKey[]>();
+const EXTERNAL_TOPIC_KEYS = new Map<string, ResourceKey[]>();
 
 /**
- * Déclare les ressources d'un module externe : son sujet live (= son id)
- * invalide les clés listées. L'équivalent, pour un module, d'une entrée dans
- * `TOPIC_KEYS` ; personne d'autre que la glue générée ne devrait l'appeler.
+ * Déclare les ressources d'un module : son sujet live (= son id) invalide les
+ * clés listées. L'équivalent, pour un module, d'une entrée dans `TOPIC_KEYS` ;
+ * personne d'autre que la glue générée ne devrait l'appeler. Accepte aussi une
+ * native rapatriée (Météo), dont l'entrée quitte alors la table.
  */
-export function registerFeatureResources(
-    featureId: ExternalFeatureId,
-    invalidatedByTopic: readonly ExternalResourceKey[]
-): void {
+export function registerFeatureResources(featureId: FeatureId, invalidatedByTopic: readonly ResourceKey[]): void {
     EXTERNAL_TOPIC_KEYS.set(featureId, [...invalidatedByTopic]);
 }
 

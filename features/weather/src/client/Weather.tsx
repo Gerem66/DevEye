@@ -1,16 +1,24 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, Reorder, useDragControls } from 'framer-motion';
-import { ws } from '@/api/ws';
-import { Dialog, TextInput } from '@/Components';
-import Button from '@/Components/Button';
-import { FeatureSettingsButton } from '@/Components/FeatureSettings';
+import {
+    Button,
+    Dialog,
+    featureApi,
+    FeatureSettingsButton,
+    TextInput,
+    useLiveOutline,
+    useLiveSegment
+} from 'deveye-sdk-client';
+// Import « privilège de native » : le magasin partagé avec le widget météo de
+// la topbar, qui reste une surface de l'app. Un module externe n'aurait que
+// son propre état.
 import { useWeather, syncWeatherLocations } from '@/stores/weather';
 import { wmoIcon } from './wmoIcon';
 import type { WeatherLocation, WeatherProvider, WeatherReport } from 'deveye-types';
-import type { FeatureProps } from '../types';
+import { manifest } from '../manifest';
 import styles from './Weather.module.css';
-import { useLiveOutline } from '@/live/useLiveOutline';
-import { useLiveSegment } from '@/live/useLiveSegment';
+
+const api = featureApi(manifest);
 
 const REFRESH_MS = 10 * 60 * 1000;
 
@@ -351,7 +359,7 @@ function LocationTab({
     );
 }
 
-export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
+export default function Weather() {
     const [locations, setLocations] = useState<WeatherLocation[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [report, setReport] = useState<WeatherReport | null>(null);
@@ -373,7 +381,7 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
     const loadReport = useCallback(async (id: string, opts?: { silent?: boolean }) => {
         if (!opts?.silent) setLoadingReport(true);
         try {
-            const res = await ws.send('weather.get', { id });
+            const res = await api.send('weather.get', { id });
             setReport(res.report);
         } catch {
             if (!opts?.silent) setReport(null);
@@ -393,7 +401,7 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
         let cancelled = false;
         void (async () => {
             try {
-                const res = await ws.send('weather.list', {});
+                const res = await api.send('weather.list', {});
                 if (cancelled) return;
                 setLocations(res.locations);
                 persistedOrder.current = res.locations.map((l) => l.id).join(',');
@@ -441,7 +449,7 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
         setAdding(true);
         setAddError(null);
         try {
-            const res = await ws.send('weather.add', {
+            const res = await api.send('weather.add', {
                 query: searchInput.trim(),
                 format: 'current',
                 days: 7,
@@ -460,7 +468,7 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
 
     const handleRemove = async (id: string) => {
         try {
-            const res = await ws.send('weather.remove', { id });
+            const res = await api.send('weather.remove', { id });
             const next = locations.filter((l) => l.id !== res.id);
             applyLocations(next);
             if (selectedId === id) {
@@ -478,7 +486,7 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
         // Optimistic flag flip; the server response reconciles the full list.
         setLocations((prev) => prev.map((l) => ({ ...l, isPrimary: l.id === id })));
         try {
-            const res = await ws.send('weather.setPrimary', { id });
+            const res = await api.send('weather.setPrimary', { id });
             applyLocations(res.locations);
         } catch {
             // ignore — next list refresh reconciles
@@ -488,7 +496,7 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
     // Save provider/API-key changes from the settings popup. `apiKey` undefined
     // leaves the key untouched; "" clears it; a string sets it.
     const handleSaveSettings = async (id: string, patch: { provider: WeatherProvider; apiKey?: string }) => {
-        const res = await ws.send('weather.update', { id, ...patch });
+        const res = await api.send('weather.update', { id, ...patch });
         applyLocations(locations.map((l) => (l.id === res.location.id ? res.location : l)));
         if (selectedId === id) await loadReport(id);
     };
@@ -499,7 +507,7 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
         if (order.join(',') === persistedOrder.current) return;
         persistedOrder.current = order.join(',');
         try {
-            const res = await ws.send('weather.reorder', { ids: order });
+            const res = await api.send('weather.reorder', { ids: order });
             applyLocations(res.locations);
         } catch {
             // ignore

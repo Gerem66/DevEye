@@ -2,7 +2,6 @@ import type { ComponentType } from 'react';
 import type { HomeFeatureId, WorkspaceKind } from 'deveye-types';
 
 import { MonitoringWidget } from '@/Features/Monitoring';
-import { WeatherWidget } from '@/Features/Weather';
 import { NotesWidget } from '@/Features/Notes/NotesWidget';
 import { PasswordWidget } from '@/Features/Password/PasswordWidget';
 import { CloudSyncWidget } from '@/Features/CloudSync';
@@ -19,7 +18,6 @@ import { AudienceWidget } from '@/Features/Audience/AudienceWidget';
 import { OsintWidget } from '@/Features/Osint/OsintWidget';
 
 import Monitoring from '@/Features/Monitoring';
-import Weather from '@/Features/Weather';
 import FeaturePassword from '@/Features/Password';
 import FeatureNotes from '@/Features/Notes';
 import CloudSync from '@/Features/CloudSync';
@@ -136,17 +134,6 @@ const NATIVE_CATALOG: FeatureCatalogEntry[] = [
         cacheDurationMinutes: 5,
         preload: true,
         adminOnly: true
-    },
-    {
-        id: 'weather',
-        title: 'Météo',
-        icon: 'cloud',
-        description: 'Conditions et prévisions des villes que vous suivez.',
-        category: 'daily',
-        WidgetContent: WeatherWidget,
-        FullComponent: Weather,
-        cacheDurationMinutes: 60,
-        preload: true
     },
     {
         id: 'password',

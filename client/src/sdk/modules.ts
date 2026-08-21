@@ -1,9 +1,9 @@
-import { registerExternalFeature, type ExternalFeatureId } from 'deveye-types';
+import { isExternalFeatureId, registerExternalFeature, type ExternalFeatureId } from 'deveye-types';
 import { validateManifest, type FeatureManifest } from 'deveye-types/sdk';
 import type { FeatureClient } from 'deveye-types/sdk/client';
 
 import { INSTALLED_CLIENT_FEATURES, type InstalledClientFeature } from '@/generated/features';
-import { registerFeatureResources, type ExternalResourceKey } from '@/stores/invalidation';
+import { registerFeatureResources, type ResourceKey } from '@/stores/invalidation';
 
 /**
  * Le pendant client de `src/features/_sdk/register.ts` du serveur : au
@@ -16,20 +16,24 @@ const BY_ID = new Map<string, InstalledClientFeature>();
 
 for (const mod of INSTALLED_CLIENT_FEATURES) {
     validateManifest(mod.manifest);
-    registerExternalFeature({
-        id: mod.manifest.id as ExternalFeatureId,
-        label: mod.manifest.label,
-        description: mod.manifest.description,
-        icon: mod.manifest.icon,
-        notifies: mod.manifest.notifies,
-        hasItems: mod.manifest.hasItems,
-        itemNoun: mod.manifest.itemNoun,
-        sources: mod.manifest.sources,
-        shareTier: mod.manifest.shareTier
-    });
+    // Une native rapatriée (Météo) garde son descripteur dans le registre
+    // publié : seuls les ids externes s'enregistrent ici.
+    if (isExternalFeatureId(mod.manifest.id)) {
+        registerExternalFeature({
+            id: mod.manifest.id as ExternalFeatureId,
+            label: mod.manifest.label,
+            description: mod.manifest.description,
+            icon: mod.manifest.icon,
+            notifies: mod.manifest.notifies,
+            hasItems: mod.manifest.hasItems,
+            itemNoun: mod.manifest.itemNoun,
+            sources: mod.manifest.sources,
+            shareTier: mod.manifest.shareTier
+        });
+    }
     registerFeatureResources(
-        mod.manifest.id as ExternalFeatureId,
-        (mod.manifest.invalidatedByTopic ?? mod.manifest.resources) as ExternalResourceKey[]
+        mod.manifest.id,
+        (mod.manifest.invalidatedByTopic ?? mod.manifest.resources) as ResourceKey[]
     );
     BY_ID.set(mod.manifest.id, mod);
 }

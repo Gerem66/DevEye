@@ -35,7 +35,6 @@ import { userSetAvatarFeature } from './user/setAvatar';
 import { userSetColorFeature } from './user/setColor';
 import { userSetSettingFeature } from './user/setSetting';
 import { userSetThemeFeature } from './user/setTheme';
-import { weatherFeatures } from './weather';
 import { workspaceActivateFeature, workspaceSetFavoriteFeature } from './workspace/activate';
 import {
     workspaceAddMemberFeature,
@@ -105,7 +104,6 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...metricsFeatures,
     ...twoFactorFeatures,
     ...secrecyFeatures,
-    ...weatherFeatures,
     ...osintFeatures,
     ...sentinelFeatures,
     ...uptimeFeatures,

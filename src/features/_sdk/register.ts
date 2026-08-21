@@ -54,26 +54,27 @@ export function registerModules(installed: readonly InstalledFeatureModule[]): v
     for (const mod of installed) {
         const { manifest } = mod;
         validateManifest(manifest);
-        if (!isExternalFeatureId(manifest.id)) {
-            throw new Error(`Module « ${manifest.id} » : une feature native ne s'installe pas par la config`);
-        }
         if (BY_ID.has(manifest.id)) {
             throw new Error(`Module « ${manifest.id} » : déclaré deux fois dans features.config.json`);
         }
         if ((manifest.nativeCapabilities ?? []).includes('notify') && !manifest.notifies) {
             throw new Error(`Module « ${manifest.id} » : la capacité 'notify' exige notifies: true`);
         }
-        registerExternalFeature({
-            id: manifest.id as ExternalFeatureId,
-            label: manifest.label,
-            description: manifest.description,
-            icon: manifest.icon,
-            notifies: manifest.notifies,
-            hasItems: manifest.hasItems,
-            itemNoun: manifest.itemNoun,
-            sources: manifest.sources,
-            shareTier: manifest.shareTier
-        });
+        // Une native rapatriée (Météo) garde son descripteur dans le registre
+        // publié : seuls les ids externes s'enregistrent ici.
+        if (isExternalFeatureId(manifest.id)) {
+            registerExternalFeature({
+                id: manifest.id as ExternalFeatureId,
+                label: manifest.label,
+                description: manifest.description,
+                icon: manifest.icon,
+                notifies: manifest.notifies,
+                hasItems: manifest.hasItems,
+                itemNoun: manifest.itemNoun,
+                sources: manifest.sources,
+                shareTier: manifest.shareTier
+            });
+        }
         let repo: { value: unknown } | null = null;
         const registered: RegisteredModule = {
             ...mod,

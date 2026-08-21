@@ -30,6 +30,7 @@ export {
 } from '@/Components';
 export type { ConfirmRequest } from '@/Components';
 export { useDialogClose, useDialogSubmit, useDismissLayer } from '@/Components/Dialog';
+export { FeatureSettingsButton, useSettingsSections } from '@/Components/FeatureSettings';
 /** Les classes de rangées canoniques des écrans de réglages (channelRow, etc.). */
 export { default as settingsStyles } from '@/Components/FeatureSettings/FeatureSettings.module.css';
 

@@ -1,4 +1,8 @@
 {
     "$comment": "Les modules de features installés, dans l'ordre. Chaque entrée doit aussi être résoluble depuis node_modules (dépendance ou workspace features/*). Après édition : npm run gen:features.",
-    "features": []
+    "features": [
+        {
+            "package": "deveye-feature-weather"
+        }
+    ]
 }

@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { weatherProviderSchema, type WeatherProvider } from 'deveye-types';
 
-import { ws } from '@/api/ws';
-import Button from '@/Components/Button';
-import TextInput from '@/Components/TextInput';
-import { useWorkspacePermissions } from '@/stores/workspace';
+import { Button, featureApi, settingsStyles as shell, TextInput, useWorkspacePermissions } from 'deveye-sdk-client';
 
-import shell from '@/Components/FeatureSettings/FeatureSettings.module.css';
+import { manifest } from '../manifest';
+
+const api = featureApi(manifest);
 
 /**
  * Les clés d'API des fournisseurs météo — le panneau Sources de la Météo.
@@ -36,7 +35,9 @@ const PROVIDER_META: Record<WeatherProvider, { label: string; needsKey: boolean;
 };
 
 export default function WeatherKeysPanel() {
-    const canWrite = useWorkspacePermissions().canFeature('weather', 'write');
+    // Depuis le rapatriement, poser une clé exige la permission déclarée
+    // `manageKeys` (voir le manifest), pas seulement l'écriture.
+    const canManage = useWorkspacePermissions().canExtra('weather', 'manageKeys');
     const [held, setHeld] = useState<Record<string, boolean>>({});
     const [drafts, setDrafts] = useState<Record<string, string>>({});
     const [status, setStatus] = useState<string | null>(null);
@@ -44,7 +45,7 @@ export default function WeatherKeysPanel() {
 
     const load = useCallback(async () => {
         try {
-            const res = await ws.send('weather.keyList', {});
+            const res = await api.send('weather.keyList', {});
             setHeld(Object.fromEntries(res.providers.map((p) => [p.provider, p.hasKey])));
         } catch {
             setStatus('Les clés n’ont pas pu être lues.');
@@ -59,7 +60,7 @@ export default function WeatherKeysPanel() {
         setSaving(provider);
         setStatus(null);
         try {
-            const res = await ws.send('weather.setKey', { provider, key });
+            const res = await api.send('weather.setKey', { provider, key });
             setHeld((prev) => ({ ...prev, [provider]: res.hasKey }));
             setDrafts((prev) => ({ ...prev, [provider]: '' }));
         } catch {
@@ -94,7 +95,7 @@ export default function WeatherKeysPanel() {
                 })}
             </div>
 
-            {canWrite ? (
+            {canManage ? (
                 weatherProviderSchema.options
                     .filter((p) => PROVIDER_META[p].needsKey)
                     .map((provider) => (
@@ -124,7 +125,8 @@ export default function WeatherKeysPanel() {
                     ))
             ) : (
                 <p className={shell.sectionHint}>
-                    Votre rôle ne permet pas de modifier ces clés : elles relèvent de l’écriture sur la Météo.
+                    Votre rôle ne permet pas de modifier ces clés : leur gestion se confie dans les permissions de la
+                    Météo.
                 </p>
             )}
 

@@ -57,7 +57,6 @@ import { twoFactorRepo, type TwoFactorRepo } from './repos/twoFactor';
 import { uptimeHistoryRepo, uptimeServicesRepo, type UptimeHistoryRepo, type UptimeServicesRepo } from './repos/uptime';
 import { userSecretKeysRepo, type UserSecretKeysRepo } from './repos/userSecretKeys';
 import { usersRepo, type UsersRepo } from './repos/users';
-import { weatherRepo, type WeatherRepo } from './repos/weather';
 import {
     workspaceMembersRepo,
     workspacesRepo,
@@ -133,7 +132,6 @@ export interface Database {
     sentinelAllow: AllowRepo;
     twoFactor: TwoFactorRepo;
     userSecretKeys: UserSecretKeysRepo;
-    weather: WeatherRepo;
     /** Le magasin clé-valeur des modules de features (SDK). */
     featureKv: FeatureKvRepo;
     osint: OsintRepo;
@@ -196,7 +194,6 @@ export function createDatabase(q: Queryable): Database {
         sentinelAllow: allowRepo(q),
         twoFactor: twoFactorRepo(q),
         userSecretKeys: userSecretKeysRepo(q),
-        weather: weatherRepo(q),
         featureKv: featureKvRepo(q),
         osint: osintRepo(q),
         uptimeServices: uptimeServicesRepo(q),

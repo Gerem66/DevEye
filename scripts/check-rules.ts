@@ -371,13 +371,7 @@ expect(
 expect(
     'un rapport ne rejoue AUCUNE règle d’instant (sinon il les résoudrait toutes)',
     evaluateReport(ctx({ snapshot: null, report: posture })),
-    [
-        'net.mining_pool',
-        'port.exposed',
-        'posture.firewall_off',
-        'posture.ssh_root_login',
-        'posture.ssh_password_auth'
-    ]
+    ['net.mining_pool', 'port.exposed', 'posture.firewall_off', 'posture.ssh_root_login', 'posture.ssh_password_auth']
 );
 
 console.log('\nRègles de persistance');

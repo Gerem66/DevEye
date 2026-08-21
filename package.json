@@ -16,7 +16,7 @@
     "start": "tsx index.ts",
     "build": "npm run build:client",
     "build:client": "npm --prefix client run build",
-    "lint": "eslint index.ts src",
+    "lint": "eslint index.ts src features scripts",
     "lint:fix": "eslint index.ts src --fix",
     "typecheck": "tsc --noEmit",
     "ci": "npm run lint && npm run typecheck && npm run ci:rules && npm run gen:features -- --check",

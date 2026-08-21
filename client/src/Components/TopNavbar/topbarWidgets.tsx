@@ -6,7 +6,7 @@ import { useUptimeCount } from '@/stores/uptime';
 import { useWeather } from '@/stores/weather';
 import { useHomeLayout } from '@/stores/homeLayout';
 import { useActiveWorkspace } from '@/stores/workspace';
-import { wmoIcon } from '@/Features/Weather/wmoIcon';
+import { wmoIcon } from 'deveye-feature-weather/client';
 import { SecrecyTimer } from './SecrecyTimer';
 import { LivePresence } from './LivePresence';
 import styles from './TopNavbar.module.css';
