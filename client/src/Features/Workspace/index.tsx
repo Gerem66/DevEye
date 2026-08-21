@@ -307,7 +307,18 @@ export default function FeatureWorkspace() {
                                                 d’administration · {r.memberCount} membre(s)
                                             </span>
                                         </div>
-                                        {!r.isDefault && (
+                                        {r.isDefault ? (
+                                            // L'étoile ne disparaît pas, elle se remplit : l'état
+                                            // s'affiche là où le geste se fait, et la colonne
+                                            // d'actions reste alignée d'une ligne à l'autre.
+                                            <span
+                                                className={styles.defaultStar}
+                                                title='Rôle par défaut : attribué d’office aux nouveaux membres'
+                                                aria-label='Rôle par défaut'
+                                            >
+                                                <span className='icon icon-star' />
+                                            </span>
+                                        ) : (
                                             <button
                                                 type='button'
                                                 className={styles.actionBtn}

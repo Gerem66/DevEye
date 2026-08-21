@@ -168,6 +168,19 @@
     color: var(--danger);
 }
 
+/* L'étoile pleine du rôle par défaut : un état, pas un geste. Même gabarit que
+   les boutons d'action voisins pour que la colonne reste alignée, mais sans
+   bordure ni survol, ce qui la lit comme un badge et non comme un bouton. */
+.defaultStar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    color: var(--accent);
+}
+
 .empty {
     padding: var(--space-lg) 0;
     text-align: center;
@@ -333,6 +346,24 @@
    pour ne pas coller la rangée du nom, et en dessous, avant le premier volet. */
 .dialogTabs {
     margin: var(--space-md) 0;
+    flex-shrink: 0;
+}
+
+/* Le volet actif du formulaire de rôle, seule zone qui défile (mode `fill` du
+   dialogue : nom, onglets et pied restent en place). `min-height: 0` est ce qui
+   l'autorise à rétrécir quand l'écran manque ; sans lui, le minimum implicite
+   des éléments flex vaut leur contenu et rien ne défile jamais. */
+.roleVolet {
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* Le cadre dont framer anime la hauteur d'un volet à l'autre : il découpe le
+   contenu le temps du mouvement, et au repos sa hauteur est exactement celle
+   du volet, donc il ne rogne rien. */
+.voletClip {
+    overflow: hidden;
 }
 
 /*

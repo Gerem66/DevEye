@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { FEATURE_REGISTRY, WORKSPACE_CAPABILITIES } from 'deveye-types';
 import type { FeatureAccess, WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole } from 'deveye-types';
 
@@ -52,6 +53,12 @@ const ACCESS_OPTIONS = [
 /** Les deux volets du formulaire. */
 type RoleTab = 'space' | 'features';
 
+/**
+ * La courbe maison du mouvement de hauteur : départ franc, arrivée longue,
+ * la même que le repli des sections de l'accueil.
+ */
+const VOLET_EASE = [0.32, 0.72, 0, 1] as const;
+
 export interface RoleDraft {
     name: string;
     color: string;
@@ -74,6 +81,36 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
     const [capabilities, setCapabilities] = useState<WorkspaceCapability[]>([]);
     const [features, setFeatures] = useState<Record<string, FeatureAccess | 'none'>>({});
     const [tab, setTab] = useState<RoleTab>('space');
+
+    const reduced = useReducedMotion() === true;
+    /** La zone qui défile entre les onglets et le pied, seule à défiler. */
+    const voletRef = useRef<HTMLDivElement>(null);
+    /** Le contenu du volet actif, mesuré pour animer la hauteur du dialogue. */
+    const [measureEl, setMeasureEl] = useState<HTMLDivElement | null>(null);
+    const [voletHeight, setVoletHeight] = useState<number | null>(null);
+
+    /**
+     * La hauteur suit le volet actif, **mesurée** plutôt que devinée : framer ne
+     * sait pas interpoler deux `auto`, il lui faut un nombre à viser. La mesure
+     * vit sur un ref-callback : le contenu du dialogue n'existe que lorsqu'il
+     * est ouvert, un effet posé au montage du composant ne trouverait rien.
+     */
+    useLayoutEffect(() => {
+        if (!measureEl) return;
+        const ro = new ResizeObserver(() => setVoletHeight(measureEl.offsetHeight));
+        ro.observe(measureEl);
+        setVoletHeight(measureEl.offsetHeight);
+        return () => {
+            ro.disconnect();
+            setVoletHeight(null);
+        };
+    }, [measureEl]);
+
+    // Changer de volet repart du haut : conserver le défilement de l'autre
+    // volet montrerait le nouveau contenu à une position sans rapport.
+    useEffect(() => {
+        voletRef.current?.scrollTo({ top: 0 });
+    }, [tab]);
 
     useEffect(() => {
         if (!open) return;
@@ -112,6 +149,7 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
             onClose={onClose}
             title={role ? `Modifier « ${role.name} »` : 'Nouveau rôle'}
             width={620}
+            fill
             onSubmit={submit}
             footer={
                 <>
@@ -155,47 +193,74 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                 />
             </div>
 
-            {tab === 'space' && (
-                <div className={`${styles.card} ${styles.rowList}`}>
-                    {WORKSPACE_CAPABILITIES.map((c) => {
-                        const on = capabilities.includes(c);
-                        return (
-                            <Checkbox key={c} className={styles.checkRow} checked={on} onChange={() => toggle(c)}>
-                                {CAPABILITY_LABELS[c]}
-                            </Checkbox>
-                        );
-                    })}
-                </div>
-            )}
-
-            {/* Toutes listées, y compris les non accordées : « Aucun » est un
-                choix explicite, pas une absence de ligne. Les exceptions par
-                élément (masquer une base à un rôle, un service en lecture
-                seule) se règlent sur l'élément lui-même, dans ses réglages. */}
-            {tab === 'features' && (
-                <div className={`${styles.card} ${styles.rowList}`}>
-                    {FEATURE_REGISTRY.map((f) => (
-                        <div key={f.id} className={styles.grantRow}>
-                            <span className={styles.grantLabel}>
-                                <span className={styles.grantTitle}>
-                                    <span className={`icon icon-${f.icon}`} aria-hidden='true' />
-                                    {f.label}
-                                </span>
-                                {/* Ce que le droit recouvre, du registre : la ligne
-                                    « Déploiement » ne dit pas seule que `write`
-                                    permet une mise en production. */}
-                                <span className={styles.grantHint}>{f.description}</span>
-                            </span>
-                            <SegmentedControl
-                                aria-label={`Accès à ${f.label}`}
-                                value={features[f.id] ?? 'none'}
-                                options={ACCESS_OPTIONS}
-                                onChange={(v) => setFeatures((prev) => ({ ...prev, [f.id]: v }))}
-                            />
-                        </div>
-                    ))}
-                </div>
-            )}
+            {/* Le volet actif est la SEULE zone qui défile : le nom, les onglets
+                et le pied restent en place (mode `fill` du dialogue). Le clip
+                anime la hauteur d'un volet à l'autre, mesure à l'appui, et le
+                contenu entrant se fond en place : la popup se redimensionne au
+                lieu de sauter. */}
+            <div className={styles.roleVolet} ref={voletRef}>
+                <motion.div
+                    className={styles.voletClip}
+                    initial={false}
+                    animate={{ height: voletHeight ?? 'auto' }}
+                    transition={reduced ? { duration: 0 } : { duration: 0.3, ease: VOLET_EASE }}
+                >
+                    <div ref={setMeasureEl}>
+                        <motion.div
+                            key={tab}
+                            initial={reduced ? false : { opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ duration: 0.18 }}
+                        >
+                            {tab === 'space' ? (
+                                <div className={`${styles.card} ${styles.rowList}`}>
+                                    {WORKSPACE_CAPABILITIES.map((c) => {
+                                        const on = capabilities.includes(c);
+                                        return (
+                                            <Checkbox
+                                                key={c}
+                                                className={styles.checkRow}
+                                                checked={on}
+                                                onChange={() => toggle(c)}
+                                            >
+                                                {CAPABILITY_LABELS[c]}
+                                            </Checkbox>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                /* Toutes listées, y compris les non accordées :
+                                   « Aucun » est un choix explicite, pas une absence
+                                   de ligne. Les exceptions par élément (masquer une
+                                   base à un rôle, un service en lecture seule) se
+                                   règlent sur l'élément lui-même, dans ses réglages. */
+                                <div className={`${styles.card} ${styles.rowList}`}>
+                                    {FEATURE_REGISTRY.map((f) => (
+                                        <div key={f.id} className={styles.grantRow}>
+                                            <span className={styles.grantLabel}>
+                                                <span className={styles.grantTitle}>
+                                                    <span className={`icon icon-${f.icon}`} aria-hidden='true' />
+                                                    {f.label}
+                                                </span>
+                                                {/* Ce que le droit recouvre, du registre : la ligne
+                                                    « Déploiement » ne dit pas seule que `write`
+                                                    permet une mise en production. */}
+                                                <span className={styles.grantHint}>{f.description}</span>
+                                            </span>
+                                            <SegmentedControl
+                                                aria-label={`Accès à ${f.label}`}
+                                                value={features[f.id] ?? 'none'}
+                                                options={ACCESS_OPTIONS}
+                                                onChange={(v) => setFeatures((prev) => ({ ...prev, [f.id]: v }))}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </motion.div>
+                    </div>
+                </motion.div>
+            </div>
         </Dialog>
     );
 }
