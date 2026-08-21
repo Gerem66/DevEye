@@ -159,7 +159,6 @@ export function DestinationsSection() {
                                         : ''}
                                     {destination.kind === 's3' && destination.bucket ? ` · ${destination.bucket}` : ''}
                                     {destination.path ? ` · ${destination.path}` : ''}
-                                    {destination.encrypt ? ' · chiffrée' : ''}
                                 </span>
                                 <span className={shell.channelMeta}>
                                     {destination.status === 'unknown'

@@ -109,7 +109,6 @@ export async function toDestination(
         // fuiter ni par une capture d'écran ni par un journal.
         hasSecret: row.secret_enc.length > 0,
         pathStyle: row.path_style === 1,
-        encrypt: row.encrypt === 1,
         status: row.status as BackupDestinationStatus,
         lastError: stored.lastError ?? null,
         checkedAt: row.checked_at,
@@ -134,6 +133,7 @@ export async function toJob(ctx: FeatureContext, row: BackupJobWithStateRow, sha
         id: row.id,
         name: job.name ?? 'Sauvegarde',
         enabled: row.enabled === 1,
+        encryption: row.encryption === 'none' ? 'none' : 'server',
         destinationId: row.destination_id,
         destinationName: destination.name ?? 'Destination',
         destinationKind: row.destination_kind as BackupDestinationKind,

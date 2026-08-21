@@ -65,7 +65,7 @@ export function AccountPanel({
     onShowList,
     onDeleteAccount,
     onRefreshFolder,
-    refreshingFolder,
+    refreshingFolder
 }: AccountPanelProps) {
     const selected = accounts.find((a) => a.id === selectedId) ?? null;
 

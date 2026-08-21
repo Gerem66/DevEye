@@ -147,7 +147,11 @@ export function JobDialog({ open, job, destinations, onClose, onSaved, onRemoved
                 scheduleHour: hour,
                 scheduleWeekday: weekday,
                 scheduleDay: day,
-                keepLast
+                keepLast,
+                // La forme des archives se règle dans l'onglet Chiffrement des
+                // réglages du travail : le formulaire préserve l'existante, et
+                // un travail naît scellé (le défaut sûr).
+                encryption: job?.encryption ?? ('server' as const)
             };
             if (job) await ws.send('backup.jobUpdate', { jobId: job.id, ...body });
             else await ws.send('backup.jobAdd', body);
@@ -228,7 +232,6 @@ export function JobDialog({ open, job, destinations, onClose, onSaved, onRemoved
                             {destinations.map((d) => (
                                 <option key={d.id} value={d.id}>
                                     {d.name} — {DESTINATION_LABELS[d.kind]}
-                                    {d.encrypt ? ' (chiffrée)' : ''}
                                 </option>
                             ))}
                         </SelectInput>

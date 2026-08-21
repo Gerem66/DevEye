@@ -48,7 +48,6 @@ export function DestinationDialog({ open, destination, onClose, onSaved }: Desti
     const [accessKeyId, setAccessKeyId] = useState('');
     const [secret, setSecret] = useState('');
     const [pathStyle, setPathStyle] = useState(true);
-    const [encrypt, setEncrypt] = useState(true);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [pickerOpen, setPickerOpen] = useState(false);
@@ -67,7 +66,6 @@ export function DestinationDialog({ open, destination, onClose, onSaved }: Desti
             setBucket(destination.bucket ?? '');
             setAccessKeyId(destination.accessKeyId ?? '');
             setPathStyle(destination.pathStyle);
-            setEncrypt(destination.encrypt);
             return;
         }
         setKind('local');
@@ -79,17 +77,8 @@ export function DestinationDialog({ open, destination, onClose, onSaved }: Desti
         setBucket('');
         setAccessKeyId('');
         setPathStyle(true);
-        setEncrypt(true);
         setPickerOpen(false);
     }, [open, destination]);
-
-    // Le chiffrement suit le genre tant qu'on n'y a pas touché à la main : un
-    // dossier local vit sous la même garde que le serveur, un bucket distant
-    // non. C'est le défaut le plus sûr sans être le plus pénible.
-    useEffect(() => {
-        if (destination) return;
-        setEncrypt(kind !== 'local');
-    }, [kind, destination]);
 
     const selectedDevice = devices.find((d) => d.id === deviceId) ?? null;
 
@@ -106,8 +95,7 @@ export function DestinationDialog({ open, destination, onClose, onSaved }: Desti
                 region: kind === 's3' ? region.trim() || 'us-east-1' : null,
                 bucket: kind === 's3' ? bucket.trim() : null,
                 accessKeyId: kind === 's3' ? accessKeyId.trim() : null,
-                pathStyle,
-                encrypt
+                pathStyle
             };
             if (destination) {
                 await ws.send('backup.destinationUpdate', {
@@ -304,12 +292,9 @@ export function DestinationDialog({ open, destination, onClose, onSaved }: Desti
                     </>
                 )}
 
-                <Switch
-                    checked={encrypt}
-                    onChange={setEncrypt}
-                    label='Chiffrer les archives'
-                    hint='Illisibles pour qui tient le disque d’en face. La clé est dérivée de CRYPT_KEY_A / CRYPT_KEY_B : sans ces deux variables, une archive chiffrée est irrécupérable.'
-                />
+                {/* Le chiffrement n'est plus ici : c'est chaque TRAVAIL qui
+                    choisit la forme de ses archives, dans l'onglet Chiffrement
+                    de ses réglages (094). Une destination dit où écrire. */}
 
                 {error && <p className={styles.error}>{error}</p>}
             </div>

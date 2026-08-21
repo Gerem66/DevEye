@@ -144,7 +144,6 @@ const destinationAddFeature = defineFeature({
             kind: input.kind,
             deviceId: input.kind === 'device' ? input.deviceId : null,
             pathStyle: input.pathStyle,
-            encrypt: input.encrypt,
             content: await ctx.secure.open.encrypt(JSON.stringify(stored)),
             secretEnc: input.secret ? await ctx.secure.open.encrypt(input.secret) : ''
         });
@@ -184,7 +183,6 @@ const destinationUpdateFeature = defineFeature({
         const updated = await ctx.db.backup.updateDestination(input.destinationId, ctx.workspaceId, {
             deviceId: row.kind === 'device' ? input.deviceId : null,
             pathStyle: input.pathStyle,
-            encrypt: input.encrypt,
             content: await ctx.secure.open.encrypt(JSON.stringify(stored)),
             secretEnc: input.secret ? await ctx.secure.open.encrypt(input.secret) : undefined
         });
@@ -333,6 +331,7 @@ const jobAddFeature = defineFeature({
             scheduleWeekday: input.scheduleWeekday,
             scheduleDay: input.scheduleDay,
             keepLast: input.keepLast,
+            encryption: input.encryption,
             nextRunAt: BackupService.nextRunAt(
                 input.schedule,
                 input.enabled,
@@ -376,6 +375,7 @@ const jobUpdateFeature = defineFeature({
             scheduleWeekday: input.scheduleWeekday,
             scheduleDay: input.scheduleDay,
             keepLast: input.keepLast,
+            encryption: input.encryption,
             // Recalculée à chaque modification : changer l'heure sans déplacer
             // l'échéance laisserait le travail partir à l'ancienne jusqu'au
             // lendemain, ce que personne n'attend.

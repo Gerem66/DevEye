@@ -1,5 +1,6 @@
 import type { WorkspaceFeatureId } from 'deveye-types';
 
+import BackupEncryptionPanel from '@/Features/Backup/BackupEncryptionPanel';
 import MailEncryptionPanel from '@/Features/Mail/MailEncryptionPanel';
 
 import type { SettingsScope } from '../scope';
@@ -15,7 +16,8 @@ import styles from '../FeatureSettings.module.css';
  * est autonome, chemins d'import directs (jamais le baril, cycle).
  */
 export const ENCRYPTION_WIRED: Partial<Record<WorkspaceFeatureId, true>> = {
-    mail: true
+    mail: true,
+    backup: true
 };
 
 export default function EncryptionSection({ scope }: { scope: SettingsScope }) {
@@ -23,6 +25,7 @@ export default function EncryptionSection({ scope }: { scope: SettingsScope }) {
     return (
         <div className={styles.section}>
             {scope.feature === 'mail' && <MailEncryptionPanel accountId={scope.itemId} />}
+            {scope.feature === 'backup' && <BackupEncryptionPanel jobId={scope.itemId} />}
         </div>
     );
 }

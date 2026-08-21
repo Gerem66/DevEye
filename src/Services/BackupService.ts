@@ -323,7 +323,7 @@ export class BackupService {
             const destination = await this.deps.db.backup.findDestinationForJob(job.id);
             if (!destination) throw new Error('La destination de ce travail est introuvable.');
 
-            const run = await this.openRun(job, destination, userId);
+            const run = await this.openRun(job, userId);
             void this.execute(job, destination, run).catch((e: unknown) =>
                 this.deps.logger.error({ jobId: job.id, err: e }, 'Backup: exécution manuelle échouée')
             );
@@ -358,22 +358,18 @@ export class BackupService {
             this.deps.logger.error({ jobId: job.id }, 'Backup: destination introuvable');
             return;
         }
-        const run = await this.openRun(job, destination, userId);
+        const run = await this.openRun(job, userId);
         await this.execute(job, destination, run);
     }
 
-    private async openRun(
-        job: BackupJobRow,
-        destination: BackupDestinationRow,
-        userId: number | null
-    ): Promise<BackupRunRow> {
+    private async openRun(job: BackupJobRow, userId: number | null): Promise<BackupRunRow> {
         const content = await this.cipherFor(job.workspace_id).encrypt(
             JSON.stringify({ artifact: null, error: null } satisfies StoredRun)
         );
         const run = await this.deps.db.backup.startRun({
             jobId: job.id,
             workspaceId: job.workspace_id,
-            encrypted: destination.encrypt === 1,
+            encrypted: job.encryption === 'server',
             triggeredByUserId: userId,
             content
         });
@@ -424,7 +420,9 @@ export class BackupService {
                 }
             };
 
-            const sealed = destination.encrypt === 1;
+            // La forme est celle du TRAVAIL (094) : la destination dit où
+            // écrire, le travail dit sous quelle forme.
+            const sealed = job.encryption === 'server';
             const name = sealed ? `${source.name}.enc` : source.name;
             const body = sealed
                 ? sealStream(backupKey(this.deps.crypt), measured(source.stream))
