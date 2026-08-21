@@ -17,6 +17,7 @@ quand elles ont été relues depuis, la date de relecture.
 |---|---|
 | [WORKSPACES.md](./WORKSPACES.md) | les espaces (isolation, rôles, clés), à lire avant de toucher à l'un des trois |
 | [SECURITY_MODEL.md](./SECURITY_MODEL.md) | le chiffrement : étages ouvert/gardé, DEK, mot de passe |
+| [AUTH_PROMPTS.md](./AUTH_PROMPTS.md) | le prompt de déverrouillage unique, et qui le réutilise |
 | [PERMISSIONS.md](./PERMISSIONS.md) | les quatre étages de droits, et les décisions actées |
 | [SHARING.md](./SHARING.md) | la projection d'éléments entre espaces |
 | [LIVE.md](./LIVE.md) | la présence en direct : roster, curseurs, invalidation poussée, téléportation |
