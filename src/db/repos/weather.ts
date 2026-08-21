@@ -39,6 +39,8 @@ export interface WeatherRepo {
     /** Mark `id` as the user's primary location and clear it on the others. */
     setPrimaryLocation(workspaceId: number, id: string): Promise<WeatherLocationRow[]>;
     getKey(workspaceId: number, provider: WeatherProvider): Promise<WeatherProviderKeyRow | null>;
+    /** Les fournisseurs pour lesquels l'espace détient une clé. */
+    listKeyProviders(workspaceId: number): Promise<WeatherProvider[]>;
     setKey(workspaceId: number, provider: WeatherProvider, keyEnc: string): Promise<void>;
     deleteKey(workspaceId: number, provider: WeatherProvider): Promise<void>;
 }
@@ -165,6 +167,13 @@ export function weatherRepo(pool: Q): WeatherRepo {
                 [workspaceId, provider]
             );
             return r.rows[0] ?? null;
+        },
+        async listKeyProviders(workspaceId) {
+            const r = await pool.query<{ provider: WeatherProvider }>(
+                'SELECT provider FROM weather_provider_keys WHERE workspace_id = ?',
+                [workspaceId]
+            );
+            return r.rows.map((row) => row.provider);
         },
         async setKey(workspaceId, provider, keyEnc) {
             await pool.query(

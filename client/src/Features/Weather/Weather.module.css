@@ -62,11 +62,21 @@
     height: 100%;
 }
 
+/* L'en-tête commun : le titre à gauche, les actions à droite. C'est lui qui
+   porte la marge basse, le titre reste un simple intitulé. */
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    margin-bottom: var(--space-lg);
+}
+
 .title {
     font-size: 1.5rem;
     font-weight: 700;
     color: var(--text-primary);
-    margin: 0 0 var(--space-lg) 0;
+    margin: 0;
 }
 
 .searchForm {

@@ -3,6 +3,7 @@ import { motion, Reorder, useDragControls } from 'framer-motion';
 import { ws } from '@/api/ws';
 import { Dialog, TextInput } from '@/Components';
 import Button from '@/Components/Button';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { useWeather, syncWeatherLocations } from '@/stores/weather';
 import { wmoIcon } from './wmoIcon';
 import type { WeatherLocation, WeatherProvider, WeatherReport } from 'deveye-types';
@@ -507,7 +508,13 @@ export default function Weather({ user: _user, workspace: _ws }: FeatureProps) {
 
     return (
         <div className={styles.container}>
-            <h2 className={styles.title}>Météo</h2>
+            {/* L'en-tête commun à toutes les features : le titre à gauche, les
+                actions à droite, dont le bouton de réglages commun. Ses clés
+                d'espace n'avaient aucun écran ; elles vivent dans Sources. */}
+            <div className={styles.header}>
+                <h2 className={styles.title}>Météo</h2>
+                <FeatureSettingsButton scope={{ kind: 'feature', feature: 'weather' }} />
+            </div>
 
             <form className={styles.searchForm} onSubmit={handleAdd}>
                 <input

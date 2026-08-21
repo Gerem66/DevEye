@@ -1,7 +1,9 @@
 import {
     weatherAdd,
     weatherGet,
+    weatherKeyList,
     weatherList,
+    weatherProviderSchema,
     weatherRemove,
     weatherReorder,
     weatherSetKey,
@@ -208,6 +210,25 @@ export const weatherGetFeature: FeatureDefinition<
     }
 });
 
+export const weatherKeyListFeature: FeatureDefinition<
+    typeof weatherKeyList.command,
+    typeof weatherKeyList.input,
+    typeof weatherKeyList.output
+> = defineFeature({
+    ...weatherKeyList,
+    access: { feature: 'weather', level: 'read' },
+    handler: async (ctx) => {
+        // Le fait, jamais le secret : la clé elle-même ne quitte pas la base.
+        const held = new Set(await ctx.db.weather.listKeyProviders(ctx.workspaceId));
+        return {
+            providers: weatherProviderSchema.options.map((provider) => ({
+                provider,
+                hasKey: held.has(provider)
+            }))
+        };
+    }
+});
+
 export const weatherSetKeyFeature: FeatureDefinition<
     typeof weatherSetKey.command,
     typeof weatherSetKey.input,
@@ -246,5 +267,6 @@ export const weatherFeatures: FeatureDefinition<string, any, any>[] = [
     weatherReorderFeature,
     weatherSetPrimaryFeature,
     weatherGetFeature,
+    weatherKeyListFeature,
     weatherSetKeyFeature
 ];

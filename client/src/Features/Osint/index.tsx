@@ -14,9 +14,9 @@ import { ws } from '@/api/ws';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { ensureUnlocked as ensureSecrecyUnlocked, useSecrecy } from '@/stores/secrecy';
 
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { humanizeError, withSecrecy } from './api';
 import { ProbeCard, type ProbeCardState } from './ProbeCard';
-import { OsintSettings } from './OsintSettings';
 import { HistoryPanel } from './HistoryPanel';
 import { ConfirmDialog, type ConfirmRequest } from './ConfirmDialog';
 import styles from './Osint.module.css';
@@ -67,7 +67,6 @@ export default function Osint(): React.ReactElement {
     const [run, setRun] = useState<RunState | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [settingsOpen, setSettingsOpen] = useState(false);
     const [historyOpen, setHistoryOpen] = useState(false);
     const [history, setHistory] = useState<OsintHistoryEntry[]>([]);
     /** L'action destructive en attente de confirmation, ou `null`. */
@@ -333,17 +332,11 @@ export default function Osint(): React.ReactElement {
                     <span className='icon icon-clock' aria-hidden />
                     {historyLocked && <span className={styles.iconBadge} aria-hidden />}
                 </button>
-                <button
-                    type='button'
-                    className={styles.iconButton}
-                    title='Clés des fournisseurs'
-                    onClick={() => setSettingsOpen(true)}
-                >
-                    <span className='icon icon-key' aria-hidden />
-                </button>
+                {/* Le bouton commun, comme partout : il ouvre la coquille de
+                    réglages, dont l'onglet Sources porte les clés des
+                    fournisseurs (l'ancien dialogue derrière l'icône de clé). */}
+                <FeatureSettingsButton scope={{ kind: 'feature', feature: 'osint' }} />
             </form>
-
-            <OsintSettings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
             <HistoryPanel
                 open={historyOpen}
