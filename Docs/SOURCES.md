@@ -43,9 +43,8 @@ boîte créée.
 | Git | jetons GitHub | `workspace_credentials` | `RepoPicker` / `RepoDialog`, champ « Jeton d'accès » |
 | Sauvegardes | destinations d'archives | `backup_destinations` | `JobDialog`, champ « Où l'écrire » |
 | chaque émetteur | ses canaux d'alerte | `notification_channels` (colonne `feature`) | section Notifications (cases) |
-
-Candidat connu, non branché : **Météo**, dont la clé d'API se saisit encore par
-lieu ; la ranger en source d'espace suivrait exactement ce patron.
+| Météo | clés d'API des fournisseurs | `weather_provider_keys` | le dialogue d'un lieu peut porter la sienne en surcharge |
+| OSINT | clés d'API des fournisseurs | `osint_provider_keys` | aucun : les sondes les résolvent seules |
 
 ## La mécanique
 

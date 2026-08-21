@@ -214,7 +214,9 @@ réinstaller côté serveur/client.
 | 13  | `DevEye/client/src/Components/TopNavbar/TopNavbar.tsx` | entrée menu (page structurelle)                                     |
 | 14  | `DevEye/client/src/stores/invalidation.ts`             | clé `ResourceKey` + `invalidate()` aux mutations (si widget résumé) |
 
-Selon ce que la feature fait, trois chantiers transverses ont chacun leur doc et
-leur checklist propre : des réglages d'espace réutilisables que les éléments
-désignent → `Docs/SOURCES.md` ; des alertes → `Docs/NOTIFICATIONS.md` §8 ; des
-éléments partageables entre espaces → `Docs/SHARING.md`.
+Selon ce que la feature fait, quatre chantiers transverses ont chacun leur doc
+et leur checklist propre : toute configuration → `Docs/SETTINGS.md` (la
+coquille unique et son bouton commun, obligatoires) ; des réglages d'espace
+réutilisables que les éléments désignent → `Docs/SOURCES.md` ; des alertes →
+`Docs/NOTIFICATIONS.md` §8 ; des éléments partageables entre espaces →
+`Docs/SHARING.md`.
