@@ -34,7 +34,7 @@ import FeatureAudience from '@/Features/Audience';
 import FeatureOsint from '@/Features/Osint';
 
 import type { FeatureProps } from '@/Features/types';
-import { clientModules } from '@/sdk/modules';
+import { clientModules } from '@/sdk/registry';
 
 /**
  * Le rayon du marché où la fonctionnalité est rangée.

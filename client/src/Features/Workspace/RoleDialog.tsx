@@ -9,7 +9,7 @@ import SegmentedControl from '@/Components/SegmentedControl';
 import SelectInput from '@/Components/SelectInput';
 import TextInput from '@/Components/TextInput';
 import { placedFeatureIds, useHomeLayout } from '@/stores/homeLayout';
-import { moduleManifest } from '@/sdk/modules';
+import { moduleManifest } from '@/sdk/registry';
 import shell from '@/Components/FeatureSettings/FeatureSettings.module.css';
 import styles from './Workspace.module.css';
 

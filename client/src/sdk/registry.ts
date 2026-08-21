@@ -1,0 +1,75 @@
+import { isExternalFeatureId, registerExternalFeature, type ExternalFeatureId } from 'deveye-types';
+import { validateManifest, type FeatureManifest } from 'deveye-types/sdk';
+import type { FeatureClient } from 'deveye-types/sdk/client';
+
+import { registerFeatureResources, type ResourceKey } from '@/stores/invalidation';
+
+/**
+ * Le registre des modules installés, côté client.
+ *
+ * Volontairement **sans dépendance vers le fichier généré** : ce module est
+ * une feuille, que le catalogue, la coquille de réglages, RoleDialog et
+ * goToHome peuvent importer depuis n'importe où. C'est l'initialiseur
+ * (`sdk/modules.ts`), et lui seul, qui importe la glue générée et verse les
+ * modules ici. Sans cette coupure, le graphe bouclait : le client d'un module
+ * importe `deveye-sdk-client`, dont le barrel tire la coquille de réglages,
+ * qui a besoin du registre... qui aurait importé le généré en train d'évaluer
+ * ce même module (« Cannot access 'client0' before initialization », écran
+ * blanc).
+ */
+export interface InstalledClientFeature {
+    manifest: FeatureManifest;
+    client: FeatureClient;
+}
+
+const MODULES: InstalledClientFeature[] = [];
+const BY_ID = new Map<string, InstalledClientFeature>();
+
+/**
+ * Verse les modules installés dans le registre : descripteur (registre fusionné
+ * de deveye-types, dont vivent RoleDialog, la coquille et la présence) et
+ * ressources d'invalidation. Appelée une fois, par l'initialiseur, avant tout
+ * rendu.
+ */
+export function registerClientModules(installed: readonly InstalledClientFeature[]): void {
+    for (const mod of installed) {
+        if (BY_ID.has(mod.manifest.id)) continue;
+        validateManifest(mod.manifest);
+        // Une native rapatriée (Météo) garde son descripteur dans le registre
+        // publié : seuls les ids externes s'enregistrent ici.
+        if (isExternalFeatureId(mod.manifest.id)) {
+            registerExternalFeature({
+                id: mod.manifest.id as ExternalFeatureId,
+                label: mod.manifest.label,
+                description: mod.manifest.description,
+                icon: mod.manifest.icon,
+                notifies: mod.manifest.notifies,
+                hasItems: mod.manifest.hasItems,
+                itemNoun: mod.manifest.itemNoun,
+                sources: mod.manifest.sources,
+                shareTier: mod.manifest.shareTier
+            });
+        }
+        registerFeatureResources(
+            mod.manifest.id,
+            (mod.manifest.invalidatedByTopic ?? mod.manifest.resources) as ResourceKey[]
+        );
+        MODULES.push(mod);
+        BY_ID.set(mod.manifest.id, mod);
+    }
+}
+
+/** Les modules installés, dans l'ordre de la config. */
+export function clientModules(): readonly InstalledClientFeature[] {
+    return MODULES;
+}
+
+/** Le manifest d'un module installé, ou `undefined` (id natif ou module retiré). */
+export function moduleManifest(featureId: string): FeatureManifest | undefined {
+    return BY_ID.get(featureId)?.manifest;
+}
+
+/** L'entrée client d'un module installé. */
+export function moduleClient(featureId: string): FeatureClient | undefined {
+    return BY_ID.get(featureId)?.client;
+}

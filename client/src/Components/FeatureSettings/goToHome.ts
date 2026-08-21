@@ -4,7 +4,7 @@ import { startTeleport } from '@/stores/live';
 import { requestItemSettings } from '@/stores/settingsRequest';
 import { requestSelectWorkspace } from '@/stores/viewRequest';
 import { getWorkspaceState } from '@/stores/workspace';
-import { moduleManifest } from '@/sdk/modules';
+import { moduleManifest } from '@/sdk/registry';
 
 /**
  * « Aller régler ça là où ça se règle. »

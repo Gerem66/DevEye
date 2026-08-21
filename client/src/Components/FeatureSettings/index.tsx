@@ -14,7 +14,7 @@ import SharingSection from './sections/SharingSection';
 import SourcesSection from './sections/SourcesSection';
 import SyncSection, { SYNC_WIRED } from './sections/SyncSection';
 import SideNav, { type SideNavItem } from './SideNav';
-import { moduleClient, moduleManifest } from '@/sdk/modules';
+import { moduleClient, moduleManifest } from '@/sdk/registry';
 import { scopeDescription, scopeTitle, type SettingsScope, type SettingsSectionId } from './scope';
 import styles from './FeatureSettings.module.css';
 
