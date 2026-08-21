@@ -3,7 +3,7 @@
 > Réécrit le 20 août 2026, après le retour d'usage sur le chantier des droits.
 > Il dit **pourquoi** ; le code dit comment.
 >
-> Documents voisins : [../../WORKSPACES.md](../../WORKSPACES.md) §3,
+> Documents voisins : [WORKSPACES.md](./WORKSPACES.md) §3,
 > [SHARING.md](./SHARING.md) pour les restrictions par élément,
 > [NOTIFICATIONS.md](./NOTIFICATIONS.md).
 

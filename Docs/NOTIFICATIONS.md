@@ -4,7 +4,7 @@
 > fonctionnalité. Il dit **pourquoi** ; le code dit comment.
 >
 > Documents voisins : [SECURITY_MODEL.md](./SECURITY_MODEL.md),
-> [UPTIME.md](./UPTIME.md), [../../WORKSPACES.md](../../WORKSPACES.md).
+> [UPTIME.md](./UPTIME.md), [WORKSPACES.md](./WORKSPACES.md).
 
 ---
 

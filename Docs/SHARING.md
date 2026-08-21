@@ -3,7 +3,7 @@
 > Écrit le 20 août 2026, à la fin du lot C du chantier d'unification. Il dit
 > **pourquoi** ; le code dit comment.
 >
-> Documents voisins : [../../WORKSPACES.md](../../WORKSPACES.md) §2 et §10,
+> Documents voisins : [WORKSPACES.md](./WORKSPACES.md) §2 et §10,
 > [SECURITY_MODEL.md](./SECURITY_MODEL.md), [PERMISSIONS.md](./PERMISSIONS.md).
 
 ---
