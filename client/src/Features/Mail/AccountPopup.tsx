@@ -306,26 +306,32 @@ export function AccountPopup() {
                     />
                 )}
 
-                <div className={styles.tierChoice}>
-                    {(['open', 'guarded'] as MailSecurityTier[]).map((tier) => (
-                        <label key={tier} className={styles.tierOption}>
-                            <input
-                                type='radio'
-                                name='securityTier'
-                                checked={draft.securityTier === tier}
-                                onChange={() => set('securityTier', tier)}
-                            />
-                            <span>
-                                <strong>{tier === 'open' ? 'Ouvert' : 'Protégé'}</strong>
-                                <span className={styles.fieldHint}>
-                                    {tier === 'open'
-                                        ? 'Synchro automatique en tâche de fond, utilisable pour les notifications (ex. Uptime).'
-                                        : 'Nécessite le déverrouillage par mot de passe à chaque consultation ; jamais synchronisé seul.'}
+                {/* Le palier ne se choisit qu'à la création : il détermine sous
+                    quelle clé la boîte naît. Ensuite, il se change dans l'onglet
+                    Chiffrement de ses réglages, comme pour les autres features :
+                    deux surfaces pour le même champ finissaient par s'écraser. */}
+                {mode === 'add' && (
+                    <div className={styles.tierChoice}>
+                        {(['open', 'guarded'] as MailSecurityTier[]).map((tier) => (
+                            <label key={tier} className={styles.tierOption}>
+                                <input
+                                    type='radio'
+                                    name='securityTier'
+                                    checked={draft.securityTier === tier}
+                                    onChange={() => set('securityTier', tier)}
+                                />
+                                <span>
+                                    <strong>{tier === 'open' ? 'Ouvert' : 'Protégé'}</strong>
+                                    <span className={styles.fieldHint}>
+                                        {tier === 'open'
+                                            ? 'Synchro automatique en tâche de fond, utilisable pour les notifications (ex. Uptime).'
+                                            : 'Nécessite le déverrouillage par mot de passe à chaque consultation ; jamais synchronisé seul.'}
+                                    </span>
                                 </span>
-                            </span>
-                        </label>
-                    ))}
-                </div>
+                            </label>
+                        ))}
+                    </div>
+                )}
 
                 {/* An OAuth account has no second tab to offer: the manual form can't
                     describe it and can't save it either. */}

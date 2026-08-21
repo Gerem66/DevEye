@@ -35,6 +35,9 @@ export type ResourceKey =
     | 'cloudSync.listShares'
     | 'mail.accountCount'
     | 'mail.accountList'
+    /** Les réglages généraux de Mail (affichage, images approuvées) : lus par
+     *  l'écran ET par le panneau Général des réglages, qui doivent se suivre. */
+    | 'mail.getSettings'
     /** L'arborescence du compte ouvert — c'est elle qui porte les compteurs de non-lus. */
     | 'mail.folderList'
     /** La tête de liste du dossier ouvert. Fusionnée, jamais rechargée en entier : voir `Features/Mail/index.tsx`. */
@@ -130,7 +133,7 @@ const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
     // des messages, corrige des drapeaux et retire des lignes disparues. Sans les
     // deux dernières clés, seule la date « il y a X min » se rafraîchissait, et
     // une boîte laissée ouverte mentait jusqu'au prochain clic.
-    mail: ['mail.accountCount', 'mail.accountList', 'mail.folderList', 'mail.messageList'],
+    mail: ['mail.accountCount', 'mail.accountList', 'mail.folderList', 'mail.messageList', 'mail.getSettings'],
     uptime: ['uptime.count', 'uptime.list'],
     /*
      * `cloudSync.listShares` en second : la liste des partages embarque les

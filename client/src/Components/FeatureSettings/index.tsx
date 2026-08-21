@@ -6,10 +6,13 @@ import { Dialog } from '@/Components/Dialog';
 import { consumeItemSettings } from '@/stores/settingsRequest';
 import { getActiveWorkspaceId, useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
 
+import EncryptionSection, { ENCRYPTION_WIRED } from './sections/EncryptionSection';
+import GeneralSection, { GENERAL_WIRED } from './sections/GeneralSection';
 import NotificationsSection from './sections/NotificationsSection';
 import ItemPermissionsSection from './sections/ItemPermissionsSection';
 import SharingSection from './sections/SharingSection';
 import SourcesSection from './sections/SourcesSection';
+import SyncSection, { SYNC_WIRED } from './sections/SyncSection';
 import SideNav, { type SideNavItem } from './SideNav';
 import { scopeDescription, scopeTitle, type SettingsScope, type SettingsSectionId } from './scope';
 import styles from './FeatureSettings.module.css';
@@ -56,6 +59,13 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
         const descriptor = featureDescriptor(scope.feature);
         const sections: SectionDef[] = [];
 
+        // Général : les réglages de la fonctionnalité qui ne sont ni des
+        // sources ni des notifications (l'affichage des messages de Mail, ses
+        // images approuvées). En tête : c'est l'onglet le plus large.
+        if (GENERAL_WIRED[scope.feature]?.[scope.kind]) {
+            sections.push({ id: 'general', label: 'Général', icon: 'settings' });
+        }
+
         // Sources : à l'échelle de la **fonctionnalité** seulement. C'est le
         // seul endroit où les réglages réutilisables (jetons, destinations) se
         // créent et se corrigent. Les dialogues d'élément ne font que choisir
@@ -69,6 +79,18 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
         // seulement quand la fonctionnalité en a de réglables.
         if (descriptor.notifies && (scope.kind === 'feature' || descriptor.hasItems)) {
             sections.push({ id: 'notifications', label: 'Notifications', icon: 'mail' });
+        }
+
+        // Synchronisation : le rythme de relève d'un élément, et sa
+        // maintenance. À l'échelle d'un élément seulement.
+        if (scope.kind === 'item' && SYNC_WIRED[scope.feature]) {
+            sections.push({ id: 'sync', label: 'Synchronisation', icon: 'refresh' });
+        }
+
+        // Chiffrement : sous quelle clé la donnée de l'élément vit, quand la
+        // fonctionnalité laisse le choix. À l'échelle d'un élément seulement.
+        if (scope.kind === 'item' && ENCRYPTION_WIRED[scope.feature]) {
+            sections.push({ id: 'encryption', label: 'Chiffrement', icon: 'lock' });
         }
 
         // Partage : à l'échelle d'un **élément** seulement — on projette une
@@ -100,7 +122,9 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
         // restriction n'existe que là où les listages la font respecter —
         // ailleurs, le serveur la refuse, donc l'onglet mentirait.
         if (scope.kind === 'item' && SHARE_WIRED_FEATURES.includes(scope.feature) && canRestrict && isShared) {
-            sections.push({ id: 'permissions', label: 'Permissions', icon: 'lock' });
+            // `shield` et non `lock` : le cadenas est l'icône du chiffrement,
+            // et deux entrées de nav au même glyphe se confondent.
+            sections.push({ id: 'permissions', label: 'Permissions', icon: 'shield' });
         }
 
         return sections;
@@ -168,7 +192,10 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection }: 
                         label={`Réglages · ${scopeTitle(scope)}`}
                     />
                     <div className={styles.panel}>
+                        {current === 'general' && <GeneralSection scope={scope} />}
                         {current === 'sources' && scope.kind === 'feature' && <SourcesSection scope={scope} />}
+                        {current === 'sync' && <SyncSection scope={scope} />}
+                        {current === 'encryption' && <EncryptionSection scope={scope} />}
                         {current === 'notifications' && (
                             <NotificationsSection
                                 scope={scope}

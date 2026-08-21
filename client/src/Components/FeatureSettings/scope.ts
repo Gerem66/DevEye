@@ -16,8 +16,9 @@ export type SettingsScope =
     | { kind: 'feature'; feature: WorkspaceFeatureId }
     | { kind: 'item'; feature: WorkspaceFeatureId; itemId: number; itemLabel: string };
 
-/** Les sections que la coquille sait rendre. */
-export type SettingsSectionId = 'sources' | 'notifications' | 'permissions' | 'sharing';
+/** Les sections que la coquille sait rendre, dans leur ordre d'affichage. */
+export type SettingsSectionId =
+    'general' | 'sources' | 'notifications' | 'sync' | 'encryption' | 'sharing' | 'permissions';
 
 /** Le titre du dialogue : le nom de l'élément, ou celui de la fonctionnalité. */
 export function scopeTitle(scope: SettingsScope): string {

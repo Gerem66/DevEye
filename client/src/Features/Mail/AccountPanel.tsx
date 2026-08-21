@@ -28,7 +28,6 @@ interface AccountPanelProps {
     onDeleteAccount: (account: MailAccount) => void;
     onRefreshFolder: () => void;
     refreshingFolder: boolean;
-    onOpenAccountSettings: (account: MailAccount) => void;
 }
 
 /**
@@ -67,7 +66,6 @@ export function AccountPanel({
     onDeleteAccount,
     onRefreshFolder,
     refreshingFolder,
-    onOpenAccountSettings
 }: AccountPanelProps) {
     const selected = accounts.find((a) => a.id === selectedId) ?? null;
 
@@ -114,7 +112,6 @@ export function AccountPanel({
                                 onEdit={() => onEdit(selected)}
                                 onRefresh={onRefreshFolder}
                                 onDelete={() => onDeleteAccount(selected)}
-                                onOpenSettings={() => onOpenAccountSettings(selected)}
                             />
                             <div className={styles.folderScroll}>
                                 <h4 className={styles.sidebarSubhead}>Dossiers</h4>
