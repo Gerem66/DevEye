@@ -359,6 +359,24 @@
     overflow-x: hidden;
 }
 
+/* Le bouton-texte qui déplie le reste du registre des fonctionnalités :
+   centré, discret, dans la teinte d'accent des actions douces. */
+.showAllBtn {
+    display: block;
+    margin: var(--space-sm) auto 0;
+    padding: var(--space-xs) var(--space-sm);
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-size: 0.82rem;
+    font-family: var(--font-sans);
+    cursor: pointer;
+}
+
+.showAllBtn:hover {
+    text-decoration: underline;
+}
+
 /* Le cadre dont framer anime la hauteur d'un volet à l'autre : il découpe le
    contenu le temps du mouvement, et au repos sa hauteur est exactement celle
    du volet, donc il ne rogne rien. */

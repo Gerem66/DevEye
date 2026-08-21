@@ -1,7 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { FEATURE_REGISTRY, WORKSPACE_CAPABILITIES } from 'deveye-types';
 import type { FeatureAccess, WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole } from 'deveye-types';
+
+import { placedFeatureIds, useHomeLayout } from '@/stores/homeLayout';
 
 import Button from '@/Components/Button';
 import Checkbox from '@/Components/Checkbox';
@@ -81,6 +83,22 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
     const [capabilities, setCapabilities] = useState<WorkspaceCapability[]>([]);
     const [features, setFeatures] = useState<Record<string, FeatureAccess | 'none'>>({});
     const [tab, setTab] = useState<RoleTab>('space');
+    /** Le volet Fonctionnalités déplié sur tout le registre, pas seulement l'accueil. */
+    const [showAll, setShowAll] = useState(false);
+
+    /**
+     * Le volet s'ouvre sur les fonctionnalités que l'accueil de l'espace montre
+     * (dossiers compris) : c'est presque toujours là-dessus qu'un rôle se
+     * règle, et quinze lignes pour en toucher quatre noyaient l'essentiel. Deux
+     * garde-fous : une ligne que le rôle accorde déjà ne se cache jamais, et un
+     * accueil qui ne montrerait rien déplie tout d'office, une liste vide d'où
+     * rien ne se règle n'aidant personne.
+     */
+    const layout = useHomeLayout();
+    const placed = useMemo(() => new Set<string>(placedFeatureIds(layout)), [layout]);
+    const onHome = FEATURE_REGISTRY.filter((f) => placed.has(f.id) || (features[f.id] ?? 'none') !== 'none');
+    const collapsed = !showAll && onHome.length > 0 && onHome.length < FEATURE_REGISTRY.length;
+    const featureRows = collapsed ? onHome : FEATURE_REGISTRY;
 
     const reduced = useReducedMotion() === true;
     /** La zone qui défile entre les onglets et le pied, seule à défiler. */
@@ -115,6 +133,7 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
     useEffect(() => {
         if (!open) return;
         setTab('space');
+        setShowAll(false);
         setName(role?.name ?? '');
         setColor(role?.color ?? '#22d3ee');
         setCapabilities(role?.capabilities ?? []);
@@ -229,33 +248,50 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                                     })}
                                 </div>
                             ) : (
-                                /* Toutes listées, y compris les non accordées :
-                                   « Aucun » est un choix explicite, pas une absence
-                                   de ligne. Les exceptions par élément (masquer une
-                                   base à un rôle, un service en lecture seule) se
-                                   règlent sur l'élément lui-même, dans ses réglages. */
-                                <div className={`${styles.card} ${styles.rowList}`}>
-                                    {FEATURE_REGISTRY.map((f) => (
-                                        <div key={f.id} className={styles.grantRow}>
-                                            <span className={styles.grantLabel}>
-                                                <span className={styles.grantTitle}>
-                                                    <span className={`icon icon-${f.icon}`} aria-hidden='true' />
-                                                    {f.label}
+                                /* Déplié, toutes listées, y compris les non
+                                   accordées : « Aucun » est un choix explicite, pas
+                                   une absence de ligne. Les exceptions par élément
+                                   (masquer une base à un rôle, un service en lecture
+                                   seule) se règlent sur l'élément lui-même, dans ses
+                                   réglages. */
+                                <>
+                                    <div className={`${styles.card} ${styles.rowList}`}>
+                                        {featureRows.map((f) => (
+                                            <div key={f.id} className={styles.grantRow}>
+                                                <span className={styles.grantLabel}>
+                                                    <span className={styles.grantTitle}>
+                                                        <span className={`icon icon-${f.icon}`} aria-hidden='true' />
+                                                        {f.label}
+                                                    </span>
+                                                    {/* Ce que le droit recouvre, du registre : la ligne
+                                                        « Déploiement » ne dit pas seule que `write`
+                                                        permet une mise en production. */}
+                                                    <span className={styles.grantHint}>{f.description}</span>
                                                 </span>
-                                                {/* Ce que le droit recouvre, du registre : la ligne
-                                                    « Déploiement » ne dit pas seule que `write`
-                                                    permet une mise en production. */}
-                                                <span className={styles.grantHint}>{f.description}</span>
-                                            </span>
-                                            <SegmentedControl
-                                                aria-label={`Accès à ${f.label}`}
-                                                value={features[f.id] ?? 'none'}
-                                                options={ACCESS_OPTIONS}
-                                                onChange={(v) => setFeatures((prev) => ({ ...prev, [f.id]: v }))}
-                                            />
-                                        </div>
-                                    ))}
-                                </div>
+                                                <SegmentedControl
+                                                    aria-label={`Accès à ${f.label}`}
+                                                    value={features[f.id] ?? 'none'}
+                                                    options={ACCESS_OPTIONS}
+                                                    onChange={(v) => setFeatures((prev) => ({ ...prev, [f.id]: v }))}
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {/* Le dépliage passe par la même hauteur animée
+                                        que le reste du volet : la popup grandit, elle
+                                        ne saute pas. */}
+                                    {collapsed && (
+                                        <button
+                                            type='button'
+                                            className={styles.showAllBtn}
+                                            onClick={() => setShowAll(true)}
+                                        >
+                                            {FEATURE_REGISTRY.length - featureRows.length === 1
+                                                ? 'Voir la fonctionnalité restante'
+                                                : `Voir les ${FEATURE_REGISTRY.length - featureRows.length} autres fonctionnalités`}
+                                        </button>
+                                    )}
+                                </>
                             )}
                         </motion.div>
                     </div>
