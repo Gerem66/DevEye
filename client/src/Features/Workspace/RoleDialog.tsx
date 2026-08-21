@@ -89,16 +89,25 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
     /**
      * Le volet s'ouvre sur les fonctionnalités que l'accueil de l'espace montre
      * (dossiers compris) : c'est presque toujours là-dessus qu'un rôle se
-     * règle, et quinze lignes pour en toucher quatre noyaient l'essentiel. Deux
-     * garde-fous : une ligne que le rôle accorde déjà ne se cache jamais, et un
-     * accueil qui ne montrerait rien déplie tout d'office, une liste vide d'où
-     * rien ne se règle n'aidant personne.
+     * règle, et quinze lignes pour en toucher quatre noyaient l'essentiel.
+     *
+     * Le filtre est l'accueil, et lui seul. Une première version gardait aussi
+     * toute ligne déjà accordée, mais un rôle généreux (les rôles de départ
+     * accordent tout) ramenait alors le registre entier et le repli ne se
+     * voyait jamais. Les droits accordés hors accueil ne sont pas cachés en
+     * silence pour autant : le bouton de dépliage en donne le compte. Seul
+     * garde-fou restant : un accueil qui ne montre rien déplie tout d'office,
+     * une liste vide d'où rien ne se règle n'aidant personne.
      */
     const layout = useHomeLayout();
     const placed = useMemo(() => new Set<string>(placedFeatureIds(layout)), [layout]);
-    const onHome = FEATURE_REGISTRY.filter((f) => placed.has(f.id) || (features[f.id] ?? 'none') !== 'none');
+    const onHome = FEATURE_REGISTRY.filter((f) => placed.has(f.id));
     const collapsed = !showAll && onHome.length > 0 && onHome.length < FEATURE_REGISTRY.length;
     const featureRows = collapsed ? onHome : FEATURE_REGISTRY;
+    /** Parmi les lignes repliées, celles que le rôle accorde déjà : dit sur le bouton. */
+    const hiddenGranted = collapsed
+        ? FEATURE_REGISTRY.filter((f) => !placed.has(f.id) && (features[f.id] ?? 'none') !== 'none').length
+        : 0;
 
     const reduced = useReducedMotion() === true;
     /** La zone qui défile entre les onglets et le pied, seule à défiler. */
@@ -112,12 +121,18 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
      * sait pas interpoler deux `auto`, il lui faut un nombre à viser. La mesure
      * vit sur un ref-callback : le contenu du dialogue n'existe que lorsqu'il
      * est ouvert, un effet posé au montage du composant ne trouverait rien.
+     *
+     * Au **plafond** de la hauteur réelle, jamais `offsetHeight` : ce dernier
+     * arrondit au plus proche, et un contenu de 312,6 px réels clippé à 312
+     * perd la rangée de pixels de sa bordure basse. Le plafond garantit que
+     * l'arête de clip tombe sous le contenu, pas dedans.
      */
     useLayoutEffect(() => {
         if (!measureEl) return;
-        const ro = new ResizeObserver(() => setVoletHeight(measureEl.offsetHeight));
+        const measure = () => setVoletHeight(Math.ceil(measureEl.getBoundingClientRect().height));
+        const ro = new ResizeObserver(measure);
         ro.observe(measureEl);
-        setVoletHeight(measureEl.offsetHeight);
+        measure();
         return () => {
             ro.disconnect();
             setVoletHeight(null);
@@ -289,6 +304,10 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                                             {FEATURE_REGISTRY.length - featureRows.length === 1
                                                 ? 'Voir la fonctionnalité restante'
                                                 : `Voir les ${FEATURE_REGISTRY.length - featureRows.length} autres fonctionnalités`}
+                                            {hiddenGranted > 0 &&
+                                                (hiddenGranted === 1
+                                                    ? ' (dont 1 accordée)'
+                                                    : ` (dont ${hiddenGranted} accordées)`)}
                                         </button>
                                     )}
                                 </>
