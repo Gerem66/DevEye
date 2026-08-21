@@ -13,7 +13,7 @@ import type { SecurityMonitor } from '@/Services/SecurityMonitor';
 import type { BackupService } from '@/Services/BackupService';
 import type { ErrorCode, LiveTopic, LogLevelName } from 'deveye-types';
 import type { Logger } from 'pino';
-import type { FeatureAccess, ItemAccess, WorkspaceCapability, WorkspaceFeatureId } from 'deveye-types';
+import type { FeatureAccess, FeatureId, ItemAccess, WorkspaceCapability, WorkspaceFeatureId } from 'deveye-types';
 import type { WorkspaceContext } from './_access';
 import type { z } from 'zod';
 
@@ -67,17 +67,17 @@ export interface FeatureContext {
     /** Lève `forbidden` si la capacité manque. */
     assertCan: (capability: WorkspaceCapability) => void;
     /** Une feature est-elle accessible, au moins au niveau demandé (défaut `read`) ? */
-    canFeature: (feature: WorkspaceFeatureId, level?: FeatureAccess) => boolean;
+    canFeature: (feature: FeatureId, level?: FeatureAccess) => boolean;
     /** Lève `forbidden` si la feature n'est pas accessible à ce niveau. */
-    assertFeature: (feature: WorkspaceFeatureId, level?: FeatureAccess) => void;
+    assertFeature: (feature: FeatureId, level?: FeatureAccess) => void;
     /**
      * L'appelant gère-t-il les **canaux d'alerte** de cette feature ? Exige la
      * lecture de la feature en plus du champ `channels` de son grant : on ne
      * gère pas les destinations d'une fonctionnalité qu'on ne voit pas.
      */
-    canChannels: (feature: WorkspaceFeatureId) => boolean;
+    canChannels: (feature: FeatureId) => boolean;
     /** Lève `forbidden` si l'appelant ne gère pas les canaux de cette feature. */
-    assertChannels: (feature: WorkspaceFeatureId) => void;
+    assertChannels: (feature: FeatureId) => void;
     /**
      * Les éléments d'une feature que le rôle de l'appelant voit autrement que
      * les autres : `'none'` masqué, `'read'` en lecture seule.
@@ -89,7 +89,7 @@ export interface FeatureContext {
      * Vide pour le propriétaire et pour un membre sans rôle — le premier passe
      * outre, le second n'a déjà rien.
      */
-    itemRestrictions: (feature: WorkspaceFeatureId) => Promise<ReadonlyMap<number, ItemAccess>>;
+    itemRestrictions: (feature: FeatureId) => Promise<ReadonlyMap<number, ItemAccess>>;
     /**
      * Lève `forbidden` si cet **élément précis** n'est pas accessible au niveau
      * demandé, restriction de rôle comprise.
@@ -97,7 +97,7 @@ export interface FeatureContext {
      * Vérifie d'abord la feature : une restriction d'élément n'ouvre jamais ce
      * qu'un droit de feature ferme.
      */
-    assertItem: (feature: WorkspaceFeatureId, itemId: number, level?: FeatureAccess) => Promise<void>;
+    assertItem: (feature: FeatureId, itemId: number, level?: FeatureAccess) => Promise<void>;
     /**
      * Caller holds the global `admin` role. Resolved by the dispatcher before the
      * handler runs, so guards read it synchronously and never query the role.

@@ -101,6 +101,10 @@ async function itemLabelOf(ctx: FeatureContext, feature: NotificationFeature, it
                 // Sentinelle n'a pas d'éléments réglables : aucune route ne peut
                 // porter un `item_id`, donc ce cas ne se produit pas.
                 return null;
+            default:
+                // Module externe : ses éléments ne sont pas lisibles d'ici, la
+                // confirmation restera générique (« une cible disparue »).
+                return null;
         }
     })();
     if (!content) return null;

@@ -5,18 +5,19 @@ import {
     LIVE_CURSORS_EVENT,
     LIVE_PEERS_EVENT,
     LIVE_TYPERS_EVENT,
+    isExternalFeatureId,
     livePathGate,
     ok,
     SHARE_WIRED_FEATURES,
-    TOPIC_FEATURE,
+    topicFeatureOf,
     type FeatureAccess,
+    type FeatureId,
     type LiveCursor,
     type LivePath,
     type LivePeer,
     type LiveTopic,
     type ServerMessage,
-    type UserColor,
-    type WorkspaceFeatureId
+    type UserColor
 } from 'deveye-types';
 
 import { accessEpochNow, permissionsFor } from '@/features/_access';
@@ -80,7 +81,7 @@ const TYPING_FLOOR_MS = 250;
 const BACKPRESSURE_BYTES = 64 * 1024;
 
 interface Grants {
-    features: ReadonlyMap<WorkspaceFeatureId, FeatureAccess>;
+    features: ReadonlyMap<FeatureId, FeatureAccess>;
     /** Époque d'accès sous laquelle ces droits ont été résolus. */
     epoch: number;
 }
@@ -419,7 +420,7 @@ export class LiveHub {
     rememberGrants(
         socket: WebSocket,
         workspaceId: number,
-        features: ReadonlyMap<WorkspaceFeatureId, FeatureAccess>,
+        features: ReadonlyMap<FeatureId, FeatureAccess>,
         epoch: number
     ): void {
         const conn = this.bySocket.get(socket);
@@ -459,7 +460,7 @@ export class LiveHub {
         this.markRoster(workspaceId);
     }
 
-    private canRead(conn: LiveConn, workspaceId: number, feature: WorkspaceFeatureId): boolean {
+    private canRead(conn: LiveConn, workspaceId: number, feature: FeatureId): boolean {
         const g = conn.grants.get(workspaceId);
         // Époque périmée = aucun droit. Fail-closed, comme partout ailleurs.
         if (!g || g.epoch !== accessEpochNow()) return false;
@@ -484,8 +485,11 @@ export class LiveHub {
         // d'une requête de plus, et un échec ici ne casse rien — il retarde.
         if (this.shareLinks === null) return;
         for (const topic of topics) {
-            const feature = TOPIC_FEATURE[topic];
-            if (feature === null || !SHARE_WIRED_FEATURES.includes(feature)) continue;
+            const feature = topicFeatureOf(topic);
+            // Un module externe n'est jamais share-wired : sa diffusion reste locale.
+            if (feature === null || isExternalFeatureId(feature) || !SHARE_WIRED_FEATURES.includes(feature)) {
+                continue;
+            }
             void this.shareLinks(workspaceId, feature)
                 .then((linked) => {
                     for (const other of linked) {
@@ -528,7 +532,7 @@ export class LiveHub {
     }
 
     private canSeeTopic(conn: LiveConn, workspaceId: number, topic: LiveTopic): boolean {
-        const feature = TOPIC_FEATURE[topic];
+        const feature = topicFeatureOf(topic);
         // `null` = aucun droit de feature à vérifier, l'appartenance suffit.
         return feature === null || this.canRead(conn, workspaceId, feature);
     }

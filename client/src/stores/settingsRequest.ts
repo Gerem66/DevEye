@@ -1,4 +1,4 @@
-import type { WorkspaceFeatureId } from 'deveye-types';
+import type { FeatureId } from 'deveye-types';
 
 /**
  * L'intention « ouvrir les réglages de tel élément, sur tel onglet ».
@@ -24,7 +24,7 @@ const SETTINGS_INTENT_TTL_MS = 15_000;
 
 interface SettingsIntent {
     workspaceId: number;
-    feature: WorkspaceFeatureId;
+    feature: FeatureId;
     itemId: number;
     /** L'onglet demandé (`SettingsSectionId`) ; en `string` pour ne pas faire
      *  dépendre un store d'un composant. */
@@ -47,11 +47,7 @@ export function requestItemSettings(next: SettingsIntent): void {
  * Consomme l'intention si elle vise exactement cet élément dans cet espace.
  * Rend l'onglet demandé, ou `null`. Une intention consommée ne rejoue pas.
  */
-export function consumeItemSettings(
-    workspaceId: number | null,
-    feature: WorkspaceFeatureId,
-    itemId: number
-): string | null {
+export function consumeItemSettings(workspaceId: number | null, feature: FeatureId, itemId: number): string | null {
     if (!intent || workspaceId === null) return null;
     if (intent.workspaceId !== workspaceId || intent.feature !== feature || intent.itemId !== itemId) return null;
     const section = intent.section;

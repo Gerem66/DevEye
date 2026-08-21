@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FEATURE_REGISTRY, notificationFeatureSchema, WORKSPACE_CAPABILITIES } from 'deveye-types';
-import type { FeatureAccess, WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole } from 'deveye-types';
+import { allFeatureDescriptors, nativeNotificationFeatureSchema, WORKSPACE_CAPABILITIES } from 'deveye-types';
+import type { FeatureAccess, FeatureId, WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole } from 'deveye-types';
 
 import Button from '@/Components/Button';
 import Checkbox from '@/Components/Checkbox';
@@ -53,10 +53,10 @@ const ACCESS_OPTIONS = [
 ] as const;
 
 /** Les fonctionnalités qui émettent des notifications : les seules à canaux. */
-const NOTIFYING = new Set<string>(notificationFeatureSchema.options);
+const NOTIFYING = new Set<string>(nativeNotificationFeatureSchema.options);
 
 /** La section affichée : le gouvernement de l'espace, ou une fonctionnalité. */
-type RoleSection = 'space' | (typeof FEATURE_REGISTRY)[number]['id'];
+type RoleSection = 'space' | FeatureId;
 
 export interface RoleDraft {
     name: string;
@@ -94,13 +94,15 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
      * d'office, une liste vide d'où rien ne se règle n'aidant personne.
      */
     const layout = useHomeLayout();
+    // Le registre fusionné : les natives, puis les modules externes installés.
+    const registry = allFeatureDescriptors();
     const placed = useMemo(() => new Set<string>(placedFeatureIds(layout)), [layout]);
-    const onHome = FEATURE_REGISTRY.filter((f) => placed.has(f.id));
-    const collapsed = !showAll && onHome.length > 0 && onHome.length < FEATURE_REGISTRY.length;
-    const featureRows = collapsed ? onHome : FEATURE_REGISTRY;
+    const onHome = registry.filter((f) => placed.has(f.id));
+    const collapsed = !showAll && onHome.length > 0 && onHome.length < registry.length;
+    const featureRows = collapsed ? onHome : registry;
     /** Parmi les lignes repliées, celles que le rôle accorde déjà : dit sur le bouton. */
     const hiddenGranted = collapsed
-        ? FEATURE_REGISTRY.filter((f) => !placed.has(f.id) && (features[f.id] ?? 'none') !== 'none').length
+        ? registry.filter((f) => !placed.has(f.id) && (features[f.id] ?? 'none') !== 'none').length
         : 0;
 
     useEffect(() => {
@@ -110,14 +112,15 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
         setName(role?.name ?? '');
         setColor(role?.color ?? '#22d3ee');
         setCapabilities(role?.capabilities ?? []);
+        const registry = allFeatureDescriptors();
         setFeatures(
             Object.fromEntries(
-                FEATURE_REGISTRY.map((f) => [f.id, role?.features.find((g) => g.feature === f.id)?.access ?? 'none'])
+                registry.map((f) => [f.id, role?.features.find((g) => g.feature === f.id)?.access ?? 'none'])
             )
         );
         setChannels(
             Object.fromEntries(
-                FEATURE_REGISTRY.map((f) => [f.id, role?.features.find((g) => g.feature === f.id)?.channels ?? false])
+                registry.map((f) => [f.id, role?.features.find((g) => g.feature === f.id)?.channels ?? false])
             )
         );
     }, [open, role]);
@@ -131,18 +134,20 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
             name: name.trim(),
             color,
             capabilities,
-            features: FEATURE_REGISTRY.flatMap<WorkspaceFeatureGrant>((f) => {
+            features: allFeatureDescriptors().flatMap<WorkspaceFeatureGrant>((f) => {
                 const a = features[f.id];
                 if (a !== 'read' && a !== 'write') return [];
                 // Les canaux ne se gèrent pas sur une fonctionnalité qui n'en
                 // émet pas, ni sur une qu'on ne voit pas : le champ est alors
                 // rangé à false plutôt que laissé à un état sans objet.
-                return [{ feature: f.id, access: a, channels: NOTIFYING.has(f.id) && (channels[f.id] ?? false) }];
+                return [
+                    { feature: f.id, access: a, channels: NOTIFYING.has(f.id) && (channels[f.id] ?? false), extras: {} }
+                ];
             })
         });
     };
 
-    const active = FEATURE_REGISTRY.find((f) => f.id === section) ?? null;
+    const active = registry.find((f) => f.id === section) ?? null;
 
     return (
         <Dialog
@@ -232,9 +237,9 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
 
                     {collapsed && (
                         <button type='button' className={styles.showAllBtn} onClick={() => setShowAll(true)}>
-                            {FEATURE_REGISTRY.length - featureRows.length === 1
+                            {registry.length - featureRows.length === 1
                                 ? 'Voir la fonctionnalité restante'
-                                : `Voir les ${FEATURE_REGISTRY.length - featureRows.length} autres`}
+                                : `Voir les ${registry.length - featureRows.length} autres`}
                             {hiddenGranted > 0 &&
                                 (hiddenGranted === 1 ? ' (dont 1 accordée)' : ` (dont ${hiddenGranted} accordées)`)}
                         </button>
@@ -242,7 +247,7 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                     {/* Le geste inverse : revenir aux seules fonctionnalités de
                         l'accueil. La sélection suit, une entrée repliée ne peut
                         pas rester la section affichée. */}
-                    {showAll && onHome.length > 0 && onHome.length < FEATURE_REGISTRY.length && (
+                    {showAll && onHome.length > 0 && onHome.length < registry.length && (
                         <button
                             type='button'
                             className={styles.showAllBtn}

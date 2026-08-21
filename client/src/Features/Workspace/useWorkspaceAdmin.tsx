@@ -145,7 +145,8 @@ export function useWorkspaceAdmin() {
                     FEATURE_REGISTRY.map<WorkspaceFeatureGrant>((f) => ({
                         feature: f.id,
                         access: 'write',
-                        channels
+                        channels,
+                        extras: {}
                     }));
                 await ws.send('workspace.roleCreate', {
                     name: 'Admin',

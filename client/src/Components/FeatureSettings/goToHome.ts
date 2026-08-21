@@ -1,4 +1,4 @@
-import type { WorkspaceFeatureId } from 'deveye-types';
+import { isExternalFeatureId, type FeatureId, type WorkspaceFeatureId } from 'deveye-types';
 
 import { startTeleport } from '@/stores/live';
 import { requestItemSettings } from '@/stores/settingsRequest';
@@ -41,14 +41,11 @@ export function accessibleWorkspaceName(workspaceId: number | null): string | nu
     return getWorkspaceState().workspaces.find((w) => w.id === workspaceId)?.name ?? null;
 }
 
-export function goToItemSettings(
-    workspaceId: number,
-    feature: WorkspaceFeatureId,
-    itemId: number,
-    section: string
-): void {
+export function goToItemSettings(workspaceId: number, feature: FeatureId, itemId: number, section: string): void {
     requestItemSettings({ workspaceId, feature, itemId, section });
-    const segment = ITEM_SEGMENT[feature];
+    // La table ne connaît que les natives ; un module externe apportera son
+    // `itemSegment` par son manifest (branchement de la coquille, phase 3).
+    const segment = isExternalFeatureId(feature) ? undefined : ITEM_SEGMENT[feature];
     startTeleport(workspaceId, segment ? [`view:${feature}`, `l1:${segment(itemId)}`] : [`view:${feature}`]);
     requestSelectWorkspace(workspaceId);
 }

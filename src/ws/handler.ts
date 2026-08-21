@@ -11,7 +11,7 @@ import {
     type FeatureAccess,
     type ServerMessage,
     type WorkspaceCapability,
-    type WorkspaceFeatureId,
+    type FeatureId,
     liveTopicSchema
 } from 'deveye-types';
 import type { FastifyInstance } from 'fastify';
@@ -275,20 +275,20 @@ export async function registerWS(
                     if (!can(c)) throw new FeatureError('forbidden', 'Droit insuffisant sur cet espace');
                 };
                 // `write` implique `read` : une seule comparaison suffit.
-                const canFeature = (f: WorkspaceFeatureId, level: FeatureAccess = 'read'): boolean => {
+                const canFeature = (f: FeatureId, level: FeatureAccess = 'read'): boolean => {
                     const granted = scope.features.get(f);
                     if (!granted) return false;
                     return level === 'read' || granted === 'write';
                 };
-                const assertFeature = (f: WorkspaceFeatureId, level: FeatureAccess = 'read'): void => {
+                const assertFeature = (f: FeatureId, level: FeatureAccess = 'read'): void => {
                     if (!canFeature(f, level)) {
                         throw new FeatureError('forbidden', 'Cette fonctionnalité ne vous est pas ouverte ici');
                     }
                 };
                 // La lecture de la feature est incluse : gérer les destinations
                 // d'une fonctionnalité qu'on ne voit pas n'a pas de sens.
-                const canChannels = (f: WorkspaceFeatureId): boolean => canFeature(f) && scope.channels.has(f);
-                const assertChannels = (f: WorkspaceFeatureId): void => {
+                const canChannels = (f: FeatureId): boolean => canFeature(f) && scope.channels.has(f);
+                const assertChannels = (f: FeatureId): void => {
                     if (!canChannels(f)) {
                         throw new FeatureError(
                             'forbidden',
@@ -297,7 +297,7 @@ export async function registerWS(
                     }
                 };
                 const assertItem = async (
-                    f: WorkspaceFeatureId,
+                    f: FeatureId,
                     itemId: number,
                     level: FeatureAccess = 'read'
                 ): Promise<void> => {

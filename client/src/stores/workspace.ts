@@ -1,4 +1,4 @@
-import type { FeatureAccess, WorkspaceCapability, WorkspaceFeatureId, WorkspacePermissions } from 'deveye-types';
+import type { FeatureAccess, FeatureId, WorkspaceCapability, WorkspacePermissions } from 'deveye-types';
 import type { Workspace } from 'deveye-types';
 import { useSyncExternalStore } from 'react';
 
@@ -165,9 +165,9 @@ export function setPermissions(permissions: WorkspacePermissions): void {
 export function useWorkspacePermissions(): {
     isOwner: boolean;
     can: (c: WorkspaceCapability) => boolean;
-    canFeature: (f: WorkspaceFeatureId, level?: FeatureAccess) => boolean;
+    canFeature: (f: FeatureId, level?: FeatureAccess) => boolean;
     /** Gérer les canaux d'alerte de CETTE feature (grant `channels`, 093). */
-    canChannels: (f: WorkspaceFeatureId) => boolean;
+    canChannels: (f: FeatureId) => boolean;
 } {
     const { permissions } = useWorkspaceState();
     return {

@@ -3,7 +3,7 @@ import type {
     ItemAccess,
     WorkspaceCapability,
     WorkspaceFeatureGrant,
-    WorkspaceFeatureId,
+    FeatureId,
     WorkspacePermissions,
     WorkspaceRoleRow,
     WorkspaceRow
@@ -81,14 +81,14 @@ export interface ResolvedScope {
     /** Capacités de gouvernance accordées par son rôle. */
     capabilities: ReadonlySet<WorkspaceCapability>;
     /** Droits par feature accordés par son rôle, absents = aucun accès. */
-    features: ReadonlyMap<WorkspaceFeatureId, FeatureAccess>;
+    features: ReadonlyMap<FeatureId, FeatureAccess>;
     /**
      * Fonctionnalités dont le rôle gère les **canaux d'alerte** (le champ
      * `channels` de ses grants, migration 093). Distinct de `features` : régler
      * où Uptime écrit relève de `write`, gérer l'adresse de l'astreinte
      * relève d'ici.
      */
-    channels: ReadonlySet<WorkspaceFeatureId>;
+    channels: ReadonlySet<FeatureId>;
     /**
      * Les restrictions posées sur des éléments précis, pour le rôle de
      * l'appelant. Chargées **paresseusement, par feature** : la plupart des
@@ -97,7 +97,7 @@ export interface ResolvedScope {
      *
      * Vide pour le propriétaire, qui passe outre — comme partout ailleurs.
      */
-    itemRestrictions: (feature: WorkspaceFeatureId) => Promise<ReadonlyMap<number, ItemAccess>>;
+    itemRestrictions: (feature: FeatureId) => Promise<ReadonlyMap<number, ItemAccess>>;
     /** Coffre chiffré de cet espace, lié à cette session. */
     secure: SecureStore;
     secretKeys: SecretKeyService;
@@ -124,25 +124,37 @@ export function grantsFor(
     role: WorkspaceRoleRow | null
 ): {
     capabilities: Set<WorkspaceCapability>;
-    features: Map<WorkspaceFeatureId, FeatureAccess>;
-    channels: Set<WorkspaceFeatureId>;
+    features: Map<FeatureId, FeatureAccess>;
+    channels: Set<FeatureId>;
+    extras: Map<FeatureId, Record<string, boolean | string>>;
 } {
     if (isOwner) {
+        // Les extras du propriétaire ne se matérialisent pas ici : leur
+        // résolution (`true` / `ownerValue`) se fait à la lecture, contre le
+        // manifest, parce qu'elle dépend de specs que ce module ne connaît pas.
         return {
             capabilities: new Set(WORKSPACE_CAPABILITIES),
             features: new Map(WORKSPACE_FEATURE_IDS.map((f) => [f, 'write'])),
-            channels: new Set(WORKSPACE_FEATURE_IDS)
+            channels: new Set(WORKSPACE_FEATURE_IDS),
+            extras: new Map()
         };
     }
-    if (!role) return { capabilities: new Set(), features: new Map(), channels: new Set() };
+    if (!role) return { capabilities: new Set(), features: new Map(), channels: new Set(), extras: new Map() };
 
-    const features = new Map<WorkspaceFeatureId, FeatureAccess>();
-    const channels = new Set<WorkspaceFeatureId>();
+    const features = new Map<FeatureId, FeatureAccess>();
+    const channels = new Set<FeatureId>();
+    const extras = new Map<FeatureId, Record<string, boolean | string>>();
     for (const g of parseJsonArray<WorkspaceFeatureGrant>(role.features)) {
         features.set(g.feature, g.access);
         if (g.channels) channels.add(g.feature);
+        if (g.extras && Object.keys(g.extras).length > 0) extras.set(g.feature, g.extras);
     }
-    return { capabilities: new Set(parseJsonArray<WorkspaceCapability>(role.capabilities)), features, channels };
+    return {
+        capabilities: new Set(parseJsonArray<WorkspaceCapability>(role.capabilities)),
+        features,
+        channels,
+        extras
+    };
 }
 
 function parseJsonArray<T>(raw: unknown): T[] {
@@ -267,7 +279,7 @@ export function createAccessResolver(
          * restrictions se posent sur des rôles.
          */
         const restrictionCache = new Map<string, Promise<ReadonlyMap<number, ItemAccess>>>();
-        const itemRestrictions = (feature: WorkspaceFeatureId): Promise<ReadonlyMap<number, ItemAccess>> => {
+        const itemRestrictions = (feature: FeatureId): Promise<ReadonlyMap<number, ItemAccess>> => {
             if (isOwner || !role) return Promise.resolve(new Map());
             const hit = restrictionCache.get(feature);
             if (hit) return hit;
@@ -324,10 +336,15 @@ export async function permissionsFor(
 ): Promise<WorkspacePermissions> {
     const isOwner = workspace.owner_user_id === userId;
     const role = isOwner ? null : await db.workspaceRoles.findForMember(userId, workspace.id);
-    const { capabilities, features, channels } = grantsFor(isOwner, role);
+    const { capabilities, features, channels, extras } = grantsFor(isOwner, role);
     return {
         isOwner,
         capabilities: [...capabilities],
-        features: [...features].map(([feature, access]) => ({ feature, access, channels: channels.has(feature) }))
+        features: [...features].map(([feature, access]) => ({
+            feature,
+            access,
+            channels: channels.has(feature),
+            extras: extras.get(feature) ?? {}
+        }))
     };
 }
