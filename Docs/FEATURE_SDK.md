@@ -100,12 +100,10 @@ Le rapatriement d'une native d'infrastructure en module PRIVÉ a élargi le cont
 - **Publication deveye-types 0.15.0** : le SDK est sur `main` du repo de types
   mais pas publié ; le miroir `node_modules` est à niveau (version 0.15.0
   locale). La CI GitHub du template ne passera qu'après publication.
-- **Lint des modules in-repo** : le lint racine couvre `features/` mais sa
-  config sans React ignore les `.tsx` ; le code client de Météo n'est vérifié
-  que par tsc et le build.
-- **Chunking** : les modules `features/*` sortent dans leur chunk
-  (`feature-<slug>`) ; un package externe installé par symlink retombe dans le
-  chunk principal (le realpath ne matche pas le motif). Fonctionnel, pas
-  optimal.
-- **Partage inter-espaces** : `shareTier` externe figé à `'never'` ; brancher
-  un module au partage exigerait `listVisible` côté SDK, non conçu.
+- **Partage inter-espaces** : `shareTier` externe figé à `'never'`. Brancher
+  un module exigerait, dans l'ordre : une migration élargissant
+  `item_shares.feature` (VARCHAR(24), or un id externe monte à 27), un point
+  d'entrée « domicile d'un élément » côté serveur du module, une façade de
+  portée de partage dans le contexte (`foreignIds` pour le listage,
+  `cipherFor` par ligne), et l'élargissement des contrats `share.*` à
+  `featureIdSchema`. La migration impose son dry-run sur copie du dump.

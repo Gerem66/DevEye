@@ -1,7 +1,7 @@
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig } from 'vite';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 
 const serverPort = process.env.LISTEN_PORT ?? '3000';
 const serverOrigin = `http://localhost:${serverPort}`;
@@ -54,8 +54,38 @@ function siblingFeatureAliases(): Record<string, string> {
     return aliases;
 }
 
+/**
+ * Le vrai chemin sur disque de chaque module installé, avec son slug.
+ *
+ * `manualChunks` reçoit des ids résolus au realpath : un package installé par
+ * symlink (npm link, overlay `features.local.json` en imports relatifs) n'y
+ * montre ni `deveye-feature-<slug>` ni `features/<slug>/src/`, et retombait
+ * dans le chunk principal. La carte préfixe → slug rattrape ces deux formes ;
+ * les modules du workspace `features/*` gardent leur motif de chemin.
+ */
+function featureChunkRoots(): [string, string][] {
+    const roots: [string, string][] = [];
+    const add = (dir: string, pkg: string) => {
+        const slug = /^deveye-feature-([a-z0-9]+)$/.exec(pkg)?.[1];
+        if (!slug || !existsSync(dir)) return;
+        roots.push([realpathSync(dir) + path.sep, slug]);
+    };
+    for (const pkg of installedFeaturePackages()) {
+        add(path.resolve(__dirname, '../node_modules', pkg), pkg);
+    }
+    const localConfig = path.resolve(__dirname, '../features.local.json');
+    if (existsSync(localConfig)) {
+        const local = JSON.parse(readFileSync(localConfig, 'utf-8')) as {
+            features?: { package: string; path: string }[];
+        };
+        for (const f of local.features ?? []) add(path.resolve(__dirname, '..', f.path), f.package);
+    }
+    return roots;
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => {
+    const featureRoots = featureChunkRoots();
     const useTypesSource = command === 'serve' && existsSync(TYPES_SOURCE_ENTRY);
 
     return {
@@ -113,6 +143,16 @@ export default defineConfig(({ command }) => {
                             id.match(/deveye-feature-([a-z0-9]+)/) ??
                             /[/\\]features[/\\]([a-z0-9]+)[/\\]src[/\\]/.exec(id);
                         if (feature) return `feature-${feature[1]}`;
+                        // Troisième forme : un module installé par symlink ou
+                        // par l'overlay local, dont le realpath ne porte aucun
+                        // des deux motifs ci-dessus.
+                        // Le `node_modules` interne d'un module (devDeps de son
+                        // typecheck) n'est pas son code : ce qui en resterait
+                        // après dédoublonnage va aux chunks vendeurs.
+                        const byRoot = id.includes('node_modules')
+                            ? undefined
+                            : featureRoots.find(([root]) => id.startsWith(root));
+                        if (byRoot) return `feature-${byRoot[1]}`;
                         if (!id.includes('node_modules')) return undefined;
                         if (id.includes('framer-motion')) return 'framer-motion';
                         // xterm is only pulled in by the lazily-loaded terminal panel; keep
@@ -125,6 +165,12 @@ export default defineConfig(({ command }) => {
             }
         },
         resolve: {
+            // Un module privé installé par chemin a son propre `node_modules`
+            // (devDeps de son typecheck autonome) : sans dédoublonnage, ses
+            // fichiers résolvaient `react` et `zod` vers SES copies, bundlées
+            // en double, et deux React dans la même page cassent les hooks.
+            // Tout se résout vers les copies de l'app, comme en dev.
+            dedupe: ['react', 'react-dom', 'zod', 'deveye-types'],
             alias: {
                 '@': path.resolve(__dirname, 'src'),
                 // La surface client du SDK des modules : un vrai module de l'app,
