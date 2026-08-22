@@ -351,28 +351,43 @@ function moduleFull(Full: ComponentType<{ closeFeature(): void }>): ComponentTyp
  * Le catalogue complet : les seize natives, puis les modules installés,
  * projetés depuis leur manifest + leur entrée client. Même contrat partout :
  * la grille, le marché d'ajout et l'« À propos » ne savent pas qui est qui.
+ *
+ * PARESSEUX, et c'est vital : figé au premier APPEL (toujours au rendu, donc
+ * après l'enregistrement des modules), jamais à l'évaluation du module. Une
+ * constante de portée module s'était fait piéger : le graphe d'imports de la
+ * glue générée atteignait ce fichier via TopNavbar → usePresence AVANT que
+ * `registerClientModules` n'ait tourné, et le catalogue se figeait sans les
+ * modules : Météo disparaissait du marché d'ajout sans un bruit.
  */
-export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
-    ...NATIVE_CATALOG,
-    ...clientModules().map(({ manifest, client }): FeatureCatalogEntry => ({
-        // Un module est externe par construction (vérifié à l'enregistrement),
-        // et un id externe est une tuile d'accueil valide depuis l'élargissement.
-        id: manifest.id as HomeFeatureId,
-        title: manifest.label,
-        icon: manifest.icon,
-        description: manifest.description,
-        category: manifest.category,
-        WidgetContent: client.Widget,
-        FullComponent: moduleFull(client.Full),
-        cacheDurationMinutes: client.cacheDurationMinutes,
-        preload: client.preload,
-        holdSecrecy: client.holdSecrecy,
-        compact: manifest.tile?.compact
-    }))
-];
+let MERGED: FeatureCatalogEntry[] | null = null;
+
+export function featureCatalog(): readonly FeatureCatalogEntry[] {
+    if (MERGED === null) {
+        MERGED = [
+            ...NATIVE_CATALOG,
+            ...clientModules().map(({ manifest, client }): FeatureCatalogEntry => ({
+                // Un module est externe par construction (vérifié à
+                // l'enregistrement), et un id externe est une tuile d'accueil
+                // valide depuis l'élargissement.
+                id: manifest.id as HomeFeatureId,
+                title: manifest.label,
+                icon: manifest.icon,
+                description: manifest.description,
+                category: manifest.category,
+                WidgetContent: client.Widget,
+                FullComponent: moduleFull(client.Full),
+                cacheDurationMinutes: client.cacheDurationMinutes,
+                preload: client.preload,
+                holdSecrecy: client.holdSecrecy,
+                compact: manifest.tile?.compact
+            }))
+        ];
+    }
+    return MERGED;
+}
 
 export function featureCatalogEntry(id: HomeFeatureId): FeatureCatalogEntry | undefined {
-    return FEATURE_CATALOG.find((f) => f.id === id);
+    return featureCatalog().find((f) => f.id === id);
 }
 
 /**
@@ -397,7 +412,7 @@ export interface HomeAudience {
  * suffit à rouvrir la porte.
  */
 export function availableFeatures({ kind, isAdmin }: HomeAudience): FeatureCatalogEntry[] {
-    return FEATURE_CATALOG.filter((f) => featureAllowed(f, { kind, isAdmin }));
+    return featureCatalog().filter((f) => featureAllowed(f, { kind, isAdmin }));
 }
 
 /**
@@ -434,7 +449,7 @@ export function usableFeatureIds(ids: readonly HomeFeatureId[], audience: HomeAu
  * qui n'ont qu'une vue (`allowedToOpen`, la garde unique de navigation).
  */
 export function featureIdAllowed(id: string, audience: HomeAudience): boolean {
-    const entry = FEATURE_CATALOG.find((f) => f.id === id);
+    const entry = featureCatalog().find((f) => f.id === id);
     return !entry || featureAllowed(entry, audience);
 }
 
@@ -460,7 +475,7 @@ export function featureRelations(id: HomeFeatureId): FeatureRelation[] {
         const entry = featureCatalogEntry(link.to);
         if (entry) out.push({ entry, what: link.what, outgoing: true });
     }
-    for (const source of FEATURE_CATALOG) {
+    for (const source of featureCatalog()) {
         for (const link of source.links ?? []) {
             if (link.to === id) out.push({ entry: source, what: link.what, outgoing: false });
         }
@@ -469,6 +484,9 @@ export function featureRelations(id: HomeFeatureId): FeatureRelation[] {
 }
 
 /** Les entrées d'un rayon, dans l'ordre du catalogue. */
-export function featuresInCategory(entries: FeatureCatalogEntry[], category: FeatureCategory): FeatureCatalogEntry[] {
+export function featuresInCategory(
+    entries: readonly FeatureCatalogEntry[],
+    category: FeatureCategory
+): FeatureCatalogEntry[] {
     return entries.filter((f) => f.category === category);
 }

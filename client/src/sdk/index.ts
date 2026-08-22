@@ -16,22 +16,24 @@ import type { FeatureManifest } from 'deveye-types/sdk';
 import type { z, ZodType } from 'zod';
 
 // ── Le kit d'interface ─────────────────────────────────────────────────────
-export {
-    Button,
-    Checkbox,
-    ConfirmDialog,
-    CountWidget,
-    Dialog,
-    SegmentedControl,
-    SelectInput,
-    StatusBadge,
-    Switch,
-    TextInput
-} from '@/Components';
-export type { ConfirmRequest } from '@/Components';
-export { useDialogClose, useDialogSubmit, useDismissLayer } from '@/Components/Dialog';
+// Imports DIRECTS, jamais le baril `@/Components` : le baril tire TopNavbar,
+// qui tire la présence, qui tire le catalogue ; le catalogue s'évaluerait
+// alors PENDANT le chargement de la glue des modules, avant leur
+// enregistrement. C'est arrivé (Météo absente du marché) ; la paresse du
+// catalogue protège désormais aussi, mais un graphe court reste la règle.
+export { default as Button } from '@/Components/Button';
+export { default as Checkbox } from '@/Components/Checkbox';
+export { ConfirmDialog } from '@/Components/ConfirmDialog';
+export type { ConfirmRequest } from '@/Components/ConfirmDialog';
+export { CountWidget, useWorkspaceCount } from '@/Components/CountWidget';
+export { default as SegmentedControl } from '@/Components/SegmentedControl';
+export { default as SelectInput } from '@/Components/SelectInput';
+export { StatusBadge } from '@/Components/StatusBadge';
+export { default as Switch } from '@/Components/Switch';
+export { default as TextInput } from '@/Components/TextInput';
+export { Dialog, useDialogClose, useDialogSubmit, useDismissLayer } from '@/Components/Dialog';
 export { FeatureSettingsButton, useSettingsSections } from '@/Components/FeatureSettings';
-export { DeviceFolderPicker } from '@/Components';
+export { DeviceFolderPicker } from '@/Components/DeviceFolderPicker';
 export { useDevices } from '@/stores/devices';
 /** Les classes de rangées canoniques des écrans de réglages (channelRow, etc.). */
 export { default as settingsStyles } from '@/Components/FeatureSettings/FeatureSettings.module.css';

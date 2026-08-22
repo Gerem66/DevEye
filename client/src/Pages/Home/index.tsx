@@ -50,7 +50,7 @@ import FeatureUsers from '@/Features/Users';
 import MonitoringPanel from '@/Features/Monitoring/MonitoringPanel';
 
 import {
-    FEATURE_CATALOG,
+    featureCatalog,
     featureAllowed,
     featureCatalogEntry,
     featureIdAllowed,
@@ -95,10 +95,16 @@ interface ViewConfig {
     renderDevice?: () => ReactNode;
 }
 
-// Static views: the built-in feature catalog (grid cards) + structural pages
-// (reached from the navbar menu, no card).
-const STATIC_VIEWS: ViewConfig[] = [
-    ...FEATURE_CATALOG.map((f) => ({
+// Static views: the feature catalog (grid cards) + structural pages (reached
+// from the navbar menu, no card). LAZY, comme le catalogue : figé au premier
+// rendu, jamais à l'import, sinon les modules enregistrés après coup manquent.
+let STATIC_VIEWS_MEMO: ViewConfig[] | null = null;
+function staticViews(): ViewConfig[] {
+    STATIC_VIEWS_MEMO ??= buildStaticViews();
+    return STATIC_VIEWS_MEMO;
+}
+const buildStaticViews = (): ViewConfig[] => [
+    ...featureCatalog().map((f) => ({
         id: f.id,
         title: f.title,
         icon: f.icon,
@@ -529,7 +535,7 @@ export default function HomePage() {
 
     const viewTitleOf = useCallback(
         (viewId: string): string =>
-            STATIC_VIEWS.find((v) => v.id === viewId)?.title ??
+            staticViews().find((v) => v.id === viewId)?.title ??
             (viewId.startsWith(DEVICE_VIEW_PREFIX) ? 'Appareils' : viewId),
         []
     );
@@ -726,7 +732,7 @@ export default function HomePage() {
         return out;
     }, [layout, devices]);
 
-    const views = useMemo(() => [...STATIC_VIEWS, ...deviceViews], [deviceViews]);
+    const views = useMemo(() => [...staticViews(), ...deviceViews], [deviceViews]);
     const viewsRef = useRef(views);
     viewsRef.current = views;
     // Même motif : lu depuis des effets qui ne doivent pas se relancer sur un
