@@ -4,7 +4,6 @@ import type { HomeFeatureId, WorkspaceKind } from 'deveye-types';
 import { MonitoringWidget } from '@/Features/Monitoring';
 import { NotesWidget } from '@/Features/Notes/NotesWidget';
 import { PasswordWidget } from '@/Features/Password/PasswordWidget';
-import { CloudSyncWidget } from '@/Features/CloudSync';
 import { UptimeWidget } from '@/Features/Uptime/UptimeWidget';
 import { SentinelWidget } from '@/Features/Sentinel/SentinelWidget';
 import { MailWidget } from '@/Features/Mail/MailWidget';
@@ -20,7 +19,6 @@ import { OsintWidget } from '@/Features/Osint/OsintWidget';
 import Monitoring from '@/Features/Monitoring';
 import FeaturePassword from '@/Features/Password';
 import FeatureNotes from '@/Features/Notes';
-import CloudSync from '@/Features/CloudSync';
 import Uptime from '@/Features/Uptime';
 import Sentinel from '@/Features/Sentinel';
 import Mail from '@/Features/Mail';
@@ -185,16 +183,6 @@ const NATIVE_CATALOG: FeatureCatalogEntry[] = [
         // `sentinel` sans que personne la regarde. La carte de l'accueil reste
         // vivante par le compteur partagé, comme celle d'Uptime.
         cacheDurationMinutes: 0
-    },
-    {
-        id: 'cloudsync',
-        title: 'CloudSync',
-        icon: 'cloud',
-        description: 'Synchronisation de dossiers entre vos appareils et votre espace.',
-        category: 'work',
-        WidgetContent: CloudSyncWidget,
-        FullComponent: CloudSync,
-        cacheDurationMinutes: 5
     },
     {
         id: 'projects',

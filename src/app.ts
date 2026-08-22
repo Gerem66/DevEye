@@ -19,11 +19,10 @@ import { assertAccessDeclared } from '@/features/_permissions';
 import { featureHandlers } from '@/features/registry';
 import { buildTopicIndex } from '@/features/_topics';
 import { authRoutes } from '@/auth/routes';
-import { CloudSyncEngine } from '@/cloudSync/engine';
 import { logger } from '@/logger';
 import { env, isDev } from '@/Utils/Env';
 import { registerWS } from '@/ws/handler';
-import { createModuleServices } from '@/features/_sdk/register';
+import { createModuleServices, moduleAgentHooks } from '@/features/_sdk/register';
 import { setSdkHub } from '@/features/_sdk/host';
 import type { FeatureService } from 'deveye-types/sdk/server';
 import { createAuditLog } from '@/Services/AuditLog';
@@ -51,8 +50,6 @@ export interface AppDeps {
 
 export interface BuiltApp {
     app: FastifyInstance;
-    /** Moteur CloudSync — exposé pour le prune horaire de index.ts. */
-    cloudSync: CloudSyncEngine;
     /** Services des modules installés — démarrés ici, arrêtés par index.ts. */
     moduleServices: readonly FeatureService[];
     /** Ordonnanceur Uptime — démarré/arrêté par index.ts. */
@@ -180,14 +177,11 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // silence, et l'interface qui masque la donnée fait croire à une garde.
     assertAccessDeclared(featureHandlers);
     const audit = createAuditLog(deps.db);
-    const cloudSync = new CloudSyncEngine({ db: deps.db, hub, crypt: deps.crypt, audit, logger });
-    await cloudSync.start();
-
     // Le hub se dépose pour l'assemblage SDK (façade agents des modules),
     // puis les services des modules installés démarrent ICI, awaités, avant
     // l'enregistrement des sockets : un module d'infrastructure (bail, clés)
     // doit être prêt avant la première trame d'agent, exactement comme le
-    // moteur CloudSync natif ci-dessus.
+    // moteur d'un module d'infrastructure (CloudSync) l'exige.
     setSdkHub(hub);
     const moduleServices = createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger });
     for (const svc of moduleServices) await svc.start();
@@ -221,7 +215,6 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         db: deps.db,
         crypt: deps.crypt,
         hub,
-        cloudSync,
         databases,
         audit,
         logger,
@@ -238,7 +231,6 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         crypt: deps.crypt,
         hub,
         live,
-        cloudSync,
         uptime,
         integrations,
         databases,
@@ -249,7 +241,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     });
     // Le moteur reçoit ce que les agents envoient — mais il n'évalue rien ici :
     // les handlers empilent, le tour de boucle évalue (voir `SecurityMonitor`).
-    await registerAgentWS(app, { db: deps.db, hub, live, cloudSync, sentinel, audit });
+    await registerAgentWS(app, { db: deps.db, hub, live, hooks: moduleAgentHooks(), sentinel, audit });
 
     // Serve the built web client from the same origin as the API whenever a
     // build is present (production, or the dockerised dev stack). On the host
@@ -278,5 +270,5 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         app.log.debug({ clientDir }, 'No client build found; static serving disabled (host dev uses Vite)');
     }
 
-    return { app, cloudSync, uptime, mailSync, integrations, databases, audience, sentinel, backups, moduleServices };
+    return { app, uptime, mailSync, integrations, databases, audience, sentinel, backups, moduleServices };
 }

@@ -12,7 +12,8 @@ import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import type { LiveHub } from '@/live/hub';
 import type { MonitorHub } from '@/agent/hub';
-import type { CloudSyncEngine } from '@/cloudSync/engine';
+import { CLOUDSYNC_BACKUP_PROVIDER, type CloudSyncBackupProvider } from 'deveye-types/sdk';
+import { moduleProvider } from '@/features/_sdk/register';
 import type { AuditLog } from '@/Services/AuditLog';
 import type { DatabaseMonitor } from '@/Services/DatabaseMonitor';
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
@@ -61,7 +62,6 @@ interface BackupDeps {
     db: Database;
     crypt: Encryption;
     hub: MonitorHub;
-    cloudSync: CloudSyncEngine;
     databases: DatabaseMonitor;
     audit: AuditLog;
     logger: Logger;
@@ -494,12 +494,16 @@ export class BackupService {
 
         if (job.source_kind === 'cloudsync') {
             if (!job.source_id) throw new Error('Ce travail ne désigne aucun partage.');
-            const share = await this.deps.db.syncShares.findById(job.source_id);
-            if (!share || share.workspace_id !== job.workspace_id) {
+            // CloudSync est un module : la lecture des partages passe par le
+            // contrat qu'il offre. Absent, le run échoue proprement et
+            // reprendra le jour où le module revient.
+            const provider = moduleProvider<CloudSyncBackupProvider>(CLOUDSYNC_BACKUP_PROVIDER);
+            if (!provider) throw new Error('Source CloudSync indisponible : module non installé.');
+            const share = await provider.findShare(job.source_id);
+            if (!share || share.workspaceId !== job.workspace_id) {
                 throw new Error('Le partage de ce travail a été supprimé.');
             }
-            const store = await this.deps.cloudSync.storeFor(share);
-            return cloudSyncSource(this.deps.db, store, { id: share.id, name: share.name }, this.deps.logger);
+            return cloudSyncSource(provider, { id: share.id, name: share.name }, this.deps.logger);
         }
 
         throw new Error(`Source de sauvegarde inconnue : ${job.source_kind}`);

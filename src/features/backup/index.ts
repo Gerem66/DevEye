@@ -20,6 +20,8 @@ import { BackupService, type StoredDestination, type StoredJob } from '@/Service
 import { safeRelPath } from '@/backup/sinks';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { shareScope } from '../_sharing';
+import { CLOUDSYNC_BACKUP_PROVIDER, type CloudSyncBackupProvider } from 'deveye-types/sdk';
+import { moduleProvider } from '@/features/_sdk/register';
 import {
     backupService,
     loadDestination,
@@ -306,8 +308,10 @@ async function assertSource(ctx: FeatureContext, source: string, sourceId: numbe
         }
         return;
     }
-    const share = await ctx.db.syncShares.findById(sourceId);
-    if (!share || share.workspace_id !== ctx.workspaceId) {
+    const provider = moduleProvider<CloudSyncBackupProvider>(CLOUDSYNC_BACKUP_PROVIDER);
+    if (!provider) throw new FeatureError('not_found', 'CloudSync est indisponible : module non installé.');
+    const share = await provider.findShare(sourceId);
+    if (!share || share.workspaceId !== ctx.workspaceId) {
         throw new FeatureError('not_found', 'Ce partage CloudSync est introuvable dans cet espace.');
     }
 }
@@ -485,9 +489,13 @@ const sourcesFeature = defineFeature({
             });
         }
 
-        const shares = await ctx.db.syncShares.listByWorkspace(ctx.workspaceId);
+        // CloudSync est un module : sans lui, la source disparaît simplement
+        // de la liste (les travaux persistés qui la visent échoueront avec un
+        // message clair au run).
+        const provider = moduleProvider<CloudSyncBackupProvider>(CLOUDSYNC_BACKUP_PROVIDER);
+        const shares = provider ? await provider.listShares(ctx.workspaceId) : [];
         for (const share of shares) {
-            const stats = await ctx.db.syncFiles.statsByShare(share.id);
+            const stats = await provider!.statsByShare(share.id);
             candidates.push({
                 kind: 'cloudsync',
                 id: share.id,

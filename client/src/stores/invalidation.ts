@@ -137,7 +137,6 @@ const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
     notify: ['notify.channelList', 'notify.routeGet'],
     notes: ['note.count', 'note.list'],
     password: ['password.count', 'password.list'],
-    cloudsync: ['cloudSync.listShares'],
     // La relève de fond ne bouge pas que les cartes de comptes : elle fait entrer
     // des messages, corrige des drapeaux et retire des lignes disparues. Sans les
     // deux dernières clés, seule la date « il y a X min » se rafraîchissait, et
@@ -158,7 +157,7 @@ const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
      * au rendu depuis le store `devices` (`useShareDevices`), donc sans le
      * moindre aller-retour.
      */
-    devices: ['device.list', 'cloudSync.listShares'],
+    devices: ['device.list'],
     /*
      * Sujet distinct de `devices`, et non un alias : les constats bougent à
      * chaque tour du moteur, la liste d'appareils presque jamais. Les confondre

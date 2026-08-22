@@ -177,7 +177,7 @@ export function moduleAgentHooks(): Required<FeatureAgentHooks> {
     return {
         onAgentConnect: (deviceId) => each((h) => h.onAgentConnect?.(deviceId)),
         onAgentOffline: (deviceId) => each((h) => h.onAgentOffline?.(deviceId)),
-        onSyncChanged: (payload) => each((h) => h.onSyncChanged?.(payload)),
+        onSyncChanged: (deviceId, payload) => each((h) => h.onSyncChanged?.(deviceId, payload)),
         onSyncIndex: (deviceId, payload) => each((h) => h.onSyncIndex?.(deviceId, payload)),
         onSyncChunk: (deviceId, payload) => each((h) => h.onSyncChunk?.(deviceId, payload)),
         onSyncAck: (deviceId, payload) => each((h) => h.onSyncAck?.(deviceId, payload)),

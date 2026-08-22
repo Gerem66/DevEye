@@ -18,6 +18,8 @@ import type { FeatureAccessSpec, FeatureContext } from '../_define';
 import { FeatureError } from '../_define';
 import type { ShareScope } from '../_sharing';
 import type { StoredDestination, StoredJob, StoredRun } from '@/Services/BackupService';
+import { CLOUDSYNC_BACKUP_PROVIDER, type CloudSyncBackupProvider } from 'deveye-types/sdk';
+import { moduleProvider } from '@/features/_sdk/register';
 
 /**
  * Ce que les handlers de sauvegarde partagent : les gardes d'accès, la lecture
@@ -186,8 +188,10 @@ export async function sourceNameOf(
         return stored.name ?? null;
     }
 
-    const share = await ctx.db.syncShares.findById(sourceId);
-    return share && share.workspace_id === homeWorkspaceId ? share.name : null;
+    const provider = moduleProvider<CloudSyncBackupProvider>(CLOUDSYNC_BACKUP_PROVIDER);
+    if (!provider) return null;
+    const share = await provider.findShare(sourceId);
+    return share && share.workspaceId === homeWorkspaceId ? share.name : null;
 }
 
 export async function toRun(ctx: FeatureContext, row: BackupRunRow, cipher?: Cipher): Promise<BackupRun> {

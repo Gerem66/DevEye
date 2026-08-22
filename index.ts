@@ -1,7 +1,6 @@
 import { env } from '@/Utils/Env';
 import { buildApp } from '@/app';
 import { buildPublicApp } from '@/publicApp';
-import { pruneCloudSync } from '@/cloudSync/prune';
 import { logger } from '@/logger';
 import { agentDistDir, startAgentReconcile } from '@/agent/sync';
 
@@ -33,7 +32,7 @@ async function main() {
     const db = createDatabase(getQueryable(pool));
     const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
 
-    const { app, cloudSync, uptime, mailSync, integrations, databases, audience, sentinel, backups, moduleServices } =
+    const { app, uptime, mailSync, integrations, databases, audience, sentinel, backups, moduleServices } =
         await buildApp({
             db,
             crypt
@@ -64,7 +63,6 @@ async function main() {
             // Rend le bail CloudSync : sans ça, le processus qui redémarre ne
             // reconnaît pas son propre bail (identité neuve) et resterait passif
             // jusqu'à expiration.
-            await cloudSync.stop();
             if (publicApp) await publicApp.close();
             await app.close();
             await pool.end();
@@ -96,7 +94,6 @@ async function main() {
             const uptimeChecks = await db.uptimeHistory.pruneByRetention(Math.floor(Date.now() / 1000));
             if (uptimeChecks > 0) logger.info({ uptimeChecks }, 'Pruned old uptime checks');
             // CloudSync : purge des versions par budget + sessions abandonnées.
-            await pruneCloudSync(db, cloudSync, audit, logger);
         } catch (e) {
             logger.error({ err: (e as Error).message }, 'Retention sweep failed');
         }

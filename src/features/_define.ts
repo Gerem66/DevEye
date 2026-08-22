@@ -1,4 +1,3 @@
-import type { CloudSyncEngine } from '@/cloudSync/engine';
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import type { SecureStore } from '@/Services/SecureStore';
@@ -130,8 +129,6 @@ export interface FeatureContext {
      * dispatcheur depuis `mutates`, jamais par un handler.
      */
     live?: LiveTransport;
-    /** CloudSync orchestrator (sessions, versions, blob store). Absent in tests. */
-    cloudSync?: CloudSyncEngine;
     /** Uptime scheduler — backs the "check now" and "test notification" commands. */
     uptime?: UptimeMonitor;
     /**
