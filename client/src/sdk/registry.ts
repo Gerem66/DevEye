@@ -1,4 +1,9 @@
-import { isExternalFeatureId, registerExternalFeature, type ExternalFeatureId } from 'deveye-types';
+import {
+    isExternalFeatureId,
+    registerExternalFeature,
+    registerFeatureCommands,
+    type ExternalFeatureId
+} from 'deveye-types';
 import { validateManifest, type FeatureManifest } from 'deveye-types/sdk';
 import type { FeatureClient } from 'deveye-types/sdk/client';
 
@@ -50,6 +55,12 @@ export function registerClientModules(installed: readonly InstalledClientFeature
                 shareTier: mod.manifest.shareTier
             });
         }
+        // Les contrats du module dans le registre des commandes : c'est lui
+        // que `ws.send` consulte avant d'envoyer. Une native rapatriée y
+        // redéclare les mêmes objets (no-op) ; un module externe n'existe que
+        // par cet enregistrement : sans lui, chaque commande serait refusée
+        // localement (« Unknown command ») et l'UI resterait en chargement.
+        registerFeatureCommands(mod.manifest.commands);
         registerFeatureResources(
             mod.manifest.id,
             (mod.manifest.invalidatedByTopic ?? mod.manifest.resources) as ResourceKey[]
