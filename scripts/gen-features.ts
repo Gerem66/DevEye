@@ -193,7 +193,13 @@ function importPath(m: ResolvedModule, fromDir: string, sub: '' | '/server' | '/
             : sub === '/server'
               ? path.join(m.localPath, 'src', 'server', 'index.ts')
               : path.join(m.localPath, 'src', 'client', 'index.tsx');
-    const rel = path.relative(fromDir, target).split(path.sep).join('/');
+    // Sans extension : tsc (Bundler), tsx et vite la résolvent, et
+    // allowImportingTsExtensions n'a pas à s'inviter dans l'app.
+    const rel = path
+        .relative(fromDir, target)
+        .split(path.sep)
+        .join('/')
+        .replace(/\.tsx?$/, '');
     return rel.startsWith('.') ? rel : `./${rel}`;
 }
 

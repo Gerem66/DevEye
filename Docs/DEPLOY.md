@@ -578,3 +578,15 @@ mysql DevEye_migdry < src/db/migrations/0XX_….sql  # deux fois : ré-entrance
     message, à la fin, comme avant. Aucune tentative de modification.
 12. **Barre sans référence** — première mise en production d'une cible neuve : le
     message affiche le temps écoulé et **aucune barre**.
+
+
+## Modules privés au déploiement
+
+Le serveur tourne en tsx sur les sources : un module privé doit être PRÉSENT
+dans l'arbre déployé. La recette : le dossier du module dans le contexte de
+build, `features.local.json` posé à la racine de l'app (entrée
+`{ "package": ..., "path": "../<module>" }`), puis `npm run gen:features`
+AVANT `npm run build` du client (la glue locale est importée statiquement).
+L'image publique, elle, n'exécute que `gen:features --ensure-local` : stubs
+vides, aucun module privé embarqué. Les variables d'environnement et montages
+propres à un module sont documentés dans son README.

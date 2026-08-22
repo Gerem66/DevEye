@@ -169,8 +169,8 @@ Ce que ça protège : le disque au repos (vol, snapshot hors-ligne). Ce que ça
 ne protège pas : une compromission du serveur vivant (qui détient la clé).
 C'est le même niveau de garantie que les secrets liés à l'auth (2FA), et un
 cran en dessous des données « mot de passe »/notes — documenté ici pour que le
-choix reste explicite. Détails d'implémentation : `src/cloudSync/blobCrypto.ts`
-et `Docs/CLOUDSYNC.md`.
+choix reste explicite. Détails d'implémentation du format de conteneur :
+`src/backup/devb.ts`.
 
 ## Uptime — l'étage ouvert appliqué à une tâche de fond
 

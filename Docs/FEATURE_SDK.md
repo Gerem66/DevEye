@@ -61,6 +61,34 @@ fournisseurs) là où le barrel ne suffit pas. Un module externe, jamais.
    `assertAccessDeclared` : les commandes enveloppées déclarent toutes leur
    accès, aucune exemption nouvelle).
 
+## Le SDK v2 : l'infrastructure (22 août 2026)
+
+Le rapatriement d'une native d'infrastructure en module PRIVÉ a élargi le contrat :
+
+- **Capacités** : `devices.read` (authorize/list/isOnline) et `agents` (la
+  façade de la flotte : les neuf requêtes sync sortantes aux noms du hub, le
+  fan-out navigateurs, `ctx.transport` pour le socket appelant), cette
+  dernière réservée aux modules à id natif.
+- **Hooks agent** (`FeatureService.agentHooks`) : les événements entrants
+  (`onAgentConnect`, `onSync*`), agrégés par `moduleAgentHooks()` avec un
+  no-op par défaut ; la couche `agent/ws.ts` ne connaît plus aucun module.
+- **Providers** (`FeatureService.providers` + `moduleProvider(clé)`) :
+  l'inversion pour du code public qui a besoin des données d'un module :
+  l'appelant cherche le contrat à l'exécution et dégrade proprement quand le
+  module est absent (source masquée, run en échec propre).
+- **Clés serveur** (`deps.keys.sealBytes/openBytes`) : wrapper du matériel de
+  clé au format natif exact (la BMK existante se relit telle quelle).
+- **Service enrichi** : start async, `deps.audit` (source système, alias de
+  catégorie côté app), démarrage awaité DANS buildApp avant les sockets.
+- **Manifest** : `alsoInvalidatedBy` (couplage de données entre sujets) et
+  `commandPrefix` (un id natif dont la casse historique des commandes
+  diffère de l'id).
+- **Installation privée** : `features.local.json` (gitignorée, entrées par
+  chemin) + trois fichiers locaux toujours présents, réparés par
+  `gen:features` (`--ensure-local` en prestart et en tête de ci ; `--check`
+  vérifie les committés, répare les locaux). La CI publique ne voit jamais un
+  module privé. Import de la glue locale en RELATIF sans extension.
+
 ## Dettes connues
 
 - **Publication deveye-types 0.15.0** : le SDK est sur `main` du repo de types
