@@ -1,7 +1,10 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import { ws } from '@/api/ws';
-import { onResourceChange } from '@/stores/invalidation';
+import { featureApi, isSocketOpen, onResourceChange, onSocketOpen } from 'deveye-sdk-client';
 import type { WeatherLocation, WeatherReport } from 'deveye-types';
+
+import { manifest } from '../manifest';
+
+const api = featureApi(manifest);
 
 /**
  * Shared weather store. Resolves the user's primary city and keeps its live
@@ -54,7 +57,7 @@ export async function refreshWeather(): Promise<void> {
     }
     inFlight = true;
     try {
-        const list = await ws.send('weather.list', {});
+        const list = await api.send('weather.list', {});
         // Surface the configured cities as soon as we have them, *before* the
         // slower, provider-dependent report fetch. This is what stops a failed
         // or slow report from masquerading as "Aucune météo configurée": the
@@ -65,7 +68,7 @@ export async function refreshWeather(): Promise<void> {
             emit({ report: null, loading: false });
             return;
         }
-        const res = await ws.send('weather.get', { id: primary.id });
+        const res = await api.send('weather.get', { id: primary.id });
         emit({ report: res.report, loading: false });
     } catch {
         // If the socket isn't open yet, stay in the loading state — the state
@@ -73,7 +76,7 @@ export async function refreshWeather(): Promise<void> {
         // weather" flash). Only give up the spinner on a real, connected error;
         // locations surfaced above survive, so a failed report never reads as
         // "Aucune météo configurée".
-        if (ws.state === 'open') emit({ loading: false });
+        if (isSocketOpen()) emit({ loading: false });
     } finally {
         inFlight = false;
         if (pending) {
@@ -97,15 +100,12 @@ function start(): void {
     if (refCount > 1) return;
     void refreshWeather();
     timer = setInterval(() => void refreshWeather(), REFRESH_MS);
-    // Reload as soon as the socket (re)connects.
-    unsubState = ws.onStateChange((s) => {
-        if (s === 'open') void refreshWeather();
-    });
+    // Reload as soon as the socket (re)connects (fires now if already open).
+    unsubState = onSocketOpen(() => void refreshWeather());
     // Une ville ajoutée, retirée ou repassée en principale par un autre membre
     // de l'espace : le sujet `weather` l'annonce, et la barre comme la tuile
     // suivent sans attendre le relevé des dix minutes.
     unsubInvalidate = onResourceChange('weather.list', () => void refreshWeather());
-    if (ws.state === 'open') void refreshWeather();
 }
 
 function stop(): void {

@@ -40,9 +40,15 @@ export { default as settingsStyles } from '@/Components/FeatureSettings/FeatureS
 
 // ── Les données ────────────────────────────────────────────────────────────
 export { humanizeError, useResource } from '@/api/useResource';
-export { onServerEvent, onSocketOpen } from './events';
+export { isSocketOpen, onServerEvent, onSocketOpen } from './events';
 export { formatBytesFr } from '@/format';
-export { invalidate, useResourceVersion, type ExternalResourceKey, type ResourceKey } from '@/stores/invalidation';
+export {
+    invalidate,
+    onResourceChange,
+    useResourceVersion,
+    type ExternalResourceKey,
+    type ResourceKey
+} from '@/stores/invalidation';
 
 // ── Le live ────────────────────────────────────────────────────────────────
 export { useLiveSegment } from '@/live/useLiveSegment';

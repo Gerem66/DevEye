@@ -35,3 +35,8 @@ export function onSocketOpen(cb: () => void): () => void {
         if (state === 'open') cb();
     });
 }
+
+/** La socket est-elle ouverte à cet instant ? (pour distinguer une vraie erreur d'une coupure.) */
+export function isSocketOpen(): boolean {
+    return ws.state === 'open';
+}

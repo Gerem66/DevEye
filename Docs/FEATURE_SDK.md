@@ -46,8 +46,8 @@ surface = l'ajouter à l'un de ces deux endroits, mettre à jour la déclaration
 d'export « en douce » par un autre chemin.
 
 Une native rapatriée a un privilège de plus, commenté à chaque usage : elle
-peut importer l'app directement (`@/stores/weather`, les adaptateurs de
-fournisseurs) là où le barrel ne suffit pas. Un module externe, jamais.
+peut importer l'app directement (les adaptateurs de fournisseurs) là où le
+barrel ne suffit pas. Un module externe, jamais.
 
 ## Les sentinelles, en trois couches
 
@@ -83,6 +83,12 @@ Le rapatriement d'une native d'infrastructure en module PRIVÉ a élargi le cont
 - **Manifest** : `alsoInvalidatedBy` (couplage de données entre sujets) et
   `commandPrefix` (un id natif dont la casse historique des commandes
   diffère de l'id).
+- **Mini-widget de topbar** : `manifest.topbarWidget` + `TopbarWidget` dans
+  l'entrée client. Rendu SANS prop, c'est le contrat de sécurité : l'hôte ne
+  lui tend rien, tout ce qu'il affiche passe par les commandes de SA feature
+  (autorisées côté serveur), et il n'est proposé et monté que pour les membres
+  dont le rôle accorde la feature (`canFeature`). Liberté dans la boîte, rien
+  dehors.
 - **Installation privée** : `features.local.json` (gitignorée, entrées par
   chemin) + trois fichiers locaux toujours présents, réparés par
   `gen:features` (`--ensure-local` en prestart et en tête de ci ; `--check`

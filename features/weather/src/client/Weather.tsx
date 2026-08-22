@@ -9,10 +9,7 @@ import {
     useLiveOutline,
     useLiveSegment
 } from 'deveye-sdk-client';
-// Import « privilège de native » : le magasin partagé avec le widget météo de
-// la topbar, qui reste une surface de l'app. Un module externe n'aurait que
-// son propre état.
-import { useWeather, syncWeatherLocations } from '@/stores/weather';
+import { useWeather, syncWeatherLocations } from './store';
 import { wmoIcon } from './wmoIcon';
 import type { WeatherLocation, WeatherProvider, WeatherReport } from 'deveye-types';
 import { manifest } from '../manifest';

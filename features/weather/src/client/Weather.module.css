@@ -641,3 +641,8 @@
     font-size: 0.8rem;
     margin: 0;
 }
+
+/* Le mini-widget de topbar : chiffres tabulaires, comme les statuts natifs. */
+.topbarTemp {
+    font-variant-numeric: tabular-nums;
+}

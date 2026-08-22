@@ -74,5 +74,6 @@ declare const styles: {
     readonly widgetEmpty: string;
     readonly widgetEmptyIcon: string;
     readonly widgetLoading: string;
+    readonly topbarTemp: string;
 };
 export = styles;

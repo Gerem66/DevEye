@@ -20,6 +20,8 @@ export const manifest = {
      * rythme du rafraîchissement de la vue.
      */
     resources: ['weather.list'],
+    /** Le mini-widget de topbar : la température de la ville principale. */
+    topbarWidget: { description: 'Température de la ville principale' },
     settings: { feature: ['sources'] },
     /**
      * La démonstration des permissions déclarées : gérer les clés d'API des
