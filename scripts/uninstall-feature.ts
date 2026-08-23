@@ -30,8 +30,8 @@
  *
  * Usage :
  *   npm run uninstall:feature -- <package> [--yes]
- *   npm run uninstall:feature -- deveye-feature-countdown            # état des lieux
- *   npm run uninstall:feature -- deveye-feature-countdown --yes      # nettoie
+ *   npm run uninstall:feature -- deveye-feature-machin            # état des lieux
+ *   npm run uninstall:feature -- deveye-feature-machin --yes      # nettoie
  *
  * Après le nettoyage : retirer l'entrée de features.config.json (ou
  * features.local.json), `npm uninstall <package>` s'il vient de npm, puis
@@ -39,6 +39,11 @@
  * encore résoluble (il faut son deveye-feature.json et son uninstall.sql),
  * et de préférence serveur ARRÊTÉ (un serveur qui tourne encore avec le
  * module recréerait du KV derrière le nettoyage).
+ *
+ * Un module DÉJÀ disparu (paquet retiré avant le nettoyage) se nettoie par
+ * son id : `--id x-machin` saute la résolution du paquet. Seule la part app
+ * est alors couverte — sans le paquet, pas d'uninstall.sql, donc d'éventuelles
+ * tables ft_* restent ; le script le dit et refuse d'en faire semblant.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -54,9 +59,10 @@ const require = createRequire(path.join(ROOT, 'package.json'));
 
 const positional = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const YES = process.argv.includes('--yes');
+const idFlag = process.argv.find((a) => a.startsWith('--id='))?.slice('--id='.length);
 const PKG = positional[0];
-if (!PKG) {
-    console.error('Usage: npm run uninstall:feature -- <package> [--yes]');
+if (!PKG && !idFlag) {
+    console.error('Usage: npm run uninstall:feature -- <package> [--yes] | -- --id=<featureId> [--yes]');
     process.exit(2);
 }
 
@@ -84,21 +90,34 @@ function resolveModuleDir(pkg: string): string {
 }
 
 async function main(): Promise<void> {
-    const dir = resolveModuleDir(PKG);
-    const metaPath = path.join(dir, 'deveye-feature.json');
-    if (!fs.existsSync(metaPath)) fail(`${PKG}: deveye-feature.json manquant (${dir})`);
-    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8')) as { id?: string };
-    const id = meta.id;
-    if (!id) fail(`${PKG}: deveye-feature.json sans « id »`);
+    let id: string;
+    let uninstallSql: string | null = null;
 
-    // Le SQL de démontage du module, s'il a des tables à lui. Vérifié AVANT de
-    // toucher quoi que ce soit : hors préfixe, on refuse tout.
-    const uninstallPath = path.join(dir, 'src', 'server', 'uninstall.sql');
-    const uninstallSql = fs.existsSync(uninstallPath) ? fs.readFileSync(uninstallPath, 'utf8') : null;
-    if (uninstallSql) {
-        const outlaw = forbiddenUninstallTargets(id, uninstallSql);
-        if (outlaw.length > 0) {
-            fail(`${PKG}: uninstall.sql touche ${outlaw.join(', ')} — hors du préfixe ft_${id.replace(/^x-/, '')}_`);
+    if (idFlag) {
+        // Mode « module déjà disparu » : rien à résoudre, part app seulement.
+        id = idFlag;
+        console.warn(
+            `uninstall-feature: --id sans paquet — pas d'uninstall.sql : d'éventuelles tables ft_${id.replace(/^x-/, '')}_* resteront.\n`
+        );
+    } else {
+        const dir = resolveModuleDir(PKG);
+        const metaPath = path.join(dir, 'deveye-feature.json');
+        if (!fs.existsSync(metaPath)) fail(`${PKG}: deveye-feature.json manquant (${dir})`);
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8')) as { id?: string };
+        if (!meta.id) fail(`${PKG}: deveye-feature.json sans « id »`);
+        id = meta.id;
+
+        // Le SQL de démontage du module, s'il a des tables à lui. Vérifié AVANT
+        // de toucher quoi que ce soit : hors préfixe, on refuse tout.
+        const uninstallPath = path.join(dir, 'src', 'server', 'uninstall.sql');
+        uninstallSql = fs.existsSync(uninstallPath) ? fs.readFileSync(uninstallPath, 'utf8') : null;
+        if (uninstallSql) {
+            const outlaw = forbiddenUninstallTargets(id, uninstallSql);
+            if (outlaw.length > 0) {
+                fail(
+                    `${PKG}: uninstall.sql touche ${outlaw.join(', ')} — hors du préfixe ft_${id.replace(/^x-/, '')}_`
+                );
+            }
         }
     }
 
@@ -111,7 +130,9 @@ async function main(): Promise<void> {
         return Number(r.rows[0]?.n ?? 0);
     };
 
-    console.log(`Désinstallation de « ${id} » (${PKG}) — ${YES ? 'EXÉCUTION' : 'dry-run, rien ne sera écrit'}\n`);
+    console.log(
+        `Désinstallation de « ${id} »${PKG ? ` (${PKG})` : ''} — ${YES ? 'EXÉCUTION' : 'dry-run, rien ne sera écrit'}\n`
+    );
 
     // --- 1. les tables du module -------------------------------------------
     const tables = uninstallSql ? [...new Set(sqlTableTargets(uninstallSql))] : [];
@@ -186,7 +207,7 @@ async function main(): Promise<void> {
     console.log(`✓ ${layoutPatches.length} disposition(s) nettoyée(s)`);
 
     console.log(
-        `\nTerminé. Reste à faire : retirer « ${PKG} » de features.config.json / features.local.json,` +
+        `\nTerminé. Reste à faire : retirer « ${PKG ?? id} » de features.config.json / features.local.json,` +
             `\nnpm uninstall si besoin, puis npm run gen:features.`
     );
     await pool.end();
