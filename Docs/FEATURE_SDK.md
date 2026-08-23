@@ -151,6 +151,11 @@ config — le module doit rester résoluble).
   journal d'audit reste : c'est de l'histoire, pas une dépendance.
 - La part pure (nettoyages JSON, sentinelle SQL) vit dans
   `scripts/lib/uninstall.ts`, testée par `npm test`.
+- **Conséquence assumée** : les tables en allowlist survivent à la
+  désinstallation, même quand elles ne servent qu'au module (les `sync_*` de
+  CloudSync). C'est le prix de la règle « un module ne détruit jamais une
+  table du schéma public » ; les retirer vraiment demanderait un second
+  temps, une migration du socle.
 
 ## Dettes connues
 
