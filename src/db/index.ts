@@ -27,7 +27,6 @@ import {
 } from './repos/sentinel';
 import { noteFoldersRepo, type NoteFoldersRepo } from './repos/noteFolders';
 import { notesRepo, type NotesRepo } from './repos/notes';
-import { osintRepo, type OsintRepo } from './repos/osint';
 import { projectsRepo, type ProjectsRepo } from './repos/projects';
 import { projectRekeyRepo, type ProjectRekeyRepo } from './repos/projectRekey';
 import { projectBoardRepo, type ProjectBoardRepo } from './repos/projectBoard';
@@ -127,7 +126,6 @@ export interface Database {
     userSecretKeys: UserSecretKeysRepo;
     /** Le magasin clé-valeur des modules de features (SDK). */
     featureKv: FeatureKvRepo;
-    osint: OsintRepo;
     uptimeServices: UptimeServicesRepo;
     uptimeHistory: UptimeHistoryRepo;
     /** Canaux d'alerte, par espace **et par feature** (voir `Services/notifications.ts`). */
@@ -181,7 +179,6 @@ export function createDatabase(q: Queryable): Database {
         twoFactor: twoFactorRepo(q),
         userSecretKeys: userSecretKeysRepo(q),
         featureKv: featureKvRepo(q),
-        osint: osintRepo(q),
         uptimeServices: uptimeServicesRepo(q),
         uptimeHistory: uptimeHistoryRepo(q),
         itemSharing: itemSharingRepo(q),

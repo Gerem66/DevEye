@@ -14,7 +14,6 @@ import { DatabaseWidget } from '@/Features/Database/DatabaseWidget';
 import { BackupWidget } from '@/Features/Backup/BackupWidget';
 import { FinanceWidget } from '@/Features/Finance/FinanceWidget';
 import { AudienceWidget } from '@/Features/Audience/AudienceWidget';
-import { OsintWidget } from '@/Features/Osint/OsintWidget';
 
 import Monitoring from '@/Features/Monitoring';
 import FeaturePassword from '@/Features/Password';
@@ -29,7 +28,6 @@ import FeatureDatabase from '@/Features/Database';
 import FeatureBackup from '@/Features/Backup';
 import FeatureFinance from '@/Features/Finance';
 import FeatureAudience from '@/Features/Audience';
-import FeatureOsint from '@/Features/Osint';
 
 import type { FeatureProps } from '@/Features/types';
 import { clientModules } from '@/sdk/registry';
@@ -305,24 +303,6 @@ const NATIVE_CATALOG: FeatureCatalogEntry[] = [
         cacheDurationMinutes: 0
     },
     {
-        id: 'osint',
-        title: 'OSINT',
-        icon: 'search',
-        description: 'Recherche en sources ouvertes, avec un historique chiffré.',
-        category: 'security',
-        WidgetContent: OsintWidget,
-        FullComponent: FeatureOsint,
-        // Démonté dès la fermeture, comme Git et Database : les cartes tiennent
-        // des résultats lus chez des tiers, qui n'ont aucune raison de survivre
-        // à la fermeture de l'écran — le cache TTL du serveur les resert de
-        // toute façon instantanément si on rouvre.
-        cacheDurationMinutes: 0,
-        // L'historique est chiffré par mot de passe : garder la DEK vivante
-        // pendant que l'écran est ouvert évite l'invite au milieu d'une session
-        // de recherche.
-        holdSecrecy: true
-    },
-    {
         id: 'mail',
         title: 'Mail',
         icon: 'mail',
@@ -348,7 +328,7 @@ function moduleFull(Full: ComponentType<{ closeFeature(): void }>): ComponentTyp
 }
 
 /**
- * Le catalogue complet : les seize natives, puis les modules installés,
+ * Le catalogue complet : les natives restantes, puis les modules installés,
  * projetés depuis leur manifest + leur entrée client. Même contrat partout :
  * la grille, le marché d'ajout et l'« À propos » ne savent pas qui est qui.
  *

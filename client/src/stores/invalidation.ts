@@ -167,10 +167,6 @@ const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
      * la pastille de Monitoring écoutent, et celle qui doit bouger le plus vite.
      */
     sentinel: ['sentinel.count', 'sentinel.overview', 'sentinel.findings', 'sentinel.baseline'],
-    // Une seule clé : les résultats de sonde ne sont pas une ressource partagée
-    // (ils se relisent à la demande, depuis le cache du serveur). Seul
-    // l'historique est un état d'espace, donc seul lui se diffuse.
-    osint: ['osint.history'],
     // Deux sujets pour une seule feature : la structure d'un côté, les fils de
     // discussion de l'autre. Un message ne doit pas faire re-solliciter le
     // portefeuille entier — d'où la coupure côté serveur (`domain/live.ts`).

@@ -10,15 +10,21 @@ import {
     type OsintTargetKind
 } from 'deveye-types';
 
-import { ws } from '@/api/ws';
-import { invalidate, useResourceVersion } from '@/stores/invalidation';
-import { ensureUnlocked as ensureSecrecyUnlocked, useSecrecy } from '@/stores/secrecy';
+import {
+    ConfirmDialog,
+    ensureSecrecyUnlocked,
+    FeatureSettingsButton,
+    humanizeError,
+    invalidate,
+    useResourceVersion,
+    useSecrecy,
+    withSecrecy,
+    type ConfirmRequest
+} from 'deveye-sdk-client';
 
-import { FeatureSettingsButton } from '@/Components/FeatureSettings';
-import { humanizeError, withSecrecy } from './api';
+import { api } from './api';
 import { ProbeCard, type ProbeCardState } from './ProbeCard';
 import { HistoryPanel } from './HistoryPanel';
-import { ConfirmDialog, type ConfirmRequest } from './ConfirmDialog';
 import styles from './Osint.module.css';
 
 /**
@@ -110,7 +116,7 @@ export default function Osint(): React.ReactElement {
      */
     const loadHistory = useCallback(async () => {
         try {
-            const res = await ws.send('osint.history', { limit: 30 });
+            const res = await api.send('osint.history', { limit: 30 });
             setHistory(res.entries);
         } catch {
             // L'historique est un confort : son échec ne doit pas masquer l'écran.
@@ -133,7 +139,7 @@ export default function Osint(): React.ReactElement {
     const probeOne = useCallback((runId: number, target: OsintTarget, probe: OsintProbeId) => {
         setRun((prev) => (prev ? { ...prev, cards: { ...prev.cards, [probe]: { kind: 'pending' } } } : prev));
 
-        ws.send('osint.probe', { probe, target }, { timeoutMs: 30_000 })
+        api.send('osint.probe', { probe, target }, { timeoutMs: 30_000 })
             .then((res) => {
                 if (runIdRef.current !== runId) return;
                 setRun((prev) =>
@@ -183,7 +189,7 @@ export default function Osint(): React.ReactElement {
             const runId = ++runIdRef.current;
 
             try {
-                const res = await withSecrecy(() => ws.send('osint.lookup', { query: trimmed }));
+                const res = await withSecrecy(() => api.send('osint.lookup', { query: trimmed }));
                 if (runIdRef.current !== runId) return;
 
                 runProbes(runId, res.target, orderProbes(res.probes));
@@ -241,7 +247,7 @@ export default function Osint(): React.ReactElement {
 
     const clearHistory = useCallback(async () => {
         try {
-            await ws.send('osint.historyClear', {});
+            await api.send('osint.historyClear', {});
             invalidate('osint.history');
         } catch (e) {
             setError(humanizeError(e, "L'historique n'a pas pu être effacé."));
@@ -250,7 +256,7 @@ export default function Osint(): React.ReactElement {
 
     const removeEntry = useCallback(async (id: string) => {
         try {
-            await ws.send('osint.historyRemove', { id });
+            await api.send('osint.historyRemove', { id });
             invalidate('osint.history');
         } catch (e) {
             setError(humanizeError(e, "L'entrée n'a pas pu être supprimée."));
@@ -397,5 +403,3 @@ export default function Osint(): React.ReactElement {
         </div>
     );
 }
-
-export { OsintWidget } from './OsintWidget';

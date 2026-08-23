@@ -2,7 +2,6 @@ import { featureDescriptor } from 'deveye-types';
 
 import CredentialsPanel, { DEPLOY_CREDENTIALS, GIT_CREDENTIALS } from './CredentialsPanel';
 import DestinationsSection from '@/Features/Backup/DestinationsSection';
-import OsintKeysPanel from '@/Features/Osint/OsintKeysPanel';
 
 import type { SettingsScope } from '../scope';
 import styles from '../FeatureSettings.module.css';
@@ -45,7 +44,6 @@ export default function SourcesSection({ scope }: { scope: SettingsScope }) {
             {scope.feature === 'deploy' && <CredentialsPanel kind={DEPLOY_CREDENTIALS} />}
             {scope.feature === 'git' && <CredentialsPanel kind={GIT_CREDENTIALS} />}
             {scope.feature === 'backup' && <DestinationsSection />}
-            {scope.feature === 'osint' && <OsintKeysPanel />}
         </div>
     );
 }

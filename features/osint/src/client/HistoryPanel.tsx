@@ -1,7 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import { useDismissLayer } from 'deveye-sdk-client';
 import type { OsintHistoryEntry, OsintTargetKind } from 'deveye-types';
-
-import { useDismissLayer } from '@/Components/Dialog';
 
 import styles from './Osint.module.css';
 

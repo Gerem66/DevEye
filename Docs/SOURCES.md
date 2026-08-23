@@ -93,4 +93,7 @@ sections existantes suivent déjà cette règle.
    chantier est qu'il n'en reste qu'une.
 
 À terme (`Docs/FEATURE_MODULES.md`), l'aiguillage de l'étape 2 a vocation à
-devenir une inscription au registre comme le reste.
+devenir une inscription au registre comme le reste — c'est déjà le cas pour
+les features migrées sur le SDK (Météo, OSINT) : leur panneau vient de
+`settingsPanels.sources` dans l'entrée client du module, sans cas dans
+l'aiguillage.

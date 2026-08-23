@@ -667,61 +667,8 @@
     color: var(--danger);
 }
 
-/* -------------------------------- Fournisseurs ----------------------------- */
-
-.providerList {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-md);
-}
-
-.provider {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: var(--space-sm) var(--space-md);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-md);
-}
-
-.providerHead {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--space-sm);
-    font-size: 0.9rem;
-}
-
-.providerHead span {
-    padding: 2px 9px;
-    border-radius: var(--radius-pill);
-    font-size: 0.7rem;
-    font-weight: 600;
-}
-
-.providerWhat {
-    margin: 0;
-    font-size: 0.8rem;
-    line-height: 1.45;
-    color: var(--text-secondary);
-}
-
-.providerRow {
-    display: flex;
-    gap: var(--space-xs);
-    align-items: center;
-}
-
-.providerRow > :first-child {
-    flex: 1 1 auto;
-    min-width: 0;
-}
-
-.providerLink {
-    align-self: flex-start;
-    font-size: 0.72rem;
-    color: var(--accent);
-}
+/* Les clés des fournisseurs (panneau Sources) n'ont plus de styles à elles :
+   le panneau est passé aux rangées canoniques des réglages (settingsStyles). */
 
 /* ---------------------------------- Widget --------------------------------- */
 

@@ -9,7 +9,6 @@ import { notifyFeatures } from './notify';
 import { sharingFeatures } from './sharing';
 import { metricsFeatures } from './metrics';
 import { noteFeatures } from './note';
-import { osintFeatures } from './osint';
 import { databaseFeatures } from './database';
 import { audienceFeatures } from './audience';
 import { gitFeatures } from './git';
@@ -102,7 +101,6 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...metricsFeatures,
     ...twoFactorFeatures,
     ...secrecyFeatures,
-    ...osintFeatures,
     ...sentinelFeatures,
     ...uptimeFeatures,
     ...logsFeatures,

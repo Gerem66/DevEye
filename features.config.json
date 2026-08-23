@@ -3,6 +3,9 @@
     "features": [
         {
             "package": "deveye-feature-weather"
+        },
+        {
+            "package": "deveye-feature-osint"
         }
     ]
 }

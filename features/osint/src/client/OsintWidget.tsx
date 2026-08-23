@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
+import { onSocketOpen, useActiveWorkspace } from 'deveye-sdk-client';
 
-import { ws } from '@/api/ws';
-import { useActiveWorkspace } from '@/stores/workspace';
-
+import { api } from './api';
 import styles from './Osint.module.css';
 
 /**
@@ -38,8 +37,10 @@ export function OsintWidget(): React.ReactElement {
         if (!workspace) return;
         let cancelled = false;
 
-        const load = (): void => {
-            ws.send('osint.keyList', {})
+        // Chargée à l'ouverture de la socket (tout de suite si elle l'est déjà),
+        // et rechargée à chaque reconnexion : la primitive du SDK fait les deux.
+        const off = onSocketOpen(() => {
+            api.send('osint.keyList', {})
                 .then((res) => {
                     if (cancelled) return;
                     setCounts({
@@ -53,11 +54,6 @@ export function OsintWidget(): React.ReactElement {
                     // Un échec passager garde le dernier compte connu plutôt
                     // que de retomber sur un « 0 » trompeur.
                 });
-        };
-
-        if (ws.state === 'open') load();
-        const off = ws.onStateChange((s) => {
-            if (s === 'open') load();
         });
         return () => {
             cancelled = true;
