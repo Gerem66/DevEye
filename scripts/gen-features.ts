@@ -383,8 +383,24 @@ function ensureLocalIconsExcluded(localMods: ResolvedModule[]): void {
     const excludeFile = path.join(gitDir, 'info', 'exclude');
 
     const current = fs.existsSync(excludeFile) ? fs.readFileSync(excludeFile, 'utf8') : '';
-    // Tout sauf notre bloc (du marqueur à la première ligne vide qui le clôt).
-    const kept = current.replace(new RegExp(`${EXCLUDE_MARKER}\\n(?:[^\\n]+\\n)*\\n?`), '').trimEnd();
+    // Tout sauf nos blocs (du marqueur aux lignes pleines qui le suivent).
+    // Littéral, pas de RegExp : le marqueur contient des parenthèses, et une
+    // première version en regex ne retirait jamais rien — les blocs
+    // s'empilaient à chaque génération.
+    const keptLines: string[] = [];
+    let inBlock = false;
+    for (const line of current.split('\n')) {
+        if (line === EXCLUDE_MARKER) {
+            inBlock = true;
+            continue;
+        }
+        if (inBlock) {
+            if (line.trim() === '') inBlock = false;
+            continue;
+        }
+        keptLines.push(line);
+    }
+    const kept = keptLines.join('\n').trimEnd();
 
     const entries = iconCopies(localMods).map((icon) => path.relative(ROOT, icon.to).split(path.sep).join('/'));
     const block = entries.length > 0 ? `${EXCLUDE_MARKER}\n${entries.join('\n')}\n` : '';
