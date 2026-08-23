@@ -60,13 +60,23 @@ export { useTypers, useTypingSignal } from '@/live/useTyping';
 export { useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
 export { useFeatureLifecycle } from '@/Features/useFeatureLifecycle';
 
+// ── Le chiffrement par mot de passe ────────────────────────────────────────
+// L'état de verrou de la session, l'invite globale, et le patron « réessaie
+// une fois après déverrouillage ». C'est la surface qu'exige toute feature
+// dont une commande peut répondre `locked` (contrats en `'private'` côté
+// serveur) ; OSINT est la première migrée à s'en servir.
+export { ensureUnlocked as ensureSecrecyUnlocked, useSecrecy, withSecrecy } from '@/stores/secrecy';
+export type { SecrecyState } from '@/stores/secrecy';
+
 /**
  * L'envoi typé des commandes de VOTRE module.
  *
  * `ws.send` natif est typé par le registre fermé de deveye-types, que les
  * modules n'étendent pas ; cet enrobage retrouve les types depuis les
  * `commands` du manifest. La validation d'exécution reste celle du serveur,
- * dans les deux sens.
+ * dans les deux sens. `timeoutMs` allonge l'attente d'une commande qui
+ * interroge un tiers lent (une sonde OSINT, un relevé distant) ; le délai
+ * par défaut reste celui du socket.
  */
 export function featureApi<const M extends FeatureManifest>(manifest: M) {
     type Commands = M['commands'][number];
@@ -74,9 +84,10 @@ export function featureApi<const M extends FeatureManifest>(manifest: M) {
     return {
         send<N extends Commands['command']>(
             name: N,
-            input: z.input<Extract<Commands, { command: N }>['input'] & ZodType>
+            input: z.input<Extract<Commands, { command: N }>['input'] & ZodType>,
+            opts?: { timeoutMs?: number }
         ): Promise<z.output<Extract<Commands, { command: N }>['output'] & ZodType>> {
-            return ws.send(name as never, input as never) as never;
+            return ws.send(name as never, input as never, opts) as never;
         }
     };
 }

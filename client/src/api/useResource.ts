@@ -17,6 +17,10 @@ export function humanizeError(error: unknown, fallback: string): string {
         // compte, combien d'opérations, quelle date déjà prise).
         if (error.code === 'validation' || error.code === 'conflict') return error.message;
         if (error.code === 'not_found') return 'Introuvable: la donnée a peut-être été supprimée entre-temps.';
+        // Les deux codes que les copies locales (OSINT en tête) traduisaient
+        // déjà : verrou du chiffrement par mot de passe, et sonde trop lente.
+        if (error.code === 'locked') return 'Déverrouillage requis.';
+        if (error.code === 'timeout') return 'Délai dépassé.';
     }
     return fallback;
 }
