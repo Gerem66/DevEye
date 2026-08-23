@@ -21,9 +21,9 @@
  * (`SEED_DEV=true`, identifiants par défaut dev / devdevdev).
  *
  * Usage :
- *   npx tsx scripts/smoke-feature.ts <featureId> <label> [--url=http://localhost:3000] [--headed]
- *   npx tsx scripts/smoke-feature.ts osint OSINT
- *   npx tsx scripts/smoke-feature.ts weather Météo
+ *   npm run smoke:feature -- <featureId> <label> [--url=http://localhost:3000] [--headed]
+ *   npm run smoke:feature -- osint OSINT
+ *   npm run smoke:feature -- weather Météo
  *
  * Env : SMOKE_USERNAME / SMOKE_PASSWORD (défaut : le seed dev),
  *       SMOKE_BROWSER (défaut : chromium-browser).
@@ -54,7 +54,7 @@ const flags = new Map(
 const FEATURE = positional[0];
 const LABEL = positional[1];
 if (!FEATURE || !LABEL) {
-    console.error('Usage: npx tsx scripts/smoke-feature.ts <featureId> <label> [--url=...] [--headed]');
+    console.error('Usage: npm run smoke:feature -- <featureId> <label> [--url=...] [--headed]');
     process.exit(2);
 }
 const BASE_URL = flags.get('url') ?? 'http://localhost:3000';

@@ -124,7 +124,7 @@ L'outillage de migration, à rejouer pour CHAQUE native :
 - **Tests de modules** : `npm test` couvre `features/*/src/**/*.test.ts`
   (harnais `deveye-types/sdk/testing`, voir `features/osint/src/server/handlers.test.ts`),
   et le tsconfig racine inclut ces fichiers pour le typecheck.
-- **Smoke E2E du chemin client** : `npx tsx scripts/smoke-feature.ts <id> <label>`
+- **Smoke E2E du chemin client** : `npm run smoke:feature -- <id> <label>`
   (serveur démarré sur le bundle construit, compte seedé). Il vérifie ce
   qu'aucune autre sentinelle ne voit : la feature au marché d'ajout, la tuile
   posée, un aller-retour de commande sur le fil, zéro exception JS.
@@ -132,7 +132,7 @@ L'outillage de migration, à rejouer pour CHAQUE native :
 ## La désinstallation d'un module (22 août 2026)
 
 Le geste inverse de l'installation, conçu pour emporter TOUTES les traces :
-`npx tsx scripts/uninstall-feature.ts <package>` (dry-run avec les comptes
+`npm run uninstall:feature -- <package>` (dry-run avec les comptes
 réels ; `--yes` pour écrire, serveur arrêté, AVANT de retirer l'entrée de
 config — le module doit rester résoluble).
 

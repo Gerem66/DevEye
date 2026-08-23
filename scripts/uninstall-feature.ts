@@ -29,9 +29,9 @@
  * `DROP TABLE IF EXISTS`), un échec au milieu se répare en relançant.
  *
  * Usage :
- *   npx tsx scripts/uninstall-feature.ts <package> [--yes]
- *   npx tsx scripts/uninstall-feature.ts deveye-feature-countdown            # état des lieux
- *   npx tsx scripts/uninstall-feature.ts deveye-feature-countdown --yes      # nettoie
+ *   npm run uninstall:feature -- <package> [--yes]
+ *   npm run uninstall:feature -- deveye-feature-countdown            # état des lieux
+ *   npm run uninstall:feature -- deveye-feature-countdown --yes      # nettoie
  *
  * Après le nettoyage : retirer l'entrée de features.config.json (ou
  * features.local.json), `npm uninstall <package>` s'il vient de npm, puis
@@ -56,7 +56,7 @@ const positional = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const YES = process.argv.includes('--yes');
 const PKG = positional[0];
 if (!PKG) {
-    console.error('Usage: npx tsx scripts/uninstall-feature.ts <package> [--yes]');
+    console.error('Usage: npm run uninstall:feature -- <package> [--yes]');
     process.exit(2);
 }
 

@@ -26,6 +26,10 @@
     "test": "tsx --test \"src/**/*.test.ts\" \"features/*/src/**/*.test.ts\" \"scripts/lib/*.test.ts\"",
     "gen:features": "tsx scripts/gen-features.ts",
     "gen:features:local": "tsx scripts/gen-features.ts --ensure-local",
+    "smoke:feature": "tsx scripts/smoke-feature.ts",
+    "uninstall:feature": "tsx scripts/uninstall-feature.ts",
+    "dev:sync-feature": "scripts/dev-sync-feature.sh",
+    "restore:backup": "node scripts/restore-backup.mjs",
     "prestart": "npm run gen:features:local"
   },
   "author": "Gerem",
