@@ -15,6 +15,7 @@ import { SecretKeyService } from '@/Services/SecretKeyService';
 import type { Database } from '@/db';
 import { WORKSPACE_CAPABILITIES, WORKSPACE_FEATURE_IDS } from 'deveye-types';
 import { FeatureError } from './_define';
+import { moduleManifests } from './_sdk/register';
 
 /**
  * Résolution d'autorisation des commandes de feature.
@@ -138,10 +139,18 @@ export function grantsFor(
         // Les extras du propriétaire ne se matérialisent pas ici : leur
         // résolution (`true` / `ownerValue`) se fait à la lecture, contre le
         // manifest, parce qu'elle dépend de specs que ce module ne connaît pas.
+        //
+        // « Tout » = les natives ET les modules installés : la constante ne
+        // porte que l'enum natif, et un module à id externe (`x-…`) en est
+        // absent. Sans cette union, le propriétaire lui-même recevait
+        // `forbidden` sur chaque commande d'un module fraîchement installé —
+        // dans son propre espace personnel. Les ids natifs rapatriés (weather,
+        // osint, cloudsync) sont déjà dans l'enum, l'union est un no-op pour eux.
+        const all: FeatureId[] = [...WORKSPACE_FEATURE_IDS, ...moduleManifests().map((m) => m.id)];
         return {
             capabilities: new Set(WORKSPACE_CAPABILITIES),
-            features: new Map(WORKSPACE_FEATURE_IDS.map((f) => [f, 'write'])),
-            channels: new Set(WORKSPACE_FEATURE_IDS),
+            features: new Map(all.map((f) => [f, 'write'])),
+            channels: new Set(all),
             extras: new Map()
         };
     }
