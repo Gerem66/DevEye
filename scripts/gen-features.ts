@@ -30,6 +30,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { validateManifest, type FeatureManifest } from 'deveye-types/sdk';
 
+import { sqlTableTargets } from './sql-tables';
+import { forbiddenUninstallTargets } from './uninstall-lib';
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(path.join(ROOT, 'package.json'));
 const CHECK = process.argv.includes('--check');
@@ -79,22 +82,6 @@ function versionAtLeast(installed: string, wanted: string): boolean {
         if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
     }
     return true;
-}
-
-/** Les tables visées par les DDL d'un fichier de migration. Balayage conservateur. */
-function sqlTableTargets(sql: string): string[] {
-    const targets: string[] = [];
-    const patterns = [
-        /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"]?([A-Za-z0-9_]+)/gi,
-        /ALTER\s+TABLE\s+[`"]?([A-Za-z0-9_]+)/gi,
-        /DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?[`"]?([A-Za-z0-9_]+)/gi,
-        /RENAME\s+TABLE\s+[`"]?([A-Za-z0-9_]+)/gi,
-        /CREATE\s+(?:UNIQUE\s+)?INDEX\s+\S+\s+ON\s+[`"]?([A-Za-z0-9_]+)/gi
-    ];
-    for (const re of patterns) {
-        for (let m = re.exec(sql); m !== null; m = re.exec(sql)) targets.push(m[1]);
-    }
-    return targets;
 }
 
 async function resolveModule(entry: ConfigEntry): Promise<ResolvedModule> {
@@ -160,6 +147,17 @@ async function resolveModule(entry: ConfigEntry): Promise<ResolvedModule> {
                     );
                 }
             }
+        }
+    }
+
+    // Le SQL de démontage (scripts/uninstall-feature.ts) : il ne peut détruire
+    // QUE les tables du préfixe — l'allowlist ne s'applique pas, les tables
+    // historiques d'une native rapatriée sont des données de l'app.
+    const uninstallPath = path.join(dir, 'src', 'server', 'uninstall.sql');
+    if (fs.existsSync(uninstallPath)) {
+        const outlaw = forbiddenUninstallTargets(manifest.id, fs.readFileSync(uninstallPath, 'utf8'));
+        if (outlaw.length > 0) {
+            fail(`${entry.package}: uninstall.sql touche ${outlaw.join(', ')}, hors du préfixe ${prefix}`);
         }
     }
 

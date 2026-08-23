@@ -23,7 +23,7 @@
     "ci:rules": "tsx scripts/check-rules.ts",
     "ci:agent": "cd agent; /usr/bin/cargo fmt --check && cargo clippy --all-targets -- -D warnings",
     "clean": "rm -rf node_modules client/node_modules client/build package-lock.json",
-    "test": "tsx --test \"src/**/*.test.ts\"",
+    "test": "tsx --test \"src/**/*.test.ts\" \"features/*/src/**/*.test.ts\" \"scripts/*.test.ts\"",
     "gen:features": "tsx scripts/gen-features.ts",
     "gen:features:local": "tsx scripts/gen-features.ts --ensure-local",
     "prestart": "npm run gen:features:local"
