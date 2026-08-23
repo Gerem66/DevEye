@@ -368,8 +368,36 @@ function iconCopies(mods: ResolvedModule[]): { from: string; to: string }[] {
         .map((m) => ({ from: m.iconSource as string, to: path.join(ICONS_DIR, `${m.icon}.svg`) }));
 }
 
+const EXCLUDE_MARKER = '# gen-features: icônes des modules privés (bloc géré, ne pas éditer)';
+
+/**
+ * Les icônes copiées pour les modules PRIVÉS ne doivent laisser aucune trace
+ * dans le dépôt public — mais le `.gitignore` committé ne peut pas les nommer,
+ * ce serait déjà une trace. Elles s'inscrivent donc dans `.git/info/exclude`,
+ * l'ignore local au clone, entretenu ici comme les trois fichiers locaux
+ * (bloc réécrit à chaque génération, retiré quand plus rien ne l'exige).
+ */
+function ensureLocalIconsExcluded(localMods: ResolvedModule[]): void {
+    const gitDir = path.join(ROOT, '.git');
+    if (!fs.existsSync(gitDir) || !fs.statSync(gitDir).isDirectory()) return;
+    const excludeFile = path.join(gitDir, 'info', 'exclude');
+
+    const current = fs.existsSync(excludeFile) ? fs.readFileSync(excludeFile, 'utf8') : '';
+    // Tout sauf notre bloc (du marqueur à la première ligne vide qui le clôt).
+    const kept = current.replace(new RegExp(`${EXCLUDE_MARKER}\\n(?:[^\\n]+\\n)*\\n?`), '').trimEnd();
+
+    const entries = iconCopies(localMods).map((icon) => path.relative(ROOT, icon.to).split(path.sep).join('/'));
+    const block = entries.length > 0 ? `${EXCLUDE_MARKER}\n${entries.join('\n')}\n` : '';
+    const next = `${kept ? `${kept}\n\n` : ''}${block}`;
+    if (next !== current) {
+        fs.mkdirSync(path.dirname(excludeFile), { recursive: true });
+        fs.writeFileSync(excludeFile, next);
+    }
+}
+
 async function main(): Promise<void> {
     const localMods = await resolveAll(readConfig('features.local.json'), true);
+    ensureLocalIconsExcluded(localMods);
     const localOutputs: Output[] = [
         { file: path.join(SERVER_GEN, 'installed.local.ts'), content: serverLocalFile(localMods) },
         { file: path.join(CLIENT_GEN, 'features.local.ts'), content: clientLocalFile(localMods) },
