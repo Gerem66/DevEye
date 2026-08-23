@@ -150,7 +150,7 @@ config — le module doit rester résoluble).
   `workspaces.home_layout` (tuiles, dossiers, mini-widget de topbar). Le
   journal d'audit reste : c'est de l'histoire, pas une dépendance.
 - La part pure (nettoyages JSON, sentinelle SQL) vit dans
-  `scripts/uninstall-lib.ts`, testée par `npm test`.
+  `scripts/lib/uninstall.ts`, testée par `npm test`.
 
 ## Dettes connues
 

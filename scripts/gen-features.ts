@@ -30,8 +30,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { validateManifest, type FeatureManifest } from 'deveye-types/sdk';
 
-import { sqlTableTargets } from './sql-tables';
-import { forbiddenUninstallTargets } from './uninstall-lib';
+import { sqlTableTargets } from './lib/sql-tables';
+import { forbiddenUninstallTargets } from './lib/uninstall';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(path.join(ROOT, 'package.json'));

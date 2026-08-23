@@ -46,8 +46,8 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 import { createDbPool, getQueryable, testConnection, type Queryable } from '@/db/pool';
-import { forbiddenUninstallTargets, scrubHomeLayout, scrubRoleGrants } from './uninstall-lib';
-import { sqlTableTargets } from './sql-tables';
+import { forbiddenUninstallTargets, scrubHomeLayout, scrubRoleGrants } from './lib/uninstall';
+import { sqlTableTargets } from './lib/sql-tables';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(path.join(ROOT, 'package.json'));

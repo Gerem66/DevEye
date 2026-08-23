@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { forbiddenUninstallTargets, scrubHomeLayout, scrubRoleGrants } from './uninstall-lib';
+import { forbiddenUninstallTargets, scrubHomeLayout, scrubRoleGrants } from './uninstall';
 
 /**
  * La part pure de la désinstallation d'un module.
