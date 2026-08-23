@@ -1,4 +1,4 @@
-import type { WorkspaceFeatureId } from 'deveye-types';
+import type { FeatureId } from 'deveye-types';
 
 import MailSyncPanel from '@/Features/Mail/MailSyncPanel';
 
@@ -13,7 +13,7 @@ import styles from '../FeatureSettings.module.css';
  * Même patron que `SourcesSection` : la table dit qui est branché, le panneau
  * est autonome, chemins d'import directs (jamais le baril, cycle).
  */
-export const SYNC_WIRED: Partial<Record<WorkspaceFeatureId, true>> = {
+export const SYNC_WIRED: Partial<Record<FeatureId, true>> = {
     mail: true
 };
 

@@ -1,4 +1,4 @@
-import { featureDescriptor } from 'deveye-types';
+import { featureDescriptor, type WorkspaceFeatureId } from 'deveye-types';
 
 import type { SettingsScope } from '../scope';
 import styles from '../FeatureSettings.module.css';
@@ -18,6 +18,11 @@ interface Props {
 }
 
 export default function ItemPermissionsSection({ scope }: Props) {
+    // Rendue seulement derrière la garde `SHARE_WIRED_FEATURES` (natives) :
+    // les contrats `share.*` sont typés sur l'enum natif tant que le partage
+    // des éléments de modules n'est pas branché (dettes n°2 et 3 de la
+    // refonte). Ce rétrécissement tombera avec elles.
+    const feature = scope.feature as WorkspaceFeatureId;
     const itemId = scope.kind === 'item' ? scope.itemId : 0;
     const noun = featureDescriptor(scope.feature).itemNoun ?? 'élément';
 
@@ -27,7 +32,7 @@ export default function ItemPermissionsSection({ scope }: Props) {
                 Ce que chaque rôle voit de ce {noun}, ici. On ne peut qu’abaisser : un rôle sans accès à{' '}
                 {featureDescriptor(scope.feature).label} ne peut pas le recevoir par ce biais.
             </p>
-            <ItemGrantsPanel feature={scope.feature} itemId={itemId} />
+            <ItemGrantsPanel feature={feature} itemId={itemId} />
         </div>
     );
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { featureDescriptor, type ItemShareState, type ShareBlocker } from 'deveye-types';
+import { featureDescriptor, type ItemShareState, type ShareBlocker, type WorkspaceFeatureId } from 'deveye-types';
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
@@ -61,6 +61,11 @@ interface Props {
 }
 
 export default function SharingSection({ scope }: Props) {
+    // Rendue seulement derrière la garde `SHARE_WIRED_FEATURES` (natives) :
+    // les contrats `share.*` sont typés sur l'enum natif tant que le partage
+    // des éléments de modules n'est pas branché (dettes n°2 et 3 de la
+    // refonte). Ce rétrécissement tombera avec elles.
+    const feature = scope.feature as WorkspaceFeatureId;
     const [state, setState] = useState<ItemShareState | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -70,9 +75,9 @@ export default function SharingSection({ scope }: Props) {
     const itemId = scope.kind === 'item' ? scope.itemId : 0;
 
     const reload = useCallback(async () => {
-        const res = await ws.send('share.get', { feature: scope.feature, itemId });
+        const res = await ws.send('share.get', { feature, itemId });
         setState(res);
-    }, [scope.feature, itemId]);
+    }, [feature, itemId]);
 
     useEffect(() => {
         void reload().catch(() => setError('Chargement impossible.'));
@@ -82,13 +87,13 @@ export default function SharingSection({ scope }: Props) {
         setBusy(true);
         setError(null);
         void ws
-            .send('share.set', { feature: scope.feature, itemId, workspaceId, shared })
+            .send('share.set', { feature, itemId, workspaceId, shared })
             .then((res) => {
                 setState(res);
                 // La liste de la fonctionnalité change des deux côtés : ici on
                 // vient d'ouvrir ou de fermer une fenêtre, là-bas la ligne
                 // apparaît ou disparaît.
-                for (const key of LIST_KEYS[scope.feature] ?? []) invalidate(key);
+                for (const key of LIST_KEYS[feature] ?? []) invalidate(key);
             })
             .catch(() => setError('Modification impossible.'))
             .finally(() => setBusy(false));
@@ -123,7 +128,7 @@ export default function SharingSection({ scope }: Props) {
                             <button
                                 type='button'
                                 className={styles.jumpBtn}
-                                onClick={() => goToItemSettings(home.workspaceId, scope.feature, itemId, 'sharing')}
+                                onClick={() => goToItemSettings(home.workspaceId, feature, itemId, 'sharing')}
                             >
                                 Régler dans « {home.workspaceName} »
                             </button>
@@ -207,9 +212,7 @@ export default function SharingSection({ scope }: Props) {
                 description={`Ce que chaque rôle de cet espace voit de ce ${noun}. On ne peut qu’abaisser ce que son rôle y donne.`}
                 width={560}
             >
-                {grantsFor && (
-                    <ItemGrantsPanel feature={scope.feature} itemId={itemId} workspaceId={grantsFor.workspaceId} />
-                )}
+                {grantsFor && <ItemGrantsPanel feature={feature} itemId={itemId} workspaceId={grantsFor.workspaceId} />}
             </Dialog>
         </div>
     );

@@ -1,4 +1,4 @@
-import type { WorkspaceFeatureId } from 'deveye-types';
+import type { FeatureId } from 'deveye-types';
 
 import MailGeneralPanel from '@/Features/Mail/MailGeneralPanel';
 
@@ -15,7 +15,9 @@ import styles from '../FeatureSettings.module.css';
  * tout seul), et il importe ses composants par chemins directs, jamais par le
  * baril `@/Components` (qui réexporte cette coquille : cycle).
  */
-export const GENERAL_WIRED: Partial<Record<WorkspaceFeatureId, { feature: boolean; item: boolean }>> = {
+// Indexée en `FeatureId` : un module absent de la table lit simplement
+// `undefined` — son onglet Général vient de son manifest, jamais d'ici.
+export const GENERAL_WIRED: Partial<Record<FeatureId, { feature: boolean; item: boolean }>> = {
     // Mail : l'affichage des messages et les images approuvées valent pour
     // toute la fonctionnalité. L'onglet reste offert depuis les réglages d'un
     // compte, pour que le bouton en haut à droite porte tout d'un coup.

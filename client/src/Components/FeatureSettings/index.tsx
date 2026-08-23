@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { SHARE_WIRED_FEATURES, featureDescriptor } from 'deveye-types';
+import { SHARE_WIRED_FEATURES, featureDescriptor, type FeatureId } from 'deveye-types';
 
 import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
@@ -123,7 +123,7 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
         // cette coquille refuse.
         if (
             scope.kind === 'item' &&
-            SHARE_WIRED_FEATURES.includes(scope.feature) &&
+            (SHARE_WIRED_FEATURES as readonly FeatureId[]).includes(scope.feature) &&
             permissions.canFeature(scope.feature, 'write')
         ) {
             sections.push({ id: 'sharing', label: 'Partage', icon: 'users' });
@@ -141,7 +141,12 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
         // à montrer. Et `SHARE_WIRED_FEATURES` comme pour le partage : une
         // restriction n'existe que là où les listages la font respecter —
         // ailleurs, le serveur la refuse, donc l'onglet mentirait.
-        if (scope.kind === 'item' && SHARE_WIRED_FEATURES.includes(scope.feature) && canRestrict && isShared) {
+        if (
+            scope.kind === 'item' &&
+            (SHARE_WIRED_FEATURES as readonly FeatureId[]).includes(scope.feature) &&
+            canRestrict &&
+            isShared
+        ) {
             // `shield` et non `lock` : le cadenas est l'icône du chiffrement,
             // et deux entrées de nav au même glyphe se confondent.
             sections.push({ id: 'permissions', label: 'Permissions', icon: 'shield' });

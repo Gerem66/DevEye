@@ -1,4 +1,4 @@
-import { featureDescriptor, type WorkspaceFeatureId } from 'deveye-types';
+import { featureDescriptor, type FeatureId } from 'deveye-types';
 
 /**
  * Ce que règle une coquille de réglages : une fonctionnalité, ou un de ses
@@ -12,9 +12,12 @@ import { featureDescriptor, type WorkspaceFeatureId } from 'deveye-types';
  * unification, dont l'un avait perdu en chemin l'avertissement « aucun compte
  * expéditeur valide ».
  */
+// `FeatureId` et non l'enum natif : la coquille sert AUSSI les modules
+// installés (elle lit leur manifest pour les onglets et les panneaux), et le
+// bouton commun doit pouvoir s'ouvrir sur `x-<slug>`. Le type disait natif
+// alors que l'exécution servait déjà les modules — attrapé par check:sdk.
 export type SettingsScope =
-    | { kind: 'feature'; feature: WorkspaceFeatureId }
-    | { kind: 'item'; feature: WorkspaceFeatureId; itemId: number; itemLabel: string };
+    { kind: 'feature'; feature: FeatureId } | { kind: 'item'; feature: FeatureId; itemId: number; itemLabel: string };
 
 /** Les sections que la coquille sait rendre, dans leur ordre d'affichage. */
 export type SettingsSectionId =
