@@ -95,11 +95,69 @@ Le rapatriement d'une native d'infrastructure en module PRIVÉ a élargi le cont
   vérifie les committés, répare les locaux). La CI publique ne voit jamais un
   module privé. Import de la glue locale en RELATIF sans extension.
 
+## La migration des natives (22 août 2026)
+
+**OSINT** est la deuxième native rapatriée (`features/osint`), sur le patron
+exact de Météo : descripteur étalé dans le manifest, tables historiques en
+allowlist `deveye-feature.json` (075, jamais déplacées), sondes restées un
+service de l'app (import « privilège de native » commenté : elles partagent le
+garde SSRF de `Services/netFetch`). Chiffrement : `ctx.cipher('private')` pour
+l'historique (l'ex-`ctx.secure`), `ctx.cipher()` pour les clés de fournisseurs
+(l'étage ouvert relit l'ancien format `ctx.crypt`, comme pour Météo).
+
+Sa migration a élargi la surface stable, pour toutes les features :
+
+- **`featureApi().send(name, input, { timeoutMs })`** : le délai d'attente
+  d'une commande qui interroge un tiers lent (une sonde OSINT à 30 s).
+- **Le chiffrement par mot de passe côté client** : `useSecrecy()`,
+  `ensureSecrecyUnlocked()`, `withSecrecy(run)` (le patron « réessaie une fois
+  après l'invite », promu de ses cinq copies locales dans
+  `stores/secrecy.ts` ; les copies restantes — Notes, Password, Projects,
+  Mail — se résorberont à leur migration).
+- **`humanizeError`** traduit aussi `locked` et `timeout`.
+
+Chaque élargissement est reflété dans `types/deveye-sdk-client.d.ts` du
+template et sa doc (REFERENCE + 04-storage-and-encryption).
+
+L'outillage de migration, à rejouer pour CHAQUE native :
+
+- **Tests de modules** : `npm test` couvre `features/*/src/**/*.test.ts`
+  (harnais `deveye-types/sdk/testing`, voir `features/osint/src/server/handlers.test.ts`),
+  et le tsconfig racine inclut ces fichiers pour le typecheck.
+- **Smoke E2E du chemin client** : `npx tsx scripts/smoke-feature.ts <id> <label>`
+  (serveur démarré sur le bundle construit, compte seedé). Il vérifie ce
+  qu'aucune autre sentinelle ne voit : la feature au marché d'ajout, la tuile
+  posée, un aller-retour de commande sur le fil, zéro exception JS.
+
+## La désinstallation d'un module (22 août 2026)
+
+Le geste inverse de l'installation, conçu pour emporter TOUTES les traces :
+`npx tsx scripts/uninstall-feature.ts <package>` (dry-run avec les comptes
+réels ; `--yes` pour écrire, serveur arrêté, AVANT de retirer l'entrée de
+config — le module doit rester résoluble).
+
+- **Côté module** : `src/server/uninstall.sql`, le miroir destructif de ses
+  migrations (`DROP TABLE IF EXISTS ft_<slug>_...`, idempotent — un échec au
+  milieu se répare en relançant). Sentinelle des deux côtés (`gen:features`
+  ET le script) : il ne peut toucher QUE le préfixe du module — l'allowlist
+  des tables historiques d'une native rapatriée ne s'applique pas ici, ces
+  tables sont des données de l'app.
+- **Côté app**, le script nettoie ce qu'aucun module ne voit : `feature_kv`,
+  les enregistrements `_migrations` (`<id>/...`), `notification_channels` et
+  `notification_routes` (liaisons par cascade), `item_shares` et
+  `item_role_grants`, les grants dans le JSON `workspace_roles.features`
+  (droit + extras + canaux), et la feature dans chaque
+  `workspaces.home_layout` (tuiles, dossiers, mini-widget de topbar). Le
+  journal d'audit reste : c'est de l'histoire, pas une dépendance.
+- La part pure (nettoyages JSON, sentinelle SQL) vit dans
+  `scripts/uninstall-lib.ts`, testée par `npm test`.
+
 ## Dettes connues
 
-- **Publication deveye-types 0.15.0** : le SDK est sur `main` du repo de types
-  mais pas publié ; le miroir `node_modules` est à niveau (version 0.15.0
-  locale). La CI GitHub du template ne passera qu'après publication.
+- *(Pas une dette : la publication de deveye-types 0.15.0 se fait à la main
+  par Gerem au moment de livrer en prod. En local, le miroir suffit — copie
+  dans `node_modules` ou package par chemin local ; la CI GitHub du template
+  passera après publication.)*
 - **Partage inter-espaces** : `shareTier` externe figé à `'never'`. Brancher
   un module exigerait, dans l'ordre : une migration élargissant
   `item_shares.feature` (VARCHAR(24), or un id externe monte à 27), un point
