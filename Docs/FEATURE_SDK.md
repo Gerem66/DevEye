@@ -41,9 +41,12 @@ première, et la preuve que le contrat suffit.
 
 Est stable : tout ce qu'exportent `deveye-types/sdk*` et le barrel
 `deveye-sdk-client`. Tout le reste est interne et peut bouger. Élargir la
-surface = l'ajouter à l'un de ces deux endroits, mettre à jour la déclaration
-`types/deveye-sdk-client.d.ts` du template et sa doc REFERENCE. Jamais
-d'export « en douce » par un autre chemin.
+surface = l'ajouter à l'un de ces deux endroits, mettre à jour le portrait
+typé du barrel — publié DANS deveye-types (`src/sdk/client-ambient.d.ts`,
+le template ne porte plus qu'un renvoi) — et la doc REFERENCE du template.
+`npm run check:sdk` (client) vérifie MÉCANIQUEMENT que le vrai barrel honore
+ce portrait : une dérive casse la CI de l'app, jamais le build d'un tiers.
+Jamais d'export « en douce » par un autre chemin.
 
 Une native rapatriée a un privilège de plus, commenté à chaque usage : elle
 peut importer l'app directement (les adaptateurs de fournisseurs) là où le
@@ -116,8 +119,9 @@ Sa migration a élargi la surface stable, pour toutes les features :
   Mail — se résorberont à leur migration).
 - **`humanizeError`** traduit aussi `locked` et `timeout`.
 
-Chaque élargissement est reflété dans `types/deveye-sdk-client.d.ts` du
-template et sa doc (REFERENCE + 04-storage-and-encryption).
+Chaque élargissement est reflété dans le portrait publié
+(`deveye-types/src/sdk/client-ambient.d.ts`, vérifié par `check:sdk`) et la
+doc du template (REFERENCE + 04-storage-and-encryption).
 
 L'outillage de migration, à rejouer pour CHAQUE native :
 
