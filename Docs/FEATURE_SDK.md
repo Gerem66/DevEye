@@ -39,6 +39,16 @@ première, et la preuve que le contrat suffit.
 
 ## La frontière stable / interne
 
+**Un seul package (`@deveye/types`), décision du 24 août 2026** : la coupe
+`@deveye/sdk` séparé est la bonne cible à terme (audience et rythme de
+version différents), mais pas pendant la vague de migration — presque chaque
+native élargit la surface, et deux packages doubleraient publications,
+correspondances de versions et miroirs pour un gain partiel (le SDK
+dépendrait des types de toute façon). Critère de bascule : vague terminée et
+surface stabilisée, ou premier vrai module tiers. La coupe sera mécanique :
+`src/sdk/` est déjà autonome.
+
+
 Est stable : tout ce qu'exportent `deveye-types/sdk*` et le barrel
 `deveye-sdk-client`. Tout le reste est interne et peut bouger. Élargir la
 surface = l'ajouter à l'un de ces deux endroits, mettre à jour le portrait
