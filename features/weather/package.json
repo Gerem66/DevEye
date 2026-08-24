@@ -1,15 +1,15 @@
 {
-    "name": "deveye-feature-weather",
-    "version": "0.0.0",
-    "private": true,
-    "description": "Météo, au format module : la première native rapatriée sur le SDK des features.",
-    "type": "module",
-    "main": "src/index.ts",
-    "types": "src/index.ts",
-    "exports": {
-        ".": "./src/index.ts",
-        "./server": "./src/server/index.ts",
-        "./client": "./src/client/index.tsx",
-        "./package.json": "./package.json"
-    }
+  "name": "deveye-feature-weather",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Météo, au format module : la première native rapatriée sur le SDK des features.",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server/index.ts",
+    "./client": "./src/client/index.tsx",
+    "./package.json": "./package.json"
+  }
 }

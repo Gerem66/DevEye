@@ -1,15 +1,10 @@
 {
-    "extends": "./tsconfig.json",
-    "compilerOptions": {
-        "paths": {
-            "@/*": [
-                "./src/*"
-            ]
-        }
-    },
-    "include": [
-        "typecheck",
-        "src/vite-env.d.ts"
-    ],
-    "references": []
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["typecheck", "src/vite-env.d.ts"],
+  "references": []
 }
