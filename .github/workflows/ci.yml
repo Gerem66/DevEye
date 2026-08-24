@@ -65,6 +65,64 @@ jobs:
       - name: Features CI (lint + format + typecheck + tests)
         run: npm run ci:features
 
+  # Smoke E2E of every installed feature module: a real server on a fresh
+  # MySQL, the built client, a real Chrome — the only guard for the bug class
+  # nothing else sees (command registry, catalog, blank page). See
+  # scripts/smoke-all.ts.
+  smoke:
+    name: smoke (features E2E)
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: DevEye
+          MYSQL_USER: deveye
+          MYSQL_PASSWORD: deveye
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -proot"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      ENVIRONMENT: dev
+      LISTEN_PORT: 3999
+      PUBLIC_ORIGIN: http://localhost:3999
+      LOG_LEVEL: info
+      DB_HOSTNAME: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: DevEye
+      DB_USERNAME: deveye
+      DB_PASSWORD: deveye
+      # Throwaway secrets: the database is born and dies with the job.
+      CRYPT_KEY_A: ci-smoke-crypt-key-a
+      CRYPT_KEY_B: ci-smoke-crypt-key-b
+      JWT_ACCESS_SECRET: ci-smoke-jwt-access
+      JWT_REFRESH_SECRET: ci-smoke-jwt-refresh
+      DEVICE_TOKEN_SECRET: ci-smoke-device-token
+      SMOKE_BROWSER: google-chrome
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install server deps
+        run: npm ci
+
+      - name: Install client deps
+        working-directory: client
+        run: npm install
+
+      - name: Smoke every installed module
+        run: npm run ci:smoke
+
   # Agent: format + clippy + build on Linux (the per-OS binaries ship via
   # release.yml on tags).
   agent:

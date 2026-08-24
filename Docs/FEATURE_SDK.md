@@ -161,6 +161,13 @@ L'outillage de migration, à rejouer pour CHAQUE native :
   (serveur démarré sur le bundle construit, compte seedé). Il vérifie ce
   qu'aucune autre sentinelle ne voit : la feature au marché d'ajout, la tuile
   posée, un aller-retour de commande sur le fil, zéro exception JS.
+  **Automatisé** par `npm run ci:smoke` (`scripts/smoke-all.ts`) : construit
+  le client dans `.smoke/client` (hors de `client/`, que son lint ratisse),
+  démarre un serveur à lui sur le port
+  3999, sonde chaque module de `features.config.json` (+ l'overlay local en
+  local), éteint tout. Lancé par `./ci.sh` (contrôle `deveye-smoke`, il lui
+  faut la base — le tunnel en local) et par le job `smoke` du workflow GitHub
+  (service MySQL neuf, migré de zéro au boot, Chrome du runner).
 
 ## La désinstallation d'un module (22 août 2026)
 
