@@ -16,8 +16,17 @@ FROM node:22-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./DevEye/
 COPY client/package.json ./DevEye/client/
-# Reproducible install from the committed lockfile. The repo is an npm workspace
-# (root + client), so a single `npm ci` installs both.
+# The repo is an npm workspace: root, client, AND features/* (each rapatriated
+# native module is a workspace). npm ci links every workspace by symlink
+# (node_modules/deveye-feature-<slug> -> ../features/<slug>), and the client's
+# generated glue imports the public ones BY PACKAGE NAME — so their package.json
+# must be present here, or the link is missing and vite can't resolve
+# `deveye-feature-weather` at build time. Copying features/ before the install
+# is what makes those workspace links exist. (.dockerignore keeps node_modules
+# out; private modules are injected later under private-modules/ and resolved
+# by path, not as workspaces.)
+COPY features ./DevEye/features/
+# Reproducible install from the committed lockfile, all workspaces at once.
 RUN --mount=type=cache,target=/root/.npm \
     cd DevEye && npm ci --no-audit --no-fund
 
