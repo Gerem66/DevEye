@@ -1,4 +1,4 @@
-import { THEME_SLOT_IMAGE_MAX_LENGTH } from 'deveye-types';
+import { THEME_SLOT_IMAGE_MAX_LENGTH } from '@deveye/types';
 
 /**
  * Background image processing for the appearance gallery. Saved backgrounds are

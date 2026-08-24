@@ -1,7 +1,7 @@
-import type { HomeFeatureId } from 'deveye-types';
+import type { HomeFeatureId } from '@deveye/types';
 
 import {
-    FEATURE_CATALOG,
+    featureCatalog,
     FEATURE_CATEGORIES,
     FEATURE_CATEGORY_ICON,
     FEATURE_CATEGORY_LABEL,
@@ -113,8 +113,8 @@ function FeatureRow({ entry }: { entry: FeatureCatalogEntry }) {
  * fonctionnalité qui n'existe plus ni oublier celle qu'on vient d'ajouter.
  */
 export default function AboutContent() {
-    const encrypted = FEATURE_CATALOG.filter((f) => f.holdSecrecy);
-    const alerting = FEATURE_CATALOG.filter((f) => (f.links ?? []).some((l) => l.to === 'mail'));
+    const encrypted = featureCatalog().filter((f) => f.holdSecrecy);
+    const alerting = featureCatalog().filter((f) => (f.links ?? []).some((l) => l.to === 'mail'));
 
     return (
         <>
@@ -126,7 +126,7 @@ export default function AboutContent() {
             <div>
                 <p className={styles.sectionTitle}>Fonctionnalités</p>
                 {FEATURE_CATEGORIES.map((category) => {
-                    const entries = featuresInCategory(FEATURE_CATALOG, category);
+                    const entries = featuresInCategory(featureCatalog(), category);
                     if (entries.length === 0) return null;
                     return (
                         <div key={category} className={styles.category}>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import type { FinanceTransaction } from 'deveye-types';
+import type { FinanceTransaction } from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';

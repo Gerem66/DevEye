@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { BackupJob, BackupRun } from 'deveye-types';
+import type { BackupJob, BackupRun } from '@deveye/types';
 
-import { Button } from '@/Components';
+import { Button, StatusBadge } from '@/Components';
 import { ws } from '@/api/ws';
 import { useResourceVersion } from '@/stores/invalidation';
 import {
@@ -17,6 +17,7 @@ import {
     SOURCE_LABELS
 } from './format';
 import styles from './style.module.css';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 
 interface JobViewProps {
     job: BackupJob;
@@ -24,7 +25,6 @@ interface JobViewProps {
     onBack: () => void;
     onEdit: () => void;
     onRun: () => void;
-    onRemove: () => void;
     running: boolean;
 }
 
@@ -36,7 +36,7 @@ interface JobViewProps {
  * cadence quotidienne dont la dernière archive date de trois semaines est un
  * travail cassé, quoi que dise son formulaire.
  */
-export function JobView({ job, canWrite, onBack, onEdit, onRun, onRemove, running }: JobViewProps) {
+export function JobView({ job, canWrite, onBack, onEdit, onRun, running }: JobViewProps) {
     const [runs, setRuns] = useState<BackupRun[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     const version = useResourceVersion('backup.detail');
@@ -57,33 +57,53 @@ export function JobView({ job, canWrite, onBack, onEdit, onRun, onRemove, runnin
 
     return (
         <div className={styles.detail}>
+            {/* Retour, titre, actions : une seule rangée, la même que dans les
+                fiches des autres features. Le titre vivait dessous, et la
+                suppression avait son bouton ici — elle vit désormais dans le
+                dialogue de modification, comme pour une cible ou un dépôt. */}
             <div className={styles.detailHead}>
                 <Button variant='ghost' icon='arrow-left' onClick={onBack}>
                     Travaux
                 </Button>
+                <h2 className={styles.detailTitle}>
+                    {job.name}
+                    {/* Sans cette pastille, rien ne distingue un travail local
+                        d'une fenêtre sur l'espace voisin. */}
+                    {job.foreign && (
+                        <span title='Ce travail appartient à un autre espace qui le partage ici'>
+                            {' '}
+                            <StatusBadge tone='accent'>partagé</StatusBadge>
+                        </span>
+                    )}
+                </h2>
                 <div className={styles.detailActions}>
                     {canWrite && (
-                        <>
-                            <Button
-                                icon={running ? 'spinner' : 'play'}
-                                disabled={running}
-                                onClick={onRun}
-                                title='Lancer une sauvegarde maintenant'
-                            >
-                                {running ? 'En cours…' : 'Sauvegarder'}
-                            </Button>
-                            <Button variant='ghost' icon='edit' onClick={onEdit}>
-                                Modifier
-                            </Button>
-                            <Button variant='ghost' icon='trash' onClick={onRemove}>
-                                Supprimer
-                            </Button>
-                        </>
+                        <Button
+                            icon={running ? 'spinner' : 'play'}
+                            disabled={running}
+                            onClick={onRun}
+                            title='Lancer une sauvegarde maintenant'
+                        >
+                            {running ? 'En cours…' : 'Sauvegarder'}
+                        </Button>
                     )}
+                    {/* `!job.foreign` : la destination et la source d'un travail
+                        se choisissent parmi les objets de SON espace — le
+                        serveur le refuse, l'écran ne le propose donc pas.
+                        Sauvegarder, lui, reste permis : c'est tout l'objet de
+                        la projection. */}
+                    {canWrite && !job.foreign && (
+                        <Button variant='secondary' icon='edit' onClick={onEdit}>
+                            Modifier
+                        </Button>
+                    )}
+                    {/* Les réglages **de ce travail** : ses propres canaux, ou
+                        ceux des Sauvegardes tant qu'il les suit. */}
+                    <FeatureSettingsButton
+                        scope={{ kind: 'item', feature: 'backup', itemId: job.id, itemLabel: job.name }}
+                    />
                 </div>
             </div>
-
-            <h2 className={styles.detailTitle}>{job.name}</h2>
 
             <div className={styles.facts}>
                 <Fact label='Source'>

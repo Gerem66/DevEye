@@ -1,4 +1,4 @@
-import { LIVE_CURSOR_COMMAND, type LiveCursor } from 'deveye-types';
+import { LIVE_CURSOR_COMMAND, type LiveCursor } from '@deveye/types';
 import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react';
 
 import { ws } from '@/api/ws';
@@ -27,7 +27,7 @@ import { useWorkspaceState } from '@/stores/workspace';
  * ## Les unités
  *
  * `x` relatif à la largeur, `y` en pixels absolus du contenu — voir
- * `liveCursorSchema` dans deveye-types pour le pourquoi de ce mélange.
+ * `liveCursorSchema` dans @deveye/types pour le pourquoi de ce mélange.
  */
 
 const SurfaceContext = createContext<HTMLElement | null>(null);

@@ -1,4 +1,4 @@
-import { AVATAR_MAX_LENGTH } from 'deveye-types';
+import { AVATAR_MAX_LENGTH } from '@deveye/types';
 import { fileToSquareDataUrl } from '@/imageResize';
 
 export { ACCEPTED_TYPES, MAX_INPUT_BYTES } from '@/imageResize';

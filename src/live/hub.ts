@@ -5,18 +5,20 @@ import {
     LIVE_CURSORS_EVENT,
     LIVE_PEERS_EVENT,
     LIVE_TYPERS_EVENT,
+    isExternalFeatureId,
     livePathGate,
     ok,
-    TOPIC_FEATURE,
+    SHARE_WIRED_FEATURES,
+    topicFeatureOf,
     type FeatureAccess,
+    type FeatureId,
     type LiveCursor,
     type LivePath,
     type LivePeer,
     type LiveTopic,
     type ServerMessage,
-    type UserColor,
-    type WorkspaceFeatureId
-} from 'deveye-types';
+    type UserColor
+} from '@deveye/types';
 
 import { accessEpochNow, permissionsFor } from '@/features/_access';
 import { logger } from '@/logger';
@@ -79,7 +81,7 @@ const TYPING_FLOOR_MS = 250;
 const BACKPRESSURE_BYTES = 64 * 1024;
 
 interface Grants {
-    features: ReadonlyMap<WorkspaceFeatureId, FeatureAccess>;
+    features: ReadonlyMap<FeatureId, FeatureAccess>;
     /** Époque d'accès sous laquelle ces droits ont été résolus. */
     epoch: number;
 }
@@ -161,6 +163,17 @@ export interface LiveTransport {
     /** L'espace disparaît : tout le monde sort. */
     evictRoom(workspaceId: number): void;
     /**
+     * Prévenir UN compte, où que ses connexions soient assises.
+     *
+     * `changed` s'arrête aux connexions de la salle, et c'est son rôle. Mais
+     * gagner ou perdre un espace se décide depuis CET espace, pendant que
+     * l'intéressé est assis ailleurs : sans cette voie, sa liste d'espaces
+     * resterait figée jusqu'au rechargement. Réservé aux sujets sans droit de
+     * feature (`TOPIC_FEATURE` à `null`, comme `workspace`) : la projection par
+     * droits d'une salle n'a pas de sens pour qui n'y est pas.
+     */
+    userChanged(userId: number, workspaceId: number, topics: readonly LiveTopic[], byUserId: number | null): void;
+    /**
      * Un rôle a changé sans que personne ne perde l'espace : les droits sont
      * re-résolus sur place. Sans ça les membres présents verraient tous leurs
      * pairs « ailleurs » jusqu'à leur prochaine commande.
@@ -180,6 +193,23 @@ export class LiveHub {
 
     /** `${workspaceId}:${topic}` -> dernier envoi, pour le plancher de débit. */
     private readonly topicSentAt = new Map<string, number>();
+
+    /**
+     * Les espaces reliés à un espace par des projections d'éléments, pour une
+     * feature — posé par `app.ts` (`db.itemSharing.linkedWorkspaces`).
+     *
+     * C'est ce qui fait TRAVERSER la projection à la diffusion : chaque
+     * `changed` sur un sujet de feature branchée au partage est rejoué dans les
+     * espaces reliés. Le point est d'être ICI et pas chez les appelants — le
+     * dispatcheur, cinq services de fond, le moteur de sauvegardes appellent
+     * tous `changed`, et aucun n'a à connaître la règle.
+     */
+    private shareLinks: ((workspaceId: number, feature: string) => Promise<number[]>) | null = null;
+
+    /** Branche le résolveur d'espaces reliés. Sans lui, aucune traversée. */
+    setShareLinks(resolver: (workspaceId: number, feature: string) => Promise<number[]>): void {
+        this.shareLinks = resolver;
+    }
 
     private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -361,6 +391,22 @@ export class LiveHub {
         }
     }
 
+    /**
+     * Prévenir un compte précis, quelle que soit sa salle (voir l'interface).
+     *
+     * Toutes ses connexions, salle ou pas : l'onglet ouvert sur un autre
+     * espace est précisément celui qui doit apprendre que sa liste vient de
+     * changer. Pas de plancher de débit ici, l'événement est rare par nature
+     * (on ne gagne pas un espace vingt fois par seconde).
+     */
+    userChanged(userId: number, workspaceId: number, topics: readonly LiveTopic[], byUserId: number | null): void {
+        if (topics.length === 0) return;
+        for (const conn of this.bySocket.values()) {
+            if (conn.userId !== userId) continue;
+            this.send(conn, LIVE_CHANGED_EVENT, { workspaceId, topics, by: byUserId });
+        }
+    }
+
     // ---------------------------------------------------------------- droits
 
     /**
@@ -374,7 +420,7 @@ export class LiveHub {
     rememberGrants(
         socket: WebSocket,
         workspaceId: number,
-        features: ReadonlyMap<WorkspaceFeatureId, FeatureAccess>,
+        features: ReadonlyMap<FeatureId, FeatureAccess>,
         epoch: number
     ): void {
         const conn = this.bySocket.get(socket);
@@ -414,7 +460,7 @@ export class LiveHub {
         this.markRoster(workspaceId);
     }
 
-    private canRead(conn: LiveConn, workspaceId: number, feature: WorkspaceFeatureId): boolean {
+    private canRead(conn: LiveConn, workspaceId: number, feature: FeatureId): boolean {
         const g = conn.grants.get(workspaceId);
         // Époque périmée = aucun droit. Fail-closed, comme partout ailleurs.
         if (!g || g.epoch !== accessEpochNow()) return false;
@@ -430,6 +476,40 @@ export class LiveHub {
      * qui écrivent sans commande et n'ont pas de socket.
      */
     changed(workspaceId: number, topics: readonly LiveTopic[], byUserId: number | null, exclude?: WebSocket): void {
+        this.changedHere(workspaceId, topics, byUserId, exclude);
+
+        // Puis les espaces reliés par des projections, pour les sujets qui s'y
+        // prêtent : une sonde qui écrit chez elle doit rafraîchir ses fenêtres,
+        // une écriture faite depuis une fenêtre doit rafraîchir le domicile.
+        // Asynchrone et sans attente : la diffusion locale ne dépend jamais
+        // d'une requête de plus, et un échec ici ne casse rien — il retarde.
+        if (this.shareLinks === null) return;
+        for (const topic of topics) {
+            const feature = topicFeatureOf(topic);
+            // Un module externe n'est jamais share-wired : sa diffusion reste locale.
+            if (feature === null || isExternalFeatureId(feature) || !SHARE_WIRED_FEATURES.includes(feature)) {
+                continue;
+            }
+            void this.shareLinks(workspaceId, feature)
+                .then((linked) => {
+                    for (const other of linked) {
+                        if (other !== workspaceId) this.changedHere(other, [topic], byUserId, exclude);
+                    }
+                })
+                .catch(() => {
+                    // Un raté de résolution retarde un rafraîchissement, il ne
+                    // mérite pas de bruit : la prochaine écriture repassera.
+                });
+        }
+    }
+
+    /** La diffusion dans UN espace — le corps historique de `changed`. */
+    private changedHere(
+        workspaceId: number,
+        topics: readonly LiveTopic[],
+        byUserId: number | null,
+        exclude?: WebSocket
+    ): void {
         const room = this.byWorkspace.get(workspaceId);
         if (!room || room.size === 0 || topics.length === 0) return;
 
@@ -452,7 +532,7 @@ export class LiveHub {
     }
 
     private canSeeTopic(conn: LiveConn, workspaceId: number, topic: LiveTopic): boolean {
-        const feature = TOPIC_FEATURE[topic];
+        const feature = topicFeatureOf(topic);
         // `null` = aucun droit de feature à vérifier, l'appartenance suffit.
         return feature === null || this.canRead(conn, workspaceId, feature);
     }
@@ -760,6 +840,7 @@ export function createLiveTransport(hub: LiveHub, socket: WebSocket): LiveTransp
         evict: (workspaceId, userId) => hub.evict(workspaceId, userId),
         evictEverywhere: (userId) => hub.evictEverywhere(userId),
         evictRoom: (workspaceId) => hub.evictRoom(workspaceId),
+        userChanged: (userId, workspaceId, topics, byUserId) => hub.userChanged(userId, workspaceId, topics, byUserId),
         resync: (db, workspaceId) => hub.resync(db, workspaceId)
     };
 }

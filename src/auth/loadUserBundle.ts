@@ -1,6 +1,6 @@
 import type { Database } from '@/db';
-import type { HomeLayout, MinimalUser, SessionBundle, ThemeStateDTO, UserRole, Workspace } from 'deveye-types';
-import { homeLayoutSchema, themeStateSchema } from 'deveye-types';
+import type { HomeLayout, MinimalUser, SessionBundle, ThemeStateDTO, UserRole, Workspace } from '@deveye/types';
+import { homeLayoutSchema, themeStateSchema } from '@deveye/types';
 import { permissionsFor } from '@/features/_access';
 
 /**

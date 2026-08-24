@@ -5,7 +5,6 @@ import {
     backupDestinationRemove,
     backupDestinationTest,
     backupDestinationUpdate,
-    backupGetSettings,
     backupJobAdd,
     backupJobGet,
     backupJobList,
@@ -13,18 +12,29 @@ import {
     backupJobRun,
     backupJobUpdate,
     backupRuns,
-    backupSetSettings,
     backupSources,
-    backupTestNotification,
     type BackupSourceCandidate
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { BackupService, type StoredDestination, type StoredJob } from '@/Services/BackupService';
-import { formatMoment, sendTest } from '@/Services/notifications';
-import { getNotificationSettings, setNotificationSettings } from '../_notifications';
 import { safeRelPath } from '@/backup/sinks';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
-import { backupService, loadDestination, loadJob, readJson, READ, toDestination, toJob, toRun, WRITE } from './_shared';
+import { shareScope } from '../_sharing';
+import { CLOUDSYNC_BACKUP_PROVIDER, type CloudSyncBackupProvider } from '@deveye/types/sdk';
+import { moduleProvider } from '@/features/_sdk/register';
+import {
+    backupService,
+    loadDestination,
+    loadHomeJob,
+    loadJob,
+    readJson,
+    readJsonWith,
+    READ,
+    toDestination,
+    toJob,
+    toRun,
+    WRITE
+} from './_shared';
 
 /**
  * Sauvegardes — les destinations de l'espace et les travaux qui y écrivent.
@@ -136,7 +146,6 @@ const destinationAddFeature = defineFeature({
             kind: input.kind,
             deviceId: input.kind === 'device' ? input.deviceId : null,
             pathStyle: input.pathStyle,
-            encrypt: input.encrypt,
             content: await ctx.secure.open.encrypt(JSON.stringify(stored)),
             secretEnc: input.secret ? await ctx.secure.open.encrypt(input.secret) : ''
         });
@@ -176,7 +185,6 @@ const destinationUpdateFeature = defineFeature({
         const updated = await ctx.db.backup.updateDestination(input.destinationId, ctx.workspaceId, {
             deviceId: row.kind === 'device' ? input.deviceId : null,
             pathStyle: input.pathStyle,
-            encrypt: input.encrypt,
             content: await ctx.secure.open.encrypt(JSON.stringify(stored)),
             secretEnc: input.secret ? await ctx.secure.open.encrypt(input.secret) : undefined
         });
@@ -242,25 +250,50 @@ const jobListFeature = defineFeature({
     ...backupJobList,
     access: READ,
     handler: async (ctx) => {
-        const rows = await ctx.db.backup.listJobs(ctx.workspaceId);
-        return { jobs: await Promise.all(rows.map((row) => toJob(ctx, row))) };
+        const rows = await ctx.db.backup.listVisibleJobs(ctx.workspaceId);
+        // Les travaux qu'une restriction masque pour ce rôle disparaissent de
+        // la liste plutôt que d'y figurer grisés.
+        const hidden = await ctx.itemRestrictions('backup');
+        const visible = rows.filter((r) => hidden.get(r.id) !== 'none');
+        const shares = await shareScope(ctx, 'backup');
+        return { jobs: await Promise.all(visible.map((row) => toJob(ctx, row, shares))) };
     }
 });
 
 const countFeature = defineFeature({
     ...backupCount,
     access: READ,
-    handler: async (ctx) => ctx.db.backup.countJobs(ctx.workspaceId)
+    handler: async (ctx) => {
+        // Les mêmes lignes que la liste — projetées comprises, restrictions
+        // déduites : la carte doit compter ce que la liste montre, et un échec
+        // survenu chez le voisin sur un travail qu'on regarde d'ici mérite
+        // autant le rouge qu'un échec local.
+        const rows = await ctx.db.backup.listVisibleJobs(ctx.workspaceId);
+        const hidden = await ctx.itemRestrictions('backup');
+        const visible = rows.filter((r) => hidden.get(r.id) !== 'none' && r.enabled === 1);
+        return {
+            count: visible.length,
+            failing: visible.filter((r) => r.last_status === 'failed').length
+        };
+    }
 });
 
 const jobGetFeature = defineFeature({
     ...backupJobGet,
     access: READ,
     handler: async (ctx, input) => {
-        const row = await ctx.db.backup.findJobWithState(input.jobId, ctx.workspaceId);
+        const row = await ctx.db.backup.findVisibleJobWithState(input.jobId, ctx.workspaceId);
         if (!row) throw new FeatureError('not_found', 'Travail de sauvegarde introuvable');
-        const runs = await ctx.db.backup.listRuns(input.jobId, ctx.workspaceId, input.limit ?? 20);
-        return { job: await toJob(ctx, row), runs: await Promise.all(runs.map((r) => toRun(ctx, r))) };
+        await ctx.assertItem('backup', input.jobId);
+        const shares = await shareScope(ctx, 'backup');
+        const cipher = await shares.cipherFor(row.id);
+        // L'historique vit chez le travail : pour un projeté, le chercher ici
+        // rendrait une fiche vide qu'on croirait jamais exécutée.
+        const runs = await ctx.db.backup.listRuns(input.jobId, row.workspace_id, input.limit ?? 20);
+        return {
+            job: await toJob(ctx, row, shares),
+            runs: await Promise.all(runs.map((r) => toRun(ctx, r, cipher)))
+        };
     }
 });
 
@@ -275,8 +308,10 @@ async function assertSource(ctx: FeatureContext, source: string, sourceId: numbe
         }
         return;
     }
-    const share = await ctx.db.syncShares.findById(sourceId);
-    if (!share || share.workspace_id !== ctx.workspaceId) {
+    const provider = moduleProvider<CloudSyncBackupProvider>(CLOUDSYNC_BACKUP_PROVIDER);
+    if (!provider) throw new FeatureError('not_found', 'CloudSync est indisponible : module non installé.');
+    const share = await provider.findShare(sourceId);
+    if (!share || share.workspaceId !== ctx.workspaceId) {
         throw new FeatureError('not_found', 'Ce partage CloudSync est introuvable dans cet espace.');
     }
 }
@@ -300,6 +335,7 @@ const jobAddFeature = defineFeature({
             scheduleWeekday: input.scheduleWeekday,
             scheduleDay: input.scheduleDay,
             keepLast: input.keepLast,
+            encryption: input.encryption,
             nextRunAt: BackupService.nextRunAt(
                 input.schedule,
                 input.enabled,
@@ -327,7 +363,9 @@ const jobUpdateFeature = defineFeature({
     access: WRITE,
     mutates: true,
     handler: async (ctx, input) => {
-        await loadJob(ctx, input.jobId);
+        // Domicile seulement : sa destination et sa source se choisissent parmi
+        // les objets de SON espace, que la fenêtre ne voit pas.
+        await loadHomeJob(ctx, input.jobId);
         await loadDestination(ctx, input.destinationId);
         await assertSource(ctx, input.source, input.sourceId);
 
@@ -341,6 +379,7 @@ const jobUpdateFeature = defineFeature({
             scheduleWeekday: input.scheduleWeekday,
             scheduleDay: input.scheduleDay,
             keepLast: input.keepLast,
+            encryption: input.encryption,
             // Recalculée à chaque modification : changer l'heure sans déplacer
             // l'échéance laisserait le travail partir à l'ancienne jusqu'au
             // lendemain, ce que personne n'attend.
@@ -372,12 +411,17 @@ const jobRemoveFeature = defineFeature({
     access: WRITE,
     mutates: true,
     handler: async (ctx, input) => {
-        const job = await loadJob(ctx, input.jobId);
+        const job = await loadHomeJob(ctx, input.jobId);
         if (backupService(ctx).isRunning(job.id)) {
             throw new FeatureError('conflict', 'Une sauvegarde de ce travail est en cours. Réessayez ensuite.');
         }
         const ok = await ctx.db.backup.deleteJob(input.jobId, ctx.workspaceId);
         if (!ok) throw new FeatureError('not_found', 'Travail de sauvegarde introuvable');
+        // Projections, restrictions et route de notification ne tiennent à
+        // aucune clé étrangère : sans ce ménage, elles s'appliqueraient au
+        // prochain travail à hériter de l'identifiant.
+        await ctx.db.itemSharing.forgetItem('backup', input.jobId, ctx.workspaceId);
+        await ctx.db.notificationChannels.clearRoute(ctx.workspaceId, 'backup', input.jobId);
 
         ctx.audit({
             action: 'backup.jobRemove',
@@ -396,8 +440,12 @@ const jobRunFeature = defineFeature({
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        const job = await loadJob(ctx, input.jobId);
-        const name = (await readJson<StoredJob>(ctx, job.content)).name ?? 'Sauvegarde';
+        // Déclencher depuis une fenêtre est permis : le moteur lit tout — clé,
+        // destination, historique — depuis l'espace du travail (`job.workspace_id`),
+        // jamais depuis l'espace de l'appelant.
+        const job = await loadJob(ctx, input.jobId, 'write');
+        const cipher = await (await shareScope(ctx, 'backup')).cipherFor(job.id);
+        const name = (await readJsonWith<StoredJob>(cipher, job.content)).name ?? 'Sauvegarde';
         let run;
         try {
             run = await backupService(ctx).trigger(job, ctx.userId);
@@ -409,7 +457,7 @@ const jobRunFeature = defineFeature({
             description: `Sauvegarde « ${name} » déclenchée manuellement`,
             metadata: { jobId: job.id, runId: run.id }
         });
-        return { run: await toRun(ctx, run) };
+        return { run: await toRun(ctx, run, cipher) };
     }
 });
 
@@ -441,9 +489,13 @@ const sourcesFeature = defineFeature({
             });
         }
 
-        const shares = await ctx.db.syncShares.listByWorkspace(ctx.workspaceId);
+        // CloudSync est un module : sans lui, la source disparaît simplement
+        // de la liste (les travaux persistés qui la visent échoueront avec un
+        // message clair au run).
+        const provider = moduleProvider<CloudSyncBackupProvider>(CLOUDSYNC_BACKUP_PROVIDER);
+        const shares = provider ? await provider.listShares(ctx.workspaceId) : [];
         for (const share of shares) {
-            const stats = await ctx.db.syncFiles.statsByShare(share.id);
+            const stats = await provider!.statsByShare(share.id);
             candidates.push({
                 kind: 'cloudsync',
                 id: share.id,
@@ -467,70 +519,6 @@ const runsFeature = defineFeature({
     }
 });
 
-// --------------------------------------------------------- notifications
-
-const getSettingsFeature = defineFeature({
-    ...backupGetSettings,
-    access: READ,
-    handler: async (ctx) => ({ settings: await getNotificationSettings(ctx, 'backup') })
-});
-
-const setSettingsFeature = defineFeature({
-    ...backupSetSettings,
-    access: WRITE,
-    mutates: true,
-    handler: async (ctx, input) => {
-        // Même garde que les quatre autres émetteurs : un compte « guarded »
-        // exige un déverrouillage que l'ordonnanceur n'a jamais, et l'accepter
-        // ici produirait un canal qui ne part jamais, en silence — c'est-à-dire
-        // exactement le scénario où l'on croit être prévenu et ne l'est pas.
-        if (input.emailEnabled && input.mailAccountId !== null) {
-            const account = await ctx.db.mailAccounts.findById(input.mailAccountId, ctx.workspaceId);
-            if (!account) throw new FeatureError('not_found', 'Compte mail introuvable');
-            if (account.security_tier !== 'open') {
-                throw new FeatureError(
-                    'validation',
-                    'Un compte « guarded » ne peut pas envoyer d’alertes automatiques : choisissez un compte « open »'
-                );
-            }
-        }
-        const settings = await setNotificationSettings(ctx, 'backup', input);
-        ctx.audit({
-            action: 'backup.setSettings',
-            description: 'Notifications de sauvegarde modifiées',
-            metadata: { email: input.emailEnabled, webhook: input.webhookEnabled }
-        });
-        return { settings };
-    }
-});
-
-const testNotificationFeature = defineFeature({
-    ...backupTestNotification,
-    access: WRITE,
-    handler: async (ctx) => {
-        const at = Math.floor(Date.now() / 1000);
-        return sendTest(
-            ctx.db,
-            ctx.secure.open,
-            ctx.workspaceId,
-            'backup',
-            {
-                subject: '[DevEye] Test de notification — Sauvegardes',
-                body: [
-                    'Ceci est un test des notifications de Sauvegardes.',
-                    '',
-                    `Envoyé le : ${formatMoment(at)}`,
-                    'Si vous lisez ce message, un échec de sauvegarde vous parviendra bien.',
-                    'Seuls les échecs sont notifiés : une sauvegarde qui réussit ne dit rien,',
-                    'sinon le canal se remplirait de succès et l’échec s’y perdrait.'
-                ].join('\n'),
-                payload: { event: 'backup_test', at }
-            },
-            ctx.logger
-        );
-    }
-});
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const backupFeatures: FeatureDefinition<string, any, any>[] = [
     destinationListFeature,
@@ -546,8 +534,5 @@ export const backupFeatures: FeatureDefinition<string, any, any>[] = [
     jobRemoveFeature,
     jobRunFeature,
     sourcesFeature,
-    runsFeature,
-    getSettingsFeature,
-    setSettingsFeature,
-    testNotificationFeature
+    runsFeature
 ];

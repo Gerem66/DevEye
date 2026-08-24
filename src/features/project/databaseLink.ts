@@ -1,4 +1,4 @@
-import { projectDatabaseLink, projectDatabaseList, projectDatabaseUnlink } from 'deveye-types';
+import { projectDatabaseLink, projectDatabaseList, projectDatabaseUnlink } from '@deveye/types';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { loadProject } from './_shared';
 

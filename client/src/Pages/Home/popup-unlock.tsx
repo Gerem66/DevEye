@@ -7,7 +7,7 @@ import { ws, WsError } from '@/api/ws';
 
 import styles from './style.module.css';
 
-import type { Workspace } from 'deveye-types';
+import type { Workspace } from '@deveye/types';
 
 interface PopupUnlockProps {
     workspace: Workspace | null;

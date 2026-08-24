@@ -1,6 +1,6 @@
 //! Wire types shared with the DevEye server.
 //!
-//! These mirror `@gerem66/deveye-types` (`protocol/agent.ts`, `domain/metrics.ts`
+//! These mirror `@deveye/types` (`protocol/agent.ts`, `domain/metrics.ts`
 //! and the HTTP enrollment contract). Field names use the server's camelCase.
 
 use serde::{Deserialize, Serialize};
@@ -61,7 +61,7 @@ pub struct MetricSnapshot {
 }
 
 /// Latest-known health/security report (sent on connect, then periodically).
-/// Mirrors `deveye-types` `domain/report.ts`. Security fields are nullable:
+/// Mirrors `@deveye/types` `domain/report.ts`. Security fields are nullable:
 /// collectors are best-effort and may be unavailable on a given platform.
 #[derive(Debug, Clone, Serialize)]
 pub struct DeviceReport {
@@ -163,7 +163,7 @@ pub struct AgentInfo {
     pub probes: Vec<&'static str>,
 }
 
-/// One detected package manager + its pending state (mirrors deveye-types
+/// One detected package manager + its pending state (mirrors @deveye/types
 /// `packageManagerSchema`).
 #[derive(Debug, Clone, Serialize)]
 pub struct PackageManagerInfo {
@@ -204,7 +204,7 @@ pub struct ReportDisk {
     pub total_bytes: u64,
 }
 
-/// One queryable log source on the host (mirrors deveye-types `deviceLogSourceSchema`).
+/// One queryable log source on the host (mirrors @deveye/types `deviceLogSourceSchema`).
 #[derive(Debug, Clone, Serialize)]
 pub struct LogSource {
     /// Opaque token the agent resolves back to a reader (`journald`, `docker:<id>`,
@@ -219,7 +219,7 @@ pub struct LogSource {
     pub running: Option<bool>,
 }
 
-/// One normalised log line (mirrors deveye-types `deviceLogLineSchema`). `ts` is
+/// One normalised log line (mirrors @deveye/types `deviceLogLineSchema`). `ts` is
 /// unix milliseconds; both `ts` and `level` are nullable (sent as `null`).
 #[derive(Debug, Clone, Serialize)]
 pub struct LogLine {
@@ -249,7 +249,7 @@ pub struct LogFilter {
     pub until: Option<i64>,
 }
 
-/// One directory entry (mirrors deveye-types `fileEntrySchema`). `size` is the
+/// One directory entry (mirrors @deveye/types `fileEntrySchema`). `size` is the
 /// entry's own size; recursive sizes come from the separate usage analysis.
 #[derive(Debug, Clone, Serialize)]
 pub struct FileEntry {

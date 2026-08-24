@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Credential, DeployHistoryEntry, DeployTarget, Deployment } from 'deveye-types';
+import type { DeployHistoryEntry, DeployTarget, Deployment } from '@deveye/types';
 
-import { Button, CredentialsDialog, DEPLOY_CREDENTIALS, NotificationsDialog } from '@/Components';
+import { Button } from '@/Components';
 import { ws } from '@/api/ws';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { useLiveOutlines } from '@/live/useLiveOutline';
 import { useLiveSegment } from '@/live/useLiveSegment';
-import { invalidate, useResourceVersion } from '@/stores/invalidation';
+import { useResourceVersion } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
 import type { FeatureProps } from '@/Features/types';
 import { humanizeError } from '@/Features/Projects/api';
@@ -13,7 +14,7 @@ import { dokployError, DOKPLOY_TIMEOUT_MS } from './format';
 import LogsDialog from './LogsDialog';
 import TargetDialog from './TargetDialog';
 import TargetList from './TargetList';
-import TargetView from './TargetView';
+import TargetView, { TargetActions } from './TargetView';
 import styles from './style.module.css';
 
 /**
@@ -52,9 +53,6 @@ export function FeatureDeploy({ workspace }: FeatureProps) {
     const [historyError, setHistoryError] = useState<string | null>(null);
 
     const [dialog, setDialog] = useState<{ target: DeployTarget | null } | null>(null);
-    const [credentialsOpen, setCredentialsOpen] = useState(false);
-    const [notificationsOpen, setNotificationsOpen] = useState(false);
-    const [credentials, setCredentials] = useState<Credential[]>([]);
     /** L'identifiant Dokploy dont on regarde le journal ; `null` = popup fermée. */
     const [logsFor, setLogsFor] = useState<string | null>(null);
 
@@ -100,21 +98,6 @@ export function FeatureDeploy({ workspace }: FeatureProps) {
         }
         void reload();
     }, [reload, workspace.id, listVersion]);
-
-    // Les jetons, pour le dialogue qui les gère. Lus avec la liste : leur nombre
-    // ne bouge qu'à la main, et l'écran en a besoin dès qu'on l'ouvre.
-    const reloadCredentials = useCallback(async () => {
-        try {
-            const res = await ws.send('deploy.credentialList', {});
-            setCredentials(res.credentials);
-        } catch {
-            setCredentials([]);
-        }
-    }, []);
-
-    useEffect(() => {
-        void reloadCredentials();
-    }, [reloadCredentials, workspace.id, listVersion]);
 
     const loadOpened = useCallback(async (targetId: number) => {
         try {
@@ -196,19 +179,13 @@ export function FeatureDeploy({ workspace }: FeatureProps) {
                             <p className={styles.subtitle}>Ce que vous mettez en production, et ce que ça a donné.</p>
                         </div>
                         <div className={styles.actions}>
-                            {/* Les clés sont une propriété de l'espace, pas d'une
-                                cible : elles vivent donc en tête de la feature.
-                                Elles étaient dans l'écran des dépôts, faute d'un
-                                module de déploiement pour les accueillir. */}
-                            <Button variant='secondary' icon='key' onClick={() => setCredentialsOpen(true)}>
-                                Accès Dokploy
-                            </Button>
-                            {/* Réglage d'espace comme les clés, donc en tête de
-                                la feature : ces canaux ne dépendent d'aucune
-                                cible en particulier. */}
-                            <Button variant='secondary' icon='mail' onClick={() => setNotificationsOpen(true)}>
-                                Notifications
-                            </Button>
+                            {/* Un seul bouton d'espace : les accès Dokploy (les
+                                sources de la feature) vivent dans Réglages →
+                                Sources, à côté des canaux d'alerte. Ils avaient
+                                leur propre bouton « Accès Dokploy », troisième
+                                endroit à connaître pour régler une même
+                                feature. */}
+                            <FeatureSettingsButton scope={{ kind: 'feature', feature: 'deploy' }} />
                             {canWrite && (
                                 <Button icon='add' onClick={() => setDialog({ target: null })}>
                                     Déclarer une cible
@@ -243,10 +220,21 @@ export function FeatureDeploy({ workspace }: FeatureProps) {
                 <p className={styles.empty}>{error ?? 'Chargement…'}</p>
             ) : (
                 <>
+                    {/* Retour à gauche, actions à droite : la même rangée
+                        d'en-tête que la liste, et que les fiches des autres
+                        features. Les actions vivaient dans le bloc d'identité,
+                        plus bas, en décalage avec la page parente. */}
                     <header className={styles.head}>
                         <Button variant='ghost' icon='arrow-left' onClick={() => setOpenedId(null)}>
                             Déploiements
                         </Button>
+                        <div className={styles.actions}>
+                            <TargetActions
+                                target={opened.target}
+                                canWrite={canWrite}
+                                onEdit={() => setDialog({ target: opened.target })}
+                            />
+                        </div>
                     </header>
 
                     <TargetView
@@ -254,7 +242,7 @@ export function FeatureDeploy({ workspace }: FeatureProps) {
                         deployments={opened.deployments}
                         members={workspace.users}
                         canWrite={canWrite}
-                        onEdit={() => setDialog({ target: opened.target })}
+                        showActions={false}
                         fullHistory={history}
                         fullHistoryError={historyError}
                         onOpenLogs={setLogsFor}
@@ -283,29 +271,6 @@ export function FeatureDeploy({ workspace }: FeatureProps) {
                           }
                         : undefined
                 }
-            />
-
-            <CredentialsDialog
-                open={credentialsOpen}
-                kind={DEPLOY_CREDENTIALS}
-                credentials={credentials}
-                canWrite={canWrite}
-                onClose={() => setCredentialsOpen(false)}
-                onChanged={() => {
-                    void reloadCredentials();
-                    // Un jeton retiré rend ses cibles indéployables : la liste
-                    // doit le dire sans attendre.
-                    invalidate('deploy.list');
-                }}
-            />
-
-            <NotificationsDialog
-                open={notificationsOpen}
-                onClose={() => setNotificationsOpen(false)}
-                feature='deploy'
-                title='Notifications de Déploiement'
-                description='Propres aux mises en production : un déploiement raté n’a ni les mêmes destinataires ni la même urgence qu’un service tombé (Uptime) ou qu’un constat de sécurité (Sentinelle).'
-                when='Envoyées à l’atterrissage d’un déploiement, échec comme succès, y compris ceux lancés depuis Dokploy, une CI ou un push git. Sur un webhook Discord, un seul message s’ouvre au démarrage puis se met à jour tout seul — avancement, journal, puis issue et durée.'
             />
 
             <LogsDialog

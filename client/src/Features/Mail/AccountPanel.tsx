@@ -4,7 +4,7 @@ import FolderTree from './FolderTree';
 import SyncProgressBar from './SyncProgressBar';
 import styles from './style.module.css';
 
-import type { MailAccount, MailFolder } from 'deveye-types';
+import type { MailAccount, MailFolder } from '@deveye/types';
 
 interface AccountPanelProps {
     accounts: MailAccount[];
@@ -28,7 +28,6 @@ interface AccountPanelProps {
     onDeleteAccount: (account: MailAccount) => void;
     onRefreshFolder: () => void;
     refreshingFolder: boolean;
-    onOpenAccountSettings: (account: MailAccount) => void;
 }
 
 /**
@@ -66,8 +65,7 @@ export function AccountPanel({
     onShowList,
     onDeleteAccount,
     onRefreshFolder,
-    refreshingFolder,
-    onOpenAccountSettings
+    refreshingFolder
 }: AccountPanelProps) {
     const selected = accounts.find((a) => a.id === selectedId) ?? null;
 
@@ -114,7 +112,6 @@ export function AccountPanel({
                                 onEdit={() => onEdit(selected)}
                                 onRefresh={onRefreshFolder}
                                 onDelete={() => onDeleteAccount(selected)}
-                                onOpenSettings={() => onOpenAccountSettings(selected)}
                             />
                             <div className={styles.folderScroll}>
                                 <h4 className={styles.sidebarSubhead}>Dossiers</h4>

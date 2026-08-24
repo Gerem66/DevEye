@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ws } from '@/api/ws';
 import { acquireMetrics } from '@/stores/metricsSubscription';
 import Button from '@/Components/Button';
-import { DEVICE_POWER_EVENT, type AgentPowerAction, type DevicePowerPush } from 'deveye-types';
+import { DEVICE_POWER_EVENT, type AgentPowerAction, type DevicePowerPush } from '@deveye/types';
 import styles from './Monitoring.module.css';
 
 interface PowerActionDef {

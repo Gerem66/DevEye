@@ -1,0 +1,6 @@
+{
+  "$comment": "Le projet SERVEUR des modules in-repo, pour ci:features seulement : pas nommé tsconfig.json, donc jamais découvert par tsserver (l'IDE aiguille la part serveur vers le tsconfig racine). Aucune reference nulle part : pas de composite à exiger.",
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["*/src/server", "*/src/contracts", "*/src/manifest.ts", "*/src/index.ts"]
+}

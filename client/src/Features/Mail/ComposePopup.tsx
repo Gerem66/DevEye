@@ -8,7 +8,7 @@ import TextInput from '@/Components/TextInput';
 import { formatSize, humanizeError, ws } from './api';
 import styles from './style.module.css';
 
-import type { MailAccount, MailAddress } from 'deveye-types';
+import type { MailAccount, MailAddress } from '@deveye/types';
 
 export const COMPOSE_POPUP = 'popup-mail-compose';
 

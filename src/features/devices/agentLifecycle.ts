@@ -1,4 +1,4 @@
-import { deviceAgentLifecycle, type AgentLifecycleAction } from 'deveye-types';
+import { deviceAgentLifecycle, type AgentLifecycleAction } from '@deveye/types';
 
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { authorizeReachableDevice } from './shared';

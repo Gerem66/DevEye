@@ -22,7 +22,7 @@ import { ensureUnlocked as ensureSecrecyUnlocked, useSecrecy } from '@/stores/se
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 
 import type { FeatureProps } from '@/Features/types';
-import type { Note, NoteFolder, NoteSummary } from 'deveye-types';
+import type { Note, NoteFolder, NoteSummary } from '@deveye/types';
 import { useLiveSegment } from '@/live/useLiveSegment';
 
 /** The user's manual order; the id only breaks ties. */

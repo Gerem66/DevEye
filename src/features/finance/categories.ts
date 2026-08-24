@@ -4,7 +4,7 @@ import {
     financeCategoryRemove,
     financeCategoryReorder,
     financeCategoryUpdate
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { decryptAll, encryptJson, financeCipher, READ, toCategory, WRITE, type StoredCategory } from './_shared';

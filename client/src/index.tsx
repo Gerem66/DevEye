@@ -1,3 +1,7 @@
+// En tout premier : l'enregistrement des modules installés (descripteurs +
+// invalidation). Avant App, donc avant le catalogue, qui se fige en s'évaluant.
+import '@/sdk/modules';
+
 import { createRoot } from 'react-dom/client';
 
 import App from './App.js';

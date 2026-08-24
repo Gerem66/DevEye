@@ -9,7 +9,7 @@ import {
     secrecyTouch,
     secrecyUnlock,
     type SecrecyStatus
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { hashPassword, verifyPassword } from '@/auth/argon';
 import { WrongSecretError } from '@/Services/SecretKeyService';

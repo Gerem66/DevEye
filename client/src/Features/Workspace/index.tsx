@@ -4,7 +4,7 @@ import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
 import SelectInput from '@/Components/SelectInput';
 import TextInput from '@/Components/TextInput';
-import type { WorkspaceRole } from 'deveye-types';
+import type { WorkspaceRole } from '@deveye/types';
 import { useAuth } from '@/auth/AuthProvider';
 import { useWorkspacePermissions } from '@/stores/workspace';
 import RoleDialog from './RoleDialog';
@@ -207,7 +207,11 @@ export default function FeatureWorkspace() {
                                 </Button>
                             )}
                         </div>
-                        <div className={styles.card}>
+                        {/* `rowList` : le gap de la carte tombe et son padding
+                            vertical se resserre, pour que l'air au-dessus de la
+                            première ligne (carte + ligne) égale les côtés, et
+                            que le trait entre deux lignes soit à mi-chemin. */}
+                        <div className={`${styles.card} ${styles.rowList}`}>
                             {workspace.users.map((u) => {
                                 const owner = u.id === workspace.ownerUserId;
                                 return (
@@ -273,11 +277,29 @@ export default function FeatureWorkspace() {
                             </Button>
                         </div>
                         <p className={styles.hint}>Le propriétaire n’en porte jamais : il a tout par construction.</p>
-                        <div className={styles.card}>
+                        {/* Même resserrement que la liste des membres, mais
+                            seulement quand il y a des lignes : l'état vide
+                            porte sa propre respiration. */}
+                        <div className={admin.roles.length === 0 ? styles.card : `${styles.card} ${styles.rowList}`}>
                             {admin.roles.length === 0 ? (
-                                <p className={styles.empty}>
-                                    Aucun rôle. Sans rôle, un membre invité n’a accès à rien.
-                                </p>
+                                // L'onglet vide n'est pas une impasse : un geste pose
+                                // deux rôles génériques, à ajuster ensuite si besoin.
+                                <div className={styles.emptyBlock}>
+                                    <p className={styles.empty}>
+                                        Aucun rôle. Sans rôle, un membre invité n’a accès à rien.
+                                    </p>
+                                    <Button
+                                        icon='add'
+                                        onClick={() => void admin.createPresetRoles()}
+                                        disabled={admin.busy}
+                                    >
+                                        {admin.busy ? 'Création…' : 'Créer les rôles de départ'}
+                                    </Button>
+                                    <p className={styles.hint}>
+                                        « Admin » peut tout ; « Membre » a toutes les fonctionnalités sans
+                                        l’administration, et devient le rôle attribué d’office.
+                                    </p>
+                                </div>
                             ) : (
                                 admin.roles.map((r) => (
                                     <div key={r.id} className={styles.row}>
@@ -292,7 +314,18 @@ export default function FeatureWorkspace() {
                                                 d’administration · {r.memberCount} membre(s)
                                             </span>
                                         </div>
-                                        {!r.isDefault && (
+                                        {r.isDefault ? (
+                                            // L'étoile ne disparaît pas, elle se remplit : l'état
+                                            // s'affiche là où le geste se fait, et la colonne
+                                            // d'actions reste alignée d'une ligne à l'autre.
+                                            <span
+                                                className={styles.defaultStar}
+                                                title='Rôle par défaut : attribué d’office aux nouveaux membres'
+                                                aria-label='Rôle par défaut'
+                                            >
+                                                <span className='icon icon-star' />
+                                            </span>
+                                        ) : (
                                             <button
                                                 type='button'
                                                 className={styles.actionBtn}

@@ -1,4 +1,4 @@
-import type { FeatureAccess, ProjectLinkCounts, WorkspaceFeatureId } from 'deveye-types';
+import type { FeatureAccess, ProjectLinkCounts, WorkspaceFeatureId } from '@deveye/types';
 
 /**
  * Les onglets d'un projet, et la règle qui décide lesquels s'affichent.

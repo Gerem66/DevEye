@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole } from 'deveye-types';
+import { FEATURE_REGISTRY, WORKSPACE_CAPABILITIES } from '@deveye/types';
+import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole } from '@deveye/types';
 
 import { ws, WsError } from '@/api/ws';
 import { useAuth } from '@/auth/AuthProvider';
@@ -127,6 +128,41 @@ export function useWorkspaceAdmin() {
                 await ws.send('workspace.enableSharedKey', {});
                 await loadSharedKey();
             }, 'Activation de la clé d’espace impossible.'),
+
+        /**
+         * Deux rôles de départ pour un onglet encore vide : « Admin » (tout) et
+         * « Membre » (toutes les fonctionnalités, aucune administration), ce
+         * dernier attribué d'office aux arrivants pour que la première
+         * invitation fonctionne sans réglage. Composer un premier rôle à la
+         * main est l'obstacle ; l'ajuster ensuite est facile.
+         */
+        createPresetRoles: () =>
+            run(async () => {
+                // Les canaux d'alerte (adresses d'astreinte, salons) suivent la
+                // ligne du preset : l'Admin les gère, le Membre s'en sert sans
+                // pouvoir les modifier.
+                const grants = (channels: boolean) =>
+                    FEATURE_REGISTRY.map<WorkspaceFeatureGrant>((f) => ({
+                        feature: f.id,
+                        access: 'write',
+                        channels,
+                        extras: {}
+                    }));
+                await ws.send('workspace.roleCreate', {
+                    name: 'Admin',
+                    color: '#f97316',
+                    capabilities: [...WORKSPACE_CAPABILITIES],
+                    features: grants(true)
+                });
+                const member = await ws.send('workspace.roleCreate', {
+                    name: 'Membre',
+                    color: '#22d3ee',
+                    capabilities: [],
+                    features: grants(false)
+                });
+                await ws.send('workspace.roleSetDefault', { roleId: member.role.id });
+                await loadRoles();
+            }, 'Création des rôles de départ impossible.'),
 
         createRole: (draft: {
             name: string;

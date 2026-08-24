@@ -5,7 +5,7 @@ import { useDragReorder } from '@/dragReorder';
 import ServiceCard from './ServiceCard';
 import styles from './style.module.css';
 
-import type { UptimeService } from 'deveye-types';
+import type { UptimeService } from '@deveye/types';
 
 interface ServiceListProps {
     /** The workspace's services, already in the user's order. */

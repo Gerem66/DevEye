@@ -7,10 +7,11 @@ import {
     workspaceRoleList,
     workspaceRoleSetDefault,
     workspaceRoleUpdate
-} from 'deveye-types';
-import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole, WorkspaceRoleRow } from 'deveye-types';
+} from '@deveye/types';
+import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole, WorkspaceRoleRow } from '@deveye/types';
 
 import { invalidateAccess } from '../_access';
+import { validateGrantExtras } from '../_sdk/register';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
 /**
@@ -71,8 +72,12 @@ export const workspaceRoleListFeature: FeatureDefinition<
                 isOwner: ctx.isOwner,
                 capabilities: WORKSPACE_CAPABILITIES.filter((c) => ctx.can(c)),
                 features: WORKSPACE_FEATURE_IDS.flatMap<WorkspaceFeatureGrant>((f) => {
-                    if (ctx.canFeature(f, 'write')) return [{ feature: f, access: 'write' }];
-                    if (ctx.canFeature(f)) return [{ feature: f, access: 'read' }];
+                    if (ctx.canFeature(f, 'write')) {
+                        return [{ feature: f, access: 'write', channels: ctx.canChannels(f), extras: {} }];
+                    }
+                    if (ctx.canFeature(f)) {
+                        return [{ feature: f, access: 'read', channels: ctx.canChannels(f), extras: {} }];
+                    }
                     return [];
                 })
             }
@@ -90,6 +95,7 @@ export const workspaceRoleCreateFeature: FeatureDefinition<
     access: { capabilities: ['workspace.roles'] },
     handler: async (ctx, input) => {
         assertShared(ctx);
+        validateGrantExtras(input.features);
         const row = await ctx.db.workspaceRoles.create(ctx.workspaceId, {
             name: input.name.trim(),
             color: input.color,
@@ -108,9 +114,14 @@ export const workspaceRoleUpdateFeature: FeatureDefinition<
 > = defineFeature({
     ...workspaceRoleUpdate,
     mutates: true,
+    // Identité et droits d'un rôle relèvent de la même capacité : c'est le
+    // choix qui garde UN écran et UNE règle. Le découpage plus fin (identité vs
+    // contenu, `workspace.permissions`) a été essayé puis retiré — deux
+    // capacités pour un même formulaire produisaient des demi-refus illisibles.
     access: { capabilities: ['workspace.roles'] },
     handler: async (ctx, input) => {
         assertShared(ctx);
+        validateGrantExtras(input.features);
         const row = await ctx.db.workspaceRoles.update(input.roleId, ctx.workspaceId, {
             name: input.name.trim(),
             color: input.color,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PresenceEvent } from 'deveye-types';
+import type { PresenceEvent } from '@deveye/types';
 import { MonthPicker } from './MonthPicker';
 import { nearestBy } from './utils';
 

@@ -1,4 +1,4 @@
-import { logLevelValue, type LogLevelName, type LogSource } from 'deveye-types';
+import { logLevelValue, type LogLevelName, type LogSource } from '@deveye/types';
 
 import { logger } from '@/logger';
 import type { Database } from '@/db';

@@ -9,7 +9,7 @@ import {
     openChunk,
     parseBlobHeader,
     sealChunk
-} from '@/cloudSync/blobCrypto';
+} from './devb';
 import type Encryption from '@/Services/Encryption';
 
 /**
@@ -21,7 +21,7 @@ import type Encryption from '@/Services/Encryption';
  * 1 Mio scellés en AES-256-GCM, nonce dérivé du compteur, AAD portant le rang et
  * le marqueur de fin. Réécrire un second format aurait produit un second
  * outil de restauration à tenir à jour, et c'est exactement le genre de dette
- * qu'on découvre le jour où on doit s'en servir. Voir `cloudSync/blobCrypto.ts`
+ * qu'on découvre le jour où on doit s'en servir. Voir `backup/devb.ts`
  * pour la description complète du format et la raison de chacun de ses champs.
  *
  * ## La clé, en revanche, n'est PAS celle de CloudSync

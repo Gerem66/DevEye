@@ -15,7 +15,7 @@ import {
     type DeviceLogSource,
     type DeviceLogSourceKind,
     type DeviceLogSourcesPush
-} from 'deveye-types';
+} from '@deveye/types';
 import styles from './Monitoring.module.css';
 
 /**

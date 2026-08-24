@@ -4,7 +4,7 @@ import type {
     BackupJobRow,
     BackupJobWithStateRow,
     BackupRunRow
-} from 'deveye-types';
+} from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
@@ -33,7 +33,6 @@ export interface BackupRepo {
         kind: string;
         deviceId: string | null;
         pathStyle: boolean;
-        encrypt: boolean;
         content: string;
         secretEnc: string;
     }): Promise<BackupDestinationRow>;
@@ -43,7 +42,6 @@ export interface BackupRepo {
         input: {
             deviceId: string | null;
             pathStyle: boolean;
-            encrypt: boolean;
             content: string;
             /** Absent = secret inchangé. Le client ne l'a jamais reçu. */
             secretEnc?: string;
@@ -56,8 +54,13 @@ export interface BackupRepo {
 
     // -- travaux ------------------------------------------------------------
     listJobs(workspaceId: number): Promise<BackupJobWithStateRow[]>;
+    /** Comme `listJobs`, plus les travaux projetés vers cet espace. */
+    listVisibleJobs(workspaceId: number): Promise<BackupJobWithStateRow[]>;
     findJob(id: number, workspaceId: number): Promise<BackupJobRow | null>;
+    /** Comme `findJob`, mais accepte aussi un travail projeté vers cet espace. */
+    findVisibleJob(id: number, workspaceId: number): Promise<BackupJobRow | null>;
     findJobWithState(id: number, workspaceId: number): Promise<BackupJobWithStateRow | null>;
+    findVisibleJobWithState(id: number, workspaceId: number): Promise<BackupJobWithStateRow | null>;
     /** Sans filtre d'espace : l'ordonnanceur tient déjà l'identité de la ligne. */
     findJobById(id: number): Promise<BackupJobRow | null>;
     countJobs(workspaceId: number): Promise<{ count: number; failing: number }>;
@@ -72,6 +75,8 @@ export interface BackupRepo {
         scheduleWeekday: number;
         scheduleDay: number;
         keepLast: number;
+        /** 'none' | 'server' : la forme des archives (voir `backupEncryptionSchema`). */
+        encryption: string;
         nextRunAt: number | null;
         content: string;
     }): Promise<BackupJobRow>;
@@ -88,6 +93,7 @@ export interface BackupRepo {
             scheduleWeekday: number;
             scheduleDay: number;
             keepLast: number;
+            encryption: string;
             nextRunAt: number | null;
             content: string;
         }
@@ -206,24 +212,16 @@ export function backupRepo(q: Q): BackupRepo {
         async createDestination(input) {
             const res = await q.query(
                 `INSERT INTO backup_destinations
-                    (workspace_id, kind, device_id, path_style, encrypt, content, secret_enc)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                [
-                    input.workspaceId,
-                    input.kind,
-                    input.deviceId,
-                    input.pathStyle ? 1 : 0,
-                    input.encrypt ? 1 : 0,
-                    input.content,
-                    input.secretEnc
-                ]
+                    (workspace_id, kind, device_id, path_style, content, secret_enc)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [input.workspaceId, input.kind, input.deviceId, input.pathStyle ? 1 : 0, input.content, input.secretEnc]
             );
             return destById(res.insertId);
         },
 
         async updateDestination(id, workspaceId, input) {
-            const sets = ['device_id = ?', 'path_style = ?', 'encrypt = ?', 'content = ?'];
-            const params: unknown[] = [input.deviceId, input.pathStyle ? 1 : 0, input.encrypt ? 1 : 0, input.content];
+            const sets = ['device_id = ?', 'path_style = ?', 'content = ?'];
+            const params: unknown[] = [input.deviceId, input.pathStyle ? 1 : 0, input.content];
             if (input.secretEnc !== undefined) {
                 sets.push('secret_enc = ?');
                 params.push(input.secretEnc);
@@ -269,11 +267,53 @@ export function backupRepo(q: Q): BackupRepo {
             return res.rows;
         },
 
+        async listVisibleJobs(workspaceId) {
+            const res = await q.query<BackupJobWithStateRow>(
+                `${JOB_SELECT} WHERE j.workspace_id = ?
+                 UNION
+                 ${JOB_SELECT}
+                  JOIN item_shares sh
+                    ON sh.feature = 'backup' AND sh.item_id = j.id AND sh.home_workspace_id = j.workspace_id
+                 WHERE sh.workspace_id = ?
+                 ORDER BY created ASC, id ASC`,
+                [workspaceId, workspaceId]
+            );
+            return res.rows;
+        },
+
         async findJob(id, workspaceId) {
             const res = await q.query<BackupJobRow>('SELECT * FROM backup_jobs WHERE id = ? AND workspace_id = ?', [
                 id,
                 workspaceId
             ]);
+            return res.rows[0] ?? null;
+        },
+
+        async findVisibleJob(id, workspaceId) {
+            const res = await q.query<BackupJobRow>(
+                `SELECT j.* FROM backup_jobs j
+                  WHERE j.id = ?
+                    AND (j.workspace_id = ?
+                         OR EXISTS (SELECT 1 FROM item_shares sh
+                                     WHERE sh.feature = 'backup' AND sh.item_id = j.id
+                                       AND sh.home_workspace_id = j.workspace_id
+                                       AND sh.workspace_id = ?))`,
+                [id, workspaceId, workspaceId]
+            );
+            return res.rows[0] ?? null;
+        },
+
+        async findVisibleJobWithState(id, workspaceId) {
+            const res = await q.query<BackupJobWithStateRow>(
+                `${JOB_SELECT}
+                  WHERE j.id = ?
+                    AND (j.workspace_id = ?
+                         OR EXISTS (SELECT 1 FROM item_shares sh
+                                     WHERE sh.feature = 'backup' AND sh.item_id = j.id
+                                       AND sh.home_workspace_id = j.workspace_id
+                                       AND sh.workspace_id = ?))`,
+                [id, workspaceId, workspaceId]
+            );
             return res.rows[0] ?? null;
         },
 
@@ -311,8 +351,8 @@ export function backupRepo(q: Q): BackupRepo {
                 `INSERT INTO backup_jobs
                     (workspace_id, destination_id, source_kind, source_id, enabled,
                      schedule_kind, schedule_hour, schedule_weekday, schedule_day,
-                     keep_last, next_run_at, content)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                     keep_last, encryption, next_run_at, content)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     input.workspaceId,
                     input.destinationId,
@@ -324,6 +364,7 @@ export function backupRepo(q: Q): BackupRepo {
                     input.scheduleWeekday,
                     input.scheduleDay,
                     input.keepLast,
+                    input.encryption,
                     input.nextRunAt,
                     input.content
                 ]
@@ -336,7 +377,7 @@ export function backupRepo(q: Q): BackupRepo {
                 `UPDATE backup_jobs
                     SET destination_id = ?, source_kind = ?, source_id = ?, enabled = ?,
                         schedule_kind = ?, schedule_hour = ?, schedule_weekday = ?, schedule_day = ?,
-                        keep_last = ?, next_run_at = ?, content = ?
+                        keep_last = ?, encryption = ?, next_run_at = ?, content = ?
                   WHERE id = ? AND workspace_id = ?`,
                 [
                     input.destinationId,
@@ -348,6 +389,7 @@ export function backupRepo(q: Q): BackupRepo {
                     input.scheduleWeekday,
                     input.scheduleDay,
                     input.keepLast,
+                    input.encryption,
                     input.nextRunAt,
                     input.content,
                     id,

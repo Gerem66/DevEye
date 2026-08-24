@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Credential, GitRepo } from 'deveye-types';
+import type { Credential, GitRepo } from '@deveye/types';
 import { Button, Dialog, SelectInput } from '@/Components';
 import { ws } from '@/api/ws';
 import { RepoPicker, type RepoTarget } from '@/Features/Git/RepoPicker';

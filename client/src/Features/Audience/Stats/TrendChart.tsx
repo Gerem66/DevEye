@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { AudiencePoint, AudienceResolution } from 'deveye-types';
+import type { AudiencePoint, AudienceResolution } from '@deveye/types';
 
 import { formatCount, formatPointLabel, formatPointTitle } from '../format';
 import styles from '../style.module.css';

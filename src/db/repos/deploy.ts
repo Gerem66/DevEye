@@ -1,4 +1,4 @@
-import type { DeployTargetRow, DeployTargetSyncRow, DeployTargetWithUsageRow, DeploymentRow } from 'deveye-types';
+import type { DeployTargetRow, DeployTargetSyncRow, DeployTargetWithUsageRow, DeploymentRow } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
@@ -22,8 +22,13 @@ type Q = Queryable;
 export interface DeployRepo {
     // -- cibles -------------------------------------------------------------
     listTargets(workspaceId: number): Promise<DeployTargetWithUsageRow[]>;
+    /** Comme `listTargets`, plus les cibles projetées vers cet espace. */
+    listVisibleTargets(workspaceId: number): Promise<DeployTargetWithUsageRow[]>;
     findTarget(id: number, workspaceId: number): Promise<DeployTargetRow | null>;
+    /** Comme `findTarget`, mais accepte aussi une cible projetée vers cet espace. */
+    findVisibleTarget(id: number, workspaceId: number): Promise<DeployTargetRow | null>;
     findTargetWithUsage(id: number, workspaceId: number): Promise<DeployTargetWithUsageRow | null>;
+    findVisibleTargetWithUsage(id: number, workspaceId: number): Promise<DeployTargetWithUsageRow | null>;
     /** L'unicité d'une cible dans l'espace : même instance, même identifiant. */
     findTargetByExternal(
         workspaceId: number,
@@ -151,10 +156,52 @@ export function deployRepo(pool: Q): DeployRepo {
             );
             return r.rows;
         },
+        async listVisibleTargets(workspaceId) {
+            // `sort_order` appartient à l'espace d'origine : une cible projetée
+            // se range après les locales, par identifiant — même arbitrage que
+            // les services Uptime.
+            const r = await pool.query<DeployTargetWithUsageRow>(
+                `${TARGET_WITH_USAGE} WHERE t.workspace_id = ?
+                 UNION
+                 ${TARGET_WITH_USAGE}
+                  JOIN item_shares sh
+                    ON sh.feature = 'deploy' AND sh.item_id = t.id AND sh.home_workspace_id = t.workspace_id
+                 WHERE sh.workspace_id = ?
+                 ORDER BY sort_order ASC, id ASC`,
+                [workspaceId, workspaceId]
+            );
+            return r.rows;
+        },
         async findTarget(id, workspaceId) {
             const r = await pool.query<DeployTargetRow>(
                 'SELECT * FROM deploy_targets WHERE id = ? AND workspace_id = ?',
                 [id, workspaceId]
+            );
+            return r.rows[0] ?? null;
+        },
+        async findVisibleTarget(id, workspaceId) {
+            const r = await pool.query<DeployTargetRow>(
+                `SELECT t.* FROM deploy_targets t
+                  WHERE t.id = ?
+                    AND (t.workspace_id = ?
+                         OR EXISTS (SELECT 1 FROM item_shares sh
+                                     WHERE sh.feature = 'deploy' AND sh.item_id = t.id
+                                       AND sh.home_workspace_id = t.workspace_id
+                                       AND sh.workspace_id = ?))`,
+                [id, workspaceId, workspaceId]
+            );
+            return r.rows[0] ?? null;
+        },
+        async findVisibleTargetWithUsage(id, workspaceId) {
+            const r = await pool.query<DeployTargetWithUsageRow>(
+                `${TARGET_WITH_USAGE}
+                  WHERE t.id = ?
+                    AND (t.workspace_id = ?
+                         OR EXISTS (SELECT 1 FROM item_shares sh
+                                     WHERE sh.feature = 'deploy' AND sh.item_id = t.id
+                                       AND sh.home_workspace_id = t.workspace_id
+                                       AND sh.workspace_id = ?))`,
+                [id, workspaceId, workspaceId]
             );
             return r.rows[0] ?? null;
         },

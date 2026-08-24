@@ -4,7 +4,7 @@ import { useDialogSubmit } from '@/Components/Dialog';
 import { openInfo } from '@/Components/InfoPopup';
 import Button from '@/Components/Button';
 import TextInput from '@/Components/TextInput';
-import type { ShortcutItem, ShortcutPreview, ShortcutTemplate } from 'deveye-types';
+import type { ShortcutItem, ShortcutPreview, ShortcutTemplate } from '@deveye/types';
 import { addShortcut, updateShortcut } from '@/stores/homeLayout';
 import { TemplateGallery } from './TemplateGallery';
 import styles from './organize.module.css';

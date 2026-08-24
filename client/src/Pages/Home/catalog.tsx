@@ -1,11 +1,9 @@
 import type { ComponentType } from 'react';
-import type { HomeFeatureId, WorkspaceKind } from 'deveye-types';
+import type { HomeFeatureId, WorkspaceKind } from '@deveye/types';
 
 import { MonitoringWidget } from '@/Features/Monitoring';
-import { WeatherWidget } from '@/Features/Weather';
 import { NotesWidget } from '@/Features/Notes/NotesWidget';
 import { PasswordWidget } from '@/Features/Password/PasswordWidget';
-import { CloudSyncWidget } from '@/Features/CloudSync';
 import { UptimeWidget } from '@/Features/Uptime/UptimeWidget';
 import { SentinelWidget } from '@/Features/Sentinel/SentinelWidget';
 import { MailWidget } from '@/Features/Mail/MailWidget';
@@ -16,13 +14,10 @@ import { DatabaseWidget } from '@/Features/Database/DatabaseWidget';
 import { BackupWidget } from '@/Features/Backup/BackupWidget';
 import { FinanceWidget } from '@/Features/Finance/FinanceWidget';
 import { AudienceWidget } from '@/Features/Audience/AudienceWidget';
-import { OsintWidget } from '@/Features/Osint/OsintWidget';
 
 import Monitoring from '@/Features/Monitoring';
-import Weather from '@/Features/Weather';
 import FeaturePassword from '@/Features/Password';
 import FeatureNotes from '@/Features/Notes';
-import CloudSync from '@/Features/CloudSync';
 import Uptime from '@/Features/Uptime';
 import Sentinel from '@/Features/Sentinel';
 import Mail from '@/Features/Mail';
@@ -33,9 +28,9 @@ import FeatureDatabase from '@/Features/Database';
 import FeatureBackup from '@/Features/Backup';
 import FeatureFinance from '@/Features/Finance';
 import FeatureAudience from '@/Features/Audience';
-import FeatureOsint from '@/Features/Osint';
 
 import type { FeatureProps } from '@/Features/types';
+import { clientModules } from '@/sdk/registry';
 
 /**
  * Le rayon du marché où la fonctionnalité est rangée.
@@ -119,9 +114,11 @@ export interface FeatureCatalogEntry {
      * de la topbar, pour que la restriction se voie sans avoir à cliquer.
      */
     adminOnly?: true;
+    /** Carte basse (demi-hauteur), comme les tuiles d'appareil. Déclarée par les modules. */
+    compact?: boolean;
 }
 
-export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
+const NATIVE_CATALOG: FeatureCatalogEntry[] = [
     {
         id: 'monitoring',
         title: 'Monitoring',
@@ -133,17 +130,6 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         cacheDurationMinutes: 5,
         preload: true,
         adminOnly: true
-    },
-    {
-        id: 'weather',
-        title: 'Météo',
-        icon: 'cloud',
-        description: 'Conditions et prévisions des villes que vous suivez.',
-        category: 'daily',
-        WidgetContent: WeatherWidget,
-        FullComponent: Weather,
-        cacheDurationMinutes: 60,
-        preload: true
     },
     {
         id: 'password',
@@ -195,16 +181,6 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         // `sentinel` sans que personne la regarde. La carte de l'accueil reste
         // vivante par le compteur partagé, comme celle d'Uptime.
         cacheDurationMinutes: 0
-    },
-    {
-        id: 'cloudsync',
-        title: 'CloudSync',
-        icon: 'cloud',
-        description: 'Synchronisation de dossiers entre vos appareils et votre espace.',
-        category: 'work',
-        WidgetContent: CloudSyncWidget,
-        FullComponent: CloudSync,
-        cacheDurationMinutes: 5
     },
     {
         id: 'projects',
@@ -327,24 +303,6 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
         cacheDurationMinutes: 0
     },
     {
-        id: 'osint',
-        title: 'OSINT',
-        icon: 'search',
-        description: 'Recherche en sources ouvertes, avec un historique chiffré.',
-        category: 'security',
-        WidgetContent: OsintWidget,
-        FullComponent: FeatureOsint,
-        // Démonté dès la fermeture, comme Git et Database : les cartes tiennent
-        // des résultats lus chez des tiers, qui n'ont aucune raison de survivre
-        // à la fermeture de l'écran — le cache TTL du serveur les resert de
-        // toute façon instantanément si on rouvre.
-        cacheDurationMinutes: 0,
-        // L'historique est chiffré par mot de passe : garder la DEK vivante
-        // pendant que l'écran est ouvert évite l'invite au milieu d'une session
-        // de recherche.
-        holdSecrecy: true
-    },
-    {
         id: 'mail',
         title: 'Mail',
         icon: 'mail',
@@ -359,8 +317,57 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     }
 ];
 
+/**
+ * L'adaptateur de vue d'un module : sa `Full` ne reçoit que `closeFeature`,
+ * tout le reste passe par les hooks du SDK, comme chez les natives modernes.
+ */
+function moduleFull(Full: ComponentType<{ closeFeature(): void }>): ComponentType<FeatureProps> {
+    return function ModuleFull(props: FeatureProps) {
+        return <Full closeFeature={props.closeFeature} />;
+    };
+}
+
+/**
+ * Le catalogue complet : les natives restantes, puis les modules installés,
+ * projetés depuis leur manifest + leur entrée client. Même contrat partout :
+ * la grille, le marché d'ajout et l'« À propos » ne savent pas qui est qui.
+ *
+ * PARESSEUX, et c'est vital : figé au premier APPEL (toujours au rendu, donc
+ * après l'enregistrement des modules), jamais à l'évaluation du module. Une
+ * constante de portée module s'était fait piéger : le graphe d'imports de la
+ * glue générée atteignait ce fichier via TopNavbar → usePresence AVANT que
+ * `registerClientModules` n'ait tourné, et le catalogue se figeait sans les
+ * modules : Météo disparaissait du marché d'ajout sans un bruit.
+ */
+let MERGED: FeatureCatalogEntry[] | null = null;
+
+export function featureCatalog(): readonly FeatureCatalogEntry[] {
+    if (MERGED === null) {
+        MERGED = [
+            ...NATIVE_CATALOG,
+            ...clientModules().map(({ manifest, client }): FeatureCatalogEntry => ({
+                // Un module est externe par construction (vérifié à
+                // l'enregistrement), et un id externe est une tuile d'accueil
+                // valide depuis l'élargissement.
+                id: manifest.id as HomeFeatureId,
+                title: manifest.label,
+                icon: manifest.icon,
+                description: manifest.description,
+                category: manifest.category,
+                WidgetContent: client.Widget,
+                FullComponent: moduleFull(client.Full),
+                cacheDurationMinutes: client.cacheDurationMinutes,
+                preload: client.preload,
+                holdSecrecy: client.holdSecrecy,
+                compact: manifest.tile?.compact
+            }))
+        ];
+    }
+    return MERGED;
+}
+
 export function featureCatalogEntry(id: HomeFeatureId): FeatureCatalogEntry | undefined {
-    return FEATURE_CATALOG.find((f) => f.id === id);
+    return featureCatalog().find((f) => f.id === id);
 }
 
 /**
@@ -385,7 +392,7 @@ export interface HomeAudience {
  * suffit à rouvrir la porte.
  */
 export function availableFeatures({ kind, isAdmin }: HomeAudience): FeatureCatalogEntry[] {
-    return FEATURE_CATALOG.filter((f) => featureAllowed(f, { kind, isAdmin }));
+    return featureCatalog().filter((f) => featureAllowed(f, { kind, isAdmin }));
 }
 
 /**
@@ -422,7 +429,7 @@ export function usableFeatureIds(ids: readonly HomeFeatureId[], audience: HomeAu
  * qui n'ont qu'une vue (`allowedToOpen`, la garde unique de navigation).
  */
 export function featureIdAllowed(id: string, audience: HomeAudience): boolean {
-    const entry = FEATURE_CATALOG.find((f) => f.id === id);
+    const entry = featureCatalog().find((f) => f.id === id);
     return !entry || featureAllowed(entry, audience);
 }
 
@@ -448,7 +455,7 @@ export function featureRelations(id: HomeFeatureId): FeatureRelation[] {
         const entry = featureCatalogEntry(link.to);
         if (entry) out.push({ entry, what: link.what, outgoing: true });
     }
-    for (const source of FEATURE_CATALOG) {
+    for (const source of featureCatalog()) {
         for (const link of source.links ?? []) {
             if (link.to === id) out.push({ entry: source, what: link.what, outgoing: false });
         }
@@ -457,6 +464,9 @@ export function featureRelations(id: HomeFeatureId): FeatureRelation[] {
 }
 
 /** Les entrées d'un rayon, dans l'ordre du catalogue. */
-export function featuresInCategory(entries: FeatureCatalogEntry[], category: FeatureCategory): FeatureCatalogEntry[] {
+export function featuresInCategory(
+    entries: readonly FeatureCatalogEntry[],
+    category: FeatureCategory
+): FeatureCatalogEntry[] {
     return entries.filter((f) => f.category === category);
 }

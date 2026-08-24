@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Database } from 'deveye-types';
+import type { Database } from '@deveye/types';
 import { Button, Dialog, SelectInput } from '@/Components';
 import { ws } from '@/api/ws';
 import { DatabaseDialog } from '@/Features/Database/DatabaseDialog';

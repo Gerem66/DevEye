@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react';
-import type { DeployHistoryEntry, DeployStatus, DeployTarget, Deployment, MinimalUser } from 'deveye-types';
-import { DEPLOY_TITLE_MAX_LENGTH } from 'deveye-types';
+import type { DeployHistoryEntry, DeployStatus, DeployTarget, Deployment, MinimalUser } from '@deveye/types';
+import { DEPLOY_TITLE_MAX_LENGTH } from '@deveye/types';
 import { Button, Dialog, TextInput } from '@/Components';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { ws } from '@/api/ws';
 import { invalidate } from '@/stores/invalidation';
 import { humanizeError } from '@/Features/Projects/api';
@@ -55,6 +56,90 @@ interface TargetViewProps {
      * Par défaut `true`.
      */
     showHistory?: boolean;
+    /**
+     * Rend les actions (Déployer, Modifier, Réglages) dans le bloc d'identité.
+     *
+     * `false` sur la page dédiée de la feature : les actions y vivent dans la
+     * rangée d'en-tête, à côté du bouton retour, comme dans toutes les fiches
+     * d'élément ; c'est l'appelant qui monte alors {@link TargetActions}. Le
+     * défaut `true` sert l'onglet d'un projet, qui n'a pas cette rangée.
+     */
+    showActions?: boolean;
+}
+
+interface TargetActionsProps {
+    target: DeployTarget;
+    canWrite: boolean;
+    /** Le projet d'où part le geste, quand il en part d'un (voir TargetView). */
+    projectId?: number;
+    onEdit?: () => void;
+    /** Actions propres à l'appelant : « Délier », « Ouvrir le Déploiement ». */
+    after?: ReactNode;
+}
+
+/**
+ * Les actions d'une cible : déclencher, modifier, régler.
+ *
+ * À part de {@link TargetView} pour pouvoir vivre à deux endroits sans se
+ * dédoubler : la rangée d'en-tête de la page dédiée (retour + actions, comme
+ * toutes les fiches d'élément) et le bloc d'identité d'un onglet de projet.
+ * Le dialogue de déclenchement lui appartient, l'appelant n'a rien à porter.
+ */
+export function TargetActions({ target, canWrite, projectId, onEdit, after }: TargetActionsProps) {
+    const [triggerOpen, setTriggerOpen] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const orphan = target.credentialId === null;
+
+    return (
+        <>
+            {canWrite && (
+                <Button icon='rocket' onClick={() => setTriggerOpen(true)} disabled={busy || orphan}>
+                    Déployer
+                </Button>
+            )}
+            {/* `!target.foreign` : modifier une cible exige les clés de SON
+                espace — le serveur le refuse, l'écran ne le propose donc pas.
+                Déployer, lui, reste permis : c'est tout l'objet de la
+                projection. */}
+            {canWrite && onEdit && !target.foreign && (
+                <Button variant='secondary' icon='edit' onClick={onEdit}>
+                    Modifier
+                </Button>
+            )}
+            {/* Les réglages **de cette cible** : ses propres canaux, ou ceux du
+                Déploiement tant qu'elle les suit — un salon par application
+                devient possible.
+
+                Hors du `canWrite && onEdit` qui précède : la fiche est aussi
+                rendue dans l'onglet d'un projet, où `onEdit` est absent, et les
+                réglages y valent autant. Le bouton se garde de lui-même (aucune
+                section accessible ⇒ il ne s'affiche pas). */}
+            <FeatureSettingsButton
+                scope={{
+                    kind: 'item',
+                    feature: 'deploy',
+                    itemId: target.id,
+                    itemLabel: target.name
+                }}
+            />
+            {after}
+
+            <TriggerDialog
+                open={triggerOpen}
+                targetId={target.id}
+                projectId={projectId}
+                busy={busy}
+                setBusy={setBusy}
+                onClose={() => setTriggerOpen(false)}
+                onDone={() => {
+                    setTriggerOpen(false);
+                    // La liste, la fiche **et** l'onglet du projet qui la
+                    // déploie montrent le même état : les trois se relisent.
+                    invalidate('deploy.list', 'deploy.detail', 'project.board');
+                }}
+            />
+        </>
+    );
 }
 
 /** Une ligne d'historique, qu'elle vienne du suivi local ou de Dokploy en direct. */
@@ -90,11 +175,9 @@ export function TargetView({
     fullHistory,
     fullHistoryError,
     onOpenLogs,
-    showHistory = true
+    showHistory = true,
+    showActions = true
 }: TargetViewProps) {
-    const [triggerOpen, setTriggerOpen] = useState(false);
-    const [busy, setBusy] = useState(false);
-
     const orphan = target.credentialId === null;
 
     // Toujours calculées, `showHistory` ou pas : l'en-tête a besoin de la
@@ -184,19 +267,17 @@ export function TargetView({
                             )}
                         </p>
                     </div>
-                    <div className={styles.actions}>
-                        {canWrite && (
-                            <Button icon='rocket' onClick={() => setTriggerOpen(true)} disabled={busy || orphan}>
-                                Déployer
-                            </Button>
-                        )}
-                        {canWrite && onEdit && (
-                            <Button variant='secondary' icon='edit' onClick={onEdit}>
-                                Modifier
-                            </Button>
-                        )}
-                        {after}
-                    </div>
+                    {showActions && (
+                        <div className={styles.actions}>
+                            <TargetActions
+                                target={target}
+                                canWrite={canWrite}
+                                projectId={projectId}
+                                onEdit={onEdit}
+                                after={after}
+                            />
+                        </div>
+                    )}
                 </header>
             </section>
 
@@ -270,21 +351,6 @@ export function TargetView({
                     )}
                 </section>
             )}
-
-            <TriggerDialog
-                open={triggerOpen}
-                targetId={target.id}
-                projectId={projectId}
-                busy={busy}
-                setBusy={setBusy}
-                onClose={() => setTriggerOpen(false)}
-                onDone={() => {
-                    setTriggerOpen(false);
-                    // La liste, la fiche **et** l'onglet du projet qui la
-                    // déploie montrent le même état : les trois se relisent.
-                    invalidate('deploy.list', 'deploy.detail', 'project.board');
-                }}
-            />
         </div>
     );
 }

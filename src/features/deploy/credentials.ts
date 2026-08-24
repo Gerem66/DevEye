@@ -3,7 +3,7 @@ import {
     deployCredentialList,
     deployCredentialRemove,
     deployCredentialUpdate
-} from 'deveye-types';
+} from '@deveye/types';
 import { defineFeature, type FeatureDefinition } from '../_define';
 import { addCredential, listCredentials, removeCredential, updateCredential } from '../_credentials';
 import { READ, WRITE } from './_shared';

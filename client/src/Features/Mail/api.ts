@@ -1,7 +1,7 @@
 import { ws, WsError } from '@/api/ws';
 import { ensureUnlocked as ensureSecrecyUnlocked, touchSecrecy } from '@/stores/secrecy';
 
-import type { MailAddress, MailSettings } from 'deveye-types';
+import type { MailAddress, MailSettings } from '@deveye/types';
 
 /**
  * Run a WS call, and if the server reports the targeted account's encryption

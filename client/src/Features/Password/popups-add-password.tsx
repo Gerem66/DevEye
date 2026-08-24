@@ -9,7 +9,7 @@ import TextInput from '@/Components/TextInput';
 import SelectInput from '@/Components/SelectInput';
 import PasswordGeneratorMenu from './PasswordGeneratorMenu';
 
-import type { PasswordEntry, PasswordStatus } from 'deveye-types';
+import type { PasswordEntry, PasswordStatus } from '@deveye/types';
 
 type PopupResult = PasswordEntry | 'delete' | null;
 

@@ -4,8 +4,8 @@ import {
     projectUptimeLink,
     projectUptimeList,
     projectUptimeUnlink
-} from 'deveye-types';
-import type { MyTask, ProjectRow } from 'deveye-types';
+} from '@deveye/types';
+import type { MyTask, ProjectRow } from '@deveye/types';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { cipherFor, decryptCard, loadProject, toCard, tryDecryptProject } from './_shared';
 

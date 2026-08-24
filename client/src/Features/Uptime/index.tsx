@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ws } from '@/api/ws';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { onResourceChange } from '@/stores/invalidation';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import Button from '@/Components/Button';
-import { NotificationsDialog } from '@/Components/NotificationsDialog';
 import { refreshUptime } from '@/stores/uptime';
 
 import ServiceDetail from './ServiceDetail';
@@ -12,7 +12,7 @@ import { ServiceDialog } from './ServiceDialog';
 import ServiceList from './ServiceList';
 import styles from './style.module.css';
 
-import type { UptimeService } from 'deveye-types';
+import type { UptimeService } from '@deveye/types';
 import type { FeatureProps } from '../types';
 
 export default function Uptime({ workspace }: FeatureProps) {
@@ -20,7 +20,6 @@ export default function Uptime({ workspace }: FeatureProps) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedId, setSelectedId] = useState<number | null>(null);
-    const [notificationsOpen, setNotificationsOpen] = useState(false);
     /** A row is in flight: the periodic reload must not reshuffle under it. */
     const dragging = useRef(false);
 
@@ -138,9 +137,7 @@ export default function Uptime({ workspace }: FeatureProps) {
                                     : 'Tous les services répondent'}
                         </p>
                         <div className={styles.toolbarActions}>
-                            <Button variant='secondary' icon='mail' onClick={() => setNotificationsOpen(true)}>
-                                Notifications
-                            </Button>
+                            <FeatureSettingsButton scope={{ kind: 'feature', feature: 'uptime' }} />
                             <Button icon='plus' onClick={() => setDialog({ service: null })}>
                                 Ajouter un service
                             </Button>
@@ -187,14 +184,6 @@ export default function Uptime({ workspace }: FeatureProps) {
                           }
                         : undefined
                 }
-            />
-            <NotificationsDialog
-                open={notificationsOpen}
-                onClose={() => setNotificationsOpen(false)}
-                feature='uptime'
-                title='Notifications d’Uptime'
-                description='Propres à la disponibilité : un service tombé n’a ni les mêmes destinataires ni la même urgence qu’un constat de sécurité ou qu’un déploiement raté.'
-                when='Envoyées à chaque bascule d’un service surveillé : hors ligne (avec l’heure et l’erreur) puis retour en ligne (avec la durée de la panne).'
             />
         </div>
     );

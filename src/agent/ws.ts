@@ -32,7 +32,7 @@ import {
     agentClientMessageSchema,
     type AgentClientMessage,
     type AgentServerMessage
-} from 'deveye-types';
+} from '@deveye/types';
 import type { FastifyInstance } from 'fastify';
 
 import { verifyDeviceToken } from '@/auth/jwt';
@@ -72,7 +72,7 @@ import { notifyDeviceWorkspaces, recordAgentOffline, recordAgentOnline } from '.
 import type { LiveHub } from '@/live/hub';
 import type { MonitorHub } from './hub';
 
-import type { CloudSyncEngine } from '@/cloudSync/engine';
+import type { FeatureAgentHooks } from '@deveye/types/sdk/server';
 import type { Database } from '@/db';
 import type { AuditLog } from '@/Services/AuditLog';
 import type { SecurityMonitor } from '@/Services/SecurityMonitor';
@@ -82,7 +82,8 @@ interface AgentWSDeps {
     hub: MonitorHub;
     /** Présence en direct : un agent qui arrive ou part change la liste d'appareils. */
     live: LiveHub;
-    cloudSync: CloudSyncEngine;
+    /** Les hooks agent des modules installés (voir moduleAgentHooks). */
+    hooks: Required<FeatureAgentHooks>;
     /** Moteur Sentinelle : les handlers lui empilent leurs relevés. */
     sentinel?: SecurityMonitor;
     audit: AuditLog;
@@ -167,7 +168,7 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
  */
 export async function registerAgentWS(
     app: FastifyInstance,
-    { db, hub, live, cloudSync, sentinel, audit }: AgentWSDeps
+    { db, hub, live, hooks, sentinel, audit }: AgentWSDeps
 ): Promise<void> {
     app.get('/agent', { websocket: true }, async (socket, req) => {
         // Stealth: every authentication/authorization failure ends the connection
@@ -214,9 +215,10 @@ export async function registerAgentWS(
             hub.agentOnline(deviceId, socket);
             // Tell the agent its collection cadences + capture mode straight away.
             send(socket, { command: AGENT_CONFIG, payload: deviceAgentConfig(device) });
-            // CloudSync : pousse ses assignations puis rattrape le retard éventuel.
-            void cloudSync.onAgentConnect(deviceId).catch((err) => {
-                reqLogger.warn({ err }, 'CloudSync onAgentConnect failed');
+            // Les modules (CloudSync) poussent leurs assignations et rattrapent
+            // le retard éventuel ; l'agrégat isole déjà chaque module.
+            void Promise.resolve(hooks.onAgentConnect(deviceId)).catch((err: unknown) => {
+                reqLogger.warn({ err }, 'Module onAgentConnect failed');
             });
             // A transient DB error here must not reject the route handler: the
             // fresh, authenticated socket would be torn down, and an agent
@@ -249,7 +251,7 @@ export async function registerAgentWS(
             socket,
             db,
             hub,
-            cloudSync,
+            hooks,
             sentinel,
             audit,
             logger: reqLogger,
@@ -309,7 +311,7 @@ export async function registerAgentWS(
             // pas interrompre les sessions du nouveau — ni écrire une transition
             // « offline » fantôme dans la présence : le hub reste l'autorité.
             if (!hub.isOnline(deviceId)) {
-                cloudSync.onAgentOffline(deviceId);
+                hooks.onAgentOffline(deviceId);
                 // Plus personne pour envoyer le `pkg.done` attendu : on clôt les
                 // mises à jour restées ouvertes, sans quoi leur verrou — et le
                 // bouton grisé qui va avec — survivrait à l'appareil.

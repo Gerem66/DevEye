@@ -10,7 +10,7 @@ import {
     DEFAULT_RETENTION_DAYS,
     type Device,
     type ProcessCapture
-} from 'deveye-types';
+} from '@deveye/types';
 import styles from './Monitoring.module.css';
 
 const CUSTOM = '__custom__';

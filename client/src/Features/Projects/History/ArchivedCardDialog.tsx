@@ -1,4 +1,4 @@
-import type { MinimalUser, ProjectCard } from 'deveye-types';
+import type { MinimalUser, ProjectCard } from '@deveye/types';
 import { Button, Dialog } from '@/Components';
 import { formatDate, PRIORITY_LABELS } from '../api';
 import { Avatar } from '../Board/Avatar';

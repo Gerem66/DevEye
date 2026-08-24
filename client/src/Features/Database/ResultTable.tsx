@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { DatabaseRows } from 'deveye-types';
+import type { DatabaseRows } from '@deveye/types';
 import { Button, Dialog } from '@/Components';
 import { formatCount } from './format';
 import styles from './style.module.css';

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { MyTask } from 'deveye-types';
+import type { MyTask } from '@deveye/types';
 import { ws } from '@/api/ws';
 import { useResourceVersion } from '@/stores/invalidation';
 import { formatDate, humanizeError, PRIORITY_LABELS } from './api';

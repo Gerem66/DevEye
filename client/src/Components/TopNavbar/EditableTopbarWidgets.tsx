@@ -16,11 +16,11 @@ import {
     horizontalListSortingStrategy
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { HomeTopbarWidgetId } from 'deveye-types';
+import type { HomeTopbarWidgetId } from '@deveye/types';
 
 import { Dialog } from '@/Components/Dialog';
 import { addTopbarWidget, removeTopbarWidget, setTopbarOrder, useHomeLayout } from '@/stores/homeLayout';
-import { useActiveWorkspace } from '@/stores/workspace';
+import { useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
 import { availableTopbarWidgets, renderTopbarWidget, usableTopbarWidgetIds } from './topbarWidgets';
 import styles from './EditableTopbarWidgets.module.css';
 
@@ -60,8 +60,9 @@ function SortableChip({ id }: { id: HomeTopbarWidgetId }) {
 function AddDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
     const layout = useHomeLayout();
     const workspace = useActiveWorkspace();
+    const { canFeature } = useWorkspacePermissions();
     const used = new Set(layout.topbar);
-    const available = availableTopbarWidgets(workspace?.kind).filter((w) => !used.has(w.id));
+    const available = availableTopbarWidgets(workspace?.kind, canFeature).filter((w) => !used.has(w.id));
     return (
         <Dialog open={open} onClose={onClose} title='Ajouter un widget' width={460}>
             {available.length === 0 ? (
@@ -101,7 +102,8 @@ function AddDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
 export function EditableTopbarWidgets() {
     const layout = useHomeLayout();
     const workspace = useActiveWorkspace();
-    const items = usableTopbarWidgetIds(layout.topbar, workspace?.kind);
+    const { canFeature } = useWorkspacePermissions();
+    const items = usableTopbarWidgetIds(layout.topbar, workspace?.kind, canFeature);
     const [addOpen, setAddOpen] = useState(false);
 
     const sensors = useSensors(
@@ -120,7 +122,7 @@ export function EditableTopbarWidgets() {
 
     // « Tout est affiché » se mesure sur ce que CET espace propose : dans un
     // espace personnel, « Présence » ne compte pas comme un widget manquant.
-    const full = items.length >= availableTopbarWidgets(workspace?.kind).length;
+    const full = items.length >= availableTopbarWidgets(workspace?.kind, canFeature).length;
 
     return (
         <div className={styles.editor} title='Barre supérieure — glissez, retirez ou ajoutez'>

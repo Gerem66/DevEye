@@ -1,4 +1,5 @@
-import type { GitRepo, GitRepoSyncState } from 'deveye-types';
+import { StatusBadge } from '@/Components';
+import type { GitRepo, GitRepoSyncState } from '@deveye/types';
 import { useDragReorder } from '@/dragReorder';
 import type { useLiveOutlines } from '@/live/useLiveOutline';
 import styles from './style.module.css';
@@ -133,6 +134,12 @@ function RepoCard({ repo, sync, outline, dragging, onOpen, onDragPointerDown }: 
                 <div className={styles.repoCardMain}>
                     <p className={styles.repoName}>
                         <span className='icon icon-branch' /> {repo.owner}/{repo.repo}
+                        {repo.foreign && (
+                            <span title='Ce dépôt appartient à un autre espace qui le partage ici'>
+                                {' '}
+                                <StatusBadge tone='accent'>partagé</StatusBadge>
+                            </span>
+                        )}
                     </p>
                     <p className={styles.repoMeta}>
                         {repo.defaultBranch ?? 'branche inconnue'}

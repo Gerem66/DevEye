@@ -6,7 +6,7 @@ import {
     ok,
     registerRequestSchema,
     twoFactorChallengeRequestSchema
-} from 'deveye-types';
+} from '@deveye/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { env } from '@/Utils/Env';

@@ -1,4 +1,4 @@
-import { financeConfig, financeConfigUpdate, financeSummary } from 'deveye-types';
+import { financeConfig, financeConfigUpdate, financeSummary } from '@deveye/types';
 
 import { defineFeature, type FeatureDefinition } from '../_define';
 import { postDueRecurring, readConfig, startOfMonth, today, READ, WRITE } from './_shared';

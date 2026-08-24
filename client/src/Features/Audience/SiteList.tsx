@@ -1,4 +1,4 @@
-import type { AudienceSite } from 'deveye-types';
+import type { AudienceSite } from '@deveye/types';
 
 import { useDragReorder } from '@/dragReorder';
 import type { useLiveOutlines } from '@/live/useLiveOutline';
@@ -110,6 +110,15 @@ function SiteCard({ site, outline, dragging, onOpen, onDragPointerDown }: SiteCa
                     <p className={styles.cardName}>
                         <span className={styles.statusDot} data-tone={status.tone} aria-hidden='true' />
                         {site.name}
+                        {site.foreign && (
+                            <span
+                                className={styles.statusTag}
+                                data-tone='neutral'
+                                title='Ce site appartient à un autre espace qui le partage ici'
+                            >
+                                partagé
+                            </span>
+                        )}
                     </p>
                     <p className={styles.cardMeta}>
                         {site.origins.length > 0 ? site.origins.join(' · ') : 'toutes origines acceptées'}

@@ -1,14 +1,14 @@
 import type { FeatureDefinition } from './_define';
-import { cloudSyncFeatures } from './cloudSync';
 import { deviceFeatures } from './devices';
 import { homeFeatures } from './home';
 import { adminFeatures } from './admin';
 import { liveHereFeature } from './live/here';
 import { logsFeatures } from './logs';
 import { mailFeatures } from './mail';
+import { notifyFeatures } from './notify';
+import { sharingFeatures } from './sharing';
 import { metricsFeatures } from './metrics';
 import { noteFeatures } from './note';
-import { osintFeatures } from './osint';
 import { databaseFeatures } from './database';
 import { audienceFeatures } from './audience';
 import { gitFeatures } from './git';
@@ -33,7 +33,6 @@ import { userSetAvatarFeature } from './user/setAvatar';
 import { userSetColorFeature } from './user/setColor';
 import { userSetSettingFeature } from './user/setSetting';
 import { userSetThemeFeature } from './user/setTheme';
-import { weatherFeatures } from './weather';
 import { workspaceActivateFeature, workspaceSetFavoriteFeature } from './workspace/activate';
 import {
     workspaceAddMemberFeature,
@@ -52,9 +51,17 @@ import {
 } from './workspace/roles';
 import { workspaceAddFeature } from './workspace/add';
 import { workspaceDeleteFeature } from './workspace/delete';
+import { INSTALLED_MODULES } from './_generated/installed';
+import { moduleFeatureHandlers, registerModules } from './_sdk/register';
+
+// Les modules installés s'enregistrent au chargement du registre : manifests
+// validés, descripteurs déclarés, définitions projetées en natives. Une
+// violation lève ici, avant même les sentinelles du boot.
+registerModules(INSTALLED_MODULES);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>> = [
+    ...moduleFeatureHandlers(),
     workspaceAddFeature,
     workspaceDeleteFeature,
     workspaceActivateFeature,
@@ -91,18 +98,17 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...financeFeatures,
     ...audienceFeatures,
     ...deviceFeatures,
-    ...cloudSyncFeatures,
     ...metricsFeatures,
     ...twoFactorFeatures,
     ...secrecyFeatures,
-    ...weatherFeatures,
-    ...osintFeatures,
     ...sentinelFeatures,
     ...uptimeFeatures,
     ...logsFeatures,
     ...adminFeatures,
     ...homeFeatures,
     ...mailFeatures,
+    ...notifyFeatures,
+    ...sharingFeatures,
     liveHereFeature
 ];
 

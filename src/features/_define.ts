@@ -1,4 +1,3 @@
-import type { CloudSyncEngine } from '@/cloudSync/engine';
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import type { SecureStore } from '@/Services/SecureStore';
@@ -11,9 +10,9 @@ import type { DatabaseMonitor } from '@/Services/DatabaseMonitor';
 import type { AudienceIngest } from '@/Services/AudienceIngest';
 import type { SecurityMonitor } from '@/Services/SecurityMonitor';
 import type { BackupService } from '@/Services/BackupService';
-import type { ErrorCode, LiveTopic, LogLevelName } from 'deveye-types';
+import type { LiveTopic, LogLevelName } from '@deveye/types';
 import type { Logger } from 'pino';
-import type { FeatureAccess, WorkspaceCapability, WorkspaceFeatureId } from 'deveye-types';
+import type { FeatureAccess, FeatureId, ItemAccess, WorkspaceCapability } from '@deveye/types';
 import type { WorkspaceContext } from './_access';
 import type { z } from 'zod';
 
@@ -67,9 +66,43 @@ export interface FeatureContext {
     /** Lève `forbidden` si la capacité manque. */
     assertCan: (capability: WorkspaceCapability) => void;
     /** Une feature est-elle accessible, au moins au niveau demandé (défaut `read`) ? */
-    canFeature: (feature: WorkspaceFeatureId, level?: FeatureAccess) => boolean;
+    canFeature: (feature: FeatureId, level?: FeatureAccess) => boolean;
     /** Lève `forbidden` si la feature n'est pas accessible à ce niveau. */
-    assertFeature: (feature: WorkspaceFeatureId, level?: FeatureAccess) => void;
+    assertFeature: (feature: FeatureId, level?: FeatureAccess) => void;
+    /**
+     * L'appelant gère-t-il les **canaux d'alerte** de cette feature ? Exige la
+     * lecture de la feature en plus du champ `channels` de son grant : on ne
+     * gère pas les destinations d'une fonctionnalité qu'on ne voit pas.
+     */
+    canChannels: (feature: FeatureId) => boolean;
+    /** Lève `forbidden` si l'appelant ne gère pas les canaux de cette feature. */
+    assertChannels: (feature: FeatureId) => void;
+    /**
+     * Les éléments d'une feature que le rôle de l'appelant voit autrement que
+     * les autres : `'none'` masqué, `'read'` en lecture seule.
+     *
+     * **Restrictif seulement** : la carte ne peut qu'abaisser ce que
+     * `canFeature` accorde, jamais l'élever. Les listages s'en servent pour
+     * filtrer ; les commandes visant un élément passent par `assertItem`.
+     *
+     * Vide pour le propriétaire et pour un membre sans rôle — le premier passe
+     * outre, le second n'a déjà rien.
+     */
+    itemRestrictions: (feature: FeatureId) => Promise<ReadonlyMap<number, ItemAccess>>;
+    /**
+     * Lève `forbidden` si cet **élément précis** n'est pas accessible au niveau
+     * demandé, restriction de rôle comprise.
+     *
+     * Vérifie d'abord la feature : une restriction d'élément n'ouvre jamais ce
+     * qu'un droit de feature ferme.
+     */
+    assertItem: (feature: FeatureId, itemId: number, level?: FeatureAccess) => Promise<void>;
+    /**
+     * Les permissions déclarées d'une feature (`extras` du grant), brutes.
+     * Vide pour le propriétaire : c'est le lecteur (l'adaptateur SDK) qui
+     * résout défauts et propriétaire contre les specs du manifest.
+     */
+    extrasFor: (feature: FeatureId) => Record<string, boolean | string>;
     /**
      * Caller holds the global `admin` role. Resolved by the dispatcher before the
      * handler runs, so guards read it synchronously and never query the role.
@@ -96,8 +129,6 @@ export interface FeatureContext {
      * dispatcheur depuis `mutates`, jamais par un handler.
      */
     live?: LiveTransport;
-    /** CloudSync orchestrator (sessions, versions, blob store). Absent in tests. */
-    cloudSync?: CloudSyncEngine;
     /** Uptime scheduler — backs the "check now" and "test notification" commands. */
     uptime?: UptimeMonitor;
     /**
@@ -164,17 +195,13 @@ export interface FeatureContext {
  * Thrown by a feature handler to send a typed error back to the client.
  * The dispatcher converts it into a `protocolError` payload; anything else is
  * mapped to `internal`.
+ *
+ * La classe vit dans `@deveye/types/sdk/server` depuis le chantier des modules :
+ * une seule définition pour les handlers natifs et les modules, sinon un
+ * `instanceof` du dispatcheur raterait l'une des deux familles. Ré-exportée
+ * ici pour que rien ne change chez les natifs.
  */
-export class FeatureError extends Error {
-    constructor(
-        public readonly code: ErrorCode,
-        message: string,
-        public readonly details?: unknown
-    ) {
-        super(message);
-        this.name = 'FeatureError';
-    }
-}
+export { FeatureError } from '@deveye/types/sdk/server';
 
 /**
  * Authorization a command requires, declared beside its schemas and enforced by
@@ -194,7 +221,7 @@ export interface FeatureAccessSpec {
      * défaut). Le membre dont le rôle ne l'accorde pas reçoit `forbidden` — et
      * l'interface ne lui montre même pas l'entrée.
      */
-    feature?: WorkspaceFeatureId;
+    feature?: FeatureId;
     level?: FeatureAccess;
     /** Capacités de gouvernance exigées, toutes nécessaires. */
     capabilities?: WorkspaceCapability[];

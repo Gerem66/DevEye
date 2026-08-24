@@ -4,7 +4,7 @@ import {
     databaseAlertRemove,
     databaseAlertTest,
     databaseAlertUpdate
-} from 'deveye-types';
+} from '@deveye/types';
 import { isFiring, runConditions, type StoredAlert } from '@/Services/DatabaseMonitor';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { databaseCipher, loadDatabase, READ, toAlert, WRITE } from './_shared';

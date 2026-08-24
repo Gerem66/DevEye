@@ -11,12 +11,24 @@ import {
     gitRepoSyncStatus,
     gitRepoUpdate,
     gitSyncStatuses
-} from 'deveye-types';
-import type { GitRepoUsage } from 'deveye-types';
+} from '@deveye/types';
+import type { GitRepoUsage } from '@deveye/types';
 import { listOwnerRepos } from '@/Services/integrations/github';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { tryDecryptProject } from '../project/_shared';
-import { gitCipher, loadRepo, READ, reloadRepo, slugRef, toRepo, WRITE, type StoredRepo } from './_shared';
+import { shareScope } from '../_sharing';
+import {
+    gitCipher,
+    loadHomeRepo,
+    loadRepo,
+    READ,
+    reloadRepo,
+    repoCipher,
+    slugRef,
+    toRepo,
+    WRITE,
+    type StoredRepo
+} from './_shared';
 
 /**
  * Les dépôts de l'espace : ajout, réglages, suppression, synchronisation.
@@ -33,7 +45,13 @@ export const gitCountFeature: FeatureDefinition<
 > = defineFeature({
     ...gitCount,
     access: READ,
-    handler: async (ctx) => ({ count: await ctx.db.git.countRepos(ctx.workspaceId) })
+    handler: async (ctx) => {
+        // Les mêmes lignes que la liste — projetées comprises, restrictions
+        // déduites : la carte doit compter ce que la liste montre.
+        const rows = await ctx.db.git.listVisibleRepos(ctx.workspaceId);
+        const hidden = await ctx.itemRestrictions('git');
+        return { count: rows.filter((r) => hidden.get(r.id) !== 'none').length };
+    }
 });
 
 export const gitRepoListFeature: FeatureDefinition<
@@ -44,9 +62,19 @@ export const gitRepoListFeature: FeatureDefinition<
     ...gitRepoList,
     access: READ,
     handler: async (ctx) => {
-        const cipher = gitCipher(ctx);
-        const rows = await ctx.db.git.listRepos(ctx.workspaceId);
-        return { repos: await Promise.all(rows.map((row) => toRepo(cipher, row))) };
+        const rows = await ctx.db.git.listVisibleRepos(ctx.workspaceId);
+        // Les dépôts qu'une restriction masque pour ce rôle disparaissent de la
+        // liste plutôt que d'y figurer grisés.
+        const hidden = await ctx.itemRestrictions('git');
+        const visible = rows.filter((r) => hidden.get(r.id) !== 'none');
+        const shares = await shareScope(ctx, 'git');
+        return {
+            repos: await Promise.all(
+                visible.map(async (row) =>
+                    toRepo(await shares.cipherFor(row.id), row, row.workspace_id !== ctx.workspaceId)
+                )
+            )
+        };
     }
 });
 
@@ -58,8 +86,11 @@ export const gitRepoGetFeature: FeatureDefinition<
     ...gitRepoGet,
     access: READ,
     handler: async (ctx, input) => {
-        const row = await ctx.db.git.findRepoWithUsage(input.repoId, ctx.workspaceId);
+        const row = await ctx.db.git.findVisibleRepoWithUsage(input.repoId, ctx.workspaceId);
         if (!row) throw new FeatureError('not_found', 'Dépôt introuvable');
+        await ctx.assertItem('git', input.repoId);
+        // Deux codecs, et ce n'est pas une redondance : le dépôt est chiffré
+        // chez LUI, les projets liés listés ici sont ceux d'ICI.
         const cipher = gitCipher(ctx);
 
         // Les projets liés, avec leur titre : c'est ce qui rend l'interconnexion
@@ -74,7 +105,7 @@ export const gitRepoGetFeature: FeatureDefinition<
             }))
         );
 
-        return { repo: await toRepo(cipher, row), usage };
+        return { repo: await toRepo(await repoCipher(ctx, row.id), row, row.workspace_id !== ctx.workspaceId), usage };
     }
 });
 
@@ -211,7 +242,9 @@ export const gitRepoUpdateFeature: FeatureDefinition<
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        const existing = await loadRepo(ctx, input.repoId);
+        // Domicile seulement : le jeton d'un dépôt se choisit parmi les clés de
+        // SON espace, que la fenêtre ne voit pas.
+        const existing = await loadHomeRepo(ctx, input.repoId);
         if (input.credentialId !== null) {
             const credential = await ctx.db.credentials.find(input.credentialId, ctx.workspaceId, 'github');
             if (!credential) throw new FeatureError('not_found', 'Jeton introuvable');
@@ -247,6 +280,10 @@ export const gitRepoRemoveFeature: FeatureDefinition<
         // perdent qu'un pointeur — c'est tout l'intérêt d'avoir séparé les deux.
         const ok = await ctx.db.git.deleteRepo(input.repoId, ctx.workspaceId);
         if (!ok) throw new FeatureError('not_found', 'Dépôt introuvable');
+        // Projections et restrictions ne tiennent à aucune clé étrangère : sans
+        // ce ménage, elles s'appliqueraient au prochain dépôt à hériter de
+        // l'identifiant.
+        await ctx.db.itemSharing.forgetItem('git', input.repoId, ctx.workspaceId);
         ctx.audit({
             action: 'git.repoRemove',
             description: 'Dépôt retiré de l’espace',
@@ -292,7 +329,9 @@ export const gitRepoSyncNowFeature: FeatureDefinition<
     // l'ordonnanceur. C'est lui qui diffusera quand il aura écrit.
     access: WRITE,
     handler: async (ctx, input) => {
-        await loadRepo(ctx, input.repoId);
+        // Depuis la fenêtre aussi : réveiller la synchronisation d'un dépôt
+        // projeté rafraîchit la même donnée pour tout le monde, chez lui.
+        await loadRepo(ctx, input.repoId, 'write');
         if (!ctx.integrations) throw new FeatureError('internal', 'Service de synchronisation indisponible');
         ctx.integrations.requestSync(input.repoId);
         return { repo: await reloadRepo(ctx, input.repoId) };

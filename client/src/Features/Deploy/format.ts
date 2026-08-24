@@ -1,4 +1,4 @@
-import type { DeployStatus } from 'deveye-types';
+import type { DeployStatus } from '@deveye/types';
 import { WsError } from '@/api/ws';
 
 /** Le vocabulaire d'état, un seul jeu pour toute la feature. */

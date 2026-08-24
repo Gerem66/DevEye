@@ -7,7 +7,7 @@ name: Agent build
 # and the server picks up the new build on its next boot.
 #
 # Trigger vs. actual build: the `paths` below keep the workflow off unrelated
-# pushes, but `package.json` is noisy (a dependency bump — e.g. deveye-types —
+# pushes, but `package.json` is noisy (a dependency bump — e.g. @deveye/types —
 # edits it without changing anything the agents care about). So the `gate` job
 # is the real filter: it only lets the matrix build run when agent/** changed,
 # this workflow changed, or package.json's `.version` actually changed — the

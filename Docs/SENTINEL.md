@@ -3,7 +3,7 @@
 Détection d'intrusion sur les hôtes (agent Rust → serveur Fastify → client React).
 Monitoring **collecte**, Sentinelle **interprète** : rien ici n'ouvre une sonde de
 son propre chef sans que ce document l'explique. Contrats partagés dans
-`deveye-types` (`domain/sentinel.ts`, `domain/report.ts`, `protocol/agent.ts`,
+`@deveye/types` (`domain/sentinel.ts`, `domain/report.ts`, `protocol/agent.ts`,
 `features/sentinel.ts`).
 
 À lire avec [MONITORING.md](MONITORING.md), dont les invariants 1, 2, 6, 8 et 9
@@ -256,7 +256,7 @@ un état différent.
 
 ## Le catalogue de règles
 
-`SENTINEL_RULES` (dans `deveye-types`) est figé : identifiant, gravité par défaut,
+`SENTINEL_RULES` (dans `@deveye/types`) est figé : identifiant, gravité par défaut,
 libellé, description, **conduite à tenir**, sonde requise, dépendance à la ligne
 de base. Un constat sans conduite à tenir ne sert personne, d'où le champ
 obligatoire.
@@ -289,7 +289,7 @@ connaître l'état précédent, et deviendrait intestable.
 
 ## Pièges connus
 
-- **`deveye-types` est miroité, pas symlinké** — voir `MONITORING.md`.
+- **`@deveye/types` est miroité, pas symlinké** — voir `MONITORING.md`.
 - **La collation des clés étrangères se déclare.** `devices.id` est en
   `utf8mb4_general_ci` ; un `CHAR(36)` nu hérite de la collation par défaut de la
   base *cible*, `utf8mb4_0900_ai_ci` sur tout MySQL 8 récent. Une FK exige les

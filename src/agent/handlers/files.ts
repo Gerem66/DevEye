@@ -4,7 +4,7 @@ import {
     AGENT_FILES_MATCHES,
     AGENT_FILES_OP_RESULT,
     AGENT_FILES_USAGE
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { ack, type AgentSession, type PayloadOf } from './session';
 

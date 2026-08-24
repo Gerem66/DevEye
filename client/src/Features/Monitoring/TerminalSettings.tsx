@@ -1,4 +1,4 @@
-import { terminalUser } from 'deveye-types';
+import { terminalUser } from '@deveye/types';
 import Button from '@/Components/Button';
 import TextInput from '@/Components/TextInput';
 import SelectInput from '@/Components/SelectInput';

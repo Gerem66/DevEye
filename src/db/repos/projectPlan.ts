@@ -1,4 +1,4 @@
-import type { ProjectCardDepRow, ProjectMilestoneRow } from 'deveye-types';
+import type { ProjectCardDepRow, ProjectMilestoneRow } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;

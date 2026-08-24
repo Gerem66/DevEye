@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { DatabaseProbe } from 'deveye-types';
+import type { DatabaseProbe } from '@deveye/types';
 import styles from './style.module.css';
 
 /** Combien de temps le résultat d'un essai reste à l'écran. */

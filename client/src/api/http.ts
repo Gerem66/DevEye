@@ -13,7 +13,7 @@ import {
     type LoginResponse,
     type MeResponse,
     type RefreshResponse
-} from 'deveye-types';
+} from '@deveye/types';
 import { z } from 'zod';
 import { getActiveWorkspaceId } from '@/stores/workspace';
 

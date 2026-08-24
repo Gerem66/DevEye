@@ -1,7 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import type { SecrecyStatus } from 'deveye-types';
+import type { SecrecyStatus } from '@deveye/types';
 
-import { ws } from '@/api/ws';
+import { ws, WsError } from '@/api/ws';
 
 /**
  * Client-side coordinator for password-based encryption ("chiffrement par mot
@@ -306,6 +306,31 @@ export function ensureUnlocked(): Promise<void> {
  *  when no action is waiting. Resolves/rejects like {@link ensureUnlocked}. */
 export function requestUnlock(): Promise<void> {
     return ensureUnlocked();
+}
+
+/**
+ * Exécute une requête qui touche une donnée chiffrée par mot de passe et, si la
+ * couche répond `locked`, ouvre l'invite globale puis réessaie une fois.
+ *
+ * Née dans Notes, recopiée dans Password, Projects, Mail et OSINT ; promue ici
+ * quand le SDK des modules a eu besoin du même patron (le barrel
+ * `deveye-sdk-client` la réexporte). Les copies locales des natives se
+ * résorberont au fil de leur rapatriement.
+ */
+export async function withSecrecy<T>(run: () => Promise<T>): Promise<T> {
+    try {
+        const out = await run();
+        touchSecrecy();
+        return out;
+    } catch (e) {
+        if (e instanceof WsError && e.code === 'locked') {
+            await ensureUnlocked();
+            const out = await run();
+            touchSecrecy();
+            return out;
+        }
+        throw e;
+    }
 }
 
 /** Called by the dialog after a successful `secrecy.unlock`. */

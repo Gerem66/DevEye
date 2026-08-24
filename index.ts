@@ -1,7 +1,6 @@
 import { env } from '@/Utils/Env';
 import { buildApp } from '@/app';
 import { buildPublicApp } from '@/publicApp';
-import { pruneCloudSync } from '@/cloudSync/prune';
 import { logger } from '@/logger';
 import { agentDistDir, startAgentReconcile } from '@/agent/sync';
 
@@ -11,6 +10,10 @@ import { createDatabase } from '@/db';
 import { runMigrations } from '@/db/migrate';
 import { createDbPool, getQueryable, testConnection } from '@/db/pool';
 import { seedDevAccount } from '@/db/seedDev';
+import { moduleMigrationDirs } from '@/features/_sdk/register';
+// L'import du registre déclenche l'enregistrement des modules installés :
+// leurs migrations et services deviennent visibles ci-dessous.
+import '@/features/registry';
 
 async function main() {
     const pool = createDbPool();
@@ -20,7 +23,7 @@ async function main() {
         process.exit(1);
     }
 
-    await runMigrations(pool);
+    await runMigrations(pool, moduleMigrationDirs());
 
     if (process.env.SEED_DEV === 'true') {
         await seedDevAccount(pool);
@@ -29,10 +32,11 @@ async function main() {
     const db = createDatabase(getQueryable(pool));
     const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
 
-    const { app, cloudSync, uptime, mailSync, integrations, databases, audience, sentinel, backups } = await buildApp({
-        db,
-        crypt
-    });
+    const { app, uptime, mailSync, integrations, databases, audience, sentinel, backups, moduleServices } =
+        await buildApp({
+            db,
+            crypt
+        });
     const audit = createAuditLog(db);
 
     /**
@@ -55,10 +59,10 @@ async function main() {
             audience.stop();
             sentinel.stop();
             backups.stop();
+            for (const svc of moduleServices) void svc.stop();
             // Rend le bail CloudSync : sans ça, le processus qui redémarre ne
             // reconnaît pas son propre bail (identité neuve) et resterait passif
             // jusqu'à expiration.
-            await cloudSync.stop();
             if (publicApp) await publicApp.close();
             await app.close();
             await pool.end();
@@ -90,7 +94,6 @@ async function main() {
             const uptimeChecks = await db.uptimeHistory.pruneByRetention(Math.floor(Date.now() / 1000));
             if (uptimeChecks > 0) logger.info({ uptimeChecks }, 'Pruned old uptime checks');
             // CloudSync : purge des versions par budget + sessions abandonnées.
-            await pruneCloudSync(db, cloudSync, audit, logger);
         } catch (e) {
             logger.error({ err: (e as Error).message }, 'Retention sweep failed');
         }

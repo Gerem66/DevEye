@@ -1,0 +1,5 @@
+{
+  "id": "weather",
+  "tables": ["weather_locations", "weather_provider_keys"],
+  "$comment": "Tables historiques (migrations 007/008/011/051 du socle, jamais déplacées) : l'allowlist les dispense du préfixe ft_weather_. Toute NOUVELLE table du module prendra le préfixe, via src/server/migrations/."
+}

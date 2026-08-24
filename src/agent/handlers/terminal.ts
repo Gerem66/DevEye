@@ -1,4 +1,4 @@
-import { AGENT_TERM_EXIT, AGENT_TERM_OUTPUT } from 'deveye-types';
+import { AGENT_TERM_EXIT, AGENT_TERM_OUTPUT } from '@deveye/types';
 
 import { ack, type AgentSession, type PayloadOf } from './session';
 

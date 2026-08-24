@@ -2,7 +2,7 @@ import fastifyCors from '@fastify/cors';
 import fastifyHelmet from '@fastify/helmet';
 import fastifyRateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyBaseLogger, type FastifyError, type FastifyInstance } from 'fastify';
-import { err, type ErrorCode } from 'deveye-types';
+import { err, type ErrorCode } from '@deveye/types';
 
 import { audienceRoutes } from '@/audience/routes';
 import { logger } from '@/logger';

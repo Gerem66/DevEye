@@ -8,13 +8,13 @@ import type {
     ProjectChecklistItem,
     ProjectMilestone,
     ProjectPriority
-} from 'deveye-types';
+} from '@deveye/types';
 import {
     PROJECT_CARD_TITLE_MAX_LENGTH,
     PROJECT_CHECKLIST_LABEL_MAX_LENGTH,
     PROJECT_MAX_CHECKLIST_ITEMS,
     PROJECT_PRIORITIES
-} from 'deveye-types';
+} from '@deveye/types';
 import { Button, Dialog, SelectInput, TextInput } from '@/Components';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import { useLiveOutlines } from '@/live/useLiveOutline';

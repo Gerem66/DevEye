@@ -8,8 +8,8 @@ import {
     projectMilestoneUpdate,
     projectPlan,
     projectMilestoneSchema
-} from 'deveye-types';
-import type { ProjectCardDepRow, ProjectMilestone, ProjectMilestoneRow, ProjectRow } from 'deveye-types';
+} from '@deveye/types';
+import type { ProjectCardDepRow, ProjectMilestone, ProjectMilestoneRow, ProjectRow } from '@deveye/types';
 import type { Cipher } from '@/Services/SecureStore';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { assertProjectUnlocked, cipherFor, loadProject, recordEvent } from './_shared';

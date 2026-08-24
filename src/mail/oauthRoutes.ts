@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { MAIL_SYNC_INTERVAL_DEFAULT_MINUTES } from 'deveye-types';
+import { MAIL_SYNC_INTERVAL_DEFAULT_MINUTES } from '@deveye/types';
 import type { MailOAuthCredentials } from '@/Services/MailAccountClient';
 import { exchangeCodeForTokens } from '@/Services/MailOAuth';
 import { verifyMailOAuthState } from '@/auth/jwt';

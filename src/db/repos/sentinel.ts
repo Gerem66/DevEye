@@ -9,7 +9,7 @@ import {
     type FindingSeverity,
     type FindingState,
     type SentinelRuleId
-} from 'deveye-types';
+} from '@deveye/types';
 
 import type { Queryable } from '../pool';
 

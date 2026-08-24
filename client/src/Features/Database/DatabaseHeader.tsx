@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import type { Database } from 'deveye-types';
+import type { Database } from '@deveye/types';
 import { Button } from '@/Components';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { openInfo } from '@/Components/InfoPopup';
 import { ENGINE_LABELS, STATUS_META } from './format';
 import styles from './style.module.css';
@@ -113,6 +114,14 @@ export function DatabaseHeader({
                     <p className={styles.cardName}>
                         <span className={styles.statusDot} data-tone={status.tone} aria-hidden='true' />
                         {database.name}
+                        {database.foreign && (
+                            <span
+                                className={styles.viaTag}
+                                title='Cette base appartient à un autre espace qui la partage ici'
+                            >
+                                partagé
+                            </span>
+                        )}
                     </p>
                     <p className={styles.cardMeta}>
                         {ENGINE_LABELS[database.engine]} · {database.host}:{database.port}/{database.database}
@@ -125,46 +134,61 @@ export function DatabaseHeader({
                     {database.lastError && <p className={styles.error}>{database.lastError}</p>}
                 </div>
             </div>
-            {/* La barre est rendue dès qu'elle a quelque chose à porter, et non
-                sous la seule condition d'écriture : « Ouvrir… » est une
-                navigation, un lecteur y a droit. */}
-            {(canWrite || onOpenInFeature || after) && (
-                <div className={styles.actions}>
-                    {canWrite && (
-                        <>
-                            <Button variant='secondary' icon='refresh' onClick={onTest} disabled={busy}>
-                                Tester
-                            </Button>
-                            <Button variant='secondary' icon='search' onClick={onInspect} disabled={busy}>
-                                Relever l’état
-                            </Button>
-                            {/* Deux boutons voisins joignent le serveur ; celui-ci dit
+            {/* La barre est rendue sans condition : outre « Ouvrir… », elle
+                porte le bouton de réglages commun, auquel un lecteur a droit
+                (il voit où la base prévient, à défaut de le changer). */}
+            <div className={styles.actions}>
+                {canWrite && (
+                    <>
+                        <Button variant='secondary' icon='refresh' onClick={onTest} disabled={busy}>
+                            Tester
+                        </Button>
+                        <Button variant='secondary' icon='search' onClick={onInspect} disabled={busy}>
+                            Relever l’état
+                        </Button>
+                        {/* Deux boutons voisins joignent le serveur ; celui-ci dit
                         en quoi ils diffèrent, et ce que « relever » garde. */}
-                            <button
-                                type='button'
-                                className={styles.infoButton}
-                                aria-label='Que font « Tester » et « Relever l’état » ?'
-                                title='Que font ces deux boutons ?'
-                                onClick={explainInspect}
-                            >
-                                <span className='icon icon-info' />
-                            </button>
+                        <button
+                            type='button'
+                            className={styles.infoButton}
+                            aria-label='Que font « Tester » et « Relever l’état » ?'
+                            title='Que font ces deux boutons ?'
+                            onClick={explainInspect}
+                        >
+                            <span className='icon icon-info' />
+                        </button>
+                        {/* `!database.foreign` : la ligne se réécrit sous la
+                                clé de SON espace — le serveur le refuse, l'écran
+                                ne le propose donc pas. */}
+                        {!database.foreign && (
                             <Button variant='secondary' icon='edit' onClick={onEdit} disabled={busy}>
                                 Modifier
                             </Button>
-                        </>
-                    )}
-                    {/* Toujours l'avant-dernier : les trois onglets d'un projet
+                        )}
+                    </>
+                )}
+                {/* Les réglages **de cette base**, hors du bloc d'écriture :
+                        un lecteur voit où elle prévient, comme le dit déjà le
+                        bouton de la fonctionnalité. Le bouton se supprime seul
+                        quand aucune section n'est lisible. */}
+                <FeatureSettingsButton
+                    scope={{
+                        kind: 'item',
+                        feature: 'database',
+                        itemId: database.id,
+                        itemLabel: database.name
+                    }}
+                />
+                {/* Toujours l'avant-dernier : les trois onglets d'un projet
                         rangent leur barre dans le même ordre, actions de la
                         feature puis « Ouvrir… » puis « Délier ». */}
-                    {onOpenInFeature && (
-                        <Button variant='secondary' icon='chevrons-right' onClick={onOpenInFeature}>
-                            Ouvrir la Base de données
-                        </Button>
-                    )}
-                    {after}
-                </div>
-            )}
+                {onOpenInFeature && (
+                    <Button variant='secondary' icon='chevrons-right' onClick={onOpenInFeature}>
+                        Ouvrir la Base de données
+                    </Button>
+                )}
+                {after}
+            </div>
         </header>
     );
 }

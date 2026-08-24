@@ -1,4 +1,4 @@
-import type { UserSettingFlag } from 'deveye-types';
+import type { UserSettingFlag } from '@deveye/types';
 
 import { useAuth } from '@/auth/AuthProvider';
 

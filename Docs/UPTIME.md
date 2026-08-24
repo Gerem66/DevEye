@@ -62,33 +62,37 @@ un incident, pas à une sonde.
   initiale, **seulement si** le « down » avait bien été notifié (sinon on
   enverrait un « c'est revenu » sans contexte).
 
-Canaux (`notification_settings`, ligne `uptime`, un jeu par espace) — la table
-`uptime_settings` a disparu à la migration `075`, qui a séparé les canaux **par
-feature** : Uptime, Sentinelle, Bases de données et Déploiement lisent la même
-table à quatre lignes différentes, et l'envoi lui-même vit dans
-`Services/notifications.ts`. Régler l'un ne touche donc jamais aux autres.
+Canaux — **une liste de destinations de l'espace, et une route qui les
+désigne** (migration `087`). Voir [NOTIFICATIONS.md](./NOTIFICATIONS.md), qui
+porte le modèle complet ; ce qui compte ici :
 
-- **e-mail** — destinataire libre, vide = l'adresse du compte. Nécessite les
-  variables `SMTP_*` (voir `.env.template`) ; sans elles la popup le dit au lieu
-  de laisser croire que les alertes partent.
+- un service peut avoir **ses propres canaux** ; sans réglage propre il suit
+  ceux d'Uptime. C'est ce qui permet d'envoyer les alertes de deux services à
+  deux équipes différentes, ce que les deux canaux binaires d'avant
+  interdisaient ;
+- **e-mail** — destinataire libre, vide = l'adresse du compte expéditeur, qui
+  doit être un compte Mail « open » de l'espace ;
 - **webhook** — POST JSON `{ content, text, event, service, url, at }`, où
-  `event` vaut `down`, `recovered` ou `test`.
+  `event` vaut `down`, `recovered` ou `test`. Le message lisible est porté
+  **deux fois**, et c'est voulu : Discord rejette tout corps sans `content` /
+  `embeds` / `file` (400, « Cannot send an empty message ») et Slack lit `text`.
+  Chacun ignore les clés qu'il ne connaît pas, donc un seul corps convient à
+  Slack et à un point d'entrée maison. Le texte est tronqué à 1900 caractères,
+  sous la limite stricte de 2000 de Discord ;
+- **discord** — un type de canal à part entière depuis la `087` : il reçoit
+  l'embed de `Services/notices/uptime.ts` au lieu du texte. Ce n'est plus deviné
+  d'après l'URL, mais **déclaré** — le reniflage décidait à la place de
+  l'utilisateur, et interdisait d'envoyer du texte brut à une URL Discord.
 
-  Le message lisible est porté **deux fois**, et c'est voulu : Discord rejette
-  tout corps sans `content` / `embeds` / `file` (400, « Cannot send an empty
-  message ») et Slack lit `text`. Chacun ignore les clés qu'il ne connaît pas,
-  donc un seul corps convient à Discord, à Slack et à un endpoint maison sans
-  demander à l'utilisateur d'où vient son URL. Le texte est tronqué à 1900
-  caractères, en dessous de la limite stricte de 2000 de Discord.
+Le bouton « Tester » agit **par canal**, sur la ligne telle qu'elle est
+enregistrée : l'ancien détour « enregistrer d'abord, sinon le test porte sur la
+configuration précédente » disparaît avec l'entité.
 
-Le bouton « Tester » enregistre d'abord, puis envoie une alerte d'exemple sur
-tous les canaux activés — sinon le test porterait sur l'ancienne configuration.
-
-L'écran de réglage est `Components/NotificationsDialog/`, **partagé par les
-quatre émetteurs** : ils règlent exactement les mêmes champs, et la copie qui
-existait pour Sentinelle avait déjà perdu au passage l'avertissement « aucun
-compte expéditeur valide » — un écran laissait donc croire à un canal actif là
-où l'autre prévenait.
+L'écran de réglage est `Components/FeatureSettings/`, **partagé par les cinq
+émetteurs et par leurs éléments**. Il remplace `Components/NotificationsDialog`,
+lui-même né de la fusion de cinq copies dont l'une avait perdu au passage
+l'avertissement « aucun compte expéditeur valide » — un écran laissait donc
+croire à un canal actif là où l'autre prévenait.
 
 Chaque bascule est aussi journalisée dans les logs d'audit (`uptime.down`,
 `uptime.recovered`), donc consultable dans la feature Logs.

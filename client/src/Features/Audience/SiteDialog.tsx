@@ -9,7 +9,7 @@ import {
     type AudiencePlatform,
     type AudienceSite,
     type AudienceVisitorMode
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { Button, Dialog, SelectInput, Switch, TextInput } from '@/Components';
 import { ws } from '@/api/ws';

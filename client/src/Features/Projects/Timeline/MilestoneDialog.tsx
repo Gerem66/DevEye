@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { ProjectMilestone, ProjectMilestoneDraft } from 'deveye-types';
-import { PROJECT_MILESTONE_NAME_MAX_LENGTH } from 'deveye-types';
+import type { ProjectMilestone, ProjectMilestoneDraft } from '@deveye/types';
+import { PROJECT_MILESTONE_NAME_MAX_LENGTH } from '@deveye/types';
 import { Button, Checkbox, Dialog, TextInput } from '@/Components';
 import { dateInputToSeconds, dateInputValue } from '../api';
 import styles from '../style.module.css';

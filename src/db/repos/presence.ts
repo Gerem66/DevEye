@@ -1,4 +1,4 @@
-import type { PresenceEvent, PresenceRow } from 'deveye-types';
+import type { PresenceEvent, PresenceRow } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;

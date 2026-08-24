@@ -1,9 +1,10 @@
 import { createHash } from 'crypto';
-import type { GitRepo, GitRepoRow } from 'deveye-types';
-import { gitRepoSchema } from 'deveye-types';
+import type { GitRepo, GitRepoRow } from '@deveye/types';
+import { gitRepoSchema } from '@deveye/types';
 import type { Cipher } from '@/Services/SecureStore';
 import type { GitRepoWithUsageRow } from '@/db/repos/git';
 import { FeatureError, type FeatureContext } from '../_define';
+import { shareScope } from '../_sharing';
 
 /**
  * Le socle de la feature Git.
@@ -58,15 +59,45 @@ export async function readJson<T>(cipher: Cipher, blob: string | null): Promise<
  * C'est **la** frontière d'espace de la feature : toute commande qui prend un
  * `repoId` commence par là, sans quoi elle répondrait sur le dépôt d'autrui.
  */
-export async function loadRepo(ctx: FeatureContext, repoId: number): Promise<GitRepoRow> {
-    const row = await ctx.db.git.findRepo(repoId, ctx.workspaceId);
+export async function loadRepo(
+    ctx: FeatureContext,
+    repoId: number,
+    level: 'read' | 'write' = 'read'
+): Promise<GitRepoRow> {
+    const row = await ctx.db.git.findVisibleRepo(repoId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Dépôt introuvable');
+    // `assertItem` refuse en plus les dépôts qu'une restriction de rôle masque
+    // ou passe en lecture seule.
+    await ctx.assertItem('git', repoId, level);
     return row;
 }
 
-export async function toRepo(cipher: Cipher, row: GitRepoWithUsageRow): Promise<GitRepo> {
+/**
+ * Comme {@link loadRepo}, mais exige que le dépôt soit **chez l'appelant**.
+ *
+ * Pour les gestes réservés au domicile : ses réglages (son jeton se choisit
+ * parmi les clés d'ici) et sa suppression. Une fenêtre lit et resynchronise.
+ */
+export async function loadHomeRepo(ctx: FeatureContext, repoId: number): Promise<GitRepoRow> {
+    const row = await loadRepo(ctx, repoId, 'write');
+    if (row.workspace_id !== ctx.workspaceId) {
+        throw new FeatureError(
+            'forbidden',
+            'Ce dépôt appartient à un autre espace : il se règle et se supprime depuis là-bas.'
+        );
+    }
+    return row;
+}
+
+/** Le codec du domicile d'un dépôt visible — celui d'ici pour un dépôt local. */
+export async function repoCipher(ctx: FeatureContext, repoId: number): Promise<Cipher> {
+    return (await shareScope(ctx, 'git')).cipherFor(repoId);
+}
+
+export async function toRepo(cipher: Cipher, row: GitRepoWithUsageRow, foreign: boolean): Promise<GitRepo> {
     const target = await readJson<Partial<StoredRepo>>(cipher, row.content);
     return gitRepoSchema.parse({
+        foreign,
         id: row.id,
         provider: row.provider === 'dokploy' ? 'dokploy' : 'github',
         owner: target?.owner ?? '',
@@ -89,9 +120,9 @@ export async function toRepo(cipher: Cipher, row: GitRepoWithUsageRow): Promise<
  * en sert trois — un chiffre faux est pire qu'un aller-retour.
  */
 export async function reloadRepo(ctx: FeatureContext, repoId: number): Promise<GitRepo> {
-    const row = await ctx.db.git.findRepoWithUsage(repoId, ctx.workspaceId);
+    const row = await ctx.db.git.findVisibleRepoWithUsage(repoId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Dépôt introuvable');
-    return toRepo(gitCipher(ctx), row);
+    return toRepo(await repoCipher(ctx, row.id), row, row.workspace_id !== ctx.workspaceId);
 }
 
 export const READ = { feature: 'git' } as const;

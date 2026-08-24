@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Project, ProjectLinkCounts } from 'deveye-types';
+import type { Project, ProjectLinkCounts } from '@deveye/types';
 import { ws } from '@/api/ws';
 import { useResourceVersion } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';

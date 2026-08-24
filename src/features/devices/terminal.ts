@@ -1,4 +1,4 @@
-import { deviceTermClose, deviceTermInput, deviceTermOpen, deviceTermResize } from 'deveye-types';
+import { deviceTermClose, deviceTermInput, deviceTermOpen, deviceTermResize } from '@deveye/types';
 
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { authorizeReachableDevice } from './shared';

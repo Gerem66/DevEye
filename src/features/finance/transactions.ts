@@ -4,7 +4,7 @@ import {
     financeTransactionRemove,
     financeTransactionSetCleared,
     financeTransactionUpdate
-} from 'deveye-types';
+} from '@deveye/types';
 import type { FinanceTransactionFilter } from '@/db/repos/finance';
 
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';

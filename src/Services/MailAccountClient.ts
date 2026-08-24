@@ -1,6 +1,6 @@
 import { ImapFlow, type FetchMessageObject, type ImapFlowOptions, type ListResponse } from 'imapflow';
 import nodemailer, { type Transporter } from 'nodemailer';
-import type { MailAddress, MailFolderSpecialUse, MailOAuthProvider, MailProxy } from 'deveye-types';
+import type { MailAddress, MailFolderSpecialUse, MailOAuthProvider, MailProxy } from '@deveye/types';
 import { logger } from '@/logger';
 import { oauthProviderEndpoints, refreshAccessToken } from './MailOAuth';
 

@@ -3,7 +3,7 @@ import {
     DEFAULT_RETENTION_DAYS,
     DEFAULT_SENTINEL_FINDING_RETENTION_DAYS,
     DEFAULT_SENTINEL_LEARNING_DAYS
-} from 'deveye-types';
+} from '@deveye/types';
 
 export const env = {
     ENVIRONMENT: getEnvVar('ENVIRONMENT', 'enum', ['dev', 'test', 'prod']),
@@ -111,8 +111,8 @@ export const env = {
     // server's working directory. The boot reconciler syncs binaries here.
     AGENT_DIST_DIR: getEnvVar('AGENT_DIST_DIR', 'string', false),
     // Boot-time agent sync (the ONLY runtime GitHub dependency). Token needs
-    // `contents:read`; falls back to GITHUB_PACKAGES_TOKEN. Empty token disables
-    // the sync (serves whatever is already on disk — typical dev).
+    // `contents:read`. Empty token disables the sync (serves whatever is
+    // already on disk — typical dev).
     AGENT_DOWNLOAD_TOKEN: getEnvVar('AGENT_DOWNLOAD_TOKEN', 'string', false),
     AGENT_RELEASE_TAG: getEnvVar('AGENT_RELEASE_TAG', 'string', false),
     AGENT_REPO: getEnvVar('AGENT_REPO', 'string', false),

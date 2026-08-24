@@ -1,9 +1,9 @@
-import type { DeviceSentinelState, FindingSeverity } from 'deveye-types';
+import type { DeviceSentinelState, FindingSeverity } from '@deveye/types';
 
-import Button from '@/Components/Button';
 import Checkbox from '@/Components/Checkbox';
 
 import styles from './style.module.css';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 
 /**
  * L'en-tête de la vue de flotte : où en est l'espace, et de quoi filtrer.
@@ -26,17 +26,9 @@ interface Props {
     onMinSeverity: (s: FindingSeverity | null) => void;
     showSettled: boolean;
     onShowSettled: (v: boolean) => void;
-    onOpenNotifications: () => void;
 }
 
-export default function FleetHeader({
-    devices,
-    minSeverity,
-    onMinSeverity,
-    showSettled,
-    onShowSettled,
-    onOpenNotifications
-}: Props) {
+export default function FleetHeader({ devices, minSeverity, onMinSeverity, showSettled, onShowSettled }: Props) {
     const watched = devices.filter((d) => d.enabled).length;
     const learning = devices.filter((d) => d.enabled && d.learning).length;
     const totals = devices.reduce(
@@ -68,9 +60,10 @@ export default function FleetHeader({
                  * flotte, qui n'en avait aucune.
                  */}
                 <div className={styles.headerActions}>
-                    <Button variant='ghost' icon='settings' onClick={onOpenNotifications}>
-                        Notifications
-                    </Button>
+                    {/* Même variante que dans les autres features : la
+                        silhouette du bouton Réglages ne change pas d'un écran
+                        à l'autre. */}
+                    <FeatureSettingsButton scope={{ kind: 'feature', feature: 'sentinel' }} />
                 </div>
             </div>
 

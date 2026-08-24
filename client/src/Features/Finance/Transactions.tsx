@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import type { FinanceTransaction, FinanceTransactionKind } from 'deveye-types';
+import type { FinanceTransaction, FinanceTransactionKind } from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';

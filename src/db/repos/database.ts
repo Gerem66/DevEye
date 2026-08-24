@@ -1,4 +1,4 @@
-import type { DatabaseAlertRow, DatabaseRow, ProjectDatabaseLinkRow } from 'deveye-types';
+import type { DatabaseAlertRow, DatabaseRow, ProjectDatabaseLinkRow } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
@@ -30,8 +30,22 @@ export interface DatabaseUsageRow {
  */
 export interface DatabaseRepo {
     list(workspaceId: number): Promise<DatabaseWithStatsRow[]>;
+    /**
+     * Les bases **visibles** depuis cet espace : les siennes, plus celles qu'un
+     * autre espace y projette (`item_shares`).
+     *
+     * Séparé de `list` plutôt que de le remplacer : l'ordonnanceur de relevé
+     * parcourt les bases d'un espace, pas ce qu'on y voit — relever deux fois la
+     * même parce qu'elle est projetée ailleurs doublerait les connexions
+     * sortantes et les alertes.
+     */
+    listVisible(workspaceId: number): Promise<DatabaseWithStatsRow[]>;
     find(id: number, workspaceId: number): Promise<DatabaseRow | null>;
+    /** Comme `find`, mais accepte aussi une base projetée vers cet espace. */
+    findVisible(id: number, workspaceId: number): Promise<DatabaseRow | null>;
     findWithStats(id: number, workspaceId: number): Promise<DatabaseWithStatsRow | null>;
+    /** Comme `findWithStats`, mais accepte aussi une base projetée vers cet espace. */
+    findVisibleWithStats(id: number, workspaceId: number): Promise<DatabaseWithStatsRow | null>;
     /** L'unicité d'une base dans l'espace, ce que `content` chiffré ne peut porter. */
     findByName(workspaceId: number, nameRef: string): Promise<DatabaseRow | null>;
     count(workspaceId: number): Promise<number>;
@@ -144,6 +158,22 @@ export function databaseRepo(pool: Q): DatabaseRepo {
             );
             return r.rows.map(withNumbers);
         },
+        async listVisible(workspaceId) {
+            // `sort_order` appartient à l'espace d'origine : une base projetée
+            // se range donc après les locales. Lui donner un ordre propre à
+            // chaque espace demanderait une colonne par projection.
+            const r = await pool.query<DatabaseWithStatsRow>(
+                `${SELECT_WITH_STATS}
+                  WHERE d.workspace_id = ?
+                     OR EXISTS (SELECT 1 FROM item_shares sh
+                                 WHERE sh.feature = 'database' AND sh.item_id = d.id
+                                   AND sh.home_workspace_id = d.workspace_id
+                                   AND sh.workspace_id = ?)
+                  ORDER BY d.sort_order ASC, d.id ASC`,
+                [workspaceId, workspaceId]
+            );
+            return r.rows.map(withNumbers);
+        },
         async find(id, workspaceId) {
             const r = await pool.query<DatabaseRow>(
                 'SELECT * FROM database_connections WHERE id = ? AND workspace_id = ?',
@@ -151,10 +181,37 @@ export function databaseRepo(pool: Q): DatabaseRepo {
             );
             return r.rows[0] ?? null;
         },
+        async findVisible(id, workspaceId) {
+            const r = await pool.query<DatabaseRow>(
+                `SELECT * FROM database_connections d
+                  WHERE d.id = ?
+                    AND (d.workspace_id = ?
+                         OR EXISTS (SELECT 1 FROM item_shares sh
+                                     WHERE sh.feature = 'database' AND sh.item_id = d.id
+                                       AND sh.home_workspace_id = d.workspace_id
+                                       AND sh.workspace_id = ?))`,
+                [id, workspaceId, workspaceId]
+            );
+            return r.rows[0] ?? null;
+        },
         async findWithStats(id, workspaceId) {
             const r = await pool.query<DatabaseWithStatsRow>(
                 `${SELECT_WITH_STATS} WHERE d.id = ? AND d.workspace_id = ?`,
                 [id, workspaceId]
+            );
+            const row = r.rows[0];
+            return row ? withNumbers(row) : null;
+        },
+        async findVisibleWithStats(id, workspaceId) {
+            const r = await pool.query<DatabaseWithStatsRow>(
+                `${SELECT_WITH_STATS}
+                  WHERE d.id = ?
+                    AND (d.workspace_id = ?
+                         OR EXISTS (SELECT 1 FROM item_shares sh
+                                     WHERE sh.feature = 'database' AND sh.item_id = d.id
+                                       AND sh.home_workspace_id = d.workspace_id
+                                       AND sh.workspace_id = ?))`,
+                [id, workspaceId, workspaceId]
             );
             const row = r.rows[0];
             return row ? withNumbers(row) : null;

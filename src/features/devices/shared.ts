@@ -1,4 +1,4 @@
-import type { Device, DeviceRow } from 'deveye-types';
+import type { Device, DeviceRow } from '@deveye/types';
 
 import { computeAgentUpdate, deviceRowToDevice } from '@/agent/mappers';
 import { agentDistDir, readServedManifestCached } from '@/agent/sync';

@@ -13,7 +13,7 @@
  *
  * Lancé par `npm run ci:rules`, donc par `npm run ci`.
  */
-import type { AuthWindow, DeviceReport, PersistenceEntry, ReportProcess } from 'deveye-types';
+import type { AuthWindow, DeviceReport, PersistenceEntry, ReportProcess } from '@deveye/types';
 
 import type { BaselineRow } from '@/db/repos/sentinel';
 import {
@@ -371,13 +371,7 @@ expect(
 expect(
     'un rapport ne rejoue AUCUNE règle d’instant (sinon il les résoudrait toutes)',
     evaluateReport(ctx({ snapshot: null, report: posture })),
-    [
-        'net.mining_pool',
-        'port.exposed',
-        'posture.firewall_off',
-        'posture.ssh_root_login',
-        'posture.ssh_password_auth'
-    ]
+    ['net.mining_pool', 'port.exposed', 'posture.firewall_off', 'posture.ssh_root_login', 'posture.ssh_password_auth']
 );
 
 console.log('\nRègles de persistance');

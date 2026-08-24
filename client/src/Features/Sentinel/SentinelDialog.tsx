@@ -3,7 +3,7 @@ import {
     DEFAULT_SENTINEL_INTEGRITY_MINUTES,
     DEFAULT_SENTINEL_LEARNING_DAYS,
     type DeviceSentinelState
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';

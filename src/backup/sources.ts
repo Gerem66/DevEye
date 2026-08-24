@@ -2,11 +2,10 @@ import { spawn } from 'child_process';
 import { createGzip } from 'zlib';
 import type { Logger } from 'pino';
 
-import type { Database } from '@/db';
 import { env } from '@/Utils/Env';
 import { openTunnel, type Tunnel } from '@/Services/databases/tunnel';
 import type { EngineTarget } from '@/Services/databases/engine';
-import type { ShareBlobStore } from '@/cloudSync/blobStore';
+import type { CloudSyncBackupProvider } from '@deveye/types/sdk';
 import { tarEnd, tarHeader, tarPadding } from './tar';
 
 /**
@@ -289,21 +288,22 @@ export async function databaseSource(target: EngineTarget, label: string): Promi
  * la différence entre une sauvegarde et une copie de répertoire technique.
  */
 export async function cloudSyncSource(
-    db: Database,
-    store: ShareBlobStore,
+    provider: CloudSyncBackupProvider,
     share: { id: number; name: string },
     logger: Logger
 ): Promise<BackupArtifact> {
     async function* stream(): AsyncGenerator<Buffer> {
-        const files = await db.syncFiles.listPresentByShare(share.id);
+        // Le module fournit l'index et les blobs déchiffrés ; le flux tar
+        // reste ici, côté public, comme pour les autres sources.
+        const files = [...(await provider.listPresentFiles(share.id))];
         // Chemin croissant : l'archive se relit dans l'ordre de l'arborescence,
         // et un `tar -t` reste lisible.
-        files.sort((a, b) => a.rel_path.localeCompare(b.rel_path));
+        files.sort((a, b) => a.relPath.localeCompare(b.relPath));
 
         for (const file of files) {
             const isDir = file.kind === 'dir';
             yield tarHeader({
-                path: `${share.name}/${file.rel_path}`,
+                path: `${share.name}/${file.relPath}`,
                 size: isDir ? 0 : file.size,
                 mtime: file.mtime,
                 mode: file.mode,
@@ -313,22 +313,22 @@ export async function cloudSyncSource(
 
             let written = 0;
             try {
-                for await (const chunk of store.read(file.hash)) {
+                for await (const chunk of await provider.openBlob(share.id, file.hash)) {
                     written += chunk.length;
-                    yield chunk;
+                    yield Buffer.from(chunk);
                 }
             } catch (e) {
                 // Un blob manquant ou corrompu ne doit pas emporter toute
                 // l'archive : on complète l'entrée par des zéros pour que le
                 // `tar` reste structurellement valide, et on le signale fort.
                 logger.error(
-                    { shareId: share.id, relPath: file.rel_path, err: (e as Error).message },
+                    { shareId: share.id, relPath: file.relPath, err: (e as Error).message },
                     'Backup CloudSync: blob illisible, entrée complétée par des zéros'
                 );
             }
             if (written < file.size) yield Buffer.alloc(file.size - written);
             else if (written > file.size) {
-                throw new Error(`Blob plus long que l'index pour « ${file.rel_path} » : archive abandonnée.`);
+                throw new Error(`Blob plus long que l'index pour « ${file.relPath} » : archive abandonnée.`);
             }
             yield tarPadding(file.size);
         }

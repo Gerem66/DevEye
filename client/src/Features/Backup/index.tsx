@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { BackupDestination, BackupJob } from 'deveye-types';
+import type { BackupDestination, BackupJob } from '@deveye/types';
 
-import { Button, Dialog, NotificationsDialog } from '@/Components';
+import { Button } from '@/Components';
 import { ws } from '@/api/ws';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
+import { useLiveSegment } from '@/live/useLiveSegment';
 import type { FeatureProps } from '@/Features/types';
-import DestinationDialog from './DestinationDialog';
-import DestinationsPanel from './DestinationsPanel';
 import JobDialog from './JobDialog';
 import JobView from './JobView';
 import {
@@ -28,8 +28,8 @@ import styles from './style.module.css';
  *
  * Feature d'espace de premier rang, comme Git, Bases de données et Déploiement.
  * Deux moitiés qui ne se recouvrent pas : les **destinations** (rarement
- * touchées, rangées dans leur propre dialogue) et les **travaux**, qui sont ce
- * qu'on vient regarder.
+ * touchées ; ce sont les sources de la feature, gérées dans Réglages → Sources)
+ * et les **travaux**, qui sont ce qu'on vient regarder.
  *
  * L'écran est construit autour d'une seule question : « est-ce que mes
  * sauvegardes tournent ? ». Le dernier état de chaque travail est donc en
@@ -48,11 +48,7 @@ export function FeatureBackup(_props: FeatureProps) {
     const [error, setError] = useState<string | null>(null);
 
     const [openedId, setOpenedId] = useState<number | null>(null);
-    const [destinationsOpen, setDestinationsOpen] = useState(false);
-    const [destinationDialog, setDestinationDialog] = useState<{ destination: BackupDestination | null } | null>(null);
     const [jobDialog, setJobDialog] = useState<{ job: BackupJob | null } | null>(null);
-    const [notificationsOpen, setNotificationsOpen] = useState(false);
-    const [confirmRemove, setConfirmRemove] = useState<BackupJob | null>(null);
 
     const jobsVersion = useResourceVersion('backup.jobList');
     const destinationsVersion = useResourceVersion('backup.destinationList');
@@ -102,18 +98,23 @@ export function FeatureBackup(_props: FeatureProps) {
         }
     };
 
-    const removeJob = async (job: BackupJob) => {
-        try {
-            await ws.send('backup.jobRemove', { jobId: job.id });
-            setConfirmRemove(null);
-            setOpenedId(null);
-            refresh();
-        } catch (e) {
-            setError(backupError(e, 'Impossible de supprimer ce travail.'));
-        }
-    };
-
     const opened = jobs?.find((j) => j.id === openedId) ?? null;
+
+    // La fiche ouverte est un lieu : déclarée à la présence (même format que
+    // Deploy « target:x »), donc rejoignable, et atteignable par la
+    // téléportation de « Régler dans <espace> » d'un élément projeté.
+    const liveTarget = useLiveSegment('l1', openedId === null ? null : `job:${openedId}`);
+    useEffect(() => {
+        if (!liveTarget || jobs === null) return;
+        if (liveTarget.value === null) {
+            setOpenedId(null);
+            return;
+        }
+        const id = Number(liveTarget.value.replace(/^job:/, ''));
+        // Pas encore chargé : la cible reste posée, le rendu suivant la relit.
+        if (!Number.isInteger(id) || !jobs.some((j) => j.id === id)) return;
+        setOpenedId(id);
+    }, [liveTarget, jobs]);
 
     return (
         <div className={styles.root}>
@@ -124,30 +125,19 @@ export function FeatureBackup(_props: FeatureProps) {
                             <h2 className={styles.title}>Sauvegardes</h2>
                             <p className={styles.subtitle}>
                                 {destinations.length === 0
-                                    ? 'Commencez par déclarer une destination : un dossier du serveur, une machine, ou un bucket S3.'
+                                    ? 'Aucune destination pour l’instant : le premier travail vous proposera d’en déclarer une, ou passez par Réglages → Sources.'
                                     : `${destinations.length} destination${destinations.length > 1 ? 's' : ''} déclarée${destinations.length > 1 ? 's' : ''}`}
                             </p>
                         </div>
                         <div className={styles.toolbarActions}>
-                            <Button variant='ghost' icon='server' onClick={() => setDestinationsOpen(true)}>
-                                Destinations
-                            </Button>
+                            {/* Les destinations vivaient derrière leur propre
+                                bouton : elles sont désormais dans Réglages →
+                                Sources, comme les sources de toute feature. */}
+                            <FeatureSettingsButton scope={{ kind: 'feature', feature: 'backup' }} />
                             {canWrite && (
-                                <>
-                                    <Button variant='ghost' icon='mail' onClick={() => setNotificationsOpen(true)}>
-                                        Alertes
-                                    </Button>
-                                    <Button
-                                        icon='plus'
-                                        disabled={destinations.length === 0}
-                                        title={
-                                            destinations.length === 0 ? 'Déclarez d’abord une destination' : undefined
-                                        }
-                                        onClick={() => setJobDialog({ job: null })}
-                                    >
-                                        Nouveau travail
-                                    </Button>
-                                </>
+                                <Button icon='plus' onClick={() => setJobDialog({ job: null })}>
+                                    Nouveau travail
+                                </Button>
                             )}
                         </div>
                     </div>
@@ -184,6 +174,15 @@ export function FeatureBackup(_props: FeatureProps) {
                                                 aria-hidden='true'
                                             />
                                             {job.name}
+                                            {job.foreign && (
+                                                <span
+                                                    className={styles.statusTag}
+                                                    data-tone='neutral'
+                                                    title='Ce travail appartient à un autre espace qui le partage ici'
+                                                >
+                                                    partagé
+                                                </span>
+                                            )}
                                         </p>
                                         <p className={styles.cardMeta}>
                                             {SOURCE_LABELS[job.source]} → {job.destinationName} (
@@ -218,26 +217,8 @@ export function FeatureBackup(_props: FeatureProps) {
                     onBack={() => setOpenedId(null)}
                     onEdit={() => setJobDialog({ job: opened })}
                     onRun={() => void runNow(opened)}
-                    onRemove={() => setConfirmRemove(opened)}
                 />
             )}
-
-            <DestinationsPanel
-                open={destinationsOpen}
-                destinations={destinations}
-                canWrite={canWrite}
-                onClose={() => setDestinationsOpen(false)}
-                onCreate={() => setDestinationDialog({ destination: null })}
-                onEdit={(destination) => setDestinationDialog({ destination })}
-                onChanged={refresh}
-            />
-
-            <DestinationDialog
-                open={destinationDialog !== null}
-                destination={destinationDialog?.destination ?? null}
-                onClose={() => setDestinationDialog(null)}
-                onSaved={refresh}
-            />
 
             <JobDialog
                 open={jobDialog !== null}
@@ -245,34 +226,11 @@ export function FeatureBackup(_props: FeatureProps) {
                 destinations={destinations}
                 onClose={() => setJobDialog(null)}
                 onSaved={refresh}
-            />
-
-            <NotificationsDialog
-                open={notificationsOpen}
-                feature='backup'
-                title='Notifications de sauvegarde'
-                description='Propres aux sauvegardes : ces canaux sont les leurs, indépendants de ceux d’Uptime, de Sentinelle, du Déploiement et des bases. Les régler ici ne touche à rien d’autre.'
-                when='Un avis part à chaque échec de sauvegarde. Les réussites ne sont jamais notifiées : sinon le canal se remplirait de succès et l’échec s’y perdrait.'
-                onClose={() => setNotificationsOpen(false)}
-            />
-
-            <Dialog
-                open={confirmRemove !== null}
-                onClose={() => setConfirmRemove(null)}
-                onSubmit={() => confirmRemove && void removeJob(confirmRemove)}
-                title='Supprimer ce travail ?'
-                description='Son historique part avec lui. Les archives déjà écrites, elles, restent où elles sont — à vous de les effacer si vous le souhaitez.'
-                width={480}
-                footer={
-                    <>
-                        <Button variant='ghost' onClick={() => setConfirmRemove(null)}>
-                            Annuler
-                        </Button>
-                        <Button variant='danger' onClick={() => confirmRemove && void removeJob(confirmRemove)}>
-                            Supprimer
-                        </Button>
-                    </>
-                }
+                onRemoved={() => {
+                    setJobDialog(null);
+                    setOpenedId(null);
+                    refresh();
+                }}
             />
         </div>
     );

@@ -5,7 +5,7 @@ import {
     liveCursorsPushSchema,
     type LiveCursor,
     type LivePeer
-} from 'deveye-types';
+} from '@deveye/types';
 import { useSyncExternalStore } from 'react';
 
 import { ws } from '@/api/ws';

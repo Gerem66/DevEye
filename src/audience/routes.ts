@@ -1,4 +1,4 @@
-import { audienceEventInputSchema, audienceIngestSchema } from 'deveye-types';
+import { audienceEventInputSchema, audienceIngestSchema } from '@deveye/types';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import type { AudienceIngest } from '@/Services/AudienceIngest';

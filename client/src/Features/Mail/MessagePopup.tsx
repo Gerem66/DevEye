@@ -2,7 +2,7 @@ import { Dialog } from '@/Components/Dialog';
 import MessagePane from './MessagePane';
 import styles from './style.module.css';
 
-import type { MailBodyRenderMode, MailMessage } from 'deveye-types';
+import type { MailBodyRenderMode, MailMessage } from '@deveye/types';
 
 interface MessagePopupProps {
     open: boolean;

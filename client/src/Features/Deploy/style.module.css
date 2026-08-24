@@ -519,3 +519,17 @@
     word-break: break-word;
     overflow: auto;
 }
+
+/* Un sélecteur de source et son « + » : le champ prend la place, le geste qui
+   mène à Réglages → Sources reste collé à ce qu'il complète. `min-width: 0`
+   pour qu'un intitulé long rétrécisse le champ, jamais ne pousse le bouton. */
+.fieldWithAction {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.fieldWithAction > select {
+    flex: 1;
+    min-width: 0;
+}

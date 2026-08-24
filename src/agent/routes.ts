@@ -16,7 +16,7 @@ import {
     ok,
     type AgentTarget,
     type DeviceRow
-} from 'deveye-types';
+} from '@deveye/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { ACCESS_COOKIE } from '@/auth/cookies';

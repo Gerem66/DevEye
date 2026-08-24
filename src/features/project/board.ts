@@ -10,8 +10,8 @@ import {
     projectColumnReorder,
     projectColumnUpdate,
     PROJECT_MAX_COLUMNS
-} from 'deveye-types';
-import type { ProjectCardDraft, ProjectCardRow, ProjectColumnRow, ProjectRow } from 'deveye-types';
+} from '@deveye/types';
+import type { ProjectCardDraft, ProjectCardRow, ProjectColumnRow, ProjectRow } from '@deveye/types';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import {
     assertProjectUnlocked,

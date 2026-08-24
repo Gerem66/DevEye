@@ -9,7 +9,7 @@ import type {
     DatabaseSort,
     DatabaseStructure,
     DatabaseTable
-} from 'deveye-types';
+} from '@deveye/types';
 import { openTunnel, type TunnelConfig } from './tunnel';
 
 /**

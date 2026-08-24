@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { SENTINEL_RULES, type AllowEntry } from 'deveye-types';
+import { SENTINEL_RULES, type AllowEntry } from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';

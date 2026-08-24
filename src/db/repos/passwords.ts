@@ -1,4 +1,4 @@
-import type { PasswordRow } from 'deveye-types';
+import type { PasswordRow } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;

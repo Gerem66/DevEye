@@ -1,4 +1,4 @@
-import { homeSetLayout } from 'deveye-types';
+import { homeSetLayout } from '@deveye/types';
 import { defineFeature, type FeatureDefinition } from '../_define';
 
 /**

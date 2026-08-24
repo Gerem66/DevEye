@@ -23,7 +23,7 @@ import {
     verticalListSortingStrategy
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { MinimalUser, ProjectCard, ProjectColumn } from 'deveye-types';
+import type { MinimalUser, ProjectCard, ProjectColumn } from '@deveye/types';
 import { Button } from '@/Components';
 import { useLiveOutlines, type LiveOutlineProps } from '@/live/useLiveOutline';
 import { useRequestPopupWidth } from '@/stores/popupWidth';

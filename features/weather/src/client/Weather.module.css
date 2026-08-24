@@ -1,0 +1,648 @@
+/* Widget compact */
+.widgetLoading,
+.widgetEmpty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    color: var(--text-muted);
+    height: 100%;
+    text-align: center;
+}
+
+.widgetEmptyIcon {
+    font-size: 2rem;
+    opacity: 0.6;
+}
+
+.widgetContent {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    height: 100%;
+}
+
+.mainTemp {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.weatherIcon {
+    font-size: 2.4rem;
+    line-height: 1;
+}
+
+.temperature {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.location {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: auto;
+}
+
+/* Full view */
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* L'en-tête commun : le titre à gauche, les actions à droite. C'est lui qui
+   porte la marge basse, le titre reste un simple intitulé. */
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    margin-bottom: var(--space-lg);
+}
+
+.title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.searchForm {
+    display: flex;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+}
+
+.searchInput {
+    flex: 1;
+    min-width: 0;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color var(--transition-fast);
+}
+
+.searchInput:focus {
+    border-color: var(--input-focus);
+}
+
+.searchInput::placeholder {
+    color: var(--input-placeholder);
+}
+
+.searchBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    padding: var(--space-sm);
+    background: var(--accent);
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--on-accent);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.searchBtn:hover:not(:disabled) {
+    background: var(--accent-hover);
+}
+
+.searchBtn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--glass-border);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.errorBanner {
+    background: var(--danger-bg);
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    font-size: 0.85rem;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-md);
+}
+
+/* Location tabs */
+.locationTabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    margin: 0 0 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.locationTabWrapper {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--glass-bg-light);
+    transition: border-color var(--transition-fast);
+    list-style: none;
+}
+
+.locationTabWrapper.activeTab {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.locationTabWrapper.primaryTab {
+    border-color: var(--accent);
+}
+
+.dragHandle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 var(--space-xs);
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--glass-border);
+    color: var(--text-muted);
+    cursor: grab;
+    touch-action: none;
+    font-size: 0.85rem;
+    transition: color var(--transition-fast);
+}
+
+.dragHandle:hover {
+    color: var(--text-primary);
+}
+
+.dragHandle:active {
+    cursor: grabbing;
+}
+
+.primaryBtn {
+    padding: var(--space-xs) var(--space-xs);
+    background: transparent;
+    border: none;
+    border-left: 1px solid var(--glass-border);
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.primaryBtn:hover {
+    background: var(--glass-bg);
+    color: var(--accent);
+}
+
+.primaryBtn.isPrimary {
+    color: var(--accent);
+}
+
+.locationTab {
+    padding: var(--space-xs) var(--space-md);
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.locationTab:hover {
+    background: var(--glass-bg);
+    color: var(--text-primary);
+}
+
+.activeTab .locationTab {
+    background: transparent;
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.removeTabBtn {
+    padding: var(--space-xs) var(--space-sm);
+    background: transparent;
+    border: none;
+    border-left: 1px solid var(--glass-border);
+    color: var(--text-muted);
+    font-size: 1rem;
+    cursor: pointer;
+    line-height: 1;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.removeTabBtn:hover {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+.activeTab .removeTabBtn {
+    background: transparent;
+    border-left-color: var(--accent);
+}
+
+.loader {
+    color: var(--text-muted);
+    text-align: center;
+    padding: var(--space-xl);
+}
+
+.empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 0.85;
+    padding: var(--space-xl);
+    color: var(--text-muted);
+    gap: var(--space-md);
+    text-align: center;
+    pointer-events: none;
+}
+
+.emptyIcon {
+    font-size: 4rem;
+    opacity: 0.35;
+}
+
+.weatherContent {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+}
+
+.currentWeather {
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+}
+
+.currentMain {
+    display: flex;
+    align-items: center;
+    gap: var(--space-lg);
+    margin-bottom: var(--space-lg);
+}
+
+/* Local date + time of the city, aligned to the top-right of the current card. */
+.localDate {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    align-self: flex-start;
+    margin-left: auto;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.localDateDay {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-transform: capitalize;
+}
+
+.localDateTime {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.bigIcon {
+    font-size: 4.5rem;
+    line-height: 1;
+}
+
+.tempBlock {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.bigTemp {
+    font-size: clamp(2.6rem, 2rem + 2.5vw, 3.5rem);
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.locationLarge {
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    margin-top: var(--space-xs);
+}
+
+.detailsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    gap: var(--space-md);
+}
+
+.detailCard {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--space-md);
+    background: var(--surface-subtle);
+    border-radius: var(--radius-sm);
+}
+
+.detailIcon {
+    font-size: 1.5rem;
+    margin-bottom: var(--space-xs);
+}
+
+.detailValue {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.detailLabel {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: var(--space-xs);
+}
+
+.forecastSection {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    margin-top: var(--space-lg);
+}
+
+.forecastTitle {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.hourlyRow {
+    display: flex;
+    gap: var(--space-sm);
+    overflow-x: auto;
+    padding-bottom: var(--space-sm);
+    /* Firefox: thin themed scrollbar instead of the native chrome. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--glass-border) transparent;
+}
+
+/* WebKit/Blink: slim, themed scrollbar that only shows a subtle thumb. */
+.hourlyRow::-webkit-scrollbar {
+    height: 6px;
+}
+
+.hourlyRow::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.hourlyRow::-webkit-scrollbar-thumb {
+    background: var(--glass-border);
+    border-radius: 999px;
+}
+
+.hourlyRow::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
+
+.hourlyCard {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xs);
+    flex: 0 0 auto;
+    min-width: 56px;
+    padding: var(--space-sm) var(--space-xs);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+.hourlyCurrent {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+}
+
+.hourlyTime {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.hourlyCurrent .hourlyTime {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.hourlyCurrent .hourlyTemp {
+    color: var(--accent);
+}
+
+.hourlyIcon {
+    font-size: 1.5rem;
+    line-height: 1;
+}
+
+.hourlyTemp {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.hourlyPrecip {
+    font-size: 0.7rem;
+    color: var(--accent);
+}
+
+.forecastGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+    gap: var(--space-md);
+}
+
+.forecastCard {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    gap: var(--space-sm);
+}
+
+.forecastDay {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: capitalize;
+}
+
+.forecastDate {
+    font-size: 0.72rem;
+    font-weight: 400;
+    color: var(--text-muted);
+}
+
+.forecastIcon {
+    font-size: 2rem;
+}
+
+.forecastTemps {
+    display: flex;
+    gap: var(--space-sm);
+    font-size: 0.9rem;
+}
+
+.maxTemp {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.minTemp {
+    color: var(--text-muted);
+}
+
+/* Discreet provider line + "Modifier" text-button, bottom-right of the card. */
+.providerBar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+    margin-top: var(--space-lg);
+}
+
+.providerNote {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.providerEdit {
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    text-decoration: underline;
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.providerEdit:hover {
+    color: var(--accent);
+}
+
+/* Settings dialog body (rendered inside the shared <Dialog/>). */
+.settingsForm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.settingsField {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.settingsLabel {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.providerOptions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.providerOption {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.providerOption:hover {
+    border-color: var(--text-muted);
+}
+
+.providerOptionActive {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.providerOptionName {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.providerOptionMeta {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.settingsHint {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.settingsError {
+    color: var(--danger);
+    font-size: 0.8rem;
+    margin: 0;
+}
+
+/* Le mini-widget de topbar : chiffres tabulaires, comme les statuts natifs. */
+.topbarTemp {
+    font-variant-numeric: tabular-nums;
+}

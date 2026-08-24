@@ -1,4 +1,4 @@
-import { userSetAvatar } from 'deveye-types';
+import { userSetAvatar } from '@deveye/types';
 import { defineFeature, type FeatureDefinition } from '../_define';
 
 export const userSetAvatarFeature: FeatureDefinition<

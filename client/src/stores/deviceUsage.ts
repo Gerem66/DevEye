@@ -1,4 +1,4 @@
-import { METRICS_PUSH_EVENT, metricsPushSchema, type MetricSeriesPoint } from 'deveye-types';
+import { METRICS_PUSH_EVENT, metricsPushSchema, type MetricSeriesPoint } from '@deveye/types';
 import { useEffect, useSyncExternalStore } from 'react';
 
 import { ws } from '@/api/ws';

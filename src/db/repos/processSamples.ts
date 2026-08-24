@@ -1,7 +1,7 @@
 import { gunzip, gzip } from 'node:zlib';
 import { promisify } from 'node:util';
 
-import { reportProcessSchema, type ProcessKind, type ProcessSample, type ReportProcess } from 'deveye-types';
+import { reportProcessSchema, type ProcessKind, type ProcessSample, type ReportProcess } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;

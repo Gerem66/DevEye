@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { BaselineEntry, BaselineKind, DeviceSentinelState } from 'deveye-types';
+import type { BaselineEntry, BaselineKind, DeviceSentinelState } from '@deveye/types';
 
 import { ws } from '@/api/ws';
 

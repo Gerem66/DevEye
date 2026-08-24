@@ -1,5 +1,5 @@
-import { financeOverview } from 'deveye-types';
-import type { FinanceMonthPoint, FinanceUpcoming } from 'deveye-types';
+import { financeOverview } from '@deveye/types';
+import type { FinanceMonthPoint, FinanceUpcoming } from '@deveye/types';
 
 import { defineFeature, type FeatureContext, type FeatureDefinition } from '../_define';
 import { withConsumption } from './budgets';

@@ -1,4 +1,4 @@
-import type { AudienceSiteRow } from 'deveye-types';
+import type { AudienceSiteRow } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;

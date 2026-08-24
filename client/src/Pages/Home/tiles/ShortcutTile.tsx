@@ -1,6 +1,6 @@
 import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useState } from 'react';
 import { ws } from '@/api/ws';
-import type { ShortcutItem, ShortcutPreview } from 'deveye-types';
+import type { ShortcutItem, ShortcutPreview } from '@deveye/types';
 import { isForceReload } from '../forceReload';
 import styles from './tiles.module.css';
 

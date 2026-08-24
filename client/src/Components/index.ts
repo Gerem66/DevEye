@@ -1,15 +1,12 @@
 export { default as Button } from './Button';
 export { default as Checkbox } from './Checkbox';
 export { default as Popup } from './Popup';
+export { default as SegmentedControl } from './SegmentedControl';
 export { default as SelectInput } from './SelectInput';
 export { default as Switch } from './Switch';
 export { default as TextInput } from './TextInput';
 
 export { Dialog } from './Dialog';
-export { CredentialsDialog, GIT_CREDENTIALS, DEPLOY_CREDENTIALS } from './CredentialsDialog';
-export type { CredentialsKind } from './CredentialsDialog';
-export { NotificationsDialog } from './NotificationsDialog';
-export type { NotificationsFeature } from './NotificationsDialog';
 export { TopNavbar } from './TopNavbar';
 export { Widget } from './Widget';
 export { WidgetGrid } from './WidgetGrid';
@@ -18,3 +15,7 @@ export { WidgetPopup } from './WidgetPopup';
 export { Wallpaper } from './Wallpaper';
 export { StatusBadge } from './StatusBadge';
 export { DeviceFolderPicker } from './DeviceFolderPicker';
+export { FeatureSettingsButton, FeatureSettingsDialog, useSettingsSections } from './FeatureSettings';
+export type { SettingsScope, SettingsSectionId } from './FeatureSettings';
+export { ConfirmDialog } from './ConfirmDialog';
+export type { ConfirmRequest } from './ConfirmDialog';

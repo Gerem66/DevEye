@@ -1,4 +1,4 @@
-import type { LiveTopic } from 'deveye-types';
+import { isExternalFeatureId, type LiveTopic } from '@deveye/types';
 
 import { logger } from '@/logger';
 import { featureHandlers } from './registry';
@@ -53,6 +53,15 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     mail: 'mail',
     metrics: 'devices',
     note: 'notes',
+    // Même forme que `git` et `database` : préfixe unique, verbes en camelCase
+    // derrière le point. Le filet `MUTATION_VERB` n'en voit donc **aucune** —
+    // les `mutates` de cette feature se relisent à la main.
+    notify: 'notify',
+    // Une projection change ce qui est visible dans **deux** espaces, et une
+    // restriction change ce que voit un rôle. Faute d'un sujet qui dise « les
+    // deux à la fois », il retombe sur celui de l'espace — c'est le plus large,
+    // et ces mutations sont rares.
+    share: 'workspace',
     // Même forme que `git` et `database` : préfixe unique, verbes en camelCase
     // derrière le point. Le filet `MUTATION_VERB` n'en voit donc presque aucune
     // — les `mutates` de cette feature se relisent à la main.
@@ -157,7 +166,11 @@ export function buildTopicIndex(): void {
 
     for (const def of featureHandlers) {
         const prefix = prefixOf(def.command);
-        if (!(prefix in COMMAND_PREFIX_TOPIC)) {
+        // Un module externe n'a pas d'entrée dans la table : son préfixe EST
+        // son id, et son sujet aussi (contrat du manifest, validé à
+        // l'enregistrement). La règle est structurelle, pas déclarative.
+        const external = isExternalFeatureId(prefix);
+        if (!external && !(prefix in COMMAND_PREFIX_TOPIC)) {
             throw new Error(
                 `Préfixe de commande inconnu de COMMAND_PREFIX_TOPIC : « ${prefix} » (${def.command}). ` +
                     'Ajoutez-le à src/features/_topics.ts.'
@@ -172,7 +185,7 @@ export function buildTopicIndex(): void {
         }
 
         if (def.mutates === true) {
-            const topic = COMMAND_PREFIX_TOPIC[prefix];
+            const topic = external ? (prefix as LiveTopic) : COMMAND_PREFIX_TOPIC[prefix];
             if (topic === null) {
                 throw new Error(
                     `« ${def.command} » déclare mutates: true, mais son préfixe « ${prefix} » ne porte aucun sujet. ` +

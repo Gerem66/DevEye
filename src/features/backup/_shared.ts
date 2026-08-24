@@ -11,11 +11,15 @@ import type {
     BackupRunStatus,
     BackupScheduleKind,
     BackupSourceKind
-} from 'deveye-types';
+} from '@deveye/types';
 
+import type { Cipher } from '@/Services/SecureStore';
 import type { FeatureAccessSpec, FeatureContext } from '../_define';
 import { FeatureError } from '../_define';
+import type { ShareScope } from '../_sharing';
 import type { StoredDestination, StoredJob, StoredRun } from '@/Services/BackupService';
+import { CLOUDSYNC_BACKUP_PROVIDER, type CloudSyncBackupProvider } from '@deveye/types/sdk';
+import { moduleProvider } from '@/features/_sdk/register';
 
 /**
  * Ce que les handlers de sauvegarde partagent : les gardes d'accès, la lecture
@@ -32,9 +36,14 @@ export const WRITE: FeatureAccessSpec = { feature: 'backup', level: 'write' };
 
 /** Lit un blob JSON chiffré, en tolérant l'illisible (liste dégradée, pas vide). */
 export async function readJson<T>(ctx: FeatureContext, blob: string): Promise<Partial<T>> {
+    return readJsonWith<T>(ctx.secure.open, blob);
+}
+
+/** La même lecture, sous un codec explicite — celui du domicile d'une ligne projetée. */
+export async function readJsonWith<T>(cipher: Cipher, blob: string): Promise<Partial<T>> {
     if (!blob) return {};
     try {
-        const raw = await ctx.secure.open.tryDecrypt(blob);
+        const raw = await cipher.tryDecrypt(blob);
         return raw ? (JSON.parse(raw) as Partial<T>) : {};
     } catch {
         return {};
@@ -52,9 +61,33 @@ export async function loadDestination(ctx: FeatureContext, destinationId: number
     return row;
 }
 
-export async function loadJob(ctx: FeatureContext, jobId: number) {
-    const row = await ctx.db.backup.findJob(jobId, ctx.workspaceId);
+/**
+ * Un travail visible depuis cet espace — le sien, ou un que l'on y projette.
+ * `level` décide de la garde : `assertItem` refuse en plus les travaux qu'une
+ * restriction de rôle masque ou passe en lecture seule.
+ */
+export async function loadJob(ctx: FeatureContext, jobId: number, level: 'read' | 'write' = 'read') {
+    const row = await ctx.db.backup.findVisibleJob(jobId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Travail de sauvegarde introuvable');
+    await ctx.assertItem('backup', jobId, level);
+    return row;
+}
+
+/**
+ * Comme {@link loadJob}, mais exige que le travail soit **chez l'appelant**.
+ *
+ * Pour les gestes réservés au domicile : le modifier (sa destination et sa
+ * source se choisissent parmi les objets de SON espace, que la fenêtre ne voit
+ * pas) et le supprimer. Une fenêtre lit, déclenche et suit.
+ */
+export async function loadHomeJob(ctx: FeatureContext, jobId: number) {
+    const row = await loadJob(ctx, jobId, 'write');
+    if (row.workspace_id !== ctx.workspaceId) {
+        throw new FeatureError(
+            'forbidden',
+            'Ce travail appartient à un autre espace : il se modifie et se supprime depuis là-bas.'
+        );
+    }
     return row;
 }
 
@@ -78,7 +111,6 @@ export async function toDestination(
         // fuiter ni par une capture d'écran ni par un journal.
         hasSecret: row.secret_enc.length > 0,
         pathStyle: row.path_style === 1,
-        encrypt: row.encrypt === 1,
         status: row.status as BackupDestinationStatus,
         lastError: stored.lastError ?? null,
         checkedAt: row.checked_at,
@@ -87,23 +119,35 @@ export async function toDestination(
     };
 }
 
-export async function toJob(ctx: FeatureContext, row: BackupJobWithStateRow): Promise<BackupJob> {
+export async function toJob(ctx: FeatureContext, row: BackupJobWithStateRow, shares?: ShareScope): Promise<BackupJob> {
+    // Le codec du **domicile** de la ligne : un travail projeté — et tout ce qui
+    // pend à lui, sa destination, sa dernière erreur — reste chiffré sous la clé
+    // de son espace d'origine.
+    const cipher = shares ? await shares.cipherFor(row.id) : ctx.secure.open;
     const [job, destination] = await Promise.all([
-        readJson<StoredJob>(ctx, row.content),
-        readJson<StoredDestination>(ctx, row.destination_content)
+        readJsonWith<StoredJob>(cipher, row.content),
+        readJsonWith<StoredDestination>(cipher, row.destination_content)
     ]);
-    const lastRun = row.last_run_content ? await readJson<StoredRun>(ctx, row.last_run_content) : {};
+    const lastRun = row.last_run_content ? await readJsonWith<StoredRun>(cipher, row.last_run_content) : {};
 
     return {
+        foreign: row.workspace_id !== ctx.workspaceId,
         id: row.id,
         name: job.name ?? 'Sauvegarde',
         enabled: row.enabled === 1,
+        encryption: row.encryption === 'none' ? 'none' : 'server',
         destinationId: row.destination_id,
         destinationName: destination.name ?? 'Destination',
         destinationKind: row.destination_kind as BackupDestinationKind,
         source: row.source_kind as BackupSourceKind,
         sourceId: row.source_id,
-        sourceName: await sourceNameOf(ctx, row.source_kind as BackupSourceKind, row.source_id),
+        sourceName: await sourceNameOf(
+            ctx,
+            row.source_kind as BackupSourceKind,
+            row.source_id,
+            row.workspace_id,
+            cipher
+        ),
         schedule: row.schedule_kind as BackupScheduleKind,
         scheduleHour: row.schedule_hour,
         scheduleWeekday: row.schedule_weekday,
@@ -129,24 +173,29 @@ export async function toJob(ctx: FeatureContext, row: BackupJobWithStateRow): Pr
 export async function sourceNameOf(
     ctx: FeatureContext,
     kind: BackupSourceKind,
-    sourceId: number | null
+    sourceId: number | null,
+    /** L'espace du travail — sa source vit chez lui, pas forcément ici. */
+    homeWorkspaceId: number = ctx.workspaceId,
+    cipher?: Cipher
 ): Promise<string | null> {
     if (kind === 'deveye') return 'Base de DevEye';
     if (sourceId === null) return null;
 
     if (kind === 'database') {
-        const row = await ctx.db.databases.find(sourceId, ctx.workspaceId);
+        const row = await ctx.db.databases.find(sourceId, homeWorkspaceId);
         if (!row) return null;
-        const stored = await readJson<{ name: string }>(ctx, row.content);
+        const stored = await readJsonWith<{ name: string }>(cipher ?? ctx.secure.open, row.content);
         return stored.name ?? null;
     }
 
-    const share = await ctx.db.syncShares.findById(sourceId);
-    return share && share.workspace_id === ctx.workspaceId ? share.name : null;
+    const provider = moduleProvider<CloudSyncBackupProvider>(CLOUDSYNC_BACKUP_PROVIDER);
+    if (!provider) return null;
+    const share = await provider.findShare(sourceId);
+    return share && share.workspaceId === homeWorkspaceId ? share.name : null;
 }
 
-export async function toRun(ctx: FeatureContext, row: BackupRunRow): Promise<BackupRun> {
-    const stored = await readJson<StoredRun>(ctx, row.content);
+export async function toRun(ctx: FeatureContext, row: BackupRunRow, cipher?: Cipher): Promise<BackupRun> {
+    const stored = await readJsonWith<StoredRun>(cipher ?? ctx.secure.open, row.content);
     return {
         id: row.id,
         jobId: row.job_id,

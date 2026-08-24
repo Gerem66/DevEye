@@ -25,7 +25,7 @@ DEALLOCATE PREPARE stmt;
 
 -- Teinte deterministe depuis l'identifiant : personne n'est sans couleur des la
 -- migration, et deux comptes crees a la suite ne recoivent pas la meme. L'ordre
--- des huit noms doit rester celui de `userColorSchema` dans deveye-types.
+-- des huit noms doit rester celui de `userColorSchema` dans @deveye/types.
 --
 -- Garde sur `color = ''` : un compte ayant deja choisi sa couleur n'est jamais
 -- reecrase, et rejouer ce fichier ne fait rien.

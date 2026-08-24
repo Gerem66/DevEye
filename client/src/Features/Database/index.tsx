@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Database, DatabaseAlert, DatabaseProbe, DatabaseUsage } from 'deveye-types';
-import { Button, NotificationsDialog } from '@/Components';
+import type { Database, DatabaseAlert, DatabaseProbe, DatabaseUsage } from '@deveye/types';
+import { Button } from '@/Components';
 import { ws } from '@/api/ws';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
 import { startTeleport } from '@/stores/live';
@@ -52,7 +53,6 @@ export function FeatureDatabase({ workspace }: FeatureProps) {
 
     const [dialog, setDialog] = useState<{ database: Database | null } | null>(null);
     const [busy, setBusy] = useState(false);
-    const [notificationsOpen, setNotificationsOpen] = useState(false);
 
     const listVersion = useResourceVersion('database.list');
     const detailVersion = useResourceVersion('database.detail');
@@ -274,19 +274,21 @@ export function FeatureDatabase({ workspace }: FeatureProps) {
                         </p>
                     )}
                 </div>
-                {canWrite && (
-                    <div className={styles.actions}>
-                        {/* Réglage d'espace, pas d'une base : les alertes de
-                            toutes les bases partent sur les mêmes canaux, d'où
-                            sa place en tête de la feature. */}
-                        <Button variant='secondary' icon='mail' onClick={() => setNotificationsOpen(true)}>
-                            Notifications
-                        </Button>
+                <div className={styles.actions}>
+                    {/* Réglage d'espace, pas d'une base : les alertes de
+                        toutes les bases partent sur les mêmes canaux, d'où
+                        sa place en tête de la feature. Hors du `canWrite` :
+                        le bouton se garde de lui-même (aucune section
+                        accessible ⇒ il ne s'affiche pas), et un lecteur a le
+                        droit de voir où partent les alertes, comme dans les
+                        autres features. */}
+                    <FeatureSettingsButton scope={{ kind: 'feature', feature: 'database' }} />
+                    {canWrite && (
                         <Button icon='add' onClick={() => setDialog({ database: null })}>
                             Ajouter une base
                         </Button>
-                    </div>
-                )}
+                    )}
+                </div>
             </header>
 
             {error && <p className={styles.error}>{error}</p>}
@@ -324,15 +326,6 @@ export function FeatureDatabase({ workspace }: FeatureProps) {
                     setOpenedId(databaseId);
                 }}
                 onRemove={canWrite && dialog?.database ? () => void remove(dialog.database!.id) : undefined}
-            />
-
-            <NotificationsDialog
-                open={notificationsOpen}
-                onClose={() => setNotificationsOpen(false)}
-                feature='database'
-                title='Notifications des bases de données'
-                description='Les siennes depuis la migration 085 : elles empruntaient les canaux d’Uptime, et un seuil SQL franchi arrivait donc sur le salon désigné pour la disponibilité. Vos réglages y ont été repris à l’identique.'
-                when='Envoyées aux transitions d’une alerte, dans les deux sens — franchie, puis retour à la normale. Une alerte n’est évaluée que si la surveillance est active sur sa base : posée sur une base au repos, elle est inerte.'
             />
         </div>
     );

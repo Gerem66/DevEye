@@ -7,7 +7,7 @@ import { formatMoment, formatMs } from './format';
 import Pane from './Pane';
 import styles from './style.module.css';
 
-import type { UptimeCheck, UptimeCheckStats, UptimeService } from 'deveye-types';
+import type { UptimeCheck, UptimeCheckStats, UptimeService } from '@deveye/types';
 
 /** Measures loaded per page. */
 const PAGE = 100;

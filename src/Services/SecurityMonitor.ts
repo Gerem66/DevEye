@@ -5,7 +5,8 @@ import type { LiveHub } from '@/live/hub';
 import type { AuditLog } from '@/Services/AuditLog';
 import type Encryption from '@/Services/Encryption';
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
-import { deliver, hasChannel, resolveChannels } from '@/Services/notifications';
+import { deliver, hasChannel, resolveRoute } from '@/Services/notifications';
+import { buildNotice } from '@/Services/notices/sentinel';
 import { env } from '@/Utils/Env';
 import { allowKey, type BaselineObservation, type BaselineRow, findingDedup } from '@/db/repos/sentinel';
 import {
@@ -19,7 +20,7 @@ import {
     type IntegrityReport,
     type ReportProcess,
     type SentinelRuleId
-} from 'deveye-types';
+} from '@deveye/types';
 
 import {
     authRules,
@@ -704,6 +705,13 @@ export class SecurityMonitor {
         const lines = notifiable.map(
             ({ draft }) => `• [${draft.severity}] ${SENTINEL_RULES[draft.rule].label} — ${draft.subject}`
         );
+        // La règle du constat le plus grave donne son titre à l'embed : dans un
+        // salon de sécurité, ce qu'on doit lire en premier est *ce qui a été
+        // enfreint*, pas le nombre de lignes ouvertes.
+        const lead = notifiable.reduce(
+            (acc, item) => (SEVERITY_RANK[item.draft.severity] > SEVERITY_RANK[acc.draft.severity] ? item : acc),
+            notifiable[0]!
+        );
         const body = [
             `Sentinelle a ouvert ${notifiable.length} constat${notifiable.length > 1 ? 's' : ''} sur « ${device.name} ».`,
             '',
@@ -717,7 +725,9 @@ export class SecurityMonitor {
             severity: worst,
             count: notifiable.length,
             body,
-            at: Math.floor(Date.now() / 1000)
+            at: Math.floor(Date.now() / 1000),
+            rule: SENTINEL_RULES[lead.draft.rule].label,
+            remediation: SENTINEL_RULES[lead.draft.rule].remediation
         });
         await this.deps.db.findings.markNotified(notifiable.map((n) => n.id));
     }
@@ -738,9 +748,19 @@ export class SecurityMonitor {
      */
     private async notify(
         workspaceId: number,
-        alert: { deviceName: string; severity: FindingSeverity; count: number; body: string; at: number }
+        alert: {
+            deviceName: string;
+            severity: FindingSeverity;
+            count: number;
+            body: string;
+            at: number;
+            /** L'intitulé de la règle du constat le plus grave — le titre de l'embed. */
+            rule: string;
+            /** Ce que cette règle propose de faire, quand elle porte une remédiation. */
+            remediation: string | null;
+        }
     ): Promise<void> {
-        const channels = await resolveChannels(this.deps.db, this.cipherFor(workspaceId), workspaceId, 'sentinel');
+        const channels = await resolveRoute(this.deps.db, this.cipherFor(workspaceId), workspaceId, 'sentinel');
         if (!hasChannel(channels)) return;
 
         await deliver(
@@ -754,7 +774,18 @@ export class SecurityMonitor {
                     severity: alert.severity,
                     count: alert.count,
                     at: alert.at
-                }
+                },
+                // La même alerte, mise en page pour Discord. Sentinelle n'en
+                // avait pas, faute d'avoir été écrite — c'est pourtant
+                // l'émetteur où la gravité doit se lire avant le texte.
+                embeds: buildNotice({
+                    device: alert.deviceName,
+                    rule: alert.rule,
+                    severity: alert.severity === 'critical' ? 'critical' : alert.severity === 'high' ? 'high' : 'low',
+                    detail: alert.body,
+                    remediation: alert.remediation,
+                    at: alert.at
+                })
             },
             this.deps.logger
         );

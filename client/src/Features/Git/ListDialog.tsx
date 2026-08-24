@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import type { GitCommit, GitCommitCursor } from 'deveye-types';
+import type { GitCommit, GitCommitCursor } from '@deveye/types';
 import { Dialog } from '@/Components';
 import { ws } from '@/api/ws';
 import { humanizeError } from '../Projects/api';

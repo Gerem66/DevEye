@@ -4,7 +4,7 @@ import { ws } from '@/api/ws';
 
 import { rangeWindow } from './format';
 
-import type { UptimePoint, UptimeRange, UptimeResolution } from 'deveye-types';
+import type { UptimePoint, UptimeRange, UptimeResolution } from '@deveye/types';
 
 /**
  * L'historique d'un service, pour qui n'affiche que la bande d'état.

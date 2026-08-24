@@ -1,8 +1,8 @@
 import type { WebSocket } from '@fastify/websocket';
-import { AGENT_ACK, type AgentClientMessage, type AgentServerMessage, type DeviceRow } from 'deveye-types';
+import { AGENT_ACK, type AgentClientMessage, type AgentServerMessage, type DeviceRow } from '@deveye/types';
 import type { Logger } from 'pino';
 
-import type { CloudSyncEngine } from '@/cloudSync/engine';
+import type { FeatureAgentHooks } from '@deveye/types/sdk/server';
 import type { Database } from '@/db';
 import type { AuditLog } from '@/Services/AuditLog';
 import type { SecurityMonitor } from '@/Services/SecurityMonitor';
@@ -19,7 +19,11 @@ export interface AgentSession {
     socket: WebSocket;
     db: Database;
     hub: MonitorHub;
-    cloudSync: CloudSyncEngine;
+    /**
+     * Les hooks agent des modules installés (agrégat no-op par défaut) : le
+     * remplaçant du moteur CloudSync câblé en dur d'avant le rapatriement.
+     */
+    hooks: Required<FeatureAgentHooks>;
     /**
      * Moteur Sentinelle. Les handlers ne lui adressent que des `enqueue*` : ils
      * empilent, il évalue à son tour de boucle. Optionnel pour que les chemins

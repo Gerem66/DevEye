@@ -1,7 +1,6 @@
 import { databaseAlertFeatures } from './alerts';
 import { databaseCrudFeatures } from './crud';
 import { databaseExploreFeatures } from './explore';
-import { databaseNotificationFeatures } from './notifications';
 import { databaseProbeFeatures } from './probe';
 
 /**
@@ -26,6 +25,5 @@ export const databaseFeatures = [
     ...databaseCrudFeatures,
     ...databaseProbeFeatures,
     ...databaseExploreFeatures,
-    ...databaseAlertFeatures,
-    ...databaseNotificationFeatures
+    ...databaseAlertFeatures
 ];

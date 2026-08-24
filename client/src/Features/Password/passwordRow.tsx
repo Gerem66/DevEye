@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import styles from './style.module.css';
 
-import type { PasswordEntry, PasswordEntryMasked } from 'deveye-types';
+import type { PasswordEntry, PasswordEntryMasked } from '@deveye/types';
 import { useLiveOutline } from '@/live/useLiveOutline';
 
 type RowPassword = PasswordEntry | PasswordEntryMasked;

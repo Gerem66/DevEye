@@ -6,7 +6,7 @@ use ed25519_dalek::SigningKey;
 use rand::rngs::OsRng;
 
 /// The platform string sent to the server at enrollment. Must match one of the
-/// values in `deveye-types` `devicePlatformSchema`.
+/// values in `@deveye/types` `devicePlatformSchema`.
 pub fn current_platform() -> &'static str {
     #[cfg(target_os = "macos")]
     {

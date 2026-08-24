@@ -1,4 +1,4 @@
-import { workspaceDelete } from 'deveye-types';
+import { workspaceDelete } from '@deveye/types';
 import { invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 
@@ -28,11 +28,20 @@ export const workspaceDeleteFeature: FeatureDefinition<
             throw new FeatureError('forbidden', 'Seul le propriétaire peut supprimer cet espace');
         }
 
+        // Relevés AVANT la suppression : la cascade emporte les rattachements,
+        // et il n'y aurait plus personne à prévenir après coup.
+        const members = await ctx.db.workspaceMembers.listByWorkspaceIds([target.id]);
+
         await ctx.db.workspaces.delete(target.id);
 
         // L'accès de tous les membres vient de disparaître.
         invalidateAccess();
         ctx.live?.evictRoom(target.id);
+        // Et leur menu d'espaces aussi : ceux qui sont connectés ailleurs ne
+        // reçoivent rien de la salle (vidée à l'instant), on les vise par compte.
+        for (const m of members) {
+            if (m.user_id !== ctx.userId) ctx.live?.userChanged(m.user_id, target.id, ['workspace'], ctx.userId);
+        }
 
         ctx.audit({
             action: 'workspace.delete',

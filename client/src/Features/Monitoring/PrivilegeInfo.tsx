@@ -1,4 +1,4 @@
-import type { AgentInfo, DevicePlatform } from 'deveye-types';
+import type { AgentInfo, DevicePlatform } from '@deveye/types';
 
 /**
  * Explainer shown from the "Privilèges agent" chip (via openInfo). Tells the user

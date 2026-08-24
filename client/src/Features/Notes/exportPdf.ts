@@ -1,7 +1,7 @@
 import { inlineToHtml } from './markdown';
 import { NOTE_COLOR_OPTIONS } from './noteColors';
 
-import type { NoteBlock, NoteColor } from 'deveye-types';
+import type { NoteBlock, NoteColor } from '@deveye/types';
 
 /**
  * Export a note to PDF, client-side, with its inline markdown fully rendered.

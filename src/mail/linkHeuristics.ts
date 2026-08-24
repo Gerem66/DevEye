@@ -1,4 +1,4 @@
-import type { MailSuspiciousLink } from 'deveye-types';
+import type { MailSuspiciousLink } from '@deveye/types';
 
 /**
  * Cheap, local heuristics over the already-sanitized HTML — no external calls,

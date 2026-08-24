@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import Button from '@/Components/Button';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { OpenPopup } from '@/Components/Popup';
 import TextInput from '@/Components/TextInput';
-import { invalidate, onResourceChange } from '@/stores/invalidation';
+import { invalidate, onResourceChange, useResourceVersion } from '@/stores/invalidation';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import AccountPanel from './AccountPanel';
 import AccountPopup, { ACCOUNT_POPUP, type AccountPopupResult } from './AccountPopup';
-import AccountSettingsPopup, { ACCOUNT_SETTINGS_POPUP, type AccountSettingsResult } from './AccountSettingsPopup';
 import ComposePopup, { COMPOSE_POPUP, type ComposeInput } from './ComposePopup';
 import ConfirmPopup, { MAIL_CONFIRM_POPUP } from './ConfirmPopup';
-import MailSettingsPopup, { MAIL_SETTINGS_POPUP } from './MailSettingsPopup';
 import MessageInfoPopup, { MESSAGE_INFO_POPUP } from './MessageInfoPopup';
 import MessageList from './MessageList';
 import MessagePopup from './MessagePopup';
@@ -18,7 +17,7 @@ import { describeAccountStatus } from './accountStatus';
 import { humanizeError, withSecrecy, withSettingsDefaults, ws } from './api';
 import styles from './style.module.css';
 
-import { MAIL_MESSAGE_PAGE_SIZE } from 'deveye-types';
+import { MAIL_MESSAGE_PAGE_SIZE } from '@deveye/types';
 
 import type {
     MailAccount,
@@ -28,7 +27,7 @@ import type {
     MailMessageCursor,
     MailMessageSummary,
     MailSecurityTier
-} from 'deveye-types';
+} from '@deveye/types';
 import type { FeatureProps } from '../types';
 
 /**
@@ -242,9 +241,13 @@ export default function Mail(_props: FeatureProps) {
         }
     }, []);
 
+    // Suit la clé partagée : le panneau Général des réglages invalide
+    // `mail.getSettings` à chaque changement, et le mode d'affichage sert au
+    // prochain message ouvert, ici.
+    const settingsVersion = useResourceVersion('mail.getSettings');
     useEffect(() => {
         void reloadRenderMode();
-    }, [reloadRenderMode]);
+    }, [reloadRenderMode, settingsVersion]);
 
     const loadFolders = useCallback(async (accountId: number) => {
         setFoldersLoading(true);
@@ -535,33 +538,6 @@ export default function Mail(_props: FeatureProps) {
         else setMessages([]);
     }, [selectedFolderId, openFolder]);
 
-    /**
-     * La réparation de dernier recours : le cache du dossier est jeté côté serveur
-     * et reconstruit sur la boîte telle qu'elle est, puis la liste repart du haut.
-     *
-     * Ce n'est plus le geste ordinaire — {@link syncFolder} l'est — mais il reste
-     * le seul à pouvoir remettre d'aplomb ce qui a dérivé au-delà de la fenêtre
-     * que la relève réconcilie. Les lignes changent d'`id` en repassant, donc la
-     * fusion de tête ne s'y applique pas : on recharge vraiment.
-     */
-    const resetFolder = useCallback(async () => {
-        const folderId = selectedFolderIdRef.current;
-        if (folderId === null || refreshing) return;
-        setRefreshing(true);
-        setError(null);
-        try {
-            await withSecrecy(() => ws.send('mail.folderReset', { folderId }));
-            setMessages([]);
-            setNextCursor(null);
-            setReachedFolderStart(false);
-            await loadMessages(folderId, null);
-        } catch (e) {
-            setError(humanizeError(e, 'Rechargement impossible.'));
-        } finally {
-            setRefreshing(false);
-        }
-    }, [refreshing, loadMessages]);
-
     /*
      * The paginated list and the search results are two views of the same rows,
      * so every local row mutation has to hit both — otherwise marking a message
@@ -686,19 +662,6 @@ export default function Mail(_props: FeatureProps) {
         [reloadAfterAccountChange]
     );
 
-    const openAccountSettings = useCallback(
-        async (account: MailAccount) => {
-            const folderId = selectedFolderIdRef.current;
-            const result = await OpenPopup<AccountSettingsResult>(ACCOUNT_SETTINGS_POPUP, {
-                account,
-                folderName: folders.find((f) => f.id === folderId)?.name ?? null
-            });
-            if (result === 'saved') await reloadAccounts();
-            else if (result === 'reset') await resetFolder();
-        },
-        [reloadAccounts, resetFolder, folders]
-    );
-
     const toggleAccountEnabled = useCallback(
         (a: MailAccount) =>
             void withAccountBusy(a.id, async () => {
@@ -803,11 +766,6 @@ export default function Mail(_props: FeatureProps) {
         if (sent && selectedFolderId !== null) void loadMessages(selectedFolderId, null);
     }
 
-    async function openSettings(): Promise<void> {
-        const saved = await OpenPopup<boolean>(MAIL_SETTINGS_POPUP, true);
-        if (saved) void reloadRenderMode();
-    }
-
     /** Adds hostnames to the trusted-images list, then reloads the open message so it applies. */
     async function trustImageSources(domains: string[]): Promise<void> {
         try {
@@ -876,15 +834,23 @@ export default function Mail(_props: FeatureProps) {
                 )}
                 <p className={styles.headline}>{headline}</p>
                 <div className={styles.toolbarActions}>
-                    <button
-                        type='button'
-                        className={styles.iconBtn}
-                        title='Paramètres Mail'
-                        aria-label='Paramètres Mail'
-                        onClick={() => void openSettings()}
-                    >
-                        <span className='icon icon-settings' />
-                    </button>
+                    {/* Le bouton commun, comme partout. Sa cible suit la
+                        sélection : la fonctionnalité quand aucune boîte n'est
+                        ouverte, la boîte sélectionnée sinon ; ses onglets
+                        (Général, Synchronisation, Chiffrement) remplacent les
+                        deux popups artisanales d'avant. */}
+                    <FeatureSettingsButton
+                        scope={
+                            selectedAccount
+                                ? {
+                                      kind: 'item',
+                                      feature: 'mail',
+                                      itemId: selectedAccount.id,
+                                      itemLabel: selectedAccount.displayName
+                                  }
+                                : { kind: 'feature', feature: 'mail' }
+                        }
+                    />
                     <Button
                         variant='ghost'
                         icon='edit'
@@ -960,7 +926,6 @@ export default function Mail(_props: FeatureProps) {
                             onDeleteAccount={(a) => void deleteAccount(a)}
                             onRefreshFolder={() => void syncFolder()}
                             refreshingFolder={refreshing}
-                            onOpenAccountSettings={(a) => void openAccountSettings(a)}
                         />
                     )}
                 </div>
@@ -1031,10 +996,8 @@ export default function Mail(_props: FeatureProps) {
             </div>
 
             <AccountPopup />
-            <AccountSettingsPopup />
             <ComposePopup />
             <ConfirmPopup />
-            <MailSettingsPopup />
             <MessageInfoPopup />
             <MessagePopup
                 open={messagePopupOpen}

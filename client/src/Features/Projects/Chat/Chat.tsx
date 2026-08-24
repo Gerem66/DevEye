@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { MinimalUser, ProjectMessage } from 'deveye-types';
-import { PROJECT_MESSAGE_MAX_LENGTH } from 'deveye-types';
+import type { MinimalUser, ProjectMessage } from '@deveye/types';
+import { PROJECT_MESSAGE_MAX_LENGTH } from '@deveye/types';
 import { Button } from '@/Components';
 import { ws } from '@/api/ws';
 import { useResourceVersion } from '@/stores/invalidation';

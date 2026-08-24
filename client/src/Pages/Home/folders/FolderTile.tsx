@@ -1,4 +1,4 @@
-import type { HomeFolder } from 'deveye-types';
+import type { HomeFolder } from '@deveye/types';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { useActiveWorkspace } from '@/stores/workspace';

@@ -1,4 +1,4 @@
-import type { ProjectRow, ProjectSecurityTier, ProjectStatus, ProjectVersionSource } from 'deveye-types';
+import type { ProjectRow, ProjectSecurityTier, ProjectStatus, ProjectVersionSource } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;

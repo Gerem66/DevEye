@@ -1,5 +1,5 @@
 import { StatusBadge } from '@/Components/StatusBadge';
-import type { Device } from 'deveye-types';
+import type { Device } from '@deveye/types';
 import { agentUpdatable } from '../agentVersion';
 import { statusMeta, formatLastSeen } from './format';
 import type { DeviceActions } from './useDeviceActions';

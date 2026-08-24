@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { DatabaseStructure } from 'deveye-types';
+import type { DatabaseStructure } from '@deveye/types';
 import { Button, Dialog } from '@/Components';
 import styles from './style.module.css';
 

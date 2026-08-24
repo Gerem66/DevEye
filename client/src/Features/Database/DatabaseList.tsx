@@ -1,4 +1,4 @@
-import type { Database } from 'deveye-types';
+import type { Database } from '@deveye/types';
 import { useDragReorder } from '@/dragReorder';
 import type { useLiveOutlines } from '@/live/useLiveOutline';
 import { ENGINE_LABELS, formatAgo, formatBytes, STATUS_META } from './format';
@@ -103,6 +103,14 @@ function DatabaseCard({ database, outline, dragging, onOpen, onDragPointerDown }
                     <p className={styles.cardName}>
                         <span className={styles.statusDot} data-tone={status.tone} aria-hidden='true' />
                         {database.name}
+                        {database.foreign && (
+                            <span
+                                className={styles.viaTag}
+                                title='Cette base appartient à un autre espace qui la partage ici'
+                            >
+                                partagé
+                            </span>
+                        )}
                     </p>
                     <p className={styles.cardMeta}>
                         {ENGINE_LABELS[database.engine]} · {database.host}:{database.port}/{database.database}

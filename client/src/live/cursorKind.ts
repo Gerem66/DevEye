@@ -1,4 +1,4 @@
-import type { LiveCursorKind } from 'deveye-types';
+import type { LiveCursorKind } from '@deveye/types';
 
 /**
  * Ce que le navigateur dessine sous le pointeur, ramené aux sept familles que

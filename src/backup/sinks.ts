@@ -5,7 +5,7 @@ import { createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import { Readable } from 'stream';
 
-import type { BackupDestinationProbe } from 'deveye-types';
+import type { BackupDestinationProbe } from '@deveye/types';
 
 import type { MonitorHub } from '@/agent/hub';
 import { env } from '@/Utils/Env';

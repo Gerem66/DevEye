@@ -1,4 +1,4 @@
-import type { Credential, CredentialProvider, CredentialRow } from 'deveye-types';
+import type { Credential, CredentialProvider, CredentialRow } from '@deveye/types';
 import { FeatureError, type FeatureContext } from './_define';
 
 /**

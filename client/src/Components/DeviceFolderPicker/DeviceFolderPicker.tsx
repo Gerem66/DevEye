@@ -5,7 +5,7 @@ import {
     type DeviceFilesListingPush,
     type DeviceFilesOpPush,
     type FileListing
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import { joinPath } from '@/devicePath';

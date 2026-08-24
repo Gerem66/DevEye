@@ -1,19 +1,21 @@
 import type {
     FeatureAccess,
+    ItemAccess,
     WorkspaceCapability,
     WorkspaceFeatureGrant,
-    WorkspaceFeatureId,
+    FeatureId,
     WorkspacePermissions,
     WorkspaceRoleRow,
     WorkspaceRow
-} from 'deveye-types';
+} from '@deveye/types';
 
 import type Encryption from '@/Services/Encryption';
 import { createSecureStore, type SecureStore } from '@/Services/SecureStore';
 import { SecretKeyService } from '@/Services/SecretKeyService';
 import type { Database } from '@/db';
-import { WORKSPACE_CAPABILITIES, WORKSPACE_FEATURE_IDS } from 'deveye-types';
+import { WORKSPACE_CAPABILITIES, WORKSPACE_FEATURE_IDS } from '@deveye/types';
 import { FeatureError } from './_define';
+import { moduleManifests } from './_sdk/register';
 
 /**
  * Résolution d'autorisation des commandes de feature.
@@ -80,7 +82,29 @@ export interface ResolvedScope {
     /** Capacités de gouvernance accordées par son rôle. */
     capabilities: ReadonlySet<WorkspaceCapability>;
     /** Droits par feature accordés par son rôle, absents = aucun accès. */
-    features: ReadonlyMap<WorkspaceFeatureId, FeatureAccess>;
+    features: ReadonlyMap<FeatureId, FeatureAccess>;
+    /**
+     * Fonctionnalités dont le rôle gère les **canaux d'alerte** (le champ
+     * `channels` de ses grants, migration 093). Distinct de `features` : régler
+     * où Uptime écrit relève de `write`, gérer l'adresse de l'astreinte
+     * relève d'ici.
+     */
+    channels: ReadonlySet<FeatureId>;
+    /**
+     * Les permissions déclarées par les features elles-mêmes (`extras` des
+     * grants, manifests des modules). Brutes ici : la résolution des défauts et
+     * du propriétaire se fait à la lecture, contre les specs du manifest.
+     */
+    extras: ReadonlyMap<FeatureId, Record<string, boolean | string>>;
+    /**
+     * Les restrictions posées sur des éléments précis, pour le rôle de
+     * l'appelant. Chargées **paresseusement, par feature** : la plupart des
+     * commandes n'en ont pas besoin, et un espace qui n'en pose aucune n'a
+     * aucune ligne à lire.
+     *
+     * Vide pour le propriétaire, qui passe outre — comme partout ailleurs.
+     */
+    itemRestrictions: (feature: FeatureId) => Promise<ReadonlyMap<number, ItemAccess>>;
     /** Coffre chiffré de cet espace, lié à cette session. */
     secure: SecureStore;
     secretKeys: SecretKeyService;
@@ -105,20 +129,47 @@ export interface ResolvedScope {
 export function grantsFor(
     isOwner: boolean,
     role: WorkspaceRoleRow | null
-): { capabilities: Set<WorkspaceCapability>; features: Map<WorkspaceFeatureId, FeatureAccess> } {
+): {
+    capabilities: Set<WorkspaceCapability>;
+    features: Map<FeatureId, FeatureAccess>;
+    channels: Set<FeatureId>;
+    extras: Map<FeatureId, Record<string, boolean | string>>;
+} {
     if (isOwner) {
+        // Les extras du propriétaire ne se matérialisent pas ici : leur
+        // résolution (`true` / `ownerValue`) se fait à la lecture, contre le
+        // manifest, parce qu'elle dépend de specs que ce module ne connaît pas.
+        //
+        // « Tout » = les natives ET les modules installés : la constante ne
+        // porte que l'enum natif, et un module à id externe (`x-…`) en est
+        // absent. Sans cette union, le propriétaire lui-même recevait
+        // `forbidden` sur chaque commande d'un module fraîchement installé —
+        // dans son propre espace personnel. Les ids natifs rapatriés (weather,
+        // osint, cloudsync) sont déjà dans l'enum, l'union est un no-op pour eux.
+        const all: FeatureId[] = [...WORKSPACE_FEATURE_IDS, ...moduleManifests().map((m) => m.id)];
         return {
             capabilities: new Set(WORKSPACE_CAPABILITIES),
-            features: new Map(WORKSPACE_FEATURE_IDS.map((f) => [f, 'write']))
+            features: new Map(all.map((f) => [f, 'write'])),
+            channels: new Set(all),
+            extras: new Map()
         };
     }
-    if (!role) return { capabilities: new Set(), features: new Map() };
+    if (!role) return { capabilities: new Set(), features: new Map(), channels: new Set(), extras: new Map() };
 
-    const features = new Map<WorkspaceFeatureId, FeatureAccess>();
+    const features = new Map<FeatureId, FeatureAccess>();
+    const channels = new Set<FeatureId>();
+    const extras = new Map<FeatureId, Record<string, boolean | string>>();
     for (const g of parseJsonArray<WorkspaceFeatureGrant>(role.features)) {
         features.set(g.feature, g.access);
+        if (g.channels) channels.add(g.feature);
+        if (g.extras && Object.keys(g.extras).length > 0) extras.set(g.feature, g.extras);
     }
-    return { capabilities: new Set(parseJsonArray<WorkspaceCapability>(role.capabilities)), features };
+    return {
+        capabilities: new Set(parseJsonArray<WorkspaceCapability>(role.capabilities)),
+        features,
+        channels,
+        extras
+    };
 }
 
 function parseJsonArray<T>(raw: unknown): T[] {
@@ -219,7 +270,7 @@ export function createAccessResolver(
         // Le propriétaire n'a pas de rôle : il passe outre, et lui en donner un
         // laisserait croire qu'on peut le lui retirer.
         const role = isOwner ? null : await db.workspaceRoles.findForMember(userId, row.id);
-        const { capabilities, features } = grantsFor(isOwner, role);
+        const { capabilities, features, channels, extras } = grantsFor(isOwner, role);
 
         const keyService = new SecretKeyService(db, crypt);
         const workspaceDekId = row.kind === 'shared' && (await keyService.hasWorkspaceDek(row.id)) ? row.id : null;
@@ -231,12 +282,38 @@ export function createAccessResolver(
             sessionId
         );
 
+        /**
+         * Les restrictions d'éléments du rôle de l'appelant, par feature.
+         *
+         * Mémoïsées dans le scope, lui-même mémoïsé sous `accessEpoch` : une
+         * restriction modifiée doit donc bumper l'époque
+         * (`share.grantSet` appelle `invalidateAccess()`), sinon elle ne
+         * mordrait qu'à la reconnexion suivante.
+         *
+         * Le propriétaire n'en a jamais : il n'a pas de rôle, et les
+         * restrictions se posent sur des rôles.
+         */
+        const restrictionCache = new Map<string, Promise<ReadonlyMap<number, ItemAccess>>>();
+        const itemRestrictions = (feature: FeatureId): Promise<ReadonlyMap<number, ItemAccess>> => {
+            if (isOwner || !role) return Promise.resolve(new Map());
+            const hit = restrictionCache.get(feature);
+            if (hit) return hit;
+            const loaded = db.itemSharing
+                .grantsForRole(row.id, feature, role.id)
+                .then((rows) => new Map(rows.map((g) => [g.item_id, g.access])) as ReadonlyMap<number, ItemAccess>);
+            restrictionCache.set(feature, loaded);
+            return loaded;
+        };
+
         return {
             workspace: toContext(row),
             isAdmin: user.role === 'admin',
             isOwner,
             capabilities,
             features,
+            channels,
+            extras,
+            itemRestrictions,
             secure: store,
             secretKeys: keys
         };
@@ -275,10 +352,15 @@ export async function permissionsFor(
 ): Promise<WorkspacePermissions> {
     const isOwner = workspace.owner_user_id === userId;
     const role = isOwner ? null : await db.workspaceRoles.findForMember(userId, workspace.id);
-    const { capabilities, features } = grantsFor(isOwner, role);
+    const { capabilities, features, channels, extras } = grantsFor(isOwner, role);
     return {
         isOwner,
         capabilities: [...capabilities],
-        features: [...features].map(([feature, access]) => ({ feature, access }))
+        features: [...features].map(([feature, access]) => ({
+            feature,
+            access,
+            channels: channels.has(feature),
+            extras: extras.get(feature) ?? {}
+        }))
     };
 }

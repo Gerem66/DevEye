@@ -1,5 +1,5 @@
 import type { BadgeTone } from '@/Components/StatusBadge';
-import type { MailAccount } from 'deveye-types';
+import type { MailAccount } from '@deveye/types';
 
 /**
  * Comment se dit l'état d'une boîte, au même endroit pour les deux surfaces qui

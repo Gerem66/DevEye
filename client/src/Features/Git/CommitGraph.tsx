@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import type { GitCommitAuthor, GitCommitPoints, MinimalUser, UserColor } from 'deveye-types';
-import { GIT_GRAPH_SHA_LEN } from 'deveye-types';
+import type { GitCommitAuthor, GitCommitPoints, MinimalUser, UserColor } from '@deveye/types';
+import { GIT_GRAPH_SHA_LEN } from '@deveye/types';
 import { userColorVar } from '@/Features/Profile/userColors';
 import { DAY_MS, labelWidth, startOfDay, timelineTicks } from '../Projects/Timeline/scale';
 import { useElementWidth } from './useElementWidth';

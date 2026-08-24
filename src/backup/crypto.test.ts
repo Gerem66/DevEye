@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { describe, it } from 'node:test';
 
-import { BLOB_CHUNK_BYTES } from '@/cloudSync/blobCrypto';
+import { BLOB_CHUNK_BYTES } from './devb';
 import { openSealedStream, sealStream } from './crypto';
 
 /**

@@ -4,7 +4,7 @@ import styles from './style.module.css';
 
 import NoteCard from './NoteCard';
 
-import type { NoteFolder, NoteSummary } from 'deveye-types';
+import type { NoteFolder, NoteSummary } from '@deveye/types';
 
 interface NoteGridProps {
     /** One folder's notes, already in the user's order. */

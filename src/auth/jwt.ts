@@ -1,7 +1,7 @@
 import { env } from '@/Utils/Env';
 import { randomUUID } from 'crypto';
 import { SignJWT, errors as joseErrors, jwtVerify } from 'jose';
-import type { MailOAuthProvider, MailSecurityTier } from 'deveye-types';
+import type { MailOAuthProvider, MailSecurityTier } from '@deveye/types';
 
 const issuer = 'deveye';
 const audience = 'deveye-client';

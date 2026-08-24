@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import type { HomeSection, ShortcutItem } from 'deveye-types';
+import type { HomeSection, ShortcutItem } from '@deveye/types';
 
 import { Dialog } from '@/Components/Dialog';
 import TextInput from '@/Components/TextInput';

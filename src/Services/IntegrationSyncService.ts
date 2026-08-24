@@ -3,7 +3,7 @@ import type Encryption from '@/Services/Encryption';
 import type { LiveHub } from '@/live/hub';
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
 import type { Logger } from 'pino';
-import type { DeploymentRow, DeployTargetSyncRow, GitSyncStatus } from 'deveye-types';
+import type { DeploymentRow, DeployTargetSyncRow, GitSyncStatus } from '@deveye/types';
 import {
     authorRef,
     fetchBranches,
@@ -25,14 +25,16 @@ import {
     type DokployDeployment,
     type DokployTarget
 } from './integrations/dokploy';
-import { buildNotice, estimateFromHistory, firstLine } from '@/Services/DeployNotice';
-import { editMessage, isDiscordWebhook, postMessage } from '@/Services/discord';
+import { buildNotice, estimateFromHistory, firstLine } from '@/Services/notices/deploy';
+import { editMessage, postMessage } from '@/Services/discord';
 import {
     deliver,
     formatDuration,
     formatMoment,
+    discordChannels,
     hasChannel,
-    resolveChannels,
+    resolveRoute,
+    type ResolvedChannel,
     type Alert
 } from '@/Services/notifications';
 
@@ -1131,15 +1133,23 @@ export class IntegrationSyncService {
         if (inFlight.length === 0 && landed.length === 0) return;
 
         const cipher = this.cipherFor(target.workspace_id);
-        const channels = await resolveChannels(this.deps.db, cipher, target.workspace_id, 'deploy');
-        const discord = channels.webhook && isDiscordWebhook(channels.webhook) ? channels.webhook : null;
+        // La cible est passée : une route posée sur elle l'emporte sur celle de
+        // la fonctionnalité, de sorte que deux applications puissent annoncer
+        // dans deux salons différents.
+        const channels = await resolveRoute(this.deps.db, cipher, target.workspace_id, 'deploy', target.id);
+        const discord = discordChannels(channels);
         const name = (await this.readJson<{ name?: string }>(cipher, target.content))?.name ?? target.external_id;
         const logger = this.deps.logger.child({ workspaceId: target.workspace_id, targetId: target.id });
 
         // Les journaux en parallèle : chaque lecture va au bout de son délai,
         // le flux d'un déploiement en cours ne se refermant pas de lui-même.
         // Les enchaîner ferait dépasser l'intervalle dès deux déploiements.
-        if (discord) {
+        //
+        // Le parallélisme porte sur les **déploiements**, jamais sur les canaux
+        // d'un même déploiement : ceux-là écrivent tous dans le même blob
+        // `noticeIds`, et les lancer de front en perdrait — le dernier écrivain
+        // écraserait les identifiants publiés par les autres.
+        if (discord.length > 0) {
             await Promise.all(
                 inFlight.map((item) =>
                     this.renderNotice({
@@ -1147,7 +1157,7 @@ export class IntegrationSyncService {
                         ...place,
                         item,
                         name,
-                        webhook: discord,
+                        channels: discord,
                         cipher,
                         logger,
                         final: false
@@ -1158,35 +1168,40 @@ export class IntegrationSyncService {
 
         for (const item of landed) {
             if (!firstImport) {
-                const closed = discord
-                    ? await this.renderNotice({
-                          ...input,
-                          ...place,
-                          item,
-                          name,
-                          webhook: discord,
-                          cipher,
-                          logger,
-                          final: true
-                      })
-                    : false;
-                // Le message vivant a conclu : le webhook a déjà tout dit, seul
-                // le mail reste à servir. Sinon, l'avis ordinaire part sur tous
-                // les canaux, comme avant le suivi vivant.
-                if (closed) {
-                    await deliver(
-                        { ...channels, webhook: null },
-                        this.deployAlert(name, {
-                            status: item.entry.status,
-                            title: item.entry.title,
-                            description: item.entry.description,
-                            startedAt: item.entry.startedAt,
-                            finishedAt: item.entry.finishedAt
-                        }),
-                        logger
-                    );
+                const closed =
+                    discord.length > 0
+                        ? await this.renderNotice({
+                              ...input,
+                              ...place,
+                              item,
+                              name,
+                              channels: discord,
+                              cipher,
+                              logger,
+                              final: true
+                          })
+                        : new Set<number>();
+                // Un canal dont le message vivant a conclu a déjà tout dit :
+                // lui renvoyer l'avis en texte afficherait deux fois la même
+                // chose. Les autres — le mail, les webhooks génériques, et un
+                // salon Discord dont le suivi n'a pas pu s'ouvrir — le reçoivent.
+                const remaining = channels.filter((c) => !closed.has(c.id));
+                if (closed.size > 0) {
+                    if (remaining.length > 0) {
+                        await deliver(
+                            remaining,
+                            this.deployAlert(name, {
+                                status: item.entry.status,
+                                title: item.entry.title,
+                                description: item.entry.description,
+                                startedAt: item.entry.startedAt,
+                                finishedAt: item.entry.finishedAt
+                            }),
+                            logger
+                        );
+                    }
                 } else if (hasChannel(channels)) {
-                    await this.announceDeployment(target.workspace_id, cipher, name, {
+                    await this.announceDeployment(target.workspace_id, target.id, cipher, name, {
                         status: item.entry.status,
                         title: item.entry.title,
                         description: item.entry.description,
@@ -1203,12 +1218,18 @@ export class IntegrationSyncService {
     }
 
     /**
-     * Publie ou modifie le message d'un déploiement. Rend `true` si Discord l'a
-     * accepté.
+     * Publie ou modifie le message d'un déploiement, **sur chaque canal
+     * Discord**, et rend l'ensemble de ceux qui l'ont accepté.
      *
-     * Le `false` compte : c'est lui qui fait retomber la conclusion sur l'avis
-     * ordinaire, plutôt que de laisser un déploiement passer sous silence parce
-     * que le message de suivi n'a pas pu s'ouvrir.
+     * L'ensemble rendu compte : c'est lui qui décide, canal par canal, qui a
+     * déjà tout dit et qui doit encore recevoir l'avis en texte. Un salon dont
+     * le message n'a pas pu s'ouvrir n'est pas privé de la nouvelle — c'était
+     * déjà l'esprit du booléen qu'il remplace, appliqué maintenant à une liste.
+     *
+     * Le journal et l'emplacement sont lus **une fois** pour tous les canaux :
+     * ce sont deux appels réseau vers l'instance, et les refaire par salon
+     * multiplierait le coût d'un déploiement par le nombre de destinations sans
+     * rien changer au message obtenu.
      */
     private async renderNotice(input: {
         baseUrl: string;
@@ -1219,15 +1240,18 @@ export class IntegrationSyncService {
         history: DeploymentRow[];
         item: { row: DeploymentRow; entry: DokployDeployment };
         name: string;
-        webhook: string;
+        channels: ResolvedChannel[];
         cipher: Cipher;
         logger: Logger;
         final: boolean;
         now: number;
-    }): Promise<boolean> {
+    }): Promise<Set<number>> {
         const { item, cipher, logger } = input;
         const blob = (await this.readJson<Record<string, unknown>>(cipher, item.row.content)) ?? {};
-        const noticeId = typeof blob.noticeId === 'string' ? blob.noticeId : null;
+        const noticeIds: Record<string, string> =
+            blob.noticeIds && typeof blob.noticeIds === 'object'
+                ? { ...(blob.noticeIds as Record<string, string>) }
+                : {};
 
         const [log, place] = await Promise.all([
             item.entry.logPath
@@ -1257,26 +1281,47 @@ export class IntegrationSyncService {
             now: input.now
         });
 
-        if (noticeId !== null) return editMessage(input.webhook, noticeId, message, logger);
+        const accepted = new Set<number>();
+        let dirty = false;
 
-        const posted = await postMessage(input.webhook, message, logger);
-        if (posted === null) return false;
+        // Séquentiel, et non `Promise.all` : les canaux partagent le blob
+        // `noticeIds` qu'on réécrit ci-dessous. Le nombre de salons se compte
+        // sur les doigts d'une main, la latence ajoutée est sans commune mesure
+        // avec la lecture de journal déjà faite.
+        for (const channel of input.channels) {
+            if (!channel.webhookUrl) continue;
+            const known = noticeIds[String(channel.id)] ?? null;
 
-        // Un déploiement conclu qu'on découvre après coup — le cas d'un
-        // déploiement de huit secondes, commencé et fini entre deux battements —
-        // reçoit le **même** message, publié une seule fois. Il n'a jamais rien
-        // suivi, mais il n'y a aucune raison de le rendre plus pauvre que les
-        // autres : c'était le défaut de la première version, qui le renvoyait
-        // vers l'avis en texte brut.
-        if (input.final) return true;
+            if (known !== null) {
+                if (await editMessage(channel.webhookUrl, known, message, logger)) accepted.add(channel.id);
+                continue;
+            }
 
-        // Retenu tout de suite : le tour suivant doit modifier ce message, et
-        // non en poser un second à côté.
-        await this.deps.db.deploy.setDeploymentContent(
-            item.row.id,
-            await cipher.encrypt(JSON.stringify({ ...blob, noticeId: posted }))
-        );
-        return true;
+            const posted = await postMessage(channel.webhookUrl, message, logger);
+            if (posted === null) continue;
+            accepted.add(channel.id);
+
+            // Un déploiement conclu qu'on découvre après coup — le cas d'un
+            // déploiement de huit secondes, commencé et fini entre deux
+            // battements — reçoit le **même** message, publié une seule fois. Il
+            // n'a jamais rien suivi, mais il n'y a aucune raison de le rendre
+            // plus pauvre que les autres : c'était le défaut de la première
+            // version, qui le renvoyait vers l'avis en texte brut.
+            if (input.final) continue;
+
+            // Retenu tout de suite : le tour suivant doit modifier ce message,
+            // et non en poser un second à côté.
+            noticeIds[String(channel.id)] = posted;
+            dirty = true;
+        }
+
+        if (dirty) {
+            await this.deps.db.deploy.setDeploymentContent(
+                item.row.id,
+                await cipher.encrypt(JSON.stringify({ ...blob, noticeIds }))
+            );
+        }
+        return accepted;
     }
 
     /**
@@ -1321,11 +1366,12 @@ export class IntegrationSyncService {
      */
     private async announceDeployment(
         workspaceId: number,
+        targetId: number,
         cipher: Cipher,
         targetName: string,
         item: { status: string; title: string; description: string; startedAt: number; finishedAt: number | null }
     ): Promise<void> {
-        const channels = await resolveChannels(this.deps.db, cipher, workspaceId, 'deploy');
+        const channels = await resolveRoute(this.deps.db, cipher, workspaceId, 'deploy', targetId);
         if (!hasChannel(channels)) return;
         await deliver(channels, this.deployAlert(targetName, item), this.deps.logger.child({ workspaceId }));
     }

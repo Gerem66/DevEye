@@ -8,7 +8,7 @@ import {
     useReducedMotion,
     useTransform
 } from 'framer-motion';
-import type { HomeFeatureId, HomeFolder } from 'deveye-types';
+import type { HomeFeatureId, HomeFolder } from '@deveye/types';
 
 import { Widget } from '@/Components/Widget';
 import { WidgetGrid } from '@/Components/WidgetGrid';
@@ -144,7 +144,20 @@ function FanCard({ index, count, source, hidden, children }: FanCardProps) {
             animate(scale, back.scale, { ...FOLD_BACK, delay })
         ];
         void Promise.all(running.map((a) => a.finished))
-            .then(() => safeToRemove())
+            .then(() => {
+                // Posée, la carte se cache elle-même. Le couvercle, redevenu
+                // opaque, la recouvre déjà : la cacher ne change rien à l'image.
+                // Mais la couche, elle, ne se démonte qu'une fois la DERNIÈRE
+                // carte rentrée, plus le temps que React et le compositeur s'en
+                // aperçoivent : pendant ce battement, une carte posée restait
+                // peinte et pouvait ressortir quelques images, figée, alors que
+                // la fermeture semblait finie. Une carte cachée n'a plus rien à
+                // laisser traîner, quel que soit ce retard. (Rouvrir pendant le
+                // repli n'existe pas : la couche intercepte tous les clics tant
+                // qu'elle est là, l'état caché ne survit donc jamais.)
+                el.style.visibility = 'hidden';
+                safeToRemove();
+            })
             .catch(() => {});
         return () => running.forEach((a) => a.stop());
     }, [isPresent]);

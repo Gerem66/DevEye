@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import type { SeverityCounts } from 'deveye-types';
+import type { SeverityCounts } from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import { onResourceChange } from './invalidation';

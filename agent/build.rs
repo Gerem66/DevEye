@@ -1,7 +1,7 @@
 use std::path::Path;
 
 /// Map a Rust target triple to the DevEye agent target id (mirrors
-/// `deveye-types` `AGENT_TARGETS` and `build-all.sh`). Returns `""` for an
+/// `@deveye/types` `AGENT_TARGETS` and `build-all.sh`). Returns `""` for an
 /// unknown triple, in which case the agent simply omits its target from
 /// `agent.hello` and can't be self-updated (but otherwise runs fine).
 fn agent_target(triple: &str) -> &'static str {

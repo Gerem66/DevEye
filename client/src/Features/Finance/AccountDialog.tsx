@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { FinanceAccount, FinanceAccountKind, FinanceColor } from 'deveye-types';
-import { FINANCE_COLORS, FINANCE_NAME_MAX_LENGTH, FINANCE_NOTE_MAX_LENGTH } from 'deveye-types';
+import type { FinanceAccount, FinanceAccountKind, FinanceColor } from '@deveye/types';
+import { FINANCE_COLORS, FINANCE_NAME_MAX_LENGTH, FINANCE_NOTE_MAX_LENGTH } from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';

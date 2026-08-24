@@ -11,8 +11,9 @@ import {
     type FeatureAccess,
     type ServerMessage,
     type WorkspaceCapability,
-    type WorkspaceFeatureId
-} from 'deveye-types';
+    type FeatureId,
+    liveTopicSchema
+} from '@deveye/types';
 import type { FastifyInstance } from 'fastify';
 
 import { ACCESS_COOKIE } from '@/auth/cookies';
@@ -27,7 +28,6 @@ import { topicsOf } from '@/features/_topics';
 import { enterSessionCommand, exitSessionCommand, forgetSessionDek } from '@/Services/SecureStore';
 import { logger } from '@/logger';
 
-import type { CloudSyncEngine } from '@/cloudSync/engine';
 import type { UptimeMonitor } from '@/Services/UptimeMonitor';
 import type { IntegrationSyncService } from '@/Services/IntegrationSyncService';
 import type { DatabaseMonitor } from '@/Services/DatabaseMonitor';
@@ -44,7 +44,6 @@ interface WSDeps {
     crypt: Encryption;
     hub: MonitorHub;
     live: LiveHub;
-    cloudSync: CloudSyncEngine;
     uptime: UptimeMonitor;
     integrations: IntegrationSyncService;
     databases: DatabaseMonitor;
@@ -84,20 +83,7 @@ function unionWorkspaces(a: readonly number[], b: readonly number[]): number[] {
 
 export async function registerWS(
     app: FastifyInstance,
-    {
-        db,
-        crypt,
-        hub,
-        live: liveHub,
-        cloudSync,
-        uptime,
-        integrations,
-        databases,
-        audience,
-        sentinel,
-        backups,
-        audit
-    }: WSDeps
+    { db, crypt, hub, live: liveHub, uptime, integrations, databases, audience, sentinel, backups, audit }: WSDeps
 ): Promise<void> {
     app.get('/ws', { websocket: true }, async (socket, req) => {
         const accessToken = req.cookies[ACCESS_COOKIE];
@@ -274,14 +260,41 @@ export async function registerWS(
                     if (!can(c)) throw new FeatureError('forbidden', 'Droit insuffisant sur cet espace');
                 };
                 // `write` implique `read` : une seule comparaison suffit.
-                const canFeature = (f: WorkspaceFeatureId, level: FeatureAccess = 'read'): boolean => {
+                const canFeature = (f: FeatureId, level: FeatureAccess = 'read'): boolean => {
                     const granted = scope.features.get(f);
                     if (!granted) return false;
                     return level === 'read' || granted === 'write';
                 };
-                const assertFeature = (f: WorkspaceFeatureId, level: FeatureAccess = 'read'): void => {
+                const assertFeature = (f: FeatureId, level: FeatureAccess = 'read'): void => {
                     if (!canFeature(f, level)) {
                         throw new FeatureError('forbidden', 'Cette fonctionnalité ne vous est pas ouverte ici');
+                    }
+                };
+                // La lecture de la feature est incluse : gérer les destinations
+                // d'une fonctionnalité qu'on ne voit pas n'a pas de sens.
+                const canChannels = (f: FeatureId): boolean => canFeature(f) && scope.channels.has(f);
+                const assertChannels = (f: FeatureId): void => {
+                    if (!canChannels(f)) {
+                        throw new FeatureError(
+                            'forbidden',
+                            'La gestion des canaux de cette fonctionnalité ne vous est pas confiée'
+                        );
+                    }
+                };
+                const assertItem = async (
+                    f: FeatureId,
+                    itemId: number,
+                    level: FeatureAccess = 'read'
+                ): Promise<void> => {
+                    // La feature d'abord : une restriction d'élément ne peut
+                    // qu'abaisser, jamais ouvrir ce que la feature ferme.
+                    assertFeature(f, level);
+                    const restriction = (await scope.itemRestrictions(f)).get(itemId);
+                    if (restriction === 'none') {
+                        throw new FeatureError('forbidden', 'Cet élément ne vous est pas accessible');
+                    }
+                    if (restriction === 'read' && level === 'write') {
+                        throw new FeatureError('forbidden', 'Cet élément est en lecture seule pour votre rôle');
                     }
                 };
 
@@ -308,13 +321,17 @@ export async function registerWS(
                         assertCan,
                         canFeature,
                         assertFeature,
+                        canChannels,
+                        assertChannels,
+                        itemRestrictions: scope.itemRestrictions,
+                        assertItem,
+                        extrasFor: (f) => scope.extras.get(f) ?? {},
                         ip,
                         logger: reqLogger.child({ command, requestId: replyId }),
                         requestId: replyId,
                         audit: recordAudit,
                         monitor,
                         live,
-                        cloudSync,
                         uptime,
                         integrations,
                         databases,
@@ -347,9 +364,25 @@ export async function registerWS(
                 // l'espace **personnel** de l'appelant.
                 //
                 // L'émetteur est exclu : il tient déjà sa propre réponse.
-                const topics = topicsOf(command);
+                let topics = topicsOf(command);
+                let extraWorkspace: number | null = null;
+                // Les commandes de partage portent leur fonctionnalité en
+                // ENTRÉE : leur préfixe ne peut pas dire quel sujet diffuser.
+                // On le lit dans la requête — le sujet d'une feature branchée
+                // au partage porte le même nom qu'elle — et on prévient aussi
+                // l'espace visé : après un retrait, la table ne le relie plus,
+                // donc l'éventail des projections ne le trouverait pas.
+                if (topics && command.startsWith('share.')) {
+                    const body = inputParse.data as { feature?: string; workspaceId?: number };
+                    const asTopic = liveTopicSchema.safeParse(body.feature);
+                    if (asTopic.success) topics = [...topics, asTopic.data];
+                    extraWorkspace = body.workspaceId ?? null;
+                }
                 if (topics) {
                     liveHub.changed(auditWorkspaceId, topics, session!.userId, socket);
+                    if (extraWorkspace !== null && extraWorkspace !== auditWorkspaceId) {
+                        liveHub.changed(extraWorkspace, topics, session!.userId);
+                    }
                     // Un appareil est partageable entre plusieurs espaces, et le
                     // dispatcheur ne connaît que celui de l'enveloppe : sans cet
                     // éventail, les autres destinataires resteraient sur une
@@ -365,6 +398,20 @@ export async function registerWS(
                     }
                 }
             } catch (e) {
+                // Le duck-typing double l'instanceof exprès : si un module et
+                // l'app résolvent deux instances distinctes de @deveye/types
+                // (miroir node_modules d'un côté, alias de l'autre), l'erreur
+                // typée d'un module resterait sinon un `internal` opaque.
+                if (!(e instanceof FeatureError) && e instanceof Error && e.name === 'FeatureError' && 'code' in e) {
+                    const dup = e as Error & { code: string; details?: unknown };
+                    reqLogger.warn({ command, code: dup.code, msg: dup.message }, 'Feature error');
+                    send(socket, {
+                        requestId: replyId,
+                        command,
+                        payload: err(dup.code as Parameters<typeof err>[0], dup.message, dup.details)
+                    });
+                    return;
+                }
                 if (e instanceof FeatureError) {
                     reqLogger.warn({ command, code: e.code, msg: e.message }, 'Feature error');
                     send(socket, {

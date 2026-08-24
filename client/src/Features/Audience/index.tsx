@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AudienceSite, AudienceUsage } from 'deveye-types';
+import type { AudienceSite, AudienceUsage } from '@deveye/types';
 
 import { Button } from '@/Components';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { ws } from '@/api/ws';
 import { useLiveOutlines } from '@/live/useLiveOutline';
 import { useLiveSegment } from '@/live/useLiveSegment';
@@ -150,6 +151,10 @@ export function FeatureAudience({ workspace }: FeatureProps) {
                             <h2 className={styles.title}>Sites suivis</h2>
                             <p className={styles.subtitle}>Ce que les visiteurs font de vos projets une fois livrés.</p>
                         </div>
+                        {/* Le bouton commun, monté sans condition comme partout :
+                            il se supprime lui-même tant qu'aucune section
+                            n'existe à cette échelle. */}
+                        <FeatureSettingsButton scope={{ kind: 'feature', feature: 'audience' }} />
                         {canWrite && (
                             <Button icon='add' onClick={() => setDialog({ site: null })}>
                                 Suivre un site

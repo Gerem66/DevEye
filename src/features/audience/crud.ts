@@ -8,18 +8,21 @@ import {
     audienceSiteRotateKey,
     audienceSiteUpdate,
     type AudienceUsage
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { tryDecryptProject } from '../project/_shared';
+import { shareScope } from '../_sharing';
 import {
     audienceCipher,
     generatePublicKey,
     ingestOrigin,
+    loadHomeSite,
     loadSite,
     nameRef,
     packOrigins,
     READ,
+    siteCipher,
     toSite,
     WRITE,
     type StoredSite
@@ -48,7 +51,13 @@ export const audienceCountFeature: FeatureDefinition<
 > = defineFeature({
     ...audienceCount,
     access: READ,
-    handler: async (ctx) => ({ count: await ctx.db.audience.count(ctx.workspaceId) })
+    handler: async (ctx) => {
+        // Les mêmes lignes que la liste — projetées comprises, restrictions
+        // déduites : la carte doit compter ce que la liste montre.
+        const rows = await ctx.db.audience.listVisible(ctx.workspaceId);
+        const hidden = await ctx.itemRestrictions('audience');
+        return { count: rows.filter((r) => hidden.get(r.id) !== 'none').length };
+    }
 });
 
 export const audienceListFeature: FeatureDefinition<
@@ -59,9 +68,19 @@ export const audienceListFeature: FeatureDefinition<
     ...audienceList,
     access: READ,
     handler: async (ctx) => {
-        const cipher = audienceCipher(ctx);
-        const rows = await ctx.db.audience.list(ctx.workspaceId);
-        return { sites: await Promise.all(rows.map((row) => toSite(cipher, row))) };
+        const rows = await ctx.db.audience.listVisible(ctx.workspaceId);
+        // Les sites qu'une restriction masque pour ce rôle disparaissent de la
+        // liste plutôt que d'y figurer grisés.
+        const hidden = await ctx.itemRestrictions('audience');
+        const visible = rows.filter((r) => hidden.get(r.id) !== 'none');
+        const shares = await shareScope(ctx, 'audience');
+        return {
+            sites: await Promise.all(
+                visible.map(async (row) =>
+                    toSite(await shares.cipherFor(row.id), row, row.workspace_id !== ctx.workspaceId)
+                )
+            )
+        };
     }
 });
 
@@ -73,8 +92,11 @@ export const audienceGetFeature: FeatureDefinition<
     ...audienceGet,
     access: READ,
     handler: async (ctx, input) => {
-        const row = await ctx.db.audience.findWithStats(input.siteId, ctx.workspaceId);
+        const home = await loadSite(ctx, input.siteId);
+        const row = await ctx.db.audience.findWithStats(input.siteId, home.workspace_id);
         if (!row) throw new FeatureError('not_found', 'Site introuvable');
+        // Deux codecs : le site est chiffré chez LUI, les projets liés listés
+        // ici sont ceux d'ICI.
         const cipher = audienceCipher(ctx);
 
         // Les projets liés, avec leur titre : c'est ce qui rend l'interconnexion
@@ -88,7 +110,11 @@ export const audienceGetFeature: FeatureDefinition<
             }))
         );
 
-        return { site: await toSite(cipher, row), usage, ingestOrigin: ingestOrigin() };
+        return {
+            site: await toSite(await siteCipher(ctx, row.id), row, row.workspace_id !== ctx.workspaceId),
+            usage,
+            ingestOrigin: ingestOrigin()
+        };
     }
 });
 
@@ -124,7 +150,7 @@ export const audienceSiteAddFeature: FeatureDefinition<
 
         const row = await ctx.db.audience.findWithStats(created.id, ctx.workspaceId);
         if (!row) throw new FeatureError('internal', 'Site introuvable après création');
-        return { site: await toSite(cipher, row) };
+        return { site: await toSite(cipher, row, false) };
     }
 });
 
@@ -137,7 +163,9 @@ export const audienceSiteUpdateFeature: FeatureDefinition<
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        await loadSite(ctx, input.siteId);
+        // Domicile seulement : les réglages d'un site — origines, rétention,
+        // mode visiteur — appartiennent à son espace.
+        await loadHomeSite(ctx, input.siteId);
         const ref = nameRef(input.name);
         const clash = await ctx.db.audience.findByName(ctx.workspaceId, ref);
         if (clash && clash.id !== input.siteId) {
@@ -160,7 +188,7 @@ export const audienceSiteUpdateFeature: FeatureDefinition<
 
         const row = await ctx.db.audience.findWithStats(input.siteId, ctx.workspaceId);
         if (!row) throw new FeatureError('not_found', 'Site introuvable');
-        return { site: await toSite(cipher, row) };
+        return { site: await toSite(cipher, row, false) };
     }
 });
 
@@ -173,7 +201,7 @@ export const audienceSiteRotateKeyFeature: FeatureDefinition<
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        await loadSite(ctx, input.siteId);
+        await loadHomeSite(ctx, input.siteId);
         await ctx.db.audience.setPublicKey(input.siteId, ctx.workspaceId, generatePublicKey());
         // Sans cette invalidation, l'ancienne clé resterait acceptée jusqu'au
         // prochain redémarrage — c'est-à-dire que la rotation ne servirait à
@@ -189,7 +217,7 @@ export const audienceSiteRotateKeyFeature: FeatureDefinition<
         const cipher = audienceCipher(ctx);
         const row = await ctx.db.audience.findWithStats(input.siteId, ctx.workspaceId);
         if (!row) throw new FeatureError('not_found', 'Site introuvable');
-        return { site: await toSite(cipher, row) };
+        return { site: await toSite(cipher, row, false) };
     }
 });
 
@@ -202,12 +230,16 @@ export const audienceSiteRemoveFeature: FeatureDefinition<
     mutates: ['audience', 'projects'],
     access: WRITE,
     handler: async (ctx, input) => {
-        await loadSite(ctx, input.siteId);
+        await loadHomeSite(ctx, input.siteId);
         // Libellés, sessions, événements, agrégat et liaisons partent en
         // CASCADE. Les projets qui suivaient ce site ne perdent qu'un pointeur,
         // d'où le second sujet diffusé : leur onglet doit se relire.
         const removed = await ctx.db.audience.remove(input.siteId, ctx.workspaceId);
         if (!removed) throw new FeatureError('not_found', 'Site introuvable');
+        // Projections et restrictions ne tiennent à aucune clé étrangère : sans
+        // ce ménage, elles s'appliqueraient au prochain site à hériter de
+        // l'identifiant.
+        await ctx.db.itemSharing.forgetItem('audience', input.siteId, ctx.workspaceId);
         ctx.audience?.invalidate();
         ctx.audit({
             level: 'warning',

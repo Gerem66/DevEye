@@ -1,0 +1,421 @@
+/* La coquille : navigation à gauche, panneau à droite.
+   Les deux colonnes se replient en une seule sur mobile, où une barre latérale
+   de 180 px prendrait la moitié de l'écran pour deux intitulés. */
+.layout {
+    display: grid;
+    grid-template-columns: 190px 1fr;
+    gap: var(--space-lg);
+    min-height: 0;
+    /* Hauteur FIXE, pas minimale : chaque section a la sienne, et un dialogue
+       qui se redimensionne à chaque clic de la barre latérale fait danser tout
+       l'écran. Le panneau défile à l'intérieur (`overflow-y` sur `.panel`).
+
+       ⚠️ Surtout pas de `flex: 1` ici : dans la colonne flex du corps du
+       dialogue, sa base à 0 ÉCRASE la hauteur explicite, et le dialogue
+       reprenait la taille du contenu — précisément ce que cette règle
+       interdit. C'est le bug qui a fait poser ce commentaire. */
+    height: min(540px, 70vh);
+}
+
+.layout:has(> .panel:only-child) {
+    grid-template-columns: 1fr;
+}
+
+.nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    border-right: 1px solid var(--glass-border);
+    padding-right: var(--space-sm);
+}
+
+.navItem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.navItem:hover {
+    color: var(--text-primary);
+    background: var(--surface-subtle);
+}
+
+.navItemActive {
+    color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.navLabel {
+    flex: 1;
+}
+
+.navBadge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.navItemActive .navBadge {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.panel {
+    min-width: 0;
+    overflow-y: auto;
+}
+
+/* ------------------------------------------------------------- une section */
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.sectionLabel {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.sectionHint {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.sectionActions {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.empty {
+    margin: 0;
+    padding: var(--space-md);
+    border: 1px dashed var(--glass-border);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.notice {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+/* Un état vide qui porte le geste : la phrase à gauche, l'action à droite.
+   Même boîte pointillée que `.empty`, en rangée. */
+.emptyRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border: 1px dashed var(--glass-border);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.emptyRow > span {
+    flex: 1;
+}
+
+/* Bouton-texte de saut : « aller régler ça là où ça se règle ». En ligne dans
+   la phrase qui explique le refus, pour que l'explication débouche sur un
+   geste. */
+.jumpBtn {
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-family: var(--font-sans);
+    font-size: inherit;
+    cursor: pointer;
+}
+
+.jumpBtn:hover {
+    text-decoration: underline;
+}
+
+.warning {
+    color: var(--warning);
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+/* --------------------------------------------------------- liste de canaux */
+
+.channelList {
+    display: flex;
+    flex-direction: column;
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.channelList:empty {
+    display: none;
+}
+
+.channelRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.channelRow:last-child {
+    border-bottom: none;
+}
+
+.channelRow:hover {
+    background: var(--surface-subtle);
+}
+
+.channelIcon {
+    flex: none;
+    color: var(--text-muted);
+}
+
+.channelText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.channelLabel {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+/* Les deux pastilles d'état. Elles disent pourquoi un canal coché n'enverra
+   rien — sans elles, un canal muet a exactement l'air d'un canal qui marche. */
+.channelOff,
+.channelBroken {
+    padding: 1px 6px;
+    border-radius: var(--radius-pill);
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: lowercase;
+}
+
+.channelOff {
+    background: var(--surface-subtle);
+    color: var(--text-muted);
+}
+
+.channelBroken {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+.channelMeta {
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.channelActions {
+    display: flex;
+    flex: none;
+    gap: 2px;
+}
+
+/* Combien de cibles écrivent vers ce canal.
+   Hors de `.channelMeta`, qui tronque : une URL de webhook est longue par
+   nature, et le compteur se faisait manger avant d'être lu. */
+.channelUsage {
+    flex: none;
+    min-width: 44px;
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+.channelUsageIdle {
+    background: var(--surface-subtle);
+    color: var(--text-muted);
+}
+
+/* Action de ligne : icône seule, la cible de clic reste confortable.
+   Même forme que `.actionBtn` de l'écran Espace. */
+.rowAction {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.rowAction:hover:not(:disabled) {
+    color: var(--text-primary);
+    background: var(--surface-subtle);
+}
+
+.rowActionDanger:hover:not(:disabled) {
+    color: var(--danger);
+    background: var(--danger-bg);
+}
+
+.rowAction:disabled {
+    /* framer-motion n'intervient pas ici, mais on garde le même levier que
+       partout ailleurs : `filter` plutôt qu'`opacity`, pour ne pas entrer en
+       conflit avec une animation ajoutée plus tard. */
+    filter: opacity(0.4);
+    cursor: default;
+}
+
+/* Une erreur au fil d'une rangée (dernier contrôle de destination échoué…) :
+   sous le libellé, dans la colonne de texte, jamais en bandeau à part. */
+.errorText {
+    color: var(--danger);
+    font-size: 0.75rem;
+    line-height: 1.4;
+}
+
+.usageList {
+    margin: var(--space-sm) 0 0;
+    padding-left: var(--space-md);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
+/* ------------------------------------------------- formulaires des sections */
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.fieldLabel {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.fieldHint {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1.45;
+}
+
+/* Un sélecteur et son « + » : le champ prend la place, le geste qui crée ce
+   que le sélecteur attend reste collé à lui. Même forme que dans les dialogues
+   d'élément des features. */
+.fieldWithAction {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.fieldWithAction > select {
+    flex: 1;
+    min-width: 0;
+}
+
+@media (max-width: 720px) {
+    .layout {
+        grid-template-columns: 1fr;
+    }
+
+    .nav {
+        flex-direction: row;
+        overflow-x: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--glass-border);
+        padding: 0 0 var(--space-sm);
+        scrollbar-width: none;
+    }
+
+    .channelActions {
+        flex-direction: column;
+    }
+}
+
+/* Pastille de rôle, reprise du même repère que la matrice et la liste des
+   membres : une couleur y identifie un rôle partout dans l'app. */
+.roleDot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+
+/* Une destination d'un autre espace : présente, inerte, sans identité. */
+.channelRowForeign {
+    background: var(--surface-subtle);
+}
+
+.foreignMark {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    color: var(--text-muted);
+}
+
+/* Le panneau de restrictions d'un élément, seul (réutilisé par l'onglet
+   Permissions et par le dialogue « Permissions » de l'onglet Partage). */
+.grantPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    min-width: 0;
+    /* Plancher : le passage « Chargement… » → liste des rôles ne doit pas
+       faire sauter le dialogue qui le porte. */
+    min-height: 220px;
+}

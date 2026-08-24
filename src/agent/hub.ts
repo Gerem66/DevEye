@@ -102,7 +102,7 @@ import {
     type PackageManagerId,
     type PackageProgressPush,
     type PackageStartedPush
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { accessEpochNow } from '@/features/_access';
 import { logger } from '@/logger';

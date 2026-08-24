@@ -1,4 +1,4 @@
-import { AGENT_PKG_DONE, AGENT_PKG_LIST_RESULT, AGENT_PKG_PROGRESS } from 'deveye-types';
+import { AGENT_PKG_DONE, AGENT_PKG_LIST_RESULT, AGENT_PKG_PROGRESS } from '@deveye/types';
 
 import { ack, type AgentSession, type PayloadOf } from './session';
 

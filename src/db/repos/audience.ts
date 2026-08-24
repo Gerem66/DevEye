@@ -1,4 +1,4 @@
-import type { AudienceDimension, AudienceSiteRow, ProjectAudienceLinkRow } from 'deveye-types';
+import type { AudienceDimension, AudienceSiteRow, ProjectAudienceLinkRow } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
@@ -89,7 +89,11 @@ const DIMENSION_SOURCE: Record<AudienceDimension, { table: 'session' | 'event'; 
  */
 export interface AudienceRepo {
     list(workspaceId: number): Promise<AudienceSiteWithStatsRow[]>;
+    /** Comme `list`, plus les sites projetés vers cet espace. */
+    listVisible(workspaceId: number): Promise<AudienceSiteWithStatsRow[]>;
     find(id: number, workspaceId: number): Promise<AudienceSiteRow | null>;
+    /** Comme `find`, mais accepte aussi un site projeté vers cet espace. */
+    findVisible(id: number, workspaceId: number): Promise<AudienceSiteRow | null>;
     findWithStats(id: number, workspaceId: number): Promise<AudienceSiteWithStatsRow | null>;
     /** L'unicité d'un site dans l'espace, ce que `content` chiffré ne peut porter. */
     findByName(workspaceId: number, nameRef: string): Promise<AudienceSiteRow | null>;
@@ -192,10 +196,36 @@ export function audienceRepo(pool: Q): AudienceRepo {
             );
             return r.rows.map(withNumbers);
         },
+        async listVisible(workspaceId) {
+            const r = await pool.query<AudienceSiteWithStatsRow>(
+                `${SELECT_WITH_STATS} WHERE s.workspace_id = ?
+                 UNION
+                 ${SELECT_WITH_STATS}
+                  JOIN item_shares sh
+                    ON sh.feature = 'audience' AND sh.item_id = s.id AND sh.home_workspace_id = s.workspace_id
+                 WHERE sh.workspace_id = ?
+                 ORDER BY sort_order ASC, id ASC`,
+                [workspaceId, workspaceId]
+            );
+            return r.rows.map(withNumbers);
+        },
         async find(id, workspaceId) {
             const r = await pool.query<AudienceSiteRow>(
                 'SELECT * FROM audience_sites WHERE id = ? AND workspace_id = ?',
                 [id, workspaceId]
+            );
+            return r.rows[0] ?? null;
+        },
+        async findVisible(id, workspaceId) {
+            const r = await pool.query<AudienceSiteRow>(
+                `SELECT s.* FROM audience_sites s
+                  WHERE s.id = ?
+                    AND (s.workspace_id = ?
+                         OR EXISTS (SELECT 1 FROM item_shares sh
+                                     WHERE sh.feature = 'audience' AND sh.item_id = s.id
+                                       AND sh.home_workspace_id = s.workspace_id
+                                       AND sh.workspace_id = ?))`,
+                [id, workspaceId, workspaceId]
             );
             return r.rows[0] ?? null;
         },

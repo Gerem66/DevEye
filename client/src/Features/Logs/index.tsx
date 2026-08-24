@@ -9,7 +9,7 @@ import {
     type LogFilter,
     type LogLevelName,
     type LogSource
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { ws, WsError } from '@/api/ws';
 import Button from '@/Components/Button';

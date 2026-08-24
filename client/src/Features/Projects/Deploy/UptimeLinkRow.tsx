@@ -1,4 +1,4 @@
-import type { UptimeService } from 'deveye-types';
+import type { UptimeService } from '@deveye/types';
 import { Button } from '@/Components';
 import { startTeleport } from '@/stores/live';
 import { getActiveWorkspaceId } from '@/stores/workspace';

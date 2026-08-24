@@ -6,17 +6,19 @@ import type {
     BackupJobRow,
     BackupRunRow,
     BackupScheduleKind
-} from 'deveye-types';
+} from '@deveye/types';
 
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import type { LiveHub } from '@/live/hub';
 import type { MonitorHub } from '@/agent/hub';
-import type { CloudSyncEngine } from '@/cloudSync/engine';
+import { CLOUDSYNC_BACKUP_PROVIDER, type CloudSyncBackupProvider } from '@deveye/types/sdk';
+import { moduleProvider } from '@/features/_sdk/register';
 import type { AuditLog } from '@/Services/AuditLog';
 import type { DatabaseMonitor } from '@/Services/DatabaseMonitor';
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
-import { deliver, hasChannel, resolveChannels } from '@/Services/notifications';
+import { deliver, hasChannel, resolveRoute } from '@/Services/notifications';
+import { buildNotice } from '@/Services/notices/backup';
 import { env } from '@/Utils/Env';
 import { backupKey, sealStream } from '@/backup/crypto';
 import { DeviceSink, LocalSink, S3Sink, type BackupSink } from '@/backup/sinks';
@@ -60,7 +62,6 @@ interface BackupDeps {
     db: Database;
     crypt: Encryption;
     hub: MonitorHub;
-    cloudSync: CloudSyncEngine;
     databases: DatabaseMonitor;
     audit: AuditLog;
     logger: Logger;
@@ -322,7 +323,7 @@ export class BackupService {
             const destination = await this.deps.db.backup.findDestinationForJob(job.id);
             if (!destination) throw new Error('La destination de ce travail est introuvable.');
 
-            const run = await this.openRun(job, destination, userId);
+            const run = await this.openRun(job, userId);
             void this.execute(job, destination, run).catch((e: unknown) =>
                 this.deps.logger.error({ jobId: job.id, err: e }, 'Backup: exécution manuelle échouée')
             );
@@ -357,22 +358,18 @@ export class BackupService {
             this.deps.logger.error({ jobId: job.id }, 'Backup: destination introuvable');
             return;
         }
-        const run = await this.openRun(job, destination, userId);
+        const run = await this.openRun(job, userId);
         await this.execute(job, destination, run);
     }
 
-    private async openRun(
-        job: BackupJobRow,
-        destination: BackupDestinationRow,
-        userId: number | null
-    ): Promise<BackupRunRow> {
+    private async openRun(job: BackupJobRow, userId: number | null): Promise<BackupRunRow> {
         const content = await this.cipherFor(job.workspace_id).encrypt(
             JSON.stringify({ artifact: null, error: null } satisfies StoredRun)
         );
         const run = await this.deps.db.backup.startRun({
             jobId: job.id,
             workspaceId: job.workspace_id,
-            encrypted: destination.encrypt === 1,
+            encrypted: job.encryption === 'server',
             triggeredByUserId: userId,
             content
         });
@@ -423,7 +420,9 @@ export class BackupService {
                 }
             };
 
-            const sealed = destination.encrypt === 1;
+            // La forme est celle du TRAVAIL (094) : la destination dit où
+            // écrire, le travail dit sous quelle forme.
+            const sealed = job.encryption === 'server';
             const name = sealed ? `${source.name}.enc` : source.name;
             const body = sealed
                 ? sealStream(backupKey(this.deps.crypt), measured(source.stream))
@@ -476,7 +475,7 @@ export class BackupService {
         });
 
         if (error === null) await this.prune(job, destination);
-        else await this.notifyFailure(job.workspace_id, jobName, error);
+        else await this.notifyFailure(job.workspace_id, job.id, jobName, error);
 
         this.deps.live?.changed(job.workspace_id, ['backup'], null);
     }
@@ -495,12 +494,16 @@ export class BackupService {
 
         if (job.source_kind === 'cloudsync') {
             if (!job.source_id) throw new Error('Ce travail ne désigne aucun partage.');
-            const share = await this.deps.db.syncShares.findById(job.source_id);
-            if (!share || share.workspace_id !== job.workspace_id) {
+            // CloudSync est un module : la lecture des partages passe par le
+            // contrat qu'il offre. Absent, le run échoue proprement et
+            // reprendra le jour où le module revient.
+            const provider = moduleProvider<CloudSyncBackupProvider>(CLOUDSYNC_BACKUP_PROVIDER);
+            if (!provider) throw new Error('Source CloudSync indisponible : module non installé.');
+            const share = await provider.findShare(job.source_id);
+            if (!share || share.workspaceId !== job.workspace_id) {
                 throw new Error('Le partage de ce travail a été supprimé.');
             }
-            const store = await this.deps.cloudSync.storeFor(share);
-            return cloudSyncSource(this.deps.db, store, { id: share.id, name: share.name }, this.deps.logger);
+            return cloudSyncSource(provider, { id: share.id, name: share.name }, this.deps.logger);
         }
 
         throw new Error(`Source de sauvegarde inconnue : ${job.source_kind}`);
@@ -553,16 +556,39 @@ export class BackupService {
         }
     }
 
-    private async notifyFailure(workspaceId: number, jobName: string, error: string): Promise<void> {
+    private async notifyFailure(
+        workspaceId: number,
+        // Le travail concerné : sa route l'emporte sur celle de la
+        // fonctionnalité, de sorte qu'une sauvegarde critique puisse réveiller
+        // quelqu'un d'autre que les copies de routine.
+        jobId: number,
+        jobName: string,
+        error: string
+    ): Promise<void> {
         try {
-            const channels = await resolveChannels(this.deps.db, this.cipherFor(workspaceId), workspaceId, 'backup');
+            const channels = await resolveRoute(
+                this.deps.db,
+                this.cipherFor(workspaceId),
+                workspaceId,
+                'backup',
+                jobId
+            );
             if (!hasChannel(channels)) return;
             await deliver(
                 channels,
                 {
                     subject: `DevEye — sauvegarde « ${jobName} » en échec`,
                     body: `La sauvegarde « ${jobName} » a échoué.\n\n${error}`,
-                    payload: { feature: 'backup', job: jobName, error }
+                    payload: { feature: 'backup', job: jobName, error },
+                    // La même alerte, mise en page pour Discord. Seuls les
+                    // échecs sont annoncés : un canal rempli de succès
+                    // quotidiens finirait par noyer celui qui compte.
+                    embeds: buildNotice({
+                        job: jobName,
+                        destination: null,
+                        error,
+                        at: Math.floor(Date.now() / 1000)
+                    })
                 },
                 this.deps.logger
             );

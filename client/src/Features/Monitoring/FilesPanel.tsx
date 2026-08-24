@@ -23,7 +23,7 @@ import {
     type FileSearchField,
     type FileSearchFilter,
     type FileUsageEntry
-} from 'deveye-types';
+} from '@deveye/types';
 import { formatBytes } from './utils';
 import styles from './Monitoring.module.css';
 

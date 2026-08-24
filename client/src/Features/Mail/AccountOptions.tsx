@@ -7,7 +7,6 @@ interface AccountOptionsProps {
     onEdit: () => void;
     onRefresh: () => void;
     onDelete: () => void;
-    onOpenSettings: () => void;
 }
 
 /**
@@ -17,23 +16,16 @@ interface AccountOptionsProps {
  * actions (compose, feature settings); the refresh lived there before and read
  * as global when it never was.
  *
- * Actions only. Anything with a value to set goes behind the settings button,
- * into `AccountSettingsPopup` — a strip of buttons is the wrong place for a
- * field, and there will be more than one setting to hold.
+ * Actions only. Anything with a value to set lives in the settings dialog of
+ * the selected account (the common settings button, top right of the feature):
+ * a strip of buttons is the wrong place for a field.
  *
  * Le rafraîchissement est une relève, pas une reconstruction : il n'attend pas
  * le prochain passage de la synchro de fond, mais fait le même travail qu'elle.
- * La reconstruction du cache, elle, vit derrière le bouton de paramètres — même
- * icône, même endroit, deux gestes trop différents pour se ressembler.
+ * La reconstruction du cache, elle, vit dans l'onglet Synchronisation des
+ * réglages de la boîte : deux gestes trop différents pour se ressembler.
  */
-export function AccountOptions({
-    canRefresh,
-    refreshing,
-    onEdit,
-    onRefresh,
-    onDelete,
-    onOpenSettings
-}: AccountOptionsProps) {
+export function AccountOptions({ canRefresh, refreshing, onEdit, onRefresh, onDelete }: AccountOptionsProps) {
     return (
         <div className={styles.accountOptions}>
             <div className={styles.accountOptionsActions}>
@@ -66,16 +58,6 @@ export function AccountOptions({
                     <span className='icon icon-trash' />
                 </button>
             </div>
-
-            <button
-                type='button'
-                className={styles.iconBtn}
-                title='Paramètres de cette boîte mail'
-                aria-label='Paramètres de cette boîte mail'
-                onClick={onOpenSettings}
-            >
-                <span className='icon icon-settings' />
-            </button>
         </div>
     );
 }

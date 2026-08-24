@@ -172,13 +172,19 @@ base a disparu — on n'aurait eu aucun moyen de l'ouvrir.
 > où l'on range une clé, et surtout pas à côté des archives ni sur la machine
 > qu'elles protègent. Les changer rend illisibles toutes les archives d'avant.
 
-Le chiffrement est un réglage **de la destination**, pas du travail, et il est
-recopié sur chaque exécution au moment où elle part : basculer une destination ne
-change donc jamais rétroactivement ce qu'on croit des archives déjà écrites.
+Le chiffrement est un réglage **du travail** (migration 094 ; il a vécu sur la
+destination) : `backup_jobs.encryption`, 'none' ou 'server', réglé dans
+l'onglet Chiffrement des réglages du travail. Une destination dit où écrire,
+le travail dit sous quelle forme. La forme reste recopiée sur chaque exécution
+au moment où elle part : changer le réglage ne change donc jamais
+rétroactivement ce qu'on croit des archives déjà écrites. Un travail naît
+scellé ('server'), le défaut sûr.
 
-Par défaut : activé pour `device` et `s3` (les octets quittent le serveur),
-désactivé pour `local` (le disque est déjà sous la même garde que le serveur, et
-le seul effet net serait un risque de clé perdue).
+Il n'y a pas de mode « mot de passe », et ce n'est pas un oubli :
+l'ordonnanceur tourne sans session, or la clé dérivée du mot de passe ne vit
+que dans une session déverrouillée, en mémoire, à fenêtre glissante (voir
+`SECURITY_MODEL.md`). Un tel mode ne pourrait ni tourner planifié, ni survivre
+à un vidage de plusieurs heures.
 
 ### Rouvrir une archive sans DevEye
 

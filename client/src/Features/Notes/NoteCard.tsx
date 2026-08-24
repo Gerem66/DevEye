@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import styles from './style.module.css';
 import { stripInline } from './markdown';
 
-import type { NoteFolder, NoteSummary } from 'deveye-types';
+import type { NoteFolder, NoteSummary } from '@deveye/types';
 import { useLiveOutline } from '@/live/useLiveOutline';
 
 /**

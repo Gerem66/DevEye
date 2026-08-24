@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Credential, GitRepo, GitRepoSyncState, GitRepoUsage } from 'deveye-types';
-import { Button, CredentialsDialog, GIT_CREDENTIALS } from '@/Components';
+import type { Credential, GitRepo, GitRepoSyncState, GitRepoUsage } from '@deveye/types';
+import { Button } from '@/Components';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { ws } from '@/api/ws';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
@@ -48,7 +49,6 @@ export function FeatureGit({ workspace }: FeatureProps) {
     const [opened, setOpened] = useState<{ repo: GitRepo; usage: GitRepoUsage[] } | null>(null);
 
     const [repoDialog, setRepoDialog] = useState<{ repo: GitRepo | null } | null>(null);
-    const [credentialsOpen, setCredentialsOpen] = useState(false);
     const [busy, setBusy] = useState(false);
 
     /**
@@ -301,11 +301,10 @@ export function FeatureGit({ workspace }: FeatureProps) {
                 </div>
                 <div className={styles.actions}>
                     {/* Les jetons sont une propriété de l'espace, pas d'un dépôt :
-                        ils vivent donc en tête de la feature, et non enfouis dans
-                        le formulaire d'un dépôt comme c'était le cas avant. */}
-                    <Button variant='secondary' icon='key' onClick={() => setCredentialsOpen(true)}>
-                        Jetons GitHub
-                    </Button>
+                        ils vivent dans Réglages → Sources, comme les sources de
+                        toute feature. Ils avaient leur propre bouton « Jetons
+                        GitHub », un endroit de plus à connaître. */}
+                    <FeatureSettingsButton scope={{ kind: 'feature', feature: 'git' }} />
                     {canWrite && (
                         <Button icon='add' onClick={() => setRepoDialog({ repo: null })}>
                             Ajouter un dépôt
@@ -350,15 +349,6 @@ export function FeatureGit({ workspace }: FeatureProps) {
                     setOpenedId(repoId);
                 }}
                 onRemove={canWrite && repoDialog?.repo ? () => void removeRepo(repoDialog.repo!.id) : undefined}
-            />
-
-            <CredentialsDialog
-                open={credentialsOpen}
-                kind={GIT_CREDENTIALS}
-                credentials={credentials}
-                canWrite={canWrite}
-                onClose={() => setCredentialsOpen(false)}
-                onChanged={() => invalidate('git.list')}
             />
         </div>
     );

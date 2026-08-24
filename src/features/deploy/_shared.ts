@@ -1,8 +1,9 @@
-import type { DeployTarget, DeployTargetRow, Deployment, DeploymentRow } from 'deveye-types';
-import { deployTargetSchema } from 'deveye-types';
+import type { DeployTarget, DeployTargetRow, Deployment, DeploymentRow } from '@deveye/types';
+import { deployTargetSchema } from '@deveye/types';
 import type { Cipher } from '@/Services/SecureStore';
-import type { DeployTargetWithUsageRow } from 'deveye-types';
+import type { DeployTargetWithUsageRow } from '@deveye/types';
 import { FeatureError, type FeatureContext } from '../_define';
+import { shareScope } from '../_sharing';
 
 /**
  * Le socle de la feature Déploiement.
@@ -28,18 +29,24 @@ export interface StoredDeployment {
     description: string;
     url: string | null;
     /**
-     * L'identifiant du message Discord qui suit ce déploiement en direct.
+     * Les messages Discord qui suivent ce déploiement en direct, **un par
+     * canal** : `identifiant de canal → identifiant de message`.
      *
-     * Dans le blob et non dans une colonne : il n'est jamais un critère de
-     * recherche, seulement une donnée qu'on transporte avec la ligne — et le
-     * blob est déjà réécrit à chaque changement d'état. Une colonne aurait coûté
-     * une migration pour un champ que rien n'interroge.
+     * C'était une seule chaîne tant qu'un espace n'avait qu'un webhook. Depuis
+     * que les canaux sont une liste, un déploiement peut être suivi dans deux
+     * salons à la fois, et chacun a son propre message à modifier — les
+     * confondre ferait éditer, dans le second salon, un identifiant qui
+     * appartient au premier.
+     *
+     * Dans le blob et non dans une colonne : jamais un critère de recherche,
+     * seulement une donnée transportée avec la ligne, et le blob est déjà
+     * réécrit à chaque changement d'état.
      *
      * **Persisté, et c'est le point** : un serveur redémarré au milieu d'un
-     * déploiement retrouve le message qu'il avait ouvert et continue de le
-     * modifier, au lieu d'en poser un second à côté du premier.
+     * déploiement retrouve les messages qu'il avait ouverts et continue de les
+     * modifier, au lieu d'en poser de seconds à côté.
      */
-    noticeId?: string | null;
+    noticeIds?: Record<string, string> | null;
 }
 
 /** Déchiffre et parse, sans jamais lever : `null` dit simplement « illisible ». */
@@ -55,20 +62,46 @@ export async function readJson<T>(cipher: Cipher, blob: string | null): Promise<
 }
 
 /**
- * Charge une cible de l'espace actif, ou lève `not_found`.
+ * Une cible visible depuis cet espace — la sienne, ou une que l'on y projette.
  *
  * C'est **la** frontière d'espace de la feature : toute commande qui prend un
- * `targetId` commence par là, sans quoi elle répondrait sur la cible d'autrui.
+ * `targetId` commence par là. `level` décide de la garde : `assertItem` refuse
+ * en plus les cibles qu'une restriction de rôle masque ou passe en lecture
+ * seule.
  */
-export async function loadTarget(ctx: FeatureContext, targetId: number): Promise<DeployTargetRow> {
-    const row = await ctx.db.deploy.findTarget(targetId, ctx.workspaceId);
+export async function loadTarget(
+    ctx: FeatureContext,
+    targetId: number,
+    level: 'read' | 'write' = 'read'
+): Promise<DeployTargetRow> {
+    const row = await ctx.db.deploy.findVisibleTarget(targetId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Cible de déploiement introuvable');
+    await ctx.assertItem('deploy', targetId, level);
     return row;
 }
 
-export async function toTarget(cipher: Cipher, row: DeployTargetWithUsageRow): Promise<DeployTarget> {
+/**
+ * Comme {@link loadTarget}, mais exige que la cible soit **chez l'appelant**.
+ *
+ * Pour les gestes réservés au domicile : la modifier (son jeton se choisit
+ * parmi les clés d'ici, pas de là-bas) et la supprimer. Une fenêtre lit,
+ * déclenche et suit ; elle ne reconfigure pas la donnée d'un autre espace.
+ */
+export async function loadHomeTarget(ctx: FeatureContext, targetId: number): Promise<DeployTargetRow> {
+    const row = await loadTarget(ctx, targetId, 'write');
+    if (row.workspace_id !== ctx.workspaceId) {
+        throw new FeatureError(
+            'forbidden',
+            'Cette cible appartient à un autre espace : elle se modifie et se supprime depuis là-bas.'
+        );
+    }
+    return row;
+}
+
+export async function toTarget(cipher: Cipher, row: DeployTargetWithUsageRow, foreign: boolean): Promise<DeployTarget> {
     const body = await readJson<Partial<StoredTarget>>(cipher, row.content);
     return deployTargetSchema.parse({
+        foreign,
         id: row.id,
         provider: 'dokploy',
         kind: row.target_kind === 'compose' ? 'compose' : 'application',
@@ -94,9 +127,13 @@ export async function toTarget(cipher: Cipher, row: DeployTargetWithUsageRow): P
  * pire qu'un aller-retour.
  */
 export async function reloadTarget(ctx: FeatureContext, targetId: number): Promise<DeployTarget> {
-    const row = await ctx.db.deploy.findTargetWithUsage(targetId, ctx.workspaceId);
+    const row = await ctx.db.deploy.findVisibleTargetWithUsage(targetId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Cible de déploiement introuvable');
-    return toTarget(deployCipher(ctx), row);
+    // Le codec du **domicile** de la cible : une projetée reste chiffrée sous
+    // la clé de son espace d'origine, et la relire avec celle d'ici rendrait un
+    // nom vide qu'on croirait mal enregistré.
+    const shares = await shareScope(ctx, 'deploy');
+    return toTarget(await shares.cipherFor(row.id), row, row.workspace_id !== ctx.workspaceId);
 }
 
 /** Un état venu de la base : inconnu vaut `null`, jamais une valeur inventée. */
@@ -130,15 +167,30 @@ export async function toDeployment(cipher: Cipher, row: DeploymentRow): Promise<
  */
 export async function loadDokployCredential(
     ctx: FeatureContext,
-    credentialId: number
+    credentialId: number,
+    /**
+     * La cible pour laquelle on charge la clé, quand elle peut être projetée :
+     * son jeton vit dans **son** espace, et le chercher ici répondrait
+     * « introuvable » sur une cible parfaitement configurée. Absent = la clé
+     * de l'espace actif (déclaration, sélecteur de candidats).
+     */
+    target?: DeployTargetRow
 ): Promise<{ baseUrl: string; apiKey: string }> {
-    const credential = await ctx.db.credentials.find(credentialId, ctx.workspaceId, 'dokploy');
+    const home = target?.workspace_id ?? ctx.workspaceId;
+    const credential = await ctx.db.credentials.find(credentialId, home, 'dokploy');
     if (!credential) throw new FeatureError('not_found', 'Accès Dokploy introuvable');
     if (!credential.base_url) {
         throw new FeatureError('validation', 'Cet accès Dokploy n’a pas d’adresse d’instance.');
     }
-    // Étage ouvert, toujours : le suivi des déploiements tourne sans session.
-    return { baseUrl: credential.base_url, apiKey: await ctx.secure.open.decrypt(credential.secret_enc) };
+    // Le codec du **domicile**, étage ouvert toujours : le suivi tourne sans
+    // session, et le secret d'une cible projetée est scellé sous la clé de son
+    // espace. `cipherFor(target.id)` ne rend un codec étranger que si la
+    // projection existe réellement — la garde de `_sharing.ts`.
+    const cipher =
+        target && target.workspace_id !== ctx.workspaceId
+            ? await (await shareScope(ctx, 'deploy')).cipherFor(target.id)
+            : ctx.secure.open;
+    return { baseUrl: credential.base_url, apiKey: await cipher.decrypt(credential.secret_enc) };
 }
 
 export const READ = { feature: 'deploy' } as const;

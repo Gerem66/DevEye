@@ -1,5 +1,5 @@
-import { homeLayoutSchema, themeStateSchema, workspaceActivate, workspaceSetFavorite } from 'deveye-types';
-import type { HomeLayout, ThemeStateDTO } from 'deveye-types';
+import { homeLayoutSchema, themeStateSchema, workspaceActivate, workspaceSetFavorite } from '@deveye/types';
+import type { HomeLayout, ThemeStateDTO } from '@deveye/types';
 import { permissionsFor } from '../_access';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 

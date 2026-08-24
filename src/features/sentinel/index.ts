@@ -13,21 +13,16 @@ import {
     sentinelResetBaseline,
     sentinelResolve,
     sentinelScanNow,
-    sentinelGetSettings,
     sentinelSetConfig,
-    sentinelSetSettings,
-    sentinelTestNotification,
     type AllowEntry,
     type BaselineEntry,
     type DeviceRow,
     type DeviceSentinelState
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { deviceAgentConfig } from '@/agent/mappers';
 import { env } from '@/Utils/Env';
 import { allowSubject, type AllowRow } from '@/db/repos/sentinel';
-import { deliver, hasChannel, resolveChannels } from '@/Services/notifications';
-import { getNotificationSettings, setNotificationSettings } from '../_notifications';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { authorizeDevice } from '../devices/shared';
 import { posturize, probesOf, scopedDevices, toFinding } from './_shared';
@@ -451,81 +446,6 @@ export const sentinelResetBaselineFeature: FeatureDefinition<
     }
 });
 
-export const sentinelGetSettingsFeature: FeatureDefinition<
-    typeof sentinelGetSettings.command,
-    typeof sentinelGetSettings.input,
-    typeof sentinelGetSettings.output
-> = defineFeature({
-    ...sentinelGetSettings,
-    access: { feature: 'sentinel', level: 'read' },
-    handler: async (ctx) => ({ settings: await getNotificationSettings(ctx, 'sentinel') })
-});
-
-export const sentinelSetSettingsFeature: FeatureDefinition<
-    typeof sentinelSetSettings.command,
-    typeof sentinelSetSettings.input,
-    typeof sentinelSetSettings.output
-> = defineFeature({
-    ...sentinelSetSettings,
-    mutates: true,
-    access: { feature: 'sentinel', level: 'write' },
-    handler: async (ctx, input) => {
-        // Même garde que côté Uptime : un compte « guarded » exige un
-        // déverrouillage que le moteur de fond n'a jamais, et l'accepter ici
-        // produirait un canal qui ne part jamais, en silence.
-        if (input.emailEnabled && input.mailAccountId !== null) {
-            const account = await ctx.db.mailAccounts.findById(input.mailAccountId, ctx.workspaceId);
-            if (!account) throw new FeatureError('not_found', 'Compte mail introuvable');
-            if (account.security_tier !== 'open') {
-                throw new FeatureError(
-                    'validation',
-                    'Un compte « guarded » ne peut pas envoyer d’alertes automatiques : choisissez un compte « open »'
-                );
-            }
-        }
-        const settings = await setNotificationSettings(ctx, 'sentinel', input);
-        ctx.audit({
-            action: 'sentinel.setSettings',
-            description: 'Notifications de sécurité modifiées',
-            metadata: { email: input.emailEnabled, webhook: input.webhookEnabled }
-        });
-        return { settings };
-    }
-});
-
-export const sentinelTestNotificationFeature: FeatureDefinition<
-    typeof sentinelTestNotification.command,
-    typeof sentinelTestNotification.input,
-    typeof sentinelTestNotification.output
-> = defineFeature({
-    ...sentinelTestNotification,
-    access: { feature: 'sentinel', level: 'write' },
-    handler: async (ctx) => {
-        const channels = await resolveChannels(ctx.db, ctx.secure.open, ctx.workspaceId, 'sentinel');
-        if (!hasChannel(channels)) {
-            return {
-                sent: false,
-                error: 'Aucun canal activé (choisissez un compte mail « open » ou un webhook).'
-            };
-        }
-        await deliver(
-            channels,
-            {
-                subject: '[DevEye] Test de notification — Sentinelle',
-                body: [
-                    'Ceci est un test des notifications de Sentinelle.',
-                    '',
-                    'Si vous lisez ce message, les constats de sécurité vous parviendront bien.',
-                    'Ils sont distincts des alertes de disponibilité (Uptime), qui ont leurs propres canaux.'
-                ].join('\n'),
-                payload: { event: 'sentinel_test', at: Math.floor(Date.now() / 1000) }
-            },
-            ctx.logger
-        );
-        return { sent: true, error: null };
-    }
-});
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- même forme que les autres registres de feature
 export const sentinelFeatures: FeatureDefinition<string, any, any>[] = [
     sentinelOverviewFeature,
@@ -540,8 +460,5 @@ export const sentinelFeatures: FeatureDefinition<string, any, any>[] = [
     sentinelRemoveAllowFeature,
     sentinelSetConfigFeature,
     sentinelScanNowFeature,
-    sentinelResetBaselineFeature,
-    sentinelGetSettingsFeature,
-    sentinelSetSettingsFeature,
-    sentinelTestNotificationFeature
+    sentinelResetBaselineFeature
 ];

@@ -75,22 +75,26 @@
     color: var(--text-muted);
 }
 
+/* Les deux cartes de cette page sont des listes de lignes : pas de gap (le
+   trait de séparation doit tomber à mi-chemin entre deux lignes, pas décalé
+   d'un côté), et un padding vertical resserré (8, plus les 4 de la ligne) :
+   ces listes se lisent serrées, l'avatar donne déjà la hauteur. */
 .card {
     display: flex;
     flex-direction: column;
-    gap: var(--space-sm);
-    padding: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
     background: var(--glass-bg-light);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
 }
 
-/* Une ligne = un membre, ou un lien d'invitation. */
+/* Une ligne = un membre, ou un lien d'invitation. Padding vertical minimal :
+   l'avatar donne déjà sa hauteur à la ligne, en rajouter aérait trop. */
 .row {
     display: flex;
     align-items: center;
     gap: var(--space-md);
-    padding: var(--space-sm) 0;
+    padding: var(--space-xs) 0;
 }
 
 .row + .row {

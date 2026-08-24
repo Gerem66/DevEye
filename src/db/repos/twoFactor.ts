@@ -1,4 +1,4 @@
-import type { BackupCodeRow, TwoFactorRow } from 'deveye-types';
+import type { BackupCodeRow, TwoFactorRow } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;

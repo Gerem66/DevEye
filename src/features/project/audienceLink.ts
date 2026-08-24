@@ -1,4 +1,4 @@
-import { projectAudienceLink, projectAudienceList, projectAudienceUnlink } from 'deveye-types';
+import { projectAudienceLink, projectAudienceList, projectAudienceUnlink } from '@deveye/types';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { loadProject } from './_shared';
 

@@ -1,4 +1,4 @@
-import { databaseInspect, databaseQuery, databaseTest, databaseTestDraft } from 'deveye-types';
+import { databaseInspect, databaseQuery, databaseTest, databaseTestDraft } from '@deveye/types';
 import { explainError, openSession, type Session } from '@/Services/databases/engine';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { databaseCipher, loadDatabase, monitorOf, READ, reloadDatabase, WRITE } from './_shared';

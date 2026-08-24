@@ -8,19 +8,23 @@ import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyBaseLogger, type FastifyError, type FastifyInstance, type FastifyRequest } from 'fastify';
-import { err, ok, serverStatusSchema, type ErrorCode } from 'deveye-types';
+import { err, ok, serverStatusSchema, type ErrorCode } from '@deveye/types';
 
 import { agentRoutes } from '@/agent/routes';
 import { audienceRoutes } from '@/audience/routes';
 import { registerAgentWS } from '@/agent/ws';
 import { MonitorHub } from '@/agent/hub';
 import { LiveHub } from '@/live/hub';
+import { assertAccessDeclared } from '@/features/_permissions';
+import { featureHandlers } from '@/features/registry';
 import { buildTopicIndex } from '@/features/_topics';
 import { authRoutes } from '@/auth/routes';
-import { CloudSyncEngine } from '@/cloudSync/engine';
 import { logger } from '@/logger';
 import { env, isDev } from '@/Utils/Env';
 import { registerWS } from '@/ws/handler';
+import { createModuleServices, moduleAgentHooks } from '@/features/_sdk/register';
+import { setSdkHub } from '@/features/_sdk/host';
+import type { FeatureService } from '@deveye/types/sdk/server';
 import { createAuditLog } from '@/Services/AuditLog';
 import { MailSyncService } from '@/Services/MailSyncService';
 import { UptimeMonitor } from '@/Services/UptimeMonitor';
@@ -46,8 +50,8 @@ export interface AppDeps {
 
 export interface BuiltApp {
     app: FastifyInstance;
-    /** Moteur CloudSync — exposé pour le prune horaire de index.ts. */
-    cloudSync: CloudSyncEngine;
+    /** Services des modules installés — démarrés ici, arrêtés par index.ts. */
+    moduleServices: readonly FeatureService[];
     /** Ordonnanceur Uptime — démarré/arrêté par index.ts. */
     uptime: UptimeMonitor;
     integrations: IntegrationSyncService;
@@ -158,6 +162,9 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // Construit avant les services de fond : ils lui adressent leurs changements
     // (ils écrivent sans commande utilisateur, donc sans socket pour diffuser).
     const live = new LiveHub();
+    // La diffusion traverse les projections : un espace est prévenu des
+    // écritures faites chez ceux qui partagent avec lui, dans les deux sens.
+    live.setShareLinks((workspaceId, feature) => deps.db.itemSharing.linkedWorkspaces(workspaceId, feature));
     live.startHeartbeat();
     // Même battement pour les sockets agent : une machine éteinte ne referme
     // jamais la sienne, et restait « en ligne » jusqu'au keepalive TCP du noyau.
@@ -165,9 +172,19 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // Résout « quelle commande touche à quoi » une fois pour toutes, et signale
     // les commandes mutantes qui auraient oublié de le déclarer.
     buildTopicIndex();
+    // Et le contrôle d'autorisation : aucune commande sans garde déclarée.
+    // Lever ici plutôt qu'avertir — un `access` oublié ouvre une commande en
+    // silence, et l'interface qui masque la donnée fait croire à une garde.
+    assertAccessDeclared(featureHandlers);
     const audit = createAuditLog(deps.db);
-    const cloudSync = new CloudSyncEngine({ db: deps.db, hub, crypt: deps.crypt, audit, logger });
-    await cloudSync.start();
+    // Le hub se dépose pour l'assemblage SDK (façade agents des modules),
+    // puis les services des modules installés démarrent ICI, awaités, avant
+    // l'enregistrement des sockets : un module d'infrastructure (bail, clés)
+    // doit être prêt avant la première trame d'agent, exactement comme le
+    // moteur d'un module d'infrastructure (CloudSync) l'exige.
+    setSdkHub(hub);
+    const moduleServices = createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger });
+    for (const svc of moduleServices) await svc.start();
 
     const uptime = new UptimeMonitor({ db: deps.db, crypt: deps.crypt, audit, logger, live });
     const mailSync = new MailSyncService({ db: deps.db, crypt: deps.crypt, logger, live });
@@ -198,7 +215,6 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         db: deps.db,
         crypt: deps.crypt,
         hub,
-        cloudSync,
         databases,
         audit,
         logger,
@@ -215,7 +231,6 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         crypt: deps.crypt,
         hub,
         live,
-        cloudSync,
         uptime,
         integrations,
         databases,
@@ -226,7 +241,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     });
     // Le moteur reçoit ce que les agents envoient — mais il n'évalue rien ici :
     // les handlers empilent, le tour de boucle évalue (voir `SecurityMonitor`).
-    await registerAgentWS(app, { db: deps.db, hub, live, cloudSync, sentinel, audit });
+    await registerAgentWS(app, { db: deps.db, hub, live, hooks: moduleAgentHooks(), sentinel, audit });
 
     // Serve the built web client from the same origin as the API whenever a
     // build is present (production, or the dockerised dev stack). On the host
@@ -255,5 +270,5 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         app.log.debug({ clientDir }, 'No client build found; static serving disabled (host dev uses Vite)');
     }
 
-    return { app, cloudSync, uptime, mailSync, integrations, databases, audience, sentinel, backups };
+    return { app, uptime, mailSync, integrations, databases, audience, sentinel, backups, moduleServices };
 }

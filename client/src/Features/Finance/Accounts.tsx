@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { FinanceAccount } from 'deveye-types';
+import type { FinanceAccount } from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';

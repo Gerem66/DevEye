@@ -1,4 +1,4 @@
-import type { AudienceMetrics } from 'deveye-types';
+import type { AudienceMetrics } from '@deveye/types';
 
 import { delta, formatCount, formatDelta, formatDuration, formatPercent } from '../format';
 import styles from '../style.module.css';

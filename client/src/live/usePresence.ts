@@ -1,8 +1,8 @@
-import type { UserColor } from 'deveye-types';
+import type { UserColor } from '@deveye/types';
 import { useMemo } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
-import { FEATURE_CATALOG } from '@/Pages/Home/catalog';
+import { featureCatalog } from '@/Pages/Home/catalog';
 import { usePeers } from '@/stores/live';
 import { useActiveWorkspace } from '@/stores/workspace';
 
@@ -23,16 +23,24 @@ export interface PresentUser {
     label: string;
 }
 
-/** Le libellé d'une vue, pour dire où se trouve quelqu'un. */
-const VIEW_TITLES: Record<string, string> = {
-    ...Object.fromEntries(FEATURE_CATALOG.map((entry) => [entry.id, entry.title])),
-    clients: 'Appareils',
-    profile: 'Profil',
-    security: 'Sécurité',
-    logs: 'Journaux',
-    users: 'Utilisateurs',
-    workspace: "Gestion de l'espace"
-};
+/**
+ * Le libellé d'une vue, pour dire où se trouve quelqu'un. PARESSEUX, comme le
+ * catalogue : ce fichier est atteint par le graphe d'imports des modules, une
+ * table figée à l'import raterait leurs titres.
+ */
+let VIEW_TITLES_MEMO: Record<string, string> | null = null;
+function viewTitles(): Record<string, string> {
+    VIEW_TITLES_MEMO ??= {
+        ...Object.fromEntries(featureCatalog().map((entry) => [entry.id, entry.title])),
+        clients: 'Appareils',
+        profile: 'Profil',
+        security: 'Sécurité',
+        logs: 'Journaux',
+        users: 'Utilisateurs',
+        workspace: "Gestion de l'espace"
+    };
+    return VIEW_TITLES_MEMO;
+}
 
 export function livePathLabel(path: readonly string[]): string {
     // Le serveur a déjà tronqué ce que je n'ai pas le droit de voir : un chemin
@@ -43,7 +51,7 @@ export function livePathLabel(path: readonly string[]): string {
     const root = path[0];
     const viewId = root.slice(root.indexOf(':') + 1);
     if (viewId.startsWith('device:')) return 'Appareils';
-    return VIEW_TITLES[viewId] ?? 'Ailleurs';
+    return viewTitles()[viewId] ?? 'Ailleurs';
 }
 
 /**

@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { MinimalUser, ProjectCard, ProjectCardDep, ProjectMilestone } from 'deveye-types';
+import type { MinimalUser, ProjectCard, ProjectCardDep, ProjectMilestone } from '@deveye/types';
 import { Button } from '@/Components';
 import { useLiveOutlines } from '@/live/useLiveOutline';
 import { useRequestPopupWidth } from '@/stores/popupWidth';

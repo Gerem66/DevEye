@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { motion } from 'framer-motion';
-import type { FinanceOverview, FinanceRange } from 'deveye-types';
+import type { FinanceOverview, FinanceRange } from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';

@@ -14,7 +14,7 @@ import {
     terminalUser,
     type DeviceTermExitPush,
     type DeviceTermOutputPush
-} from 'deveye-types';
+} from '@deveye/types';
 import styles from './Monitoring.module.css';
 
 /** The validated default user to open a session under, or undefined for the agent's. */

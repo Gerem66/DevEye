@@ -25,8 +25,8 @@ import {
     type SortingStrategy
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { Device, HomeFeatureId, HomeFolder, HomeSection, HomeTile, ShortcutItem } from 'deveye-types';
-import { homeTileId, isFeatureTile, isHomeFolder, isShortcutTile } from 'deveye-types';
+import type { Device, HomeFeatureId, HomeFolder, HomeSection, HomeTile, ShortcutItem } from '@deveye/types';
+import { homeTileId, isFeatureTile, isHomeFolder, isShortcutTile } from '@deveye/types';
 
 import { useDevices } from '@/stores/devices';
 import {

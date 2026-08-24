@@ -5,7 +5,7 @@ import type {
     FinanceFrequency,
     FinanceRange,
     FinanceTransactionKind
-} from 'deveye-types';
+} from '@deveye/types';
 
 /**
  * Mise en forme et vocabulaire des finances.

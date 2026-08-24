@@ -1,4 +1,4 @@
-import type { GitPullRequest, GitPullState } from 'deveye-types';
+import type { GitPullRequest, GitPullState } from '@deveye/types';
 import { Button, Dialog } from '@/Components';
 import styles from './style.module.css';
 

@@ -5,7 +5,7 @@ import {
     type AudienceFunnel,
     type AudienceFunnelStepDraft,
     type AudienceFunnelStepKind
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { Button, Dialog, SelectInput, TextInput } from '@/Components';
 import { ws } from '@/api/ws';

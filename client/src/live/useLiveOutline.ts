@@ -1,4 +1,4 @@
-import type { UserColor } from 'deveye-types';
+import type { UserColor } from '@deveye/types';
 import { useEffect, useMemo, useReducer, type CSSProperties } from 'react';
 
 import { userColorVar } from '@/Features/Profile/userColors';

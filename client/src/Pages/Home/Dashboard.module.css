@@ -139,6 +139,35 @@
     width: 100%;
 }
 
+/* Bascule d'espace quand l'accueil quitté n'a rien à laisser à l'écran : un
+   battement. Quand il a des sections, elles restent affichées et glissent vers
+   la disposition de la cible, ce bloc ne sert pas. Assez haut pour que la page
+   ne se recroqueville pas le temps du chargement. */
+.switching {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40vh;
+    color: var(--text-muted);
+}
+
+.switchingSpinner {
+    width: 28px;
+    animation: switching-spin 0.9s linear infinite;
+}
+
+@keyframes switching-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .switchingSpinner {
+        animation: none;
+    }
+}
+
 /*
  * La boîte qui se déroule au dépliage d'une section.
  *

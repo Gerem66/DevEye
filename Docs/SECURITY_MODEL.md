@@ -169,8 +169,8 @@ Ce que ça protège : le disque au repos (vol, snapshot hors-ligne). Ce que ça
 ne protège pas : une compromission du serveur vivant (qui détient la clé).
 C'est le même niveau de garantie que les secrets liés à l'auth (2FA), et un
 cran en dessous des données « mot de passe »/notes — documenté ici pour que le
-choix reste explicite. Détails d'implémentation : `src/cloudSync/blobCrypto.ts`
-et `Docs/CLOUDSYNC.md`.
+choix reste explicite. Détails d'implémentation du format de conteneur :
+`src/backup/devb.ts`.
 
 ## Uptime — l'étage ouvert appliqué à une tâche de fond
 
@@ -183,7 +183,8 @@ utilise donc systématiquement l'**étage ouvert** :
   n'expose *que* cet étage — l'étage gardé n'a aucun sens sans session) : le nom
   du service, son URL, le mot-clé attendu, les messages d'erreur (ligne du
   service, ligne de chaque ping, ligne d'incident) et les canaux de notification
-  (adresse mail, URL de webhook) ;
+  — libellé, adresse mail, URL de webhook, dans `notification_channels`
+  (voir [NOTIFICATIONS.md](./NOTIFICATIONS.md)) ;
 - en clair : ce qui pilote la planification (`interval_seconds`,
   `timeout_seconds`, `enabled`, `last_checked_at`) et ce qu'agrègent les
   graphiques (`status`, `response_ms`, `http_status`, horodatages, agrégat

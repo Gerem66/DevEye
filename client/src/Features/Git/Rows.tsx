@@ -1,4 +1,4 @@
-import type { GitBranch, GitCommit, GitPullRequest, GitRelease } from 'deveye-types';
+import type { GitBranch, GitCommit, GitPullRequest, GitRelease } from '@deveye/types';
 import { PULL_STATE_LABELS } from './PullRequestDialog';
 import styles from './style.module.css';
 

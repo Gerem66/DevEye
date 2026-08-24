@@ -1,4 +1,4 @@
-import type { ShortcutPreview, ShortcutTemplate } from 'deveye-types';
+import type { ShortcutPreview, ShortcutTemplate } from '@deveye/types';
 import { EMPTY, openGraphPreview, type TemplateAdapter } from './shared';
 import { link } from './link';
 import { github } from './github';

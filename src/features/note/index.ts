@@ -13,8 +13,8 @@ import {
     noteList,
     noteReorder,
     noteRestore
-} from 'deveye-types';
-import type { NoteRow } from 'deveye-types';
+} from '@deveye/types';
+import type { NoteRow } from '@deveye/types';
 import type { Cipher } from '@/Services/SecureStore';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import {

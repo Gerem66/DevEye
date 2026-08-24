@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { ProjectColumn } from 'deveye-types';
-import { PROJECT_COLUMN_NAME_MAX_LENGTH } from 'deveye-types';
+import type { ProjectColumn } from '@deveye/types';
+import { PROJECT_COLUMN_NAME_MAX_LENGTH } from '@deveye/types';
 import { Button, Checkbox, Dialog, TextInput } from '@/Components';
 import styles from '../style.module.css';
 

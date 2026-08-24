@@ -1,6 +1,6 @@
 import type { Cipher } from '@/Services/SecureStore';
-import type { Note, NoteBlock, NoteFolder, NoteFolderRow, NoteRow, NoteSummary } from 'deveye-types';
-import { noteFolderSchema, noteSchema } from 'deveye-types';
+import type { Note, NoteBlock, NoteFolder, NoteFolderRow, NoteRow, NoteSummary } from '@deveye/types';
+import { noteFolderSchema, noteSchema } from '@deveye/types';
 
 /**
  * Stored payload (encrypted as `notes.content`). Holds only the sensitive parts

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Credential, GitRepoCandidate } from 'deveye-types';
-import { GIT_REPO_NAME_MAX_LENGTH, GIT_REPO_OWNER_MAX_LENGTH } from 'deveye-types';
-import { SelectInput, TextInput } from '@/Components';
+import type { Credential, GitRepoCandidate } from '@deveye/types';
+import { GIT_REPO_NAME_MAX_LENGTH, GIT_REPO_OWNER_MAX_LENGTH } from '@deveye/types';
+import { Button, SelectInput, TextInput } from '@/Components';
 import { ws } from '@/api/ws';
 import { humanizeError } from '../Projects/api';
 import styles from './style.module.css';
@@ -17,6 +17,8 @@ interface RepoPickerProps {
     credentials: Credential[];
     value: RepoTarget;
     onChange: (value: RepoTarget) => void;
+    /** Ouvre Réglages → Sources : les jetons se gèrent là, jamais ici. */
+    onManageCredentials?: () => void;
     autoFocus?: boolean;
 }
 
@@ -46,7 +48,7 @@ const LOOKUP_DEBOUNCE_MS = 500;
  * introuvable, jeton à portée réduite). Sans repli, un échec de liste
  * empêcherait d'ajouter un dépôt dont on connaît parfaitement le nom.
  */
-export function RepoPicker({ credentials, value, onChange, autoFocus }: RepoPickerProps) {
+export function RepoPicker({ credentials, value, onChange, onManageCredentials, autoFocus }: RepoPickerProps) {
     const [candidates, setCandidates] = useState<GitRepoCandidate[] | null>(null);
     const [looking, setLooking] = useState(false);
     const [lookupError, setLookupError] = useState<string | null>(null);
@@ -106,22 +108,33 @@ export function RepoPicker({ credentials, value, onChange, autoFocus }: RepoPick
                 voir. */}
             <label className={styles.field}>
                 <span className={styles.label}>Jeton d’accès</span>
-                <SelectInput
-                    value={credentialId === null ? '' : String(credentialId)}
-                    onChange={(e) =>
-                        onChange({ ...value, credentialId: e.target.value ? Number(e.target.value) : null })
-                    }
-                >
-                    <option value=''>Aucun — dépôts publics uniquement</option>
-                    {githubCredentials.map((c) => (
-                        <option key={c.id} value={c.id}>
-                            {c.label}
-                        </option>
-                    ))}
-                </SelectInput>
+                <div className={styles.fieldWithAction}>
+                    <SelectInput
+                        value={credentialId === null ? '' : String(credentialId)}
+                        onChange={(e) =>
+                            onChange({ ...value, credentialId: e.target.value ? Number(e.target.value) : null })
+                        }
+                    >
+                        <option value=''>Aucun — dépôts publics uniquement</option>
+                        {githubCredentials.map((c) => (
+                            <option key={c.id} value={c.id}>
+                                {c.label}
+                            </option>
+                        ))}
+                    </SelectInput>
+                    {onManageCredentials && (
+                        <Button
+                            variant='ghost'
+                            icon='plus'
+                            aria-label='Gérer les jetons GitHub'
+                            title='Gérer les jetons GitHub (Réglages → Sources)'
+                            onClick={onManageCredentials}
+                        />
+                    )}
+                </div>
                 <span className={styles.hint}>
                     {githubCredentials.length === 0
-                        ? 'Aucun jeton GitHub enregistré : seuls les dépôts publics apparaîtront, et la synchronisation restera inactive.'
+                        ? 'Aucun jeton GitHub enregistré : seuls les dépôts publics apparaîtront, et la synchronisation restera inactive. Le « + » ouvre les réglages pour en déclarer un.'
                         : 'Change la liste ci-dessous — un jeton donne accès aux dépôts privés, et il est indispensable à la synchronisation.'}
                 </span>
             </label>

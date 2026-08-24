@@ -5,7 +5,7 @@ import type {
     GitPullRequestRow,
     GitReleaseRow,
     GitRepoRow
-} from 'deveye-types';
+} from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
@@ -37,8 +37,13 @@ export interface GitRepoUsageRow {
 export interface GitRepo {
     // -- dépôts ------------------------------------------------------------
     listRepos(workspaceId: number): Promise<GitRepoWithUsageRow[]>;
+    /** Comme `listRepos`, plus les dépôts projetés vers cet espace. */
+    listVisibleRepos(workspaceId: number): Promise<GitRepoWithUsageRow[]>;
     findRepo(id: number, workspaceId: number): Promise<GitRepoRow | null>;
+    /** Comme `findRepo`, mais accepte aussi un dépôt projeté vers cet espace. */
+    findVisibleRepo(id: number, workspaceId: number): Promise<GitRepoRow | null>;
     findRepoWithUsage(id: number, workspaceId: number): Promise<GitRepoWithUsageRow | null>;
+    findVisibleRepoWithUsage(id: number, workspaceId: number): Promise<GitRepoWithUsageRow | null>;
     /** L'unicité d'un dépôt dans l'espace, ce que `content` chiffré ne peut porter. */
     findRepoBySlug(workspaceId: number, slugRef: string): Promise<GitRepoRow | null>;
     countRepos(workspaceId: number): Promise<number>;
@@ -191,12 +196,62 @@ export function gitRepo(pool: Q): GitRepo {
             );
             return r.rows.map((row) => ({ ...row, project_count: Number(row.project_count) }));
         },
+        async listVisibleRepos(workspaceId) {
+            const r = await pool.query<GitRepoWithUsageRow>(
+                `SELECT r.*, COUNT(l.project_id) AS project_count
+                   FROM git_repos r
+                   LEFT JOIN project_repo_links l ON l.repo_id = r.id
+                  WHERE r.workspace_id = ?
+                  GROUP BY r.id
+                 UNION
+                 SELECT r.*, COUNT(l.project_id) AS project_count
+                   FROM git_repos r
+                   LEFT JOIN project_repo_links l ON l.repo_id = r.id
+                   JOIN item_shares sh
+                     ON sh.feature = 'git' AND sh.item_id = r.id AND sh.home_workspace_id = r.workspace_id
+                  WHERE sh.workspace_id = ?
+                  GROUP BY r.id
+                  ORDER BY sort_order ASC, id ASC`,
+                [workspaceId, workspaceId]
+            );
+            return r.rows.map((row) => ({ ...row, project_count: Number(row.project_count) }));
+        },
         async findRepo(id, workspaceId) {
             const r = await pool.query<GitRepoRow>('SELECT * FROM git_repos WHERE id = ? AND workspace_id = ?', [
                 id,
                 workspaceId
             ]);
             return r.rows[0] ?? null;
+        },
+        async findVisibleRepo(id, workspaceId) {
+            const r = await pool.query<GitRepoRow>(
+                `SELECT r.* FROM git_repos r
+                  WHERE r.id = ?
+                    AND (r.workspace_id = ?
+                         OR EXISTS (SELECT 1 FROM item_shares sh
+                                     WHERE sh.feature = 'git' AND sh.item_id = r.id
+                                       AND sh.home_workspace_id = r.workspace_id
+                                       AND sh.workspace_id = ?))`,
+                [id, workspaceId, workspaceId]
+            );
+            return r.rows[0] ?? null;
+        },
+        async findVisibleRepoWithUsage(id, workspaceId) {
+            const r = await pool.query<GitRepoWithUsageRow>(
+                `SELECT r.*, COUNT(l.project_id) AS project_count
+                   FROM git_repos r
+                   LEFT JOIN project_repo_links l ON l.repo_id = r.id
+                  WHERE r.id = ?
+                    AND (r.workspace_id = ?
+                         OR EXISTS (SELECT 1 FROM item_shares sh
+                                     WHERE sh.feature = 'git' AND sh.item_id = r.id
+                                       AND sh.home_workspace_id = r.workspace_id
+                                       AND sh.workspace_id = ?))
+                  GROUP BY r.id`,
+                [id, workspaceId, workspaceId]
+            );
+            const row = r.rows[0];
+            return row ? { ...row, project_count: Number(row.project_count) } : null;
         },
         async findRepoWithUsage(id, workspaceId) {
             const r = await pool.query<GitRepoWithUsageRow>(

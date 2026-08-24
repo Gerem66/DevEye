@@ -5,7 +5,7 @@ import {
     twoFactorRegenBackup,
     twoFactorSetup,
     type TwoFactorStatus
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { sha256hex } from '@/Utils/hash';
 import { generateBackupCodes, generateTotpSecret, normalizeBackupCode, verifyTotp } from '@/Services/Totp';

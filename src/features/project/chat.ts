@@ -5,8 +5,8 @@ import {
     projectMessageList,
     projectMessageSend,
     projectMessageSchema
-} from 'deveye-types';
-import type { ProjectCardRow, ProjectMessage, ProjectMessageRow, ProjectRow } from 'deveye-types';
+} from '@deveye/types';
+import type { ProjectCardRow, ProjectMessage, ProjectMessageRow, ProjectRow } from '@deveye/types';
 import type { Cipher } from '@/Services/SecureStore';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { assertProjectUnlocked, cipherFor, loadProject } from './_shared';

@@ -2,7 +2,7 @@ import { randomBytes } from 'crypto';
 
 import { FeatureError } from '@/features/_define';
 import type { Database } from '@/db';
-import type { UserSecretKeyRow } from 'deveye-types';
+import type { UserSecretKeyRow } from '@deveye/types';
 import Encryption from './Encryption';
 import { SecretKeyService } from './SecretKeyService';
 

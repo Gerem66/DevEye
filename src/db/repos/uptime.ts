@@ -5,8 +5,8 @@ import type {
     UptimePoint,
     UptimeServiceRow,
     UptimeStatus
-} from 'deveye-types';
-import type { UptimeCheckStats } from 'deveye-types';
+} from '@deveye/types';
+import type { UptimeCheckStats } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 /** Which pings a journal query covers; mirrors the shared command filter. */
@@ -28,7 +28,6 @@ export interface UptimeServiceConfig {
     timeoutSeconds: number;
     failureThreshold: number;
     retentionDays: number | null;
-    notify: boolean;
     enabled: boolean;
 }
 
@@ -53,7 +52,19 @@ export interface UptimeWindowStat {
 
 export interface UptimeServicesRepo {
     listByWorkspace(workspaceId: number): Promise<UptimeServiceRow[]>;
+    /**
+     * Les services **visibles** depuis cet espace : les siens, plus ceux qu'un
+     * autre espace y projette (`item_shares`).
+     *
+     * Séparé de `listByWorkspace` plutôt que de le remplacer : l'ordonnanceur de
+     * fond sonde les services d'un espace, pas ce qu'on y voit — sonder deux
+     * fois le même service parce qu'il est projeté ailleurs serait un doublon de
+     * requêtes et d'incidents.
+     */
+    listVisible(workspaceId: number): Promise<UptimeServiceRow[]>;
     findById(id: number, workspaceId: number): Promise<UptimeServiceRow | null>;
+    /** Comme `findById`, mais accepte aussi un service projeté vers cet espace. */
+    findVisible(id: number, workspaceId: number): Promise<UptimeServiceRow | null>;
     create(input: { userId: number; workspaceId: number } & UptimeServiceConfig): Promise<UptimeServiceRow>;
     update(id: number, workspaceId: number, input: UptimeServiceConfig): Promise<UptimeServiceRow | null>;
     setEnabled(id: number, workspaceId: number, enabled: boolean): Promise<UptimeServiceRow | null>;
@@ -138,7 +149,7 @@ export interface UptimeHistoryRepo {
 }
 
 const SERVICE_COLUMNS = `content = ?, method = ?, expected_status = ?, interval_seconds = ?,
-     timeout_seconds = ?, failure_threshold = ?, retention_days = ?, notify = ?, enabled = ?`;
+     timeout_seconds = ?, failure_threshold = ?, retention_days = ?, enabled = ?`;
 
 function configParams(c: UptimeServiceConfig): unknown[] {
     return [
@@ -149,7 +160,6 @@ function configParams(c: UptimeServiceConfig): unknown[] {
         c.timeoutSeconds,
         c.failureThreshold,
         c.retentionDays,
-        c.notify ? 1 : 0,
         c.enabled ? 1 : 0
     ];
 }
@@ -205,6 +215,36 @@ export function uptimeServicesRepo(pool: Q): UptimeServicesRepo {
     }
 
     return {
+        async listVisible(workspaceId) {
+            // `sort_order` appartient à l'espace d'origine : un service projeté
+            // se range donc après les locaux, par identifiant. Lui donner un
+            // ordre propre à chaque espace demanderait une colonne par
+            // projection — un réglage d'affichage ne vaut pas cette table.
+            const r = await pool.query<UptimeServiceRow>(
+                `SELECT s.* FROM uptime_services s WHERE s.workspace_id = ?
+                 UNION
+                 SELECT s.* FROM uptime_services s
+                   JOIN item_shares sh
+                     ON sh.feature = 'uptime' AND sh.item_id = s.id AND sh.home_workspace_id = s.workspace_id
+                  WHERE sh.workspace_id = ?
+                 ORDER BY sort_order ASC, id ASC`,
+                [workspaceId, workspaceId]
+            );
+            return r.rows;
+        },
+        async findVisible(id, workspaceId) {
+            const r = await pool.query<UptimeServiceRow>(
+                `SELECT s.* FROM uptime_services s
+                  WHERE s.id = ?
+                    AND (s.workspace_id = ?
+                         OR EXISTS (SELECT 1 FROM item_shares sh
+                                     WHERE sh.feature = 'uptime' AND sh.item_id = s.id
+                                       AND sh.home_workspace_id = s.workspace_id
+                                       AND sh.workspace_id = ?))`,
+                [id, workspaceId, workspaceId]
+            );
+            return r.rows[0] ?? null;
+        },
         async listByWorkspace(workspaceId) {
             // The user's own order; id only breaks ties.
             const r = await pool.query<UptimeServiceRow>(
@@ -223,8 +263,8 @@ export function uptimeServicesRepo(pool: Q): UptimeServicesRepo {
             const res = await pool.query(
                 `INSERT INTO uptime_services
                      (user_id, workspace_id, content, method, expected_status, interval_seconds,
-                      timeout_seconds, failure_threshold, retention_days, notify, enabled, sort_order)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                      timeout_seconds, failure_threshold, retention_days, enabled, sort_order)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [userId, workspaceId, ...configParams(config), Number(posRow.rows[0]?.next ?? 0)]
             );
             const r = await pool.query<UptimeServiceRow>('SELECT * FROM uptime_services WHERE id = ?', [res.insertId]);

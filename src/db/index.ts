@@ -12,7 +12,9 @@ import {
     type MailSettingsRepo
 } from './repos/mail';
 import { metricsRepo, type MetricsRepo } from './repos/metrics';
-import { notificationSettingsRepo, type NotificationSettingsRepo } from './repos/notificationSettings';
+import { featureKvRepo, type FeatureKvRepo } from './repos/featureKv';
+import { itemSharingRepo, type ItemSharingRepo } from './repos/itemSharing';
+import { notificationChannelsRepo, type NotificationChannelsRepo } from './repos/notificationChannels';
 import { presenceRepo, type PresenceRepo } from './repos/presence';
 import { processSamplesRepo, type ProcessSamplesRepo } from './repos/processSamples';
 import {
@@ -25,7 +27,6 @@ import {
 } from './repos/sentinel';
 import { noteFoldersRepo, type NoteFoldersRepo } from './repos/noteFolders';
 import { notesRepo, type NotesRepo } from './repos/notes';
-import { osintRepo, type OsintRepo } from './repos/osint';
 import { projectsRepo, type ProjectsRepo } from './repos/projects';
 import { projectRekeyRepo, type ProjectRekeyRepo } from './repos/projectRekey';
 import { projectBoardRepo, type ProjectBoardRepo } from './repos/projectBoard';
@@ -44,18 +45,10 @@ import { backupRepo, type BackupRepo } from './repos/backup';
 import { projectLinksRepo, type ProjectLinksRepo } from './repos/projectLinks';
 import { passwordsRepo, type PasswordsRepo } from './repos/passwords';
 import { refreshTokensRepo, type RefreshTokensRepo } from './repos/refreshTokens';
-import { syncEventsRepo, type SyncEventsRepo } from './repos/syncEvents';
-import { syncFilesRepo, type SyncFilesRepo } from './repos/syncFiles';
-import { syncMetaRepo, type SyncMetaRepo } from './repos/syncMeta';
-import { syncSessionsRepo, type SyncSessionsRepo } from './repos/syncSessions';
-import { syncSharesRepo, type SyncSharesRepo } from './repos/syncShares';
-import { syncSnapshotsRepo, type SyncSnapshotsRepo } from './repos/syncSnapshots';
-import { syncVersionsRepo, type SyncVersionsRepo } from './repos/syncVersions';
 import { twoFactorRepo, type TwoFactorRepo } from './repos/twoFactor';
 import { uptimeHistoryRepo, uptimeServicesRepo, type UptimeHistoryRepo, type UptimeServicesRepo } from './repos/uptime';
 import { userSecretKeysRepo, type UserSecretKeysRepo } from './repos/userSecretKeys';
 import { usersRepo, type UsersRepo } from './repos/users';
-import { weatherRepo, type WeatherRepo } from './repos/weather';
 import {
     workspaceMembersRepo,
     workspacesRepo,
@@ -68,6 +61,12 @@ import { workspaceRolesRepo, type WorkspaceRolesRepo } from './repos/workspaceRo
 import { userInvitesRepo, type UserInvitesRepo } from './repos/userInvites';
 
 export interface Database {
+    /**
+     * Le Queryable brut, pour les fabriques de repos des MODULES uniquement :
+     * un repo de module se construit avec, un handler natif n'a aucune raison
+     * d'y toucher (ses repos sont déjà là).
+     */
+    queryable: Queryable;
     users: UsersRepo;
     workspaces: WorkspacesRepo;
     workspaceMembers: WorkspaceMembersRepo;
@@ -125,27 +124,22 @@ export interface Database {
     sentinelAllow: AllowRepo;
     twoFactor: TwoFactorRepo;
     userSecretKeys: UserSecretKeysRepo;
-    weather: WeatherRepo;
-    osint: OsintRepo;
+    /** Le magasin clé-valeur des modules de features (SDK). */
+    featureKv: FeatureKvRepo;
     uptimeServices: UptimeServicesRepo;
     uptimeHistory: UptimeHistoryRepo;
     /** Canaux d'alerte, par espace **et par feature** (voir `Services/notifications.ts`). */
-    notificationSettings: NotificationSettingsRepo;
+    itemSharing: ItemSharingRepo;
+    notificationChannels: NotificationChannelsRepo;
     mailAccounts: MailAccountsRepo;
     mailFolders: MailFoldersRepo;
     mailMessages: MailMessagesRepo;
     mailSettings: MailSettingsRepo;
-    syncMeta: SyncMetaRepo;
-    syncShares: SyncSharesRepo;
-    syncFiles: SyncFilesRepo;
-    syncVersions: SyncVersionsRepo;
-    syncSnapshots: SyncSnapshotsRepo;
-    syncSessions: SyncSessionsRepo;
-    syncEvents: SyncEventsRepo;
 }
 
 export function createDatabase(q: Queryable): Database {
     return {
+        queryable: q,
         users: usersRepo(q),
         workspaces: workspacesRepo(q),
         workspaceMembers: workspaceMembersRepo(q),
@@ -184,21 +178,14 @@ export function createDatabase(q: Queryable): Database {
         sentinelAllow: allowRepo(q),
         twoFactor: twoFactorRepo(q),
         userSecretKeys: userSecretKeysRepo(q),
-        weather: weatherRepo(q),
-        osint: osintRepo(q),
+        featureKv: featureKvRepo(q),
         uptimeServices: uptimeServicesRepo(q),
         uptimeHistory: uptimeHistoryRepo(q),
-        notificationSettings: notificationSettingsRepo(q),
+        itemSharing: itemSharingRepo(q),
+        notificationChannels: notificationChannelsRepo(q),
         mailAccounts: mailAccountsRepo(q),
         mailFolders: mailFoldersRepo(q),
         mailMessages: mailMessagesRepo(q),
-        mailSettings: mailSettingsRepo(q),
-        syncMeta: syncMetaRepo(q),
-        syncShares: syncSharesRepo(q),
-        syncFiles: syncFilesRepo(q),
-        syncVersions: syncVersionsRepo(q),
-        syncSnapshots: syncSnapshotsRepo(q),
-        syncSessions: syncSessionsRepo(q),
-        syncEvents: syncEventsRepo(q)
+        mailSettings: mailSettingsRepo(q)
     };
 }

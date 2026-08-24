@@ -1,4 +1,4 @@
-import { LIVE_CHANGED_EVENT, liveChangedPushSchema, type LiveTopic } from 'deveye-types';
+import { LIVE_CHANGED_EVENT, liveChangedPushSchema, type FeatureId, type LiveTopic } from '@deveye/types';
 import { useCallback, useSyncExternalStore } from 'react';
 
 import { ws } from '@/api/ws';
@@ -18,6 +18,16 @@ import { ws } from '@/api/ws';
  * Par convention, une clé est la commande WS dont elle met en cache le résultat.
  */
 export type ResourceKey =
+    /**
+     * Les canaux d'alerte de l'espace.
+     *
+     * Une seule clé pour toutes les fonctionnalités : un canal appartient à
+     * l'espace, donc le corriger change ce que voit l'écran de réglages de
+     * chacune d'elles. Le routage suit dans `notify.routeGet`, relu par la
+     * coquille ouverte.
+     */
+    | 'notify.channelList'
+    | 'notify.routeGet'
     | 'note.count'
     | 'note.list'
     | 'password.count'
@@ -25,6 +35,9 @@ export type ResourceKey =
     | 'cloudSync.listShares'
     | 'mail.accountCount'
     | 'mail.accountList'
+    /** Les réglages généraux de Mail (affichage, images approuvées) : lus par
+     *  l'écran ET par le panneau Général des réglages, qui doivent se suivre. */
+    | 'mail.getSettings'
     /** L'arborescence du compte ouvert — c'est elle qui porte les compteurs de non-lus. */
     | 'mail.folderList'
     /** La tête de liste du dossier ouvert. Fusionnée, jamais rechargée en entier : voir `Features/Mail/index.tsx`. */
@@ -100,7 +113,16 @@ export type ResourceKey =
      * aurait fait relire les réglages — et rouvrir la liste des projets liés —
      * à chaque battement de l'audience.
      */
-    | 'audience.stats';
+    | 'audience.stats'
+    /**
+     * Les clés d'un module externe : `<id>.<nom>`, déclarées par son manifest
+     * (`resources`) et enregistrées au chargement par la glue générée. Le type
+     * reste nominal pour les natives et structurel pour les modules : la liste
+     * des modules dépend de l'installation, pas de ce fichier.
+     */
+    | ExternalResourceKey;
+
+export type ExternalResourceKey = `x-${string}.${string}`;
 
 /**
  * Ce qu'un sujet du serveur invalide chez nous.
@@ -111,15 +133,15 @@ export type ResourceKey =
  * est le bon défaut, mais explique pourquoi une nouvelle vue en cache doit
  * penser à s'y inscrire.
  */
-const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
+const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
+    notify: ['notify.channelList', 'notify.routeGet'],
     notes: ['note.count', 'note.list'],
     password: ['password.count', 'password.list'],
-    cloudsync: ['cloudSync.listShares'],
     // La relève de fond ne bouge pas que les cartes de comptes : elle fait entrer
     // des messages, corrige des drapeaux et retire des lignes disparues. Sans les
     // deux dernières clés, seule la date « il y a X min » se rafraîchissait, et
     // une boîte laissée ouverte mentait jusqu'au prochain clic.
-    mail: ['mail.accountCount', 'mail.accountList', 'mail.folderList', 'mail.messageList'],
+    mail: ['mail.accountCount', 'mail.accountList', 'mail.folderList', 'mail.messageList', 'mail.getSettings'],
     uptime: ['uptime.count', 'uptime.list'],
     /*
      * `cloudSync.listShares` en second : la liste des partages embarque les
@@ -135,7 +157,7 @@ const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
      * au rendu depuis le store `devices` (`useShareDevices`), donc sans le
      * moindre aller-retour.
      */
-    devices: ['device.list', 'cloudSync.listShares'],
+    devices: ['device.list'],
     /*
      * Sujet distinct de `devices`, et non un alias : les constats bougent à
      * chaque tour du moteur, la liste d'appareils presque jamais. Les confondre
@@ -145,11 +167,6 @@ const TOPIC_KEYS: Record<LiveTopic, ResourceKey[]> = {
      * la pastille de Monitoring écoutent, et celle qui doit bouger le plus vite.
      */
     sentinel: ['sentinel.count', 'sentinel.overview', 'sentinel.findings', 'sentinel.baseline'],
-    weather: ['weather.list'],
-    // Une seule clé : les résultats de sonde ne sont pas une ressource partagée
-    // (ils se relisent à la demande, depuis le cache du serveur). Seul
-    // l'historique est un état d'espace, donc seul lui se diffuse.
-    osint: ['osint.history'],
     // Deux sujets pour une seule feature : la structure d'un côté, les fils de
     // discussion de l'autre. Un message ne doit pas faire re-solliciter le
     // portefeuille entier — d'où la coupure côté serveur (`domain/live.ts`).
@@ -313,6 +330,32 @@ let wired = false;
 let pending = new Set<ResourceKey>();
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
+/** Ce que le sujet d'un module externe invalide, enregistré par la glue générée. */
+const EXTERNAL_TOPIC_KEYS = new Map<string, ResourceKey[]>();
+
+/**
+ * Les invalidations CROISÉES déclarées par les modules (`alsoInvalidatedBy`) :
+ * le sujet d'une AUTRE feature ravive des clés du module. L'exemple fondateur :
+ * les lignes de partage CloudSync portent le nom de leurs appareils, donc le
+ * sujet `devices` doit raviver la liste des partages.
+ */
+const CROSS_TOPIC_KEYS = new Map<string, ResourceKey[]>();
+
+/** Déclare des invalidations croisées. Réservé à l'enregistrement des modules. */
+export function registerCrossTopicKeys(topic: string, keys: readonly ResourceKey[]): void {
+    CROSS_TOPIC_KEYS.set(topic, [...(CROSS_TOPIC_KEYS.get(topic) ?? []), ...keys]);
+}
+
+/**
+ * Déclare les ressources d'un module : son sujet live (= son id) invalide les
+ * clés listées. L'équivalent, pour un module, d'une entrée dans `TOPIC_KEYS` ;
+ * personne d'autre que la glue générée ne devrait l'appeler. Accepte aussi une
+ * native rapatriée (Météo), dont l'entrée quitte alors la table.
+ */
+export function registerFeatureResources(featureId: FeatureId, invalidatedByTopic: readonly ResourceKey[]): void {
+    EXTERNAL_TOPIC_KEYS.set(featureId, [...invalidatedByTopic]);
+}
+
 /**
  * Branché à la première lecture, jamais au chargement du module : sans
  * abonné, il n'y a rien à invalider.
@@ -327,7 +370,12 @@ export function ensureWired(): void {
         if (!push.success) return;
 
         for (const topic of push.data.topics) {
-            for (const key of TOPIC_KEYS[topic]) pending.add(key);
+            const keys = [
+                ...(TOPIC_KEYS[topic] ?? []),
+                ...(EXTERNAL_TOPIC_KEYS.get(topic) ?? []),
+                ...(CROSS_TOPIC_KEYS.get(topic) ?? [])
+            ];
+            for (const key of keys) pending.add(key);
         }
         if (pending.size === 0) return;
 

@@ -5,7 +5,7 @@ import { openInfo } from '@/Components/InfoPopup';
 import Button from '@/Components/Button';
 import { useAuth } from '@/auth/AuthProvider';
 import { refreshSecrecyStatus } from '@/stores/secrecy';
-import type { SecrecyStatus, TwoFactorStatus } from 'deveye-types';
+import type { SecrecyStatus, TwoFactorStatus } from '@deveye/types';
 import type { FeatureProps } from '../types';
 import { SecurityDialog } from './SecurityDialog';
 import styles from './Security.module.css';

@@ -7,13 +7,14 @@ import {
     type AudienceResolution,
     type AudienceSite,
     type AudienceSiteRow
-} from 'deveye-types';
+} from '@deveye/types';
 
 import type { AudienceMetricsRow, AudienceSiteWithStatsRow } from '@/db/repos/audience';
 import type { Cipher } from '@/Services/SecureStore';
 import { normalizeHost } from '@/Services/audience/normalize';
 import { env } from '@/Utils/Env';
 import { FeatureError, type FeatureContext } from '../_define';
+import { shareScope } from '../_sharing';
 
 /**
  * Le socle de la feature Audience.
@@ -118,15 +119,46 @@ export async function readJson<T>(cipher: Cipher, blob: string | null): Promise<
  * C'est **la** frontière d'espace de la feature : toute commande qui prend un
  * `siteId` commence par là, sans quoi elle répondrait sur le site d'autrui.
  */
-export async function loadSite(ctx: FeatureContext, siteId: number): Promise<AudienceSiteRow> {
-    const row = await ctx.db.audience.find(siteId, ctx.workspaceId);
+export async function loadSite(
+    ctx: FeatureContext,
+    siteId: number,
+    level: 'read' | 'write' = 'read'
+): Promise<AudienceSiteRow> {
+    const row = await ctx.db.audience.findVisible(siteId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Site introuvable');
+    // `assertItem` refuse en plus les sites qu'une restriction de rôle masque
+    // ou passe en lecture seule.
+    await ctx.assertItem('audience', siteId, level);
     return row;
 }
 
-export async function toSite(cipher: Cipher, row: AudienceSiteWithStatsRow): Promise<AudienceSite> {
+/**
+ * Comme {@link loadSite}, mais exige que le site soit **chez l'appelant**.
+ *
+ * Pour les gestes réservés au domicile : ses réglages, sa clé publique, ses
+ * entonnoirs, sa suppression. Une fenêtre lit les chiffres — c'est tout l'objet
+ * de projeter un site vers l'espace d'une équipe.
+ */
+export async function loadHomeSite(ctx: FeatureContext, siteId: number): Promise<AudienceSiteRow> {
+    const row = await loadSite(ctx, siteId, 'write');
+    if (row.workspace_id !== ctx.workspaceId) {
+        throw new FeatureError(
+            'forbidden',
+            'Ce site appartient à un autre espace : il se règle et se supprime depuis là-bas.'
+        );
+    }
+    return row;
+}
+
+/** Le codec du domicile d'un site visible — celui d'ici pour un site local. */
+export async function siteCipher(ctx: FeatureContext, siteId: number): Promise<Cipher> {
+    return (await shareScope(ctx, 'audience')).cipherFor(siteId);
+}
+
+export async function toSite(cipher: Cipher, row: AudienceSiteWithStatsRow, foreign: boolean): Promise<AudienceSite> {
     const body = await readJson<Partial<StoredSite>>(cipher, row.content);
     return audienceSiteSchema.parse({
+        foreign,
         id: row.id,
         name: body?.name ?? '',
         description: body?.description ?? '',

@@ -1,4 +1,4 @@
-import type { ShortcutPreview } from 'deveye-types';
+import type { ShortcutPreview } from '@deveye/types';
 
 import {
     decodeEntities,

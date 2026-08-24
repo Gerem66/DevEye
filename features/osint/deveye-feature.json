@@ -1,0 +1,5 @@
+{
+  "id": "osint",
+  "tables": ["osint_lookups", "osint_provider_keys"],
+  "$comment": "Tables historiques (migration 075 du socle, jamais déplacée) : l'allowlist les dispense du préfixe ft_osint_. Toute NOUVELLE table du module prendra le préfixe, via src/server/migrations/."
+}

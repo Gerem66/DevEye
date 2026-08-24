@@ -1,5 +1,13 @@
 # Créer une nouvelle fonctionnalité — checklist complète
 
+> **Une feature de tiers, ou une nouvelle feature « moderne » ?** Passe par le
+> **SDK des modules** : repo
+> [DevEye-Feature-Template](https://github.com/Gerem66/DevEye-Feature-Template)
+> (doc anglaise complète) côté développeur, [FEATURE_SDK.md](./FEATURE_SDK.md)
+> côté mainteneur. La checklist ci-dessous reste celle du chemin **natif
+> historique**, encore suivi par quinze features sur seize (Météo est passée au
+> format module).
+
 Ce document liste **tout** ce qu'implique l'ajout d'une fonctionnalité dans DevEye,
 dans l'ordre, à travers les trois bases de code. Suis-le de haut en bas pour ne
 rien oublier.
@@ -21,7 +29,7 @@ rien oublier.
 ## A. Contrats partagés — `DevEye-Types/` (à faire en premier)
 
 Tout passe par des schémas zod partagés. Le serveur **et** le client importent
-`deveye-types`. ⚠️ **Lis [DEVELOPMENT.md](#g-workflow-deveye-types--node_modules)
+`@deveye/types`. ⚠️ **Lis [DEVELOPMENT.md](#g-workflow-@deveye/types--node_modules)
 (section G) : un changement de types doit être mirroré dans `node_modules`.**
 
 1. **Domaine** — `src/domain/<feature>.ts` : schémas zod + types des entités
@@ -171,27 +179,27 @@ ouvrir la feature.
 
 ---
 
-## G. Workflow `deveye-types` ↔ `node_modules`
+## G. Workflow `@deveye/types` ↔ `node_modules`
 
-`deveye-types` est consommé comme **paquet npm installé** (`@gerem66/deveye-types`,
-GitHub Packages), **pas** un symlink. Le serveur (tsx) et le client (vite) lisent
-le `src` du paquet installé, hoisté dans `DevEye/node_modules/deveye-types/`.
+`@deveye/types` est consommé comme **paquet npm installé** (`@deveye/types`,
+npmjs public), **pas** un symlink. Le serveur (tsx) et le client (vite) lisent
+le `src` du paquet installé, hoisté dans `DevEye/node_modules/@deveye/types/`.
 
 Après avoir édité `DevEye-Types/src/` en dev local, pour que serveur/client le
 voient **sans publier**, mirrorer les fichiers modifiés dans
-`DevEye/node_modules/deveye-types/src/` et bumper la version de ce `package.json`
+`DevEye/node_modules/@deveye/types/src/` et bumper la version de ce `package.json`
 aussi. Vérifier :
 
 ```bash
-diff -rq DevEye-Types/src DevEye/node_modules/deveye-types/src   # doit être vide
+diff -rq DevEye-Types/src DevEye/node_modules/@deveye/types/src   # doit être vide
 ```
 
 ⚠️ **Vite met en cache le pré-bundling** : après un changement de types, si le
 client plante sur un export manquant, vider le cache :
 `rm -rf DevEye/client/node_modules/.vite` puis relancer le dev server.
 
-Release réelle : publier `@gerem66/deveye-types@x.y.z` sur GitHub Packages, puis
-réinstaller côté serveur/client.
+Release réelle : publier `@deveye/types@x.y.z` sur npmjs (release GitHub du repo
+de types → workflow publish), puis réinstaller côté serveur/client.
 
 ---
 
@@ -213,3 +221,10 @@ réinstaller côté serveur/client.
 | 12  | `DevEye/client/src/Pages/Home/index.tsx`               | `FEATURES` ou `PAGES`                                               |
 | 13  | `DevEye/client/src/Components/TopNavbar/TopNavbar.tsx` | entrée menu (page structurelle)                                     |
 | 14  | `DevEye/client/src/stores/invalidation.ts`             | clé `ResourceKey` + `invalidate()` aux mutations (si widget résumé) |
+
+Selon ce que la feature fait, quatre chantiers transverses ont chacun leur doc
+et leur checklist propre : toute configuration → `Docs/SETTINGS.md` (la
+coquille unique et son bouton commun, obligatoires) ; des réglages d'espace
+réutilisables que les éléments désignent → `Docs/SOURCES.md` ; des alertes →
+`Docs/NOTIFICATIONS.md` §8 ; des éléments partageables entre espaces →
+`Docs/SHARING.md`.

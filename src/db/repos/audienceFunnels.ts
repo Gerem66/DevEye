@@ -1,4 +1,4 @@
-import { AUDIENCE_FUNNEL_MAX_STEPS, type AudienceFunnelRow, type AudienceFunnelStepRow } from 'deveye-types';
+import { AUDIENCE_FUNNEL_MAX_STEPS, type AudienceFunnelRow, type AudienceFunnelStepRow } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
