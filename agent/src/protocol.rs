@@ -1,6 +1,6 @@
 //! Wire types shared with the DevEye server.
 //!
-//! These mirror `@gerem66/deveye-types` (`protocol/agent.ts`, `domain/metrics.ts`
+//! These mirror `@deveye/types` (`protocol/agent.ts`, `domain/metrics.ts`
 //! and the HTTP enrollment contract). Field names use the server's camelCase.
 
 use serde::{Deserialize, Serialize};
