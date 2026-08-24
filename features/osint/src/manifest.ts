@@ -1,4 +1,6 @@
-import { featureDescriptor, osintCommands } from 'deveye-types';
+import { featureDescriptor } from 'deveye-types';
+
+import { osintCommands } from './contracts/commands';
 import type { FeatureManifest } from 'deveye-types/sdk';
 
 /**

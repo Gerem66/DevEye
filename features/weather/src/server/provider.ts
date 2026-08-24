@@ -5,7 +5,7 @@ import type {
     WeatherHour,
     WeatherProvider,
     WeatherReport
-} from 'deveye-types';
+} from '../contracts/domain';
 
 /**
  * Weather provider abstraction. Open-Meteo needs no API key and provides free

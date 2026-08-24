@@ -1,4 +1,4 @@
-import { OSINT_PROBES_BY_KIND, type OsintProbeId, type OsintTargetKind } from 'deveye-types';
+import { OSINT_PROBES_BY_KIND, type OsintProbeId, type OsintTargetKind } from '../../contracts/domain';
 
 import { crtshProbe } from './crtsh';
 import { dnsProbe } from './dns';

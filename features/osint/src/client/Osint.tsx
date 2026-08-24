@@ -8,7 +8,7 @@ import {
     type OsintProbeId,
     type OsintTarget,
     type OsintTargetKind
-} from 'deveye-types';
+} from '../contracts/domain';
 
 import {
     ConfirmDialog,

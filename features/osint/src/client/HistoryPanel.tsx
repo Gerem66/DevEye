@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useDismissLayer } from 'deveye-sdk-client';
-import type { OsintHistoryEntry, OsintTargetKind } from 'deveye-types';
+import type { OsintHistoryEntry, OsintTargetKind } from '../contracts/domain';
 
 import styles from './Osint.module.css';
 

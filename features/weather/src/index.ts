@@ -1,20 +1,10 @@
 /**
  * L'entrée isomorphe du module : le manifest, et les contrats.
  *
- * Les contrats de Météo vivent dans deveye-types (API publiée d'une native) ;
- * le module les ré-exporte pour être complet au format template, sans les
- * dupliquer.
+ * Les contrats de Météo vivent ICI (src/contracts), comme chez un module
+ * externe : deveye-types ne garde que l'identité de la feature (id,
+ * descripteur).
  */
 export { manifest } from './manifest';
-export {
-    weatherAdd,
-    weatherCommands,
-    weatherGet,
-    weatherKeyList,
-    weatherList,
-    weatherRemove,
-    weatherReorder,
-    weatherSetKey,
-    weatherSetPrimary,
-    weatherUpdate
-} from 'deveye-types';
+export * from './contracts/domain';
+export * from './contracts/commands';

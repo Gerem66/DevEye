@@ -11,7 +11,7 @@ import {
 } from 'deveye-sdk-client';
 import { useWeather, syncWeatherLocations } from './store';
 import { wmoIcon } from './wmoIcon';
-import type { WeatherLocation, WeatherProvider, WeatherReport } from 'deveye-types';
+import type { WeatherLocation, WeatherProvider, WeatherReport } from '../contracts/domain';
 import { manifest } from '../manifest';
 import styles from './Weather.module.css';
 

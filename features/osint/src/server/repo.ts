@@ -1,4 +1,4 @@
-import type { OsintLookupRow, OsintProvider, OsintProviderKeyRow, OsintTargetKind } from 'deveye-types';
+import type { OsintLookupRow, OsintProvider, OsintProviderKeyRow, OsintTargetKind } from '../contracts/domain';
 import type { SdkQueryable } from 'deveye-types/sdk/server';
 import { randomUUID } from 'crypto';
 

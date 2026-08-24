@@ -1,4 +1,6 @@
-import { featureDescriptor, weatherCommands } from 'deveye-types';
+import { featureDescriptor } from 'deveye-types';
+
+import { weatherCommands } from './contracts/commands';
 import type { FeatureManifest } from 'deveye-types/sdk';
 
 /**

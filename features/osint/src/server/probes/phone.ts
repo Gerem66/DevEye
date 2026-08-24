@@ -1,6 +1,6 @@
 import { parsePhoneNumberFromString, type PhoneNumber } from 'libphonenumber-js/max';
 
-import { fetchJson } from '../netFetch';
+import { fetchJson } from '@/Services/netFetch';
 import { field, tag, type OsintProbeAdapter, type OsintScore, type OsintTag } from './shared';
 
 /**

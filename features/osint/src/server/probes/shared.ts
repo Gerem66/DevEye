@@ -11,7 +11,7 @@ import {
     type OsintTarget,
     type OsintTargetKind,
     type OsintTone
-} from 'deveye-types';
+} from '../../contracts/domain';
 
 // Réexportés pour que chaque sonde n'ait qu'un seul import à écrire : elles
 // travaillent toutes avec ces types-là, et les faire venir de deux endroits

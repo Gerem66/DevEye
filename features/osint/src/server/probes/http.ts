@@ -1,4 +1,4 @@
-import { BROWSER_UA, isSafePublicUrl, titleTag } from '../netFetch';
+import { BROWSER_UA, isSafePublicUrl, titleTag } from '@/Services/netFetch';
 import { field, tag, type OsintProbeAdapter, type OsintTag } from './shared';
 
 /**

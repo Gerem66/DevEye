@@ -1,4 +1,4 @@
-import { BROWSER_UA } from '../netFetch';
+import { BROWSER_UA } from '@/Services/netFetch';
 import { field, mapLimit, tag, type OsintProbeAdapter, type OsintLink } from './shared';
 
 /**

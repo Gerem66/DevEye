@@ -43,7 +43,8 @@ Est stable : tout ce qu'exportent `deveye-types/sdk*` et le barrel
 `deveye-sdk-client`. Tout le reste est interne et peut bouger. Élargir la
 surface = l'ajouter à l'un de ces deux endroits, mettre à jour le portrait
 typé du barrel — publié DANS deveye-types (`src/sdk/client-ambient.d.ts`,
-le template ne porte plus qu'un renvoi) — et la doc REFERENCE du template.
+que le template tire par une entrée `include` de son tsconfig) — et la doc
+REFERENCE du template.
 `npm run check:sdk` (client) vérifie MÉCANIQUEMENT que le vrai barrel honore
 ce portrait : une dérive casse la CI de l'app, jamais le build d'un tiers.
 Jamais d'export « en douce » par un autre chemin.
@@ -102,11 +103,22 @@ Le rapatriement d'une native d'infrastructure en module PRIVÉ a élargi le cont
 
 **OSINT** est la deuxième native rapatriée (`features/osint`), sur le patron
 exact de Météo : descripteur étalé dans le manifest, tables historiques en
-allowlist `deveye-feature.json` (075, jamais déplacées), sondes restées un
-service de l'app (import « privilège de native » commenté : elles partagent le
-garde SSRF de `Services/netFetch`). Chiffrement : `ctx.cipher('private')` pour
-l'historique (l'ex-`ctx.secure`), `ctx.cipher()` pour les clés de fournisseurs
-(l'étage ouvert relit l'ancien format `ctx.crypt`, comme pour Météo).
+allowlist `deveye-feature.json` (075, jamais déplacées). Chiffrement :
+`ctx.cipher('private')` pour l'historique (l'ex-`ctx.secure`), `ctx.cipher()`
+pour les clés de fournisseurs (l'étage ouvert relit l'ancien format
+`ctx.crypt`, comme pour Météo).
+
+**La norme d'isolation (24 août 2026)** : une feature migrée est TOUT ENTIÈRE
+dans son répertoire. Ses contrats zod et son domaine vivent dans
+`src/contracts/` (le patron du template), ses services aussi (les sondes
+OSINT, l'adaptateur météo — seul reste à l'app ce qui est réellement partagé,
+comme le garde SSRF de `Services/netFetch`, importé avec le privilège de
+native commenté). `deveye-types` ne garde que l'IDENTITÉ (l'id dans les
+enums, le descripteur du registre — ce que les écrans des autres doivent
+savoir sans ouvrir la feature) et les points de couplage déclarés (providers,
+protocole agent). Ses commandes s'enregistrent au runtime par le manifest,
+comme celles de CloudSync : le registre natif des commandes ne les porte
+plus.
 
 Sa migration a élargi la surface stable, pour toutes les features :
 

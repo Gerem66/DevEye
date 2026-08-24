@@ -3,21 +3,16 @@ import {
     weatherGet,
     weatherKeyList,
     weatherList,
-    weatherProviderSchema,
     weatherRemove,
     weatherReorder,
     weatherSetKey,
     weatherSetPrimary,
-    weatherUpdate,
-    type WeatherLocation,
-    type WeatherLocationRow
-} from 'deveye-types';
+    weatherUpdate
+} from '../contracts/commands';
+import { weatherProviderSchema, type WeatherLocation, type WeatherLocationRow } from '../contracts/domain';
 import { defineSdkFeature, FeatureError, type SdkFeatureContext } from 'deveye-types/sdk/server';
 
-// Import « privilège de native » : les adaptateurs des fournisseurs restent un
-// service de l'app (ils préexistent au SDK et ne concernent que Météo). Un
-// module externe n'aurait pas cet accès et embarquerait les siens.
-import { fetchWeatherReport, getWeatherAdapter, WeatherError } from '@/Services/WeatherProvider';
+import { fetchWeatherReport, getWeatherAdapter, WeatherError } from './provider';
 import type { WeatherRepo } from './repo';
 
 type Ctx = SdkFeatureContext<WeatherRepo>;

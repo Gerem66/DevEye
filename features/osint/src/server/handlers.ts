@@ -1,25 +1,23 @@
 import {
-    detectTarget,
-    OSINT_PROVIDER_META,
     osintHistory,
     osintHistoryClear,
     osintHistoryRemove,
     osintKeyList,
     osintLookup,
     osintProbe,
-    osintSetKey,
+    osintSetKey
+} from '../contracts/commands';
+import {
+    detectTarget,
+    OSINT_PROVIDER_META,
     osintProviderSchema,
     type OsintHistoryEntry,
     type OsintLookupRow,
     type OsintProvider
-} from 'deveye-types';
+} from '../contracts/domain';
 import { defineSdkFeature, FeatureError, type SdkFeatureContext } from 'deveye-types/sdk/server';
 
-// Import « privilège de native » : les sondes restent un service de l'app
-// (elles partagent le garde SSRF et les fetch bornés de `Services/netFetch`
-// avec les aperçus de raccourcis). Un module externe n'aurait pas cet accès et
-// embarquerait les siennes.
-import { PROBES, probeAccepts, probesFor, readCache, runProbe, writeCache } from '@/Services/osint';
+import { PROBES, probeAccepts, probesFor, readCache, runProbe, writeCache } from './probes';
 import type { OsintRepo } from './repo';
 
 type Ctx = SdkFeatureContext<OsintRepo>;

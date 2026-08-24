@@ -9,10 +9,9 @@ import {
     osintKeyList,
     osintLookup,
     osintProbe,
-    osintSetKey,
-    type OsintLookupRow,
-    type OsintProviderKeyRow
-} from 'deveye-types';
+    osintSetKey
+} from '../contracts/commands';
+import type { OsintLookupRow, OsintProviderKeyRow } from '../contracts/domain';
 import type { SdkFeatureContext } from 'deveye-types/sdk/server';
 import { createTestContext } from 'deveye-types/sdk/testing';
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { weatherProviderSchema, type WeatherProvider } from 'deveye-types';
+import { weatherProviderSchema, type WeatherProvider } from '../contracts/domain';
 
 import { Button, featureApi, settingsStyles as shell, TextInput, useWorkspacePermissions } from 'deveye-sdk-client';
 

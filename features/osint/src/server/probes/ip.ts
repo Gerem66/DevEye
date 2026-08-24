@@ -1,7 +1,7 @@
 import { Resolver } from 'dns/promises';
 import { isIPv4 } from 'net';
 
-import { fetchJson, isPublicIp } from '../netFetch';
+import { fetchJson, isPublicIp } from '@/Services/netFetch';
 import { field, mapLimit, tag, type OsintProbeAdapter, type OsintTag } from './shared';
 
 /* --------------------------------- Reverse -------------------------------- */

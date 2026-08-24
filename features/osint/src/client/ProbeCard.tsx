@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { OSINT_PROBE_LABELS, type OsintProbeId, type OsintProbeResult, type OsintTone } from 'deveye-types';
+import { OSINT_PROBE_LABELS, type OsintProbeId, type OsintProbeResult, type OsintTone } from '../contracts/domain';
 
 import { internalPivot } from './api';
 import styles from './Osint.module.css';

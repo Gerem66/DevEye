@@ -1,4 +1,4 @@
-import { fetchJson } from '../netFetch';
+import { fetchJson } from '@/Services/netFetch';
 import { field, skipped, tag, type OsintProbeAdapter, type OsintLink } from './shared';
 
 /**

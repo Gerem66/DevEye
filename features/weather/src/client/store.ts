@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { featureApi, isSocketOpen, onResourceChange, onSocketOpen } from 'deveye-sdk-client';
-import type { WeatherLocation, WeatherReport } from 'deveye-types';
+import type { WeatherLocation, WeatherReport } from '../contracts/domain';
 
 import { manifest } from '../manifest';
 
