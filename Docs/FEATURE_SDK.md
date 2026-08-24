@@ -149,12 +149,15 @@ L'outillage de migration, à rejouer pour CHAQUE native :
 - **Tests de modules** : `npm test` couvre `features/*/src/**/*.test.ts`
   (harnais `deveye-types/sdk/testing`, voir `features/osint/src/server/handlers.test.ts`),
   et le tsconfig racine inclut ces fichiers pour le typecheck.
-- **L'IDE** : `features/tsconfig.json` est une config « solution » qui aiguille
-  tout fichier de `features/*` vers `tsconfig.server.json` ou
-  `tsconfig.client.json` (tsserver remonte jusqu'à `features/`, jamais jusqu'à
-  `client/` — sans ce trio, le client d'un module tombait dans un projet
-  inféré, sans l'alias `deveye-sdk-client`). `npm run typecheck:features` les
-  garde en CI.
+- **L'IDE** : `features/tsconfig.json` est le projet CLIENT des modules
+  in-repo (extends celui du client) et référence `tsconfig.server.json` pour
+  leur part serveur : tsserver remonte jusqu'à `features/`, jamais jusqu'à
+  `client/` — sans ces deux fichiers, le client d'un module tombait dans un
+  projet inféré, sans l'alias `deveye-sdk-client`. Vérifié en interrogeant
+  tsserver. `npm run typecheck:features` compile le projet serveur en CI ; le
+  projet client, tsc le refuse (référence non-`composite`, TS6306) mais ses
+  fichiers sont déjà couverts par le `tsc` du client via les imports de la
+  glue.
 - **Smoke E2E du chemin client** : `npm run smoke:feature -- <id> <label>`
   (serveur démarré sur le bundle construit, compte seedé). Il vérifie ce
   qu'aucune autre sentinelle ne voit : la feature au marché d'ajout, la tuile

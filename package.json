@@ -19,7 +19,7 @@
     "lint": "eslint index.ts src features scripts",
     "lint:fix": "eslint index.ts src --fix",
     "typecheck": "tsc --noEmit",
-    "typecheck:features": "tsc -p features/tsconfig.server.json && tsc -p features/tsconfig.client.json",
+    "typecheck:features": "tsc -p features/tsconfig.server.json",
     "ci": "npm run gen:features:local && npm run lint && npm run typecheck && npm run typecheck:features && npm run ci:rules && npm run gen:features -- --check",
     "ci:rules": "tsx scripts/check-rules.ts",
     "ci:agent": "cd agent; /usr/bin/cargo fmt --check && cargo clippy --all-targets -- -D warnings",
