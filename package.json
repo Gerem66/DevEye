@@ -22,7 +22,7 @@
     "format:fix": "prettier --write \"*.json\" \"client/*.json\" \"features/**/*.json\" \".github/**/*.yml\" \"docker-compose*.yml\"",
     "typecheck": "tsc --noEmit",
     "typecheck:features": "tsc -p features/tsconfig.json",
-    "ci": "npm run gen:features:local && npm run lint && npm run format:check && npm run typecheck && npm run typecheck:features && npm run ci:rules && npm run gen:features -- --check",
+    "ci": "npm run gen:features:local && npm run lint && npm run format:check && npm run typecheck && npm run typecheck:features && npm test && npm run ci:rules && npm run gen:features -- --check",
     "ci:rules": "tsx scripts/check-rules.ts",
     "ci:agent": "cd agent; /usr/bin/cargo fmt --check && cargo clippy --all-targets -- -D warnings",
     "clean": "rm -rf node_modules client/node_modules client/build package-lock.json",
