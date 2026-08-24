@@ -218,7 +218,7 @@ export async function reconcileAgents({ source, distDir, want, maxWaitMs, pollMs
 export function startAgentReconcile(distDir: string): void {
     status.register(TASK_ID, TASK_LABEL);
 
-    const token = env.AGENT_DOWNLOAD_TOKEN || process.env.GITHUB_PACKAGES_TOKEN || '';
+    const token = env.AGENT_DOWNLOAD_TOKEN || '';
     const repo = env.AGENT_REPO || '';
     if (!token || !repo) {
         // No upstream configured (no token, or AGENT_REPO unset): serve disk only.
