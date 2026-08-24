@@ -19,10 +19,6 @@ jobs:
   web:
     name: server + client
     runs-on: ubuntu-latest
-    env:
-      # The repo .npmrc resolves @gerem66/deveye-types from GitHub Packages via
-      # this token. The built-in GITHUB_TOKEN can read packages owned by Gerem66.
-      GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v6
 

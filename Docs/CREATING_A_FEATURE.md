@@ -181,8 +181,8 @@ ouvrir la feature.
 
 ## G. Workflow `deveye-types` ↔ `node_modules`
 
-`deveye-types` est consommé comme **paquet npm installé** (`@gerem66/deveye-types`,
-GitHub Packages), **pas** un symlink. Le serveur (tsx) et le client (vite) lisent
+`deveye-types` est consommé comme **paquet npm installé** (`@deveye/types`,
+npmjs public), **pas** un symlink. Le serveur (tsx) et le client (vite) lisent
 le `src` du paquet installé, hoisté dans `DevEye/node_modules/deveye-types/`.
 
 Après avoir édité `DevEye-Types/src/` en dev local, pour que serveur/client le
@@ -198,8 +198,8 @@ diff -rq DevEye-Types/src DevEye/node_modules/deveye-types/src   # doit être vi
 client plante sur un export manquant, vider le cache :
 `rm -rf DevEye/client/node_modules/.vite` puis relancer le dev server.
 
-Release réelle : publier `@gerem66/deveye-types@x.y.z` sur GitHub Packages, puis
-réinstaller côté serveur/client.
+Release réelle : publier `@deveye/types@x.y.z` sur npmjs (release GitHub du repo
+de types → workflow publish), puis réinstaller côté serveur/client.
 
 ---
 
