@@ -1,6 +1,5 @@
 {
-    "$comment": "Le projet CLIENT des modules in-repo, et la porte d'entrée de l'IDE : tsserver remonte jusqu'ici (jamais jusqu'à client/). Un fichier serveur, non inclus, est aiguillé par la référence vers tsconfig.server.json. Les typechecks de la CI atteignent aussi ces fichiers par les imports de la glue générée.",
+    "$comment": "Le projet CLIENT des modules in-repo, pour l'IDE : tsserver remonte jusqu'ici (jamais jusqu'à client/). Un fichier serveur ou contrat, non inclus ici, remonte encore d'un cran : le tsconfig racine l'inclut. Pas de references : elles exigeraient composite, impraticable (tout fichier atteint par import devrait être inclus).",
     "extends": "../client/tsconfig.json",
-    "include": ["*/src/client", "../client/src/vite-env.d.ts"],
-    "references": [{ "path": "./tsconfig.server.json" }]
+    "include": ["*/src/client", "../client/src/vite-env.d.ts"]
 }

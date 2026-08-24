@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "allowJs": true,
     "checkJs": false,
     "skipLibCheck": true,
@@ -23,9 +25,22 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": [
+        "./src/*"
+      ]
     }
   },
-  "include": ["index.ts", "src/**/*", "features/*/src/**/*.test.ts", "scripts/lib/*.test.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "index.ts",
+    "src/**/*",
+    "features/*/src/server",
+    "features/*/src/contracts",
+    "features/*/src/manifest.ts",
+    "features/*/src/index.ts",
+    "scripts/lib/*.test.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }
