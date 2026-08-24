@@ -1,0 +1,5 @@
+{
+    "$comment": "Config « solution », pour l'IDE : un fichier de features/* est aiguillé vers le projet serveur ou client ci-dessous (tsserver remonte jusqu'ici, jamais jusqu'à client/). Les typechecks de la CI passent par les tsconfig de la racine et du client, qui atteignent ces fichiers par les imports de la glue générée.",
+    "files": [],
+    "references": [{ "path": "./tsconfig.server.json" }, { "path": "./tsconfig.client.json" }]
+}

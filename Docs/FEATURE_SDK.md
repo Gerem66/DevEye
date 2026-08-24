@@ -48,7 +48,6 @@ dépendrait des types de toute façon). Critère de bascule : vague terminée et
 surface stabilisée, ou premier vrai module tiers. La coupe sera mécanique :
 `src/sdk/` est déjà autonome.
 
-
 Est stable : tout ce qu'exportent `deveye-types/sdk*` et le barrel
 `deveye-sdk-client`. Tout le reste est interne et peut bouger. Élargir la
 surface = l'ajouter à l'un de ces deux endroits, mettre à jour le portrait
@@ -150,6 +149,12 @@ L'outillage de migration, à rejouer pour CHAQUE native :
 - **Tests de modules** : `npm test` couvre `features/*/src/**/*.test.ts`
   (harnais `deveye-types/sdk/testing`, voir `features/osint/src/server/handlers.test.ts`),
   et le tsconfig racine inclut ces fichiers pour le typecheck.
+- **L'IDE** : `features/tsconfig.json` est une config « solution » qui aiguille
+  tout fichier de `features/*` vers `tsconfig.server.json` ou
+  `tsconfig.client.json` (tsserver remonte jusqu'à `features/`, jamais jusqu'à
+  `client/` — sans ce trio, le client d'un module tombait dans un projet
+  inféré, sans l'alias `deveye-sdk-client`). `npm run typecheck:features` les
+  garde en CI.
 - **Smoke E2E du chemin client** : `npm run smoke:feature -- <id> <label>`
   (serveur démarré sur le bundle construit, compte seedé). Il vérifie ce
   qu'aucune autre sentinelle ne voit : la feature au marché d'ajout, la tuile
