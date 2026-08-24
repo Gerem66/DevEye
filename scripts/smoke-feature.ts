@@ -304,21 +304,24 @@ async function main(): Promise<void> {
     );
 
     if (!(await exists('[class*="profileBtn"]'))) {
-        if (!(await setInput('input[placeholder*="utilisateur"]', USERNAME))) {
-            fail('connexion', 'champ « Nom d’utilisateur » introuvable');
-        }
-        await setInput('input[type="password"]', PASSWORD);
-        // Plusieurs tentatives espacées : le rate limit global de l'API compte
-        // aussi les visites précédentes (smoke relancé, curl de diagnostic).
+        // Re-remplir les DEUX champs à CHAQUE tentative : un échec de connexion
+        // vide le mot de passe côté client, donc un simple re-clic soumettrait
+        // du vide. Et le budget par tentative est large : la vérification du
+        // mot de passe passe par argon2 (lent à dessein), et le premier login
+        // après le seed, sur un runner froid et chargé, peut dépasser 10 s.
         for (let attempt = 1; ; attempt++) {
+            if (!(await setInput('input[placeholder*="utilisateur"]', USERNAME))) {
+                fail('connexion', 'champ « Nom d’utilisateur » introuvable');
+            }
+            await setInput('input[type="password"]', PASSWORD);
             await evaluate(`document.querySelector('button.submit')?.click()`);
-            const deadline = Date.now() + 8_000;
+            const deadline = Date.now() + 25_000;
             while (Date.now() < deadline && !(await exists('[class*="profileBtn"]'))) await sleep(300);
             if (await exists('[class*="profileBtn"]')) break;
-            if (attempt >= 4) {
+            if (attempt >= 3) {
                 await waitFor('connexion (identifiants seedés valides ?)', 1, () => exists('[class*="profileBtn"]'));
             }
-            await sleep(5_000);
+            await sleep(3_000);
         }
     }
     console.log('  ✓ connecté');
