@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { OSINT_PROVIDER_META, osintProviderSchema, type OsintProvider } from '../contracts/domain';
 
 import { Button, humanizeError, settingsStyles as shell, TextInput } from 'deveye-sdk-client';
-import type { SettingsPanelProps } from 'deveye-types/sdk/client';
+import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
 import { api } from './api';
 

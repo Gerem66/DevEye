@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { DeployTarget, Deployment, MinimalUser, Project } from 'deveye-types';
+import type { DeployTarget, Deployment, MinimalUser, Project } from '@deveye/types';
 import { Button, Dialog } from '@/Components';
 import { ws } from '@/api/ws';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';

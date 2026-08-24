@@ -14,7 +14,7 @@ import { ensureUnlocked as ensureSecrecyUnlocked, touchSecrecy, UnlockCancelledE
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 
 import type { FeatureProps } from '@/Features/types';
-import type { PasswordEntry, PasswordEntryMasked } from 'deveye-types';
+import type { PasswordEntry, PasswordEntryMasked } from '@deveye/types';
 import { useLiveSegment } from '@/live/useLiveSegment';
 
 /**

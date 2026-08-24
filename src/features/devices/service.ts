@@ -1,4 +1,4 @@
-import { deviceDropPrivileges, deviceElevate, deviceSetAutostart } from 'deveye-types';
+import { deviceDropPrivileges, deviceElevate, deviceSetAutostart } from '@deveye/types';
 
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { authorizeOnlineDevice, toDevice } from './shared';

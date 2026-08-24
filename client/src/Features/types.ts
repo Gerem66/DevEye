@@ -1,4 +1,4 @@
-import type { User, Workspace } from 'deveye-types';
+import type { User, Workspace } from '@deveye/types';
 import type { ComponentType } from 'react';
 
 /**

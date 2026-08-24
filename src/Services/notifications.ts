@@ -4,7 +4,7 @@ import type {
     NotificationChannelKind,
     NotificationChannelRow,
     NotificationFeature
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { decryptCredentials } from '@/features/mail/_shared';
 import type { DiscordMessage } from '@/Services/discord';

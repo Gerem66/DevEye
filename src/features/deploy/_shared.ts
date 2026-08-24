@@ -1,7 +1,7 @@
-import type { DeployTarget, DeployTargetRow, Deployment, DeploymentRow } from 'deveye-types';
-import { deployTargetSchema } from 'deveye-types';
+import type { DeployTarget, DeployTargetRow, Deployment, DeploymentRow } from '@deveye/types';
+import { deployTargetSchema } from '@deveye/types';
 import type { Cipher } from '@/Services/SecureStore';
-import type { DeployTargetWithUsageRow } from 'deveye-types';
+import type { DeployTargetWithUsageRow } from '@deveye/types';
 import { FeatureError, type FeatureContext } from '../_define';
 import { shareScope } from '../_sharing';
 

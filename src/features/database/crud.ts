@@ -6,8 +6,8 @@ import {
     databaseRemove,
     databaseReorder,
     databaseUpdate
-} from 'deveye-types';
-import type { DatabaseUsage } from 'deveye-types';
+} from '@deveye/types';
+import type { DatabaseUsage } from '@deveye/types';
 import type { StoredAccess, StoredDatabase } from '@/Services/DatabaseMonitor';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { shareScope } from '../_sharing';

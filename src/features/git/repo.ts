@@ -11,8 +11,8 @@ import {
     gitRepoSyncStatus,
     gitRepoUpdate,
     gitSyncStatuses
-} from 'deveye-types';
-import type { GitRepoUsage } from 'deveye-types';
+} from '@deveye/types';
+import type { GitRepoUsage } from '@deveye/types';
 import { listOwnerRepos } from '@/Services/integrations/github';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { tryDecryptProject } from '../project/_shared';

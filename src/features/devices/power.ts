@@ -1,4 +1,4 @@
-import { devicePower, type AgentPowerAction } from 'deveye-types';
+import { devicePower, type AgentPowerAction } from '@deveye/types';
 
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { authorizeReachableDevice } from './shared';

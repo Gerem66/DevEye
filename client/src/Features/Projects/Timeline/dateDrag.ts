@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import type { ProjectCard } from 'deveye-types';
+import type { ProjectCard } from '@deveye/types';
 
 /**
  * Déplacer les dates d'une carte à la souris, sur la frise.

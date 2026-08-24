@@ -5,7 +5,7 @@ import Checkbox from '@/Components/Checkbox';
 import { DialogCancelButton } from '@/Components/Dialog';
 import Popup, { ClosePopup } from '@/Components/Popup';
 import TextInput from '@/Components/TextInput';
-import { MAIL_SYNC_INTERVAL_DEFAULT_MINUTES } from 'deveye-types';
+import { MAIL_SYNC_INTERVAL_DEFAULT_MINUTES } from '@deveye/types';
 import { humanizeError, ws } from './api';
 import styles from './style.module.css';
 
@@ -17,7 +17,7 @@ import type {
     MailOAuthProvider,
     MailProxy,
     MailSecurityTier
-} from 'deveye-types';
+} from '@deveye/types';
 
 export const ACCOUNT_POPUP = 'popup-mail-account';
 

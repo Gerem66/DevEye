@@ -13,7 +13,7 @@ import {
     type WorkspaceCapability,
     type FeatureId,
     liveTopicSchema
-} from 'deveye-types';
+} from '@deveye/types';
 import type { FastifyInstance } from 'fastify';
 
 import { ACCESS_COOKIE } from '@/auth/cookies';
@@ -399,7 +399,7 @@ export async function registerWS(
                 }
             } catch (e) {
                 // Le duck-typing double l'instanceof exprès : si un module et
-                // l'app résolvent deux instances distinctes de deveye-types
+                // l'app résolvent deux instances distinctes de @deveye/types
                 // (miroir node_modules d'un côté, alias de l'autre), l'erreur
                 // typée d'un module resterait sinon un `internal` opaque.
                 if (!(e instanceof FeatureError) && e instanceof Error && e.name === 'FeatureError' && 'code' in e) {

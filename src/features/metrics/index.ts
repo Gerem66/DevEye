@@ -11,7 +11,7 @@ import {
     metricsSubscribe,
     metricsUnsubscribe,
     type DeviceRow
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { parseDeviceReport } from '@/agent/mappers';
 import { env } from '@/Utils/Env';

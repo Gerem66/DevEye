@@ -46,7 +46,7 @@ import type {
     NoteColor,
     NoteDividerBlock,
     NoteNumberBlock
-} from 'deveye-types';
+} from '@deveye/types';
 
 /** A block whose marker (dot / ordinal / box / rule) can be tinted. */
 type MarkerBlock = NoteBulletBlock | NoteNumberBlock | NoteCheckBlock | NoteDividerBlock;

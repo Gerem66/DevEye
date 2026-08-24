@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { FinanceMonthPoint } from 'deveye-types';
+import type { FinanceMonthPoint } from '@deveye/types';
 
 import { formatMoney, formatMonth, formatMonthShort } from '../format';
 import styles from '../style.module.css';

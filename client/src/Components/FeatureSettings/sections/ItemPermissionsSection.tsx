@@ -1,4 +1,4 @@
-import { featureDescriptor, type WorkspaceFeatureId } from 'deveye-types';
+import { featureDescriptor, type WorkspaceFeatureId } from '@deveye/types';
 
 import type { SettingsScope } from '../scope';
 import styles from '../FeatureSettings.module.css';

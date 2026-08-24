@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AdminInvite, AdminUser } from 'deveye-types';
+import type { AdminInvite, AdminUser } from '@deveye/types';
 
 import { ws, WsError } from '@/api/ws';
 import Button from '@/Components/Button';

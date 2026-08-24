@@ -13,7 +13,7 @@ const { version: appVersion } = JSON.parse(readFileSync(path.resolve(__dirname, 
 /**
  * Where the client reads the shared contracts from.
  *
- * `deveye-types` is a published package, but between releases it's edited in
+ * `@deveye/types` is a published package, but between releases it's edited in
  * place inside `node_modules` — and Vite serves anything under `node_modules`
  * with a one-year `immutable` cache, under a `?v=` URL that only changes when
  * package.json or the lockfile do. A contract change therefore stayed invisible
@@ -31,7 +31,7 @@ const TYPES_SOURCE_DIR = path.resolve(__dirname, '../../DevEye-Types/src');
 /**
  * Les modules de features installés (features.config.json), et pour chacun, en
  * dev, l'éventuel checkout frère à la racine du chantier : même logique que
- * `deveye-types` ci-dessus, un package publié qui s'édite en place et que le
+ * `@deveye/types` ci-dessus, un package publié qui s'édite en place et que le
  * pré-bundling servirait rassis. Un module in-repo (`features/*`, lien de
  * workspace) n'a pas besoin d'alias : c'est déjà de la source ordinaire.
  */
@@ -94,7 +94,7 @@ export default defineConfig(({ command }) => {
         },
         plugins: [react()],
         optimizeDeps: {
-            // `deveye-types` ships TypeScript source and is the one dependency that
+            // `@deveye/types` ships TypeScript source and is the one dependency that
             // changes in step with the app. Vite's dep pre-bundling keys its cache on
             // package.json/lockfile hashes, never on a dependency's file contents, so
             // editing the package in place (which is how it's iterated on before a
@@ -102,7 +102,7 @@ export default defineConfig(({ command }) => {
             // exist on disk, with no hint as to why. Excluding it from pre-bundling
             // routes it through the normal transform pipeline, where edits are picked
             // up like any other source file.
-            exclude: ['deveye-types', ...installedFeaturePackages()]
+            exclude: ['@deveye/types', ...installedFeaturePackages()]
         },
         server: {
             port: 5173,
@@ -170,21 +170,21 @@ export default defineConfig(({ command }) => {
             // fichiers résolvaient `react` et `zod` vers SES copies, bundlées
             // en double, et deux React dans la même page cassent les hooks.
             // Tout se résout vers les copies de l'app, comme en dev.
-            dedupe: ['react', 'react-dom', 'zod', 'deveye-types'],
+            dedupe: ['react', 'react-dom', 'zod', '@deveye/types'],
             alias: {
                 '@': path.resolve(__dirname, 'src'),
                 // La surface client du SDK des modules : un vrai module de l'app,
                 // servi sous son nom de contrat (voir src/sdk/index.ts).
                 'deveye-sdk-client': path.resolve(__dirname, 'src/sdk/index.ts'),
                 // Les sous-chemins AVANT le nu : l'alias remplace par préfixe, et
-                // `deveye-types/sdk` ne doit pas devenir `src/index.ts/sdk`.
+                // `@deveye/types/sdk` ne doit pas devenir `src/index.ts/sdk`.
                 ...(useTypesSource
                     ? {
-                          'deveye-types/sdk/server': path.join(TYPES_SOURCE_DIR, 'sdk', 'server.ts'),
-                          'deveye-types/sdk/client': path.join(TYPES_SOURCE_DIR, 'sdk', 'client.ts'),
-                          'deveye-types/sdk/testing': path.join(TYPES_SOURCE_DIR, 'sdk', 'testing.ts'),
-                          'deveye-types/sdk': path.join(TYPES_SOURCE_DIR, 'sdk', 'index.ts'),
-                          'deveye-types': TYPES_SOURCE_ENTRY
+                          '@deveye/types/sdk/server': path.join(TYPES_SOURCE_DIR, 'sdk', 'server.ts'),
+                          '@deveye/types/sdk/client': path.join(TYPES_SOURCE_DIR, 'sdk', 'client.ts'),
+                          '@deveye/types/sdk/testing': path.join(TYPES_SOURCE_DIR, 'sdk', 'testing.ts'),
+                          '@deveye/types/sdk': path.join(TYPES_SOURCE_DIR, 'sdk', 'index.ts'),
+                          '@deveye/types': TYPES_SOURCE_ENTRY
                       }
                     : {}),
                 ...(command === 'serve' ? siblingFeatureAliases() : {})

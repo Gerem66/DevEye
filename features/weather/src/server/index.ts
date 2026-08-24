@@ -1,4 +1,4 @@
-import type { FeatureServer } from 'deveye-types/sdk/server';
+import type { FeatureServer } from '@deveye/types/sdk/server';
 
 import { weatherHandlers } from './handlers';
 import { createRepo, type WeatherRepo } from './repo';

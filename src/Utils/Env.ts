@@ -3,7 +3,7 @@ import {
     DEFAULT_RETENTION_DAYS,
     DEFAULT_SENTINEL_FINDING_RETENTION_DAYS,
     DEFAULT_SENTINEL_LEARNING_DAYS
-} from 'deveye-types';
+} from '@deveye/types';
 
 export const env = {
     ENVIRONMENT: getEnvVar('ENVIRONMENT', 'enum', ['dev', 'test', 'prod']),

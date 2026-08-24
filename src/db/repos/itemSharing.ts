@@ -1,4 +1,4 @@
-import type { ItemAccess, ItemRoleGrantRow, ItemShareRow } from 'deveye-types';
+import type { ItemAccess, ItemRoleGrantRow, ItemShareRow } from '@deveye/types';
 
 import type { Queryable } from '../pool';
 

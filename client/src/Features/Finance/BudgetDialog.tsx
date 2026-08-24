@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { FinanceBudget, FinanceBudgetPeriod, FinanceCategory } from 'deveye-types';
+import type { FinanceBudget, FinanceBudgetPeriod, FinanceCategory } from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';

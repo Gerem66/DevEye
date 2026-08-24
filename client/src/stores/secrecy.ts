@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import type { SecrecyStatus } from 'deveye-types';
+import type { SecrecyStatus } from '@deveye/types';
 
 import { ws, WsError } from '@/api/ws';
 

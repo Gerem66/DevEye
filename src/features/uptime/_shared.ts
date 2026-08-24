@@ -1,4 +1,4 @@
-import type { UptimeIncident, UptimeIncidentRow, UptimeService, UptimeServiceRow } from 'deveye-types';
+import type { UptimeIncident, UptimeIncidentRow, UptimeService, UptimeServiceRow } from '@deveye/types';
 import type { Cipher } from '@/Services/SecureStore';
 
 /**

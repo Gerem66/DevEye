@@ -1,7 +1,7 @@
 /**
  * Le contrôle anti-drift de la surface SDK client (`npm run check:sdk`).
  *
- * `deveye-types` publie le portrait typé du barrel (`src/sdk/client-ambient.d.ts`,
+ * `@deveye/types` publie le portrait typé du barrel (`src/sdk/client-ambient.d.ts`,
  * la déclaration ambiante que les repos de modules consomment pour leur
  * typecheck autonome). Ici, on vérifie MÉCANIQUEMENT que le vrai barrel
  * honore ce portrait : le fichier est compilé par `tsconfig.sdkcheck.json`,
@@ -17,7 +17,7 @@
 // Une référence et non un import : un import n'enregistre pas une déclaration
 // ambiante hors du graphe de modules ; la référence est le mécanisme prévu.
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference
-/// <reference path="../../node_modules/deveye-types/src/sdk/client-ambient.d.ts" />
+/// <reference path="../../node_modules/@deveye/types/src/sdk/client-ambient.d.ts" />
 
 import * as real from '../src/sdk';
 

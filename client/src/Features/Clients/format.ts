@@ -1,5 +1,5 @@
 import type { BadgeTone } from '@/Components/StatusBadge';
-import type { DeviceStatus } from 'deveye-types';
+import type { DeviceStatus } from '@deveye/types';
 
 /** Localized lifecycle label + badge tone for a device status. */
 export function statusMeta(status: DeviceStatus): { label: string; tone: BadgeTone } {

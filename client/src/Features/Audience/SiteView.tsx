@@ -7,7 +7,7 @@ import type {
     AudienceOverview,
     AudienceRange,
     AudienceSite
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { Button } from '@/Components';
 

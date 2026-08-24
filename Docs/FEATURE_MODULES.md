@@ -18,7 +18,7 @@
 ## 1. La cible
 
 **Une fonctionnalité = un dossier.** Potentiellement un dépôt git à part
-entière, qui n'a besoin que de `deveye-types` pour s'intégrer complètement à
+entière, qui n'a besoin que de `@deveye/types` pour s'intégrer complètement à
 DevEye :
 
 ```
@@ -46,7 +46,7 @@ La colonne de droite est l'état réel au 20/08/2026 :
 
 | Besoin | Contrat visé | Aujourd'hui |
 |---|---|---|
-| Descripteur (id, libellé, icône, capacités) | `manifest.ts` | ✅ `FEATURE_REGISTRY` (`deveye-types/domain/featureRegistry.ts`) — le descriptif dit une fois |
+| Descripteur (id, libellé, icône, capacités) | `manifest.ts` | ✅ `FEATURE_REGISTRY` (`@deveye/types/domain/featureRegistry.ts`) — le descriptif dit une fois |
 | Commandes typées | schémas zod input/output | ✅ `defineFeature()` + dispatcheur WS qui valide, autorise, diffuse |
 | Stockage | migrations embarquées | ⚠️ migrations **globales** numérotées (`0NN_*.sql`) — pas de namespace par feature |
 | Widget d'accueil | une entrée de manifeste | ⚠️ `FEATURE_CATALOG` (client) à éditer à la main |
@@ -74,7 +74,7 @@ justifié ; leur somme est le problème. Les pires :
   l'oublie (bien), mais qu'on doit connaître (moins bien) ;
 - `stores/invalidation.ts` — les clés de fraîcheur ;
 - `db/index.ts` — le branchement du repo ;
-- le mirroring `deveye-types` ↔ `node_modules`.
+- le mirroring `@deveye/types` ↔ `node_modules`.
 
 ## 4. Le chemin, par étapes qui rapportent chacune seule
 

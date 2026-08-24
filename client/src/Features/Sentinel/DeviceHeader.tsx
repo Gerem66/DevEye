@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SENTINEL_RULES, type DeviceSentinelState, type RuleProbe } from 'deveye-types';
+import { SENTINEL_RULES, type DeviceSentinelState, type RuleProbe } from '@deveye/types';
 
 import Button from '@/Components/Button';
 import { StatusBadge } from '@/Components/StatusBadge';

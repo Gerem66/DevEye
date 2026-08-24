@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { Database } from 'deveye-types';
+import type { Database } from '@deveye/types';
 import { Button } from '@/Components';
 import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { openInfo } from '@/Components/InfoPopup';

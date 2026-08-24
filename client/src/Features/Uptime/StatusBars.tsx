@@ -3,7 +3,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { formatBucket, formatMs, formatRatio } from './format';
 import styles from './style.module.css';
 
-import type { UptimePoint, UptimeResolution } from 'deveye-types';
+import type { UptimePoint, UptimeResolution } from '@deveye/types';
 
 /**
  * Slots the window is always cut into. Fixed on purpose: a bar stands for a

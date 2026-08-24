@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Database, DatabaseAlert, DatabaseProbe, DatabaseUsage } from 'deveye-types';
+import type { Database, DatabaseAlert, DatabaseProbe, DatabaseUsage } from '@deveye/types';
 import { Button } from '@/Components';
 import { STATUS_LABELS } from '../Projects/api';
 import { DatabaseHeader } from './DatabaseHeader';

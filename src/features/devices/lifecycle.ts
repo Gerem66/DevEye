@@ -12,7 +12,7 @@ import {
     deviceSetConfig,
     deviceSetWorkspaces,
     deviceWorkspaceList
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { computeAgentUpdate, deviceAgentConfig, deviceRowToDevice } from '@/agent/mappers';
 import { agentDistDir, readServedManifestCached } from '@/agent/sync';

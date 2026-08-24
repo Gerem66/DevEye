@@ -1,4 +1,4 @@
-import { defaultUserColor, type AdminUser, type UserColor, type UserRow } from 'deveye-types';
+import { defaultUserColor, type AdminUser, type UserColor, type UserRow } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;

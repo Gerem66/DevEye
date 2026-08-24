@@ -1,13 +1,13 @@
-import { featureDescriptor } from 'deveye-types';
+import { featureDescriptor } from '@deveye/types';
 
 import { weatherCommands } from './contracts/commands';
-import type { FeatureManifest } from 'deveye-types/sdk';
+import type { FeatureManifest } from '@deveye/types/sdk';
 
 /**
  * Météo, au format manifest : la première native rapatriée sur le SDK.
  *
  * Le descriptif (intitulé, icône, sources) reste celui du registre publié,
- * étalé plutôt que recopié : une native garde son identité dans deveye-types,
+ * étalé plutôt que recopié : une native garde son identité dans @deveye/types,
  * le manifest n'ajoute que ce que le registre ne porte pas (catégorie, onglets,
  * ressources, permissions déclarées, commandes).
  */

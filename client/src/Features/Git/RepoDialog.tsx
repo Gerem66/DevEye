@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Credential, GitRepo } from 'deveye-types';
+import type { Credential, GitRepo } from '@deveye/types';
 import { Button, Checkbox, Dialog, SelectInput } from '@/Components';
 import { FeatureSettingsDialog } from '@/Components/FeatureSettings';
 import { ws } from '@/api/ws';

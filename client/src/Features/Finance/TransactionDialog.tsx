@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { FinanceTransaction, FinanceTransactionKind } from 'deveye-types';
-import { FINANCE_COUNTERPARTY_MAX_LENGTH, FINANCE_LABEL_MAX_LENGTH, FINANCE_NOTE_MAX_LENGTH } from 'deveye-types';
+import type { FinanceTransaction, FinanceTransactionKind } from '@deveye/types';
+import { FINANCE_COUNTERPARTY_MAX_LENGTH, FINANCE_LABEL_MAX_LENGTH, FINANCE_NOTE_MAX_LENGTH } from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';

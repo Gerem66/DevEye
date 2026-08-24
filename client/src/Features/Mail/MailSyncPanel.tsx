@@ -3,8 +3,8 @@ import {
     MAIL_SYNC_INTERVAL_DEFAULT_MINUTES,
     MAIL_SYNC_INTERVAL_MAX_MINUTES,
     MAIL_SYNC_INTERVAL_MIN_MINUTES
-} from 'deveye-types';
-import type { MailAccount, MailFolder } from 'deveye-types';
+} from '@deveye/types';
+import type { MailAccount, MailFolder } from '@deveye/types';
 
 import Button from '@/Components/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';

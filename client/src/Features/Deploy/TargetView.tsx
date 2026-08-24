@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import type { DeployHistoryEntry, DeployStatus, DeployTarget, Deployment, MinimalUser } from 'deveye-types';
-import { DEPLOY_TITLE_MAX_LENGTH } from 'deveye-types';
+import type { DeployHistoryEntry, DeployStatus, DeployTarget, Deployment, MinimalUser } from '@deveye/types';
+import { DEPLOY_TITLE_MAX_LENGTH } from '@deveye/types';
 import { Button, Dialog, TextInput } from '@/Components';
 import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { ws } from '@/api/ws';

@@ -2,7 +2,7 @@
 
 Surveillance des appareils (agent Rust → serveur Fastify → client React). Ce
 document décrit le **modèle de collecte** et liste les **décisions de conception
-à ne pas casser** lors des évolutions. Contrats partagés dans `deveye-types`
+à ne pas casser** lors des évolutions. Contrats partagés dans `@deveye/types`
 (`domain/metrics.ts`, `domain/report.ts`, `domain/device.ts`, `domain/presence.ts`,
 `protocol/agent.ts`, `features/metrics.ts`, `features/device.ts`).
 
@@ -176,7 +176,7 @@ Statuts (`devices.status`) : `pending` → `active`, `revoked` (réversible via
 
 ## Pièges connus
 
-- **`deveye-types` est miroité, pas symlinké.** Après édition de
+- **`@deveye/types` est miroité, pas symlinké.** Après édition de
   `DevEye-Types/src`, lancer `./sync-types.sh` (mirror + purge cache Vite) ;
   `diff -rq` doit être vide. Committer les **deux** repos ensemble (le serveur/
   client stagés peuvent dépendre de types non encore committés).

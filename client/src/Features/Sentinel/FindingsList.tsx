@@ -1,4 +1,4 @@
-import { SENTINEL_RULES, type Finding, type FindingSeverity } from 'deveye-types';
+import { SENTINEL_RULES, type Finding, type FindingSeverity } from '@deveye/types';
 
 import { formatDuration } from '@/Features/Monitoring/utils';
 import styles from './style.module.css';

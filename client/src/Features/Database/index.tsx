@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Database, DatabaseAlert, DatabaseProbe, DatabaseUsage } from 'deveye-types';
+import type { Database, DatabaseAlert, DatabaseProbe, DatabaseUsage } from '@deveye/types';
 import { Button } from '@/Components';
 import { ws } from '@/api/ws';
 import { FeatureSettingsButton } from '@/Components/FeatureSettings';

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { MinimalUser, ProjectCard, ProjectEvent, ProjectEventKind } from 'deveye-types';
+import type { MinimalUser, ProjectCard, ProjectEvent, ProjectEventKind } from '@deveye/types';
 import { ws } from '@/api/ws';
 import { useResourceVersion } from '@/stores/invalidation';
 import { humanizeError, withSecrecy } from '../api';

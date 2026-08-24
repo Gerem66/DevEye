@@ -11,8 +11,8 @@ import {
     uptimeReorder,
     uptimeSetEnabled,
     uptimeUpdate
-} from 'deveye-types';
-import type { UptimePoint, UptimeRange, UptimeResolution, UptimeService, UptimeServiceRow } from 'deveye-types';
+} from '@deveye/types';
+import type { UptimePoint, UptimeRange, UptimeResolution, UptimeService, UptimeServiceRow } from '@deveye/types';
 
 import type { UptimeWindowStat } from '@/db/repos/uptime';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';

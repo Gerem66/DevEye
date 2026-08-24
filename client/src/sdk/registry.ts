@@ -3,9 +3,9 @@ import {
     registerExternalFeature,
     registerFeatureCommands,
     type ExternalFeatureId
-} from 'deveye-types';
-import { validateManifest, type FeatureManifest } from 'deveye-types/sdk';
-import type { FeatureClient } from 'deveye-types/sdk/client';
+} from '@deveye/types';
+import { validateManifest, type FeatureManifest } from '@deveye/types/sdk';
+import type { FeatureClient } from '@deveye/types/sdk/client';
 
 import { registerCrossTopicKeys, registerFeatureResources, type ResourceKey } from '@/stores/invalidation';
 
@@ -32,7 +32,7 @@ const BY_ID = new Map<string, InstalledClientFeature>();
 
 /**
  * Verse les modules installés dans le registre : descripteur (registre fusionné
- * de deveye-types, dont vivent RoleDialog, la coquille et la présence) et
+ * de @deveye/types, dont vivent RoleDialog, la coquille et la présence) et
  * ressources d'invalidation. Appelée une fois, par l'initialiseur, avant tout
  * rendu.
  */

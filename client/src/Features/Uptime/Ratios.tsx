@@ -1,7 +1,7 @@
 import { formatRatio } from './format';
 import styles from './style.module.css';
 
-import type { UptimeService } from 'deveye-types';
+import type { UptimeService } from '@deveye/types';
 
 /**
  * La disponibilité sur les trois fenêtres usuelles.

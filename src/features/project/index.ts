@@ -10,8 +10,8 @@ import {
     projectSetStatus,
     projectSetVersion,
     projectUpdate
-} from 'deveye-types';
-import type { ProjectDraft, ProjectSummary } from 'deveye-types';
+} from '@deveye/types';
+import type { ProjectDraft, ProjectSummary } from '@deveye/types';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import type { FeatureContext } from '../_define';
 import { projectBoardFeatures } from './board';

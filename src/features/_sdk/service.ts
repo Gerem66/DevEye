@@ -1,5 +1,5 @@
-import type { FeatureService, FeatureServiceDeps, SdkCipher, SdkServerKeys } from 'deveye-types/sdk/server';
-import type { FeatureManifest } from 'deveye-types/sdk';
+import type { FeatureService, FeatureServiceDeps, SdkCipher, SdkServerKeys } from '@deveye/types/sdk/server';
+import type { FeatureManifest } from '@deveye/types/sdk';
 
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';

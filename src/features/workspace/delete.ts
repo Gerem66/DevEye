@@ -1,4 +1,4 @@
-import { workspaceDelete } from 'deveye-types';
+import { workspaceDelete } from '@deveye/types';
 import { invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 

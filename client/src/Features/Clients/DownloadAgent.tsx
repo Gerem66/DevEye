@@ -8,7 +8,7 @@ import {
     compareVersions,
     type AgentOs,
     type AgentTargetStatus
-} from 'deveye-types';
+} from '@deveye/types';
 import { APP_VERSION } from '../agentVersion';
 import styles from './Clients.module.css';
 

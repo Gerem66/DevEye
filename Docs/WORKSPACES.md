@@ -427,11 +427,11 @@ DB_DATABASE=DevEye_migtest LISTEN_PORT=3099 npx tsx index.ts   # ×2
 ## 9. Conventions du dépôt
 
 - **Trois dépôts** : `DevEye/` (serveur + client), `DevEye-Types/`, et un miroir
-  dans `DevEye/node_modules/deveye-types/`. Après **toute** modification des
+  dans `DevEye/node_modules/@deveye/types/`. Après **toute** modification des
   contrats :
   ```bash
-  rsync -a --delete DevEye-Types/src/ DevEye/node_modules/deveye-types/src/
-  diff -rq DevEye-Types/src DevEye/node_modules/deveye-types/src   # doit être vide
+  rsync -a --delete DevEye-Types/src/ DevEye/node_modules/@deveye/types/src/
+  diff -rq DevEye-Types/src DevEye/node_modules/@deveye/types/src   # doit être vide
   ```
 - **`./ci.sh`** à la racine : lint + typecheck des trois, tests du serveur,
   build du client.

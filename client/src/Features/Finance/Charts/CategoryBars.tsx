@@ -1,4 +1,4 @@
-import type { FinanceCategory, FinanceCategoryShare } from 'deveye-types';
+import type { FinanceCategory, FinanceCategoryShare } from '@deveye/types';
 
 import { formatMoney } from '../format';
 import { categoryOf, colorVar } from '../shared';

@@ -1,5 +1,5 @@
-import { PROJECT_EVENT_PAGE_SIZE, projectEventList, projectEventSchema } from 'deveye-types';
-import type { ProjectEvent, ProjectEventRow } from 'deveye-types';
+import { PROJECT_EVENT_PAGE_SIZE, projectEventList, projectEventSchema } from '@deveye/types';
+import type { ProjectEvent, ProjectEventRow } from '@deveye/types';
 import type { Cipher } from '@/Services/SecureStore';
 import { defineFeature, type FeatureDefinition } from '../_define';
 import { assertProjectUnlocked, cipherFor, loadProject, type StoredEvent } from './_shared';

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import type { AllowScope, DevicePosture, DeviceSentinelState, Finding, FindingSeverity } from 'deveye-types';
+import type { AllowScope, DevicePosture, DeviceSentinelState, Finding, FindingSeverity } from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import { useLiveSegment } from '@/live/useLiveSegment';

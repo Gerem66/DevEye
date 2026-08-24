@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { MailAccount, MailSecurityTier } from 'deveye-types';
+import type { MailAccount, MailSecurityTier } from '@deveye/types';
 
 import Button from '@/Components/Button';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';

@@ -1,8 +1,8 @@
 import type { WebSocket } from '@fastify/websocket';
-import { AGENT_ACK, type AgentClientMessage, type AgentServerMessage, type DeviceRow } from 'deveye-types';
+import { AGENT_ACK, type AgentClientMessage, type AgentServerMessage, type DeviceRow } from '@deveye/types';
 import type { Logger } from 'pino';
 
-import type { FeatureAgentHooks } from 'deveye-types/sdk/server';
+import type { FeatureAgentHooks } from '@deveye/types/sdk/server';
 import type { Database } from '@/db';
 import type { AuditLog } from '@/Services/AuditLog';
 import type { SecurityMonitor } from '@/Services/SecurityMonitor';

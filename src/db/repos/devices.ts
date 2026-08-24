@@ -1,4 +1,4 @@
-import type { DeviceRow, DeviceStatus, ProcessCapture } from 'deveye-types';
+import type { DeviceRow, DeviceStatus, ProcessCapture } from '@deveye/types';
 import { randomInt, randomUUID } from 'crypto';
 import type { Queryable } from '../pool';
 

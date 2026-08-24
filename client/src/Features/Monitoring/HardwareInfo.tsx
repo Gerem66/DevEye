@@ -1,4 +1,4 @@
-import type { Device, DeviceReport, NetInterfaceKind } from 'deveye-types';
+import type { Device, DeviceReport, NetInterfaceKind } from '@deveye/types';
 import { agentUpdatable } from '../agentVersion';
 import { pct } from './utils';
 import styles from './Monitoring.module.css';

@@ -1,4 +1,4 @@
-import type { BootTask, ServerStatus } from 'deveye-types';
+import type { BootTask, ServerStatus } from '@deveye/types';
 
 import { appVersion } from './version';
 

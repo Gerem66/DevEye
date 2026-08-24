@@ -1,4 +1,4 @@
-import { MAIL_MESSAGE_PAGE_SIZE, type MailAccountRow, type MailFolderRow } from 'deveye-types';
+import { MAIL_MESSAGE_PAGE_SIZE, type MailAccountRow, type MailFolderRow } from '@deveye/types';
 import * as mailClient from '@/Services/MailAccountClient';
 import type { Cipher } from '@/Services/SecureStore';
 import type { Database } from '@/db';

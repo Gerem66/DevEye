@@ -13,7 +13,7 @@
  *
  * Lancé par `npm run ci:rules`, donc par `npm run ci`.
  */
-import type { AuthWindow, DeviceReport, PersistenceEntry, ReportProcess } from 'deveye-types';
+import type { AuthWindow, DeviceReport, PersistenceEntry, ReportProcess } from '@deveye/types';
 
 import type { BaselineRow } from '@/db/repos/sentinel';
 import {

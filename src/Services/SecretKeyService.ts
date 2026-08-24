@@ -3,7 +3,7 @@ import crypto from 'crypto';
 
 import type { Database } from '@/db';
 import type { WrapState } from '@/db/repos/userSecretKeys';
-import type { SecrecyWrapMode, UserSecretKeyRow } from 'deveye-types';
+import type { SecrecyWrapMode, UserSecretKeyRow } from '@deveye/types';
 import Encryption from './Encryption';
 
 /** Argon2id parameters for deriving a 32-byte key-encryption key from a password. */

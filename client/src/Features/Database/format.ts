@@ -4,7 +4,7 @@ import type {
     DatabaseFilterOperator,
     DatabaseStatus,
     DatabaseTable
-} from 'deveye-types';
+} from '@deveye/types';
 
 /** Le nom d'usage d'un moteur, celui que l'utilisateur reconnaît. */
 export const ENGINE_LABELS: Record<DatabaseEngine, string> = {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Credential, GitRepo, GitRepoSyncState, GitRepoUsage } from 'deveye-types';
+import type { Credential, GitRepo, GitRepoSyncState, GitRepoUsage } from '@deveye/types';
 import { Button } from '@/Components';
 import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { ws } from '@/api/ws';

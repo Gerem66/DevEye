@@ -6,7 +6,7 @@ import {
     type AudiencePlatform,
     type AudienceSiteRow,
     type AudienceVisitorMode
-} from 'deveye-types';
+} from '@deveye/types';
 
 import type { Database as Db } from '@/db';
 import type { PendingEventRow } from '@/db/repos/audienceIngest';

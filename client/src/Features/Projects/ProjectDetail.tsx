@@ -8,7 +8,7 @@ import type {
     ProjectColumn,
     ProjectMilestone,
     ProjectMilestoneDraft
-} from 'deveye-types';
+} from '@deveye/types';
 import { Button } from '@/Components';
 import { ws } from '@/api/ws';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';

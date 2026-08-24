@@ -16,7 +16,7 @@ import {
     type HomeTopbarWidgetId,
     type ShortcutItem,
     type ShortcutTemplate
-} from 'deveye-types';
+} from '@deveye/types';
 import { ws } from '@/api/ws';
 import { getActiveWorkspaceId } from './workspace';
 
@@ -244,7 +244,7 @@ export function setSectionOrder(ids: string[]): void {
  *
  * C'est le vocabulaire du déplacement : l'organiseur s'en sert pour ses
  * identifiants de glissé, le store pour retrouver une tuile. La forme de
- * l'union, elle, n'est lue que par `homeTileId` (voir `deveye-types`).
+ * l'union, elle, n'est lue que par `homeTileId` (voir `@deveye/types`).
  */
 export function sectionTileIds(section: HomeSection): string[] {
     return section.items.map((tile) => homeTileId(tile));

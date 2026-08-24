@@ -7,7 +7,7 @@ import {
     databaseTableList,
     databaseTableRows,
     databaseTableStructure
-} from 'deveye-types';
+} from '@deveye/types';
 import type {
     DatabaseCell,
     DatabaseExportFormat,
@@ -15,7 +15,7 @@ import type {
     DatabaseRows,
     DatabaseStructure,
     DatabaseTable
-} from 'deveye-types';
+} from '@deveye/types';
 import { ROWS_PAGE_DEFAULT, type IdRanges, type Session } from '@/Services/databases/engine';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { WRITE } from './_shared';

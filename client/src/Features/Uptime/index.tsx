@@ -12,7 +12,7 @@ import { ServiceDialog } from './ServiceDialog';
 import ServiceList from './ServiceList';
 import styles from './style.module.css';
 
-import type { UptimeService } from 'deveye-types';
+import type { UptimeService } from '@deveye/types';
 import type { FeatureProps } from '../types';
 
 export default function Uptime({ workspace }: FeatureProps) {

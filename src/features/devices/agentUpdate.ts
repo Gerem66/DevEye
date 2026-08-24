@@ -1,4 +1,4 @@
-import { deviceUpdateAgent, isNewerVersion } from 'deveye-types';
+import { deviceUpdateAgent, isNewerVersion } from '@deveye/types';
 
 import { agentDistDir, readServedManifestCached } from '@/agent/sync';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { MailBodyRenderMode, MailSettings } from 'deveye-types';
+import type { MailBodyRenderMode, MailSettings } from '@deveye/types';
 
 import Button from '@/Components/Button';
 import TextInput from '@/Components/TextInput';

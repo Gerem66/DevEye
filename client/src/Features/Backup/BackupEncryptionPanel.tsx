@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { BackupEncryption, BackupJob } from 'deveye-types';
+import type { BackupEncryption, BackupJob } from '@deveye/types';
 
 import Button from '@/Components/Button';
 import SegmentedControl from '@/Components/SegmentedControl';

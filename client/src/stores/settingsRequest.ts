@@ -1,4 +1,4 @@
-import type { FeatureId } from 'deveye-types';
+import type { FeatureId } from '@deveye/types';
 
 /**
  * L'intention « ouvrir les réglages de tel élément, sur tel onglet ».

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Credential, DeployCandidate, DeployTarget, DeployTargetKind } from 'deveye-types';
-import { DEPLOY_TARGET_NAME_MAX_LENGTH } from 'deveye-types';
+import type { Credential, DeployCandidate, DeployTarget, DeployTargetKind } from '@deveye/types';
+import { DEPLOY_TARGET_NAME_MAX_LENGTH } from '@deveye/types';
 import { Button, Dialog, SelectInput, TextInput } from '@/Components';
 import { FeatureSettingsDialog } from '@/Components/FeatureSettings';
 import { ws } from '@/api/ws';

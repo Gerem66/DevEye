@@ -1,4 +1,4 @@
-import type { NoteBlock } from 'deveye-types';
+import type { NoteBlock } from '@deveye/types';
 
 import type { BlockPoint, BlockRange } from './selection';
 

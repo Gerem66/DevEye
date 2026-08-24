@@ -1,4 +1,4 @@
-import { AGENT_LOG_LINES, AGENT_LOG_SOURCES_RESULT } from 'deveye-types';
+import { AGENT_LOG_LINES, AGENT_LOG_SOURCES_RESULT } from '@deveye/types';
 
 import { ack, type AgentSession, type PayloadOf } from './session';
 

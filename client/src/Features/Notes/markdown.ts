@@ -1,4 +1,4 @@
-import { noteColorSchema, type NoteColor } from 'deveye-types';
+import { noteColorSchema, type NoteColor } from '@deveye/types';
 
 /**
  * Tiny inline-markdown engine shared by the note editor (live rendering), the

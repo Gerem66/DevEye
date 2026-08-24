@@ -1,5 +1,5 @@
-import type { FeatureAccess, FeatureId, WorkspaceCapability, WorkspacePermissions } from 'deveye-types';
-import type { Workspace } from 'deveye-types';
+import type { FeatureAccess, FeatureId, WorkspaceCapability, WorkspacePermissions } from '@deveye/types';
+import type { Workspace } from '@deveye/types';
 import { useSyncExternalStore } from 'react';
 
 /**

@@ -1,4 +1,4 @@
-import type { UptimeServiceRow, UptimeStatus } from 'deveye-types';
+import type { UptimeServiceRow, UptimeStatus } from '@deveye/types';
 import type { Logger } from 'pino';
 
 import { decryptError, decryptService, encryptError, type ServicePayload } from '@/features/uptime/_shared';

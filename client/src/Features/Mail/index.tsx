@@ -17,7 +17,7 @@ import { describeAccountStatus } from './accountStatus';
 import { humanizeError, withSecrecy, withSettingsDefaults, ws } from './api';
 import styles from './style.module.css';
 
-import { MAIL_MESSAGE_PAGE_SIZE } from 'deveye-types';
+import { MAIL_MESSAGE_PAGE_SIZE } from '@deveye/types';
 
 import type {
     MailAccount,
@@ -27,7 +27,7 @@ import type {
     MailMessageCursor,
     MailMessageSummary,
     MailSecurityTier
-} from 'deveye-types';
+} from '@deveye/types';
 import type { FeatureProps } from '../types';
 
 /**

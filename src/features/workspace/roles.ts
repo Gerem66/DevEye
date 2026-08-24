@@ -7,8 +7,8 @@ import {
     workspaceRoleList,
     workspaceRoleSetDefault,
     workspaceRoleUpdate
-} from 'deveye-types';
-import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole, WorkspaceRoleRow } from 'deveye-types';
+} from '@deveye/types';
+import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole, WorkspaceRoleRow } from '@deveye/types';
 
 import { invalidateAccess } from '../_access';
 import { validateGrantExtras } from '../_sdk/register';

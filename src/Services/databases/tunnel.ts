@@ -1,7 +1,7 @@
 import { createServer, type AddressInfo, type Server, type Socket } from 'net';
 import { Client as SshClient } from 'ssh2';
 import { SocksClient } from 'socks';
-import type { DatabaseAccessKind, DatabaseSshAuth } from 'deveye-types';
+import type { DatabaseAccessKind, DatabaseSshAuth } from '@deveye/types';
 
 /**
  * Joindre une base qui n'est pas directement accessible.

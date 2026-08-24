@@ -15,7 +15,7 @@ import {
     UPTIME_TIMEOUT_MIN,
     type UptimeMethod,
     type UptimeService
-} from 'deveye-types';
+} from '@deveye/types';
 
 /** Everything the user sets on a service. */
 interface ServiceDraft {

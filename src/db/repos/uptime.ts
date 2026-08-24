@@ -5,8 +5,8 @@ import type {
     UptimePoint,
     UptimeServiceRow,
     UptimeStatus
-} from 'deveye-types';
-import type { UptimeCheckStats } from 'deveye-types';
+} from '@deveye/types';
+import type { UptimeCheckStats } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 /** Which pings a journal query covers; mirrors the shared command filter. */

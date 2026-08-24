@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { BackupDestination, BackupDestinationKind } from 'deveye-types';
+import type { BackupDestination, BackupDestinationKind } from '@deveye/types';
 
 /* Chemins directs et non le baril `@/Components` : ce dialogue est monté par le
    panneau Sources de la coquille de réglages, que le baril réexporte ; passer

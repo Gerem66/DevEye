@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { DEVICE_SERVICE_EVENT, type DeviceServicePush } from 'deveye-types';
+import { DEVICE_SERVICE_EVENT, type DeviceServicePush } from '@deveye/types';
 import { ws } from '@/api/ws';
 import { openInfo } from '@/Components/InfoPopup';
 import { startAgentUpdate, useAgentUpdates } from '@/stores/agentUpdates';

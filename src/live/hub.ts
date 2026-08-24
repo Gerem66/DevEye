@@ -18,7 +18,7 @@ import {
     type LiveTopic,
     type ServerMessage,
     type UserColor
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { accessEpochNow, permissionsFor } from '@/features/_access';
 import { logger } from '@/logger';

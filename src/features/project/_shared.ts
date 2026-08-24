@@ -9,8 +9,8 @@ import type {
     ProjectRow,
     ProjectSummary,
     ProjectTag
-} from 'deveye-types';
-import { PROJECT_PRIORITIES, projectCardSchema, projectColumnSchema, projectSchema } from 'deveye-types';
+} from '@deveye/types';
+import { PROJECT_PRIORITIES, projectCardSchema, projectColumnSchema, projectSchema } from '@deveye/types';
 import type { Cipher } from '@/Services/SecureStore';
 import { FeatureError, type FeatureContext } from '../_define';
 import type { ProjectStats } from '@/db/repos/projects';

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { get } from '@/api/http';
-import { serverStatusSchema, type ServerStatus } from 'deveye-types';
+import { serverStatusSchema, type ServerStatus } from '@deveye/types';
 
 /**
  * Server readiness store. Polls `GET /api/status` **only while a boot task is

@@ -16,7 +16,7 @@ import { requestOpenView } from '@/stores/viewRequest';
 import { useWorkspaceState } from '@/stores/workspace';
 
 import type { CSSProperties } from 'react';
-import type { UserColor } from 'deveye-types';
+import type { UserColor } from '@deveye/types';
 
 const SECURITY_MAX = 3;
 

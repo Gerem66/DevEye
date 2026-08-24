@@ -1,6 +1,6 @@
 import type { SecureStore } from '@/Services/SecureStore';
-import type { PasswordEntry, PasswordEntryMasked, PasswordStatus } from 'deveye-types';
-import { passwordEntrySchema } from 'deveye-types';
+import type { PasswordEntry, PasswordEntryMasked, PasswordStatus } from '@deveye/types';
+import { passwordEntrySchema } from '@deveye/types';
 
 /**
  * Stored payload (encrypted as `passwords.content`). Mirrors PasswordEntry

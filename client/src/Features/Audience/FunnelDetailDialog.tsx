@@ -1,4 +1,4 @@
-import type { AudienceFunnel } from 'deveye-types';
+import type { AudienceFunnel } from '@deveye/types';
 
 import { Button, Dialog } from '@/Components';
 import { formatCount, formatPercent } from './format';

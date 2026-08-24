@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { featureDescriptor, type ItemAccess, type ItemGrantState, type WorkspaceFeatureId } from 'deveye-types';
+import { featureDescriptor, type ItemAccess, type ItemGrantState, type WorkspaceFeatureId } from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import SegmentedControl from '@/Components/SegmentedControl';

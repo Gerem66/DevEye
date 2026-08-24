@@ -27,7 +27,7 @@ Requires a stable Rust toolchain (`rust-toolchain.toml` pins `stable`).
 
 **The whole matrix at once.** A release ships **8 binaries** (the same set the
 web UI offers under **Appareils → Télécharger l'agent**, and the canonical list
-in `deveye-types` `AGENT_TARGETS`):
+in `@deveye/types` `AGENT_TARGETS`):
 
 | OS                    | Cibles                                      |
 | --------------------- | ------------------------------------------- |

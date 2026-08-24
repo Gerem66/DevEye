@@ -4,7 +4,7 @@ import FolderTree from './FolderTree';
 import SyncProgressBar from './SyncProgressBar';
 import styles from './style.module.css';
 
-import type { MailAccount, MailFolder } from 'deveye-types';
+import type { MailAccount, MailFolder } from '@deveye/types';
 
 interface AccountPanelProps {
     accounts: MailAccount[];

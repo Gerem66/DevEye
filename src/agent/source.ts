@@ -1,4 +1,4 @@
-import { agentManifestSchema, type AgentManifest } from 'deveye-types';
+import { agentManifestSchema, type AgentManifest } from '@deveye/types';
 
 /**
  * The agent binaries' upstream source — the **only** place in the server that

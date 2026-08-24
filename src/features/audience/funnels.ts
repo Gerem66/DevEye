@@ -7,7 +7,7 @@ import {
     type AudienceFunnel,
     type AudienceFunnelStepDraft,
     type AudienceFunnelStepKind
-} from 'deveye-types';
+} from '@deveye/types';
 
 import type { ResolvedStep } from '@/db/repos/audienceFunnels';
 import type { Cipher } from '@/Services/SecureStore';

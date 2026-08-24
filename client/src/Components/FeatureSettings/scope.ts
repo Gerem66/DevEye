@@ -1,4 +1,4 @@
-import { featureDescriptor, type FeatureId } from 'deveye-types';
+import { featureDescriptor, type FeatureId } from '@deveye/types';
 
 /**
  * Ce que règle une coquille de réglages : une fonctionnalité, ou un de ses

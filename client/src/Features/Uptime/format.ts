@@ -1,4 +1,4 @@
-import type { UptimePoint, UptimeRange } from 'deveye-types';
+import type { UptimePoint, UptimeRange } from '@deveye/types';
 
 const DAY = 86400;
 

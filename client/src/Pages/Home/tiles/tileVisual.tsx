@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import type { Device, HomeTile, ShortcutItem } from 'deveye-types';
-import { homeTileKind, isFeatureTile, isHomeFolder, isShortcutTile } from 'deveye-types';
+import type { Device, HomeTile, ShortcutItem } from '@deveye/types';
+import { homeTileKind, isFeatureTile, isHomeFolder, isShortcutTile } from '@deveye/types';
 import { DeviceWidget } from '@/Features/Monitoring/DeviceWidget';
 import { ShortcutTile } from './ShortcutTile';
 import { FolderTile, folderKey, folderTitle } from '../folders';

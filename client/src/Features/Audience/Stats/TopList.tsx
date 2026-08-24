@@ -1,4 +1,4 @@
-import type { AudienceBreakdownItem, AudienceDimension } from 'deveye-types';
+import type { AudienceBreakdownItem, AudienceDimension } from '@deveye/types';
 
 import { DIMENSION_EMPTY, DIMENSION_LABELS, formatCount } from '../format';
 import styles from '../style.module.css';

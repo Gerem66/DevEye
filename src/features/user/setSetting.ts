@@ -1,4 +1,4 @@
-import { userSetSetting } from 'deveye-types';
+import { userSetSetting } from '@deveye/types';
 import { parseStringArray } from '../../auth/loadUserBundle';
 import { defineFeature, type FeatureDefinition } from '../_define';
 

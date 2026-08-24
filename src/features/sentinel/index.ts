@@ -18,7 +18,7 @@ import {
     type BaselineEntry,
     type DeviceRow,
     type DeviceSentinelState
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { deviceAgentConfig } from '@/agent/mappers';
 import { env } from '@/Utils/Env';

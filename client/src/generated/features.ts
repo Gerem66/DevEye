@@ -3,8 +3,8 @@
  * toute modification à la main est écrasée à la prochaine génération, et la CI
  * (`gen:features --check`) refuse un fichier qui ne correspond plus à la config.
  */
-import type { FeatureManifest } from 'deveye-types/sdk';
-import type { FeatureClient } from 'deveye-types/sdk/client';
+import type { FeatureManifest } from '@deveye/types/sdk';
+import type { FeatureClient } from '@deveye/types/sdk/client';
 
 import { LOCAL_CLIENT_FEATURES } from './features.local';
 import { manifest as manifest0 } from 'deveye-feature-weather';

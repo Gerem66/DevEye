@@ -10,7 +10,7 @@ import {
     type PostureStatus,
     type RuleProbe,
     type SentinelRuleId
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { parseDeviceReport } from '@/agent/mappers';
 import type { FindingRow } from '@/db/repos/sentinel';

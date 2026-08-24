@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AudienceSite, Project } from 'deveye-types';
+import type { AudienceSite, Project } from '@deveye/types';
 
 import { Button, Dialog } from '@/Components';
 import { ws } from '@/api/ws';

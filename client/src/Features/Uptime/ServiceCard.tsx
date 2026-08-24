@@ -6,7 +6,7 @@ import StatusBars from './StatusBars';
 import { useServiceHistory } from './useServiceHistory';
 import styles from './style.module.css';
 
-import type { UptimeService } from 'deveye-types';
+import type { UptimeService } from '@deveye/types';
 import { useLiveOutline } from '@/live/useLiveOutline';
 
 interface ServiceCardProps {

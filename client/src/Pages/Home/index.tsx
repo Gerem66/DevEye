@@ -70,11 +70,11 @@ import { AboutContent } from './about';
 import { EditableHome } from './organize/EditableHome';
 import { FolderOverlay, folderTitle } from './folders';
 
-import type { HomeFeatureId, HomeLayout, HomeSection, WorkspaceFeatureId, WorkspacePermissions } from 'deveye-types';
-import { isFeatureTile, isHomeFolder, isShortcutTile, WORKSPACE_FEATURE_IDS } from 'deveye-types';
+import type { HomeFeatureId, HomeLayout, HomeSection, WorkspaceFeatureId, WorkspacePermissions } from '@deveye/types';
+import { isFeatureTile, isHomeFolder, isShortcutTile, WORKSPACE_FEATURE_IDS } from '@deveye/types';
 import type { FeatureProps } from '@/Features/types';
 import styles from './Dashboard.module.css';
-import type { Workspace } from 'deveye-types';
+import type { Workspace } from '@deveye/types';
 
 /** A view openable full-screen in the popup (feature, structural page or device). */
 interface ViewConfig {

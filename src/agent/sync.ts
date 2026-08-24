@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { chmod, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 
-import { AGENT_TARGETS, agentManifestSchema, type AgentManifest } from 'deveye-types';
+import { AGENT_TARGETS, agentManifestSchema, type AgentManifest } from '@deveye/types';
 
 import { env } from '@/Utils/Env';
 import { logger } from '@/logger';

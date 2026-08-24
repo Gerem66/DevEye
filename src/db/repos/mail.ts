@@ -9,7 +9,7 @@ import type {
     MailMessageRow,
     MailSecurityTier,
     MailSettingsRow
-} from 'deveye-types';
+} from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;

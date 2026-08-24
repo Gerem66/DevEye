@@ -1,4 +1,4 @@
-import type { ProjectMessageRow } from 'deveye-types';
+import type { ProjectMessageRow } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;

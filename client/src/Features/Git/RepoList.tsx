@@ -1,5 +1,5 @@
 import { StatusBadge } from '@/Components';
-import type { GitRepo, GitRepoSyncState } from 'deveye-types';
+import type { GitRepo, GitRepoSyncState } from '@deveye/types';
 import { useDragReorder } from '@/dragReorder';
 import type { useLiveOutlines } from '@/live/useLiveOutline';
 import styles from './style.module.css';

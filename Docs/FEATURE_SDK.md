@@ -17,7 +17,7 @@ première, et la preuve que le contrat suffit.
 
 ## Les trois étages
 
-1. **`deveye-types/sdk`** (publié) : le contrat. Ids `x-<slug>`
+1. **`@deveye/types/sdk`** (publié) : le contrat. Ids `x-<slug>`
    (surensemble pur des enums natifs : rien d'existant n'a été migré),
    `FeatureManifest` + `validateManifest`, le contexte serveur
    (`SdkFeatureContext`, `FeatureStore`, façade), les contrats client
@@ -48,10 +48,10 @@ dépendrait des types de toute façon). Critère de bascule : vague terminée et
 surface stabilisée, ou premier vrai module tiers. La coupe sera mécanique :
 `src/sdk/` est déjà autonome.
 
-Est stable : tout ce qu'exportent `deveye-types/sdk*` et le barrel
+Est stable : tout ce qu'exportent `@deveye/types/sdk*` et le barrel
 `deveye-sdk-client`. Tout le reste est interne et peut bouger. Élargir la
 surface = l'ajouter à l'un de ces deux endroits, mettre à jour le portrait
-typé du barrel — publié DANS deveye-types (`src/sdk/client-ambient.d.ts`,
+typé du barrel — publié DANS @deveye/types (`src/sdk/client-ambient.d.ts`,
 que le template tire par une entrée `include` de son tsconfig) — et la doc
 REFERENCE du template.
 `npm run check:sdk` (client) vérifie MÉCANIQUEMENT que le vrai barrel honore
@@ -122,7 +122,7 @@ dans son répertoire. Ses contrats zod et son domaine vivent dans
 `src/contracts/` (le patron du template), ses services aussi (les sondes
 OSINT, l'adaptateur météo — seul reste à l'app ce qui est réellement partagé,
 comme le garde SSRF de `Services/netFetch`, importé avec le privilège de
-native commenté). `deveye-types` ne garde que l'IDENTITÉ (l'id dans les
+native commenté). `@deveye/types` ne garde que l'IDENTITÉ (l'id dans les
 enums, le descripteur du registre — ce que les écrans des autres doivent
 savoir sans ouvrir la feature) et les points de couplage déclarés (providers,
 protocole agent). Ses commandes s'enregistrent au runtime par le manifest,
@@ -141,13 +141,13 @@ Sa migration a élargi la surface stable, pour toutes les features :
 - **`humanizeError`** traduit aussi `locked` et `timeout`.
 
 Chaque élargissement est reflété dans le portrait publié
-(`deveye-types/src/sdk/client-ambient.d.ts`, vérifié par `check:sdk`) et la
+(`@deveye/types/src/sdk/client-ambient.d.ts`, vérifié par `check:sdk`) et la
 doc du template (REFERENCE + 04-storage-and-encryption).
 
 L'outillage de migration, à rejouer pour CHAQUE native :
 
 - **Tests de modules** : `npm test` couvre `features/*/src/**/*.test.ts`
-  (harnais `deveye-types/sdk/testing`, voir `features/osint/src/server/handlers.test.ts`),
+  (harnais `@deveye/types/sdk/testing`, voir `features/osint/src/server/handlers.test.ts`),
   et le tsconfig racine inclut ces fichiers pour le typecheck.
 - **L'IDE** : `features/tsconfig.json` est le projet CLIENT des modules
   in-repo (extends celui du client : alias `deveye-sdk-client`, JSX) ; leur
@@ -192,7 +192,7 @@ config — le module doit rester résoluble).
 
 ## Dettes connues
 
-- *(Pas une dette : la publication de deveye-types 0.15.0 se fait à la main
+- *(Pas une dette : la publication de @deveye/types 0.15.0 se fait à la main
   par Gerem au moment de livrer en prod. En local, le miroir suffit — copie
   dans `node_modules` ou package par chemin local ; la CI GitHub du template
   passera après publication.)*

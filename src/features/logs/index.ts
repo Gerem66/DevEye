@@ -1,4 +1,4 @@
-import { LOGS_PAGE_DEFAULT, logsFacets, logsList } from 'deveye-types';
+import { LOGS_PAGE_DEFAULT, logsFacets, logsList } from '@deveye/types';
 
 import { defineFeature, type FeatureDefinition } from '../_define';
 import type { LogQueryFilter } from '@/db/repos/logs';

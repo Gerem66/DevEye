@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Credential } from 'deveye-types';
-import { CREDENTIAL_LABEL_MAX_LENGTH } from 'deveye-types';
+import type { Credential } from '@deveye/types';
+import { CREDENTIAL_LABEL_MAX_LENGTH } from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';

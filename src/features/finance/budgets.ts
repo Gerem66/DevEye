@@ -1,5 +1,5 @@
-import { financeBudgetList, financeBudgetRemove, financeBudgetSet } from 'deveye-types';
-import type { FinanceBudget, FinanceBudgetRow } from 'deveye-types';
+import { financeBudgetList, financeBudgetRemove, financeBudgetSet } from '@deveye/types';
+import type { FinanceBudget, FinanceBudgetRow } from '@deveye/types';
 
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { periodBounds, postDueRecurring, READ, today, WRITE } from './_shared';

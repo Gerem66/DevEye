@@ -1,4 +1,4 @@
-import type { FeatureId } from 'deveye-types';
+import type { FeatureId } from '@deveye/types';
 
 import MailSyncPanel from '@/Features/Mail/MailSyncPanel';
 

@@ -378,8 +378,8 @@ mysql … -e "DROP DATABASE IF EXISTS DevEye_migtest; CREATE DATABASE DevEye_mig
 mysql … DevEye_migtest < Backups/<dump>.sql
 DB_DATABASE=DevEye_migtest LISTEN_PORT=3099 npx tsx index.ts   # ×2
 
-rsync -a --delete DevEye-Types/src/ DevEye/node_modules/deveye-types/src/
-diff -rq DevEye-Types/src DevEye/node_modules/deveye-types/src   # doit être vide
+rsync -a --delete DevEye-Types/src/ DevEye/node_modules/@deveye/types/src/
+diff -rq DevEye-Types/src DevEye/node_modules/@deveye/types/src   # doit être vide
 ./ci.sh
 ```
 

@@ -1,5 +1,5 @@
 import type { WeatherFormat, WeatherLocationRow, WeatherProvider, WeatherProviderKeyRow } from '../contracts/domain';
-import type { SdkQueryable } from 'deveye-types/sdk/server';
+import type { SdkQueryable } from '@deveye/types/sdk/server';
 import { randomUUID } from 'crypto';
 
 export interface CreateWeatherLocationInput {

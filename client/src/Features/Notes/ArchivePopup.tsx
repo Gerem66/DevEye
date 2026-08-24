@@ -9,7 +9,7 @@ import { humanizeError, withSecrecy } from './api';
 import { stripInline } from './markdown';
 import { NOTE_CONFIRM_POPUP, type ConfirmInput } from './ConfirmPopup';
 
-import type { NoteSummary } from 'deveye-types';
+import type { NoteSummary } from '@deveye/types';
 
 export const NOTE_ARCHIVE_POPUP = 'popup-note-archives';
 

@@ -1,4 +1,4 @@
-import type { DatabaseAlertRow, DatabaseRow, ProjectDatabaseLinkRow } from 'deveye-types';
+import type { DatabaseAlertRow, DatabaseRow, ProjectDatabaseLinkRow } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;

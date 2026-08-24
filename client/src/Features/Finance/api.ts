@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { FinanceSummary } from 'deveye-types';
+import type { FinanceSummary } from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import { useResource } from '@/api/useResource';

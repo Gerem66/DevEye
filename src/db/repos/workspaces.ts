@@ -1,4 +1,4 @@
-import type { WorkspaceMemberRow, WorkspaceRow } from 'deveye-types';
+import type { WorkspaceMemberRow, WorkspaceRow } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;

@@ -1,4 +1,4 @@
-import type { DeviceReport } from 'deveye-types';
+import type { DeviceReport } from '@deveye/types';
 import { serviceName } from './ports';
 import styles from './Monitoring.module.css';
 

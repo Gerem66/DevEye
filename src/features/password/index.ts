@@ -6,7 +6,7 @@ import {
     passwordGet,
     passwordList,
     passwordUnlock
-} from 'deveye-types';
+} from '@deveye/types';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { encryptPayload, markUnlocked, toEntry, toMaskedEntry, tryDecryptPayload } from './_shared';
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SENTINEL_RULES, type AllowScope, type Finding } from 'deveye-types';
+import { SENTINEL_RULES, type AllowScope, type Finding } from '@deveye/types';
 
 import Button from '@/Components/Button';
 import TextInput from '@/Components/TextInput';

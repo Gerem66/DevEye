@@ -1,4 +1,4 @@
-import type { NoteRow } from 'deveye-types';
+import type { NoteRow } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;

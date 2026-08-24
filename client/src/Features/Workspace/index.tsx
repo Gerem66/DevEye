@@ -4,7 +4,7 @@ import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
 import SelectInput from '@/Components/SelectInput';
 import TextInput from '@/Components/TextInput';
-import type { WorkspaceRole } from 'deveye-types';
+import type { WorkspaceRole } from '@deveye/types';
 import { useAuth } from '@/auth/AuthProvider';
 import { useWorkspacePermissions } from '@/stores/workspace';
 import RoleDialog from './RoleDialog';

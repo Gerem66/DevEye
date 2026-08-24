@@ -1,4 +1,4 @@
-import type { FeatureServer } from 'deveye-types/sdk/server';
+import type { FeatureServer } from '@deveye/types/sdk/server';
 
 import { osintHandlers } from './handlers';
 import { createRepo, type OsintRepo } from './repo';

@@ -1,4 +1,4 @@
-import { projectRepoLink, projectRepoList, projectRepoUnlink } from 'deveye-types';
+import { projectRepoLink, projectRepoList, projectRepoUnlink } from '@deveye/types';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { loadProject, recordEvent } from './_shared';
 

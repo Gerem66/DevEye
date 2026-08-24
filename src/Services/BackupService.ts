@@ -6,13 +6,13 @@ import type {
     BackupJobRow,
     BackupRunRow,
     BackupScheduleKind
-} from 'deveye-types';
+} from '@deveye/types';
 
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import type { LiveHub } from '@/live/hub';
 import type { MonitorHub } from '@/agent/hub';
-import { CLOUDSYNC_BACKUP_PROVIDER, type CloudSyncBackupProvider } from 'deveye-types/sdk';
+import { CLOUDSYNC_BACKUP_PROVIDER, type CloudSyncBackupProvider } from '@deveye/types/sdk';
 import { moduleProvider } from '@/features/_sdk/register';
 import type { AuditLog } from '@/Services/AuditLog';
 import type { DatabaseMonitor } from '@/Services/DatabaseMonitor';

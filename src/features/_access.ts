@@ -7,13 +7,13 @@ import type {
     WorkspacePermissions,
     WorkspaceRoleRow,
     WorkspaceRow
-} from 'deveye-types';
+} from '@deveye/types';
 
 import type Encryption from '@/Services/Encryption';
 import { createSecureStore, type SecureStore } from '@/Services/SecureStore';
 import { SecretKeyService } from '@/Services/SecretKeyService';
 import type { Database } from '@/db';
-import { WORKSPACE_CAPABILITIES, WORKSPACE_FEATURE_IDS } from 'deveye-types';
+import { WORKSPACE_CAPABILITIES, WORKSPACE_FEATURE_IDS } from '@deveye/types';
 import { FeatureError } from './_define';
 import { moduleManifests } from './_sdk/register';
 

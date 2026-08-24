@@ -11,14 +11,14 @@ import type {
     BackupRunStatus,
     BackupScheduleKind,
     BackupSourceKind
-} from 'deveye-types';
+} from '@deveye/types';
 
 import type { Cipher } from '@/Services/SecureStore';
 import type { FeatureAccessSpec, FeatureContext } from '../_define';
 import { FeatureError } from '../_define';
 import type { ShareScope } from '../_sharing';
 import type { StoredDestination, StoredJob, StoredRun } from '@/Services/BackupService';
-import { CLOUDSYNC_BACKUP_PROVIDER, type CloudSyncBackupProvider } from 'deveye-types/sdk';
+import { CLOUDSYNC_BACKUP_PROVIDER, type CloudSyncBackupProvider } from '@deveye/types/sdk';
 import { moduleProvider } from '@/features/_sdk/register';
 
 /**

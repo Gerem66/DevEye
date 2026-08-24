@@ -12,8 +12,8 @@ import {
     osintSetKey
 } from '../contracts/commands';
 import type { OsintLookupRow, OsintProviderKeyRow } from '../contracts/domain';
-import type { SdkFeatureContext } from 'deveye-types/sdk/server';
-import { createTestContext } from 'deveye-types/sdk/testing';
+import type { SdkFeatureContext } from '@deveye/types/sdk/server';
+import { createTestContext } from '@deveye/types/sdk/testing';
 
 import { osintHandlers } from './handlers';
 import type { OsintRepo } from './repo';

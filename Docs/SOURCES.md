@@ -56,7 +56,7 @@ affaire de **surface** : une seule porte au lieu de cinq.
 
 **Côté client**, trois pièces :
 
-- `sources?: { hint }` dans `FEATURE_REGISTRY` (deveye-types) crée l'onglet et
+- `sources?: { hint }` dans `FEATURE_REGISTRY` (@deveye/types) crée l'onglet et
   sa phrase de tête. C'est la déclaration de vérité : le registre, jamais une
   liste locale de plus.
 - `Components/FeatureSettings/sections/SourcesSection.tsx` aiguille vers le

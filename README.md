@@ -6,7 +6,7 @@ DevEye est une stack moderne pour le monitorage décentralisé :
 
 - Serveur Node.js (Fastify) + MySQL orchestrent les données
 - Interface web React (dossier [`client/`](./client)) les visualise
-- Contrats partagés typés dans le paquet `deveye-types` (séparé)
+- Contrats partagés typés dans le paquet `@deveye/types` (séparé)
 
 **Monitoring zero-knowledge**: Le serveur ne voit jamais les données en clair.
 
@@ -16,7 +16,7 @@ Pour les détails d'implémentation, voir [docs/architecture.md](./docs/architec
 
 Ce dépôt contient **le serveur (API Fastify)** et **le client web React** (dossier
 [`client/`](./client)). Les contrats partagés vivent dans le paquet séparé
-`deveye-types` (`../DevEye-Types`, consommé en source, sans build).
+`@deveye/types` (`../DevEye-Types`, consommé en source, sans build).
 
 ### Prérequis
 

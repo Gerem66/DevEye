@@ -1,4 +1,4 @@
-import type { FinanceAccount, FinanceCategory, FinanceColor, FinanceConfig } from 'deveye-types';
+import type { FinanceAccount, FinanceCategory, FinanceColor, FinanceConfig } from '@deveye/types';
 
 /**
  * Le socle que tous les écrans des finances reçoivent.

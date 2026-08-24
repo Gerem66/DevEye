@@ -12,7 +12,7 @@ import type {
     FinanceTransaction,
     FinanceTransactionKind,
     FinanceTransactionRow
-} from 'deveye-types';
+} from '@deveye/types';
 
 import type { Cipher } from '@/Services/SecureStore';
 import { FeatureError, type FeatureContext } from '../_define';

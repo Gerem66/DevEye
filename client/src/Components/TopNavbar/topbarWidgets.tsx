@@ -1,5 +1,5 @@
 import { type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
-import type { FeatureId, HomeTopbarWidgetId, WorkspaceKind } from 'deveye-types';
+import type { FeatureId, HomeTopbarWidgetId, WorkspaceKind } from '@deveye/types';
 
 import { useDevices } from '@/stores/devices';
 import { useUptimeCount } from '@/stores/uptime';

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { DatabaseExecution } from 'deveye-types';
+import type { DatabaseExecution } from '@deveye/types';
 import { Button, Dialog } from '@/Components';
 import { ws } from '@/api/ws';
 import { humanizeError } from '../Projects/api';

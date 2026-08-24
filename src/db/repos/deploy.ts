@@ -1,4 +1,4 @@
-import type { DeployTargetRow, DeployTargetSyncRow, DeployTargetWithUsageRow, DeploymentRow } from 'deveye-types';
+import type { DeployTargetRow, DeployTargetSyncRow, DeployTargetWithUsageRow, DeploymentRow } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;

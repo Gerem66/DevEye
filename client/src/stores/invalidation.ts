@@ -1,4 +1,4 @@
-import { LIVE_CHANGED_EVENT, liveChangedPushSchema, type FeatureId, type LiveTopic } from 'deveye-types';
+import { LIVE_CHANGED_EVENT, liveChangedPushSchema, type FeatureId, type LiveTopic } from '@deveye/types';
 import { useCallback, useSyncExternalStore } from 'react';
 
 import { ws } from '@/api/ws';

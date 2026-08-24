@@ -1,6 +1,6 @@
 import styles from './style.module.css';
 
-import type { MailFolder } from 'deveye-types';
+import type { MailFolder } from '@deveye/types';
 import { useLiveOutlines } from '@/live/useLiveOutline';
 
 interface FolderTreeProps {

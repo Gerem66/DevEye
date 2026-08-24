@@ -1,4 +1,4 @@
-import type { Database } from 'deveye-types';
+import type { Database } from '@deveye/types';
 import { useDragReorder } from '@/dragReorder';
 import type { useLiveOutlines } from '@/live/useLiveOutline';
 import { ENGINE_LABELS, formatAgo, formatBytes, STATUS_META } from './format';

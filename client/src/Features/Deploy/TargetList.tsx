@@ -1,4 +1,4 @@
-import type { DeployTarget } from 'deveye-types';
+import type { DeployTarget } from '@deveye/types';
 
 import { useDragReorder } from '@/dragReorder';
 import type { useLiveOutlines } from '@/live/useLiveOutline';

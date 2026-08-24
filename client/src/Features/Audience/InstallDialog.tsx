@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import type { AudienceSite } from 'deveye-types';
+import type { AudienceSite } from '@deveye/types';
 
 import { Button, Dialog } from '@/Components';
 import { ws } from '@/api/ws';

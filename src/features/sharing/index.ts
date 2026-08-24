@@ -10,7 +10,7 @@ import {
     type ShareBlocker,
     type WorkspaceFeatureGrant,
     type WorkspaceFeatureId
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { grantsFor, invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';

@@ -1,4 +1,4 @@
-import { AGENT_HELLO, isNewerVersion } from 'deveye-types';
+import { AGENT_HELLO, isNewerVersion } from '@deveye/types';
 
 import { appVersion } from '@/version';
 import { ack, type AgentSession, type PayloadOf } from './session';

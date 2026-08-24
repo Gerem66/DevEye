@@ -1,4 +1,4 @@
-import type { DeviceSentinelState, FindingSeverity } from 'deveye-types';
+import type { DeviceSentinelState, FindingSeverity } from '@deveye/types';
 
 import Checkbox from '@/Components/Checkbox';
 

@@ -1,4 +1,4 @@
-import type { MailOAuthProvider } from 'deveye-types';
+import type { MailOAuthProvider } from '@deveye/types';
 import { env } from '@/Utils/Env';
 
 /**

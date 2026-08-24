@@ -12,7 +12,7 @@ import type {
     FinanceRecurringRow,
     FinanceTransactionKind,
     FinanceTransactionRow
-} from 'deveye-types';
+} from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;

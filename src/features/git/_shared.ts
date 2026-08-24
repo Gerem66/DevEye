@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
-import type { GitRepo, GitRepoRow } from 'deveye-types';
-import { gitRepoSchema } from 'deveye-types';
+import type { GitRepo, GitRepoRow } from '@deveye/types';
+import { gitRepoSchema } from '@deveye/types';
 import type { Cipher } from '@/Services/SecureStore';
 import type { GitRepoWithUsageRow } from '@/db/repos/git';
 import { FeatureError, type FeatureContext } from '../_define';

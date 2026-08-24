@@ -10,7 +10,7 @@ import {
     deployReorder,
     deployTrigger,
     deployUpdate
-} from 'deveye-types';
+} from '@deveye/types';
 import { fetchDeploymentLog, listDeployments, listTargets, triggerDeploy } from '@/Services/integrations/dokploy';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { shareScope } from '../_sharing';

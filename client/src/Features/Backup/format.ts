@@ -4,7 +4,7 @@ import type {
     BackupRunStatus,
     BackupScheduleKind,
     BackupSourceKind
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { WsError } from '@/api/ws';
 

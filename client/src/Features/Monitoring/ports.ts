@@ -1,4 +1,4 @@
-import type { NetInterface, OpenPort } from 'deveye-types';
+import type { NetInterface, OpenPort } from '@deveye/types';
 
 /**
  * Port naming, address classification and bubble grouping — shared by the

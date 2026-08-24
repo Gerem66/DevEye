@@ -1,4 +1,4 @@
-import { workspaceSharedKeyStatus, workspaceEnableSharedKey } from 'deveye-types';
+import { workspaceSharedKeyStatus, workspaceEnableSharedKey } from '@deveye/types';
 import { DekCipher } from '@/Services/SecureStore';
 import { invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';

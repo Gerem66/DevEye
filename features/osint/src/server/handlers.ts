@@ -15,7 +15,7 @@ import {
     type OsintLookupRow,
     type OsintProvider
 } from '../contracts/domain';
-import { defineSdkFeature, FeatureError, type SdkFeatureContext } from 'deveye-types/sdk/server';
+import { defineSdkFeature, FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
 import { PROBES, probeAccepts, probesFor, readCache, runProbe, writeCache } from './probes';
 import type { OsintRepo } from './repo';

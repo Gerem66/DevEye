@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { UptimeService } from 'deveye-types';
+import type { UptimeService } from '@deveye/types';
 import { Button } from '@/Components';
 import { ws, WsError } from '@/api/ws';
 import { useWorkspacePermissions } from '@/stores/workspace';

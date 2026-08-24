@@ -19,7 +19,7 @@
  * les sorties committées, RÉPARE les locales.
  *
  * Le générateur est aussi la première sentinelle : ids valides et uniques (les
- * deux configs confondues), version minimale de deveye-types, préfixe de table
+ * deux configs confondues), version minimale de @deveye/types, préfixe de table
  * `ft_<slug>_` vérifié par balayage statique des migrations SQL (allowlist
  * `deveye-feature.json` pour les tables historiques d'une native rapatriée).
  */
@@ -28,7 +28,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { validateManifest, type FeatureManifest } from 'deveye-types/sdk';
+import { validateManifest, type FeatureManifest } from '@deveye/types/sdk';
 
 import { sqlTableTargets } from './lib/sql-tables';
 import { forbiddenUninstallTargets } from './lib/uninstall';
@@ -109,10 +109,10 @@ async function resolveModule(entry: ConfigEntry): Promise<ResolvedModule> {
 
     if (meta.minTypesVersion) {
         const typesVersion = (
-            JSON.parse(fs.readFileSync(require.resolve('deveye-types/package.json'), 'utf8')) as { version: string }
+            JSON.parse(fs.readFileSync(require.resolve('@deveye/types/package.json'), 'utf8')) as { version: string }
         ).version;
         if (!versionAtLeast(typesVersion, meta.minTypesVersion)) {
-            fail(`${entry.package}: exige deveye-types >= ${meta.minTypesVersion}, installé ${typesVersion}`);
+            fail(`${entry.package}: exige @deveye/types >= ${meta.minTypesVersion}, installé ${typesVersion}`);
         }
     }
 
@@ -264,8 +264,8 @@ function clientFile(mods: ResolvedModule[]): string {
         .map((m, i) => `    { manifest: { ...manifest${i}, icon: '${m.icon}' }, client: client${i} }`)
         .join(',\n');
     return `${HEADER}
-import type { FeatureManifest } from 'deveye-types/sdk';
-import type { FeatureClient } from 'deveye-types/sdk/client';
+import type { FeatureManifest } from '@deveye/types/sdk';
+import type { FeatureClient } from '@deveye/types/sdk/client';
 
 import { LOCAL_CLIENT_FEATURES } from './features.local';
 ${imports ? `${imports}\n` : ''}

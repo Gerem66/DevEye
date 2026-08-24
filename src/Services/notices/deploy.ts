@@ -1,4 +1,4 @@
-import type { DeploymentRow } from 'deveye-types';
+import type { DeploymentRow } from '@deveye/types';
 
 import type { DiscordMessage } from '@/Services/discord';
 import { COLOR_DANGER, COLOR_INFO, COLOR_SUCCESS, FIELD_MAX, block, duration, moment, trim } from './shared';

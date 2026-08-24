@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Credential, GitRepoCandidate } from 'deveye-types';
-import { GIT_REPO_NAME_MAX_LENGTH, GIT_REPO_OWNER_MAX_LENGTH } from 'deveye-types';
+import type { Credential, GitRepoCandidate } from '@deveye/types';
+import { GIT_REPO_NAME_MAX_LENGTH, GIT_REPO_OWNER_MAX_LENGTH } from '@deveye/types';
 import { Button, SelectInput, TextInput } from '@/Components';
 import { ws } from '@/api/ws';
 import { humanizeError } from '../Projects/api';

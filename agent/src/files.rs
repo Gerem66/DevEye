@@ -15,7 +15,7 @@ use tokio::sync::mpsc::Sender;
 
 use crate::protocol::{FileEntry, FileListing, FileMatch, FileSearchFilter, FileUsageEntry};
 
-/// Hard cap on returned search hits (mirrors deveye-types `FILE_SEARCH_MAX`).
+/// Hard cap on returned search hits (mirrors @deveye/types `FILE_SEARCH_MAX`).
 const FILE_SEARCH_MAX: usize = 2000;
 /// Entries the usage analysis may walk before stopping (marks results partial).
 const ANALYZE_BUDGET: u64 = 2_000_000;

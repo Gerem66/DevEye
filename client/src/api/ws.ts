@@ -9,7 +9,7 @@ import {
     type ErrorCode,
     type FeatureCommandName,
     type ServerMessage
-} from 'deveye-types';
+} from '@deveye/types';
 import { getActiveWorkspaceId } from '../stores/workspace';
 
 const BASE_URL: string = (import.meta.env.VITE_SERVER_URL as string | undefined) ?? '';

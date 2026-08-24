@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { BackupJob, BackupRun } from 'deveye-types';
+import type { BackupJob, BackupRun } from '@deveye/types';
 
 import { Button, StatusBadge } from '@/Components';
 import { ws } from '@/api/ws';

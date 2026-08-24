@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { DatabaseAlert, DatabaseCombinator, DatabaseComparator, DatabaseCondition } from 'deveye-types';
+import type { DatabaseAlert, DatabaseCombinator, DatabaseComparator, DatabaseCondition } from '@deveye/types';
 import { Button, Checkbox, Dialog, SelectInput, TextInput } from '@/Components';
 import { ws } from '@/api/ws';
 import { humanizeError } from '../Projects/api';

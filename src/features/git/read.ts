@@ -11,8 +11,8 @@ import {
     GIT_GRAPH_SHA_LEN,
     USER_COLORS,
     defaultUserColor
-} from 'deveye-types';
-import type { UserColor } from 'deveye-types';
+} from '@deveye/types';
+import type { UserColor } from '@deveye/types';
 import { fetchCommitDetail } from '@/Services/integrations/github';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { loadHomeRepo, loadRepo, READ, readJson, repoCipher, WRITE, type StoredRepo } from './_shared';

@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import type { GitRepo, GitRepoUsage, MinimalUser } from 'deveye-types';
+import type { GitRepo, GitRepoUsage, MinimalUser } from '@deveye/types';
 import { Button, StatusBadge } from '@/Components';
 import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import { STATUS_LABELS } from '../Projects/api';

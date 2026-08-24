@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { allFeatureDescriptors, WORKSPACE_CAPABILITIES } from 'deveye-types';
-import type { FeatureAccess, FeatureId, WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole } from 'deveye-types';
+import { allFeatureDescriptors, WORKSPACE_CAPABILITIES } from '@deveye/types';
+import type {
+    FeatureAccess,
+    FeatureId,
+    WorkspaceCapability,
+    WorkspaceFeatureGrant,
+    WorkspaceRole
+} from '@deveye/types';
 
 import Button from '@/Components/Button';
 import Checkbox from '@/Components/Checkbox';

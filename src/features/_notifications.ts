@@ -3,7 +3,7 @@ import type {
     NotificationChannelInput,
     NotificationFeature,
     NotificationRoute
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { describeChannel, resolveRoute, type ResolvedChannel } from '@/Services/notifications';
 

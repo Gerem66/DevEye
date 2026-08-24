@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { DatabaseCombinator, DatabaseFilter, DatabaseFilterOperator, DatabaseStructure } from 'deveye-types';
+import type { DatabaseCombinator, DatabaseFilter, DatabaseFilterOperator, DatabaseStructure } from '@deveye/types';
 import { Button, Dialog, SelectInput, TextInput } from '@/Components';
 import { FILTER_OPERATOR_LABELS, OPERATOR_NEEDS_VALUE } from './format';
 import styles from './style.module.css';

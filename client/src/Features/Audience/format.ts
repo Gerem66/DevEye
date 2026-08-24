@@ -4,7 +4,7 @@ import type {
     AudienceRange,
     AudienceResolution,
     AudienceVisitorMode
-} from 'deveye-types';
+} from '@deveye/types';
 
 /** Les fenêtres, dans l'ordre où on les parcourt : du plus près au plus loin. */
 export const RANGE_LABELS: Record<AudienceRange, string> = {

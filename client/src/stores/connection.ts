@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { ws } from '@/api/ws';
-import type { ConnectionState } from 'deveye-types';
+import type { ConnectionState } from '@deveye/types';
 
 /**
  * Subscribe a React component to the live WebSocket connection state. Returns the

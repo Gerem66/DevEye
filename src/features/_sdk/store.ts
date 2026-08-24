@@ -1,6 +1,6 @@
 import type { ZodType } from 'zod';
-import type { FeatureStore, SdkCipher, StorageEncryption } from 'deveye-types/sdk/server';
-import { FeatureError } from 'deveye-types/sdk/server';
+import type { FeatureStore, SdkCipher, StorageEncryption } from '@deveye/types/sdk/server';
+import { FeatureError } from '@deveye/types/sdk/server';
 
 import type { FeatureKvRepo } from '@/db/repos/featureKv';
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Device } from 'deveye-types';
+import type { Device } from '@deveye/types';
 import { ws } from '@/api/ws';
 import { useDragReorder } from '@/dragReorder';
 import { useDevices } from '@/stores/devices';

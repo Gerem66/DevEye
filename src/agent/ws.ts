@@ -32,7 +32,7 @@ import {
     agentClientMessageSchema,
     type AgentClientMessage,
     type AgentServerMessage
-} from 'deveye-types';
+} from '@deveye/types';
 import type { FastifyInstance } from 'fastify';
 
 import { verifyDeviceToken } from '@/auth/jwt';
@@ -72,7 +72,7 @@ import { notifyDeviceWorkspaces, recordAgentOffline, recordAgentOnline } from '.
 import type { LiveHub } from '@/live/hub';
 import type { MonitorHub } from './hub';
 
-import type { FeatureAgentHooks } from 'deveye-types/sdk/server';
+import type { FeatureAgentHooks } from '@deveye/types/sdk/server';
 import type { Database } from '@/db';
 import type { AuditLog } from '@/Services/AuditLog';
 import type { SecurityMonitor } from '@/Services/SecurityMonitor';

@@ -1,4 +1,4 @@
-import type { AudienceFunnel } from 'deveye-types';
+import type { AudienceFunnel } from '@deveye/types';
 
 import { formatCount, formatPercent, funnelDrops } from '../format';
 import styles from '../style.module.css';

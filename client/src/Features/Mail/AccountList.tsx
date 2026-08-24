@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import AccountCard from './AccountCard';
 import styles from './style.module.css';
 
-import type { MailAccount } from 'deveye-types';
+import type { MailAccount } from '@deveye/types';
 
 interface AccountListProps {
     accounts: MailAccount[];

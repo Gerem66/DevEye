@@ -5,7 +5,7 @@ import ImageSourcesPopup from './ImageSourcesPopup';
 import { formatAddress, formatSize } from './api';
 import styles from './style.module.css';
 
-import type { MailBodyRenderMode, MailMessage } from 'deveye-types';
+import type { MailBodyRenderMode, MailMessage } from '@deveye/types';
 
 interface MessagePaneProps {
     message: MailMessage | null;

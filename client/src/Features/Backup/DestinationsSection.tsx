@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { BackupDestination, BackupDestinationProbe } from 'deveye-types';
+import type { BackupDestination, BackupDestinationProbe } from '@deveye/types';
 
 import Button from '@/Components/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';

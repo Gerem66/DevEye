@@ -10,7 +10,7 @@ import {
     weatherUpdate
 } from '../contracts/commands';
 import { weatherProviderSchema, type WeatherLocation, type WeatherLocationRow } from '../contracts/domain';
-import { defineSdkFeature, FeatureError, type SdkFeatureContext } from 'deveye-types/sdk/server';
+import { defineSdkFeature, FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
 import { fetchWeatherReport, getWeatherAdapter, WeatherError } from './provider';
 import type { WeatherRepo } from './repo';

@@ -1,4 +1,4 @@
-import { compareVersions } from 'deveye-types';
+import { compareVersions } from '@deveye/types';
 
 /**
  * The DevEye version this UI was built from (single source of truth: package.json).

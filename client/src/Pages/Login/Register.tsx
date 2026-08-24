@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { loginResponseSchema, registerRequestSchema } from 'deveye-types';
+import { loginResponseSchema, registerRequestSchema } from '@deveye/types';
 
 import { ApiError, post } from '@/api/http';
 import TextInput from '@/Components/TextInput';

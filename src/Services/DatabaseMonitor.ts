@@ -5,7 +5,7 @@ import type { LiveHub } from '@/live/hub';
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
 import { deliver, hasChannel, resolveRoute } from '@/Services/notifications';
 import { buildNotice } from '@/Services/notices/database';
-import type { DatabaseComparator, DatabaseCondition, DatabaseProbe, DatabaseRow } from 'deveye-types';
+import type { DatabaseComparator, DatabaseCondition, DatabaseProbe, DatabaseRow } from '@deveye/types';
 import { explainError, openSession, singleNumber, type EngineTarget, type Session } from './databases/engine';
 import type { TunnelConfig } from './databases/tunnel';
 

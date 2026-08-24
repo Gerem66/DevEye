@@ -1,4 +1,4 @@
-import type { MetricSeriesPoint } from 'deveye-types';
+import type { MetricSeriesPoint } from '@deveye/types';
 
 /**
  * Shared formatting + activity helpers for the monitoring views. Kept here so

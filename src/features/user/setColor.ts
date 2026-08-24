@@ -1,4 +1,4 @@
-import { userSetColor } from 'deveye-types';
+import { userSetColor } from '@deveye/types';
 import { defineFeature, type FeatureDefinition } from '../_define';
 
 /**

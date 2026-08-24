@@ -1,4 +1,4 @@
-import type { HomeFeatureId } from 'deveye-types';
+import type { HomeFeatureId } from '@deveye/types';
 
 import {
     featureCatalog,

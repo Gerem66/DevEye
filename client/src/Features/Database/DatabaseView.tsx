@@ -1,5 +1,5 @@
 import { useCallback, useState, type ReactNode } from 'react';
-import type { Database, DatabaseAlert, DatabaseProbe } from 'deveye-types';
+import type { Database, DatabaseAlert, DatabaseProbe } from '@deveye/types';
 import { Button } from '@/Components';
 import { AlertDialog } from './AlertDialog';
 import { ProbeLine } from './ProbeLine';

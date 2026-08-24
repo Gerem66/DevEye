@@ -8,7 +8,7 @@ import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyBaseLogger, type FastifyError, type FastifyInstance, type FastifyRequest } from 'fastify';
-import { err, ok, serverStatusSchema, type ErrorCode } from 'deveye-types';
+import { err, ok, serverStatusSchema, type ErrorCode } from '@deveye/types';
 
 import { agentRoutes } from '@/agent/routes';
 import { audienceRoutes } from '@/audience/routes';
@@ -24,7 +24,7 @@ import { env, isDev } from '@/Utils/Env';
 import { registerWS } from '@/ws/handler';
 import { createModuleServices, moduleAgentHooks } from '@/features/_sdk/register';
 import { setSdkHub } from '@/features/_sdk/host';
-import type { FeatureService } from 'deveye-types/sdk/server';
+import type { FeatureService } from '@deveye/types/sdk/server';
 import { createAuditLog } from '@/Services/AuditLog';
 import { MailSyncService } from '@/Services/MailSyncService';
 import { UptimeMonitor } from '@/Services/UptimeMonitor';

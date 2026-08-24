@@ -1,4 +1,4 @@
-import type { FeatureId } from 'deveye-types';
+import type { FeatureId } from '@deveye/types';
 
 import BackupEncryptionPanel from '@/Features/Backup/BackupEncryptionPanel';
 import MailEncryptionPanel from '@/Features/Mail/MailEncryptionPanel';

@@ -23,7 +23,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::config::Config;
 
-/// How the agent is installed for persistence. Mirrors `deveye-types`
+/// How the agent is installed for persistence. Mirrors `@deveye/types`
 /// `agentServiceScopeSchema`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServiceScope {

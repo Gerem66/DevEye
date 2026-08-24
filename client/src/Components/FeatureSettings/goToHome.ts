@@ -1,4 +1,4 @@
-import { isExternalFeatureId, type FeatureId, type WorkspaceFeatureId } from 'deveye-types';
+import { isExternalFeatureId, type FeatureId, type WorkspaceFeatureId } from '@deveye/types';
 
 import { startTeleport } from '@/stores/live';
 import { requestItemSettings } from '@/stores/settingsRequest';

@@ -1,4 +1,4 @@
-import { liveHere } from 'deveye-types';
+import { liveHere } from '@deveye/types';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 
 /**

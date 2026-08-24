@@ -9,7 +9,7 @@ import type {
     GitRepo,
     GitSyncStatus,
     MinimalUser
-} from 'deveye-types';
+} from '@deveye/types';
 import { ws } from '@/api/ws';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { humanizeError } from '../Projects/api';

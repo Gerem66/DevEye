@@ -1,6 +1,6 @@
 import { WsError } from '@/api/ws';
 import { ensureUnlocked as ensureSecrecyUnlocked, touchSecrecy } from '@/stores/secrecy';
-import type { ProjectPriority, ProjectStatus, ProjectTagKind } from 'deveye-types';
+import type { ProjectPriority, ProjectStatus, ProjectTagKind } from '@deveye/types';
 
 /**
  * Joue un appel qui touche un projet **confidentiel** et, si la couche de

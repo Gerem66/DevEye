@@ -26,7 +26,7 @@ import {
     mailOAuthStart,
     mailSend,
     mailSetSettings
-} from 'deveye-types';
+} from '@deveye/types';
 import type {
     MailAccountRow,
     MailAddress,
@@ -34,7 +34,7 @@ import type {
     MailMessageRow,
     MailMessageSummary,
     MailSecurityTier
-} from 'deveye-types';
+} from '@deveye/types';
 
 import * as mailClient from '@/Services/MailAccountClient';
 import type { MailCredentials, MailPasswordCredentials } from '@/Services/MailAccountClient';

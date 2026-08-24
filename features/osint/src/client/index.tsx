@@ -1,4 +1,4 @@
-import type { FeatureClient } from 'deveye-types/sdk/client';
+import type { FeatureClient } from '@deveye/types/sdk/client';
 
 import Osint from './Osint';
 import OsintKeysPanel from './OsintKeysPanel';

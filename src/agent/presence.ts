@@ -1,4 +1,4 @@
-import type { DeviceRow } from 'deveye-types';
+import type { DeviceRow } from '@deveye/types';
 
 import type { LiveHub } from '@/live/hub';
 import type { Database } from '@/db';

@@ -4,7 +4,7 @@ import type {
     BackupJobRow,
     BackupJobWithStateRow,
     BackupRunRow
-} from 'deveye-types';
+} from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;

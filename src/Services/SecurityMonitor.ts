@@ -20,7 +20,7 @@ import {
     type IntegrityReport,
     type ReportProcess,
     type SentinelRuleId
-} from 'deveye-types';
+} from '@deveye/types';
 
 import {
     authRules,

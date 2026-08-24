@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Project, ProjectDraft, ProjectSecurityTier, ProjectStatus, ProjectTag } from 'deveye-types';
+import type { Project, ProjectDraft, ProjectSecurityTier, ProjectStatus, ProjectTag } from '@deveye/types';
 import {
     PROJECT_ICON_MAX_LENGTH,
     PROJECT_MAX_TAGS,
     PROJECT_TAG_LABEL_MAX_LENGTH,
     PROJECT_TITLE_MAX_LENGTH
-} from 'deveye-types';
+} from '@deveye/types';
 import { ACCEPTED_TYPES, fileToSquareDataUrl } from '@/imageResize';
 import { Button, Dialog, SelectInput, TextInput } from '@/Components';
 import { dateInputToSeconds, dateInputValue, STATUS_LABELS, TAG_KIND_LABELS } from './api';

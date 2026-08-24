@@ -7,7 +7,7 @@ import {
     type PersistenceEntry,
     type ReportProcess,
     type SentinelRuleId
-} from 'deveye-types';
+} from '@deveye/types';
 
 import type { BaselineRow } from '@/db/repos/sentinel';
 

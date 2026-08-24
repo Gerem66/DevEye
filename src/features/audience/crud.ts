@@ -8,7 +8,7 @@ import {
     audienceSiteRotateKey,
     audienceSiteUpdate,
     type AudienceUsage
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { tryDecryptProject } from '../project/_shared';

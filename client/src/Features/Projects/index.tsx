@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import type { Project, ProjectSummary } from 'deveye-types';
+import type { Project, ProjectSummary } from '@deveye/types';
 import { Button } from '@/Components';
 import { ws } from '@/api/ws';
 import { useDragReorder } from '@/dragReorder';

@@ -1,5 +1,5 @@
-import { workspaceLeave, workspaceAddMember, workspaceRemoveMember, workspaceRename } from 'deveye-types';
-import type { Workspace } from 'deveye-types';
+import { workspaceLeave, workspaceAddMember, workspaceRemoveMember, workspaceRename } from '@deveye/types';
+import type { Workspace } from '@deveye/types';
 
 import { invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';

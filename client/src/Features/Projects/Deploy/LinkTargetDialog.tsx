@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { DeployTarget } from 'deveye-types';
+import type { DeployTarget } from '@deveye/types';
 import { Button, Dialog, SelectInput } from '@/Components';
 import { ws } from '@/api/ws';
 import { TargetDialog } from '@/Features/Deploy/TargetDialog';

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ws } from '@/api/ws';
-import type { ShortcutItem, ShortcutPreview, ShortcutTemplate } from 'deveye-types';
+import type { ShortcutItem, ShortcutPreview, ShortcutTemplate } from '@deveye/types';
 import { Widget } from '@/Components/Widget';
 import { ShortcutTile } from '../tiles/ShortcutTile';
 import styles from './organize.module.css';

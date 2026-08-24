@@ -1,4 +1,4 @@
-import { LIVE_TYPERS_EVENT, LIVE_TYPING_COMMAND, liveTypersPushSchema } from 'deveye-types';
+import { LIVE_TYPERS_EVENT, LIVE_TYPING_COMMAND, liveTypersPushSchema } from '@deveye/types';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 
 import { ws } from '@/api/ws';

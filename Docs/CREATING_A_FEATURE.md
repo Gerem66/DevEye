@@ -29,7 +29,7 @@ rien oublier.
 ## A. Contrats partagés — `DevEye-Types/` (à faire en premier)
 
 Tout passe par des schémas zod partagés. Le serveur **et** le client importent
-`deveye-types`. ⚠️ **Lis [DEVELOPMENT.md](#g-workflow-deveye-types--node_modules)
+`@deveye/types`. ⚠️ **Lis [DEVELOPMENT.md](#g-workflow-@deveye/types--node_modules)
 (section G) : un changement de types doit être mirroré dans `node_modules`.**
 
 1. **Domaine** — `src/domain/<feature>.ts` : schémas zod + types des entités
@@ -179,19 +179,19 @@ ouvrir la feature.
 
 ---
 
-## G. Workflow `deveye-types` ↔ `node_modules`
+## G. Workflow `@deveye/types` ↔ `node_modules`
 
-`deveye-types` est consommé comme **paquet npm installé** (`@deveye/types`,
+`@deveye/types` est consommé comme **paquet npm installé** (`@deveye/types`,
 npmjs public), **pas** un symlink. Le serveur (tsx) et le client (vite) lisent
-le `src` du paquet installé, hoisté dans `DevEye/node_modules/deveye-types/`.
+le `src` du paquet installé, hoisté dans `DevEye/node_modules/@deveye/types/`.
 
 Après avoir édité `DevEye-Types/src/` en dev local, pour que serveur/client le
 voient **sans publier**, mirrorer les fichiers modifiés dans
-`DevEye/node_modules/deveye-types/src/` et bumper la version de ce `package.json`
+`DevEye/node_modules/@deveye/types/src/` et bumper la version de ce `package.json`
 aussi. Vérifier :
 
 ```bash
-diff -rq DevEye-Types/src DevEye/node_modules/deveye-types/src   # doit être vide
+diff -rq DevEye-Types/src DevEye/node_modules/@deveye/types/src   # doit être vide
 ```
 
 ⚠️ **Vite met en cache le pré-bundling** : après un changement de types, si le

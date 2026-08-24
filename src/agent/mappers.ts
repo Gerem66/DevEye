@@ -12,7 +12,7 @@ import {
     type DevicePlatform,
     type DeviceStatus,
     type ProcessCapture
-} from 'deveye-types';
+} from '@deveye/types';
 
 /** Build the collection config the server pushes to an agent (defaults applied). */
 export function deviceAgentConfig(row: DeviceRow): AgentConfigPayload {

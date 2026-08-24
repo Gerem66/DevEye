@@ -20,7 +20,7 @@ import {
     type MetricsResolution,
     type PresenceEvent,
     type ProcessSample
-} from 'deveye-types';
+} from '@deveye/types';
 import { HardwareInfo } from './HardwareInfo';
 import { Connections } from './Connections';
 import { DeviceActionsMenu, type DeviceAction } from './DeviceActionsMenu';

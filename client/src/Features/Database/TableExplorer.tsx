@@ -7,7 +7,7 @@ import type {
     DatabaseSort,
     DatabaseStructure,
     DatabaseTable
-} from 'deveye-types';
+} from '@deveye/types';
 import { Button, Checkbox, Dialog } from '@/Components';
 import { ws } from '@/api/ws';
 import { useRequestPopupWidth } from '@/stores/popupWidth';

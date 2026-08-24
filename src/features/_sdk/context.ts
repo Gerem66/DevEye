@@ -1,6 +1,6 @@
-import type { SdkFeatureContext, SdkSocketTransport } from 'deveye-types/sdk/server';
-import { FeatureError } from 'deveye-types/sdk/server';
-import type { ExtraPermissionSpec, FeatureManifest } from 'deveye-types/sdk';
+import type { SdkFeatureContext, SdkSocketTransport } from '@deveye/types/sdk/server';
+import { FeatureError } from '@deveye/types/sdk/server';
+import type { ExtraPermissionSpec, FeatureManifest } from '@deveye/types/sdk';
 
 import type { FeatureContext } from '@/features/_define';
 import { createFacade } from './facade';

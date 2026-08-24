@@ -4,7 +4,7 @@ import {
     AGENT_SYNC_CHUNK,
     AGENT_SYNC_INDEX,
     AGENT_SYNC_OP_RESULT
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { ack, type AgentSession, type PayloadOf } from './session';
 

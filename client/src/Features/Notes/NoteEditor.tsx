@@ -10,7 +10,7 @@ import BlockEditor from './BlockEditor';
 import { exportNotePdf } from './exportPdf';
 import { NOTE_CONFIRM_POPUP, type ConfirmInput } from './ConfirmPopup';
 
-import { NOTE_TITLE_MAX_LENGTH, type Note, type NoteBlock } from 'deveye-types';
+import { NOTE_TITLE_MAX_LENGTH, type Note, type NoteBlock } from '@deveye/types';
 import { useActiveWorkspace } from '@/stores/workspace';
 
 export const NOTE_EDITOR_POPUP = 'popup-note-editor';

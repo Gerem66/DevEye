@@ -1,4 +1,4 @@
-import { isExternalFeatureId, type LiveTopic } from 'deveye-types';
+import { isExternalFeatureId, type LiveTopic } from '@deveye/types';
 
 import { logger } from '@/logger';
 import { featureHandlers } from './registry';

@@ -7,7 +7,7 @@ import {
     linkCodeResponseSchema,
     linkCodesListResponseSchema,
     type LinkCodeResponse
-} from 'deveye-types';
+} from '@deveye/types';
 import { LinkInfo } from './LinkInfo';
 
 /**

@@ -1,4 +1,4 @@
-import { AGENT_ERROR, AGENT_METRICS_BATCH, AGENT_REPORT, type ProcessKind, type ReportProcess } from 'deveye-types';
+import { AGENT_ERROR, AGENT_METRICS_BATCH, AGENT_REPORT, type ProcessKind, type ReportProcess } from '@deveye/types';
 
 import { ack, reply, type AgentSession, type PayloadOf } from './session';
 

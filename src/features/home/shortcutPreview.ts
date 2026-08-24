@@ -1,4 +1,4 @@
-import { homeShortcutPreview } from 'deveye-types';
+import { homeShortcutPreview } from '@deveye/types';
 import { fetchShortcutPreview } from '@/Services/shortcutTemplates';
 import { defineFeature, type FeatureDefinition } from '../_define';
 

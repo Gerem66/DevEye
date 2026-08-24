@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { SHARE_WIRED_FEATURES, featureDescriptor, type FeatureId } from 'deveye-types';
+import { SHARE_WIRED_FEATURES, featureDescriptor, type FeatureId } from '@deveye/types';
 
 import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';

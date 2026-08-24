@@ -1,4 +1,4 @@
-import type { NotificationFeature } from 'deveye-types';
+import type { NotificationFeature } from '@deveye/types';
 import {
     featureDescriptor,
     notifyChannelAdd,
@@ -11,7 +11,7 @@ import {
     notifyRouteGet,
     notifyRouteSet,
     notifyRouteTest
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { formatMoment, resolveChannelIds, sendTest } from '@/Services/notifications';
 

@@ -7,7 +7,7 @@ import {
     type AudienceResolution,
     type AudienceSite,
     type AudienceSiteRow
-} from 'deveye-types';
+} from '@deveye/types';
 
 import type { AudienceMetricsRow, AudienceSiteWithStatsRow } from '@/db/repos/audience';
 import type { Cipher } from '@/Services/SecureStore';

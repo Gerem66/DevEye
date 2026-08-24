@@ -5,7 +5,7 @@ import type {
     BackupScheduleKind,
     BackupSourceCandidate,
     BackupSourceKind
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { Button, Dialog, SelectInput, Switch, TextInput } from '@/Components';
 import { FeatureSettingsDialog } from '@/Components/FeatureSettings';

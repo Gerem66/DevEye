@@ -16,7 +16,7 @@ import {
     horizontalListSortingStrategy
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { HomeTopbarWidgetId } from 'deveye-types';
+import type { HomeTopbarWidgetId } from '@deveye/types';
 
 import { Dialog } from '@/Components/Dialog';
 import { addTopbarWidget, removeTopbarWidget, setTopbarOrder, useHomeLayout } from '@/stores/homeLayout';

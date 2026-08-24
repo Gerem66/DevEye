@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import type { HomeFeatureId, WorkspaceKind } from 'deveye-types';
+import type { HomeFeatureId, WorkspaceKind } from '@deveye/types';
 
 import { MonitoringWidget } from '@/Features/Monitoring';
 import { NotesWidget } from '@/Features/Notes/NotesWidget';

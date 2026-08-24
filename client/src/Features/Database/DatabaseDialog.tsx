@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Database, DatabaseAccessKind, DatabaseEngine, DatabaseProbe, DatabaseSshAuth } from 'deveye-types';
+import type { Database, DatabaseAccessKind, DatabaseEngine, DatabaseProbe, DatabaseSshAuth } from '@deveye/types';
 import { Button, Checkbox, Dialog, SelectInput, TextInput } from '@/Components';
 import { ws } from '@/api/ws';
 import { humanizeError } from '../Projects/api';

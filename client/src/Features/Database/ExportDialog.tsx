@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { DatabaseExportFormat, DatabaseIdRange, DatabaseTable } from 'deveye-types';
+import type { DatabaseExportFormat, DatabaseIdRange, DatabaseTable } from '@deveye/types';
 import { Button, Dialog, SelectInput, TextInput } from '@/Components';
 import { ws } from '@/api/ws';
 import { humanizeError } from '../Projects/api';

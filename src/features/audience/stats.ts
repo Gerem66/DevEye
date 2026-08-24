@@ -5,7 +5,7 @@ import {
     audienceLive,
     audienceOverview,
     type AudienceBreakdownItem
-} from 'deveye-types';
+} from '@deveye/types';
 
 import type { AudienceBreakdownRow } from '@/db/repos/audience';
 import type { Cipher } from '@/Services/SecureStore';

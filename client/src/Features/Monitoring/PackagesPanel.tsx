@@ -13,7 +13,7 @@ import {
     type PackageManagerId,
     type PackageProgressPush,
     type PackageStartedPush
-} from 'deveye-types';
+} from '@deveye/types';
 import styles from './Monitoring.module.css';
 
 /** Human label per manager id. */

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { featureDescriptor, type ItemShareState, type ShareBlocker, type WorkspaceFeatureId } from 'deveye-types';
+import { featureDescriptor, type ItemShareState, type ShareBlocker, type WorkspaceFeatureId } from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';

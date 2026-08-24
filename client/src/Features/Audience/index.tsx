@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AudienceSite, AudienceUsage } from 'deveye-types';
+import type { AudienceSite, AudienceUsage } from '@deveye/types';
 
 import { Button } from '@/Components';
 import { FeatureSettingsButton } from '@/Components/FeatureSettings';

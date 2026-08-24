@@ -5,14 +5,14 @@
  * contrat, et ce qui n'y figure pas est interne (donc libre de bouger). Résolu
  * par alias (vite + tsconfig) quand le module est compilé dans l'app ; pour le
  * typecheck autonome du repo d'un module, le template porte une déclaration du
- * même module basée sur `deveye-types/sdk/client`.
+ * même module basée sur `@deveye/types/sdk/client`.
  */
 import { useEffect, useRef } from 'react';
 
 import { ws } from '@/api/ws';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import type { LiveSegmentKind } from '@/stores/live';
-import type { FeatureManifest } from 'deveye-types/sdk';
+import type { FeatureManifest } from '@deveye/types/sdk';
 import type { z, ZodType } from 'zod';
 
 // ── Le kit d'interface ─────────────────────────────────────────────────────
@@ -71,7 +71,7 @@ export type { SecrecyState } from '@/stores/secrecy';
 /**
  * L'envoi typé des commandes de VOTRE module.
  *
- * `ws.send` natif est typé par le registre fermé de deveye-types, que les
+ * `ws.send` natif est typé par le registre fermé de @deveye/types, que les
  * modules n'étendent pas ; cet enrobage retrouve les types depuis les
  * `commands` du manifest. La validation d'exécution reste celle du serveur,
  * dans les deux sens. `timeoutMs` allonge l'attente d'une commande qui

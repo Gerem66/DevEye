@@ -365,7 +365,7 @@ les droits d'un rôle ne sont **jamais** intersectés avec cette colonne. Ne pas
 
 ```bash
 ./ci.sh    # lint + typecheck des trois dépôts + build client
-diff -rq DevEye-Types/src DevEye/node_modules/deveye-types/src   # doit être vide
+diff -rq DevEye-Types/src DevEye/node_modules/@deveye/types/src   # doit être vide
 ```
 
 Il n'existe aucun framework de test dans ce dépôt. Les parties à logique pure

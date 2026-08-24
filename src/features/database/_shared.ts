@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
-import type { Database, DatabaseAlert, DatabaseAlertRow, DatabaseRow } from 'deveye-types';
-import { databaseAlertSchema, databaseSchema } from 'deveye-types';
+import type { Database, DatabaseAlert, DatabaseAlertRow, DatabaseRow } from '@deveye/types';
+import { databaseAlertSchema, databaseSchema } from '@deveye/types';
 import type { Cipher } from '@/Services/SecureStore';
 import type { DatabaseWithStatsRow } from '@/db/repos/database';
 import type { StoredAccess, StoredAlert, StoredDatabase } from '@/Services/DatabaseMonitor';

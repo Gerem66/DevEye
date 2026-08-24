@@ -3,7 +3,7 @@ import { describeAccountStatus } from './accountStatus';
 import SyncProgressBar from './SyncProgressBar';
 import styles from './style.module.css';
 
-import type { MailAccount } from 'deveye-types';
+import type { MailAccount } from '@deveye/types';
 import { useLiveOutline } from '@/live/useLiveOutline';
 
 interface AccountCardProps {

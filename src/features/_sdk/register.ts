@@ -1,7 +1,7 @@
-import { isExternalFeatureId, registerExternalFeature, type ExternalFeatureId } from 'deveye-types';
-import { validateManifest, type FeatureManifest } from 'deveye-types/sdk';
-import type { FeatureAgentHooks, FeatureServer, FeatureService, SdkQueryable } from 'deveye-types/sdk/server';
-import { FeatureError } from 'deveye-types/sdk/server';
+import { isExternalFeatureId, registerExternalFeature, type ExternalFeatureId } from '@deveye/types';
+import { validateManifest, type FeatureManifest } from '@deveye/types/sdk';
+import type { FeatureAgentHooks, FeatureServer, FeatureService, SdkQueryable } from '@deveye/types/sdk/server';
+import { FeatureError } from '@deveye/types/sdk/server';
 
 import type { Database } from '@/db';
 import type { Queryable } from '@/db/pool';
@@ -186,7 +186,7 @@ export function moduleAgentHooks(): Required<FeatureAgentHooks> {
 }
 
 /**
- * Le contrat nommé qu'un module offre à l'app (voir deveye-types/sdk/providers) :
+ * Le contrat nommé qu'un module offre à l'app (voir @deveye/types/sdk/providers) :
  * recherche à l'appel, `undefined` quand le module est absent, et c'est à
  * l'appelant de dégrader proprement.
  */

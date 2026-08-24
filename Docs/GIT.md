@@ -390,8 +390,8 @@ Le voile couvre toujours toute la boîte, mais son panneau est en
 
 ```bash
 ./ci.sh
-rsync -a --delete DevEye-Types/src/ DevEye/node_modules/deveye-types/src/
-diff -rq DevEye-Types/src DevEye/node_modules/deveye-types/src   # doit être vide
+rsync -a --delete DevEye-Types/src/ DevEye/node_modules/@deveye/types/src/
+diff -rq DevEye-Types/src DevEye/node_modules/@deveye/types/src   # doit être vide
 ```
 
 Il n'existe aucun framework de test dans ce dépôt. La migration `064` a été

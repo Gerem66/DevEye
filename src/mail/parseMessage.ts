@@ -1,5 +1,5 @@
 import { simpleParser } from 'mailparser';
-import type { MailAttachment, MailHeader, MailSuspiciousLink } from 'deveye-types';
+import type { MailAttachment, MailHeader, MailSuspiciousLink } from '@deveye/types';
 import { sanitizeMailHtml, type SanitizeOptions } from './sanitize';
 import { findSuspiciousLinks } from './linkHeuristics';
 

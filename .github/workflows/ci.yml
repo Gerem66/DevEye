@@ -28,7 +28,7 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      # Installs the server deps (brings deveye-types into ./node_modules, which
+      # Installs the server deps (brings @deveye/types into ./node_modules, which
       # the client also resolves by walking up the tree).
       - name: Install server deps
         run: npm ci

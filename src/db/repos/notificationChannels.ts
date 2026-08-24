@@ -3,7 +3,7 @@ import type {
     NotificationChannelRow,
     NotificationFeature,
     NotificationRouteRow
-} from 'deveye-types';
+} from '@deveye/types';
 
 import type { Queryable } from '../pool';
 

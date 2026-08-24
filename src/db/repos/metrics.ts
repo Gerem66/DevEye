@@ -1,4 +1,4 @@
-import type { MetricRow, MetricSeriesPoint, MetricSnapshot, MetricsResolution } from 'deveye-types';
+import type { MetricRow, MetricSeriesPoint, MetricSnapshot, MetricsResolution } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;

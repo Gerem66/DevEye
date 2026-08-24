@@ -529,7 +529,7 @@ de code Discord les rendrait telles quelles.
 
 ```bash
 ./ci.sh    # lint + typecheck des trois dépôts + build client
-diff -rq DevEye-Types/src DevEye/node_modules/deveye-types/src   # doit être vide
+diff -rq DevEye-Types/src DevEye/node_modules/@deveye/types/src   # doit être vide
 ```
 
 **Migration** : rejeu obligatoire sur une copie d'un dump avant livraison, et

@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import { formatBucket, formatMs, formatRatio } from './format';
 import styles from './style.module.css';
 
-import type { UptimePoint, UptimeResolution } from 'deveye-types';
+import type { UptimePoint, UptimeResolution } from '@deveye/types';
 
 const W = 600;
 const H = 140;

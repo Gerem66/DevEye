@@ -1,4 +1,4 @@
-import type { MinimalUser } from 'deveye-types';
+import type { MinimalUser } from '@deveye/types';
 import { userColorVar } from '@/Features/Profile/userColors';
 import styles from '../style.module.css';
 

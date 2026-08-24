@@ -1,8 +1,8 @@
-import type { UserColor } from 'deveye-types';
+import type { UserColor } from '@deveye/types';
 
 /**
  * La palette d'identité des comptes, côté interface. L'ensemble des noms est
- * détenu par `userColorSchema` dans deveye-types ; on y attache ici une
+ * détenu par `userColorSchema` dans @deveye/types ; on y attache ici une
  * étiquette française et l'ordre du sélecteur. La valeur vient toujours du jeton
  * `--user-<nom>` (voir Styles/theme.css) — jamais un hexadécimal ici, pour que
  * la palette reste une source de vérité unique.

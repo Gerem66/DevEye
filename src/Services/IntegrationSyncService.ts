@@ -3,7 +3,7 @@ import type Encryption from '@/Services/Encryption';
 import type { LiveHub } from '@/live/hub';
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
 import type { Logger } from 'pino';
-import type { DeploymentRow, DeployTargetSyncRow, GitSyncStatus } from 'deveye-types';
+import type { DeploymentRow, DeployTargetSyncRow, GitSyncStatus } from '@deveye/types';
 import {
     authorRef,
     fetchBranches,

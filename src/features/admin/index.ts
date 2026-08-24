@@ -6,8 +6,8 @@ import {
     adminSetUserRole,
     adminSetUserStatus,
     adminUserList
-} from 'deveye-types';
-import type { AdminInvite } from 'deveye-types';
+} from '@deveye/types';
+import type { AdminInvite } from '@deveye/types';
 
 import type { UserInviteRow } from '@/db/repos/userInvites';
 import { env } from '@/Utils/Env';

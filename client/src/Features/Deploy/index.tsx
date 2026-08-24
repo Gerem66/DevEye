@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { DeployHistoryEntry, DeployTarget, Deployment } from 'deveye-types';
+import type { DeployHistoryEntry, DeployTarget, Deployment } from '@deveye/types';
 
 import { Button } from '@/Components';
 import { ws } from '@/api/ws';

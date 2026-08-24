@@ -14,13 +14,13 @@ import {
     backupRuns,
     backupSources,
     type BackupSourceCandidate
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { BackupService, type StoredDestination, type StoredJob } from '@/Services/BackupService';
 import { safeRelPath } from '@/backup/sinks';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { shareScope } from '../_sharing';
-import { CLOUDSYNC_BACKUP_PROVIDER, type CloudSyncBackupProvider } from 'deveye-types/sdk';
+import { CLOUDSYNC_BACKUP_PROVIDER, type CloudSyncBackupProvider } from '@deveye/types/sdk';
 import { moduleProvider } from '@/features/_sdk/register';
 import {
     backupService,

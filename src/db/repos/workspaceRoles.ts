@@ -1,4 +1,4 @@
-import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRoleRow } from 'deveye-types';
+import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRoleRow } from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;

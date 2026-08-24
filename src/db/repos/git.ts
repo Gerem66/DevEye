@@ -5,7 +5,7 @@ import type {
     GitPullRequestRow,
     GitReleaseRow,
     GitRepoRow
-} from 'deveye-types';
+} from '@deveye/types';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;

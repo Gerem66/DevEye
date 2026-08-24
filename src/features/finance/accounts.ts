@@ -4,7 +4,7 @@ import {
     financeAccountRemove,
     financeAccountReorder,
     financeAccountUpdate
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import {

@@ -6,7 +6,7 @@ import Popup, { ClosePopup } from '@/Components/Popup';
 import { formatAddress, formatSize } from './api';
 import styles from './style.module.css';
 
-import type { MailMessage } from 'deveye-types';
+import type { MailMessage } from '@deveye/types';
 
 export const MESSAGE_INFO_POPUP = 'popup-mail-message-info';
 

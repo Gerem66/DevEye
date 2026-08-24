@@ -1,7 +1,7 @@
-import type { AgentsFacade, DevEyeFacade, SdkCipher, SdkDevice } from 'deveye-types/sdk/server';
-import { FeatureError } from 'deveye-types/sdk/server';
-import type { FeatureManifest, NativeCapability } from 'deveye-types/sdk';
-import type { NotificationFeature } from 'deveye-types';
+import type { AgentsFacade, DevEyeFacade, SdkCipher, SdkDevice } from '@deveye/types/sdk/server';
+import { FeatureError } from '@deveye/types/sdk/server';
+import type { FeatureManifest, NativeCapability } from '@deveye/types/sdk';
+import type { NotificationFeature } from '@deveye/types';
 
 import type { Database } from '@/db';
 import type { Logger } from 'pino';

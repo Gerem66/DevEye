@@ -1,4 +1,4 @@
-import { AGENT_DESTROYED, AGENT_POWER_RESULT, AGENT_SERVICE_RESULT, AGENT_UPDATED } from 'deveye-types';
+import { AGENT_DESTROYED, AGENT_POWER_RESULT, AGENT_SERVICE_RESULT, AGENT_UPDATED } from '@deveye/types';
 
 import { ack, type AgentSession, type PayloadOf } from './session';
 

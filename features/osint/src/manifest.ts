@@ -1,14 +1,14 @@
-import { featureDescriptor } from 'deveye-types';
+import { featureDescriptor } from '@deveye/types';
 
 import { osintCommands } from './contracts/commands';
-import type { FeatureManifest } from 'deveye-types/sdk';
+import type { FeatureManifest } from '@deveye/types/sdk';
 
 /**
  * OSINT, au format manifest : la deuxième native rapatriée sur le SDK.
  *
  * Le descriptif (intitulé, icône, phrase des sources) reste celui du registre
  * publié, étalé plutôt que recopié : une native garde son identité dans
- * deveye-types, le manifest n'ajoute que ce que le registre ne porte pas
+ * @deveye/types, le manifest n'ajoute que ce que le registre ne porte pas
  * (catégorie, onglets, ressources, commandes).
  */
 const descriptor = featureDescriptor('osint');

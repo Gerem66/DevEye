@@ -2,7 +2,7 @@ import { memo, useEffect, useRef } from 'react';
 
 import styles from './style.module.css';
 
-import type { MailMessageSummary } from 'deveye-types';
+import type { MailMessageSummary } from '@deveye/types';
 
 interface MessageListProps {
     messages: MailMessageSummary[];

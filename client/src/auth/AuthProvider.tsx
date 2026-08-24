@@ -1,4 +1,4 @@
-import type { SessionBundle, User } from 'deveye-types';
+import type { SessionBundle, User } from '@deveye/types';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ApiError, login as apiLogin, logout as apiLogout, me as apiMe, refresh as apiRefresh } from '../api/http';
 import { ws } from '../api/ws';

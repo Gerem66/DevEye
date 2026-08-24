@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useServerStatus } from '@/stores/serverStatus';
-import type { BootTask } from 'deveye-types';
+import type { BootTask } from '@deveye/types';
 import styles from './DeploymentStatus.module.css';
 
 /** The task worth showing: errors first, then a warning, then the in-flight one. */

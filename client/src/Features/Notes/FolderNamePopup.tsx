@@ -6,7 +6,7 @@ import Popup, { ClosePopup } from '@/Components/Popup';
 import Button from '@/Components/Button';
 import TextInput from '@/Components/TextInput';
 
-import { NOTE_FOLDER_MAX_LENGTH } from 'deveye-types';
+import { NOTE_FOLDER_MAX_LENGTH } from '@deveye/types';
 
 export const FOLDER_NAME_POPUP = 'popup-folder-name';
 

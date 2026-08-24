@@ -19,7 +19,7 @@ import type {
     UptimeRange,
     UptimeResolution,
     UptimeService
-} from 'deveye-types';
+} from '@deveye/types';
 
 /**
  * Measures previewed inline. Deliberately short: the full record lives on its own

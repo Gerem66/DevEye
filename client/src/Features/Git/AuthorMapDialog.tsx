@@ -1,4 +1,4 @@
-import type { GitCommitAuthor, MinimalUser } from 'deveye-types';
+import type { GitCommitAuthor, MinimalUser } from '@deveye/types';
 import { Checkbox, Dialog, SelectInput } from '@/Components';
 import styles from './style.module.css';
 

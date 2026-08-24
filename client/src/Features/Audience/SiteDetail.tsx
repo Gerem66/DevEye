@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { AudienceSite, AudienceUsage } from 'deveye-types';
+import type { AudienceSite, AudienceUsage } from '@deveye/types';
 
 import { Button, StatusBadge } from '@/Components';
 import { FeatureSettingsButton } from '@/Components/FeatureSettings';

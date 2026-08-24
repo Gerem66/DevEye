@@ -10,7 +10,7 @@ import type {
     MailSecurityTier,
     MailSettings,
     MailSettingsRow
-} from 'deveye-types';
+} from '@deveye/types';
 import { createOpenCipher, createSecureStore, type Cipher } from '@/Services/SecureStore';
 import { SecretKeyService } from '@/Services/SecretKeyService';
 import type Encryption from '@/Services/Encryption';

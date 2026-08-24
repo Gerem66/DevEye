@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import type { DeploymentRow } from 'deveye-types';
+import type { DeploymentRow } from '@deveye/types';
 
 import { buildNotice, estimateFromHistory, firstLine, progressBar, tailOf } from './deploy';
 

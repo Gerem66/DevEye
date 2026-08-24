@@ -1,4 +1,4 @@
-import type { UserColor } from 'deveye-types';
+import type { UserColor } from '@deveye/types';
 import { useMemo } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';

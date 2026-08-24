@@ -1,5 +1,5 @@
-import { SHARE_WIRED_FEATURES } from 'deveye-types';
-import type { ForeignRef, WorkspaceFeatureId } from 'deveye-types';
+import { SHARE_WIRED_FEATURES } from '@deveye/types';
+import type { ForeignRef, WorkspaceFeatureId } from '@deveye/types';
 
 import { createSecureStore, type Cipher } from '@/Services/SecureStore';
 

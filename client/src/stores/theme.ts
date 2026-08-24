@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import type { ThemeStateDTO } from 'deveye-types';
-import { THEME_SLOT_COUNT, THEME_SLOT_IMAGE_MAX_LENGTH } from 'deveye-types';
+import type { ThemeStateDTO } from '@deveye/types';
+import { THEME_SLOT_COUNT, THEME_SLOT_IMAGE_MAX_LENGTH } from '@deveye/types';
 import { ws } from '@/api/ws';
 import { getActiveWorkspaceId } from './workspace';
 

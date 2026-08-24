@@ -1,4 +1,4 @@
-import type { LiveCursorKind } from 'deveye-types';
+import type { LiveCursorKind } from '@deveye/types';
 import type { ReactNode } from 'react';
 
 /**

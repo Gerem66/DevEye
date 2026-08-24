@@ -2,7 +2,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { ws } from '@/api/ws';
 import { onResourceChange } from '@/stores/invalidation';
 import { markHomeReady } from '@/stores/homeReady';
-import type { Device } from 'deveye-types';
+import type { Device } from '@deveye/types';
 
 /**
  * Listes d'appareils partagées, interrogées tant qu'un consommateur est monté —

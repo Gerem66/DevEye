@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { UptimeService } from 'deveye-types';
+import type { UptimeService } from '@deveye/types';
 import { Button, Dialog, SelectInput } from '@/Components';
 import { ws } from '@/api/ws';
 import { ServiceDialog } from '@/Features/Uptime/ServiceDialog';

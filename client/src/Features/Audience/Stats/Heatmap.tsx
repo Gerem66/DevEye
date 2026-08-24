@@ -1,4 +1,4 @@
-import type { AudienceActivityCell } from 'deveye-types';
+import type { AudienceActivityCell } from '@deveye/types';
 
 import { DAY_LABELS, formatCount } from '../format';
 import styles from '../style.module.css';

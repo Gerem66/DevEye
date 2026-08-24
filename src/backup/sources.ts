@@ -5,7 +5,7 @@ import type { Logger } from 'pino';
 import { env } from '@/Utils/Env';
 import { openTunnel, type Tunnel } from '@/Services/databases/tunnel';
 import type { EngineTarget } from '@/Services/databases/engine';
-import type { CloudSyncBackupProvider } from 'deveye-types/sdk';
+import type { CloudSyncBackupProvider } from '@deveye/types/sdk';
 import { tarEnd, tarHeader, tarPadding } from './tar';
 
 /**

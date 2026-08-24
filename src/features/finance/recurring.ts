@@ -5,8 +5,8 @@ import {
     financeRecurringRemove,
     financeRecurringSkip,
     financeRecurringUpdate
-} from 'deveye-types';
-import type { FinanceRecurringRow } from 'deveye-types';
+} from '@deveye/types';
+import type { FinanceRecurringRow } from '@deveye/types';
 
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import {

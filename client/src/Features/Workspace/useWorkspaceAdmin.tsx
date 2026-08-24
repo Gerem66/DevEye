@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { FEATURE_REGISTRY, WORKSPACE_CAPABILITIES } from 'deveye-types';
-import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole } from 'deveye-types';
+import { FEATURE_REGISTRY, WORKSPACE_CAPABILITIES } from '@deveye/types';
+import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole } from '@deveye/types';
 
 import { ws, WsError } from '@/api/ws';
 import { useAuth } from '@/auth/AuthProvider';

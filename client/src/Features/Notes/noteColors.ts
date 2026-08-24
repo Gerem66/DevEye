@@ -1,8 +1,8 @@
-import type { NoteColor } from 'deveye-types';
+import type { NoteColor } from '@deveye/types';
 
 /**
  * The Notes colour palette, UI side. The set of names is owned by
- * `noteColorSchema` in deveye-types; here we attach a French label and the
+ * `noteColorSchema` in @deveye/types; here we attach a French label and the
  * order shown in the swatch pickers. The actual colour value always comes from
  * the `--note-<name>` theme token (see Styles/theme.css) — never a hex here, so
  * the palette stays a single design-token source.

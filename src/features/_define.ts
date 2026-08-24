@@ -10,9 +10,9 @@ import type { DatabaseMonitor } from '@/Services/DatabaseMonitor';
 import type { AudienceIngest } from '@/Services/AudienceIngest';
 import type { SecurityMonitor } from '@/Services/SecurityMonitor';
 import type { BackupService } from '@/Services/BackupService';
-import type { LiveTopic, LogLevelName } from 'deveye-types';
+import type { LiveTopic, LogLevelName } from '@deveye/types';
 import type { Logger } from 'pino';
-import type { FeatureAccess, FeatureId, ItemAccess, WorkspaceCapability } from 'deveye-types';
+import type { FeatureAccess, FeatureId, ItemAccess, WorkspaceCapability } from '@deveye/types';
 import type { WorkspaceContext } from './_access';
 import type { z } from 'zod';
 
@@ -196,12 +196,12 @@ export interface FeatureContext {
  * The dispatcher converts it into a `protocolError` payload; anything else is
  * mapped to `internal`.
  *
- * La classe vit dans `deveye-types/sdk/server` depuis le chantier des modules :
+ * La classe vit dans `@deveye/types/sdk/server` depuis le chantier des modules :
  * une seule définition pour les handlers natifs et les modules, sinon un
  * `instanceof` du dispatcheur raterait l'une des deux familles. Ré-exportée
  * ici pour que rien ne change chez les natifs.
  */
-export { FeatureError } from 'deveye-types/sdk/server';
+export { FeatureError } from '@deveye/types/sdk/server';
 
 /**
  * Authorization a command requires, declared beside its schemas and enforced by

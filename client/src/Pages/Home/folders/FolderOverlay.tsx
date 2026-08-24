@@ -8,7 +8,7 @@ import {
     useReducedMotion,
     useTransform
 } from 'framer-motion';
-import type { HomeFeatureId, HomeFolder } from 'deveye-types';
+import type { HomeFeatureId, HomeFolder } from '@deveye/types';
 
 import { Widget } from '@/Components/Widget';
 import { WidgetGrid } from '@/Components/WidgetGrid';

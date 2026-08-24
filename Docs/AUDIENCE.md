@@ -488,8 +488,8 @@ type.
 
 ```bash
 ./ci.sh
-rsync -a --delete DevEye-Types/src/ DevEye/node_modules/deveye-types/src/
-diff -rq DevEye-Types/src DevEye/node_modules/deveye-types/src   # doit être vide
+rsync -a --delete DevEye-Types/src/ DevEye/node_modules/@deveye/types/src/
+diff -rq DevEye-Types/src DevEye/node_modules/@deveye/types/src   # doit être vide
 ```
 
 **Vérifié hors serveur — les routes** (35 assertions, `tsx` + `app.inject()`, sur

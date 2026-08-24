@@ -8,7 +8,7 @@ import {
     type NotificationChannelInput,
     type NotificationChannelKind,
     type NotificationFeature
-} from 'deveye-types';
+} from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
