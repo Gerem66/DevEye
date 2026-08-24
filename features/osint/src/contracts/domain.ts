@@ -214,10 +214,7 @@ export interface OsintLookupRow {
 export const osintProviderSchema = z.enum(['pappers', 'numverify', 'hibp', 'shodan', 'virustotal']);
 export type OsintProvider = z.infer<typeof osintProviderSchema>;
 
-export const OSINT_PROVIDER_META: Record<
-    OsintProvider,
-    { label: string; signupUrl: string; enables: string }
-> = {
+export const OSINT_PROVIDER_META: Record<OsintProvider, { label: string; signupUrl: string; enables: string }> = {
     pappers: {
         label: 'Pappers',
         signupUrl: 'https://www.pappers.fr/api',
@@ -268,9 +265,7 @@ const USERNAME = /^@?[a-z0-9][a-z0-9._-]{1,38}$/i;
 
 function isIpv4(s: string): boolean {
     const m = s.match(IPV4);
-    return (
-        m !== null && m.slice(1).every((o) => Number(o) <= 255 && (o === '0' || !o.startsWith('0')))
-    );
+    return m !== null && m.slice(1).every((o) => Number(o) <= 255 && (o === '0' || !o.startsWith('0')));
 }
 
 /**

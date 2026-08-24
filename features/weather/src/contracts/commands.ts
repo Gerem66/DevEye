@@ -1,10 +1,5 @@
 import { z } from 'zod';
-import {
-    weatherFormatSchema,
-    weatherLocationSchema,
-    weatherProviderSchema,
-    weatherReportSchema
-} from './domain';
+import { weatherFormatSchema, weatherLocationSchema, weatherProviderSchema, weatherReportSchema } from './domain';
 
 const locationId = z.uuid();
 
