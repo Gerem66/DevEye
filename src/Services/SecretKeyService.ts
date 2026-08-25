@@ -61,38 +61,40 @@ export class SecretKeyService {
     }
 
     /**
+     * Pose la clé de données d'un espace partagé (WDK), à sa naissance.
+     *
+     * Toujours emballée par la clé serveur, jamais par un mot de passe : c'est
+     * précisément ce qui permet à **tout** membre de lire l'espace, et aux tâches
+     * de fond d'y travailler sans session. Même schéma que la BMK de CloudSync et
+     * que l'étage ouvert. Sans effet si l'espace a déjà la sienne.
+     */
+    async createWorkspaceDek(workspaceId: number): Promise<void> {
+        await this.db.workspaceSecretKeys.create(
+            workspaceId,
+            Encryption.encryptWithKey(this.crypt.serverKey(), crypto.randomBytes(DEK_BYTES))
+        );
+    }
+
+    /**
+     * La clé de données d'un espace partagé. Tout espace partagé la reçoit à sa
+     * création (`workspace.add`) : son absence est un invariant rompu, pas un
+     * état à réparer.
+     */
+    async resolveWorkspaceDek(workspaceId: number): Promise<Buffer> {
+        const row = await this.db.workspaceSecretKeys.get(workspaceId);
+        if (!row) throw new Error(`Workspace ${workspaceId} has no data key`);
+        const dek = Encryption.decryptWithKeyRaw(this.crypt.serverKey(), row.dek_wrapped);
+        if (!dek) throw new Error('Workspace DEK failed to decrypt (server key changed?)');
+        return dek;
+    }
+
+    /**
      * Fetch the user's **open DEK**, creating it on first use. Unlike the main
      * DEK this one is always server-wrapped, whatever the user's `wrap_mode`:
      * it backs the data a feature must be able to read without any password
      * prompt (see {@link SecureStore.open}). Never re-wrapped by the secrecy
      * handlers — enabling password encryption must not lock this tier.
      */
-    /**
-     * La clé de données d'un espace partagé, créée si absente.
-     *
-     * Toujours emballée par la clé serveur, jamais par un mot de passe : c'est
-     * précisément ce qui permet à **tout** membre de lire l'espace, et aux tâches
-     * de fond d'y travailler sans session. Même schéma que la BMK de CloudSync et
-     * que l'étage ouvert.
-     */
-    async resolveWorkspaceDek(workspaceId: number): Promise<Buffer> {
-        const existing = await this.db.workspaceSecretKeys.get(workspaceId);
-        const row =
-            existing ??
-            (await this.db.workspaceSecretKeys.create(
-                workspaceId,
-                Encryption.encryptWithKey(this.crypt.serverKey(), crypto.randomBytes(DEK_BYTES))
-            ));
-        const dek = Encryption.decryptWithKeyRaw(this.crypt.serverKey(), row.dek_wrapped);
-        if (!dek) throw new Error('Workspace DEK failed to decrypt (server key changed?)');
-        return dek;
-    }
-
-    /** Cet espace a-t-il déjà sa propre clé ? */
-    async hasWorkspaceDek(workspaceId: number): Promise<boolean> {
-        return (await this.db.workspaceSecretKeys.get(workspaceId)) !== null;
-    }
-
     async resolveOpenDek(userId: number): Promise<Buffer> {
         const row = await this.ensureRow(userId);
         if (!row.open_dek_wrapped) {

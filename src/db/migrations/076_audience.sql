@@ -19,11 +19,6 @@
 -- état et sa plateforme. Ce sont exactement les champs dont l'ingestion a besoin
 -- pour router une requête sans session — et ils sont de toute façon lisibles
 -- dans la page suivie, où la balise les expose.
---
--- ⚠️ Deux colonnes chiffrées à déclarer dans `workspaceRekey` :
--- `audience_sites.content` et `audience_labels.content`. En oublier une les
--- rendrait illisibles après une conversion de clé d'espace, sans rien pour le
--- signaler : les graphes se videraient de leurs libellés sans une erreur.
 
 CREATE TABLE IF NOT EXISTS audience_sites (
     id             INT AUTO_INCREMENT PRIMARY KEY,

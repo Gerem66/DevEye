@@ -12,9 +12,6 @@
 -- C'est aussi pourquoi ces deux tables sont minuscules et ne grandissent qu'à
 -- la main : quelques dizaines de lignes par site, là où `audience_events` en
 -- compte des millions.
---
--- ⚠️ Deux colonnes chiffrées de plus à déclarer dans `workspaceRekey`, portée
--- `audience_site` : `audience_funnels.content` et `audience_funnel_steps.content`.
 
 CREATE TABLE IF NOT EXISTS audience_funnels (
     id         INT AUTO_INCREMENT PRIMARY KEY,

@@ -94,10 +94,9 @@ CREATE TABLE IF NOT EXISTS project_repo_links (
 -- Table à part plutôt qu'une colonne sur les commits : le rattachement se fait
 -- une fois et vaut pour tous les commits de la personne, passés comme à venir.
 CREATE TABLE IF NOT EXISTS git_commit_authors (
-    -- Clé de substitution, et non la paire (repo_id, author_ref) : la
-    -- conversion de clé d'espace (`workspaceRekey`) cible une ligne par **une
-    -- seule** colonne identifiante. Avec une clé composite, elle mettrait à jour
-    -- l'auteur de même empreinte dans tous les dépôts à la fois.
+    -- Clé de substitution, et non la paire (repo_id, author_ref) : une ligne se
+    -- cible par **une seule** colonne identifiante, même forme que les autres
+    -- tables de contenu chiffré.
     id           INT AUTO_INCREMENT PRIMARY KEY,
     repo_id      INT      NOT NULL,
     -- 16 premiers caractères du sha256 de l'adresse e-mail : identité stable,

@@ -1,7 +1,8 @@
 # Les espaces de travail dans DevEye
 
 > Écrit le 6 août 2026, à la fin du chantier qui les a introduits ; relu et mis
-> à jour le 21 août 2026 (rôles, partage, canaux par feature). Destiné à une
+> à jour le 21 août 2026 (rôles, partage, canaux par feature) et le 25 août 2026
+> (retrait du chemin hérité « espace partagé sans clé propre »). Destiné à une
 > session future : lis ce document avant de toucher aux espaces, aux rôles ou au
 > chiffrement. Il dit **pourquoi** les choses sont ainsi ; le code dit comment.
 
@@ -79,11 +80,16 @@ mot de passe, le dispatcheur **force** `ctx.workspace` à l'espace personnel de
 l'appelant quelle que soit l'enveloppe. Sans lui, une enveloppe pointant un
 espace partagé pourrait détourner `secrecy.enable`.
 
-### L3 — Un espace résout les clés de son propriétaire
+### L3 — Chaque espace a sa clé, et un blob n'en change jamais
 
-Corollaire capital : **la migration n'a rien re-chiffré.** Chaque blob existant
-est resté chiffré sous la même clé, il a seulement changé de rattachement. C'est
-le principal réducteur de risque du chantier. Ne pas le brader.
+Un espace partagé a sa propre clé de données (WDK), posée à sa création ; un
+espace personnel utilise les DEK de son propriétaire, qui en est le seul membre
+(cf. §5). Un contenu est chiffré sous la clé de son espace et n'en change
+jamais : déplacer un élément d'un espace à un autre est hors périmètre (§10), et
+partager le projette sans le re-chiffrer (`SHARING.md`). Seul le passage d'un
+étage à l'autre, à l'intérieur d'un espace personnel, re-chiffre (projets,
+comptes mail, notes privées). C'est le principal réducteur de risque du
+chantier. Ne pas le brader.
 
 ---
 
@@ -213,38 +219,20 @@ prérogative d'un administrateur.
   mot de passe, le rôle étant la seule frontière. Les tâches de fond y travaillent
   sans session.
 
-**Tout espace partagé créé depuis la migration naît avec sa clé** — `add.ts`
-appelle `resolveWorkspaceDek()` à la création. Il est vide, donc il n'y a rien à
-convertir.
+**Tout espace partagé naît avec sa clé** : `add.ts` appelle
+`createWorkspaceDek()` à la création, et c'est le seul endroit qui en pose une.
+Un espace partagé sans clé n'est pas un état : `resolveWorkspaceDek()` le
+traite comme un invariant rompu.
 
 Le prix, à assumer et à dire : **le serveur peut lire le contenu d'un espace
 partagé.** C'est inévitable dès lors que tous les membres doivent y accéder sans
 secret partagé entre eux.
 
-### L'état hérité, et le symptôme qu'il produit
-
-Un espace partagé **antérieur** à la WDK résout encore les clés de son
-propriétaire (L3). Si celui-ci chiffre par mot de passe :
-
-> le propriétaire lit tout en entrant *son* mot de passe personnel, et **tous les
-> autres membres reçoivent « accès refusé » malgré le rôle qui convient.**
-
-C'est un état à réparer, pas un réglage. Aucune migration SQL ne peut le faire :
-le serveur seul est incapable de déchiffrer. Il faut une **session vivante et
-déverrouillée du propriétaire** → `workspace.enableSharedKey`, exposé comme un
-avertissement en tête de « Gérer l'espace › Général » qui disparaît une fois fait.
-
-La conversion lit tout **avant** de créer la nouvelle clé, et renonce entièrement
-si un seul blob est illisible : convertir les autres laisserait l'espace à moitié
-sous chaque clé, sans retour possible.
-
 ### Deux étages de chiffrement
 
 `ctx.secure` (gardé) et `ctx.secure.open` (ouvert) — les notes et Uptime écrivent
-dans l'étage ouvert, le coffre dans l'étage gardé. **`workspaceRekey.ts` porte un
-registre manuel des colonnes chiffrées avec leur étage.** Il faut le mettre à
-jour en ajoutant une colonne chiffrée, sinon la conversion la laissera derrière.
-Dans un espace partagé la distinction disparaît : la WDK sert les deux.
+dans l'étage ouvert, le coffre dans l'étage gardé. Dans un espace partagé la
+distinction disparaît : la WDK sert les deux.
 
 ### Notes privées
 
@@ -261,10 +249,8 @@ partagé : les deux étages y utilisent la WDK, donc le palier ne protège plus
 rien. Le plan prévoyait de le forcer à `'open'` ; **ce n'a jamais été
 implémenté** — `mail.accountAdd` / `accountEdit` acceptent encore `guarded`.
 
-Sans conséquence dans un espace correctement doté de sa clé (le palier est
-simplement inopérant). Dans un espace **hérité**, en revanche, un compte mail
-`guarded` n'est lisible que par le propriétaire, et le sync de fond échoue.
-Vérifié le 6 août 2026 : aucune garde ne l'interdit.
+Sans conséquence (le palier est simplement inopérant). Vérifié le 6 août 2026 :
+aucune garde ne l'interdit.
 
 ---
 
@@ -455,14 +441,9 @@ DB_DATABASE=DevEye_migtest LISTEN_PORT=3099 npx tsx index.ts   # ×2
 - [ ] Rejouer les migrations en attente sur une copie du dump de production
       avant livraison ; au 21 août 2026 : **086 à 094** (091–093 réécrivent
       des données, routes de notification et JSON des rôles).
-- [ ] Convertir l'espace hérité **OxyFoo** s'il ne l'est pas encore : session du
-      propriétaire déverrouillée → « Gérer l'espace › Général › Donner sa clé à
-      l'espace ». Sans ça ses membres restent en « accès refusé ».
 - [ ] **Trois migrations mail (043–045) existent en base mais leurs fichiers
       manquent du dépôt.** Antérieur à ce chantier, mais une installation neuve
       divergerait.
-- [ ] `workspaceRekey.ts` porte une liste de colonnes chiffrées maintenue à la
-      main — à garder en tête en ajoutant une colonne chiffrée.
 - [ ] Interdire `security_tier: 'guarded'` sur un compte mail d'espace partagé
       (cf. §5) — prévu au plan, jamais fait.
 - [ ] Sept comptes de test (`sectest_*`, `rep_*`) traînent en base, chacun avec

@@ -2,7 +2,7 @@ import { randomBytes } from 'crypto';
 
 import { FeatureError } from '@/features/_define';
 import type { Database } from '@/db';
-import type { UserSecretKeyRow } from '@deveye/types';
+import type { UserSecretKeyRow, WorkspaceRow } from '@deveye/types';
 import Encryption from './Encryption';
 import { SecretKeyService } from './SecretKeyService';
 
@@ -353,13 +353,8 @@ export interface Cipher {
     tryDecrypt(blob: string): Promise<string | null>;
 }
 
-/** A {@link Cipher} bound to a lazily-resolved DEK. */
-/**
- * Chiffreur assis sur une DEK déjà résolue. Exporté pour les rares cas qui
- * détiennent la clé eux-mêmes — la conversion d'un espace vers sa propre clé,
- * qui doit écrire sous la clé neuve tout en lisant sous l'ancienne.
- */
-export class DekCipher implements Cipher {
+/** Un {@link Cipher} assis sur une DEK résolue paresseusement. */
+class DekCipher implements Cipher {
     constructor(private readonly dek: () => Promise<Buffer>) {}
 
     async encrypt(plaintext: string): Promise<string> {
@@ -382,43 +377,45 @@ export class DekCipher implements Cipher {
 }
 
 /**
+ * Ce qui décide de la clé d'un espace : sa nature et, pour un espace personnel,
+ * son propriétaire. Un espace partagé a sa propre clé (WDK, posée à sa
+ * création) ; un espace personnel utilise les DEK de son propriétaire, qui en
+ * est le seul membre.
+ */
+export type WorkspaceKeyScope = Pick<WorkspaceRow, 'id' | 'kind' | 'owner_user_id'>;
+
+/**
+ * La clé de l'étage ouvert d'un espace : la WDK d'un espace partagé, la DEK
+ * ouverte du propriétaire d'un espace personnel. Toutes deux sont emballées par
+ * la clé serveur, donc résolubles sans session : c'est ce qui permet aux tâches
+ * de fond de travailler et aux projections de partage d'être servies.
+ */
+function openDekOf(keys: SecretKeyService, scope: WorkspaceKeyScope): Promise<Buffer> {
+    return scope.kind === 'shared' ? keys.resolveWorkspaceDek(scope.id) : keys.resolveOpenDek(scope.owner_user_id);
+}
+
+/**
  * The unified storage-encryption gateway handed to feature handlers as
  * `ctx.secure`. Features call `encrypt`/`decrypt` and never see the DEK, the
  * server key, the password or the storage of the wrapped key — this is the
  * single place that turns plaintext into a stored blob and back.
  *
- * Scoped to one (user, session), it exposes two tiers:
- *  - the store itself — the **guarded** tier, keyed by the user's main DEK. When
- *    password encryption is on, reading or writing it requires a live session
- *    unlock (`locked` otherwise). Default for feature data.
- *  - {@link open} — the **open** tier, keyed by a per-user DEK the server can
- *    always unwrap. For data a feature must serve with no prompt at all, while
- *    still being encrypted at rest.
+ * Scoped to one (workspace, session), it exposes two tiers:
+ *  - the store itself — the **guarded** tier. In a personal workspace it is
+ *    keyed by the owner's main DEK: when password encryption is on, reading or
+ *    writing it requires a live session unlock (`locked` otherwise). Default
+ *    for feature data.
+ *  - {@link open} — the **open** tier, keyed by a DEK the server can always
+ *    unwrap. For data a feature must serve with no prompt at all, while still
+ *    being encrypted at rest.
+ *
+ * In a shared workspace both tiers resolve the workspace's own key (WDK),
+ * server-wrapped: every member reads the workspace without depending on
+ * anyone's password, and there is nothing to unlock.
  */
 export class SecureStore implements Cipher {
     private cachedRow: UserSecretKeyRow | null = null;
     private cachedOpenDek: Promise<Buffer> | null = null;
-
-    /**
-     * Le compte dont les clés chiffrent cet espace : son **propriétaire**.
-     *
-     * Pour un espace personnel c'est l'appelant lui-même — comportement
-     * strictement identique à avant l'introduction des espaces. Pour un espace
-     * partagé, c'est le propriétaire, ce qui garantit qu'aucune donnée déjà
-     * écrite n'a besoin d'être re-chiffrée : elle l'a été sous cette même clé.
-     *
-     * Conséquence assumée en l'état : si le propriétaire a activé le chiffrement
-     * par mot de passe, lui seul peut lire l'espace partagé (les autres membres
-     * voient les lignes mais aucun contenu). L'ouverture réelle du partage passe
-     * par une clé d'espace dédiée, wrappée par la clé serveur — elle ne peut pas
-     * être introduite par une migration SQL, puisque déballer l'existant exige le
-     * mot de passe vivant du propriétaire. Ce sera une action explicite du
-     * propriétaire, session déverrouillée.
-     */
-    private readonly ownerUserId: number;
-
-    /** L'appelant est le propriétaire : son déverrouillage de session s'applique. */
-    private readonly sessionOwnsKeys: boolean;
 
     /**
      * Always-available tier. Deliberately not gated: anything written here is
@@ -430,28 +427,16 @@ export class SecureStore implements Cipher {
     /** Password-gated tier backing this store's own encrypt/decrypt. */
     private readonly guarded: Cipher = new DekCipher(() => this.resolveDek());
 
-    /**
-     * Id de l'espace quand celui-ci possède sa propre clé (WDK). Dans ce cas
-     * elle sert les **deux** étages : elle est emballée par la clé serveur, donc
-     * un second niveau « gardé » n'apporterait rien — il serait déballable de la
-     * même façon. `null` pour un espace personnel, et pour un espace partagé pas
-     * encore converti, qui retombe sur les clés de son propriétaire.
-     */
-    private readonly workspaceDekId: number | null;
-
     constructor(
         private readonly keys: SecretKeyService,
-        scope: { ownerUserId: number; callerUserId: number; workspaceDekId: number | null },
+        private readonly scope: WorkspaceKeyScope,
         private readonly sessionId: string,
         private readonly crypt: Encryption
-    ) {
-        this.ownerUserId = scope.ownerUserId;
-        this.sessionOwnsKeys = scope.ownerUserId === scope.callerUserId;
-        this.workspaceDekId = scope.workspaceDekId;
-    }
+    ) {}
 
+    /** La ligne de clés du propriétaire : l'étage gardé d'un espace personnel. */
     private async row(): Promise<UserSecretKeyRow> {
-        if (!this.cachedRow) this.cachedRow = await this.keys.ensureRow(this.ownerUserId);
+        if (!this.cachedRow) this.cachedRow = await this.keys.ensureRow(this.scope.owner_user_id);
         return this.cachedRow;
     }
 
@@ -467,8 +452,7 @@ export class SecureStore implements Cipher {
      * first uses of a listing into a single lookup. A failure is not cached.
      */
     private resolveOpenDek(): Promise<Buffer> {
-        if (this.workspaceDekId !== null) return this.keys.resolveWorkspaceDek(this.workspaceDekId);
-        this.cachedOpenDek ??= this.keys.resolveOpenDek(this.ownerUserId).catch((e: unknown) => {
+        this.cachedOpenDek ??= openDekOf(this.keys, this.scope).catch((e: unknown) => {
             this.cachedOpenDek = null;
             throw e;
         });
@@ -476,30 +460,22 @@ export class SecureStore implements Cipher {
     }
 
     /**
-     * Resolve the DEK for this session, or throw a typed error the dispatcher
-     * turns into a client-actionable response:
+     * Resolve the guarded DEK for this session, or throw a typed error the
+     * dispatcher turns into a client-actionable response:
+     *  - shared workspace → the WDK, nothing to unlock.
      *  - feature OFF → unwrap with the server key transparently.
      *  - feature ON, session unlocked → use the cached DEK.
      *  - feature ON, locked → `FeatureError('locked')` so the client prompts.
      */
     private async resolveDek(): Promise<Buffer> {
-        // L'espace a sa propre clé : elle sert aussi l'étage gardé, et il n'y a
-        // donc rien à déverrouiller — c'est tout l'intérêt, chaque membre lit
-        // l'espace sans dépendre du mot de passe d'un autre.
-        if (this.workspaceDekId !== null) return this.keys.resolveWorkspaceDek(this.workspaceDekId);
+        // La clé d'un espace partagé sert aussi l'étage gardé : emballée par la
+        // clé serveur, un second niveau serait déballable de la même façon et
+        // n'apporterait rien. Chaque membre lit l'espace sans dépendre du mot de
+        // passe d'un autre.
+        if (this.scope.kind === 'shared') return this.resolveOpenDek();
         const row = await this.row();
         if (!this.keys.isPasswordWrapped(row)) {
             return this.keys.resolveServerDek(row);
-        }
-        // La clé est emballée par le mot de passe de son propriétaire. Seule la
-        // session de ce dernier peut la déballer : un autre membre n'a aucun
-        // moyen de l'obtenir, et son propre déverrouillage ne vaut pas pour
-        // cette clé. On échoue fermé plutôt que de servir du contenu illisible.
-        if (!this.sessionOwnsKeys) {
-            throw new FeatureError(
-                'forbidden',
-                'Le propriétaire de cet espace a activé le chiffrement par mot de passe : son contenu ne peut être lu que par lui'
-            );
         }
         const dek = liveDek(this.sessionId);
         if (!dek) {
@@ -509,22 +485,14 @@ export class SecureStore implements Cipher {
     }
 
     /**
-     * Pourquoi le coffre est fermé, quand il l'est.
-     *
-     *  - `open`    — lisible tout de suite, rien à demander.
-     *  - `locked`  — fermé, mais l'appelant peut l'ouvrir avec SON mot de passe.
-     *  - `foreign` — les clés appartiennent à quelqu'un d'autre : aucun mot de
-     *                passe de l'appelant n'ouvrira jamais ce contenu.
-     *
-     * La distinction compte : confondre `foreign` avec `locked` fait réclamer à
-     * un membre un mot de passe qui ne peut pas marcher, indéfiniment.
+     * L'étage gardé est-il lisible sans invite ? Toujours dans un espace
+     * partagé ; dans un espace personnel, dès que la clé n'est pas emballée par
+     * le mot de passe, sinon selon `probe` (le déverrouillage de session).
      */
-    async lockState(): Promise<'open' | 'locked' | 'foreign'> {
-        if (this.workspaceDekId !== null) return 'open';
+    private async unlockedBy(probe: (sessionId: string) => boolean): Promise<boolean> {
+        if (this.scope.kind === 'shared') return true;
         const row = await this.row();
-        if (!this.keys.isPasswordWrapped(row)) return 'open';
-        if (!this.sessionOwnsKeys) return 'foreign';
-        return liveDek(this.sessionId) !== null ? 'open' : 'locked';
+        return !this.keys.isPasswordWrapped(row) || probe(this.sessionId);
     }
 
     /**
@@ -532,24 +500,16 @@ export class SecureStore implements Cipher {
      * Note: this also slides the grace window forward (treated as activity), so
      * call it only as part of a real access check, not for passive polling.
      */
-    async isUnlocked(): Promise<boolean> {
-        if (this.workspaceDekId !== null) return true;
-        const row = await this.row();
-        if (!this.keys.isPasswordWrapped(row)) return true;
-        if (!this.sessionOwnsKeys) return false;
-        return liveDek(this.sessionId) !== null;
+    isUnlocked(): Promise<boolean> {
+        return this.unlockedBy((sessionId) => liveDek(sessionId) !== null);
     }
 
     /**
      * Like {@link isUnlocked} but does NOT slide the grace window — for status
      * polling that must not count as user activity.
      */
-    async isUnlockedPassive(): Promise<boolean> {
-        if (this.workspaceDekId !== null) return true;
-        const row = await this.row();
-        if (!this.keys.isPasswordWrapped(row)) return true;
-        if (!this.sessionOwnsKeys) return false;
-        return hasLiveDek(this.sessionId);
+    isUnlockedPassive(): Promise<boolean> {
+        return this.unlockedBy(hasLiveDek);
     }
 
     /** Encrypt a plaintext payload for storage. */
@@ -579,13 +539,12 @@ export class SecureStore implements Cipher {
 
 /**
  * Fabrique utilisée par le dispatcheur WS pour bâtir `ctx.secure`, scopé à
- * `(espace, session)` : les clés sont celles du propriétaire de l'espace, et le
- * déverrouillage de session ne s'applique que si l'appelant est ce propriétaire.
+ * `(espace, session)`.
  */
 export function createSecureStore(
     db: Database,
     crypt: Encryption,
-    scope: { ownerUserId: number; callerUserId: number; workspaceDekId: number | null },
+    scope: WorkspaceKeyScope,
     sessionId: string
 ): { store: SecureStore; keys: SecretKeyService } {
     const keys = new SecretKeyService(db, crypt);
@@ -593,22 +552,17 @@ export function createSecureStore(
 }
 
 /**
- * L'étage **ouvert** d'un espace, sans session derrière — pour les tâches de
- * fond qui lisent ou écrivent des données alors que personne n'est connecté
- * (ordonnanceur uptime, synchro mail). Seul cet étage est atteignable ainsi, par
- * construction : l'étage gardé exige un déverrouillage de session et n'aurait
- * ici aucun sens.
- *
- * Indexé par espace et non par utilisateur : c'est l'espace qui porte les
- * données, et c'est son propriétaire qui en détient la clé — la même que celle
- * sous laquelle ces données ont été écrites, donc rien à re-chiffrer.
+ * L'étage **ouvert** d'un espace, sans session derrière : pour les tâches de
+ * fond qui lisent ou écrivent alors que personne n'est connecté (ordonnanceur
+ * uptime, synchro mail), et pour servir un élément projeté depuis son espace
+ * d'origine. Seul cet étage est atteignable ainsi, par construction : l'étage
+ * gardé exige un déverrouillage de session et n'aurait ici aucun sens.
  */
 export function createOpenCipher(db: Database, crypt: Encryption, workspaceId: number): Cipher {
     const keys = new SecretKeyService(db, crypt);
     return new DekCipher(async () => {
-        if (await keys.hasWorkspaceDek(workspaceId)) return keys.resolveWorkspaceDek(workspaceId);
         const workspace = await db.workspaces.findById(workspaceId);
         if (!workspace) throw new Error(`Unknown workspace ${workspaceId}`);
-        return keys.resolveOpenDek(workspace.owner_user_id);
+        return openDekOf(keys, workspace);
     });
 }

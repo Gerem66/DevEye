@@ -195,17 +195,11 @@ projets. Un `mutates` oublié ne produira donc aucun avertissement.
 préfixe absent de `COMMAND_PREFIX_TOPIC` **fait échouer le démarrage** — c'est
 un contrat, pas une heuristique.
 
-### Une seule liste de rekey, désormais
+### Le cache git ne suit aucun tier
 
-Le cache git ne figure **plus** dans `projectRekey.ts` : il n'a plus de tier de
-projet à suivre. Il relève de `workspaceRekey.ts` et de lui seul, à l'étage
-ouvert. Toute nouvelle colonne chiffrée pendue à `git_repos` doit y être
-inscrite — rien ne peut le détecter, un blob chiffré est indistinguable d'un
-autre.
-
-`sync_state` et `last_sync_error` y sont volontairement absents : éphémères,
-réécrits en permanence par le service de fond. Un ETag illisible ne fait rien de
-pire qu'un 200 au lieu d'un 304.
+Le cache git ne figure pas dans `projectRekey.ts` : un dépôt appartient à
+l'espace et non à un projet, il est chiffré sous la clé de l'espace à l'étage
+ouvert, une fois pour toutes.
 
 ### Le droit `git` est distinct de `projects`
 

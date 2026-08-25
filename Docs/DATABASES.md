@@ -91,13 +91,6 @@ Corollaire sur les formulaires : un champ laissé intact **conserve** le secret 
 place ; une chaîne vide l'efface. Le client ne peut pas renvoyer un secret
 inchangé, puisqu'il ne l'a jamais reçu.
 
-> ⚠️ **Quatre colonnes chiffrées par base**, toutes déclarées dans
-> `workspaceRekey` (`content`, `secret_enc`, `access_content`,
-> `access_secret_enc`) plus `database_alerts.content`. En oublier une la rendrait
-> illisible après une conversion de clé d'espace, **sans rien pour le signaler** :
-> au mieux l'hôte disparaît de l'écran, au pire le mot de passe devient un octet
-> mort et la base injoignable sans qu'on sache pourquoi.
-
 ### 2.3 Ce qui doit être unique ne peut pas être chiffré
 
 Le nom porte l'unicité dans l'espace, via `name_ref` (16 caractères du sha256 du

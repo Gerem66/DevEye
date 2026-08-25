@@ -12,7 +12,6 @@ import type {
     MailSettingsRow
 } from '@deveye/types';
 import { createOpenCipher, createSecureStore, type Cipher } from '@/Services/SecureStore';
-import { SecretKeyService } from '@/Services/SecretKeyService';
 import type Encryption from '@/Services/Encryption';
 import type { Database } from '@/db';
 import type { MailCredentials, MailOAuthCredentials, TokenRefreshCallback } from '@/Services/MailAccountClient';
@@ -105,36 +104,23 @@ export async function runWithAccountStatus<T>(
  * and must build the store themselves out of the signed token's claims.
  *
  * Indexé par **espace**, comme tout le reste de Mail depuis `050_scope_mail.sql` :
- * c'est l'espace qui porte le compte (`mail_accounts.workspace_id`) et son
- * propriétaire qui détient la clé. Passer l'utilisateur ici écrivait les
- * identifiants sous une clé résolue par coïncidence — celle de l'espace dont
- * l'id vaut celui de l'utilisateur — que `MailSyncService`, qui part bien de
- * `workspace_id`, ne pouvait alors plus déchiffrer.
+ * c'est l'espace qui porte le compte (`mail_accounts.workspace_id`) et sa clé.
+ * Passer l'utilisateur ici écrivait les identifiants sous une clé résolue par
+ * coïncidence — celle de l'espace dont l'id vaut celui de l'utilisateur — que
+ * `MailSyncService`, qui part bien de `workspace_id`, ne pouvait alors plus
+ * déchiffrer.
  */
 export async function cipherForTier(
     db: Database,
     crypt: Encryption,
     workspaceId: number,
-    callerUserId: number,
     sessionId: string,
     tier: MailSecurityTier
 ): Promise<Cipher> {
     if (tier === 'open') return createOpenCipher(db, crypt, workspaceId);
     const workspace = await db.workspaces.findById(workspaceId);
     if (!workspace) throw new Error(`Unknown workspace ${workspaceId}`);
-    // Même règle qu'en `features/_access.ts` : un espace partagé déjà converti a
-    // sa propre clé, qui sert les deux étages ; sinon on retombe sur celles du
-    // propriétaire. Le `null` codé en dur d'avant chiffrait un compte gardé sous
-    // la clé du propriétaire jusque dans un espace partagé qui avait la sienne.
-    const keys = new SecretKeyService(db, crypt);
-    const workspaceDekId =
-        workspace.kind === 'shared' && (await keys.hasWorkspaceDek(workspace.id)) ? workspace.id : null;
-    return createSecureStore(
-        db,
-        crypt,
-        { ownerUserId: workspace.owner_user_id, callerUserId, workspaceDekId },
-        sessionId
-    ).store;
+    return createSecureStore(db, crypt, workspace, sessionId).store;
 }
 
 /**

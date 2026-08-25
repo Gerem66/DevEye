@@ -71,10 +71,10 @@ function cipherFor(ctx: FeatureContext, isPrivate: boolean): Cipher {
  *
  * Ce qui protège une note privée n'est pas un contrôle d'accès mais le
  * chiffrement lui-même : son corps passe par l'étage gardé, c'est-à-dire la DEK
- * emballée par le mot de passe. Or dans un espace partagé cette clé est celle du
- * **propriétaire** de l'espace. Accepter le drapeau y reviendrait à chiffrer une
- * note commune sous la clé personnelle d'un seul membre : illisible pour les
- * autres, et trompeur pour celui qui la crée en croyant la garder pour lui.
+ * emballée par le mot de passe. Or dans un espace partagé les deux étages
+ * utilisent la clé de l'espace, lisible par tout membre : accepter le drapeau y
+ * produirait une note « privée » que tous peuvent lire, trompeuse pour celui
+ * qui la crée en croyant la garder pour lui.
  *
  * Refus explicite plutôt que retombée silencieuse sur « publique » : demander
  * une note privée et en obtenir une lisible par tous serait le pire des deux.
@@ -84,7 +84,7 @@ function assertPrivateAllowed(ctx: FeatureContext, isPrivate: boolean): void {
     throw new FeatureError(
         'validation',
         'Une note privée n’existe que dans votre espace personnel : dans un espace partagé, ' +
-            'elle serait chiffrée avec la clé de son propriétaire.'
+            'elle serait lisible par tous les membres.'
     );
 }
 

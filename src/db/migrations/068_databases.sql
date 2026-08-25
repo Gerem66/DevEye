@@ -9,8 +9,7 @@
 -- Deux secrets vivent ici, chacun dans sa colonne et jamais dans `content` :
 -- le mot de passe de la base, et celui du tunnel (mot de passe SSH ou clé
 -- privée). Aucun des deux ne sort du serveur — les DTO n'en portent qu'un
--- booléen. Les deux sont déclarés dans `workspaceRekey`, sans quoi une
--- conversion de clé d'espace les rendrait illisibles sans rien pour le signaler.
+-- booléen.
 
 -- ⚠️ `database_connections`, et non `databases` : ce dernier est un mot réservé
 -- de MySQL (`SHOW DATABASES`) et `CREATE TABLE databases` échoue à l'analyse.

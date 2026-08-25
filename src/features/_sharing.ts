@@ -1,7 +1,7 @@
 import { SHARE_WIRED_FEATURES } from '@deveye/types';
 import type { ForeignRef, WorkspaceFeatureId } from '@deveye/types';
 
-import { createSecureStore, type Cipher } from '@/Services/SecureStore';
+import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
 
 import { FeatureError, type FeatureContext } from './_define';
 
@@ -88,25 +88,17 @@ export async function shareScope(ctx: FeatureContext, feature: WorkspaceFeatureI
  * Le codec ouvert d'un espace donné.
  *
  * Résolu comme `_access.ts` le fait pour l'espace actif : la clé de l'espace
- * quand il en a une, celle de son propriétaire sinon. Les deux sont emballées
- * par la clé serveur, donc résolubles **sans session** — c'est ce qui rend la
- * projection possible, et c'est aussi sa limite (voir `shareTier`).
+ * s'il est partagé, la DEK ouverte de son propriétaire s'il est personnel. Les
+ * deux sont emballées par la clé serveur, donc résolubles **sans session** :
+ * c'est ce qui rend la projection possible, et c'est aussi sa limite (voir
+ * `shareTier`). L'étage ouvert et jamais le magasin entier : l'étage gardé d'un
+ * autre espace n'a rien à faire ici, et le rendre accessible laisserait croire
+ * qu'il est lisible, alors qu'il exigerait le mot de passe de son propriétaire.
  */
 async function buildOpenCipher(ctx: FeatureContext, workspaceId: number): Promise<Cipher> {
     const row = await ctx.db.workspaces.findById(workspaceId);
     if (!row) throw new FeatureError('not_found', 'Espace d’origine introuvable');
-
-    const workspaceDekId = row.kind === 'shared' && (await ctx.secretKeys.hasWorkspaceDek(row.id)) ? row.id : null;
-    const { store } = createSecureStore(
-        ctx.db,
-        ctx.crypt,
-        { ownerUserId: row.owner_user_id, callerUserId: ctx.userId, workspaceDekId },
-        ctx.sessionId
-    );
-    // `.open` et jamais le magasin entier : l'étage gardé d'un autre espace n'a
-    // rien à faire ici, et le rendre accessible laisserait croire qu'il est
-    // lisible — alors qu'il exigerait le mot de passe de son propriétaire.
-    return store.open;
+    return createOpenCipher(ctx.db, ctx.crypt, row.id);
 }
 
 /**

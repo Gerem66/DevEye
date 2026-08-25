@@ -32,12 +32,6 @@
 -- toujours ces colonnes par `DATE_FORMAT(..., '%Y-%m-%d')`, parce que le pilote
 -- rendrait sinon un objet `Date` recalé sur le fuseau du serveur Node.
 --
--- ⚠️ Quatre colonnes chiffrées à déclarer dans `workspaceRekey`:
--- `finance_accounts.content`, `finance_categories.content`,
--- `finance_transactions.content` et `finance_recurring.content`. En oublier une
--- la rendrait illisible après une conversion de clé d'espace, sans rien pour le
--- signaler: les écrans se videraient de leurs libellés sans une erreur.
---
 -- ⚠️ Les noms de contraintes sont uniques **par schéma** et non par table, d'où
 -- le préfixe `fk_fin_` sur toutes celles d'ici.
 

@@ -25,18 +25,7 @@ import { encryptPayload, markUnlocked, toEntry, toMaskedEntry, tryDecryptPayload
  */
 async function assertSecureUnlocked(ctx: FeatureContext): Promise<void> {
     try {
-        const state = await ctx.secure.lockState();
-        // Les deux fermetures ne se traitent pas pareil : réclamer son mot de
-        // passe à quelqu'un dont il n'ouvrira jamais ce contenu le fait tourner
-        // en rond. On dit alors ce qui manque réellement, et à qui.
-        if (state === 'foreign') {
-            throw new FeatureError(
-                'forbidden',
-                'Le contenu de cet espace est chiffré avec la clé de son propriétaire. ' +
-                    'Il doit activer la clé d’espace pour le rendre lisible par ses membres.'
-            );
-        }
-        if (state === 'locked') {
+        if (!(await ctx.secure.isUnlocked())) {
             throw new FeatureError('locked', 'Password encryption is locked; unlock with your password');
         }
     } catch (e) {

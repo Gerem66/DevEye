@@ -129,10 +129,9 @@ export async function loadProject(ctx: FeatureContext, projectId: number): Promi
  *
  * Ce qui protège un projet confidentiel n'est pas un contrôle d'accès mais le
  * chiffrement : son arbre passe par l'étage gardé, c'est-à-dire la DEK emballée
- * par le mot de passe. Dans un espace partagé, cette clé est celle du
- * **propriétaire** — le projet deviendrait illisible pour les autres membres, ou
- * (si l'espace a sa propre clé) lisible par tous tout en s'annonçant
- * confidentiel. Les deux issues sont pires que le refus.
+ * par le mot de passe. Dans un espace partagé, les deux étages utilisent la clé
+ * de l'espace : le projet serait lisible par tous tout en s'annonçant
+ * confidentiel, ce qui est pire que le refus.
  *
  * Un espace partagé n'est pas pour autant en clair : son arbre est chiffré sous
  * la clé de l'espace, à l'étage ouvert.
@@ -142,7 +141,7 @@ export function assertGuardedAllowed(ctx: FeatureContext, tier: ProjectRow['secu
     throw new FeatureError(
         'validation',
         'Un projet confidentiel n’existe que dans votre espace personnel : dans un espace partagé, ' +
-            'il serait chiffré avec la clé de son propriétaire.'
+            'il serait lisible par tous les membres tout en s’annonçant confidentiel.'
     );
 }
 
@@ -323,7 +322,6 @@ export async function recordEvent(
  * Tout est lu et re-chiffré **avant** la moindre écriture : si une seule ligne
  * résiste, on abandonne sans avoir rien touché, plutôt que de laisser un projet
  * à moitié converti dont la seconde moitié serait définitivement illisible.
- * Même parti pris que la conversion d'espace (`workspaceRekey`).
  *
  * Renvoie le `content` du projet lui-même, ré-encodé — la ligne `projects` est
  * écrite par l'appelant en même temps que `security_tier`, pour que le tier et

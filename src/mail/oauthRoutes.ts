@@ -89,7 +89,6 @@ export async function mailOAuthRoutes(app: FastifyInstance, { db, crypt, audit }
                     db,
                     crypt,
                     claims.workspaceId,
-                    claims.userId,
                     claims.sessionId,
                     claims.securityTier
                 );

@@ -20,9 +20,6 @@ export function useWorkspaceAdmin() {
     const isShared = workspace?.kind === 'shared';
     const isOwner = workspace !== null && user !== null && workspace.ownerUserId === user.id;
 
-    const [sharedKey, setSharedKey] = useState<{ enabled: boolean; applicable: boolean; blockers: string[] } | null>(
-        null
-    );
     const [roles, setRoles] = useState<WorkspaceRole[]>([]);
     const [memberRoles, setMemberRoles] = useState<{ userId: number; roleId: number | null }[]>([]);
     const [error, setError] = useState<string | null>(null);
@@ -49,14 +46,6 @@ export function useWorkspaceAdmin() {
      */
     const grantsChanged = (): void => invalidate('workspace.activate');
 
-    const loadSharedKey = useCallback(async () => {
-        try {
-            setSharedKey(await ws.send('workspace.sharedKeyStatus', {}));
-        } catch {
-            setSharedKey(null);
-        }
-    }, []);
-
     const loadRoles = useCallback(async () => {
         try {
             const res = await ws.send('workspace.roleList', {});
@@ -73,18 +62,11 @@ export function useWorkspaceAdmin() {
      * personnes ouvrent volontiers cette page en même temps, et celle qui
      * regarde ne doit pas rester sur une liste périmée. La clé est déjà
      * invalidée par le sujet `workspace` ; il ne manquait que l'abonnement.
-     *
-     * La clé d'espace, elle, ne suit pas : sa conversion est un geste unique du
-     * propriétaire, qui recharge lui-même l'état juste après.
      */
     const rolesVersion = useResourceVersion('workspace.roleList');
     useEffect(() => {
         void loadRoles();
     }, [loadRoles, rolesVersion]);
-
-    useEffect(() => {
-        void loadSharedKey();
-    }, [loadSharedKey]);
 
     /**
      * Exécute une action, en portant l'erreur et l'état occupé.
@@ -111,23 +93,11 @@ export function useWorkspaceAdmin() {
         workspace,
         isShared,
         isOwner,
-        sharedKey,
         roles,
         memberRoles,
         error,
         busy,
         clearError: () => setError(null),
-
-        /**
-         * Bascule l'espace sur sa propre clé. Le contenu existant est relu avec
-         * la clé du propriétaire puis réécrit sous celle de l'espace — d'où la
-         * session déverrouillée exigée par le serveur.
-         */
-        enableSharedKey: () =>
-            run(async () => {
-                await ws.send('workspace.enableSharedKey', {});
-                await loadSharedKey();
-            }, 'Activation de la clé d’espace impossible.'),
 
         /**
          * Deux rôles de départ pour un onglet encore vide : « Admin » (tout) et

@@ -40,7 +40,6 @@ import {
     workspaceRemoveMemberFeature,
     workspaceRenameFeature
 } from './workspace/members';
-import { workspaceEnableSharedKeyFeature, workspaceSharedKeyStatusFeature } from './workspace/sharedKey';
 import {
     workspaceAssignRoleFeature,
     workspaceRoleCreateFeature,
@@ -70,8 +69,6 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     workspaceLeaveFeature,
     workspaceRemoveMemberFeature,
     workspaceAddMemberFeature,
-    workspaceSharedKeyStatusFeature,
-    workspaceEnableSharedKeyFeature,
     workspaceRoleListFeature,
     workspaceRoleCreateFeature,
     workspaceRoleUpdateFeature,

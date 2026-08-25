@@ -22,8 +22,7 @@
 -- ⚠️ `project_credentials.secret_enc` est **toujours** sous l'étage ouvert,
 -- quel que soit le tier du projet : le service de fond doit pouvoir le lire
 -- sans session. Il ne figure donc PAS dans la conversion de tier d'un projet
--- (`src/db/repos/projectRekey.ts`), mais bien dans celle d'un espace
--- (`src/db/repos/workspaceRekey.ts`).
+-- (`src/db/repos/projectRekey.ts`).
 
 -- Identifiants d'accès aux services externes, partagés par tout l'espace : un
 -- jeton GitHub sert en général à plusieurs projets, et le ressaisir par projet
@@ -80,11 +79,10 @@ CREATE TABLE IF NOT EXISTS project_repos (
 -- rattachement se fait une fois et vaut pour tous les commits de la personne,
 -- passés comme à venir.
 CREATE TABLE IF NOT EXISTS project_commit_authors (
-    -- Clé de substitution, et non la paire (project_id, author_ref) : les deux
-    -- conversions de clé (`workspaceRekey`, `projectRekey`) ciblent une ligne
-    -- par **une seule** colonne identifiante. Avec une clé composite, une
-    -- conversion d'espace mettrait à jour l'auteur de même empreinte dans tous
-    -- les projets à la fois.
+    -- Clé de substitution, et non la paire (project_id, author_ref) : la
+    -- conversion de tier (`projectRekey`) cible une ligne par **une seule**
+    -- colonne identifiante. Avec une clé composite, elle mettrait à jour
+    -- l'auteur de même empreinte dans tous les projets à la fois.
     id           INT AUTO_INCREMENT PRIMARY KEY,
     project_id   INT         NOT NULL,
     -- 16 premiers caractères du sha256 de l'adresse e-mail : identité stable,

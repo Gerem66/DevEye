@@ -210,14 +210,6 @@
     margin: 0;
 }
 
-/* Carte d'avertissement : un état à réparer, pas un réglage parmi d'autres. Le
-   liseré suffit à la distinguer sans crier — elle n'annonce pas un danger, elle
-   signale que quelque chose ne fonctionne pas encore comme prévu. */
-.warnCard {
-    border-color: var(--warning);
-    background: var(--warning-bg);
-}
-
 /* Un champ et son action, sur une ligne : le champ prend tout ce qui reste. */
 .nameRow {
     display: flex;

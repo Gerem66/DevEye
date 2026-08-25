@@ -40,8 +40,6 @@ const ACCESS_EXEMPT = new Set([
     'workspace.add',
     'workspace.leave',
     'workspace.delete',
-    'workspace.sharedKeyStatus',
-    'workspace.enableSharedKey',
     'workspace.roleList',
     'device.list',
     'metrics.unsubscribe',

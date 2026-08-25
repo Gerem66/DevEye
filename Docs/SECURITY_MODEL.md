@@ -207,20 +207,15 @@ Ce qui en découle :
   ligne : c'est ce qui rend la bascule atomique (`reencryptProjectTree`), qui
   lit et re-chiffre tout **avant** la moindre écriture et abandonne sans rien
   toucher si une seule ligne résiste.
-- **`guarded` n'existe qu'en espace personnel.** En espace partagé, l'étage
-  gardé est la clé du *propriétaire* : le projet serait illisible pour les
-  autres membres, ou (si l'espace a sa propre clé) lisible par tous tout en
-  s'annonçant confidentiel. Refus explicite plutôt qu'une de ces deux issues.
-  Un espace partagé reste chiffré — sous la clé de l'espace, à l'étage ouvert.
+- **`guarded` n'existe qu'en espace personnel.** En espace partagé, les deux
+  étages utilisent la clé de l'espace : le projet serait lisible par tous tout
+  en s'annonçant confidentiel. Refus explicite plutôt que ce mensonge. Un
+  espace partagé reste chiffré — sous la clé de l'espace, à l'étage ouvert.
 - **Un projet gardé perd ses intégrations.** La synchronisation git et le suivi
   de déploiement tournent sans session : ils n'atteindront jamais l'étage gardé.
   La règle est portée par la requête d'ordonnancement elle-même, pas par une
   garde applicative, pour qu'elle ne puisse pas être contournée par un nouvel
   appelant.
-- **`workspace.enableSharedKey` est refusée** tant qu'un projet gardé subsiste
-  dans l'espace : le convertir le rendrait lisible par tous les membres, ce que
-  son auteur a précisément refusé. Voir le bloqueur dans
-  `src/db/repos/workspaceRekey.ts`.
 
 ### Ce qui reste en clair, et pourquoi
 

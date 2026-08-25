@@ -11,7 +11,7 @@ import type {
 
 import type Encryption from '@/Services/Encryption';
 import { createSecureStore, type SecureStore } from '@/Services/SecureStore';
-import { SecretKeyService } from '@/Services/SecretKeyService';
+import type { SecretKeyService } from '@/Services/SecretKeyService';
 import type { Database } from '@/db';
 import { WORKSPACE_CAPABILITIES, WORKSPACE_FEATURE_IDS } from '@deveye/types';
 import { FeatureError } from './_define';
@@ -262,25 +262,15 @@ export function createAccessResolver(
             throw new FeatureError('forbidden', 'Vous n’êtes pas membre de cet espace');
         }
 
-        // Un espace partagé déjà converti possède sa propre clé : elle sert les
-        // deux étages, et tout membre lit alors l'espace sans dépendre du mot de
-        // passe de son propriétaire. Sinon (espace personnel, ou espace partagé
-        // pas encore converti) on retombe sur les clés du propriétaire.
         const isOwner = row.owner_user_id === userId;
         // Le propriétaire n'a pas de rôle : il passe outre, et lui en donner un
         // laisserait croire qu'on peut le lui retirer.
         const role = isOwner ? null : await db.workspaceRoles.findForMember(userId, row.id);
         const { capabilities, features, channels, extras } = grantsFor(isOwner, role);
 
-        const keyService = new SecretKeyService(db, crypt);
-        const workspaceDekId = row.kind === 'shared' && (await keyService.hasWorkspaceDek(row.id)) ? row.id : null;
-
-        const { store, keys } = createSecureStore(
-            db,
-            crypt,
-            { ownerUserId: row.owner_user_id, callerUserId: userId, workspaceDekId },
-            sessionId
-        );
+        // Les clés de l'espace : la sienne s'il est partagé, celles de son
+        // propriétaire (l'appelant, seul membre) s'il est personnel.
+        const { store, keys } = createSecureStore(db, crypt, row, sessionId);
 
         /**
          * Les restrictions d'éléments du rôle de l'appelant, par feature.

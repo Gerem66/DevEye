@@ -49,14 +49,7 @@ export async function mailAttachmentRoutes(
         const account = await db.mailAccounts.findById(folder.account_id, claims.workspaceId);
         if (!account) return reply.code(404).send({ error: 'not_found' });
 
-        const cipher = await cipherForTier(
-            db,
-            crypt,
-            claims.workspaceId,
-            claims.userId,
-            claims.sessionId,
-            account.security_tier
-        );
+        const cipher = await cipherForTier(db, crypt, claims.workspaceId, claims.sessionId, account.security_tier);
 
         try {
             const credentials = await decryptCredentials(cipher, account.credentials_enc);

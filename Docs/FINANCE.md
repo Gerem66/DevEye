@@ -58,11 +58,6 @@ La raison n'est pas le confort : un solde, un budget et une répartition sont de
 sur quoi on agrège ne peut le traverser. L'alternative serait de télécharger
 l'intégralité du journal dans le navigateur pour afficher un solde.
 
-> ⚠️ Les quatre colonnes chiffrées sont déclarées dans `db/repos/workspaceRekey.ts`.
-> En oublier une serait particulièrement sournois ici : les soldes et les graphes
-> resteraient parfaitement justes (ils n'agrègent que du clair) pendant que les
-> intitulés deviendraient illisibles. Une panne qui ne se voit qu'à l'écran.
-
 ---
 
 ## Les échéances n'ont pas de tâche de fond

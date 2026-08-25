@@ -103,14 +103,9 @@ ouvert de n'importe quel espace du serveur.
 
 ### Vérifié, pas supposé
 
-Contrôle mené sur base de copie : un contenu chiffré dans un espace **doté de sa
-propre clé** (WDK) est illisible avec la clé d'un autre espace, et lisible avec
-la sienne. Le codec d'origine est donc *indispensable et suffisant*.
-
-> Attention en relisant un contrôle de ce genre : deux espaces d'un même
-> propriétaire, dont aucun n'a de WDK, résolvent la **même** clé. Ce n'est pas
-> une fuite mais le levier L3 — c'est simplement un couple qui ne prouve rien.
-> Le contrôle doit viser un espace converti.
+Contrôle mené sur base de copie : un contenu chiffré dans un espace est
+illisible avec la clé d'un autre espace, et lisible avec la sienne. Le codec
+d'origine est donc *indispensable et suffisant*.
 
 ---
 

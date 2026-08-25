@@ -457,16 +457,12 @@ en silence et pour toujours.
 Ce ménage n'est pas cosmétique : un site qui appelle `identify()` accumule un
 libellé par utilisateur, qui survivrait à l'expiration de toutes ses sessions.
 
-### Les deux listes de rekey, et la colonne qui n'a pas de `workspace_id`
+### La colonne qui n'a pas de `workspace_id`
 
-`audience_labels` pend à son site, qui seul porte l'espace. `workspaceRekey` a
-donc gagné un second mode de portée (`audience_site`, par sous-requête) plutôt
-qu'une colonne dupliquée sur une table qui grandit vite — une colonne dupliquée
-est un second endroit où la vérité peut diverger.
-
-L'oublier n'aurait rien cassé de visible tout de suite : les nombres seraient
-restés justes, et chaque classement se serait vidé de ses intitulés. C'est la
-pire des deux pannes — silencieuse, et découverte des semaines plus tard.
+`audience_labels` pend à son site, qui seul porte l'espace : pas de colonne
+dupliquée sur une table qui grandit vite, une colonne dupliquée étant un second
+endroit où la vérité peut diverger. Ce qui rattache un libellé à son espace se
+retrouve par jointure sur `audience_sites`.
 
 ### La requête est retirée des chemins
 
@@ -567,13 +563,11 @@ du chantier (ni serveur local, ni conteneur, ni dump dans `Backups/`). N'ont don
    existants ne l'accordent pas.
 8. **Confidentialité** — passer un projet en confidentiel retire ses liaisons ;
    les sites survivent.
-9. **Rekey** — `workspace.enableSharedKey` sur un espace portant des sites : nom,
-   libellés, entonnoirs et marches toujours lisibles après conversion.
-10. **Entonnoir** — le composer depuis les suggestions, vérifier que la première
-    marche vaut le nombre d'entrées et que la dernière vaut les conversions ;
-    ajouter une marche inexistante et vérifier qu'elle affiche zéro sans erreur ;
-    supprimer l'entonnoir et le recréer à l'identique — **les chiffres doivent
-    être exactement les mêmes**, c'est la preuve qu'il ne collecte rien.
+9. **Entonnoir** — le composer depuis les suggestions, vérifier que la première
+   marche vaut le nombre d'entrées et que la dernière vaut les conversions ;
+   ajouter une marche inexistante et vérifier qu'elle affiche zéro sans erreur ;
+   supprimer l'entonnoir et le recréer à l'identique — **les chiffres doivent
+   être exactement les mêmes**, c'est la preuve qu'il ne collecte rien.
 
 ---
 

@@ -3,12 +3,9 @@ import type { Queryable } from '../pool';
 type Q = Queryable;
 
 /**
- * La conversion d'un projet d'un étage de chiffrement vers l'autre.
- *
- * Même mécanique que `workspaceRekey.ts`, à une maille plus fine : là-bas c'est
- * un espace entier qui passe sous sa propre clé, ici c'est un seul projet qui
- * passe de l'étage ouvert à l'étage gardé (ou l'inverse) quand son auteur change
- * `security_tier`.
+ * La conversion d'un projet d'un étage de chiffrement vers l'autre : un seul
+ * projet passe de l'étage ouvert à l'étage gardé (ou l'inverse) quand son
+ * auteur change `security_tier`.
  *
  * ⚠️ **Liste à tenir à jour.** Toute nouvelle colonne chiffrée suspendue à un
  * projet doit y figurer, sinon son contenu resterait sous l'ancienne clé et
@@ -18,8 +15,7 @@ type Q = Queryable;
  * N'y figurent PAS, et c'est volontaire : `workspace_credentials.secret_enc`, le
  * cache git (`git_*`) et le déploiement (`deploy_targets`, `deployments`),
  * toujours sous l'étage ouvert quel que soit le tier des projets qui s'y
- * rattachent — les services de fond doivent pouvoir les lire sans session. Ils
- * relèvent de `workspaceRekey`.
+ * rattachent : les services de fond doivent pouvoir les lire sans session.
  */
 interface EncryptedCell {
     table: string;
@@ -44,7 +40,7 @@ const COLUMNS: EncryptedCell[] = [
     // peuvent s'y rattacher. Il ne peut donc suivre le tier d'aucun d'eux. Un
     // projet qui passe en confidentiel **perd sa liaison** (voir
     // `projectSetSecurityTierFeature`) ; le dépôt et son cache, eux, ne bougent
-    // pas. Ils relèvent désormais de `workspaceRekey` seul.
+    // pas.
     //
     // Effet de bord bienvenu : la course qui obligeait à effacer `sync_state` et
     // `last_sync_error` à chaque bascule a disparu avec sa cause — plus rien de
@@ -54,8 +50,7 @@ const COLUMNS: EncryptedCell[] = [
     // le git juste au-dessus : depuis la migration `080`, une cible appartient à
     // l'espace, plusieurs projets peuvent la déployer, et elle est chiffrée à
     // l'étage ouvert une fois pour toutes. Un projet qui passe en confidentiel
-    // **perd sa liaison** ; la cible et son historique ne bougent pas. Ils
-    // relèvent désormais de `workspaceRekey` seul.
+    // **perd sa liaison** ; la cible et son historique ne bougent pas.
 ];
 
 export interface ProjectEncryptedCell {

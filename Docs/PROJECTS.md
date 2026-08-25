@@ -297,19 +297,16 @@ les autres membres jusqu'au rechargement.
 
 → **Relire `mutates` à la main** sur chaque écriture ajoutée.
 
-### Les deux listes de rekey
+### La liste de rekey
 
-Toute nouvelle colonne chiffrée doit être inscrite :
+Toute nouvelle colonne chiffrée suspendue à un projet doit être inscrite dans
+`src/db/repos/projectRekey.ts` (conversion du **tier d'un projet**). Rien ne
+peut le détecter : un blob chiffré est indistinguable d'un autre. Elle ne cible
+une ligne que par **une seule** colonne identifiante — d'où les clés de
+substitution là où la paire naturelle serait composite.
 
-- `src/db/repos/projectRekey.ts` — conversion du **tier d'un projet** ;
-- `src/db/repos/workspaceRekey.ts` — conversion d'un **espace** vers sa clé.
-
-Rien ne peut le détecter : un blob chiffré est indistinguable d'un autre. Les
-deux ne ciblent une ligne que par **une seule** colonne identifiante — d'où les
-clés de substitution là où la paire naturelle serait composite.
-
-Ce qui est **toujours** sous l'étage ouvert relève de la conversion d'espace et
-jamais de celle d'un projet : les jetons (`workspace_credentials.secret_enc`,
+Ce qui est **toujours** sous l'étage ouvert ne relève jamais de la conversion
+d'un projet : les jetons (`workspace_credentials.secret_enc`,
 ex-`project_credentials`, renommée par le chantier Déploiement), et depuis la
 migration `064` **tout le cache git** (`git_*`), qui appartient à l'espace et n'a
 donc aucun tier de projet à suivre.
@@ -388,15 +385,13 @@ tournent au démarrage, hors transaction, et ne sont jamais rejouées.
    **disparaît** quand l'onglet se ferme, contours de présence, badge non-lus.
 5. **Archives** — une carte archivée quitte le tableau, apparaît dans
    l'historique, s'ouvre en lecture seule.
-6. **Conversion de clé d'espace** — avec un projet `guarded` présent,
-   `workspace.enableSharedKey` doit être **refusée** par le bloqueur.
-7. **Onglets** — un projet neuf n'ouvre que Tableau, Frise et Historique. Le
+6. **Onglets** — un projet neuf n'ouvre que Tableau, Frise et Historique. Le
    « + » propose les quatre autres ; annuler l'ajout ne change rien, le valider
    fait paraître l'onglet **et** l'ouvre. Retirer le dernier élément d'une
    feature renvoie au tableau et remet son entrée dans le « + ». Un rôle sans
    `git`/`database`/`audience` ne voit pas l'entrée correspondante ; un projet
    confidentiel n'a pas de « + » du tout.
-8. **Dialogue de tâche** — sur un projet d'une seule tâche, le bloc « Dépend
+7. **Dialogue de tâche** — sur un projet d'une seule tâche, le bloc « Dépend
    de » ne s'affiche pas du tout ; dès qu'il y a une autre tâche, il propose de
    la choisir. La popup prend la hauteur de son contenu et grandit avec la
    discussion jusqu'au bord de l'écran, sans second ascenseur.

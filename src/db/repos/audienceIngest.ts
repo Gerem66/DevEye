@@ -107,8 +107,7 @@ export interface AudienceIngestRepo {
      * Les libellés que plus aucun fait ne cite.
      *
      * Sans ce ménage, la table de dimensions ne décroîtrait jamais : un chemin
-     * disparu du site resterait pour toujours, et se présenterait à chaque
-     * conversion de clé d'espace.
+     * disparu du site y resterait pour toujours.
      */
     pruneOrphanLabels(siteId: number): Promise<number>;
 }

@@ -242,10 +242,7 @@ passe passera partout.
 
 `project_credentials` est devenue `workspace_credentials` : elle n'a jamais rien
 eu de « projet », elle s'appelait ainsi parce qu'elle est née dans ce module. Les
-clés étrangères qui la visent suivent le nom automatiquement — mais la ligne de
-`workspaceRekey.ts` qui convertit `secret_enc`, elle, ne le sait pas. Elle a été
-mise à jour à la main ; rien n'aurait pu le détecter, un blob chiffré étant
-indistinguable d'un autre.
+clés étrangères qui la visent suivent le nom automatiquement.
 
 ### Dokploy ne parle pas REST
 
