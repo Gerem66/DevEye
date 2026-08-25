@@ -35,9 +35,9 @@ export interface FeatureAuditEntry {
 export interface FeatureContext {
     db: Database;
     /**
-     * Raw server-key cipher. Reserved for auth-bound secrets that must be
-     * readable without a live user password (e.g. the 2FA secret). Feature data
-     * at rest must go through `secure` instead, never `crypt` directly.
+     * The server-key seal (`seal`/`open`). Reserved for auth-bound secrets that
+     * must be readable without a live user password (e.g. the 2FA secret).
+     * Feature data at rest must go through `secure` instead, never `crypt`.
      */
     crypt: Encryption;
     /**

@@ -1,84 +1,43 @@
 import crypto from 'crypto';
 
 /**
- * Symmetric encryption helper.
+ * Le chiffrement symétrique de DevEye : AES-256-GCM, une seule primitive, un
+ * seul format de blob (base64 de `iv(12) | tag(16) | chiffré`).
  *
- * Two layers coexist:
- *
- *  1. Legacy `Encrypt`/`Decrypt` — keyed by the instance's `keyA`/`keyB`
- *     (the server key from env). Kept byte-compatible so data written before
- *     envelope encryption keeps decrypting. Still used for auth-bound secrets
- *     that must be readable without a live user password (e.g. the 2FA secret).
- *
- *  2. `encryptWithKey`/`decryptWithKey` — AES-256-GCM keyed by an explicit
- *     32-byte key. This is the primitive the envelope scheme is built on: it
- *     encrypts feature data with the per-user DEK and wraps the DEK with the
- *     server key or a password-derived key.
+ *  - `encryptWithKey` / `decryptWithKey(Raw)` : sous une clé explicite de 32
+ *    octets. C'est la brique du chiffrement par enveloppe : les données de
+ *    features sous une DEK (ou la WDK d'un espace), et l'emballage de ces DEK.
+ *  - `seal` / `open(Raw)` : sous la **clé serveur**, dérivée de l'env
+ *    (`sha256("CRYPT_KEY_A:CRYPT_KEY_B")`). Réservé à ce qui doit se relire
+ *    sans aucune session : l'emballage des DEK, le secret TOTP, le matériel de
+ *    clé des modules (`deps.keys`). Jamais des données d'utilisateur, qui
+ *    passent par `ctx.secure`.
  */
 class Encryption {
-    keyA: string;
-    keyB: string;
-    cipher_algo: string;
+    private readonly key: Buffer;
 
-    constructor(key: string, secondKey: string) {
-        this.keyA = key;
-        this.keyB = secondKey;
-        this.cipher_algo = 'aes-256-ctr';
+    constructor(keyA: string, keyB: string) {
+        this.key = crypto.createHash('sha256').update(`${keyA}:${keyB}`).digest();
     }
 
-    defineSecondKey(secondKey: string) {
-        this.keyB = secondKey;
-    }
-
-    static hashPassword(password: string) {
-        if (password.length === 0) {
-            return '';
-        }
-        return crypto.createHash('sha512').update(password).digest('hex');
-    }
-
-    /** 32-byte key derived from the server key, used to wrap a DEK at rest. */
+    /** La clé serveur, 32 octets : pour en dériver d'autres (sauvegardes). */
     serverKey(): Buffer {
-        return crypto.createHash('sha256').update(`${this.keyA}:${this.keyB}`).digest();
+        return this.key;
     }
 
-    Encrypt(plaintext: string) {
-        const nonce = crypto.randomBytes(16);
-        const cipher = crypto.createCipheriv(this.cipher_algo, this.keyA, nonce);
-        const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-        const keyB = crypto.createHash('ripemd160').update(this.keyB).digest();
-        const mac = crypto
-            .createHmac('sha512', keyB)
-            .update(Buffer.concat([nonce, ciphertext]))
-            .digest();
-        return Buffer.concat([mac, nonce, ciphertext]).toString('base64');
+    /** Scelle sous la clé serveur. */
+    seal(plaintext: string | Buffer): string {
+        return Encryption.encryptWithKey(this.key, plaintext);
     }
 
-    Decrypt(message: string): string | null {
-        const decoded = Buffer.from(message, 'base64');
-        if (decoded.length < 80) return null;
+    /** Inverse de {@link seal}, en octets ; `null` si le blob n'est pas à nous. */
+    openRaw(sealed: string): Buffer | null {
+        return Encryption.decryptWithKeyRaw(this.key, sealed);
+    }
 
-        const mac = decoded.subarray(0, 64);
-        const nonce = decoded.subarray(64, 80);
-        const ciphertext = decoded.subarray(80);
-
-        const keyB = crypto.createHash('ripemd160').update(this.keyB).digest();
-        const calc = crypto
-            .createHmac('sha512', keyB)
-            .update(Buffer.concat([nonce, ciphertext]))
-            .digest();
-
-        if (calc.length !== mac.length || !crypto.timingSafeEqual(calc, mac)) {
-            return null;
-        }
-
-        try {
-            const decipher = crypto.createDecipheriv(this.cipher_algo, this.keyA, nonce);
-            const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-            return plaintext.toString('utf8');
-        } catch {
-            return null;
-        }
+    /** Inverse de {@link seal}, en UTF-8 ; `null` si le blob n'est pas à nous. */
+    open(sealed: string): string | null {
+        return Encryption.decryptWithKey(this.key, sealed);
     }
 
     /**

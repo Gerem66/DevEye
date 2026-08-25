@@ -155,8 +155,8 @@ handler })` par commande. Le handler reçoit un `FeatureContext` (`ctx.db`,
 Voir [SECURITY_MODEL.md](./SECURITY_MODEL.md). Règles clés :
 
 - Les données de feature au repos passent **toujours** par `ctx.secure`
-  (`encrypt`/`tryDecrypt`), **jamais** par `ctx.crypt` directement (réservé aux
-  secrets liés à l'auth, ex. 2FA).
+  (`encrypt`/`tryDecrypt`), **jamais** par `ctx.crypt` (`seal`/`open`, réservés
+  aux secrets liés à l'auth, ex. 2FA).
 - Stocker en clair seulement les métadonnées non sensibles nécessaires au
   serveur pour lister/trier/gater sans déchiffrer (`sort_order`, `folder_id`, `level`,
   `workspace_id`…).

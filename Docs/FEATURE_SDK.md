@@ -114,8 +114,7 @@ Le rapatriement d'une native d'infrastructure en module PRIVÉ a élargi le cont
 exact de Météo : descripteur étalé dans le manifest, tables historiques en
 allowlist `deveye-feature.json` (075, jamais déplacées). Chiffrement :
 `ctx.cipher('private')` pour l'historique (l'ex-`ctx.secure`), `ctx.cipher()`
-pour les clés de fournisseurs (l'étage ouvert relit l'ancien format
-`ctx.crypt`, comme pour Météo).
+pour les clés de fournisseurs (l'étage ouvert, comme pour Météo).
 
 **La norme d'isolation (24 août 2026)** : une feature migrée est TOUT ENTIÈRE
 dans son répertoire. Ses contrats zod et son domaine vivent dans

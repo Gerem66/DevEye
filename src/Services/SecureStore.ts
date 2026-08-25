@@ -430,8 +430,7 @@ export class SecureStore implements Cipher {
     constructor(
         private readonly keys: SecretKeyService,
         private readonly scope: WorkspaceKeyScope,
-        private readonly sessionId: string,
-        private readonly crypt: Encryption
+        private readonly sessionId: string
     ) {}
 
     /** La ligne de clés du propriétaire : l'étage gardé d'un espace personnel. */
@@ -522,18 +521,9 @@ export class SecureStore implements Cipher {
         return this.guarded.decrypt(blob);
     }
 
-    /**
-     * Non-throwing decrypt for tolerant list paths. Tries the new GCM format
-     * first; falls back to the legacy CTR+HMAC format for rows written before
-     * the envelope-encryption layer was introduced.
-     */
-    async tryDecrypt(blob: string): Promise<string | null> {
-        try {
-            return await this.guarded.decrypt(blob);
-        } catch {
-            // Legacy fallback: data written with the old Encryption.Encrypt scheme.
-            return this.crypt.Decrypt(blob);
-        }
+    /** Non-throwing decrypt for tolerant list paths. */
+    tryDecrypt(blob: string): Promise<string | null> {
+        return this.guarded.tryDecrypt(blob);
     }
 }
 
@@ -548,7 +538,7 @@ export function createSecureStore(
     sessionId: string
 ): { store: SecureStore; keys: SecretKeyService } {
     const keys = new SecretKeyService(db, crypt);
-    return { store: new SecureStore(keys, scope, sessionId, crypt), keys };
+    return { store: new SecureStore(keys, scope, sessionId), keys };
 }
 
 /**

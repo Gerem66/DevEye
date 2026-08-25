@@ -312,7 +312,7 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit }: Aut
         }
 
         const code = parsed.data.code.trim();
-        const secret = crypt.Decrypt(twoFa.secret_enc);
+        const secret = crypt.open(twoFa.secret_enc);
         let accepted = false;
         if (secret && verifyTotp(code, secret)) {
             accepted = true;

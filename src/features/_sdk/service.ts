@@ -5,7 +5,6 @@ import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import { createOpenCipher } from '@/Services/SecureStore';
 import type { Logger } from 'pino';
-import EncryptionStatics from '@/Services/Encryption';
 import type { AuditLog } from '@/Services/AuditLog';
 import { agentsFacade, createFacade } from './facade';
 import { createFeatureStore } from './store';
@@ -54,8 +53,8 @@ export function createServiceDeps(
         }
     };
     const keys: SdkServerKeys = {
-        sealBytes: (plain) => EncryptionStatics.encryptWithKey(host.crypt.serverKey(), Buffer.from(plain)),
-        openBytes: (sealed) => EncryptionStatics.decryptWithKeyRaw(host.crypt.serverKey(), sealed)
+        sealBytes: (plain) => host.crypt.seal(Buffer.from(plain)),
+        openBytes: (sealed) => host.crypt.openRaw(sealed)
     };
 
     return {

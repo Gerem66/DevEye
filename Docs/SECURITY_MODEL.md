@@ -29,6 +29,11 @@ décrit côté types dans `DevEye-Types/src/domain/secrecy.ts`.
 feature OFF, les données sont chiffrées (DEK distincte par user) ; seul le niveau
 d'emballage de la DEK change.
 
+**Un seul format de blob**, quelle que soit la clé : AES-256-GCM, base64 de
+`iv(12) | tag(16) | chiffré` (`src/Services/Encryption.ts`). Sous la clé serveur
+(`crypt.seal`) : l'emballage des DEK, le secret TOTP, le matériel de clé des
+modules. Sous une DEK ou une WDK : tout le reste.
+
 ### Les deux étages : DEK « gardée » et DEK « ouverte »
 
 `ctx.secure` expose **deux** codecs (`Cipher`), chacun adossé à une clé
@@ -145,7 +150,7 @@ peuvent pas vivre en base. À la place :
   (`<storage_path>/blobs/…`), adressés par le SHA-256 de leur clair ;
 - chaque blob est chiffré **AES-256-GCM en flux** par une **BMK** (Blob Master
   Key, 32 octets) générée au premier boot, wrappée par la clé serveur
-  (`Encryption.encryptWithKey(crypt.serverKey(), bmk)`, même schéma que le
+  (`deps.keys.sealBytes`, soit `crypt.seal`, même schéma que le
   wrap des DEK) et rangée dans `sync_meta` — la rotation de `CRYPT_KEY_A/B` ne
   demande que de re-wrapper 32 octets, jamais de re-chiffrer les blobs ;
 - l'index (chemins relatifs, hashes, tailles, mtimes, appareil source) est en

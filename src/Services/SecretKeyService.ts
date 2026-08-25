@@ -52,9 +52,7 @@ export class SecretKeyService {
     async ensureRow(userId: number): Promise<UserSecretKeyRow> {
         const existing = await this.db.userSecretKeys.get(userId);
         if (existing) return existing;
-        const dek = crypto.randomBytes(DEK_BYTES);
-        const wrapped = Encryption.encryptWithKey(this.crypt.serverKey(), dek);
-        await this.db.userSecretKeys.create(userId, wrapped);
+        await this.db.userSecretKeys.create(userId, this.crypt.seal(crypto.randomBytes(DEK_BYTES)));
         const row = await this.db.userSecretKeys.get(userId);
         if (!row) throw new Error('Failed to create user secret key');
         return row;
@@ -69,10 +67,7 @@ export class SecretKeyService {
      * que l'étage ouvert. Sans effet si l'espace a déjà la sienne.
      */
     async createWorkspaceDek(workspaceId: number): Promise<void> {
-        await this.db.workspaceSecretKeys.create(
-            workspaceId,
-            Encryption.encryptWithKey(this.crypt.serverKey(), crypto.randomBytes(DEK_BYTES))
-        );
+        await this.db.workspaceSecretKeys.create(workspaceId, this.crypt.seal(crypto.randomBytes(DEK_BYTES)));
     }
 
     /**
@@ -83,7 +78,7 @@ export class SecretKeyService {
     async resolveWorkspaceDek(workspaceId: number): Promise<Buffer> {
         const row = await this.db.workspaceSecretKeys.get(workspaceId);
         if (!row) throw new Error(`Workspace ${workspaceId} has no data key`);
-        const dek = Encryption.decryptWithKeyRaw(this.crypt.serverKey(), row.dek_wrapped);
+        const dek = this.crypt.openRaw(row.dek_wrapped);
         if (!dek) throw new Error('Workspace DEK failed to decrypt (server key changed?)');
         return dek;
     }
@@ -98,15 +93,14 @@ export class SecretKeyService {
     async resolveOpenDek(userId: number): Promise<Buffer> {
         const row = await this.ensureRow(userId);
         if (!row.open_dek_wrapped) {
-            const wrapped = Encryption.encryptWithKey(this.crypt.serverKey(), crypto.randomBytes(DEK_BYTES));
-            await this.db.userSecretKeys.setOpenDek(userId, wrapped);
+            await this.db.userSecretKeys.setOpenDek(userId, this.crypt.seal(crypto.randomBytes(DEK_BYTES)));
             // Re-read rather than trust `wrapped`: a concurrent first write may
             // have landed first, and its key is the one the content will use.
             const stored = (await this.db.userSecretKeys.get(userId))?.open_dek_wrapped;
             if (!stored) throw new Error('Failed to create user open DEK');
             row.open_dek_wrapped = stored;
         }
-        const dek = Encryption.decryptWithKeyRaw(this.crypt.serverKey(), row.open_dek_wrapped);
+        const dek = this.crypt.openRaw(row.open_dek_wrapped);
         if (!dek) throw new Error('Open DEK failed to decrypt (server key changed?)');
         return dek;
     }
@@ -125,7 +119,7 @@ export class SecretKeyService {
         if (row.wrap_mode !== 'server') {
             throw new Error('DEK is password-wrapped; server key cannot unwrap it');
         }
-        const dek = Encryption.decryptWithKeyRaw(this.crypt.serverKey(), row.dek_wrapped);
+        const dek = this.crypt.openRaw(row.dek_wrapped);
         if (!dek) throw new Error('Server-wrapped DEK failed to decrypt (server key changed?)');
         return dek;
     }
@@ -203,9 +197,8 @@ export class SecretKeyService {
 
     /** Re-wrap the DEK with the server key (disable). Clears recovery material. */
     async wrapWithServer(userId: number, dek: Buffer): Promise<void> {
-        const dekWrapped = Encryption.encryptWithKey(this.crypt.serverKey(), dek);
         const state: WrapState = {
-            dekWrapped,
+            dekWrapped: this.crypt.seal(dek),
             wrapMode: 'server',
             kdfSalt: null,
             recoveryWrapped: null,
