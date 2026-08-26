@@ -53,6 +53,7 @@ import {
 } from './_sync';
 import {
     assertMailUnlocked,
+    assertTierAllowed,
     runWithAccountStatus,
     cipherFor,
     decryptCredentials,
@@ -204,6 +205,7 @@ export const mailAccountAddFeature: FeatureDefinition<
     access: { feature: 'mail', level: 'write' },
     mutates: true,
     handler: async (ctx, input) => {
+        assertTierAllowed(ctx, input.draft.securityTier);
         await assertMailUnlocked(ctx, input.draft.securityTier);
         const cipher = cipherFor(ctx, input.draft.securityTier);
         const credentials: MailCredentials = {
@@ -249,6 +251,7 @@ export const mailAccountUpdateFeature: FeatureDefinition<
             );
         }
         await assertMailUnlocked(ctx, existing.security_tier);
+        assertTierAllowed(ctx, input.draft.securityTier);
         await assertMailUnlocked(ctx, input.draft.securityTier);
         const cipher = cipherFor(ctx, input.draft.securityTier);
 
@@ -307,6 +310,7 @@ export const mailAccountSetProfileFeature: FeatureDefinition<
         // Both ends of the move have to be reachable: reading what's there now,
         // and writing it back under the tier the user is switching to.
         await assertMailUnlocked(ctx, existing.security_tier);
+        assertTierAllowed(ctx, input.securityTier);
         await assertMailUnlocked(ctx, input.securityTier);
         const from = cipherFor(ctx, existing.security_tier);
         const to = cipherFor(ctx, input.securityTier);
@@ -430,6 +434,7 @@ export const mailOAuthStartFeature: FeatureDefinition<
         if (!isOAuthConfigured(input.provider)) {
             throw new FeatureError('validation', `OAuth ${input.provider} n'est pas configuré sur ce serveur`);
         }
+        assertTierAllowed(ctx, input.securityTier);
         const state = await signMailOAuthState({
             userId: ctx.userId,
             workspaceId: ctx.workspaceId,

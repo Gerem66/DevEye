@@ -140,6 +140,21 @@ export async function assertMailUnlocked(ctx: FeatureContext, tier: MailSecurity
     }
 }
 
+/**
+ * Le palier « guarded » n'a de sens que dans un espace personnel : dans un
+ * espace partagé, les deux étages utilisent la clé de l'espace, lisible par
+ * tout membre, et le palier annoncerait une protection qu'il ne donne pas.
+ * Même règle que les notes privées et les projets confidentiels.
+ */
+export function assertTierAllowed(ctx: FeatureContext, tier: MailSecurityTier): void {
+    if (tier === 'open' || ctx.workspace.kind === 'personal') return;
+    throw new FeatureError(
+        'validation',
+        'Une boîte protégée n’existe que dans votre espace personnel : dans un espace partagé, ' +
+            'elle serait lisible par tous les membres.'
+    );
+}
+
 export async function encryptCredentials(cipher: Cipher, credentials: MailCredentials): Promise<string> {
     return cipher.encrypt(JSON.stringify(credentials));
 }

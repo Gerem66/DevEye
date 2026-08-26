@@ -6,6 +6,7 @@ import { DialogCancelButton } from '@/Components/Dialog';
 import Popup, { ClosePopup } from '@/Components/Popup';
 import TextInput from '@/Components/TextInput';
 import { MAIL_SYNC_INTERVAL_DEFAULT_MINUTES } from '@deveye/types';
+import { useActiveWorkspace } from '@/stores/workspace';
 import { humanizeError, ws } from './api';
 import styles from './style.module.css';
 
@@ -54,6 +55,7 @@ export function AccountPopup() {
     const [syncIntervalMinutes, setSyncIntervalMinutes] = useState(MAIL_SYNC_INTERVAL_DEFAULT_MINUTES);
     const [accountId, setAccountId] = useState<number | null>(null);
     const [draft, setDraft] = useState<MailAccountDraft>(DEFAULT_DRAFT);
+    const workspace = useActiveWorkspace();
     const [proxyEnabled, setProxyEnabled] = useState(false);
     /** The account already had a proxy when the form opened (details unknown to us). */
     const [proxyPreconfigured, setProxyPreconfigured] = useState(false);
@@ -309,8 +311,10 @@ export function AccountPopup() {
                 {/* Le palier ne se choisit qu'à la création : il détermine sous
                     quelle clé la boîte naît. Ensuite, il se change dans l'onglet
                     Chiffrement de ses réglages, comme pour les autres features :
-                    deux surfaces pour le même champ finissaient par s'écraser. */}
-                {mode === 'add' && (
+                    deux surfaces pour le même champ finissaient par s'écraser.
+                    Et seulement dans l'espace personnel : un espace partagé n'a
+                    qu'une clé, lisible par tout membre, donc un seul palier. */}
+                {mode === 'add' && workspace?.kind === 'personal' && (
                     <div className={styles.tierChoice}>
                         {(['open', 'guarded'] as MailSecurityTier[]).map((tier) => (
                             <label key={tier} className={styles.tierOption}>

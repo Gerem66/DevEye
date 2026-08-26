@@ -242,15 +242,15 @@ par tout membre ayant `notes: read`. **Le bouton est donc refusé côté serveur
 (`assertPrivateAllowed`) : une note privée n'existe que dans l'espace personnel.
 Garder le drapeau comme simple ACL aurait contredit le modèle documenté.
 
-### Mail — incohérence connue, non corrigée
+### Mail — un seul palier en espace partagé
 
-`mail_accounts.security_tier = 'guarded'` n'a plus de sens dans un espace
-partagé : les deux étages y utilisent la WDK, donc le palier ne protège plus
-rien. Le plan prévoyait de le forcer à `'open'` ; **ce n'a jamais été
-implémenté** — `mail.accountAdd` / `accountEdit` acceptent encore `guarded`.
-
-Sans conséquence (le palier est simplement inopérant). Vérifié le 6 août 2026 :
-aucune garde ne l'interdit.
+`mail_accounts.security_tier = 'guarded'` n'a pas de sens dans un espace
+partagé : les deux étages y utilisent la WDK, le palier annoncerait une
+protection qu'il ne donne pas. Depuis le 26 août 2026 le serveur le refuse
+(`assertTierAllowed`, même règle que les notes privées et les projets
+confidentiels), le client ne propose que « ouvert » hors espace personnel, et
+la migration `097` a ramené à `'open'` les comptes qui l'auraient porté (sans
+rien re-chiffrer : sous la WDK, les deux paliers lisent le même octet).
 
 ---
 
@@ -441,11 +441,16 @@ DB_DATABASE=DevEye_migtest LISTEN_PORT=3099 npx tsx index.ts   # ×2
 - [ ] Rejouer les migrations en attente sur une copie du dump de production
       avant livraison ; au 21 août 2026 : **086 à 094** (091–093 réécrivent
       des données, routes de notification et JSON des rôles).
-- [ ] **Trois migrations mail (043–045) existent en base mais leurs fichiers
-      manquent du dépôt.** Antérieur à ce chantier, mais une installation neuve
-      divergerait.
-- [ ] Interdire `security_tier: 'guarded'` sur un compte mail d'espace partagé
-      (cf. §5) — prévu au plan, jamais fait.
+- [x] ~~Trois migrations mail sans fichier~~ Réglé le 26 août 2026 : une base
+      neuve migrée depuis le dépôt a été comparée colonne à colonne à la base
+      historique. Quatre noms fantômes (`041_mail_settings_extra`,
+      `042_mail_sync_interval`, `043_mail_folder_backfill`,
+      `044_mail_account_sync_interval`), trois écarts réels
+      (`mail_folders.first_seen_uid` INT contre BIGINT,
+      `mail_settings.default_send_account_id` et `workspace_roles.permissions`
+      jamais lus) : la migration `097` fait converger l'historique.
+- [x] ~~Interdire `guarded` sur un compte mail d'espace partagé~~ Fait le
+      26 août 2026 (cf. §5).
 - [ ] Sept comptes de test (`sectest_*`, `rep_*`) traînent en base, chacun avec
       son espace personnel. Sans gravité, candidats au ménage.
 

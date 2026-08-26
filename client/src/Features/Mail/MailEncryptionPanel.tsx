@@ -3,6 +3,7 @@ import type { MailAccount, MailSecurityTier } from '@deveye/types';
 
 import Button from '@/Components/Button';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
+import { useActiveWorkspace } from '@/stores/workspace';
 
 import { humanizeError, withSecrecy, ws } from './api';
 import styles from './style.module.css';
@@ -22,6 +23,7 @@ import styles from './style.module.css';
  */
 export default function MailEncryptionPanel({ accountId }: { accountId: number }) {
     const version = useResourceVersion('mail.accountList');
+    const workspace = useActiveWorkspace();
     const [account, setAccount] = useState<MailAccount | null>(null);
     const [tier, setTier] = useState<MailSecurityTier>('open');
     const [busy, setBusy] = useState(false);
@@ -39,6 +41,14 @@ export default function MailEncryptionPanel({ accountId }: { accountId: number }
     }, [accountId, version]);
 
     if (!account) return <p className={styles.status}>{status ?? 'Chargement…'}</p>;
+    if (workspace?.kind !== 'personal') {
+        return (
+            <p className={styles.status}>
+                Dans un espace partagé, la boîte vit sous la clé de l’espace, lisible par tout membre : il n’y a qu’un
+                palier, ouvert.
+            </p>
+        );
+    }
 
     const changed = tier !== account.securityTier;
 

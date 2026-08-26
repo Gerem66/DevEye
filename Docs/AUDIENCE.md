@@ -523,26 +523,30 @@ détection des user-agents (Edge avant Chrome, Chrome avant Safari, Android avan
 Linux, tablette Android sans « Mobile ») ; l'alignement des cinq fenêtres sur
 leur propre pas ; et les moyennes sur zéro session.
 
-### Ce qui n'a pas pu être vérifié, et il faut le faire
+### Vérifié le 26 août 2026, sur une base
 
-**Aucune base MySQL n'était joignable** sur la machine de développement au moment
-du chantier (ni serveur local, ni conteneur, ni dump dans `Backups/`). N'ont donc
-**jamais tourné** :
+Aucune base n'était joignable pendant le chantier ; tout ce qui suit a été
+exécuté ensuite, sur une base neuve migrée depuis le dépôt et sur la base de
+dev qui porte déjà des données réelles.
 
-- [ ] **les migrations `076`, `077` et `078`** — à rejouer deux fois sur une copie du
-      dump de production avant livraison, en vérifiant des invariants de
-      **données** et non seulement le succès du DDL. Elles tournent au démarrage,
-      hors transaction, et ne sont jamais rejouées ;
-- [ ] **toutes les requêtes SQL** de `db/repos/audience.ts` et
-      `db/repos/audienceIngest.ts` — écrites avec soin, jamais exécutées. À
-      essayer en premier : `activity()` (arithmétique de fuseau et `MOD`),
-      `points()` (alignement des seaux), `pruneOrphanLabels()` (le `NOT IN`) et
-      l'upsert `resolveLabel` ;
-- [ ] **le chemin de bout en bout** : balise → `/api/t/b` → file → lot → écran.
-      Les deux extrémités sont vérifiées séparément (routes ci-dessus, logique
-      pure ci-dessus) ; c'est le milieu — la file, le lot, les caches — qu'aucune
-      exécution n'a traversé ;
-- [ ] **l'interface**, qu'aucun navigateur n'a affichée.
+- [x] **les migrations `076`, `077` et `078`** : jouées de zéro sur la base
+      neuve, puis rejouées telles quelles une seconde fois sans erreur (elles
+      sont idempotentes), et déjà passées sur la copie du dump.
+- [x] **toutes les requêtes SQL** des trois dépôts (`audience.ts`,
+      `audienceIngest.ts`, `audienceFunnels.ts`) : les 72 méthodes exercées sur
+      un jeu synthétique avec des invariants de données (`activity` rend le bon
+      jour et la bonne heure locale pour `tz_offset = -120`, `points` aligne ses
+      seaux sur l'origine et retrouve toutes les vues, `returningVisitors` voit
+      la visite de la veille, `retention` rend `[2, 1, 0]` avec une marche
+      inconnue, `rollupDay` rejoué écrase sans doubler, `pruneOrphanLabels` ne
+      retire que le libellé orphelin, `remove` ne laisse aucune ligne).
+- [x] **le chemin de bout en bout** : serveur monté sur la base de dev,
+      `/t.js` servi, un lot sur `/api/t/b` et un événement isolé sur `/api/t/e`
+      acceptés (204), trois événements en base après le vidage de la file,
+      `last_event_at` touché, deux sessions ouvertes (persistante et anonyme).
+- [x] **l'interface** : le smoke de la feature (marché d'ajout, tuile, vue
+      complète, allers-retours `audience.count` et `audience.list`, zéro
+      exception JS).
 
 ### Points d'attention à l'essai manuel
 
