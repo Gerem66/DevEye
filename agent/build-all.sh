@@ -2,7 +2,7 @@
 #
 # Build the DevEye agent for the full 8-target matrix in one go, into agent/dist/.
 # Lets you smoke-test locally before tagging a release. The CI builds the same set
-# natively per OS — see ../.github/workflows/release.yml. The matrix mirrors the
+# natively per OS — see ../.github/workflows/agent-build.yml. The matrix mirrors the
 # web UI ("Télécharger l'agent") and @deveye/types `AGENT_TARGETS`; keep all three
 # in sync.
 #

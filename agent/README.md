@@ -39,7 +39,7 @@ Two ways to produce them:
 
 - **CI** — built natively on each OS on every push to `main` that touches the
   agent, and published (with a `manifest.json`) to the rolling **`agent-latest`**
-  prerelease. See `.github/workflows/release.yml` in the `DevEye` repo. No local setup.
+  prerelease. See `.github/workflows/agent-build.yml` in the `DevEye` repo. No local setup.
 - **Locally** — `./build-all.sh` cross-compiles the matrix into `dist/` (handy to
   smoke-test). It needs `rustup` + `zig` + `cargo-zigbuild` (Homebrew Rust can't
   cross-compile); the script preflights and prints the exact install commands if
@@ -68,7 +68,7 @@ Two workflows:
 | Workflow      | Trigger                                                | Does                                                                                  |
 | ------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------- |
 | `ci.yml`      | every push / PR                                        | server + client + agent: lint, typecheck, build                                       |
-| `release.yml` | push to `main` touching `agent/**` (or a version bump) | build the 8-target matrix natively → rolling `agent-latest` release + `manifest.json` |
+| `agent-build.yml` | push to `main` touching `agent/**` (or a version bump) | build the 8-target matrix natively → rolling `agent-latest` release + `manifest.json` |
 
 So every push is checked (the agent on Linux); the full matrix is rebuilt and
 published whenever the agent (or the DevEye version) changes.

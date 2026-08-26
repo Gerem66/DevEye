@@ -124,7 +124,7 @@ jobs:
         run: npm run ci:smoke
 
   # Agent: format + clippy + build on Linux (the per-OS binaries ship via
-  # release.yml on tags).
+  # agent-build.yml on pushes to main).
   agent:
     name: agent
     runs-on: ubuntu-latest

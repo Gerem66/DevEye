@@ -19,7 +19,7 @@ on:
     paths:
       - 'agent/**'
       - 'package.json'
-      - '.github/workflows/release.yml'
+      - '.github/workflows/agent-build.yml'
   workflow_dispatch:
 
 concurrency:
@@ -74,7 +74,7 @@ jobs:
           echo "Changed files:"; echo "$changed"
 
           # Agent source or this workflow → always build.
-          if echo "$changed" | grep -qE '^agent/|^\.github/workflows/release\.yml$'; then
+          if echo "$changed" | grep -qE '^agent/|^\.github/workflows/agent-build\.yml$'; then
             decide true "agent/ or workflow changed"
           fi
 
