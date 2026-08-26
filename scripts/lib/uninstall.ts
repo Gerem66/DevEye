@@ -1,3 +1,4 @@
+import { tablePrefix } from './features-config';
 import { sqlTableTargets } from './sql-tables';
 
 /**
@@ -16,7 +17,7 @@ import { sqlTableTargets } from './sql-tables';
  * contrat, vide si tout est en règle.
  */
 export function forbiddenUninstallTargets(featureId: string, sql: string): string[] {
-    const prefix = `ft_${featureId.replace(/^x-/, '')}_`;
+    const prefix = tablePrefix(featureId);
     return [...new Set(sqlTableTargets(sql).filter((t) => !t.startsWith(prefix)))];
 }
 

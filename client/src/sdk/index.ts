@@ -7,11 +7,15 @@
  * typecheck autonome du repo d'un module, le template porte une déclaration du
  * même module basée sur `@deveye/types/sdk/client`.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ChangeEvent } from 'react';
 
 import { ws } from '@/api/ws';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import type { LiveSegmentKind } from '@/stores/live';
+
+export type { LiveSegmentKind };
+/** The change event of a text input, for handlers typed by hand. */
+export type InputChange = ChangeEvent<HTMLInputElement>;
 import type { FeatureManifest } from '@deveye/types/sdk';
 import type { z, ZodType } from 'zod';
 
@@ -25,14 +29,13 @@ export { default as Button } from '@/Components/Button';
 export { default as Checkbox } from '@/Components/Checkbox';
 export { ConfirmDialog } from '@/Components/ConfirmDialog';
 export type { ConfirmRequest } from '@/Components/ConfirmDialog';
-export { CountWidget, useWorkspaceCount } from '@/Components/CountWidget';
 export { default as SegmentedControl } from '@/Components/SegmentedControl';
 export { default as SelectInput } from '@/Components/SelectInput';
 export { StatusBadge } from '@/Components/StatusBadge';
 export { default as Switch } from '@/Components/Switch';
 export { default as TextInput } from '@/Components/TextInput';
 export { Dialog, useDialogClose, useDialogSubmit, useDismissLayer } from '@/Components/Dialog';
-export { FeatureSettingsButton, useSettingsSections } from '@/Components/FeatureSettings';
+export { FeatureSettingsButton } from '@/Components/FeatureSettings';
 export { DeviceFolderPicker } from '@/Components/DeviceFolderPicker';
 export { useDevices } from '@/stores/devices';
 /** Les classes de rangées canoniques des écrans de réglages (channelRow, etc.). */
@@ -42,13 +45,7 @@ export { default as settingsStyles } from '@/Components/FeatureSettings/FeatureS
 export { humanizeError, useResource } from '@/api/useResource';
 export { isSocketOpen, onServerEvent, onSocketOpen } from './events';
 export { formatBytesFr } from '@/format';
-export {
-    invalidate,
-    onResourceChange,
-    useResourceVersion,
-    type ExternalResourceKey,
-    type ResourceKey
-} from '@/stores/invalidation';
+export { invalidate, onResourceChange, useResourceVersion, type ExternalResourceKey } from '@/stores/invalidation';
 
 // ── Le live ────────────────────────────────────────────────────────────────
 export { useLiveSegment } from '@/live/useLiveSegment';

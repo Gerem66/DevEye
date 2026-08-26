@@ -17,12 +17,12 @@ première, et la preuve que le contrat suffit.
 
 ## Les trois étages
 
-1. **`@deveye/types/sdk`** (publié) : le contrat. Ids `x-<slug>`
-   (surensemble pur des enums natifs : rien d'existant n'a été migré),
-   `FeatureManifest` + `validateManifest`, le contexte serveur
-   (`SdkFeatureContext`, `FeatureStore`, façade), les contrats client
-   (`FeatureClient`), le harnais de test. **C'est la surface publique** :
-   elle se versionne, elle ne casse plus.
+1. **`@deveye/types/sdk`** (publié) : le contrat. Ids `x-<slug>` pour les
+   modules externes, l'id natif pour une native rapatriée, `FeatureManifest`
+   + `validateManifest`, le contexte serveur (`SdkFeatureContext`,
+   `FeatureStore`, façade), les contrats client (`FeatureClient`), les deux
+   harnais de test (`createTestContext`, `createTestServiceDeps`). **C'est la
+   surface publique** : elle se versionne, elle ne casse plus.
 2. **Le serveur** : `src/features/_sdk/` adapte. `register.ts` projette les
    définitions SDK en `FeatureDefinition` natives (accès de LA feature +
    extras en enveloppe), le dispatcheur ne sait pas qu'un module existe.
@@ -145,9 +145,10 @@ doc du template (REFERENCE + 04-storage-and-encryption).
 
 L'outillage de migration, à rejouer pour CHAQUE native :
 
-- **Tests de modules** : `npm test` couvre `features/*/src/**/*.test.ts`
-  (harnais `@deveye/types/sdk/testing`, voir `features/osint/src/server/handlers.test.ts`),
-  et le tsconfig racine inclut ces fichiers pour le typecheck.
+- **Tests de modules** : `npm run test:features` couvre
+  `features/*/src/**/*.test.ts` (harnais `@deveye/types/sdk/testing`, voir
+  `features/osint/src/server/handlers.test.ts`), et le tsconfig racine inclut
+  ces fichiers pour le typecheck.
 - **L'IDE** : `features/tsconfig.json` est le projet CLIENT des modules
   in-repo (extends celui du client : alias `deveye-sdk-client`, JSX) ; leur
   part serveur et leurs contrats sont inclus par le tsconfig RACINE. tsserver
@@ -196,16 +197,41 @@ config — le module doit rester résoluble).
   table du schéma public » ; les retirer vraiment demanderait un second
   temps, une migration du socle.
 
+## Ce que le contexte serveur expose, en une liste
+
+Par requête (`SdkFeatureContext`, construit dans `_sdk/context.ts`) : l'identité
+de l'appel (`userId`, `workspaceId`, `workspace`, `isOwner`, `canWrite`,
+`canExtra`/`extraValue` par `resolveExtras`, la même règle que le harnais),
+`repo`, `store` (KV chiffrable, `'server' | 'private' | 'none'`), `cipher(mode)`,
+`deveye` (façade gardée par `nativeCapabilities` : `notify`, `mail.accounts`,
+`members.read`, `devices.read`, `agents`), `transport` (socket appelant,
+`agents`), `audit`, `logger`, `requestId`. Une erreur se signale par
+`FeatureError(code, message)`.
+
+Par service (`FeatureServiceDeps`, `_sdk/service.ts`) : `repo`,
+`listWorkspaceIds` (tous les espaces), `storeFor`/`cipherFor`/`deveyeFor`/
+`devicesFor` (sessionless, étage ouvert seul ; `devicesFor` est la vraie façade,
+gardée par `devices.read`, avec l'état en ligne du hub), `audit` (source
+système), `agents`, `keys` (`sealBytes`/`openBytes` sous la clé serveur),
+`createTicker` (boucle avec garde de réentrance), `logger`. Les hooks agent
+d'un module qui échouent sont isolés et journalisés (`moduleAgentHooks`), deux
+modules offrant le même provider sont refusés au boot, et
+`validateGrantExtras` vérifie les extras d'un rôle contre les manifests.
+
+Pairs admis d'un module : `@deveye/types`, `react`, `zod`, `framer-motion`
+(déclarés en `peerDependencies`, résolus depuis l'app).
+
 ## Dettes connues
 
-- *(Pas une dette : la publication de @deveye/types 0.15.0 se fait à la main
-  par Gerem au moment de livrer en prod. En local, le miroir suffit — copie
-  dans `node_modules` ou package par chemin local ; la CI GitHub du template
-  passera après publication.)*
 - **Partage inter-espaces** : `shareTier` externe figé à `'never'`. Brancher
-  un module exigerait, dans l'ordre : une migration élargissant
-  `item_shares.feature` (VARCHAR(24), or un id externe monte à 27), un point
-  d'entrée « domicile d'un élément » côté serveur du module, une façade de
-  portée de partage dans le contexte (`foreignIds` pour le listage,
-  `cipherFor` par ligne), et l'élargissement des contrats `share.*` à
-  `featureIdSchema`. La migration impose son dry-run sur copie du dump.
+  un module exigerait, dans l'ordre : un point d'entrée « domicile d'un
+  élément » côté serveur du module, une façade de portée de partage dans le
+  contexte (`foreignIds` pour le listage, `cipherFor` par ligne), et
+  l'élargissement des contrats `share.*` à `featureIdSchema`. (La largeur des
+  colonnes `feature` n'est plus un obstacle : 32 partout depuis la 096.)
+- **Restrictions par élément** : `assertItem` / `itemRestrictions` existent au
+  dispatcheur (`ws/handler.ts`, `_access.ts`) mais ne sont pas exposés au
+  contexte SDK, et les contrats `share.grant*` sont typés natifs. Un module
+  `hasItems` avec `settings.item` ne peut donc pas honorer une restriction de
+  rôle. Même chantier que le partage, à traiter avec la première native à
+  éléments partagés (uptime).

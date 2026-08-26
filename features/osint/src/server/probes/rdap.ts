@@ -1,3 +1,4 @@
+// Privilège de native rapatriée : le garde SSRF est partagé par toute l'app, pas propre au module.
 import { fetchJson } from '@/Services/netFetch';
 import { daysUntil, field, formatDate, tag, type OsintProbeAdapter, type OsintTag } from './shared';
 

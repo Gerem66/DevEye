@@ -1,3 +1,4 @@
+// Privilège de native rapatriée : le garde SSRF est partagé par toute l'app, pas propre au module.
 import { BROWSER_UA, isSafePublicUrl, titleTag } from '@/Services/netFetch';
 import { field, tag, type OsintProbeAdapter, type OsintTag } from './shared';
 

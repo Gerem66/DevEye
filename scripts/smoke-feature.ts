@@ -140,8 +140,8 @@ function fail(step: string, detail: string): never {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Ce que la page affichait au moment d'un échec — rempli par `main` une fois
- *  la session CDP ouverte, pour que tout échec dise CE QUE l'écran montrait. */
+/** Ce que la page affichait au moment d'un échec : rempli par `openPage` une
+ *  fois la session CDP ouverte, pour que tout échec dise CE QUE l'écran montrait. */
 let dumpPageText: () => Promise<string> = () => Promise.resolve('');
 
 /** Attend qu'un prédicat (évalué en boucle) devienne vrai, sinon échoue en nommant l'étape. */
@@ -155,9 +155,35 @@ async function waitFor(step: string, timeoutMs: number, check: () => Promise<boo
     fail(step, `délai de ${timeoutMs} ms dépassé\n  écran: ${shown}`);
 }
 
-// ------------------------------------------------------------------ scénario
+// ------------------------------------------------------------------ la page pilotée
 
-async function main(): Promise<void> {
+/** L'onglet piloté : sa session CDP et les gestes qu'on y fait, évalués dans la page. */
+interface Page {
+    cdp: Cdp;
+    sessionId: string;
+    /** Évalue une expression dans la page et rend sa valeur (JSON-compatible). */
+    evaluate<T>(expression: string): Promise<T>;
+    /** Un élément (bouton de préférence) portant exactement ce texte, cliqué. */
+    clickByText(text: string): Promise<boolean>;
+    /** Renseigne un input contrôlé par React (setter natif + événement input). */
+    setInput(selector: string, value: string): Promise<boolean>;
+    exists(selector: string): Promise<boolean>;
+    /** Une touche pressée puis relâchée. */
+    press(key: string): Promise<void>;
+}
+
+/** Ce que le scénario relève pendant qu'il se joue, pour le verdict. */
+interface Watch {
+    exceptions: string[];
+    consoleErrors: string[];
+    /** Allers-retours ACCOMPLIS (réponse ok) des commandes du module. */
+    roundTrips: string[];
+    /** Refus LOCAUX « Unknown command » : le bug historique, que seule la console trahit. */
+    refusedLocally: number;
+}
+
+/** Lance Chromium sur un profil temporaire ; rend l'URL DevTools et de quoi tout nettoyer. */
+async function launchBrowser(): Promise<{ wsUrl: string; cleanup: () => void }> {
     const profile = mkdtempSync(path.join(tmpdir(), 'deveye-smoke-'));
     const args = [
         ...(HEADED ? [] : ['--headless=new']),
@@ -194,7 +220,11 @@ async function main(): Promise<void> {
         });
         browser.on('exit', () => reject(new Error(`Chromium s'est arrêté (binaire: ${BROWSER})`)));
     }).catch((e: Error) => fail('lancement du navigateur', e.message));
+    return { wsUrl, cleanup };
+}
 
+/** Ouvre un onglet, active les domaines CDP utiles et rend les gestes de page. */
+async function openPage(wsUrl: string): Promise<Page> {
     const cdp = await Cdp.connect(wsUrl);
     const { targetId } = await cdp.send<{ targetId: string }>('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await cdp.send<{ sessionId: string }>('Target.attachToTarget', { targetId, flatten: true });
@@ -203,29 +233,69 @@ async function main(): Promise<void> {
     await cdp.send('Runtime.enable', {}, sessionId);
     await cdp.send('Network.enable', {}, sessionId);
 
-    // --- collecte : exceptions, console.error, et trames WS de l'app ---------
-    const exceptions: string[] = [];
-    const consoleErrors: string[] = [];
+    const evaluate = async <T>(expression: string): Promise<T> => {
+        const res = await cdp.send<{ result: { value: T } }>(
+            'Runtime.evaluate',
+            { expression, returnByValue: true },
+            sessionId
+        );
+        return res.result.value;
+    };
+    dumpPageText = () => evaluate<string>(`document.body ? document.body.innerText : '(pas de body)'`);
+
+    return {
+        cdp,
+        sessionId,
+        evaluate,
+        clickByText: (text) =>
+            evaluate<boolean>(`(() => {
+            const norm = (s) => (s ?? '').replace(/\\s+/g, ' ').trim();
+            const all = [...document.querySelectorAll('button, [role="button"], a, span, h3, div')];
+            const hit = all.filter((el) => norm(el.textContent) === ${JSON.stringify(text)})
+                .sort((a, b) => norm(a.textContent).length - norm(b.textContent).length)[0];
+            if (!hit) return false;
+            (hit.closest('button, [role="button"], a') ?? hit).click();
+            return true;
+        })()`),
+        setInput: (selector, value) =>
+            evaluate<boolean>(`(() => {
+            const el = document.querySelector(${JSON.stringify(selector)});
+            if (!el) return false;
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            setter.call(el, ${JSON.stringify(value)});
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            return true;
+        })()`),
+        exists: (selector) => evaluate<boolean>(`document.querySelector(${JSON.stringify(selector)}) !== null`),
+        press: async (key) => {
+            await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code: key }, sessionId);
+            await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code: key }, sessionId);
+        }
+    };
+}
+
+/** Collecte exceptions, console.error et trames WS de l'app, pour le verdict. */
+function watchPage(page: Page): Watch {
+    const watch: Watch = { exceptions: [], consoleErrors: [], roundTrips: [], refusedLocally: 0 };
     /** requestId -> commande, pour les trames sorties portant le préfixe du module. */
     const sentByRequest = new Map<string, string>();
-    /** Allers-retours ACCOMPLIS (réponse ok) des commandes du module. */
-    const roundTrips: string[] = [];
-    let refusedLocally = 0;
 
-    cdp.on((e) => {
-        if (e.sessionId !== sessionId) return;
+    page.cdp.on((e) => {
+        if (e.sessionId !== page.sessionId) return;
         if (e.method === 'Runtime.exceptionThrown') {
             const d = e.params as { exceptionDetails?: { text?: string; exception?: { description?: string } } };
-            exceptions.push(d.exceptionDetails?.exception?.description ?? d.exceptionDetails?.text ?? 'exception');
+            watch.exceptions.push(
+                d.exceptionDetails?.exception?.description ?? d.exceptionDetails?.text ?? 'exception'
+            );
         }
         if (e.method === 'Runtime.consoleAPICalled') {
             const d = e.params as { type?: string; args?: { value?: unknown; description?: string }[] };
             if (d.type === 'error') {
                 const text = (d.args ?? []).map((a) => a.value ?? a.description ?? '').join(' ');
-                consoleErrors.push(text);
+                watch.consoleErrors.push(text);
                 // Le bug historique : refus LOCAL avant la socket. Il ne produit
                 // aucune trame, donc seule la console le trahit.
-                if (text.includes('Unknown command')) refusedLocally++;
+                if (text.includes('Unknown command')) watch.refusedLocally++;
             }
         }
         if (e.method === 'Network.webSocketFrameSent') {
@@ -247,106 +317,78 @@ async function main(): Promise<void> {
                     payload?: { ok?: boolean };
                 };
                 const command = frame.requestId ? sentByRequest.get(frame.requestId) : undefined;
-                if (command && frame.payload?.ok === true) roundTrips.push(command);
+                if (command && frame.payload?.ok === true) watch.roundTrips.push(command);
             } catch {
                 /* idem */
             }
         }
     });
+    return watch;
+}
 
-    /** Évalue une expression dans la page et rend sa valeur (JSON-compatible). */
-    const evaluate = async <T>(expression: string): Promise<T> => {
-        const res = await cdp.send<{ result: { value: T } }>(
-            'Runtime.evaluate',
-            { expression, returnByValue: true },
-            sessionId
-        );
-        return res.result.value;
-    };
+// ------------------------------------------------------------------ scénario
 
-    /** Un élément (bouton de préférence) portant exactement ce texte, cliqué. */
-    const clickByText = (text: string): Promise<boolean> =>
-        evaluate<boolean>(`(() => {
-            const norm = (s) => (s ?? '').replace(/\\s+/g, ' ').trim();
-            const all = [...document.querySelectorAll('button, [role="button"], a, span, h3, div')];
-            const hit = all.filter((el) => norm(el.textContent) === ${JSON.stringify(text)})
-                .sort((a, b) => norm(a.textContent).length - norm(b.textContent).length)[0];
-            if (!hit) return false;
-            (hit.closest('button, [role="button"], a') ?? hit).click();
-            return true;
-        })()`);
-
-    /** Renseigne un input contrôlé par React (setter natif + événement input). */
-    const setInput = (selector: string, value: string): Promise<boolean> =>
-        evaluate<boolean>(`(() => {
-            const el = document.querySelector(${JSON.stringify(selector)});
-            if (!el) return false;
-            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-            setter.call(el, ${JSON.stringify(value)});
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            return true;
-        })()`);
-
-    const exists = (selector: string): Promise<boolean> =>
-        evaluate<boolean>(`document.querySelector(${JSON.stringify(selector)}) !== null`);
-
-    dumpPageText = () => evaluate<string>(`document.body ? document.body.innerText : '(pas de body)'`);
-
-    // --- 1. chargement et connexion ------------------------------------------
-    console.log(`Smoke « ${FEATURE} » (${LABEL}) sur ${BASE_URL}`);
-    await cdp.send('Page.navigate', { url: BASE_URL }, sessionId);
+/** 1. L'app se charge et la connexion (compte seedé) aboutit. */
+async function login(page: Page): Promise<void> {
+    await page.cdp.send('Page.navigate', { url: BASE_URL }, page.sessionId);
 
     await waitFor('page de connexion (le serveur tourne-t-il ?)', 15_000, () =>
-        evaluate<boolean>(
+        page.evaluate<boolean>(
             `document.querySelector('input[placeholder*="utilisateur"]') !== null` +
                 ` || document.querySelector('[class*="profileBtn"]') !== null`
         )
     );
 
-    if (!(await exists('[class*="profileBtn"]'))) {
+    if (!(await page.exists('[class*="profileBtn"]'))) {
         // Re-remplir les DEUX champs à CHAQUE tentative : un échec de connexion
         // vide le mot de passe côté client, donc un simple re-clic soumettrait
         // du vide. Et le budget par tentative est large : la vérification du
         // mot de passe passe par argon2 (lent à dessein), et le premier login
         // après le seed, sur un runner froid et chargé, peut dépasser 10 s.
         for (let attempt = 1; ; attempt++) {
-            if (!(await setInput('input[placeholder*="utilisateur"]', USERNAME))) {
+            if (!(await page.setInput('input[placeholder*="utilisateur"]', USERNAME))) {
                 fail('connexion', 'champ « Nom d’utilisateur » introuvable');
             }
-            await setInput('input[type="password"]', PASSWORD);
-            await evaluate(`document.querySelector('button.submit')?.click()`);
+            await page.setInput('input[type="password"]', PASSWORD);
+            await page.evaluate(`document.querySelector('button.submit')?.click()`);
             const deadline = Date.now() + 25_000;
-            while (Date.now() < deadline && !(await exists('[class*="profileBtn"]'))) await sleep(300);
-            if (await exists('[class*="profileBtn"]')) break;
+            while (Date.now() < deadline && !(await page.exists('[class*="profileBtn"]'))) await sleep(300);
+            if (await page.exists('[class*="profileBtn"]')) break;
             if (attempt >= 3) {
-                await waitFor('connexion (identifiants seedés valides ?)', 1, () => exists('[class*="profileBtn"]'));
+                await waitFor('connexion (identifiants seedés valides ?)', 1, () =>
+                    page.exists('[class*="profileBtn"]')
+                );
             }
             await sleep(3_000);
         }
     }
     console.log('  ✓ connecté');
+}
 
-    // --- 2. la feature est dans le marché d'ajout ----------------------------
-    await evaluate(`document.querySelector('[class*="profileBtn"]')?.click()`);
-    await waitFor('menu du profil', 5_000, () => clickByText('Organiser l’accueil'));
+/** 2. La feature est dans le marché d'ajout (mode organisation, bouton d'ajout d'une section). */
+async function checkCatalogue(page: Page): Promise<void> {
+    await page.evaluate(`document.querySelector('[class*="profileBtn"]')?.click()`);
+    await waitFor('menu du profil', 5_000, () => page.clickByText('Organiser l’accueil'));
     // Un accueil vierge (compte fraîchement seedé) n'a pas encore de section :
     // le bouton d'ajout de fonctionnalité n'existe que dans une section.
     await waitFor("mode organisation (bouton d'ajout)", 8_000, async () => {
-        if (await clickByText('Ajouter une fonctionnalité')) return true;
-        await clickByText('Ajouter une section');
+        if (await page.clickByText('Ajouter une fonctionnalité')) return true;
+        await page.clickByText('Ajouter une section');
         return false;
     });
 
     await waitFor(`« ${LABEL} » dans le marché d'ajout — la feature est-elle au catalogue ?`, 5_000, () =>
-        evaluate<boolean>(`(() => {
+        page.evaluate<boolean>(`(() => {
             const norm = (s) => (s ?? '').replace(/\\s+/g, ' ').trim();
             return [...document.querySelectorAll('button')].some((b) => norm(b.textContent).includes(${JSON.stringify(LABEL)}));
         })()`)
     );
     console.log('  ✓ au marché d’ajout');
+}
 
-    // Pose la tuile si elle ne l'est pas déjà (bouton désactivé = déjà posée).
-    const placedNow = await evaluate<string>(`(() => {
+/** Pose la tuile si elle ne l'est pas déjà (bouton désactivé = déjà posée), puis quitte le mode. */
+async function placeTile(page: Page): Promise<void> {
+    const placedNow = await page.evaluate<string>(`(() => {
         const norm = (s) => (s ?? '').replace(/\\s+/g, ' ').trim();
         const btn = [...document.querySelectorAll('button')].find((b) => norm(b.textContent).includes(${JSON.stringify(LABEL)}));
         if (!btn) return 'introuvable';
@@ -355,43 +397,63 @@ async function main(): Promise<void> {
         return 'posée';
     })()`);
     // Referme le marché s'il est resté ouvert (Échap), puis quitte le mode.
-    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' }, sessionId);
-    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' }, sessionId);
+    await page.press('Escape');
     await sleep(300);
-    await clickByText('Terminer');
+    await page.clickByText('Terminer');
     console.log(`  ✓ tuile ${placedNow}`);
+}
 
-    // --- 3. une commande du module part ET répond ----------------------------
+/** 3. Une commande du module part sur le fil ET reçoit une réponse ok. */
+async function awaitFirstRoundTrip(watch: Watch): Promise<void> {
     await waitFor(
         `un aller-retour « ${PREFIX}* » sur le fil — les commandes du module sont-elles enregistrées côté client ?`,
         20_000,
-        async () => roundTrips.length > 0
+        async () => watch.roundTrips.length > 0
     );
-    console.log(`  ✓ premier aller-retour: ${roundTrips[0]}`);
+    console.log(`  ✓ premier aller-retour: ${watch.roundTrips[0]}`);
+}
 
-    // --- 4. la vue complète s'ouvre et recharge ------------------------------
-    const before = roundTrips.length;
-    await waitFor(`la tuile « ${LABEL} » sur la grille`, 10_000, () => clickByText(LABEL));
+/** 4. La vue complète s'ouvre et déclenche un nouvel aller-retour. */
+async function openFullView(page: Page, watch: Watch): Promise<void> {
+    const before = watch.roundTrips.length;
+    await waitFor(`la tuile « ${LABEL} » sur la grille`, 10_000, () => page.clickByText(LABEL));
     await waitFor(
         `un aller-retour « ${PREFIX}* » depuis la vue complète`,
         20_000,
-        async () => roundTrips.length > before
+        async () => watch.roundTrips.length > before
     );
-    console.log(`  ✓ vue complète: ${roundTrips.slice(before).join(', ')}`);
+    console.log(`  ✓ vue complète: ${watch.roundTrips.slice(before).join(', ')}`);
+}
 
-    // --- verdict --------------------------------------------------------------
-    if (refusedLocally > 0) {
-        fail('registre des commandes', `${refusedLocally} refus local(aux) « Unknown command » en console`);
+/** Le verdict : un refus local ou une exception JS est un échec, un console.error un avertissement. */
+function verdict(watch: Watch): void {
+    if (watch.refusedLocally > 0) {
+        fail('registre des commandes', `${watch.refusedLocally} refus local(aux) « Unknown command » en console`);
     }
-    if (exceptions.length > 0) {
-        fail('exceptions JS', exceptions.slice(0, 5).join('\n  '));
+    if (watch.exceptions.length > 0) {
+        fail('exceptions JS', watch.exceptions.slice(0, 5).join('\n  '));
     }
-    if (consoleErrors.length > 0) {
-        console.warn(`  ⚠ ${consoleErrors.length} console.error (non bloquant):`);
-        for (const line of consoleErrors.slice(0, 5)) console.warn(`    ${line.slice(0, 160)}`);
+    if (watch.consoleErrors.length > 0) {
+        console.warn(`  ⚠ ${watch.consoleErrors.length} console.error (non bloquant):`);
+        for (const line of watch.consoleErrors.slice(0, 5)) console.warn(`    ${line.slice(0, 160)}`);
     }
-    console.log(`\n✓ SMOKE OK — ${roundTrips.length} aller(s)-retour(s) ${PREFIX}*, 0 exception.`);
-    cdp.close();
+    console.log(`\n✓ SMOKE OK — ${watch.roundTrips.length} aller(s)-retour(s) ${PREFIX}*, 0 exception.`);
+}
+
+async function main(): Promise<void> {
+    const { wsUrl, cleanup } = await launchBrowser();
+    const page = await openPage(wsUrl);
+    const watch = watchPage(page);
+
+    console.log(`Smoke « ${FEATURE} » (${LABEL}) sur ${BASE_URL}`);
+    await login(page);
+    await checkCatalogue(page);
+    await placeTile(page);
+    await awaitFirstRoundTrip(watch);
+    await openFullView(page, watch);
+    verdict(watch);
+
+    page.cdp.close();
     cleanup();
     process.exit(0);
 }

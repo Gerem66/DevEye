@@ -33,7 +33,7 @@
     "features/*/src/contracts",
     "features/*/src/manifest.ts",
     "features/*/src/index.ts",
-    "scripts/lib/*.test.ts"
+    "scripts/**/*.ts"
   ],
   "exclude": ["node_modules", "dist"]
 }

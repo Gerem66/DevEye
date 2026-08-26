@@ -109,6 +109,14 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     liveHereFeature
 ];
 
+// Une commande n'a qu'un handler : un module à id natif qui redéclarerait une
+// commande encore native l'écraserait en silence dans la carte ci-dessous.
+for (const [i, f] of featureHandlers.entries()) {
+    if (featureHandlers.findIndex((g) => g.command === f.command) !== i) {
+        throw new Error(`Commande « ${f.command} » déclarée deux fois (module et native ?)`);
+    }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const featureHandlerMap: Record<string, FeatureDefinition<string, any, any>> = Object.fromEntries(
     featureHandlers.map((f) => [f.command, f])

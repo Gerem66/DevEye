@@ -1,8 +1,15 @@
-import type { FeatureService, FeatureServiceDeps, SdkCipher, SdkServerKeys } from '@deveye/types/sdk/server';
+import type {
+    DevEyeFacade,
+    FeatureService,
+    FeatureServiceDeps,
+    SdkCipher,
+    SdkServerKeys
+} from '@deveye/types/sdk/server';
 import type { FeatureManifest } from '@deveye/types/sdk';
 
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
+import { FeatureError } from '@deveye/types/sdk/server';
 import { createOpenCipher } from '@/Services/SecureStore';
 import type { Logger } from 'pino';
 import type { AuditLog } from '@/Services/AuditLog';
@@ -46,10 +53,32 @@ export function createServiceDeps(
         return cipher;
     };
 
+    // La façade sessionless d'un espace : notify et devices, gardés par les
+    // capacités du manifest comme dans une requête. Sans session, le
+    // propriétaire n'entre pas en jeu (members n'est pas exposé ici).
+    const facades = new Map<number, DevEyeFacade>();
+    const facadeFor = (workspaceId: number): DevEyeFacade => {
+        const hit = facades.get(workspaceId);
+        if (hit) return hit;
+        const facade = createFacade({
+            db: host.db,
+            cipher: cipherFor(workspaceId),
+            workspaceId,
+            isAdmin: false,
+            ownerUserId: 0,
+            manifest,
+            logger: host.logger
+        });
+        facades.set(workspaceId, facade);
+        return facade;
+    };
+
+    // La même faute, la même erreur qu'en requête (`facade.ts`) : typée, et
+    // nommant la capacité manquante.
     const capabilities = new Set(manifest.nativeCapabilities ?? []);
     const gateAgents = (): void => {
         if (!capabilities.has('agents')) {
-            throw new Error(`Module « ${manifest.id} » : declare 'agents' in nativeCapabilities`);
+            throw new FeatureError('forbidden', `Module « ${manifest.id} » : declare 'agents' in nativeCapabilities`);
         }
     };
     const keys: SdkServerKeys = {
@@ -72,27 +101,11 @@ export function createServiceDeps(
                 guarded: null
             }),
         cipherFor,
-        deveyeFor: (workspaceId) => {
-            const facade = createFacade({
-                db: host.db,
-                cipher: cipherFor(workspaceId),
-                workspaceId,
-                isAdmin: false,
-                // Sans session, le propriétaire n'entre pas en jeu : la façade
-                // sessionless n'expose que notify, qui ne lit pas les membres.
-                ownerUserId: 0,
-                manifest,
-                logger: host.logger
-            });
-            return { notify: facade.notify };
+        deveyeFor: (workspaceId) => ({ notify: facadeFor(workspaceId).notify }),
+        devicesFor: (workspaceId) => {
+            const { list, isOnline } = facadeFor(workspaceId).devices;
+            return { list, isOnline };
         },
-        devicesFor: (workspaceId) => ({
-            list: async () => {
-                const rows = await host.db.devices.listByWorkspace(workspaceId);
-                return rows.map((r) => ({ id: r.id, name: r.name, online: false }));
-            },
-            isOnline: () => false
-        }),
         audit: (entry) => {
             host.audit.record({
                 action: entry.action,

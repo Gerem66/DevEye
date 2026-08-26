@@ -1,6 +1,6 @@
 import type { SdkFeatureContext, SdkSocketTransport } from '@deveye/types/sdk/server';
 import { FeatureError } from '@deveye/types/sdk/server';
-import type { ExtraPermissionSpec, FeatureManifest } from '@deveye/types/sdk';
+import { resolveExtras, type FeatureManifest } from '@deveye/types/sdk';
 
 import type { FeatureContext } from '@/features/_define';
 import { createFacade } from './facade';
@@ -15,31 +15,13 @@ import { createFeatureStore } from './store';
  * construisent par requête, liés à l'espace de l'enveloppe.
  */
 export function createSdkContext(ctx: FeatureContext, manifest: FeatureManifest, repo: unknown): SdkFeatureContext {
-    const specs = new Map<string, ExtraPermissionSpec>((manifest.extraPermissions ?? []).map((s) => [s.key, s]));
-    const granted = ctx.extrasFor(manifest.id);
-
-    const canExtra = (key: string): boolean => {
-        const spec = specs.get(key);
-        if (!spec || spec.type !== 'toggle') return false;
-        if (ctx.isOwner) return true;
-        return granted[key] === true;
-    };
-    const extraValue = (key: string): string => {
-        const spec = specs.get(key);
-        if (!spec || spec.type !== 'choice') return '';
-        if (ctx.isOwner) return spec.ownerValue;
-        const value = granted[key];
-        return typeof value === 'string' && spec.options.some((o) => o.value === value) ? value : spec.default;
-    };
-
     return {
         userId: ctx.userId,
         workspaceId: ctx.workspaceId,
         workspace: { id: ctx.workspace.id, kind: ctx.workspace.kind, name: ctx.workspace.name },
         isOwner: ctx.isOwner,
         canWrite: ctx.canFeature(manifest.id, 'write'),
-        canExtra,
-        extraValue,
+        ...resolveExtras(manifest.extraPermissions, ctx.isOwner, ctx.extrasFor(manifest.id)),
         repo,
         store: createFeatureStore(ctx.db.featureKv, manifest.id, ctx.workspaceId, {
             open: ctx.secure.open,

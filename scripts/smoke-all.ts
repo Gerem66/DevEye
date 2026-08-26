@@ -25,9 +25,9 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
-import type { FeatureManifest } from '@deveye/types/sdk';
+import { importManifest, readFeatureConfig, type FeatureConfigEntry } from './lib/features-config';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.SMOKE_PORT ?? 3999);
@@ -38,28 +38,14 @@ const SMOKE_DIR = path.join(ROOT, '.smoke');
 const CLIENT_DIR = path.join(SMOKE_DIR, 'client');
 const TSX = path.join(ROOT, 'node_modules', '.bin', 'tsx');
 
-interface ConfigEntry {
-    package: string;
-    path?: string;
-}
-
 function fail(message: string): never {
     console.error(`\n✗ ci:smoke — ${message}`);
     process.exit(1);
 }
 
-function readConfig(file: string): ConfigEntry[] {
-    const full = path.join(ROOT, file);
-    if (!fs.existsSync(full)) return [];
-    return (JSON.parse(fs.readFileSync(full, 'utf8')) as { features?: ConfigEntry[] }).features ?? [];
-}
-
-/** L'identité d'un module installé (id + libellé), lue dans son manifest — même résolution que gen-features. */
-async function moduleIdentity(entry: ConfigEntry): Promise<{ id: string; label: string }> {
-    const entryFile = entry.path
-        ? pathToFileURL(path.join(path.resolve(ROOT, entry.path), 'src', 'index.ts')).href
-        : entry.package;
-    const { manifest } = (await import(entryFile)) as { manifest?: FeatureManifest };
+/** L'identité d'un module installé (id + libellé), lue dans son manifest : même résolution que gen-features. */
+async function moduleIdentity(entry: FeatureConfigEntry): Promise<{ id: string; label: string }> {
+    const manifest = await importManifest(ROOT, entry);
     if (!manifest) fail(`${entry.package}: l'entrée racine n'exporte pas « manifest »`);
     return { id: manifest.id, label: manifest.label };
 }
@@ -90,7 +76,10 @@ async function waitForServer(server: ChildProcess, logFile: string): Promise<voi
 }
 
 async function main(): Promise<void> {
-    const entries = [...readConfig('features.config.json'), ...readConfig('features.local.json')];
+    const entries = [
+        ...readFeatureConfig(ROOT, 'features.config.json'),
+        ...readFeatureConfig(ROOT, 'features.local.json')
+    ];
     const modules = [];
     for (const entry of entries) modules.push(await moduleIdentity(entry));
     if (modules.length === 0) fail('aucun module installé à sonder');

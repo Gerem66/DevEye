@@ -1,4 +1,5 @@
 import type { ZodType } from 'zod';
+import { ZodError } from 'zod';
 import type { FeatureStore, SdkCipher, StorageEncryption } from '@deveye/types/sdk/server';
 import { FeatureError } from '@deveye/types/sdk/server';
 
@@ -41,14 +42,29 @@ export function createFeatureStore(
         return cipher ? cipher.decrypt(row.value) : row.value;
     };
 
+    // Une valeur hors schéma à l'écriture est une faute de l'appelant ; à la
+    // lecture, c'est une ligne que le schéma ne décrit plus : deux erreurs
+    // typées, jamais un ZodError brut que le dispatcheur rendrait opaque.
+    const parseOr = <T>(schema: ZodType<T>, value: unknown, code: 'validation' | 'internal', key: string): T => {
+        try {
+            return schema.parse(value);
+        } catch (e) {
+            if (e instanceof ZodError)
+                throw new FeatureError(code, `store « ${key} » : ${e.issues[0]?.message ?? 'hors schéma'}`);
+            throw e;
+        }
+    };
+
     return {
         put: (key, value, opts) => write(key, value, opts?.encryption ?? 'server'),
-        putJson: <T>(key: string, schema: ZodType<T>, value: T, opts?: { encryption?: StorageEncryption }) =>
-            write(key, JSON.stringify(schema.parse(value)), opts?.encryption ?? 'server'),
+        // `async` pour qu'une valeur hors schéma REJETTE la promesse promise par
+        // le contrat, au lieu de lever avant même de la rendre.
+        putJson: async <T>(key: string, schema: ZodType<T>, value: T, opts?: { encryption?: StorageEncryption }) =>
+            write(key, JSON.stringify(parseOr(schema, value, 'validation', key)), opts?.encryption ?? 'server'),
         get: read,
         getJson: async <T>(key: string, schema: ZodType<T>): Promise<T | null> => {
             const raw = await read(key);
-            return raw === null ? null : schema.parse(JSON.parse(raw));
+            return raw === null ? null : parseOr(schema, JSON.parse(raw), 'internal', key);
         },
         remove: (key) => kv.remove(workspaceId, feature, key),
         keys: (prefix) => kv.keys(workspaceId, feature, prefix ?? '')

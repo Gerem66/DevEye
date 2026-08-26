@@ -1,6 +1,7 @@
 import { Resolver } from 'dns/promises';
 import { isIPv4 } from 'net';
 
+// Privilège de native rapatriée : le garde SSRF est partagé par toute l'app, pas propre au module.
 import { fetchJson, isPublicIp } from '@/Services/netFetch';
 import { field, mapLimit, tag, type OsintProbeAdapter, type OsintTag } from './shared';
 

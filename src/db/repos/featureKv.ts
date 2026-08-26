@@ -51,9 +51,10 @@ export function featureKvRepo(pool: Q): FeatureKvRepo {
             ]);
         },
         async keys(workspaceId, feature, prefix) {
+            // Le préfixe est un texte, pas un motif : `%` et `_` s'échappent.
             const r = await pool.query<{ k: string }>(
                 "SELECT k FROM feature_kv WHERE workspace_id = ? AND feature = ? AND k LIKE CONCAT(?, '%') ORDER BY k",
-                [workspaceId, feature, prefix]
+                [workspaceId, feature, prefix.replace(/[\\%_]/g, '\\$&')]
             );
             return r.rows.map((row) => row.k);
         }

@@ -1,5 +1,5 @@
-import { isExternalFeatureId, registerExternalFeature, type ExternalFeatureId } from '@deveye/types';
-import { validateManifest, type FeatureManifest } from '@deveye/types/sdk';
+import { isExternalFeatureId, registerExternalFeature } from '@deveye/types';
+import { externalDescriptorOf, validateManifest, type FeatureManifest } from '@deveye/types/sdk';
 import type { FeatureAgentHooks, FeatureServer, FeatureService, SdkQueryable } from '@deveye/types/sdk/server';
 import { FeatureError } from '@deveye/types/sdk/server';
 
@@ -62,19 +62,7 @@ export function registerModules(installed: readonly InstalledFeatureModule[]): v
         }
         // Une native rapatriée (Météo) garde son descripteur dans le registre
         // publié : seuls les ids externes s'enregistrent ici.
-        if (isExternalFeatureId(manifest.id)) {
-            registerExternalFeature({
-                id: manifest.id as ExternalFeatureId,
-                label: manifest.label,
-                description: manifest.description,
-                icon: manifest.icon,
-                notifies: manifest.notifies,
-                hasItems: manifest.hasItems,
-                itemNoun: manifest.itemNoun,
-                sources: manifest.sources,
-                shareTier: manifest.shareTier
-            });
-        }
+        if (isExternalFeatureId(manifest.id)) registerExternalFeature(externalDescriptorOf(manifest));
         let repo: { value: unknown } | null = null;
         const registered: RegisteredModule = {
             ...mod,
@@ -141,14 +129,30 @@ export function moduleMigrationDirs(): { id: string; dir: string }[] {
  * dessus à la demande, jamais à la construction, pour que l'ordre de boot ne
  * compte pas.
  */
-const SERVICES: { manifest: FeatureManifest; service: FeatureService }[] = [];
+const SERVICES: { manifest: FeatureManifest; service: FeatureService; logger: ModuleServiceHost['logger'] }[] = [];
 
-/** Les services d'arrière-plan des modules, créés une fois, démarrés par le boot. */
+/**
+ * Les services d'arrière-plan des modules, créés une fois, démarrés par le
+ * boot. Deux modules qui offrent le même contrat (`providers`) se refusent
+ * ici : `moduleProvider` n'aurait aucun critère pour en choisir un.
+ */
+let servicesCreated = false;
+
 export function createModuleServices(host: ModuleServiceHost): FeatureService[] {
+    // Une seule fois par processus : un second appel doublerait les hooks et
+    // laisserait `moduleProvider` sur les premiers services.
+    if (servicesCreated) throw new Error('createModuleServices : déjà appelée');
+    servicesCreated = true;
+    const providers = new Map<string, string>();
     return MODULES.flatMap((m) => {
         if (!m.server.createService) return [];
         const service = m.server.createService(createServiceDeps(host, m.manifest, m.repoFor(host.db)));
-        SERVICES.push({ manifest: m.manifest, service });
+        for (const key of Object.keys(service.providers ?? {})) {
+            const other = providers.get(key);
+            if (other) throw new Error(`Provider « ${key} » offert par « ${other} » et « ${m.manifest.id} »`);
+            providers.set(key, m.manifest.id);
+        }
+        SERVICES.push({ manifest: m.manifest, service, logger: host.logger });
         return [service];
     });
 }
@@ -156,39 +160,40 @@ export function createModuleServices(host: ModuleServiceHost): FeatureService[] 
 /**
  * L'agrégat des hooks agent des modules qui déclarent la capacité 'agents' :
  * la couche socket agent appelle ceci sans savoir quels modules existent.
- * Chaque hook est isolé (try/catch) : un module qui trébuche sur une trame ne
- * prive pas les autres, ni la couche socket.
+ * Chaque hook est isolé : un module qui trébuche sur une trame ne prive pas
+ * les autres, ni la couche socket ; la trame est perdue pour lui, et ça se
+ * lit dans le journal.
  */
 export function moduleAgentHooks(): Required<FeatureAgentHooks> {
-    const targets = (): FeatureAgentHooks[] =>
-        SERVICES.filter((s) => (s.manifest.nativeCapabilities ?? []).includes('agents')).map(
-            (s) => s.service.agentHooks ?? {}
-        );
-    const each = (run: (hooks: FeatureAgentHooks) => void | Promise<void>): void => {
-        for (const hooks of targets()) {
+    const each = (hook: keyof FeatureAgentHooks, run: (hooks: FeatureAgentHooks) => void | Promise<void>): void => {
+        for (const s of SERVICES) {
+            if (!(s.manifest.nativeCapabilities ?? []).includes('agents')) continue;
+            const failed = (err: unknown): void =>
+                s.logger.error({ err, module: s.manifest.id, hook }, 'hook agent en échec');
             try {
-                const out = run(hooks);
-                if (out instanceof Promise) out.catch(() => undefined);
-            } catch {
-                // Isolé exprès : la trame est perdue pour ce module, pas pour le socket.
+                const out = run(s.service.agentHooks ?? {});
+                if (out instanceof Promise) out.catch(failed);
+            } catch (err) {
+                failed(err);
             }
         }
     };
     return {
-        onAgentConnect: (deviceId) => each((h) => h.onAgentConnect?.(deviceId)),
-        onAgentOffline: (deviceId) => each((h) => h.onAgentOffline?.(deviceId)),
-        onSyncChanged: (deviceId, payload) => each((h) => h.onSyncChanged?.(deviceId, payload)),
-        onSyncIndex: (deviceId, payload) => each((h) => h.onSyncIndex?.(deviceId, payload)),
-        onSyncChunk: (deviceId, payload) => each((h) => h.onSyncChunk?.(deviceId, payload)),
-        onSyncAck: (deviceId, payload) => each((h) => h.onSyncAck?.(deviceId, payload)),
-        onSyncOpResult: (deviceId, payload) => each((h) => h.onSyncOpResult?.(deviceId, payload))
+        onAgentConnect: (deviceId) => each('onAgentConnect', (h) => h.onAgentConnect?.(deviceId)),
+        onAgentOffline: (deviceId) => each('onAgentOffline', (h) => h.onAgentOffline?.(deviceId)),
+        onSyncChanged: (deviceId, payload) => each('onSyncChanged', (h) => h.onSyncChanged?.(deviceId, payload)),
+        onSyncIndex: (deviceId, payload) => each('onSyncIndex', (h) => h.onSyncIndex?.(deviceId, payload)),
+        onSyncChunk: (deviceId, payload) => each('onSyncChunk', (h) => h.onSyncChunk?.(deviceId, payload)),
+        onSyncAck: (deviceId, payload) => each('onSyncAck', (h) => h.onSyncAck?.(deviceId, payload)),
+        onSyncOpResult: (deviceId, payload) => each('onSyncOpResult', (h) => h.onSyncOpResult?.(deviceId, payload))
     };
 }
 
 /**
  * Le contrat nommé qu'un module offre à l'app (voir @deveye/types/sdk/providers) :
  * recherche à l'appel, `undefined` quand le module est absent, et c'est à
- * l'appelant de dégrader proprement.
+ * l'appelant de dégrader proprement. Une clé n'a qu'un offreur possible
+ * (sentinelle de `createModuleServices`).
  */
 export function moduleProvider<T>(key: string): T | undefined {
     for (const s of SERVICES) {

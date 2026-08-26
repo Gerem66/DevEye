@@ -27,7 +27,10 @@ type Ctx = SdkFeatureContext<OsintRepo>;
  *
  * Le partage du travail est le point à retenir : `osint.lookup` **ne sonde
  * rien**. Il reconnaît la cible, journalise, et rend la liste des sondes à
- * faire. Le client tire ensuite un `osint.probe` par sonde, en parallèle, ce qui
+ * faire. L'historique s'écrit au niveau `read`, à dessein : chercher EST
+ * l'usage de la feature, et un rôle en lecture n'a rien d'autre à y écrire ;
+ * `mutates` suffit à rafraîchir l'historique des autres onglets. Le client
+ * tire ensuite un `osint.probe` par sonde, en parallèle, ce qui
  * donne l'affichage progressif sans qu'aucun sujet live ni protocole particulier
  * n'ait été inventé pour ça.
  */

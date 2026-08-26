@@ -1,10 +1,5 @@
-import {
-    isExternalFeatureId,
-    registerExternalFeature,
-    registerFeatureCommands,
-    type ExternalFeatureId
-} from '@deveye/types';
-import { validateManifest, type FeatureManifest } from '@deveye/types/sdk';
+import { isExternalFeatureId, registerExternalFeature, registerFeatureCommands } from '@deveye/types';
+import { externalDescriptorOf, validateManifest, type FeatureManifest } from '@deveye/types/sdk';
 import type { FeatureClient } from '@deveye/types/sdk/client';
 
 import { registerCrossTopicKeys, registerFeatureResources, type ResourceKey } from '@/stores/invalidation';
@@ -38,23 +33,13 @@ const BY_ID = new Map<string, InstalledClientFeature>();
  */
 export function registerClientModules(installed: readonly InstalledClientFeature[]): void {
     for (const mod of installed) {
-        if (BY_ID.has(mod.manifest.id)) continue;
+        // Même règle que le serveur (`registerModules`) : un id en double est
+        // une erreur de config, pas un doublon à ignorer.
+        if (BY_ID.has(mod.manifest.id)) throw new Error(`Module « ${mod.manifest.id} » : déclaré deux fois`);
         validateManifest(mod.manifest);
         // Une native rapatriée (Météo) garde son descripteur dans le registre
         // publié : seuls les ids externes s'enregistrent ici.
-        if (isExternalFeatureId(mod.manifest.id)) {
-            registerExternalFeature({
-                id: mod.manifest.id as ExternalFeatureId,
-                label: mod.manifest.label,
-                description: mod.manifest.description,
-                icon: mod.manifest.icon,
-                notifies: mod.manifest.notifies,
-                hasItems: mod.manifest.hasItems,
-                itemNoun: mod.manifest.itemNoun,
-                sources: mod.manifest.sources,
-                shareTier: mod.manifest.shareTier
-            });
-        }
+        if (isExternalFeatureId(mod.manifest.id)) registerExternalFeature(externalDescriptorOf(mod.manifest));
         // Les contrats du module dans le registre des commandes : c'est lui
         // que `ws.send` consulte avant d'envoyer. Une native rapatriée y
         // redéclare les mêmes objets (no-op) ; un module externe n'existe que

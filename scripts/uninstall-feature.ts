@@ -47,15 +47,14 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 import { createDbPool, getQueryable, testConnection, type Queryable } from '@/db/pool';
+import { readFeatureConfig, resolveModuleDir, tablePrefix } from './lib/features-config';
 import { forbiddenUninstallTargets, scrubHomeLayout, scrubRoleGrants } from './lib/uninstall';
 import { sqlTableTargets } from './lib/sql-tables';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const require = createRequire(path.join(ROOT, 'package.json'));
 
 const positional = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const YES = process.argv.includes('--yes');
@@ -71,22 +70,14 @@ function fail(message: string): never {
     process.exit(1);
 }
 
-/** Le dossier du module : node_modules, ou le `path` d'une des deux configs. */
-function resolveModuleDir(pkg: string): string {
-    for (const file of ['features.local.json', 'features.config.json']) {
-        const full = path.join(ROOT, file);
-        if (!fs.existsSync(full)) continue;
-        const entries =
-            (JSON.parse(fs.readFileSync(full, 'utf8')) as { features?: { package: string; path?: string }[] })
-                .features ?? [];
-        const entry = entries.find((e) => e.package === pkg);
-        if (entry?.path) return path.resolve(ROOT, entry.path);
-    }
-    try {
-        return path.dirname(require.resolve(`${pkg}/package.json`));
-    } catch {
-        fail(`« ${pkg} » introuvable : ni dans les configs (par chemin), ni dans node_modules`);
-    }
+/** Le dossier du paquet : le `path` d'une des deux configs (l'overlay local d'abord), sinon node_modules. */
+function packageDir(pkg: string): string {
+    const byPath = (['features.local.json', 'features.config.json'] as const)
+        .flatMap((file) => readFeatureConfig(ROOT, file))
+        .find((e) => e.package === pkg && e.path);
+    const dir = resolveModuleDir(ROOT, byPath ?? { package: pkg });
+    if (dir === null) fail(`« ${pkg} » introuvable : ni dans les configs (par chemin), ni dans node_modules`);
+    return dir;
 }
 
 async function main(): Promise<void> {
@@ -97,10 +88,10 @@ async function main(): Promise<void> {
         // Mode « module déjà disparu » : rien à résoudre, part app seulement.
         id = idFlag;
         console.warn(
-            `uninstall-feature: --id sans paquet — pas d'uninstall.sql : d'éventuelles tables ft_${id.replace(/^x-/, '')}_* resteront.\n`
+            `uninstall-feature: --id sans paquet — pas d'uninstall.sql : d'éventuelles tables ${tablePrefix(id)}* resteront.\n`
         );
     } else {
-        const dir = resolveModuleDir(PKG);
+        const dir = packageDir(PKG);
         const metaPath = path.join(dir, 'deveye-feature.json');
         if (!fs.existsSync(metaPath)) fail(`${PKG}: deveye-feature.json manquant (${dir})`);
         const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8')) as { id?: string };
@@ -114,9 +105,7 @@ async function main(): Promise<void> {
         if (uninstallSql) {
             const outlaw = forbiddenUninstallTargets(id, uninstallSql);
             if (outlaw.length > 0) {
-                fail(
-                    `${PKG}: uninstall.sql touche ${outlaw.join(', ')} — hors du préfixe ft_${id.replace(/^x-/, '')}_`
-                );
+                fail(`${PKG}: uninstall.sql touche ${outlaw.join(', ')} — hors du préfixe ${tablePrefix(id)}`);
             }
         }
     }
@@ -183,12 +172,10 @@ async function main(): Promise<void> {
 
     // --- exécution ----------------------------------------------------------
     if (uninstallSql) {
-        for (const statement of uninstallSql
-            .split(';')
-            .map((s) => s.trim())
-            .filter((s) => s.length > 0 && !s.startsWith('--'))) {
-            await q.query(statement, []);
-        }
+        // Le fichier entier en une requête, comme une migration : le pool est en
+        // `multipleStatements`, et découper sur `;` faisait sauter tout statement
+        // précédé d'une ligne de commentaire.
+        await q.query(uninstallSql);
         console.log('\n✓ uninstall.sql exécuté');
     }
     for (const r of rows) {
