@@ -48,7 +48,7 @@ export const passwordListFeature: FeatureDefinition<
         // `locked` error (don't silently skip every row) so the client prompts.
         await assertSecureUnlocked(ctx);
         const rows = await ctx.db.passwords.listByWorkspace(ctx.workspaceId);
-        // A single undecryptable row (e.g. legacy/foreign-key data) must not break
+        // A single undecryptable row (a corrupt blob) must not break
         // the whole list — skip it with a warning instead of failing the feature.
         let skipped = 0;
         const entries = (
