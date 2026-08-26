@@ -1,0 +1,15 @@
+# Ce que docker ne reçoit jamais. Une seule liste pour le build public (`docker build .`)
+# et pour deploy/build.sh, qui la lit pour bâtir son contexte (rsync --exclude-from).
+# D'où la forme : `**/` pour toute profondeur, sinon ancré à la racine ; pas de négation.
+**/node_modules
+**/.git
+**/target
+**/dist
+**/build
+**/coverage
+**/.env*
+**/*.log
+**/.DS_Store
+**/.vscode
+**/.claude
+.smoke
