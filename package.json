@@ -38,7 +38,6 @@
     "gen:features:local": "tsx scripts/gen-features.ts --ensure-local",
     "smoke:feature": "tsx scripts/smoke-feature.ts",
     "uninstall:feature": "tsx scripts/uninstall-feature.ts",
-    "reencrypt:legacy": "tsx scripts/reencrypt-legacy-blobs.ts",
     "dev:sync-feature": "scripts/dev-sync-feature.sh",
     "restore:backup": "node scripts/restore-backup.mjs",
     "prestart": "npm run gen:features:local"
