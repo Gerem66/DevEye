@@ -31,7 +31,11 @@ première, et la preuve que le contrat suffit.
    inexprimable côté services) ; `facade.ts` garde chaque appel aux natives
    derrière `nativeCapabilities`. Migrations de modules : deuxième passe du
    runner, noms `<id>/<fichier>`, tables `ft_<slug>_` vérifiées par le
-   générateur.
+   générateur. Une table de module qui référence `devices.id` par une clé
+   étrangère lit la collation de cette colonne dans `INFORMATION_SCHEMA` au
+   moment de se créer (`CONCAT` + `PREPARE`, patron de la 098) : ni déclarée
+   en dur, ni héritée du défaut de la base, les deux cassent la clé sur une
+   base restaurée d'un dump, où `devices` arrive avec sa collation épinglée.
 3. **Le client** : `client/src/sdk/index.ts` est le barrel servi sous l'alias
    `deveye-sdk-client` : LE seul import légal d'un module. `sdk/modules.ts`
    enregistre descripteurs et ressources au chargement ; catalogue, coquille
@@ -324,20 +328,39 @@ Par requête (`SdkFeatureContext`, construit dans `_sdk/context.ts`) : l'identit
 de l'appel (`userId`, `workspaceId`, `workspace`, `isOwner`, `canWrite`,
 `canExtra`/`extraValue` par `resolveExtras`, la même règle que le harnais),
 `repo`, `store` (KV chiffrable, `'server' | 'private' | 'none'`), `cipher(mode)`,
-`deveye` (façade gardée par `nativeCapabilities` : `notify`, `mail.accounts`,
-`members.read`, `devices.read`, `agents`), `transport` (socket appelant,
-`agents`), `audit`, `logger`, `requestId`. Une erreur se signale par
-`FeatureError(code, message)`.
+`deveye` (façade gardée par `nativeCapabilities` : `notify` avec `embeds`
+Discord, `mail.accounts`, `members.read`, `devices.read` (des `SdkDevice`
+complets : état, propriétaire, espace, cadence, rapport ; `list()` suit la règle
+de `device.list`, l'admin dans son espace personnel voit la flotte),
+`telemetry.read` (`snapshot`, `pinInstant`, réservée aux ids natifs) et
+`agents` (`requestScan`, `pushConfig`, les requêtes sync)), `transport` (socket
+appelant, `agents`), `secrecy.isUnlocked()` (le verrou de la session),
+`items` (`restrictions()`, `assert(itemId, level)`, `forget(itemId)` : les
+restrictions du dispatcheur liées à LA feature du module, et le ménage d'un
+élément supprimé), `sharing.scope()` (les projections vers l'espace actif,
+`shareScope` de `_sharing.ts` ; refusé sous `shareTier: 'never'`), `audit`,
+`logger`, `requestId`. Une erreur se signale par `FeatureError(code, message)`.
 
 Par service (`FeatureServiceDeps`, `_sdk/service.ts`) : `repo`,
 `listWorkspaceIds` (tous les espaces), `storeFor`/`cipherFor`/`deveyeFor`/
 `devicesFor` (sessionless, étage ouvert seul ; `devicesFor` est la vraie façade,
-gardée par `devices.read`, avec l'état en ligne du hub), `audit` (source
+gardée par `devices.read`, avec l'état en ligne du hub), `devices` (la flotte
+par identifiant, même garde), `telemetry`, `live.changed(workspaceId)` (le
+sujet du module, diffusé par le hub, projections comprises), `audit` (source
 système), `agents`, `keys` (`sealBytes`/`openBytes` sous la clé serveur),
 `createTicker` (boucle avec garde de réentrance), `logger`. Les hooks agent
-d'un module qui échouent sont isolés et journalisés (`moduleAgentHooks`), deux
-modules offrant le même provider sont refusés au boot, et
-`validateGrantExtras` vérifie les extras d'un rôle contre les manifests.
+d'un module (connexion, télémétrie après persistance, sync) qui échouent sont
+isolés et journalisés (`moduleAgentHooks`), deux modules offrant le même
+provider sont refusés au boot, et `validateGrantExtras` vérifie les extras
+d'un rôle contre les manifests.
+
+Par entrée serveur (`FeatureServer`) : `items` (`homeOf`, `labelOf`), ce que
+les commandes transversales de partage et de routage savent des éléments d'un
+module (`moduleItems` dans `register.ts`, consulté avant les switchs natifs),
+obligatoire dès que le manifest déclare un `shareTier` autre que `'never'`
+(`isModuleShareWired`). Par entrée client (`FeatureClient`) : `providers`, le
+jumeau client des providers de service, que les écrans de l'app lisent par
+`moduleClientProvider` (Projets compose ainsi les composants d'Uptime).
 
 Pairs admis d'un module : `@deveye/types`, `react`, `zod`, `framer-motion`
 (déclarés en `peerDependencies`, résolus depuis l'app).

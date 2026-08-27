@@ -534,6 +534,13 @@ sur une copie **au défaut de collation différent** — c'est ce qui révèle l
 jointures entre table neuve et table ancienne. Deux scénarios à couvrir, pas
 un : la base vierge de la migration (production) **et** la base laissée à
 mi-chemin par un échec (celle de développement, une fois que c'est arrivé).
+Ce que la copie au défaut différent attrape à coup sûr : une table neuve avec
+une clé étrangère vers `devices.id`, qu'elle déclare sa collation ou qu'elle
+hérite du défaut. Sur une base restaurée d'un dump, `devices` arrive avec sa
+collation d'origine épinglée, et le défaut d'accueil peut être un autre. La
+seule forme juste partout lit la collation de la colonne référencée dans
+`INFORMATION_SCHEMA` et construit le `CREATE TABLE` par `CONCAT` + `PREPARE`
+(patron de la 098).
 
 ```bash
 mysqldump ... DevEye > /tmp/dump.sql
