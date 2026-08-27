@@ -56,10 +56,17 @@ async function main() {
             databases.stop();
             audience.stop();
             backups.stop();
-            for (const svc of moduleServices) void svc.stop();
-            // Rend le bail CloudSync : sans ça, le processus qui redémarre ne
-            // reconnaît pas son propre bail (identité neuve) et resterait passif
-            // jusqu'à expiration.
+            // Attendus, et AVANT la fermeture du pool : un module rend son état
+            // par une écriture en base (CloudSync libère son bail d'instance).
+            // Lancés en `void`, ces arrêts étaient coupés par `pool.end()` puis
+            // `process.exit`, et le processus suivant démarrait passif. Un
+            // module qui échoue à s'arrêter ne retient pas les autres.
+            const stops = await Promise.allSettled(moduleServices.map((svc) => svc.stop()));
+            for (const stop of stops) {
+                if (stop.status === 'rejected') {
+                    logger.warn({ err: (stop.reason as Error).message }, 'Module service failed to stop');
+                }
+            }
             if (publicApp) await publicApp.close();
             await app.close();
             await pool.end();
