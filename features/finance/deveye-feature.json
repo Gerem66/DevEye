@@ -1,0 +1,13 @@
+{
+  "id": "finance",
+  "tables": [
+    "finance_config",
+    "finance_accounts",
+    "finance_categories",
+    "finance_recurring",
+    "finance_transactions",
+    "finance_budgets"
+  ],
+  "minTypesVersion": "0.15.2",
+  "$comment": "Tables historiques (migration 084 du socle, jamais déplacée) : l'allowlist les dispense du préfixe ft_finance_. Toute NOUVELLE table du module prendra le préfixe, via src/server/migrations/."
+}

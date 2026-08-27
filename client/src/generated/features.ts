@@ -10,9 +10,12 @@ import { manifest as manifest0 } from 'deveye-feature-weather';
 import { clientEntry as client0 } from 'deveye-feature-weather/client';
 import { manifest as manifest1 } from 'deveye-feature-osint';
 import { clientEntry as client1 } from 'deveye-feature-osint/client';
+import { manifest as manifest2 } from 'deveye-feature-finance';
+import { clientEntry as client2 } from 'deveye-feature-finance/client';
 
 export const INSTALLED_CLIENT_FEATURES: readonly InstalledClientFeature[] = [
     { manifest: { ...manifest0, icon: 'cloud' }, client: client0 },
     { manifest: { ...manifest1, icon: 'search' }, client: client1 },
+    { manifest: { ...manifest2, icon: 'finance' }, client: client2 },
     ...LOCAL_CLIENT_FEATURES
 ];

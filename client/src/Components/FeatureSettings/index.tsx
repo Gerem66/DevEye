@@ -282,6 +282,14 @@ export interface FeatureSettingsButtonProps {
     variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
     /** Intitulé ; « Réglages » par défaut. */
     label?: string;
+    /**
+     * La section ouverte par un clic manuel ; la première à défaut.
+     *
+     * C'est ce qui permet à un bouton posé dans une fiche de MENER quelque
+     * part : le « + » d'un sélecteur ouvre les réglages sur l'onglet qui crée
+     * ce qu'il sélectionne (Sources, Catégories), plutôt que de laisser chercher.
+     */
+    initialSection?: SettingsSectionId;
 }
 
 /**
@@ -293,7 +301,8 @@ export interface FeatureSettingsButtonProps {
 export function FeatureSettingsButton({
     scope,
     variant = 'secondary',
-    label = 'Réglages'
+    label = 'Réglages',
+    initialSection
 }: FeatureSettingsButtonProps) {
     const sections = useSettingsSections(scope);
     const [open, setOpen] = useState(false);
@@ -324,9 +333,10 @@ export function FeatureSettingsButton({
                 variant={variant}
                 icon='settings'
                 onClick={() => {
-                    // Une ouverture manuelle repart de la première section :
-                    // l'onglet d'une intention passée n'a plus rien de demandé.
-                    setSection(undefined);
+                    // Une ouverture manuelle repart de la section demandée par
+                    // le bouton, ou de la première : l'onglet d'une intention
+                    // passée n'a plus rien de demandé.
+                    setSection(initialSection);
                     setOpen(true);
                 }}
             >

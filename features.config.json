@@ -6,6 +6,9 @@
     },
     {
       "package": "deveye-feature-osint"
+    },
+    {
+      "package": "deveye-feature-finance"
     }
   ]
 }

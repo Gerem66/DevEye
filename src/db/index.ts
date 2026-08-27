@@ -34,7 +34,6 @@ import { projectChatRepo, type ProjectChatRepo } from './repos/projectChat';
 import { projectPlanRepo, type ProjectPlanRepo } from './repos/projectPlan';
 import { projectHistoryRepo, type ProjectHistoryRepo } from './repos/projectHistory';
 import { databaseRepo, type DatabaseRepo } from './repos/database';
-import { financeRepo, type FinanceRepo } from './repos/finance';
 import { audienceRepo, type AudienceRepo } from './repos/audience';
 import { audienceIngestRepo, type AudienceIngestRepo } from './repos/audienceIngest';
 import { audienceFunnelsRepo, type AudienceFunnelsRepo } from './repos/audienceFunnels';
@@ -93,12 +92,6 @@ export interface Database {
      */
     backup: BackupRepo;
     databases: DatabaseRepo;
-    /**
-     * Le grand livre de l'espace: comptes, opérations, budgets, échéances.
-     * Un seul dépôt pour les cinq tables, parce qu'elles ne se lisent jamais
-     * séparément (un solde est une agrégation des opérations sur les comptes).
-     */
-    finance: FinanceRepo;
     /** Les sites suivis de l'espace, et leurs statistiques — le chemin froid. */
     audience: AudienceRepo;
     /**
@@ -159,7 +152,6 @@ export function createDatabase(q: Queryable): Database {
         deploy: deployRepo(q),
         backup: backupRepo(q),
         databases: databaseRepo(q),
-        finance: financeRepo(q),
         audience: audienceRepo(q),
         audienceIngest: audienceIngestRepo(q),
         audienceFunnels: audienceFunnelsRepo(q),

@@ -143,6 +143,20 @@ Chaque élargissement est reflété dans le portrait publié
 (`@deveye/types/src/sdk/client-ambient.d.ts`, vérifié par `check:sdk`) et la
 doc du template (REFERENCE + 04-storage-and-encryption).
 
+**Finances** est la troisième native rapatriée (`features/finance`, 27 août
+2026), sur le même patron : descripteur étalé, six tables historiques en
+allowlist (084), `ctx.cipher()` seul (tout vit à l'étage ouvert, l'ex
+`ctx.secure.open`), pas de service de fond (le rattrapage des échéances reste
+une matérialisation paresseuse en tête des lectures). Ce que sa migration a
+réglé : la dette de la coquille de réglages (`SettingsDialog` +
+`CategoriesDialog` derrière un engrenage maison) est devenue deux panneaux
+déclarés par le manifest, `general` et l'onglet personnalisé `categories` (le
+premier `CustomTabRef` d'une native) ; les fiches d'opération et de budget ne
+font plus que choisir une catégorie, et montent le bouton commun là où elles
+ouvraient le dialogue (patron des sources). Rien d'autre dans l'app ne lisait
+ses types : ils ont quitté `@deveye/types` sans qu'aucun provider ne soit
+nécessaire.
+
 L'outillage de migration, à rejouer pour CHAQUE native :
 
 - **Tests de modules** : `npm run test:features` couvre

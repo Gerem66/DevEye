@@ -11,9 +11,9 @@ sa fiche, en dernière position (voir la règle des en-têtes de fiche). Le bout
 se supprime lui-même quand aucune section n'est lisible : les features ne le
 conditionnent jamais elles-mêmes.
 
-Un dialogue artisanal derrière un engrenage à part est une dette : Mail, Météo
-et OSINT en ont été purgés, les candidats restants sont listés en fin de
-fichier.
+Un dialogue artisanal derrière un engrenage à part est une dette : Mail, Météo,
+OSINT et Finances en ont été purgés, les candidats restants sont listés en fin
+de fichier.
 
 ## Les sections
 
@@ -67,8 +67,6 @@ Trois mécanismes font qu'aucun réglage n'est un mur :
 
 - **CloudSync** : la bande de six boutons par partage (`ShareCard`) est une
   coquille de réglages qui s'ignore.
-- **Finance** : `SettingsDialog` + `CategoriesDialog` derrière un engrenage à
-  part.
 - **Monitoring** : la configuration de collecte est enfouie dans un menu
   déroulant d'appareil ; `TerminalSettings` à part.
 - **Sentinelle** : `SentinelDialog` par appareil, un second engrenage qui ne

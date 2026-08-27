@@ -14,7 +14,6 @@ import { audienceFeatures } from './audience';
 import { gitFeatures } from './git';
 import { deployFeatures } from './deploy';
 import { backupFeatures } from './backup';
-import { financeFeatures } from './finance';
 import { projectFeatures } from './project';
 import {
     passwordAddFeature,
@@ -92,7 +91,6 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...deployFeatures,
     ...backupFeatures,
     ...databaseFeatures,
-    ...financeFeatures,
     ...audienceFeatures,
     ...deviceFeatures,
     ...metricsFeatures,

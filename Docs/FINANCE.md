@@ -4,8 +4,13 @@ Le grand livre d'un espace : comptes, opérations, budgets, échéances. Le mêm
 objet pour un particulier et pour une PME, la TVA en plus quand on l'allume.
 
 Ce document dit **pourquoi** la feature est faite ainsi. Le « quoi » est dans les
-schémas (`DevEye-Types/src/domain/finance.ts`) et le « comment » dans le code,
-qui est commenté.
+schémas (`features/finance/src/contracts/domain.ts`) et le « comment » dans le
+code, qui est commenté.
+
+Depuis le 27 août 2026, Finances est un **module in-repo** sur le SDK des
+features (`DevEye/features/finance`, voir `FEATURE_SDK.md`) : ses contrats, son
+dépôt, ses handlers et son client vivent tous dans ce répertoire, et
+`@deveye/types` n'en garde que l'identité (l'id, le descripteur du registre).
 
 ---
 
@@ -35,7 +40,7 @@ Deux conséquences dans le code :
 
 - le dépôt projette **toujours** ces colonnes par `DATE_FORMAT(..., '%Y-%m-%d')`,
   parce que mysql2 rendrait sinon un objet `Date` recalé sur le fuseau de Node.
-  C'est pourquoi il n'y a aucun `SELECT *` dans `db/repos/finance.ts` ;
+  C'est pourquoi il n'y a aucun `SELECT *` dans `src/server/repo.ts` ;
 - « aujourd'hui » est **passé en paramètre** aux requêtes, jamais lu par
   `CURDATE()` : le fuseau de MySQL et celui du processus Node n'ont aucune raison
   de coïncider, et un solde ne doit pas osciller autour de minuit. Ce paramètre
@@ -44,10 +49,11 @@ Deux conséquences dans le code :
 
 ### 3. Étage ouvert, texte libre chiffré, nombres en clair
 
-Tout passe par `ctx.secure.open`, comme l'audience et les bases de données : le
-livre appartient à l'**espace**, et tout membre d'un espace partagé doit pouvoir
-le lire sans dépendre de la session de son propriétaire. La feature ne demande
-donc **jamais** de mot de passe.
+Tout passe par `ctx.cipher()` (l'étage ouvert du SDK, l'ex `ctx.secure.open`),
+comme l'audience et les bases de données : le livre appartient à l'**espace**,
+et tout membre d'un espace partagé doit pouvoir le lire sans dépendre de la
+session de son propriétaire. La feature ne demande donc **jamais** de mot de
+passe, et son manifest ne déclare aucune capacité native.
 
 Ce qui est chiffré (`content`) : intitulé, tiers, note, nom de compte, nom de
 catégorie. Ce qui reste en clair : montants, dates, natures, rattachements,
@@ -62,8 +68,8 @@ l'intégralité du journal dans le navigateur pour afficher un solde.
 
 ## Les échéances n'ont pas de tâche de fond
 
-`postDueRecurring` (`features/finance/_shared.ts`) est appelé **en tête de chaque
-lecture** qui montre un montant. Il écrit les occurrences dues des échéances
+`postDueRecurring` (`features/finance/src/server/_shared.ts`) est appelé **en
+tête de chaque lecture** qui montre un montant. Il écrit les occurrences dues des échéances
 automatiques, puis avance leur date.
 
 Pourquoi pas un ordonnanceur : il aurait fallu un état en mémoire, un cycle de
@@ -82,11 +88,13 @@ verrou applicatif qui ne survivrait pas à deux instances du serveur.
 Le **jour d'ancrage** (`anchor_day`) est ce qui empêche une échéance au 31 de
 dériver : sans lui, février la ramène au 28 et elle y reste pour toujours, parce
 que le calcul suivant repartirait de cette date-là. Les cas sont couverts par
-`features/finance/calendar.test.ts` (`npm test`).
+`features/finance/src/server/calendar.test.ts`, et le rattrapage lui-même par
+`handlers.test.ts` sur un faux dépôt (`npm run test:features`).
 
 Les deux contreparties sont assumées et documentées à côté du code : une lecture
 peut écrire (y compris pour un membre en lecture seule), et rien n'est diffusé
-aux autres connexions (`ctx.live` n'expose pas `changed`, par construction).
+aux autres connexions (le contexte d'une commande n'expose pas `live.changed`,
+par construction ; seul un service de fond du module l'aurait).
 
 > ⚠️ **En ajoutant une lecture qui montre un solde, un journal ou un budget, il
 > faut appeler `postDueRecurring`.** Six lectures le font ; `finance.config` et
@@ -157,15 +165,35 @@ saisissable en ajustant le montant.
 
 ---
 
+## Les réglages
+
+Deux panneaux dans la coquille commune (`Docs/SETTINGS.md`), déclarés par le
+manifest (`settings.feature: ['general', { id: 'categories', ... }]`) et
+fournis par l'entrée client (`settingsPanels`) :
+
+- **Général** (`FinanceGeneralPanel`) : la devise et le mode entreprise
+  (`finance.config` / `finance.configUpdate`). Après enregistrement, toutes les
+  clés de la feature sont ravivées : le socle porte le symbole de chaque montant.
+- **Catégories** (`FinanceCategoriesPanel`) : la grille de lecture. C'est le
+  seul endroit où une catégorie se crée, se corrige, se retire ; les fiches
+  d'opération et de budget ne font que choisir dedans, et montent le bouton
+  commun (`FeatureSettingsButton`, « Catégories ») quand il n'y a rien à
+  choisir. Patron des sources (`Docs/SOURCES.md`).
+
 ## Points d'entrée
+
+Tout vit dans `DevEye/features/finance/` (module in-repo).
 
 | Rôle                          | Fichier                                     |
 | ----------------------------- | ------------------------------------------- |
-| Schémas et types              | `DevEye-Types/src/domain/finance.ts`        |
-| Contrats des 28 commandes     | `DevEye-Types/src/features/finance.ts`      |
-| Schéma SQL                    | `DevEye/src/db/migrations/084_finance.sql`  |
-| Requêtes                      | `DevEye/src/db/repos/finance.ts`            |
-| Socle serveur (chiffre, calendrier, gardes, rattrapage) | `DevEye/src/features/finance/_shared.ts` |
-| Tests du calendrier           | `DevEye/src/features/finance/calendar.test.ts` |
-| Coquille et onglets           | `DevEye/client/src/Features/Finance/index.tsx` |
-| Mise en forme et vocabulaire  | `DevEye/client/src/Features/Finance/format.ts` |
+| Manifest                      | `src/manifest.ts`                           |
+| Schémas et types              | `src/contracts/domain.ts`                   |
+| Contrats des 28 commandes     | `src/contracts/commands.ts`                 |
+| Schéma SQL (socle, jamais déplacé) | `DevEye/src/db/migrations/084_finance.sql` |
+| Requêtes                      | `src/server/repo.ts`                        |
+| Socle serveur (chiffre, calendrier, gardes, rattrapage) | `src/server/_shared.ts` |
+| Handlers (un fichier par nature) | `src/server/handlers/`                   |
+| Tests (calendrier, handlers)  | `src/server/calendar.test.ts`, `src/server/handlers.test.ts` |
+| Entrée client, panneaux de réglages | `src/client/index.tsx`, `src/client/Finance*Panel.tsx` |
+| Coquille et onglets           | `src/client/Finance.tsx`                    |
+| Mise en forme et vocabulaire  | `src/client/format.ts`                      |
