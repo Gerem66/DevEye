@@ -25,3 +25,6 @@ client/src/Styles/icons.local.css
 
 # Stockage CloudSync du serveur de dev (blobs chiffrés adressés par hash)
 /cloudsync-data/
+
+# Archives des destinations locales du serveur de dev (BACKUP_STORAGE_DIR)
+/backup-data/
