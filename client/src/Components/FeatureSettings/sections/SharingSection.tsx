@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { featureDescriptor, type ItemShareState, type ShareBlocker, type WorkspaceFeatureId } from '@deveye/types';
+import { featureDescriptor, type ItemShareState, type ShareBlocker } from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
 import Switch from '@/Components/Switch';
+import { moduleManifest } from '@/sdk/registry';
 import { invalidate, type ResourceKey } from '@/stores/invalidation';
 
 import type { SettingsScope } from '../scope';
@@ -41,11 +42,13 @@ const BLOCKER_TEXT: Record<ShareBlocker, string> = {
 };
 
 /**
- * Ce qu'un partage invalide, par fonctionnalité branchée.
+ * Ce qu'un partage invalide, par fonctionnalité native branchée.
  *
  * La clé était codée en dur sur `uptime.list` : partager une base ou une cible
- * rafraîchissait… la liste des services. La table suit `SHARE_WIRED_FEATURES` —
- * une feature qu'on branche au partage s'inscrit ici en même temps.
+ * rafraîchissait… la liste des services. La table suit `SHARE_WIRED_FEATURES` ;
+ * une feature native qu'on branche au partage s'inscrit ici en même temps. Un
+ * module n'a rien à inscrire : ses ressources déclarées (manifest) se ravivent
+ * toutes, c'est le même geste que son sujet live.
  */
 const LIST_KEYS: Partial<Record<SettingsScope['feature'], ResourceKey[]>> = {
     uptime: ['uptime.list', 'uptime.count'],
@@ -56,16 +59,16 @@ const LIST_KEYS: Partial<Record<SettingsScope['feature'], ResourceKey[]>> = {
     backup: ['backup.jobList', 'backup.count']
 };
 
+function listKeysOf(feature: SettingsScope['feature']): readonly ResourceKey[] {
+    return LIST_KEYS[feature] ?? ((moduleManifest(feature)?.resources ?? []) as ResourceKey[]);
+}
+
 interface Props {
     scope: SettingsScope;
 }
 
 export default function SharingSection({ scope }: Props) {
-    // Rendue seulement derrière la garde `SHARE_WIRED_FEATURES` (natives) :
-    // les contrats `share.*` sont typés sur l'enum natif tant que le partage
-    // des éléments de modules n'est pas branché (dettes n°2 et 3 de la
-    // refonte). Ce rétrécissement tombera avec elles.
-    const feature = scope.feature as WorkspaceFeatureId;
+    const feature = scope.feature;
     const [state, setState] = useState<ItemShareState | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -93,7 +96,7 @@ export default function SharingSection({ scope }: Props) {
                 // La liste de la fonctionnalité change des deux côtés : ici on
                 // vient d'ouvrir ou de fermer une fenêtre, là-bas la ligne
                 // apparaît ou disparaît.
-                for (const key of LIST_KEYS[feature] ?? []) invalidate(key);
+                for (const key of listKeysOf(feature)) invalidate(key);
             })
             .catch(() => setError('Modification impossible.'))
             .finally(() => setBusy(false));

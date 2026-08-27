@@ -5,10 +5,8 @@ import {
     LIVE_CURSORS_EVENT,
     LIVE_PEERS_EVENT,
     LIVE_TYPERS_EVENT,
-    isExternalFeatureId,
     livePathGate,
     ok,
-    SHARE_WIRED_FEATURES,
     topicFeatureOf,
     type FeatureAccess,
     type FeatureId,
@@ -21,6 +19,7 @@ import {
 } from '@deveye/types';
 
 import { accessEpochNow, permissionsFor } from '@/features/_access';
+import { isShareWired } from '@/features/_sharing';
 import { logger } from '@/logger';
 import type { Database } from '@/db';
 
@@ -486,10 +485,9 @@ export class LiveHub {
         if (this.shareLinks === null) return;
         for (const topic of topics) {
             const feature = topicFeatureOf(topic);
-            // Un module externe n'est jamais share-wired : sa diffusion reste locale.
-            if (feature === null || isExternalFeatureId(feature) || !SHARE_WIRED_FEATURES.includes(feature)) {
-                continue;
-            }
+            // Natives par la liste publiée, modules par leur manifest : la
+            // même question que le serveur et la coquille de réglages.
+            if (feature === null || !isShareWired(feature)) continue;
             void this.shareLinks(workspaceId, feature)
                 .then((linked) => {
                     for (const other of linked) {

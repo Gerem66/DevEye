@@ -14,7 +14,11 @@ import { useActiveWorkspace } from '@/stores/workspace';
  *  ce composant sur une seule forme de réponse. `sentinel.count` est dans le
  *  même cas — il rend un décompte **par gravité**, parce que « trois constats »
  *  ne veut rien dire tant qu'on ne sait pas si l'un d'eux est critique. */
-type CountCommand = Exclude<Extract<ResourceKey, `${string}.count`>, 'uptime.count' | 'sentinel.count'>;
+type CountCommand =
+    | Exclude<Extract<ResourceKey, `${string}.count`>, 'uptime.count' | 'sentinel.count'>
+    // Un module externe déclare sa propre clé `.count` dans son manifest ; le
+    // registre des commandes la connaît au chargement, pas ce type.
+    | `x-${string}.count`;
 
 export type CountState = { kind: 'loading' } | { kind: 'ready'; count: number };
 
@@ -37,7 +41,7 @@ export function useWorkspaceCount(command: CountCommand): CountState {
         let cancelled = false;
 
         const load = () => {
-            ws.send(command, {})
+            (ws.send(command as never, {} as never) as Promise<{ count: number }>)
                 .then((res) => {
                     if (!cancelled) setState({ kind: 'ready', count: res.count });
                 })

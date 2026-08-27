@@ -7,7 +7,7 @@ import type { SdkCipher } from '@deveye/types/sdk/server';
 import type { MonitorHub } from '@/agent/hub';
 import type { Database } from '@/db';
 import { createFacade } from './facade';
-import { setSdkHub } from './host';
+import { setSdkHost } from './host';
 
 /**
  * La façade des natives : le SEUL chemin d'un module vers les données des
@@ -63,20 +63,23 @@ const fanout =
     (payload: unknown): void => {
         hubCalls.push({ method, args: [payload] });
     };
-setSdkHub({
-    isOnline: (deviceId: string) => online.has(deviceId),
-    requestSyncConfig: outbound('requestSyncConfig'),
-    requestSyncScan: outbound('requestSyncScan'),
-    requestSyncPush: outbound('requestSyncPush'),
-    requestSyncApplyChunk: outbound('requestSyncApplyChunk'),
-    requestSyncApplyStart: outbound('requestSyncApplyStart'),
-    requestSyncApplyDir: outbound('requestSyncApplyDir'),
-    requestSyncApplyLocal: outbound('requestSyncApplyLocal'),
-    requestSyncMove: outbound('requestSyncMove'),
-    requestSyncDelete: outbound('requestSyncDelete'),
-    publishSyncProgress: fanout('publishSyncProgress'),
-    publishSyncState: fanout('publishSyncState')
-} as unknown as MonitorHub);
+setSdkHost(
+    {
+        isOnline: (deviceId: string) => online.has(deviceId),
+        requestSyncConfig: outbound('requestSyncConfig'),
+        requestSyncScan: outbound('requestSyncScan'),
+        requestSyncPush: outbound('requestSyncPush'),
+        requestSyncApplyChunk: outbound('requestSyncApplyChunk'),
+        requestSyncApplyStart: outbound('requestSyncApplyStart'),
+        requestSyncApplyDir: outbound('requestSyncApplyDir'),
+        requestSyncApplyLocal: outbound('requestSyncApplyLocal'),
+        requestSyncMove: outbound('requestSyncMove'),
+        requestSyncDelete: outbound('requestSyncDelete'),
+        publishSyncProgress: fanout('publishSyncProgress'),
+        publishSyncState: fanout('publishSyncState')
+    } as unknown as MonitorHub,
+    {} as Database
+);
 
 const OUTBOUND = [
     'requestSyncConfig',
@@ -99,6 +102,7 @@ function facadeWith(caps: readonly NativeCapability[], db: object = {}, isAdmin 
         workspaceId: WS,
         ownerUserId: OWNER,
         isAdmin,
+        workspaceKind: isAdmin ? 'personal' : 'shared',
         manifest: manifest(caps),
         logger
     });
@@ -297,23 +301,47 @@ describe('createFacade : members.list', () => {
 });
 
 describe('createFacade : devices', () => {
-    const rows = [
-        { id: 'dev-1', name: 'Portable' },
-        { id: 'dev-2', name: 'Serveur' }
-    ];
+    /** Une ligne appareil réduite à ce que la façade lit. */
+    const row = (id: string, name: string) => ({
+        id,
+        name,
+        status: 'active',
+        owner_id: 7,
+        workspace_id: WS,
+        metric_interval_seconds: null,
+        report_json: null
+    });
+    const rows = [row('dev-1', 'Portable'), row('dev-2', 'Serveur')];
+    const fleet = [...rows, row('dev-3', 'Ailleurs')];
+    /** Ce que la façade révèle d'une ligne : l'identité, la présence, l'état, le rapport. */
+    const revealed = (id: string, name: string, online: boolean) => ({
+        id,
+        name,
+        online,
+        status: 'active',
+        ownerUserId: 7,
+        workspaceId: WS,
+        metricIntervalSeconds: null,
+        report: null
+    });
     function devicesDb(membership: Record<string, boolean>) {
         const hasWorkspaceCalls: [string, number][] = [];
+        const listAllCalls: number[] = [];
         const db = {
             devices: {
-                findById: async (id: string) => rows.find((r) => r.id === id) ?? null,
+                findById: async (id: string) => fleet.find((r) => r.id === id) ?? null,
                 hasWorkspace: async (id: string, ws: number) => {
                     hasWorkspaceCalls.push([id, ws]);
                     return membership[id] ?? false;
                 },
-                listByWorkspace: async () => rows
+                listByWorkspace: async () => rows,
+                listAll: async () => {
+                    listAllCalls.push(1);
+                    return fleet;
+                }
             }
         };
-        return { db, hasWorkspaceCalls };
+        return { db, hasWorkspaceCalls, listAllCalls };
     }
 
     it('authorize : not_found quand la ligne manque', async () => {
@@ -333,22 +361,48 @@ describe('createFacade : devices', () => {
     it("authorize : l'admin global passe outre l'appartenance, sans même la consulter", async () => {
         const { db, hasWorkspaceCalls } = devicesDb({ 'dev-1': false });
         const device = await facadeWith(['devices.read'], db, true).devices.authorize('dev-1');
-        assert.deepEqual(device, { id: 'dev-1', name: 'Portable', online: true });
+        assert.deepEqual(device, revealed('dev-1', 'Portable', true));
         assert.deepEqual(hasWorkspaceCalls, []);
     });
 
     it("authorize : l'appareil de l'espace, avec sa présence", async () => {
         const { db } = devicesDb({ 'dev-2': true });
         const device = await facadeWith(['devices.read'], db).devices.authorize('dev-2');
-        assert.deepEqual(device, { id: 'dev-2', name: 'Serveur', online: false });
+        assert.deepEqual(device, revealed('dev-2', 'Serveur', false));
     });
 
     it("list : les appareils de l'espace, avec leur présence", async () => {
         const { db } = devicesDb({});
         assert.deepEqual(await facadeWith(['devices.read'], db).devices.list(), [
-            { id: 'dev-1', name: 'Portable', online: true },
-            { id: 'dev-2', name: 'Serveur', online: false }
+            revealed('dev-1', 'Portable', true),
+            revealed('dev-2', 'Serveur', false)
         ]);
+    });
+
+    it("list : l'admin global dans son espace personnel voit la flotte, ailleurs son espace", async () => {
+        // La règle de `device.list`, reprise telle quelle : c'est dans son
+        // espace personnel qu'un administrateur surveille ses machines.
+        const { db, listAllCalls } = devicesDb({});
+        const listed = await facadeWith(['devices.read'], db, true).devices.list();
+        assert.deepEqual(
+            listed.map((d) => d.id),
+            ['dev-1', 'dev-2', 'dev-3']
+        );
+        assert.deepEqual(listAllCalls, [1]);
+        const shared = await createFacade({
+            db: db as unknown as Database,
+            cipher,
+            workspaceId: WS,
+            ownerUserId: OWNER,
+            isAdmin: true,
+            workspaceKind: 'shared',
+            manifest: manifest(['devices.read']),
+            logger
+        }).devices.list();
+        assert.deepEqual(
+            shared.map((d) => d.id),
+            ['dev-1', 'dev-2']
+        );
     });
 
     it('isOnline : la présence du hub', () => {

@@ -16,6 +16,7 @@ import {
 import { formatMoment, resolveChannelIds, sendTest } from '@/Services/notifications';
 
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
+import { moduleItems } from '../_sdk/register';
 import {
     createChannel,
     foreignChannels,
@@ -87,6 +88,10 @@ function assertRouteAccess(ctx: FeatureContext, feature: NotificationFeature, le
  * exactement ce que l'écran doit montrer comme « une cible disparue ».
  */
 async function itemLabelOf(ctx: FeatureContext, feature: NotificationFeature, itemId: number): Promise<string | null> {
+    // Un module nomme ses éléments lui-même (entrée `items` de son serveur) ;
+    // le `switch` ne connaît que les natives.
+    const items = moduleItems(feature, ctx.db);
+    if (items) return items.labelOf(ctx.secure.open, itemId, ctx.workspaceId);
     const content = await (async (): Promise<string | null> => {
         switch (feature) {
             case 'uptime':

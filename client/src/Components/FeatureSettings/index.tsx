@@ -14,7 +14,7 @@ import SharingSection from './sections/SharingSection';
 import SourcesSection from './sections/SourcesSection';
 import SyncSection, { SYNC_WIRED } from './sections/SyncSection';
 import SideNav, { type SideNavItem } from './SideNav';
-import { moduleClient, moduleManifest } from '@/sdk/registry';
+import { isModuleShareWired, moduleClient, moduleManifest } from '@/sdk/registry';
 import { scopeDescription, scopeTitle, type SettingsScope, type SettingsSectionId } from './scope';
 import styles from './FeatureSettings.module.css';
 
@@ -43,6 +43,16 @@ interface SectionDef {
 }
 
 /**
+ * La lecture élargie de cette fonctionnalité est-elle branchée ? Les natives
+ * par la liste publiée, les modules par leur manifest : la même question que
+ * le serveur pose (`isShareWired`), et c'est ce qui garde l'onglet Partage
+ * derrière ce que le code fait, jamais derrière ce que `shareTier` promet.
+ */
+function isShareWired(feature: FeatureId): boolean {
+    return (SHARE_WIRED_FEATURES as readonly FeatureId[]).includes(feature) || isModuleShareWired(feature);
+}
+
+/**
  * Les sections visibles pour cette cible, dans l'ordre d'affichage.
  *
  * Exporté : les appelants s'en servent pour décider s'il y a un bouton à rendre,
@@ -60,9 +70,47 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
         const descriptor = featureDescriptor(scope.feature);
         const sections: SectionDef[] = [];
 
-        // Un module installé déclare ses onglets dans son manifest ; la seule
-        // règle que la coquille ajoute d'elle-même est celle des émetteurs
-        // (l'onglet Notifications suit `notifies`, comme pour les natives).
+        // Partage : à l'échelle d'un **élément** seulement, on projette une
+        // ligne, pas une fonctionnalité entière.
+        //
+        // Le branchement (`isShareWired`) et non `shareTier` : le premier dit
+        // ce que le code fait, le second ce que le chiffrement autoriserait.
+        // Se fier au second ouvrirait, sur une note ou un compte mail, un
+        // onglet que le serveur refuse, un onglet qui ne mène nulle part,
+        // exactement ce que cette coquille refuse.
+        //
+        // Permissions : à l'échelle d'un **élément** seulement, ce que chaque
+        // rôle voit de cette ligne-là. À l'échelle de la fonctionnalité, la
+        // question n'existe pas ici : « qui a accès à Uptime » se règle sur le
+        // rôle, dans Gérer l'espace. Un panneau qui la reposerait par
+        // fonctionnalité a été essayé puis retiré, deux endroits pour un même
+        // droit finissent toujours par se contredire.
+        //
+        // Derrière `workspace.roles` : restreindre un élément, c'est régler ce
+        // qu'un rôle peut voir. Un espace personnel n'a pas de rôles, donc rien
+        // à montrer. Et le branchement comme pour le partage : une restriction
+        // n'existe que là où les listages la font respecter ; ailleurs, le
+        // serveur la refuse, donc l'onglet mentirait.
+        //
+        // Commun aux natives et aux modules : les deux échelles se règlent
+        // pareil, seule la source du branchement diffère.
+        const pushSharingSections = (into: SectionDef[]): void => {
+            if (scope.kind !== 'item' || !isShareWired(scope.feature)) return;
+            if (permissions.canFeature(scope.feature, 'write')) {
+                into.push({ id: 'sharing', label: 'Partage', icon: 'users' });
+            }
+            if (canRestrict && isShared) {
+                // `shield` et non `lock` : le cadenas est l'icône du
+                // chiffrement, et deux entrées de nav au même glyphe se
+                // confondent.
+                into.push({ id: 'permissions', label: 'Permissions', icon: 'shield' });
+            }
+        };
+
+        // Un module installé déclare ses onglets dans son manifest ; les
+        // règles que la coquille ajoute d'elle-même sont celles des natives
+        // aussi : Notifications suit `notifies`, Partage et Permissions
+        // suivent le branchement au partage (plus bas, commun aux deux).
         const manifest = moduleManifest(scope.feature);
         if (manifest) {
             for (const tab of manifest.settings?.[scope.kind] ?? []) {
@@ -76,6 +124,7 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
             if (descriptor.notifies && (scope.kind === 'feature' || descriptor.hasItems)) {
                 sections.push({ id: 'notifications', label: 'Notifications', icon: 'mail' });
             }
+            pushSharingSections(sections);
             return sections;
         }
 
@@ -113,48 +162,13 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
             sections.push({ id: 'encryption', label: 'Chiffrement', icon: 'lock' });
         }
 
-        // Partage : à l'échelle d'un **élément** seulement — on projette une
-        // ligne, pas une fonctionnalité entière.
-        //
-        // `SHARE_WIRED_FEATURES` et non `shareTier` : le premier dit ce que le
-        // code fait, le second ce que le chiffrement autoriserait. Se fier au
-        // second ouvrirait, sur une note ou un compte mail, un onglet que le
-        // serveur refuse — un onglet qui ne mène nulle part, exactement ce que
-        // cette coquille refuse.
-        if (
-            scope.kind === 'item' &&
-            (SHARE_WIRED_FEATURES as readonly FeatureId[]).includes(scope.feature) &&
-            permissions.canFeature(scope.feature, 'write')
-        ) {
-            sections.push({ id: 'sharing', label: 'Partage', icon: 'users' });
-        }
-
-        // Permissions : à l'échelle d'un **élément** seulement — ce que chaque
-        // rôle voit de cette ligne-là. À l'échelle de la fonctionnalité, la
-        // question n'existe pas ici : « qui a accès à Uptime » se règle sur le
-        // rôle, dans Gérer l'espace. Un panneau qui la reposerait par
-        // fonctionnalité a été essayé puis retiré — deux endroits pour un même
-        // droit finissent toujours par se contredire.
-        //
-        // Derrière `workspace.roles` : restreindre un élément, c'est régler ce
-        // qu'un rôle peut voir. Un espace personnel n'a pas de rôles, donc rien
-        // à montrer. Et `SHARE_WIRED_FEATURES` comme pour le partage : une
-        // restriction n'existe que là où les listages la font respecter —
-        // ailleurs, le serveur la refuse, donc l'onglet mentirait.
-        if (
-            scope.kind === 'item' &&
-            (SHARE_WIRED_FEATURES as readonly FeatureId[]).includes(scope.feature) &&
-            canRestrict &&
-            isShared
-        ) {
-            // `shield` et non `lock` : le cadenas est l'icône du chiffrement,
-            // et deux entrées de nav au même glyphe se confondent.
-            sections.push({ id: 'permissions', label: 'Permissions', icon: 'shield' });
-        }
-
+        pushSharingSections(sections);
         return sections;
     }, [scope.feature, scope.kind, canRead, canRestrict, isShared, permissions]);
 }
+
+/** Les sections que la coquille rend elle-même, native ou module. */
+const GENERIC_SECTIONS: ReadonlySet<SettingsSectionId> = new Set(['notifications', 'sharing', 'permissions']);
 
 export interface FeatureSettingsDialogProps {
     open: boolean;
@@ -217,42 +231,33 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection }: 
                         label={`Réglages · ${scopeTitle(scope)}`}
                     />
                     <div className={styles.panel}>
-                        {moduleManifest(scope.feature) ? (
-                            /* Un module : ses panneaux viennent de son entrée
-                               client ; seul Notifications reste le générique de
-                               la coquille, comme chez les natives. */
-                            <>
-                                {current === 'notifications' ? (
-                                    <NotificationsSection
-                                        scope={scope}
-                                        onManageChannels={
-                                            scope.kind === 'item' ? () => setManageChannels(true) : undefined
-                                        }
-                                    />
-                                ) : (
-                                    <ModulePanel scope={scope} section={current} />
-                                )}
-                            </>
-                        ) : (
-                            <>
-                                {current === 'general' && <GeneralSection scope={scope} />}
-                                {current === 'sources' && scope.kind === 'feature' && <SourcesSection scope={scope} />}
-                                {current === 'sync' && <SyncSection scope={scope} />}
-                                {current === 'encryption' && <EncryptionSection scope={scope} />}
-                                {current === 'notifications' && (
-                                    <NotificationsSection
-                                        scope={scope}
-                                        onManageChannels={
-                                            scope.kind === 'item' ? () => setManageChannels(true) : undefined
-                                        }
-                                    />
-                                )}
-                                {current === 'permissions' && scope.kind === 'item' && (
-                                    <ItemPermissionsSection scope={scope} />
-                                )}
-                                {current === 'sharing' && <SharingSection scope={scope} />}
-                            </>
+                        {/* Les trois sections génériques de la coquille, les
+                            mêmes pour une native et pour un module : les
+                            canaux, le partage, les restrictions. Le reste
+                            vient de la feature : ses panneaux (`settingsPanels`)
+                            pour un module, les dispatcheurs à table pour une
+                            native. */}
+                        {current === 'notifications' && (
+                            <NotificationsSection
+                                scope={scope}
+                                onManageChannels={scope.kind === 'item' ? () => setManageChannels(true) : undefined}
+                            />
                         )}
+                        {current === 'permissions' && scope.kind === 'item' && <ItemPermissionsSection scope={scope} />}
+                        {current === 'sharing' && <SharingSection scope={scope} />}
+                        {!GENERIC_SECTIONS.has(current) &&
+                            (moduleManifest(scope.feature) ? (
+                                <ModulePanel scope={scope} section={current} />
+                            ) : (
+                                <>
+                                    {current === 'general' && <GeneralSection scope={scope} />}
+                                    {current === 'sources' && scope.kind === 'feature' && (
+                                        <SourcesSection scope={scope} />
+                                    )}
+                                    {current === 'sync' && <SyncSection scope={scope} />}
+                                    {current === 'encryption' && <EncryptionSection scope={scope} />}
+                                </>
+                            ))}
                     </div>
                 </div>
             </Dialog>

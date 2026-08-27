@@ -1,20 +1,20 @@
 import {
-    SHARE_WIRED_FEATURES,
     featureDescriptor,
     itemGrantList,
     itemGrantSet,
     shareGet,
     shareSet,
+    type FeatureId,
     type ItemGrantState,
     type ItemShareState,
     type ShareBlocker,
-    type WorkspaceFeatureGrant,
-    type WorkspaceFeatureId
+    type WorkspaceFeatureGrant
 } from '@deveye/types';
 
 import { grantsFor, invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
-import { shareBlockerFor } from '../_sharing';
+import { moduleItems } from '../_sdk/register';
+import { isShareWired, shareBlockerFor } from '../_sharing';
 
 /**
  * Rendre un élément visible depuis un autre espace, et restreindre qui le voit.
@@ -65,7 +65,7 @@ async function canManageRolesIn(ctx: FeatureContext, workspaceId: number): Promi
 async function canWriteItemIn(
     ctx: FeatureContext,
     workspaceId: number,
-    feature: WorkspaceFeatureId,
+    feature: FeatureId,
     itemId: number
 ): Promise<boolean> {
     const workspace = await ctx.db.workspaces.findById(workspaceId);
@@ -82,7 +82,7 @@ async function canWriteItemIn(
 }
 
 /** Où vit cet élément, et l'appelant peut-il en disposer ? */
-async function loadHome(ctx: FeatureContext, feature: WorkspaceFeatureId, itemId: number): Promise<number> {
+async function loadHome(ctx: FeatureContext, feature: FeatureId, itemId: number): Promise<number> {
     // L'élément doit être **chez l'appelant** pour qu'il en dispose : on ne
     // re-projette pas depuis un espace où l'on ne fait que le voir. Sinon un
     // membre de B pourrait diffuser vers C une donnée de A dont il n'est que
@@ -101,15 +101,14 @@ async function loadHome(ctx: FeatureContext, feature: WorkspaceFeatureId, itemId
 /**
  * L'espace d'origine d'un élément, lu dans la table de sa fonctionnalité.
  *
- * Le `switch` est explicite plutôt que dynamique : chaque fonctionnalité range
+ * Un module répond par son entrée `items` (son repo, sa requête) ; les natives
+ * par le `switch`, explicite plutôt que dynamique : chaque fonctionnalité range
  * ses éléments dans sa propre table, et une résolution par nom construirait une
- * requête à partir d'une entrée — ce que ce dépôt ne fait nulle part.
+ * requête à partir d'une entrée, ce que ce dépôt ne fait nulle part.
  */
-async function itemHomeWorkspace(
-    ctx: FeatureContext,
-    feature: WorkspaceFeatureId,
-    itemId: number
-): Promise<number | null> {
+async function itemHomeWorkspace(ctx: FeatureContext, feature: FeatureId, itemId: number): Promise<number | null> {
+    const items = moduleItems(feature, ctx.db);
+    if (items) return items.homeOf(itemId, ctx.workspaceId);
     switch (feature) {
         case 'uptime':
             return (await ctx.db.uptimeServices.findById(itemId, ctx.workspaceId))?.workspace_id ?? null;
@@ -135,7 +134,7 @@ async function itemHomeWorkspace(
 /** L'état complet, relu après chaque écriture plutôt que reconstruit. */
 async function shareState(
     ctx: FeatureContext,
-    feature: WorkspaceFeatureId,
+    feature: FeatureId,
     itemId: number,
     blocker: ShareBlocker | null,
     /**
@@ -302,11 +301,11 @@ const setFeature = defineFeature({
  */
 async function resolveGrantTarget(
     ctx: FeatureContext,
-    input: { feature: WorkspaceFeatureId; itemId: number; workspaceId?: number },
+    input: { feature: FeatureId; itemId: number; workspaceId?: number },
     level: 'read' | 'write'
 ): Promise<{ workspaceId: number; workspaceName: string }> {
     ctx.assertFeature(input.feature, level);
-    if (!SHARE_WIRED_FEATURES.includes(input.feature)) {
+    if (!isShareWired(input.feature)) {
         throw new FeatureError(
             'validation',
             `Les restrictions par élément ne sont pas encore branchées sur ${featureDescriptor(input.feature).label}.`
@@ -344,7 +343,7 @@ async function resolveGrantTarget(
  */
 async function grantState(
     ctx: FeatureContext,
-    feature: WorkspaceFeatureId,
+    feature: FeatureId,
     itemId: number,
     target: { workspaceId: number; workspaceName: string }
 ): Promise<ItemGrantState> {

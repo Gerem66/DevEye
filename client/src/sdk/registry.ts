@@ -72,3 +72,27 @@ export function moduleManifest(featureId: string): FeatureManifest | undefined {
 export function moduleClient(featureId: string): FeatureClient | undefined {
     return BY_ID.get(featureId)?.client;
 }
+
+/**
+ * Le contrat nommé qu'un module offre aux écrans de l'app (voir
+ * `@deveye/types/sdk/providers`), le jumeau client de `moduleProvider` :
+ * recherche au rendu, `undefined` quand le module est absent, et c'est à
+ * l'écran de dégrader proprement.
+ */
+export function moduleClientProvider<T>(key: string): T | undefined {
+    for (const mod of MODULES) {
+        const value = mod.client.providers?.[key];
+        if (value !== undefined) return value as T;
+    }
+    return undefined;
+}
+
+/**
+ * Un module dont les éléments se projettent (`shareTier` autre que 'never') :
+ * l'équivalent, pour un module, d'une entrée dans `SHARE_WIRED_FEATURES`. Le
+ * serveur exige l'entrée `items` au boot, donc le manifest suffit ici.
+ */
+export function isModuleShareWired(featureId: string): boolean {
+    const manifest = BY_ID.get(featureId)?.manifest;
+    return manifest !== undefined && manifest.shareTier !== 'never';
+}

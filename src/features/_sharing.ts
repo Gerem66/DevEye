@@ -1,9 +1,10 @@
 import { SHARE_WIRED_FEATURES } from '@deveye/types';
-import type { ForeignRef, WorkspaceFeatureId } from '@deveye/types';
+import type { FeatureId, ForeignRef, WorkspaceFeatureId } from '@deveye/types';
 
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
 
 import { FeatureError, type FeatureContext } from './_define';
+import { isModuleShareWired } from './_sdk/register';
 
 /**
  * Lire un élément qui n'habite pas l'espace où on le regarde.
@@ -56,7 +57,7 @@ export interface ShareScope {
  * pas à la commande : une projection retirée entre deux appels doit se voir au
  * suivant, pas au prochain redémarrage.
  */
-export async function shareScope(ctx: FeatureContext, feature: WorkspaceFeatureId): Promise<ShareScope> {
+export async function shareScope(ctx: FeatureContext, feature: FeatureId): Promise<ShareScope> {
     const rows = await ctx.db.itemSharing.sharedInto(ctx.workspaceId, feature);
     const homes = new Map<number, number>(rows.map((r) => [r.item_id, r.home_workspace_id]));
     const ciphers = new Map<number, Promise<Cipher>>();
@@ -129,10 +130,23 @@ export function foreignRef(label: string): ForeignRef {
  *     apparaît ;
  *  3. l'espace visé doit être un des siens, ce que le handler vérifie ensuite.
  */
-export function shareBlockerFor(ctx: FeatureContext, feature: WorkspaceFeatureId): 'feature' | 'forbidden' | null {
-    if (!SHARE_WIRED.has(feature)) return 'feature';
+export function shareBlockerFor(ctx: FeatureContext, feature: FeatureId): 'feature' | 'forbidden' | null {
+    if (!isShareWired(feature)) return 'feature';
     if (!ctx.canFeature(feature, 'write')) return 'forbidden';
     return null;
+}
+
+/**
+ * La lecture élargie de cette fonctionnalité est-elle réellement branchée ?
+ *
+ * Les natives par la liste publiée (`SHARE_WIRED_FEATURES`), les modules par
+ * leur manifest et leur entrée `items` : deux sources, une seule question, et
+ * c'est elle que le serveur, le hub de présence et la coquille de réglages
+ * posent. `shareTier` dit ce que le chiffrement autorise ; ceci dit ce que le
+ * code fait.
+ */
+export function isShareWired(feature: FeatureId): boolean {
+    return SHARE_WIRED.has(feature as WorkspaceFeatureId) || isModuleShareWired(feature);
 }
 
 const SHARE_WIRED = new Set<WorkspaceFeatureId>(SHARE_WIRED_FEATURES);

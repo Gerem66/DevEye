@@ -1,12 +1,13 @@
-import type { AgentsFacade, DevEyeFacade, SdkCipher, SdkDevice } from '@deveye/types/sdk/server';
+import type { AgentsFacade, DevEyeFacade, SdkCipher, SdkDevice, SdkTelemetry } from '@deveye/types/sdk/server';
 import { FeatureError } from '@deveye/types/sdk/server';
 import type { FeatureManifest, NativeCapability } from '@deveye/types/sdk';
-import type { NotificationFeature } from '@deveye/types';
+import type { DeviceRow, NotificationFeature } from '@deveye/types';
 
 import type { Database } from '@/db';
 import type { Logger } from 'pino';
+import { parseDeviceReport } from '@/agent/mappers';
 import { deliver, hasChannel, resolveRoute } from '@/Services/notifications';
-import { sdkHub } from './host';
+import { pushAgentConfig, sdkHub } from './host';
 
 /**
  * La façade des natives : le SEUL chemin d'un module vers les données des
@@ -22,6 +23,8 @@ export interface FacadeDeps {
     ownerUserId: number;
     /** L'appelant est administrateur global (false pour les services sessionless). */
     isAdmin: boolean;
+    /** Le genre de l'espace : un administrateur dans son espace personnel voit la flotte. */
+    workspaceKind: 'personal' | 'shared';
     manifest: FeatureManifest;
     logger: Logger;
 }
@@ -53,7 +56,11 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
                     {
                         subject: alert.subject,
                         body: alert.body,
-                        payload: alert.payload ?? { feature: deps.manifest.id }
+                        payload: alert.payload ?? { feature: deps.manifest.id },
+                        // La mise en page Discord du module, quand il en a une :
+                        // `deliver` ne s'en sert que sur un canal Discord, le
+                        // texte reste ce que reçoivent les autres.
+                        embeds: alert.embeds ? [...alert.embeds] : undefined
                     },
                     deps.logger
                 );
@@ -99,24 +106,72 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
                 if (!deps.isAdmin && !(await deps.db.devices.hasWorkspace(row.id, deps.workspaceId))) {
                     throw new FeatureError('forbidden', 'Cet appareil ne relève pas de cet espace');
                 }
-                return toSdkDevice(row.id, row.name);
+                return toSdkDevice(row);
             },
+            // Même règle que `device.list` : l'administrateur dans son espace
+            // PERSONNEL voit la flotte entière (c'est là qu'il surveille ses
+            // machines, et l'obliger à se partager chaque appareil à lui-même
+            // n'aurait rien protégé) ; partout ailleurs, le partage explicite.
             async list() {
                 gate('devices.read');
-                const rows = await deps.db.devices.listByWorkspace(deps.workspaceId);
-                return rows.map((r) => toSdkDevice(r.id, r.name));
+                const rows =
+                    deps.isAdmin && deps.workspaceKind === 'personal'
+                        ? await deps.db.devices.listAll()
+                        : await deps.db.devices.listByWorkspace(deps.workspaceId);
+                return rows.map(toSdkDevice);
             },
             isOnline(deviceId) {
                 gate('devices.read');
                 return sdkHub().isOnline(deviceId);
             }
         },
+        telemetry: createTelemetry(deps.db, () => gate('telemetry.read')),
         agents: agentsFacade(() => gate('agents'))
     };
 }
 
-function toSdkDevice(id: string, name: string): SdkDevice {
-    return { id, name, online: sdkHub().isOnline(id) };
+/** Ce que la façade révèle d'une ligne appareil : l'identité, l'état, le rapport. */
+export function toSdkDevice(row: DeviceRow): SdkDevice {
+    return {
+        id: row.id,
+        name: row.name,
+        online: sdkHub().isOnline(row.id),
+        status: row.status,
+        ownerUserId: row.owner_id,
+        workspaceId: row.workspace_id ?? null,
+        metricIntervalSeconds: row.metric_interval_seconds === null ? null : Number(row.metric_interval_seconds),
+        report: parseDeviceReport(row.report_json)
+    };
+}
+
+/**
+ * La télémétrie des appareils, lue à l'instant : la liste de processus la plus
+ * proche et la ligne de métriques qui l'accompagne, exactement ce que le moteur
+ * Sentinelle lisait en dur. Et l'épinglage d'un instant, pour que la rétention
+ * n'efface jamais la preuve d'un constat.
+ */
+export function createTelemetry(db: Database, gate: () => void): SdkTelemetry {
+    return {
+        async snapshot(deviceId, ts) {
+            gate();
+            const sample = await db.processSamples.nearest(deviceId, ts);
+            const points = await db.metrics.query({ deviceId, from: ts - 1000, to: ts + 1000, resolution: 'raw' });
+            const point = points[points.length - 1] ?? null;
+            if (!sample && !point) return null;
+            return {
+                ts,
+                processes: sample?.processes ?? [],
+                activeConnections: point?.activeConnections ?? null
+            };
+        },
+        async pinInstant(deviceId, ts) {
+            gate();
+            // Les deux tables en une seule instruction : une preuve à moitié
+            // épinglée est une preuve dont la liste de processus disparaît à
+            // la purge suivante.
+            await db.metrics.setInstantsPinned(deviceId, ts, ts, true);
+        }
+    };
 }
 
 /**
@@ -128,6 +183,8 @@ function toSdkDevice(id: string, name: string): SdkDevice {
 export function agentsFacade(gate: () => void): AgentsFacade {
     return {
         isOnline: (deviceId) => (gate(), sdkHub().isOnline(deviceId)),
+        requestScan: (deviceId) => (gate(), sdkHub().requestScan(deviceId)),
+        pushConfig: (deviceId) => (gate(), pushAgentConfig(deviceId)),
         requestSyncConfig: (deviceId, payload) => (gate(), sdkHub().requestSyncConfig(deviceId, payload)),
         requestSyncScan: (deviceId, payload) => (gate(), sdkHub().requestSyncScan(deviceId, payload)),
         requestSyncPush: (deviceId, payload) => (gate(), sdkHub().requestSyncPush(deviceId, payload)),

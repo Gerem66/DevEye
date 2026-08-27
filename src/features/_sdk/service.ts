@@ -6,6 +6,7 @@ import type {
     SdkServerKeys
 } from '@deveye/types/sdk/server';
 import type { FeatureManifest } from '@deveye/types/sdk';
+import type { LiveTopic } from '@deveye/types';
 
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
@@ -13,8 +14,10 @@ import { FeatureError } from '@deveye/types/sdk/server';
 import { createOpenCipher } from '@/Services/SecureStore';
 import type { Logger } from 'pino';
 import type { AuditLog } from '@/Services/AuditLog';
-import { agentsFacade, createFacade } from './facade';
+import type { LiveHub } from '@/live/hub';
+import { agentsFacade, createFacade, createTelemetry, toSdkDevice } from './facade';
 import { createFeatureStore } from './store';
+import { sdkHub } from './host';
 
 /**
  * Les dépendances d'un service d'arrière-plan de module : tout est résolu
@@ -26,6 +29,11 @@ export interface ModuleServiceHost {
     crypt: Encryption;
     audit: AuditLog;
     logger: Logger;
+    /**
+     * Présence en direct : un service écrit sans commande utilisateur, donc
+     * sans socket pour diffuser, et c'est le hub qu'il avertit directement.
+     */
+    live: LiveHub;
 }
 
 /**
@@ -66,6 +74,7 @@ export function createServiceDeps(
             workspaceId,
             isAdmin: false,
             ownerUserId: 0,
+            workspaceKind: 'shared',
             manifest,
             logger: host.logger
         });
@@ -76,11 +85,13 @@ export function createServiceDeps(
     // La même faute, la même erreur qu'en requête (`facade.ts`) : typée, et
     // nommant la capacité manquante.
     const capabilities = new Set(manifest.nativeCapabilities ?? []);
-    const gateAgents = (): void => {
-        if (!capabilities.has('agents')) {
-            throw new FeatureError('forbidden', `Module « ${manifest.id} » : declare 'agents' in nativeCapabilities`);
+    const gate = (cap: 'agents' | 'devices.read' | 'telemetry.read') => (): void => {
+        if (!capabilities.has(cap)) {
+            throw new FeatureError('forbidden', `Module « ${manifest.id} » : declare '${cap}' in nativeCapabilities`);
         }
     };
+    const gateAgents = gate('agents');
+    const gateDevices = gate('devices.read');
     const keys: SdkServerKeys = {
         sealBytes: (plain) => host.crypt.seal(Buffer.from(plain)),
         openBytes: (sealed) => host.crypt.openRaw(sealed)
@@ -105,6 +116,23 @@ export function createServiceDeps(
         devicesFor: (workspaceId) => {
             const { list, isOnline } = facadeFor(workspaceId).devices;
             return { list, isOnline };
+        },
+        // La flotte entière, par identifiant : ce qu'un moteur qui reçoit les
+        // trames de tous les appareils a besoin de relire, sans espace.
+        devices: {
+            find: async (deviceId) => {
+                gateDevices();
+                const row = await host.db.devices.findById(deviceId);
+                return row ? toSdkDevice(row) : null;
+            },
+            isOnline: (deviceId) => (gateDevices(), sdkHub().isOnline(deviceId))
+        },
+        telemetry: createTelemetry(host.db, gate('telemetry.read')),
+        // Le sujet d'un module EST son id (contrat du manifest, validé à
+        // l'enregistrement) ; la diffusion traverse les projections d'une
+        // feature branchée au partage, le hub s'en charge.
+        live: {
+            changed: (workspaceId) => host.live.changed(workspaceId, [manifest.id as LiveTopic], null)
         },
         audit: (entry) => {
             host.audit.record({

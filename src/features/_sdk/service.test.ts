@@ -5,8 +5,9 @@ import type { FeatureId } from '@deveye/types';
 import type { FeatureManifest, NativeCapability } from '@deveye/types/sdk';
 
 import type { MonitorHub } from '@/agent/hub';
+import type { Database } from '@/db';
 import type { AuditEvent } from '@/Services/AuditLog';
-import { setSdkHub } from './host';
+import { setSdkHost } from './host';
 import { createServiceDeps, type ModuleServiceHost } from './service';
 
 /**
@@ -58,9 +59,9 @@ function fakeHost() {
                 listByWorkspace: async (ws: number) => {
                     listByWorkspaceCalls.push(ws);
                     return [
-                        { id: 'dev-1', name: 'Portable' },
-                        { id: 'dev-2', name: 'Serveur' }
-                    ];
+                        { id: 'dev-1', name: 'Portable', status: 'active', owner_id: 7, workspace_id: ws },
+                        { id: 'dev-2', name: 'Serveur', status: 'active', owner_id: 7, workspace_id: ws }
+                    ].map((r) => ({ ...r, metric_interval_seconds: null, report_json: null }));
                 }
             },
             featureKv: {
@@ -88,7 +89,7 @@ function fakeHost() {
     return { host, errors, records, listByWorkspaceCalls };
 }
 
-setSdkHub({ isOnline: (deviceId: string) => deviceId === 'dev-1' } as unknown as MonitorHub);
+setSdkHost({ isOnline: (deviceId: string) => deviceId === 'dev-1' } as unknown as MonitorHub, {} as Database);
 
 const forbidden = { name: 'FeatureError', code: 'forbidden' };
 const flush = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
@@ -191,9 +192,19 @@ describe('createServiceDeps : devicesFor', () => {
     it("avec la capacité : les appareils de l'espace demandé, présence comprise", async () => {
         const { host, listByWorkspaceCalls } = fakeHost();
         const devices = createServiceDeps(host, manifest(ID, ['devices.read']), null).devicesFor(4);
+        const revealed = (id: string, name: string, online: boolean) => ({
+            id,
+            name,
+            online,
+            status: 'active',
+            ownerUserId: 7,
+            workspaceId: 4,
+            metricIntervalSeconds: null,
+            report: null
+        });
         assert.deepEqual(await devices.list(), [
-            { id: 'dev-1', name: 'Portable', online: true },
-            { id: 'dev-2', name: 'Serveur', online: false }
+            revealed('dev-1', 'Portable', true),
+            revealed('dev-2', 'Serveur', false)
         ]);
         assert.deepEqual(listByWorkspaceCalls, [4]);
         assert.equal(devices.isOnline('dev-1'), true);

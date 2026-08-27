@@ -23,7 +23,7 @@ import { logger } from '@/logger';
 import { env, isDev } from '@/Utils/Env';
 import { registerWS } from '@/ws/handler';
 import { createModuleServices, moduleAgentHooks } from '@/features/_sdk/register';
-import { setSdkHub } from '@/features/_sdk/host';
+import { setSdkHost } from '@/features/_sdk/host';
 import type { FeatureService } from '@deveye/types/sdk/server';
 import { createAuditLog } from '@/Services/AuditLog';
 import { MailSyncService } from '@/Services/MailSyncService';
@@ -182,8 +182,8 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // l'enregistrement des sockets : un module d'infrastructure (bail, clés)
     // doit être prêt avant la première trame d'agent, exactement comme le
     // moteur d'un module d'infrastructure (CloudSync) l'exige.
-    setSdkHub(hub);
-    const moduleServices = createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger });
+    setSdkHost(hub, deps.db);
+    const moduleServices = createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger, live });
     for (const svc of moduleServices) await svc.start();
 
     const uptime = new UptimeMonitor({ db: deps.db, crypt: deps.crypt, audit, logger, live });

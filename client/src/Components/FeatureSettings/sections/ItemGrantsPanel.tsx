@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { featureDescriptor, type ItemAccess, type ItemGrantState, type WorkspaceFeatureId } from '@deveye/types';
+import { featureDescriptor, type FeatureId, type ItemAccess, type ItemGrantState } from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import SegmentedControl from '@/Components/SegmentedControl';
@@ -40,7 +40,7 @@ const FEATURE_ACCESS_LABEL: Record<'none' | 'read' | 'write', string> = {
 };
 
 interface Props {
-    feature: WorkspaceFeatureId;
+    feature: FeatureId;
     itemId: number;
     /** L'espace visé ; absent = l'espace actif. */
     workspaceId?: number;

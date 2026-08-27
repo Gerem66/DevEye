@@ -34,12 +34,21 @@ export { default as SelectInput } from '@/Components/SelectInput';
 export { StatusBadge } from '@/Components/StatusBadge';
 export { default as Switch } from '@/Components/Switch';
 export { default as TextInput } from '@/Components/TextInput';
-export { Dialog, useDialogClose, useDialogSubmit, useDismissLayer } from '@/Components/Dialog';
+export { Dialog, DialogCancelButton, useDialogClose, useDialogSubmit, useDismissLayer } from '@/Components/Dialog';
+// La couche impérative au-dessus de Dialog (OpenPopup → promesse résolue par
+// ClosePopup), et l'explicatif « i » commun : les features à formulaires
+// (Coffre, Notes) s'en servent, les modules qui en viennent aussi.
+export { default as Popup, ClosePopup, OpenPopup } from '@/Components/Popup';
+export { openInfo } from '@/Components/InfoPopup';
 export { FeatureSettingsButton } from '@/Components/FeatureSettings';
 export { DeviceFolderPicker } from '@/Components/DeviceFolderPicker';
 export { useDevices } from '@/stores/devices';
 /** Les classes de rangées canoniques des écrans de réglages (channelRow, etc.). */
 export { default as settingsStyles } from '@/Components/FeatureSettings/FeatureSettings.module.css';
+/** La carte de comptage de l'accueil, et le compte qui la nourrit. */
+export { CountWidget, useWorkspaceCount, type CountState } from '@/Components/CountWidget';
+/** Le glisser-déposer de réordonnancement, le seul geste de l'app pour ça. */
+export { useDragReorder } from '@/dragReorder';
 
 // ── Les données ────────────────────────────────────────────────────────────
 export { humanizeError, useResource } from '@/api/useResource';

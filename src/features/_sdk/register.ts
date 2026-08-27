@@ -1,6 +1,12 @@
 import { isExternalFeatureId, registerExternalFeature } from '@deveye/types';
 import { externalDescriptorOf, validateManifest, type FeatureManifest } from '@deveye/types/sdk';
-import type { FeatureAgentHooks, FeatureServer, FeatureService, SdkQueryable } from '@deveye/types/sdk/server';
+import type {
+    FeatureAgentHooks,
+    FeatureServer,
+    FeatureService,
+    SdkCipher,
+    SdkQueryable
+} from '@deveye/types/sdk/server';
 import { FeatureError } from '@deveye/types/sdk/server';
 
 import type { Database } from '@/db';
@@ -59,6 +65,12 @@ export function registerModules(installed: readonly InstalledFeatureModule[]): v
         }
         if ((manifest.nativeCapabilities ?? []).includes('notify') && !manifest.notifies) {
             throw new Error(`Module « ${manifest.id} » : la capacité 'notify' exige notifies: true`);
+        }
+        // Projeter suppose que l'app sache où vit un élément : sans l'entrée
+        // `items`, l'onglet Partage cocherait et `share.set` répondrait
+        // « introuvable ». Refusé au boot plutôt que découvert à l'écran.
+        if (manifest.shareTier !== 'never' && !mod.server.items) {
+            throw new Error(`Module « ${manifest.id} » : shareTier '${manifest.shareTier}' exige server.items`);
         }
         // Une native rapatriée (Météo) garde son descripteur dans le registre
         // publié : seuls les ids externes s'enregistrent ici.
@@ -124,6 +136,40 @@ export function moduleMigrationDirs(): { id: string; dir: string }[] {
 }
 
 /**
+ * Ce que l'app sait des éléments d'un module (domicile, intitulé), lié à son
+ * repo : les commandes transversales de partage et de routage de notification
+ * y passent avant leur `switch` natif. `undefined` pour une native non migrée
+ * ou un module sans éléments.
+ */
+export function moduleItems(
+    featureId: string,
+    db: Database
+):
+    | {
+          homeOf(itemId: number, workspaceId: number): Promise<number | null>;
+          labelOf(cipher: SdkCipher, itemId: number, workspaceId: number): Promise<string | null>;
+      }
+    | undefined {
+    const mod = BY_ID.get(featureId);
+    const items = mod?.server.items;
+    if (!mod || !items) return undefined;
+    return {
+        homeOf: (itemId, workspaceId) => items.homeOf(mod.repoFor(db), itemId, workspaceId),
+        labelOf: (cipher, itemId, workspaceId) => items.labelOf(mod.repoFor(db), cipher, itemId, workspaceId)
+    };
+}
+
+/**
+ * Un module dont les éléments se projettent : `shareTier` autre que 'never'
+ * ET l'entrée `items` (garantie par `registerModules`). C'est l'équivalent,
+ * pour un module, d'une entrée dans `SHARE_WIRED_FEATURES`.
+ */
+export function isModuleShareWired(featureId: string): boolean {
+    const mod = BY_ID.get(featureId);
+    return mod !== undefined && mod.manifest.shareTier !== 'never' && mod.server.items !== undefined;
+}
+
+/**
  * Les services créés, gardés pour les regards transverses : les hooks agent
  * (`moduleAgentHooks`) et les contrats offerts (`moduleProvider`) se lisent
  * dessus à la demande, jamais à la construction, pour que l'ordre de boot ne
@@ -181,6 +227,10 @@ export function moduleAgentHooks(): Required<FeatureAgentHooks> {
     return {
         onAgentConnect: (deviceId) => each('onAgentConnect', (h) => h.onAgentConnect?.(deviceId)),
         onAgentOffline: (deviceId) => each('onAgentOffline', (h) => h.onAgentOffline?.(deviceId)),
+        onReport: (deviceId, report) => each('onReport', (h) => h.onReport?.(deviceId, report)),
+        onMetricsBatch: (deviceId, snapshots) => each('onMetricsBatch', (h) => h.onMetricsBatch?.(deviceId, snapshots)),
+        onIntegrity: (deviceId, integrity) => each('onIntegrity', (h) => h.onIntegrity?.(deviceId, integrity)),
+        onAuthEvents: (deviceId, auth) => each('onAuthEvents', (h) => h.onAuthEvents?.(deviceId, auth)),
         onSyncChanged: (deviceId, payload) => each('onSyncChanged', (h) => h.onSyncChanged?.(deviceId, payload)),
         onSyncIndex: (deviceId, payload) => each('onSyncIndex', (h) => h.onSyncIndex?.(deviceId, payload)),
         onSyncChunk: (deviceId, payload) => each('onSyncChunk', (h) => h.onSyncChunk?.(deviceId, payload)),
