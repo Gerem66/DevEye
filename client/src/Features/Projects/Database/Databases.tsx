@@ -257,10 +257,10 @@ function DatabaseBlock({ database, alerts, canWrite, onUnlink }: DatabaseBlockPr
                     // Le sens qui manquait : la feature sait déjà mener aux
                     // projets d'une base, l'onglet d'un projet ne savait pas
                     // mener à la base. Par la téléportation, comme partout — un
-                    // chemin `view:database l1:db:7` dit « ouvre la feature, et
+                    // chemin `view:database l1:7` dit « ouvre la feature, et
                     // dedans, cette base-là », garde d'accès comprise.
                     onOpenInFeature={() =>
-                        startTeleport(getActiveWorkspaceId() ?? 0, ['view:database', `l1:db:${database.id}`])
+                        startTeleport(getActiveWorkspaceId() ?? 0, ['view:database', `l1:${database.id}`])
                     }
                     after={
                         // Destructeur, donc à part et confirmé : il ne doit pas

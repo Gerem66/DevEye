@@ -103,7 +103,7 @@ export function FeatureBackup(_props: FeatureProps) {
     // La fiche ouverte est un lieu : déclarée à la présence (même format que
     // Deploy « target:x »), donc rejoignable, et atteignable par la
     // téléportation de « Régler dans <espace> » d'un élément projeté.
-    const liveTarget = useLiveSegment('l1', openedId === null ? null : `job:${openedId}`);
+    const liveTarget = useLiveSegment('l1', openedId === null ? null : String(openedId));
     useEffect(() => {
         if (!liveTarget || jobs === null) return;
         if (liveTarget.value === null) {

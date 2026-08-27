@@ -44,7 +44,7 @@ import { getActiveWorkspaceId } from './workspace';
  * qu'après un préfixe commun, lequel commence toujours par `view:<feature>`.
  *
  * Cinq niveaux, parce que la feature la plus profonde en compte cinq : Projets
- * descend jusqu'à l'onglet d'une tâche (`view:projects l1:project l2:tab
+ * descend jusqu'à l'onglet d'une tâche (`view:projects l1:<id> l2:tab
  * l3:card l4:tab`). Le contrat du fil en autorise six (`livePathSchema`), il
  * reste donc de la marge — mais en ajouter un ici a un coût réel : chaque
  * niveau allonge le chemin diffusé à chaque déplacement, et affine le

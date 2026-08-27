@@ -10,7 +10,7 @@ import type { FeatureManifest } from '@deveye/types/sdk';
  * Le descriptif (intitulé, icône, nom de l'élément, `shareTier: 'never'`)
  * reste celui du registre publié, étalé plutôt que recopié : une native garde
  * son identité dans @deveye/types, le manifest n'ajoute que ce que le registre
- * ne porte pas (catégorie, ressources, segment de présence, commandes). Pas
+ * ne porte pas (catégorie, ressources, commandes). Pas
  * d'onglet de réglages : le coffre n'a rien à régler.
  */
 const descriptor = featureDescriptor('password');
@@ -25,12 +25,5 @@ export const manifest = {
      * membres de l'espace.
      */
     resources: ['password.count', 'password.list'],
-    /**
-     * Le rendez-vous de présence : l'entrée ouverte dans le formulaire, par
-     * son identifiant nu. Octet pour octet ce que la vue déclare via
-     * `useLiveSegment('l1', String(id))` ; le descripteur dit `hasItems`,
-     * donc le manifest le porte.
-     */
-    itemSegment: (id) => String(id),
     commands: passwordCommands
 } satisfies FeatureManifest;

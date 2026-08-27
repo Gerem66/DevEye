@@ -64,8 +64,8 @@ export default function Sentinel(_props: FeatureViewProps) {
 
     // Le niveau profond de Sentinelle : la machine ouverte, par son uuid. La
     // racine `view:sentinel` vient de l'accueil ; cette feature n'annonce que
-    // le sien. Pas d'`itemSegment` au manifest : Sentinelle n'a pas
-    // d'éléments, ses « éléments » sont des appareils.
+    // le sien. Sentinelle n'a pas d'éléments au sens de la coquille : ses
+    // « éléments » sont des appareils.
     const liveTarget = useLiveSegment('l1', deviceId);
     useEffect(() => {
         if (!liveTarget) return;

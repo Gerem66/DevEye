@@ -11,7 +11,7 @@ import type { FeatureManifest } from '@deveye/types/sdk';
  * Le descriptif (intitulé, icône, nom de l'élément) reste celui du registre
  * publié, étalé plutôt que recopié : une native garde son identité dans
  * @deveye/types, le manifest n'ajoute que ce que le registre ne porte pas
- * (catégorie, ressources, segment de présence, commandes). Pas d'onglet de
+ * (catégorie, ressources, commandes). Pas d'onglet de
  * réglages : les notes n'ont rien à régler. Pas de `nativeCapabilities` :
  * rien n'est appelé.
  */
@@ -42,12 +42,5 @@ export const manifest = {
      * l'espace.
      */
     resources: ['notes.count', 'notes.list'],
-    /**
-     * Le rendez-vous de présence : la note ouverte dans l'éditeur, par son
-     * identifiant nu. Octet pour octet ce que la vue déclare via
-     * `useLiveSegment('l1', String(id))` ; le descripteur dit `hasItems`,
-     * donc le manifest le porte.
-     */
-    itemSegment: (id) => String(id),
     commands: notesCommands
 } satisfies FeatureManifest;

@@ -34,8 +34,8 @@ export default function Uptime(_props: FeatureViewProps) {
     const workspaceId = useActiveWorkspace()?.id ?? null;
 
     // Le niveau profond d'Uptime : le service ouvert. La racine `view:uptime`
-    // vient de l'accueil ; cette feature n'annonce que le sien. Octet pour
-    // octet ce que le manifest déclare (`itemSegment`).
+    // vient de l'accueil ; cette feature n'annonce que le sien, par l'id nu
+    // du service, comme toute fiche d'élément.
     const liveTarget = useLiveSegment('l1', selectedId === null ? null : String(selectedId));
     useEffect(() => {
         if (!liveTarget) return;

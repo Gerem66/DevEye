@@ -37,7 +37,7 @@ export function TargetList({ targets, outlineFor, canWrite, onOpen, onReorder, o
                 <TargetCard
                     key={target.id}
                     target={target}
-                    outline={outlineFor(`target:${target.id}`)}
+                    outline={outlineFor(String(target.id))}
                     dragging={drag.draggingId === target.id}
                     onOpen={() => onOpen(target.id)}
                     onDragPointerDown={canWrite ? (e) => drag.onGripPointerDown(e, target.id) : undefined}

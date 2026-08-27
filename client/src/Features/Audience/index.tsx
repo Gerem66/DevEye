@@ -54,7 +54,7 @@ export function FeatureAudience({ workspace }: FeatureProps) {
 
     // Présence : « qui regarde quel site ». Un seul déclarant par niveau — ce
     // composant possède `l1`, et rien d'autre dans la feature n'y touche.
-    const l1Target = useLiveSegment('l1', openedId === null ? null : `site:${openedId}`);
+    const l1Target = useLiveSegment('l1', openedId === null ? null : String(openedId));
     const outlineFor = useLiveOutlines('l1');
 
     /**

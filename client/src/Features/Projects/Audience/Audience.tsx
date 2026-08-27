@@ -142,7 +142,7 @@ export function Audience({ project, canWrite }: AudienceProps) {
                                     onClick={() =>
                                         startTeleport(getActiveWorkspaceId() ?? 0, [
                                             'view:audience',
-                                            `l1:site:${site.id}`
+                                            `l1:${site.id}`
                                         ])
                                     }
                                 >

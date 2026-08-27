@@ -1,10 +1,9 @@
-import type { FeatureId, WorkspaceFeatureId } from '@deveye/types';
+import type { FeatureId } from '@deveye/types';
 
 import { startTeleport } from '@/stores/live';
 import { requestItemSettings } from '@/stores/settingsRequest';
 import { requestSelectWorkspace } from '@/stores/viewRequest';
 import { getWorkspaceState } from '@/stores/workspace';
-import { moduleManifest } from '@/sdk/registry';
 
 /**
  * « Aller régler ça là où ça se règle. »
@@ -16,23 +15,15 @@ import { moduleManifest } from '@/sdk/registry';
  * « rejoindre quelqu'un »), puis réouverture de ses réglages sur l'onglet
  * demandé (l'intention de `stores/settingsRequest`, consommée par le bouton
  * commun une fois la fiche montée).
- */
-
-/**
- * Le segment de présence (`l1`) d'un élément, par fonctionnalité.
  *
- * ⚠️ La MÊME valeur que le `useLiveSegment('l1', …)` déclaré par la feature
- * dans son index : c'est un rendez-vous, pas une convention centrale. Une
- * feature qui change son format de segment doit corriger ici, sinon la
- * téléportation la laissera sur sa liste au lieu d'ouvrir la fiche.
+ * Le segment de présence d'un élément est son identifiant nu, `l1:<id>`,
+ * pour toutes les features : c'est ce que chaque vue déclare via
+ * `useLiveSegment('l1', String(id))`, et le préfixe `view:<feature>` du chemin
+ * dit déjà de quelle sorte d'élément il s'agit. Il y a eu une table de
+ * formats par feature (`repo:12`, `db:12`...) et un `itemSegment` au manifest
+ * des modules pour la remplacer ; les deux ont disparu le jour où les six
+ * natives préfixées sont passées à l'id nu.
  */
-const ITEM_SEGMENT: Partial<Record<WorkspaceFeatureId, (itemId: number) => string>> = {
-    database: (id) => `db:${id}`,
-    deploy: (id) => `target:${id}`,
-    git: (id) => `repo:${id}`,
-    audience: (id) => `site:${id}`,
-    backup: (id) => `job:${id}`
-};
 
 /** Le nom de l'espace si l'appelant en est membre, sinon `null` : sans accès,
  *  aucun saut à proposer. */
@@ -43,10 +34,6 @@ export function accessibleWorkspaceName(workspaceId: number | null): string | nu
 
 export function goToItemSettings(workspaceId: number, feature: FeatureId, itemId: number, section: string): void {
     requestItemSettings({ workspaceId, feature, itemId, section });
-    // Un module apporte le sien par son manifest (`itemSegment`), même
-    // contrat de rendez-vous octet pour octet ; la table ne connaît que les
-    // natives non migrées.
-    const segment = moduleManifest(feature)?.itemSegment ?? ITEM_SEGMENT[feature as WorkspaceFeatureId];
-    startTeleport(workspaceId, segment ? [`view:${feature}`, `l1:${segment(itemId)}`] : [`view:${feature}`]);
+    startTeleport(workspaceId, [`view:${feature}`, `l1:${itemId}`]);
     requestSelectWorkspace(workspaceId);
 }

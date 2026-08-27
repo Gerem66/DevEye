@@ -167,9 +167,8 @@ nécessaire.
 `ctx.secrecy.isUnlocked()` posé AVANT de lire, parce qu'une liste vide n'est
 pas une liste verrouillée (le client attend `locked` pour rouvrir l'invite,
 par le `withSecrecy` du barrel). Une table historique en allowlist (001,
-rattachée à l'espace par la 048), pas de service, pas de réglages ; `hasItems`
-au descripteur, donc `itemSegment` au manifest (l'entrée ouverte, par son id
-nu). Ce que sa migration a retiré : la commande `password.unlock` et son
+rattachée à l'espace par la 048), pas de service, pas de réglages. Ce que sa
+migration a retiré : la commande `password.unlock` et son
 registre en mémoire par session (`markUnlocked` / `forgetSession`, avec son
 crochet de fin de session dans `ws/handler.ts`), un mécanisme sans lecteur
 (le déverrouillage passe par `secrecy.unlock`, la protection réelle est le
@@ -185,9 +184,8 @@ d'accès ; `ctx.secrecy.isUnlocked()` ne sert qu'aux écritures sur une note
 privée (édition, archivage, destruction), qui n'ont pas besoin de lire le
 corps mais ne doivent pas écraser ce qu'une session scellée ne voit pas, et à
 masquer la liste (jamais bloquée). Deux tables historiques en allowlist (014
-et 015, complétées jusqu'à la 036), pas de service, pas de réglages ;
-`hasItems` au descripteur, donc `itemSegment` au manifest (la note ouverte,
-par son id nu). Ce que sa migration a décidé : le **renommage franc** de ses
+et 015, complétées jusqu'à la 036), pas de service, pas de réglages. Ce que
+sa migration a décidé : le **renommage franc** de ses
 quatorze commandes sous le seul préfixe `notes.` (le contrat du manifest ;
 `commandPrefix` ne sert qu'à une casse différente du même id), les dossiers
 passant de `folder.*` à des verbes camelCase (`notes.folderAdd`...), et les
@@ -228,7 +226,7 @@ coquille (cadence, délai, seuil et rétention d'un service sont un panneau
 Général à l'échelle de l'élément, le dialogue ne garde que l'identité), la
 commande morte `uptime.testNotification` et l'avis « test » de sa mise en
 page (l'essai passe par `notify.channelTest`), l'entrée native du widget de
-topbar et celles de `SHARE_WIRED_FEATURES`, `ITEM_SEGMENT`, `LIST_KEYS` et
+topbar et celles de `SHARE_WIRED_FEATURES`, `LIST_KEYS` et
 `TOPIC_KEYS`. Ce que le contrat client a demandé côté module : `Ratios` ne
 lit plus qu'un `Pick` des trois taux (ce que `UptimeLinkedService` porte), et
 le dialogue offert à l'hôte est un adaptateur qui recharge la fiche complète

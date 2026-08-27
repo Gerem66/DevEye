@@ -161,7 +161,7 @@ export function Deploy({ project, members, canWrite }: DeployProps) {
                                     onClick={() =>
                                         startTeleport(getActiveWorkspaceId() ?? 0, [
                                             'view:deploy',
-                                            `l1:target:${item.target.id}`
+                                            `l1:${item.target.id}`
                                         ])
                                     }
                                 >

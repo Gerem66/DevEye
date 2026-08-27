@@ -281,13 +281,13 @@ function RepoBlock({ repo, members, canWrite, canWriteGit, onUnlink }: RepoBlock
                     )}
 
                     {/* Par la téléportation, comme partout : le chemin
-                        `view:git l1:repo:7` dit « ouvre la feature, et dedans,
+                        `view:git l1:7` dit « ouvre la feature, et dedans,
                         ce dépôt-là », garde d'accès comprise. Offert même sans
                         droit d'écriture : c'est une navigation. */}
                     <Button
                         variant='secondary'
                         icon='chevrons-right'
-                        onClick={() => startTeleport(getActiveWorkspaceId() ?? 0, ['view:git', `l1:repo:${repo.id}`])}
+                        onClick={() => startTeleport(getActiveWorkspaceId() ?? 0, ['view:git', `l1:${repo.id}`])}
                     >
                         Ouvrir le Git
                     </Button>

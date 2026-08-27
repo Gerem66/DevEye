@@ -50,7 +50,7 @@ export function FeatureProjects({ user, workspace }: FeatureProps) {
 
     // Présence : « qui regarde quel projet ». Un seul déclarant par niveau —
     // ce composant possède `l1`, et rien d'autre dans la feature n'y touche.
-    const liveTarget = useLiveSegment('l1', selectedId === null ? null : `project:${selectedId}`);
+    const liveTarget = useLiveSegment('l1', selectedId === null ? null : String(selectedId));
     const outlineFor = useLiveOutlines('l1');
 
     const reload = useCallback(async () => {
@@ -238,7 +238,7 @@ export function FeatureProjects({ user, workspace }: FeatureProps) {
      *
      * Deux usages, un seul mécanisme : rejoindre quelqu'un qui regarde un projet
      * (présence), et le « ouvrir le projet » de la feature Git, qui pose le même
-     * chemin `view:projects l1:project:<id>`.
+     * chemin `view:projects l1:<id>`.
      *
      * La cible est rendue **tant qu'elle n'est pas atteinte** (voir
      * `useLiveSegment`) : si le portefeuille n'a pas fini de charger, l'effet la
@@ -413,7 +413,7 @@ export function FeatureProjects({ user, workspace }: FeatureProps) {
                             summary={summary}
                             canWrite={canWrite}
                             archived={showArchived}
-                            outline={outlineFor(`project:${summary.project.id}`)}
+                            outline={outlineFor(String(summary.project.id))}
                             dragging={drag.draggingId === summary.project.id}
                             onOpen={() => void openProject(summary)}
                             onArchive={() => void setArchived(summary, !showArchived)}

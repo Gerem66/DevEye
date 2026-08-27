@@ -49,7 +49,7 @@ export function RepoList({
                     key={repo.id}
                     repo={repo}
                     sync={syncing.get(repo.id) ?? null}
-                    outline={outlineFor(`repo:${repo.id}`)}
+                    outline={outlineFor(String(repo.id))}
                     dragging={drag.draggingId === repo.id}
                     onOpen={() => onOpen(repo.id)}
                     onDragPointerDown={canWrite ? (e) => drag.onGripPointerDown(e, repo.id) : undefined}

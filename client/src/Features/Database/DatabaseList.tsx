@@ -43,7 +43,7 @@ export function DatabaseList({
                 <DatabaseCard
                     key={database.id}
                     database={database}
-                    outline={outlineFor(`db:${database.id}`)}
+                    outline={outlineFor(String(database.id))}
                     dragging={drag.draggingId === database.id}
                     onOpen={() => onOpen(database.id)}
                     onDragPointerDown={canWrite ? (e) => drag.onGripPointerDown(e, database.id) : undefined}

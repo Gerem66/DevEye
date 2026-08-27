@@ -162,7 +162,7 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onEdit
                                     onClick={() =>
                                         startTeleport(getActiveWorkspaceId() ?? 0, [
                                             'view:projects',
-                                            `l1:project:${project.projectId}`
+                                            `l1:${project.projectId}`
                                         ])
                                     }
                                 >

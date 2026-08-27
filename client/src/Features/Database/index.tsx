@@ -63,7 +63,7 @@ export function FeatureDatabase({ workspace }: FeatureProps) {
 
     // Présence : « qui regarde quelle base ». Un seul déclarant par niveau —
     // ce composant possède `l1`, et rien d'autre dans la feature n'y touche.
-    const l1Target = useLiveSegment('l1', openedId === null ? null : `db:${openedId}`);
+    const l1Target = useLiveSegment('l1', openedId === null ? null : String(openedId));
     const outlineFor = useLiveOutlines('l1');
 
     /**
@@ -221,11 +221,11 @@ export function FeatureDatabase({ workspace }: FeatureProps) {
      * Ouvre un projet qui utilise cette base, dans la feature Projets.
      *
      * Par la **téléportation**, comme la feature Git : un chemin
-     * `view:projects l1:project:12` dit exactement « ouvre Projets, et dedans,
+     * `view:projects l1:12` dit exactement « ouvre Projets, et dedans,
      * ce projet-là », et l'accueil sait déjà l'appliquer, garde d'accès comprise.
      */
     const openProject = (projectId: number) => {
-        startTeleport(workspace.id, ['view:projects', `l1:project:${projectId}`]);
+        startTeleport(workspace.id, ['view:projects', `l1:${projectId}`]);
     };
 
     if (opened) {

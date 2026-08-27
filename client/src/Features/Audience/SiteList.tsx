@@ -37,7 +37,7 @@ export function SiteList({ sites, outlineFor, canWrite, onOpen, onReorder, onDra
                 <SiteCard
                     key={site.id}
                     site={site}
-                    outline={outlineFor(`site:${site.id}`)}
+                    outline={outlineFor(String(site.id))}
                     dragging={drag.draggingId === site.id}
                     onOpen={() => onOpen(site.id)}
                     onDragPointerDown={canWrite ? (e) => drag.onGripPointerDown(e, site.id) : undefined}

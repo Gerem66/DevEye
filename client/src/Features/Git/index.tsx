@@ -73,7 +73,7 @@ export function FeatureGit({ workspace }: FeatureProps) {
 
     // Présence : « qui regarde quel dépôt ». Un seul déclarant par niveau —
     // ce composant possède `l1`, et rien d'autre dans la feature n'y touche.
-    const l1Target = useLiveSegment('l1', openedId === null ? null : `repo:${openedId}`);
+    const l1Target = useLiveSegment('l1', openedId === null ? null : String(openedId));
     const outlineFor = useLiveOutlines('l1');
 
     /**
@@ -249,13 +249,13 @@ export function FeatureGit({ workspace }: FeatureProps) {
      *
      * Par la **téléportation** — le mécanisme que la présence utilise déjà pour
      * « rejoindre quelqu'un » — plutôt que par un canal de navigation dédié :
-     * un chemin `view:projets l1:project:12` dit exactement « ouvre Projets, et
+     * un chemin `view:projects l1:12` dit exactement « ouvre Projets, et
      * dedans, ce projet-là », et l'accueil sait déjà l'appliquer, garde d'accès
      * comprise. Écrire un second mécanisme pour le même besoin aurait été en
      * maintenir deux.
      */
     const openProject = (projectId: number) => {
-        startTeleport(workspace.id, ['view:projects', `l1:project:${projectId}`]);
+        startTeleport(workspace.id, ['view:projects', `l1:${projectId}`]);
     };
 
     if (opened) {

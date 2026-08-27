@@ -12,8 +12,7 @@ import type { FeatureManifest } from '@deveye/types/sdk';
  * `itemNoun`, `shareTier: 'open'`) reste celui du registre publié, étalé
  * plutôt que recopié : une native garde son identité dans @deveye/types, le
  * manifest n'ajoute que ce que le registre ne porte pas (catégorie,
- * ressources, capacités, widget de topbar, onglets de réglages, segment de
- * présence, commandes).
+ * ressources, capacités, widget de topbar, onglets de réglages, commandes).
  *
  * `shareTier: 'open'` est un engagement, tenu : l'entrée `items` du serveur
  * (domicile et intitulé d'un service), `ctx.sharing.scope()` dans les
@@ -34,12 +33,6 @@ export const manifest = {
      * sonde).
      */
     resources: ['uptime.count', 'uptime.list'],
-    /**
-     * Le rendez-vous de présence : le service ouvert, par son identifiant nu.
-     * Octet pour octet ce que la vue déclare via `useLiveSegment('l1',
-     * String(id))` ; le descripteur dit `hasItems`, donc le manifest le porte.
-     */
-    itemSegment: (id) => String(id),
     /** La seule native appelée : les canaux d'alerte de l'espace, par service. */
     nativeCapabilities: ['notify'],
     /** Le mini-widget de topbar : services en ligne sur services surveillés. */

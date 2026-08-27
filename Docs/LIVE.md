@@ -112,25 +112,27 @@ l'envers.
 | Feature | Niveaux | Valeur `l1` |
 |---|---|---|
 | Mail | boîte puis `l2` dossier | l'id |
-| Projets | projet, `l2` onglet, `l3` carte, `l4` onglet de carte | `project:<id>` |
+| Projets | projet, `l2` onglet, `l3` carte, `l4` onglet de carte | l'id |
 | Uptime | le service ouvert | l'id |
-| Git | le dépôt ouvert | `repo:<id>` |
-| Déploiement | la cible ouverte | `target:<id>` |
-| Bases de données | la base ouverte | `db:<id>` |
-| Audience | le site ouvert | `site:<id>` |
-| Sauvegardes | le travail ouvert | `job:<id>` |
+| Git | le dépôt ouvert | l'id |
+| Déploiement | la cible ouverte | l'id |
+| Bases de données | la base ouverte | l'id |
+| Audience | le site ouvert | l'id |
+| Sauvegardes | le travail ouvert | l'id |
 | Monitoring / Sentinelle | l'appareil sélectionné | l'uuid |
 | Météo | la ville consultée | l'id |
 | Notes / Coffre / CloudSync | la note, l'entrée, le partage ouvert | l'id |
 | Finance | l'onglet actif | son nom |
 | Appareils, Journaux, Utilisateurs… | aucun | (la vue suffit) |
 
-Le format de la valeur `l1` est propre à chaque feature, et deux endroits
-doivent le connaître : le `useLiveSegment` de la feature, et le rendez-vous
-`ITEM_SEGMENT` de `Components/FeatureSettings/goToHome.ts`, qui téléporte vers
-la fiche d'un élément projeté pour y rouvrir ses réglages (voir
-`SETTINGS.md`). Un module porte le sien dans son manifest (`itemSegment`,
-Uptime : `String(id)`) ; la table ne connaît que les natives non migrées.
+La valeur `l1` d'un élément est son identifiant nu, partout : le préfixe
+`view:<feature>` du chemin dit déjà de quelle sorte d'élément il s'agit. Six
+features ont longtemps eu chacune leur préfixe (`repo:12`, `db:12`, `target:`,
+`site:`, `job:`, `project:`), ce qui obligeait une table centrale
+(`ITEM_SEGMENT` dans `goToHome.ts`) puis un `itemSegment` au manifest des
+modules à connaître le format de chacune pour téléporter vers la fiche d'un
+élément projeté (voir `SETTINGS.md`). Le 27 août 2026, toutes sont passées à
+l'id nu, et `goToHome.ts` écrit `l1:<id>` lui-même.
 
 ---
 

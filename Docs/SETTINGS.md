@@ -61,9 +61,9 @@ Trois mécanismes font qu'aucun réglage n'est un mur :
    Général / Synchronisation / Chiffrement → une entrée dans la table du
    dispatcheur correspondant + un panneau autonome chez la feature.
 3. Si la feature a des fiches d'élément rejoignables, elle déclare son segment
-   de présence `l1` et l'ajoute au rendez-vous `ITEM_SEGMENT` de `goToHome.ts`
-   (un module le porte dans son manifest : `itemSegment`, même contrat octet
-   pour octet).
+   de présence `l1` avec l'identifiant nu de l'élément
+   (`useLiveSegment('l1', String(id))`) : c'est ce que `goToHome.ts` écrit
+   pour téléporter vers la fiche, sans table ni déclaration.
 
 ## Candidats restants (dettes connues)
 

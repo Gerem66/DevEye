@@ -65,7 +65,7 @@ export function FeatureDeploy({ workspace }: FeatureProps) {
 
     // Présence : « qui regarde quelle cible ». Un seul déclarant par niveau —
     // ce composant possède `l1`, et rien d'autre dans la feature n'y touche.
-    const l1Target = useLiveSegment('l1', openedId === null ? null : `target:${openedId}`);
+    const l1Target = useLiveSegment('l1', openedId === null ? null : String(openedId));
     const outlineFor = useLiveOutlines('l1');
 
     useEffect(() => {
