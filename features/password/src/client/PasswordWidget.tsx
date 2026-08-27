@@ -1,4 +1,4 @@
-import { CountWidget, useWorkspaceCount } from '@/Components/CountWidget';
+import { CountWidget, useWorkspaceCount } from 'deveye-sdk-client';
 
 /**
  * Compact dashboard card for the password vault: a plain count of stored

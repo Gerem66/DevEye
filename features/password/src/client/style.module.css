@@ -267,7 +267,7 @@
 
 .generatorMenu {
     /* Portaled to <body> (see PasswordGeneratorMenu) and anchored to the
-       trigger button via inline top/right — escapes the dialog's own scroll
+       trigger button via inline top/right: escapes the dialog's own scroll
        container so it floats above everything instead of being clipped. */
     position: fixed;
     width: 250px;
@@ -281,7 +281,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-md);
-    /* Above --z-modal (the add/edit dialog it's anchored to) — a nested
+    /* Above --z-modal (the add/edit dialog it's anchored to): a nested
        popover must never end up rendered underneath its own dialog. */
     z-index: var(--z-toast);
 }

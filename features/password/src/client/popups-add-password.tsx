@@ -2,14 +2,10 @@ import { useRef, useState } from 'react';
 
 import styles from './style.module.css';
 
-import Popup, { ClosePopup } from '@/Components/Popup';
-import { DialogCancelButton } from '@/Components/Dialog';
-import Button from '@/Components/Button';
-import TextInput from '@/Components/TextInput';
-import SelectInput from '@/Components/SelectInput';
-import PasswordGeneratorMenu from './PasswordGeneratorMenu';
+import { Button, ClosePopup, DialogCancelButton, Popup, SelectInput, TextInput } from 'deveye-sdk-client';
+import type { PasswordEntry, PasswordStatus } from '../contracts/domain';
 
-import type { PasswordEntry, PasswordStatus } from '@deveye/types';
+import PasswordGeneratorMenu from './PasswordGeneratorMenu';
 
 type PopupResult = PasswordEntry | 'delete' | null;
 

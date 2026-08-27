@@ -101,7 +101,6 @@ const TOPICS_BY_COMMAND = new Map<string, readonly LiveTopic[]>();
  * déclarée saute aux yeux au démarrage.
  */
 const NON_MUTATING = new Set([
-    'password.unlock',
     'secrecy.unlock',
     'secrecy.hold',
     'secrecy.touch',

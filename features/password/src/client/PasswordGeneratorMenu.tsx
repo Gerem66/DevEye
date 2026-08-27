@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Checkbox } from 'deveye-sdk-client';
 
-import Checkbox from '@/Components/Checkbox';
 import styles from './style.module.css';
 import {
     DEFAULT_GENERATOR_OPTIONS,
@@ -38,7 +38,7 @@ interface MenuAnchor {
 
 /**
  * Discreet "generate password" trigger + settings popover (length, character
- * types). Rendered through a portal to <body> — like {@link Dialog} — so it
+ * types). Rendered through a portal to <body>, like {@link Dialog}, so it
  * escapes the add/edit dialog's own scroll container and floats above it
  * instead of being clipped or forcing the dialog to scroll to reveal it.
  */

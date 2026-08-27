@@ -3,7 +3,6 @@ import type { HomeFeatureId, WorkspaceKind } from '@deveye/types';
 
 import { MonitoringWidget } from '@/Features/Monitoring';
 import { NotesWidget } from '@/Features/Notes/NotesWidget';
-import { PasswordWidget } from '@/Features/Password/PasswordWidget';
 import { UptimeWidget } from '@/Features/Uptime/UptimeWidget';
 import { SentinelWidget } from '@/Features/Sentinel/SentinelWidget';
 import { MailWidget } from '@/Features/Mail/MailWidget';
@@ -15,7 +14,6 @@ import { BackupWidget } from '@/Features/Backup/BackupWidget';
 import { AudienceWidget } from '@/Features/Audience/AudienceWidget';
 
 import Monitoring from '@/Features/Monitoring';
-import FeaturePassword from '@/Features/Password';
 import FeatureNotes from '@/Features/Notes';
 import Uptime from '@/Features/Uptime';
 import Sentinel from '@/Features/Sentinel';
@@ -128,17 +126,6 @@ const NATIVE_CATALOG: FeatureCatalogEntry[] = [
         cacheDurationMinutes: 5,
         preload: true,
         adminOnly: true
-    },
-    {
-        id: 'password',
-        title: 'Mot de passe',
-        icon: 'lock',
-        description: 'Coffre de mots de passe, chiffré par votre mot de passe maître.',
-        category: 'security',
-        WidgetContent: PasswordWidget,
-        FullComponent: FeaturePassword,
-        cacheDurationMinutes: 0,
-        holdSecrecy: true
     },
     {
         id: 'notes',

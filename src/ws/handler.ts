@@ -22,7 +22,6 @@ import { createMonitorTransport, type MonitorHub } from '@/agent/hub';
 import { accessEpochNow, createAccessResolver } from '@/features/_access';
 import type { LiveHub } from '@/live/hub';
 import { FeatureError } from '@/features/_define';
-import { forgetSession } from '@/features/password/_shared';
 import { featureHandlerMap } from '@/features/registry';
 import { topicsOf } from '@/features/_topics';
 import { enterSessionCommand, exitSessionCommand, forgetSessionDek } from '@/Services/SecureStore';
@@ -435,7 +434,6 @@ export async function registerWS(
         socket.on('close', () => {
             hub.dropSubscriber(socket);
             liveHub.drop(socket);
-            forgetSession(session!.sessionId);
             forgetSessionDek(session!.sessionId);
             reqLogger.info('WS closed');
         });

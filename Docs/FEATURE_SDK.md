@@ -157,6 +157,22 @@ ouvraient le dialogue (patron des sources). Rien d'autre dans l'app ne lisait
 ses types : ils ont quitté `@deveye/types` sans qu'aucun provider ne soit
 nécessaire.
 
+**Le Coffre** est la quatrième native rapatriée (`features/password`, 27 août
+2026), et la première à vivre tout entière à l'étage gardé :
+`ctx.cipher('private')` (l'ex `ctx.secure`) pour chaque entrée, et
+`ctx.secrecy.isUnlocked()` posé AVANT de lire, parce qu'une liste vide n'est
+pas une liste verrouillée (le client attend `locked` pour rouvrir l'invite,
+par le `withSecrecy` du barrel). Une table historique en allowlist (001,
+rattachée à l'espace par la 048), pas de service, pas de réglages ; `hasItems`
+au descripteur, donc `itemSegment` au manifest (l'entrée ouverte, par son id
+nu). Ce que sa migration a retiré : la commande `password.unlock` et son
+registre en mémoire par session (`markUnlocked` / `forgetSession`, avec son
+crochet de fin de session dans `ws/handler.ts`), un mécanisme sans lecteur
+(le déverrouillage passe par `secrecy.unlock`, la protection réelle est le
+chiffrement), et `popup-unlock`, le dialogue orphelin de l'accueil qui
+l'appelait. Ses copies locales de `withSecrecy` / `humanizeError` ont rejoint
+celles du barrel, comme annoncé plus haut.
+
 L'outillage de migration, à rejouer pour CHAQUE native :
 
 - **Tests de modules** : `npm run test:features` couvre

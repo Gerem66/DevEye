@@ -42,7 +42,6 @@ import { credentialsRepo, type CredentialsRepo } from './repos/credentials';
 import { deployRepo, type DeployRepo } from './repos/deploy';
 import { backupRepo, type BackupRepo } from './repos/backup';
 import { projectLinksRepo, type ProjectLinksRepo } from './repos/projectLinks';
-import { passwordsRepo, type PasswordsRepo } from './repos/passwords';
 import { refreshTokensRepo, type RefreshTokensRepo } from './repos/refreshTokens';
 import { twoFactorRepo, type TwoFactorRepo } from './repos/twoFactor';
 import { uptimeHistoryRepo, uptimeServicesRepo, type UptimeHistoryRepo, type UptimeServicesRepo } from './repos/uptime';
@@ -73,7 +72,6 @@ export interface Database {
     userInvites: UserInvitesRepo;
     refreshTokens: RefreshTokensRepo;
     logs: LogsRepo;
-    passwords: PasswordsRepo;
     notes: NotesRepo;
     projects: ProjectsRepo;
     projectRekey: ProjectRekeyRepo;
@@ -139,7 +137,6 @@ export function createDatabase(q: Queryable): Database {
         userInvites: userInvitesRepo(q),
         refreshTokens: refreshTokensRepo(q),
         logs: logsRepo(q),
-        passwords: passwordsRepo(q),
         notes: notesRepo(q),
         projects: projectsRepo(q),
         projectRekey: projectRekeyRepo(q),

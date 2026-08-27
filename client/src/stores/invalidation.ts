@@ -138,7 +138,6 @@ export type ExternalResourceKey = `x-${string}.${string}`;
 const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
     notify: ['notify.channelList', 'notify.routeGet'],
     notes: ['note.count', 'note.list'],
-    password: ['password.count', 'password.list'],
     // La relève de fond ne bouge pas que les cartes de comptes : elle fait entrer
     // des messages, corrige des drapeaux et retire des lignes disparues. Sans les
     // deux dernières clés, seule la date « il y a X min » se rafraîchissait, et

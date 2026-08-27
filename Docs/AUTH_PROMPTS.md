@@ -3,17 +3,33 @@
 Répertoire des popups/gates d'authentification réutilisés dans l'app, pour
 savoir lequel réutiliser au lieu d'en réinventer un.
 
-## 1. `popup-unlock` — déverrouillage du SecureStore (chiffrement par mot de passe)
+## 1. `SecrecyGate` : déverrouillage du SecureStore (chiffrement par mot de passe)
 
-- Fichier : `DevEye/client/src/Pages/Home/popup-unlock.tsx`
-- Commande WS : `password.unlock` (param `{ password }` ; l'espace visé voyage
-  sur l'enveloppe, comme partout depuis le chantier des espaces)
-- Rôle : déverrouille le **DEK** d'un workspace quand la feature « Chiffrement
-  par mot de passe » est active (le SecureStore est verrouillé).
-- Portée : session (DEK mis en cache, fenêtre de grâce — voir `@/stores/secrecy`).
-- Helper d'usage : `ensureUnlocked()` / `touchSecrecy()` de `@/stores/secrecy`,
-  enrobé côté features par `withSecrecy()` (retry auto sur code `locked`).
-- Pattern : `OpenPopup('popup-unlock')` / `ClosePopup('popup-unlock', true)`.
+- Fichier : `DevEye/client/src/Components/SecrecyGate/SecrecyGate.tsx`, monté
+  une fois au niveau de l'app.
+- Commande WS : `secrecy.unlock` (param `{ password }`, le mot de passe du
+  compte ; l'espace visé voyage sur l'enveloppe, comme partout depuis le
+  chantier des espaces).
+- Rôle : déverrouille la **DEK gardée** de la session quand la feature
+  « Chiffrement par mot de passe » est active (le SecureStore est verrouillé).
+- Portée : session (DEK mise en cache côté serveur, fenêtre de grâce
+  glissante, voir `@/stores/secrecy`).
+- Helper d'usage : `ensureUnlocked()` de `@/stores/secrecy`, enrobé par
+  `withSecrecy()` (réessai automatique sur code `locked`, fenêtre de grâce
+  glissée à chaque action réussie). Le barrel `deveye-sdk-client` les
+  réexporte pour les modules (`ensureSecrecyUnlocked`, `withSecrecy`).
+- Annulation : `ensureUnlocked()` rejette une `UnlockCancelledError` (nom
+  stable, `e.name === 'UnlockCancelledError'`, la classe n'étant pas exportée
+  par le barrel) ; une feature qui n'a rien à montrer sans le mot de passe se
+  referme dessus (le Coffre).
+- Pattern : le store passe `prompting` à vrai, le dialogue s'ouvre, puis
+  `resolveUnlock()` / `cancelUnlock()` libèrent les appelants en attente
+  (plusieurs appels concurrents partagent la même invite).
+
+Il n'existe **plus** de mot de passe par espace : l'ancien `popup-unlock`
+(commande `password.unlock`, registre en mémoire par session côté serveur) a
+disparu avec le rapatriement du Coffre en module, le 27 août 2026. Personne ne
+l'ouvrait et il ne protégeait rien : la protection réelle est le chiffrement.
 
 ## 2. Notes privées — **aucun prompt dédié**
 
@@ -28,8 +44,11 @@ Les popups `popup-note-lock` / `-lock-set` / `-lock-manage` et l'ancien système
 
 ## Composant sous-jacent
 
-Tous suivent le contrat du composant `@/Components/Popup` :
-`OpenPopup(id, input)` (résout au close) / `ClosePopup(id, result)`.
+Le prompt n°1 est un `Dialog` piloté par le store `@/stores/secrecy`, pas un
+`Popup` : c'est le store qui l'ouvre, et personne n'a d'identifiant à connaître.
+Les formulaires des features (ajout d'un mot de passe, d'un compte mail) suivent
+eux le contrat du composant `@/Components/Popup` : `OpenPopup(id, input)`
+(résout au close) / `ClosePopup(id, result)`.
 
 Même réutilisation partout ailleurs : une boîte mail « protégée », l'historique
 OSINT verrouillé, une note privée passent tous par `withSecrecy()` et donc par

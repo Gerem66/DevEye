@@ -1,0 +1,6 @@
+{
+  "id": "password",
+  "tables": ["passwords"],
+  "minTypesVersion": "0.15.2",
+  "$comment": "Table historique (migration 001 du socle, rattachée à l'espace par la 048, jamais déplacée) : l'allowlist la dispense du préfixe ft_password_. Toute NOUVELLE table du module prendra le préfixe, via src/server/migrations/."
+}

@@ -32,7 +32,7 @@ function randomIndex(max: number): number {
     return arr[0] % max;
 }
 
-/** True once at least one character type is enabled — a generator with none selected has no pool to draw from. */
+/** True once at least one character type is enabled: a generator with none selected has no pool to draw from. */
 export function hasSelectedCharset(options: PasswordGeneratorOptions): boolean {
     return options.uppercase || options.lowercase || options.digits || options.symbols;
 }

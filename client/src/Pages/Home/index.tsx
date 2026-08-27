@@ -36,7 +36,6 @@ import { WidgetPopup, FeatureKeepAlive } from '@/Components/WidgetPopup';
 import { Wallpaper } from '@/Components/Wallpaper';
 import { SettingsPanel } from '@/Components/SettingsPanel';
 import { InfoPopup, openInfo } from '@/Components/InfoPopup';
-import PopupUnlock from './popup-unlock';
 import CreateWorkspacePopup, { CREATE_WORKSPACE_POPUP } from './popup-create-workspace';
 
 // Structural feature views (no grid card)
@@ -1287,10 +1286,6 @@ export default function HomePage() {
                 })}
 
                 <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-
-                {/* Password unlock dialog — registered globally so the Password feature
-                can request it on demand. */}
-                <PopupUnlock workspace={currentWorkspace} />
 
                 {/* Création d'espace, pilotée depuis le menu de la topbar. */}
                 <CreateWorkspacePopup />

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import styles from './style.module.css';
 
-import type { PasswordEntry, PasswordEntryMasked } from '@deveye/types';
-import { useLiveOutline } from '@/live/useLiveOutline';
+import { useLiveOutline } from 'deveye-sdk-client';
+import type { PasswordEntry, PasswordEntryMasked } from '../contracts/domain';
 
 type RowPassword = PasswordEntry | PasswordEntryMasked;
 
@@ -20,7 +20,7 @@ const REVEAL_DURATION_MS = 15_000;
 /**
  * Copy-to-clipboard icon with "copied" feedback. Either copies `value` locally,
  * or delegates to `onCopy` (which performs the copy itself and returns whether
- * it succeeded — used to copy a still-masked password fetched on demand).
+ * it succeeded, used to copy a still-masked password fetched on demand).
  */
 function CopyButton({
     value,
@@ -50,7 +50,7 @@ function CopyButton({
             return;
         }
         navigator.clipboard.writeText(value ?? '').then(flashCopied, () => {
-            // Clipboard refused (insecure context / denied permission) — no-op.
+            // Clipboard refused (insecure context / denied permission): no-op.
         });
     };
 

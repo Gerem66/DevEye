@@ -15,15 +15,6 @@ import { gitFeatures } from './git';
 import { deployFeatures } from './deploy';
 import { backupFeatures } from './backup';
 import { projectFeatures } from './project';
-import {
-    passwordAddFeature,
-    passwordCountFeature,
-    passwordDeleteFeature,
-    passwordEditFeature,
-    passwordGetFeature,
-    passwordListFeature,
-    passwordUnlockFeature
-} from './password';
 import { secrecyFeatures } from './secrecy';
 import { twoFactorFeatures } from './twofa';
 import { sentinelFeatures } from './sentinel';
@@ -78,13 +69,6 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     userSetThemeFeature,
     userSetColorFeature,
     userSetSettingFeature,
-    passwordListFeature,
-    passwordCountFeature,
-    passwordGetFeature,
-    passwordAddFeature,
-    passwordEditFeature,
-    passwordDeleteFeature,
-    passwordUnlockFeature,
     ...noteFeatures,
     ...projectFeatures,
     ...gitFeatures,

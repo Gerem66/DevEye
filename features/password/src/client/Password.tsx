@@ -1,58 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    Button,
+    humanizeError,
+    invalidate,
+    OpenPopup,
+    TextInput,
+    UnlockCancelledError,
+    useActiveWorkspace,
+    useLiveSegment,
+    useResourceVersion,
+    withSecrecy
+} from 'deveye-sdk-client';
+import type { FeatureViewProps } from '@deveye/types/sdk/client';
+import type { PasswordEntry, PasswordEntryMasked } from '../contracts/domain';
 
-import styles from './style.module.css';
-
+import { api } from './api';
 import LoadingTable from './loadingTable';
 import PasswordRow, { type RowPassword } from './passwordRow';
 import { PasswordPopupAdd, type PopupResult } from './popups-add-password';
+import styles from './style.module.css';
 
-import { OpenPopup } from '@/Components/Popup';
-import { ws, WsError } from '@/api/ws';
-import TextInput from '@/Components/TextInput';
-import Button from '@/Components/Button';
-import { ensureUnlocked as ensureSecrecyUnlocked, touchSecrecy, UnlockCancelledError } from '@/stores/secrecy';
-import { invalidate, useResourceVersion } from '@/stores/invalidation';
-
-import type { FeatureProps } from '@/Features/types';
-import type { PasswordEntry, PasswordEntryMasked } from '@deveye/types';
-import { useLiveSegment } from '@/live/useLiveSegment';
-
-/**
- * Run a request, and if the server reports the password-encryption layer is
- * `locked`, open the global unlock prompt and retry once. Keeps every
- * encrypted-data call resilient without each call handling the prompt itself.
- */
-async function withSecrecy<T>(run: () => Promise<T>): Promise<T> {
-    try {
-        const out = await run();
-        touchSecrecy(); // slide the grace window on each successful action
-        return out;
-    } catch (e) {
-        if (e instanceof WsError && e.code === 'locked') {
-            await ensureSecrecyUnlocked();
-            const out = await run();
-            touchSecrecy();
-            return out;
-        }
-        throw e;
-    }
-}
-
-function humanizeError(e: unknown, fallback: string): string {
-    if (e instanceof WsError) {
-        if (e.code === 'auth_required' || e.code === 'locked') return 'Déverrouillage requis.';
-        if (e.code === 'auth_invalid') return 'Mot de passe principal incorrect.';
-        if (e.code === 'forbidden') return 'Accès refusé.';
-    }
-    return fallback;
-}
-
-function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
+function Password({ closeFeature }: FeatureViewProps) {
+    // L'espace vient du SDK, plus des props : c'est lui qui borne le coffre,
+    // et son changement recharge la liste.
+    const workspaceId = useActiveWorkspace()?.id ?? null;
     const [loaded, setLoaded] = useState(false);
     const [search, setSearch] = useState('');
     const [allPasswords, setAllPasswords] = useState<RowPassword[]>([]);
     const [actionError, setActionError] = useState<string | null>(null);
-    /** L'entrée ouverte dans le formulaire — le niveau profond du coffre. */
+    /** L'entrée ouverte dans le formulaire : le niveau profond du coffre. */
     const [openEntryId, setOpenEntryId] = useState<number | null>(null);
     useLiveSegment('l1', openEntryId === null ? null : String(openEntryId));
     const reloadRef = useRef<Promise<void> | null>(null);
@@ -64,12 +40,15 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
         if (reloadRef.current) return reloadRef.current;
         const task = (async () => {
             try {
-                const res = await withSecrecy(() => ws.send('password.list', {}));
-                setAllPasswords(res.entries as PasswordEntryMasked[]);
+                const res = await withSecrecy(() => api.send('password.list', {}));
+                setAllPasswords(res.entries);
             } catch (e) {
                 setAllPasswords([]);
                 // Nothing to show without the password: close instead of leaving
                 // an empty, unusable view behind.
+                // `withSecrecy` rejette une `UnlockCancelledError` quand
+                // l'utilisateur referme l'invite sans saisir son mot de passe :
+                // un renoncement délibéré, pas une panne.
                 if (e instanceof UnlockCancelledError) closeFeatureRef.current();
             } finally {
                 setLoaded(true);
@@ -81,7 +60,7 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
         } finally {
             reloadRef.current = null;
         }
-    }, [workspace.id]);
+    }, [workspaceId]);
 
     useEffect(() => {
         setLoaded(false);
@@ -99,17 +78,17 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
      * liste sur une session reverrouillée renverrait `locked`, et passer par
      * `withSecrecy` ferait alors surgir une demande de mot de passe déclenchée
      * par le geste de quelqu'un d'autre. On garde donc simplement ce qui est à
-     * l'écran — la prochaine action de l'utilisateur redemandera le
+     * l'écran : la prochaine action de l'utilisateur redemandera le
      * déverrouillage, au moment où il l'aura lui-même provoqué.
      */
     const listVersion = useResourceVersion('password.list');
     useEffect(() => {
         if (listVersion === 0) return;
         let cancelled = false;
-        void ws
+        void api
             .send('password.list', {})
             .then((res) => {
-                if (!cancelled) setAllPasswords(res.entries as PasswordEntryMasked[]);
+                if (!cancelled) setAllPasswords(res.entries);
             })
             .catch(() => {});
         return () => {
@@ -145,13 +124,13 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
         async (id: number) => {
             setActionError(null);
             try {
-                const res = await withSecrecy(() => ws.send('password.get', { passwordId: id }));
+                const res = await withSecrecy(() => api.send('password.get', { passwordId: id }));
                 replaceEntry(res.entry);
             } catch (e) {
                 setActionError(humanizeError(e, 'Impossible de récupérer le mot de passe.'));
             }
         },
-        [workspace.id, replaceEntry]
+        [workspaceId, replaceEntry]
     );
 
     /**
@@ -163,7 +142,7 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
         async (id: number): Promise<boolean> => {
             setActionError(null);
             try {
-                const res = await withSecrecy(() => ws.send('password.get', { passwordId: id }));
+                const res = await withSecrecy(() => api.send('password.get', { passwordId: id }));
                 await navigator.clipboard.writeText(res.entry.password);
                 return true;
             } catch (e) {
@@ -171,7 +150,7 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
                 return false;
             }
         },
-        [workspace.id]
+        [workspaceId]
     );
 
     const openEditPopup = useCallback(
@@ -182,8 +161,8 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
             if (id !== null) {
                 // Need the real entry (clear password) before editing.
                 try {
-                    const res = await withSecrecy(() => ws.send('password.get', { passwordId: id }));
-                    // Hand the clear entry to the edit popup ONLY — never write it
+                    const res = await withSecrecy(() => api.send('password.get', { passwordId: id }));
+                    // Hand the clear entry to the edit popup ONLY, never write it
                     // into `allPasswords`, or the table would reveal the password.
                     initial = res.entry;
                 } catch (e) {
@@ -199,7 +178,7 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
 
             if (result === 'delete' && id !== null) {
                 try {
-                    await ws.send('password.delete', { passwordId: id });
+                    await api.send('password.delete', { passwordId: id });
                     setAllPasswords((prev) => prev.filter((p) => p.id !== id));
                     invalidate('password.count');
                 } catch (e) {
@@ -213,11 +192,11 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
                     if (id === null || result.id === 0) {
                         const { id: _omit, ...entry } = result;
                         void _omit;
-                        const res = await withSecrecy(() => ws.send('password.add', { entry }));
+                        const res = await withSecrecy(() => api.send('password.add', { entry }));
                         upsertMasked(res.entry);
                         invalidate('password.count');
                     } else {
-                        const res = await withSecrecy(() => ws.send('password.edit', { entry: result }));
+                        const res = await withSecrecy(() => api.send('password.edit', { entry: result }));
                         upsertMasked(res.entry);
                     }
                 } catch (e) {
@@ -225,7 +204,7 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
                 }
             }
         },
-        [workspace.id, upsertMasked]
+        [workspaceId, upsertMasked]
     );
 
     /** Categories grouped + filtered by search. */
@@ -323,4 +302,4 @@ function FeaturePassword({ workspace, closeFeature }: FeatureProps) {
     );
 }
 
-export default FeaturePassword;
+export default Password;

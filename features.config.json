@@ -9,6 +9,9 @@
     },
     {
       "package": "deveye-feature-finance"
+    },
+    {
+      "package": "deveye-feature-password"
     }
   ]
 }
