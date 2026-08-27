@@ -22,3 +22,6 @@ src/features/_generated/installed.local.ts
 client/src/generated/features.local.ts
 client/src/Styles/icons.local.css
 .smoke/
+
+# Stockage CloudSync du serveur de dev (blobs chiffrés adressés par hash)
+/cloudsync-data/
