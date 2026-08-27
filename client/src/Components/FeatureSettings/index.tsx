@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { SHARE_WIRED_FEATURES, featureDescriptor, type FeatureId } from '@deveye/types';
 
 import Button from '@/Components/Button';
@@ -290,6 +290,16 @@ export interface FeatureSettingsButtonProps {
      * ce qu'il sélectionne (Sources, Catégories), plutôt que de laisser chercher.
      */
     initialSection?: SettingsSectionId;
+    /**
+     * La coquille s'ouvre ou se ferme (le démontage vaut fermeture).
+     *
+     * Pour le composant qui DÉTIENT la présence (`useLiveSegment`) quand rien
+     * d'autre n'annonce l'élément : une carte sans fiche, où la coquille est un
+     * lieu au même titre que les autres dialogues de l'élément. La coquille ne
+     * déclare jamais le niveau elle-même : le registre n'admet qu'un déclarant
+     * par niveau, et elle effacerait ce qu'une fiche déjà ouverte a posé.
+     */
+    onOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -302,11 +312,24 @@ export function FeatureSettingsButton({
     scope,
     variant = 'secondary',
     label = 'Réglages',
-    initialSection
+    initialSection,
+    onOpenChange
 }: FeatureSettingsButtonProps) {
     const sections = useSettingsSections(scope);
     const [open, setOpen] = useState(false);
     const [section, setSection] = useState<SettingsSectionId | undefined>(undefined);
+
+    // Une seule voie de sortie pour les trois entrées (clic, intention de
+    // téléportation, démontage) : l'appelant voit chaque transition, et
+    // l'ouverture consommée d'une intention n'est pas oubliée.
+    const onOpenChangeRef = useRef(onOpenChange);
+    useEffect(() => {
+        onOpenChangeRef.current = onOpenChange;
+    }, [onOpenChange]);
+    useEffect(() => {
+        onOpenChangeRef.current?.(open);
+        return () => onOpenChangeRef.current?.(false);
+    }, [open]);
 
     /**
      * L'intention « ouvrir les réglages de cet élément » posée avant une
