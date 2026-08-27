@@ -140,10 +140,7 @@ export function Audience({ project, canWrite }: AudienceProps) {
                                     variant='secondary'
                                     icon='chevrons-right'
                                     onClick={() =>
-                                        startTeleport(getActiveWorkspaceId() ?? 0, [
-                                            'view:audience',
-                                            `l1:${site.id}`
-                                        ])
+                                        startTeleport(getActiveWorkspaceId() ?? 0, ['view:audience', `l1:${site.id}`])
                                     }
                                 >
                                     Ouvrir l’Audience
