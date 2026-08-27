@@ -13,8 +13,9 @@ import { useActiveWorkspace } from '@/stores/workspace';
  *  son propre magasin partagé (`features/uptime/src/client/store.ts`, chez le
  *  module) : l'exclure ici est ce qui garde
  *  ce composant sur une seule forme de réponse. `sentinel.count` est dans le
- *  même cas — il rend un décompte **par gravité**, parce que « trois constats »
- *  ne veut rien dire tant qu'on ne sait pas si l'un d'eux est critique. */
+ *  même cas (magasin dans `features/sentinel/src/client/store.ts`) : il rend un
+ *  décompte **par gravité**, parce que « trois constats » ne veut rien dire
+ *  tant qu'on ne sait pas si l'un d'eux est critique. */
 type CountCommand =
     | Exclude<Extract<ResourceKey, `${string}.count`>, 'uptime.count' | 'sentinel.count'>
     // Un module externe déclare sa propre clé `.count` dans son manifest ; le

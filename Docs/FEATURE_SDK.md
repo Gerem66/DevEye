@@ -233,6 +233,37 @@ avant d'ouvrir le vrai formulaire. Le projet serveur des modules
 ambiantes de l'app (`src/types`) : un import de privilège
 (`@/Services/notifications`) atteint des fichiers qui en dépendent.
 
+**Sentinelle** est la septième native rapatriée (`features/sentinel`, 27 août
+2026), et la plus entremêlée à l'infrastructure : elle inaugure côté module
+les **hooks agent de télémétrie** (`onReport`, `onMetricsBatch`,
+`onIntegrity`, `onAuthEvents`, tendus par les handlers agent de l'app une fois
+la télémétrie persistée, pour tout appareil actif ; c'est le module qui relit
+sa config et décide, l'app ne garde plus rien de ses réglages), la **façade
+télémétrie** (`telemetry.snapshot` remplace la lecture en dur de l'instant,
+`telemetry.pinInstant` l'épinglage de la preuve), la **flotte par la façade**
+(`deps.devices.find` rend un `SdkDevice` au rapport déjà analysé,
+`ctx.deveye.devices.list` porte la règle « l'admin dans son espace personnel
+voit la flotte »), la **façade agents** (`requestScan`, `pushConfig`) et le
+**provider vers l'app** (`SENTINEL_AGENT_CONFIG_PROVIDER` : l'app recompose la
+config poussée à un agent, `src/agent/config.ts`, en demandant au module sa
+part ; `DEFAULT_SENTINEL_INTEGRITY_MINUTES` vit à côté, dans
+`sdk/providers.ts`). Ce que sa migration a décidé : l'**option B** pour ses
+réglages par appareil, les cinq colonnes `sentinel_*` de `devices` (074)
+quittent la table du socle pour `ft_sentinel_device_config`, créée et
+remplie par la 098 du SOCLE (ses migrations tournent avant celles des modules,
+et la copie devait précéder la suppression des colonnes) puis possédée par le
+module (`uninstall.sql`, hors allowlist parce qu'au préfixe) ; les dépôts du
+module ne joignent plus `devices` (les noms viennent de la façade, par
+requête) ; les 31 vérifications de `scripts/check-rules.ts` (`ci:rules`)
+deviennent `rules.test.ts`, un test du module ; les variables `SENTINEL_*` se
+lisent dans le module ; la dette de la coquille (`SentinelDialog` par appareil
+derrière un second engrenage) devient l'onglet personnalisé `devices` du
+manifest, un panneau listant les appareils visibles avec leur configuration
+en ligne (Sentinelle n'a pas d'éléments : ses éléments sont des appareils) ;
+et l'état de flotte porte désormais les cadences réglées (`integrityMinutes`,
+`authEvents`), pour que le panneau parte des vraies valeurs et non des
+défauts.
+
 L'outillage de migration, à rejouer pour CHAQUE native :
 
 - **Tests de modules** : `npm run test:features` couvre

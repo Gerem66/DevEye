@@ -7,7 +7,6 @@ import type { LiveTransport } from '@/live/hub';
 import type { IntegrationSyncService } from '@/Services/IntegrationSyncService';
 import type { DatabaseMonitor } from '@/Services/DatabaseMonitor';
 import type { AudienceIngest } from '@/Services/AudienceIngest';
-import type { SecurityMonitor } from '@/Services/SecurityMonitor';
 import type { BackupService } from '@/Services/BackupService';
 import type { LiveTopic, LogLevelName } from '@deveye/types';
 import type { Logger } from 'pino';
@@ -163,15 +162,6 @@ export interface FeatureContext {
      * pour qu'une réponse ne dépende jamais de l'état d'une file en mémoire.
      */
     audience?: AudienceIngest;
-    /**
-     * Moteur Sentinelle.
-     *
-     * Sert à deux choses seulement : oublier la ligne de base en mémoire après
-     * une remise à zéro (`sentinel.resetBaseline`), et rien d'autre — les
-     * commandes de lecture passent par les dépôts, jamais par le moteur, de
-     * sorte qu'une réponse ne dépende jamais de l'état d'un tour de boucle.
-     */
-    sentinel?: SecurityMonitor;
     /**
      * Moteur de sauvegardes.
      *

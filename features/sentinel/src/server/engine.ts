@@ -1,27 +1,24 @@
-import type { Logger } from 'pino';
+import type { AuthWindow, DeviceReport, IntegrityReport, MetricSnapshot, ReportProcess } from '@deveye/types';
+import type { FeatureService, FeatureServiceDeps, SdkDevice } from '@deveye/types/sdk/server';
 
-import type { Database as Db } from '@/db';
-import type { LiveHub } from '@/live/hub';
-import type { AuditLog } from '@/Services/AuditLog';
-import type Encryption from '@/Services/Encryption';
-import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
-import { deliver, hasChannel, resolveRoute } from '@/Services/notifications';
-import { buildNotice } from '@/Services/notices/sentinel';
-import { env } from '@/Utils/Env';
-import { allowKey, type BaselineObservation, type BaselineRow, findingDedup } from '@/db/repos/sentinel';
 import {
     SENTINEL_RULES,
     SEVERITY_RANK,
-    type AuthWindow,
     type BaselineAttrs,
-    type DeviceReport,
-    type DeviceRow,
     type FindingSeverity,
-    type IntegrityReport,
-    type ReportProcess,
     type SentinelRuleId
-} from '@deveye/types';
+} from '../contracts/domain';
 
+import { FINDING_RETENTION_DAYS, TICK_SECONDS } from './env';
+import { buildNotice } from './notice';
+import {
+    allowKey,
+    findingDedup,
+    type BaselineObservation,
+    type BaselineRow,
+    type FindingDraft,
+    type SentinelRepo
+} from './repo';
 import {
     authRules,
     evaluateReport,
@@ -32,26 +29,27 @@ import {
     processKey,
     REPORT_RULES,
     SNAPSHOT_RULES,
-    type EvalContext,
-    type FindingDraft,
-    type SnapshotView
-} from './security/rules';
+    type EvalContext
+} from './rules';
 
 /**
  * Le moteur de Sentinelle.
  *
- * Même forme que `UptimeMonitor` et `DatabaseMonitor` : un `setInterval`, une
- * garde de recouvrement, construit dans `app.ts` et démarré depuis `index.ts`.
- * Il tourne **sans session et sans mot de passe** — d'où le choix de ne rien
- * chiffrer côté Sentinelle (voir la migration 074).
+ * Même forme que l'ordonnanceur d'Uptime : un ticker du SDK (`deps.createTicker`,
+ * le patron des services natifs, setInterval + garde de réentrance + unref),
+ * construit par `createService` et démarré par le boot. Il tourne **sans
+ * session et sans mot de passe**, d'où le choix de ne rien chiffrer côté
+ * Sentinelle (voir la migration 074).
  *
  * ## L'ingestion n'évalue pas
  *
  * C'est l'invariant principal. Un lot de métriques peut porter cent instants
  * (un agent qui revient après une coupure), et évaluer dans le handler ferait
- * payer la détection au chemin le plus chaud du serveur. Les handlers d'agent se
- * contentent d'`enqueue()` ; le tour de boucle draine, **ne garde que le dernier
- * instant par appareil**, et évalue.
+ * payer la détection au chemin le plus chaud du serveur. Les hooks agent du
+ * module (`onReport`, `onMetricsBatch`, `onIntegrity`, `onAuthEvents`, appelés
+ * par la couche socket de l'app une fois la télémétrie persistée) se contentent
+ * d'`enqueue()` ; le tour de boucle draine, **ne garde que le dernier instant par
+ * appareil**, et évalue.
  *
  * ## Notifier aux transitions seulement
  *
@@ -60,9 +58,6 @@ import {
  * rendrait le canal inutilisable en une nuit, et les constats d'un même appareil
  * dans un même tour partent donc en **un seul message**.
  */
-
-/** Cadence de vidage de la file. */
-const TICK_SECONDS = env.SENTINEL_TICK_SECONDS;
 
 /** Cadence de la passe lente : enveloppes, disparitions, balayage des résolus. */
 const SLOW_PASS_MS = 60 * 60 * 1000;
@@ -121,15 +116,6 @@ interface Pending {
     auth?: AuthWindow;
 }
 
-export interface SecurityMonitorDeps {
-    db: Db;
-    /** Pour le chiffre « open » de l'espace : les canaux d'alerte y sont chiffrés. */
-    crypt: Encryption;
-    logger: Logger;
-    audit: AuditLog;
-    live?: LiveHub;
-}
-
 /** La ligne de base d'un appareil, telle que le moteur la tient en mémoire. */
 interface BaselineCache {
     process: Map<string, BaselineRow>;
@@ -143,7 +129,7 @@ interface BaselineCache {
  * Une vraie p95 exigerait de garder l'historique des mesures par programme, ce
  * qui coûterait plus cher que toute la détection. Cette moyenne mobile
  * exponentielle en tient lieu : elle monte lentement, redescend lentement, et
- * suffit à répondre à la seule question posée — « est-ce que ça sort largement
+ * suffit à répondre à la seule question posée, « est-ce que ça sort largement
  * de l'ordinaire ? ». Le seuil de déclenchement (×3, et au moins 20 %) est
  * volontairement grossier pour la même raison.
  */
@@ -176,10 +162,9 @@ function attrsOf(row: BaselineRow | undefined): BaselineAttrs {
     return typeof row.attrs === 'string' ? emptyAttrs() : row.attrs;
 }
 
-export class SecurityMonitor {
-    private timer: ReturnType<typeof setInterval> | null = null;
-    /** Chiffres « open » par espace : le moteur n'a ni session ni mot de passe. */
-    private readonly ciphers = new Map<number, Cipher>();
+export class SentinelEngine {
+    /** La boucle de vidage de la file : un ticker du SDK. */
+    private readonly ticker: FeatureService;
     private ticking = false;
     private lastSlowPass = 0;
     private readonly queue = new Map<string, Pending>();
@@ -202,27 +187,17 @@ export class SecurityMonitor {
      */
     private readonly lastEval = new Map<string, EvalMarks>();
 
-    constructor(private readonly deps: SecurityMonitorDeps) {}
+    constructor(private readonly deps: FeatureServiceDeps<SentinelRepo>) {
+        this.ticker = deps.createTicker({ intervalMs: TICK_SECONDS * 1000, tick: () => this.tick() });
+    }
 
     start(): void {
-        if (this.timer) return;
-        this.timer = setInterval(() => void this.tick(), TICK_SECONDS * 1000);
-        this.timer.unref();
+        this.ticker.start();
         this.deps.logger.info({ tickSeconds: TICK_SECONDS }, 'Security monitor started');
     }
 
     stop(): void {
-        if (this.timer) clearInterval(this.timer);
-        this.timer = null;
-    }
-
-    private cipherFor(workspaceId: number): Cipher {
-        let cipher = this.ciphers.get(workspaceId);
-        if (!cipher) {
-            cipher = createOpenCipher(this.deps.db, this.deps.crypt, workspaceId);
-            this.ciphers.set(workspaceId, cipher);
-        }
-        return cipher;
+        this.ticker.stop();
     }
 
     /** Oublie la ligne de base en mémoire d'un appareil (après une remise à zéro). */
@@ -245,6 +220,78 @@ export class SecurityMonitor {
         marks[kind] = now;
         this.lastEval.set(deviceId, marks);
         return true;
+    }
+
+    // ─────────────────────────────── les hooks ───────────────────────────────
+
+    /**
+     * Les hooks agent du module : ce que la couche socket de l'app appelle une
+     * fois la télémétrie persistée, pour tout appareil **actif**. L'app ne
+     * garde plus rien sur les réglages de Sentinelle : c'est ici que le module
+     * relit sa config et décide. Un appareil non surveillé est ignoré ; une
+     * fenêtre d'authentification reçue alors que la sonde est éteinte est
+     * journalisée et jetée (un agent qui l'ignorerait ne doit pas pouvoir
+     * imposer la lecture de journaux qu'on a refusée).
+     *
+     * On empile, on n'évalue pas : le moteur relira le rapport depuis la
+     * façade des appareils, que la couche socket vient justement d'écrire,
+     * d'où l'ordre (persistance d'abord, hook ensuite).
+     */
+    async onReport(deviceId: string): Promise<void> {
+        if (!(await this.watched(deviceId))) return;
+        this.enqueueReport(deviceId);
+    }
+
+    async onMetricsBatch(deviceId: string, snapshots: readonly MetricSnapshot[]): Promise<void> {
+        // Un lot peut porter cent instants (agent revenu après une coupure) :
+        // seul le dernier est signalé au moteur, et lui-même n'en garde que le
+        // plus récent. Évaluer les cent produirait des constats sur des états
+        // qui n'existent plus, au prix fort et sur le chemin le plus chaud.
+        const latest = snapshots[snapshots.length - 1];
+        if (!latest) return;
+        if (!(await this.watched(deviceId))) return;
+        this.enqueueSnapshot(deviceId, latest.timestamp);
+    }
+
+    async onIntegrity(deviceId: string, integrity: IntegrityReport): Promise<void> {
+        if (!(await this.watched(deviceId))) {
+            this.deps.logger.debug({ deviceId }, 'Sentinel probe dropped: device not watched');
+            return;
+        }
+        this.enqueueIntegrity(deviceId, integrity);
+        if (integrity.truncated) {
+            // Un manifeste tronqué reste exploitable (le moteur s'interdit alors
+            // seulement de conclure à des suppressions) mais il mérite une trace :
+            // c'est le signe qu'une surface a grossi au-delà de ce qu'on prévoyait.
+            this.deps.logger.warn(
+                { deviceId, entries: integrity.entries.length },
+                'Sentinel: persistence manifest truncated (removals will not be reported)'
+            );
+        }
+    }
+
+    async onAuthEvents(deviceId: string, auth: AuthWindow): Promise<void> {
+        const config = await this.deps.repo.deviceConfig.get(deviceId);
+        if (!config || config.enabled !== 1) {
+            this.deps.logger.debug({ deviceId }, 'Sentinel probe dropped: device not watched');
+            return;
+        }
+        if (config.auth_events !== 1) {
+            // La sonde a son propre interrupteur : un agent qui l'ignorerait ne doit
+            // pas pouvoir imposer la lecture de journaux qu'on a refusée.
+            this.deps.logger.warn(
+                { deviceId },
+                'Sentinel: auth window received while auth probing is disabled, dropped'
+            );
+            return;
+        }
+        this.enqueueAuth(deviceId, auth);
+    }
+
+    /** Sentinelle est-elle active sur cet appareil ? Sans ligne de config, non. */
+    private async watched(deviceId: string): Promise<boolean> {
+        const config = await this.deps.repo.deviceConfig.get(deviceId);
+        return config?.enabled === 1;
     }
 
     // ─────────────────────────────── la file ─────────────────────────────────
@@ -271,7 +318,7 @@ export class SecurityMonitor {
      * Gardé **en entier** dans la file, et non relu depuis la base : on ne le
      * stocke jamais brut (c'est tout l'intérêt du diff), donc il n'existe qu'ici
      * entre sa réception et son évaluation. Un manifeste plus récent écrase le
-     * précédent — le diff porte sur l'état courant.
+     * précédent, le diff porte sur l'état courant.
      */
     enqueueIntegrity(deviceId: string, integrity: IntegrityReport): void {
         const pending = this.queue.get(deviceId) ?? {};
@@ -284,7 +331,7 @@ export class SecurityMonitor {
      *
      * Contrairement au manifeste, deux fenêtres consécutives ne s'écrasent pas :
      * elles se **fusionnent**. Une fenêtre est additive par nature, et en perdre
-     * une reviendrait à perdre les tentatives qu'elle comptait — précisément ce
+     * une reviendrait à perdre les tentatives qu'elle comptait, précisément ce
      * qu'on cherche à voir.
      */
     enqueueAuth(deviceId: string, auth: AuthWindow): void {
@@ -332,9 +379,9 @@ export class SecurityMonitor {
         const cached = this.baselines.get(deviceId);
         if (cached) return cached;
         const [process, listener, persistence] = await Promise.all([
-            this.deps.db.baseline.known(deviceId, 'process'),
-            this.deps.db.baseline.known(deviceId, 'listener'),
-            this.deps.db.baseline.known(deviceId, 'persistence')
+            this.deps.repo.baseline.known(deviceId, 'process'),
+            this.deps.repo.baseline.known(deviceId, 'listener'),
+            this.deps.repo.baseline.known(deviceId, 'persistence')
         ]);
         const fresh = { process, listener, persistence };
         this.baselines.set(deviceId, fresh);
@@ -342,18 +389,23 @@ export class SecurityMonitor {
     }
 
     private async evaluate(deviceId: string, pending: Pending): Promise<void> {
-        const device = await this.deps.db.devices.findById(deviceId);
-        // Sentinelle éteinte, appareil archivé ou supprimé entre-temps : rien à
-        // faire. Le garde est ici et pas seulement à l'ingestion parce qu'on peut
-        // désactiver la feature pendant qu'une file attend.
-        if (!device || device.sentinel_enabled !== 1 || device.status !== 'active') return;
+        const device = await this.deps.devices.find(deviceId);
+        // Appareil archivé ou supprimé entre-temps, ou Sentinelle éteinte : rien
+        // à faire. Le garde est ici et pas seulement à l'ingestion parce qu'on
+        // peut désactiver la feature pendant qu'une file attend.
+        if (!device || device.status !== 'active') return;
+        const config = await this.deps.repo.deviceConfig.get(deviceId);
+        if (!config || config.enabled !== 1) return;
 
         const now = Date.now();
-        const learning = device.sentinel_learning_until !== null && now < Number(device.sentinel_learning_until);
+        const learning = config.learning_until !== null && now < config.learning_until;
         const baseline = await this.baselineOf(deviceId);
 
-        const report = parseReport(device.report_json);
-        const snapshot = pending.snapshotTs ? await this.loadSnapshot(deviceId, pending.snapshotTs) : null;
+        // Le rapport arrive déjà analysé par la façade des appareils ; l'instant
+        // (liste de processus + ligne de métriques) vient de la façade
+        // télémétrie, et n'est relu que s'il y en a un en attente.
+        const report = device.report;
+        const snapshot = pending.snapshotTs ? await this.deps.telemetry.snapshot(deviceId, pending.snapshotTs) : null;
 
         const ctx: EvalContext = { now, learning, snapshot, report, baseline };
 
@@ -368,7 +420,7 @@ export class SecurityMonitor {
         // cadences différentes (60 s contre 1 h). Les confondre avait deux
         // effets, tous deux faux : la posture se re-constatait chaque minute sur
         // un rapport inchangé, et un rapport arrivé sans instant résolvait d'un
-        // coup tous les constats `exec.*` / `net.*` / `process.*` — un détecteur
+        // coup tous les constats `exec.*` / `net.*` / `process.*`, un détecteur
         // qui s'éteint sans bruit.
         const replayed: SentinelRuleId[] = [];
         if (snapshot !== null) {
@@ -400,75 +452,56 @@ export class SecurityMonitor {
         if (report?.openPorts) await this.observeListeners(deviceId, report.openPorts, baseline, now);
         if (pending.integrity) {
             await this.observePersistence(deviceId, pending.integrity, baseline, now);
-            await this.deps.db.devices.touchIntegrity(deviceId, pending.integrity.collectedAt);
+            await this.deps.repo.deviceConfig.touchIntegrity(deviceId, pending.integrity.collectedAt);
         }
 
         if (opened.length > 0) await this.announce(device, opened);
-    }
-
-    /** L'instant, tel que les règles le veulent : métriques + liste des processus. */
-    private async loadSnapshot(deviceId: string, ts: number): Promise<SnapshotView | null> {
-        const sample = await this.deps.db.processSamples.nearest(deviceId, ts);
-        const points = await this.deps.db.metrics.query({
-            deviceId,
-            from: ts - 1000,
-            to: ts + 1000,
-            resolution: 'raw'
-        });
-        const point = points[points.length - 1] ?? null;
-        if (!sample && !point) return null;
-        return {
-            ts,
-            processes: sample?.processes ?? [],
-            activeConnections: point?.activeConnections ?? null
-        };
     }
 
     // ───────────────────────────── les constats ──────────────────────────────
 
     /**
      * Confronte les constats produits à ceux en base, et rend ceux qui viennent
-     * de s'ouvrir — les seuls qui méritent une notification.
+     * de s'ouvrir, les seuls qui méritent une notification.
      */
     private async record(
-        device: DeviceRow,
+        device: SdkDevice,
         drafts: FindingDraft[],
         replayed: SentinelRuleId[]
     ): Promise<{ draft: FindingDraft; id: number }[]> {
         const now = Date.now();
-        const workspaceId = device.workspace_id;
+        const workspaceId = device.workspaceId;
         // Les autorisations sont portées par l'espace ; un appareil orphelin
         // (son espace d'appairage a été supprimé) n'en a plus aucune à consulter.
-        const allowed = workspaceId
-            ? await this.deps.db.sentinelAllow.forDevice(workspaceId, device.id)
-            : new Set<string>();
+        const allowed =
+            workspaceId !== null ? await this.deps.repo.allow.forDevice(workspaceId, device.id) : new Set<string>();
 
         const kept = drafts.filter((d) => !allowed.has(allowKey(d.rule, d.subject)));
         const opened: { draft: FindingDraft; id: number }[] = [];
         const seen: Buffer[] = [];
 
         for (const draft of kept) {
-            const outcome = await this.deps.db.findings.upsert(device.id, draft, now);
+            const outcome = await this.deps.repo.findings.upsert(device.id, draft, now);
             seen.push(findingDedup(draft.rule, draft.subject));
             if (outcome.isNew) opened.push({ draft, id: outcome.id });
         }
 
-        // Ce qui ne se déclenche plus se résout — mais seulement pour les règles
+        // Ce qui ne se déclenche plus se résout, mais seulement pour les règles
         // qu'on vient effectivement de rejouer. Résoudre `persistence.*` parce
         // qu'un instant est passé dirait une chose fausse, et résoudre la posture
         // parce qu'un lot de métriques est arrivé dirait qu'un réglage a changé
         // sans que personne ne l'ait relu. `resolveMissing` filtre par jeu de
         // règles, donc `seen` peut rester l'union de tout ce qu'on a produit.
         if (replayed.length > 0) {
-            await this.deps.db.findings.resolveMissing(device.id, replayed, seen, now);
+            await this.deps.repo.findings.resolveMissing(device.id, replayed, seen, now);
         }
 
         // Épingler l'instant qui porte la preuve, pour les constats sérieux. Sans
         // cela la rétention effacerait, trente jours plus tard, la seule liste de
-        // processus qui explique le constat.
-        // `setInstantsPinned` épingle les deux tables en une seule instruction —
-        // c'est justement ce qu'il faut ici : une preuve à moitié épinglée est
-        // une preuve dont la liste de processus disparaît à la purge suivante.
+        // processus qui explique le constat. `telemetry.pinInstant` épingle les
+        // deux tables en une seule instruction, c'est justement ce qu'il faut ici :
+        // une preuve à moitié épinglée est une preuve dont la liste de processus
+        // disparaît à la purge suivante.
         const toPin = [
             ...new Set(
                 opened
@@ -480,7 +513,7 @@ export class SecurityMonitor {
         ];
         for (const ts of toPin) {
             try {
-                await this.deps.db.metrics.setInstantsPinned(device.id, ts, ts, true);
+                await this.deps.telemetry.pinInstant(device.id, ts);
             } catch (e) {
                 // Une preuve non épinglée reste un constat valide : on journalise
                 // et on continue, plutôt que de perdre le constat lui-même.
@@ -537,7 +570,7 @@ export class SecurityMonitor {
             } as BaselineRow);
         }
 
-        await this.deps.db.baseline.observe(deviceId, at, items);
+        await this.deps.repo.baseline.observe(deviceId, at, items);
     }
 
     private async observeListeners(
@@ -571,7 +604,7 @@ export class SecurityMonitor {
                 attrs
             } as BaselineRow);
         }
-        if (items.length > 0) await this.deps.db.baseline.observe(deviceId, at, items);
+        if (items.length > 0) await this.deps.repo.baseline.observe(deviceId, at, items);
     }
 
     private async observePersistence(
@@ -594,13 +627,13 @@ export class SecurityMonitor {
             const present = new Set(integrity.entries.map((e) => e.path));
             const gone = [...baseline.persistence.keys()].filter((path) => !present.has(path));
             if (gone.length > 0) {
-                await this.deps.db.baseline.forget(deviceId, 'persistence', gone);
+                await this.deps.repo.baseline.forget(deviceId, 'persistence', gone);
                 for (const path of gone) baseline.persistence.delete(path);
             }
         }
 
         if (items.length === 0) return;
-        await this.deps.db.baseline.observe(deviceId, at, items);
+        await this.deps.repo.baseline.observe(deviceId, at, items);
         for (const item of items) {
             const known = baseline.persistence.get(item.key);
             baseline.persistence.set(item.key, {
@@ -624,15 +657,22 @@ export class SecurityMonitor {
     /**
      * Ce qui ne se décide pas sur un instant : les programmes disparus, et le
      * balayage des constats résolus.
+     *
+     * La flotte surveillée vient du dépôt du module (les lignes `enabled`),
+     * chaque appareil relu par la façade : c'est elle qui dit s'il est encore
+     * actif, le module ne lisant plus la table `devices`.
      */
     private async slowPass(): Promise<void> {
-        const devices = await this.deps.db.devices.listSentinelEnabled();
         const now = Date.now();
 
-        for (const device of devices) {
-            if (device.sentinel_learning_until !== null && now < Number(device.sentinel_learning_until)) continue;
-            const interval = (device.metric_interval_seconds ?? 60) * 1000;
-            const stale = await this.deps.db.baseline.staleSince(
+        for (const deviceId of await this.deps.repo.deviceConfig.listEnabled()) {
+            const device = await this.deps.devices.find(deviceId);
+            if (!device || device.status !== 'active') continue;
+            const config = await this.deps.repo.deviceConfig.get(deviceId);
+            if (!config || config.enabled !== 1) continue;
+            if (config.learning_until !== null && now < config.learning_until) continue;
+            const interval = (device.metricIntervalSeconds ?? 60) * 1000;
+            const stale = await this.deps.repo.baseline.staleSince(
                 device.id,
                 'process',
                 now - VANISHED_AFTER_SAMPLES * interval
@@ -656,13 +696,13 @@ export class SecurityMonitor {
 
             if (drafts.length === 0) continue;
             // Aucune famille rejouée : `process.vanished` se constate par absence
-            // et n'a rien à résoudre — c'est le retour du programme qui le ferme,
+            // et n'a rien à résoudre, c'est le retour du programme qui le ferme,
             // pas ce balayage.
             const opened = await this.record(device, drafts, []);
             if (opened.length > 0) await this.announce(device, opened);
         }
 
-        const pruned = await this.deps.db.findings.pruneResolved(env.SENTINEL_FINDING_RETENTION_DAYS);
+        const pruned = await this.deps.repo.findings.pruneResolved(FINDING_RETENTION_DAYS);
         if (pruned > 0) this.deps.logger.info({ pruned }, 'Sentinel: resolved findings pruned');
     }
 
@@ -676,34 +716,31 @@ export class SecurityMonitor {
      * lisent pas, et la première réaction de qui les reçoit est de créer une
      * règle de filtrage.
      */
-    private async announce(device: DeviceRow, opened: { draft: FindingDraft; id: number }[]): Promise<void> {
+    private async announce(device: SdkDevice, opened: { draft: FindingDraft; id: number }[]): Promise<void> {
         for (const { draft } of opened) {
-            this.deps.audit.record({
+            this.deps.audit({
                 level: SEVERITY_RANK[draft.severity] >= SEVERITY_RANK.high ? 'warning' : 'info',
-                source: 'system',
-                category: 'sentinel',
                 action: draft.rule,
                 // Le moteur n'a pas d'acteur : il tourne sans session. On
                 // attribue au propriétaire de l'appareil, comme le fait
-                // `UptimeMonitor` avec `row.user_id`.
-                uid: device.owner_id,
-                ip: '',
+                // l'ordonnanceur d'Uptime avec `row.user_id`.
+                userId: device.ownerUserId,
                 description: `${SENTINEL_RULES[draft.rule].label} sur « ${device.name} » : ${draft.subject}`,
                 metadata: { deviceId: device.id, rule: draft.rule, subject: draft.subject }
             });
         }
 
-        if (device.workspace_id) this.deps.live?.changed(device.workspace_id, ['sentinel'], null);
+        if (device.workspaceId !== null) this.deps.live.changed(device.workspaceId);
 
         const notifiable = opened.filter(({ draft }) => SEVERITY_RANK[draft.severity] >= SEVERITY_RANK.high);
-        if (notifiable.length === 0 || !device.workspace_id) return;
+        if (notifiable.length === 0 || device.workspaceId === null) return;
 
         const worst = notifiable.reduce(
             (acc, { draft }) => (SEVERITY_RANK[draft.severity] > SEVERITY_RANK[acc] ? draft.severity : acc),
             'high' as FindingSeverity
         );
         const lines = notifiable.map(
-            ({ draft }) => `• [${draft.severity}] ${SENTINEL_RULES[draft.rule].label} — ${draft.subject}`
+            ({ draft }) => `• [${draft.severity}] ${SENTINEL_RULES[draft.rule].label} : ${draft.subject}`
         );
         // La règle du constat le plus grave donne son titre à l'embed : dans un
         // salon de sécurité, ce qu'on doit lire en premier est *ce qui a été
@@ -720,7 +757,7 @@ export class SecurityMonitor {
             SENTINEL_RULES[notifiable[0]!.draft.rule].remediation
         ].join('\n');
 
-        await this.notify(device.workspace_id, {
+        await this.notify(device.workspaceId, {
             deviceName: device.name,
             severity: worst,
             count: notifiable.length,
@@ -729,22 +766,20 @@ export class SecurityMonitor {
             rule: SENTINEL_RULES[lead.draft.rule].label,
             remediation: SENTINEL_RULES[lead.draft.rule].remediation
         });
-        await this.deps.db.findings.markNotified(notifiable.map((n) => n.id));
+        await this.deps.repo.findings.markNotified(notifiable.map((n) => n.id));
     }
 
-    /**
-     * Délivre sur les canaux de l'espace — ceux d'Uptime, comme `DatabaseMonitor`.
-     *
-     * Toute erreur est journalisée puis avalée : un webhook en panne ne doit ni
-     * supprimer le mail, ni arrêter la boucle.
-     */
     /**
      * Délivre sur les canaux **de Sentinelle**.
      *
      * Ses propres réglages, et non ceux d'Uptime : une alerte de sécurité n'a ni
      * les mêmes destinataires ni la même urgence qu'une alerte de disponibilité,
      * et emprunter un canal qu'on n'a pas désigné pour ça revient à écrire à des
-     * gens sans le leur avoir demandé. Sans réglage enregistré, rien ne part.
+     * gens sans le leur avoir demandé. Sans réglage enregistré, rien ne part :
+     * la façade `notify` du SDK rend `false` sans canal routé, ce n'est plus au
+     * moteur de le vérifier. Toute erreur de livraison est journalisée puis
+     * avalée par elle : un webhook en panne ne doit ni supprimer le mail, ni
+     * arrêter la boucle.
      */
     private async notify(
         workspaceId: number,
@@ -754,51 +789,34 @@ export class SecurityMonitor {
             count: number;
             body: string;
             at: number;
-            /** L'intitulé de la règle du constat le plus grave — le titre de l'embed. */
+            /** L'intitulé de la règle du constat le plus grave, le titre de l'embed. */
             rule: string;
             /** Ce que cette règle propose de faire, quand elle porte une remédiation. */
             remediation: string | null;
         }
     ): Promise<void> {
-        const channels = await resolveRoute(this.deps.db, this.cipherFor(workspaceId), workspaceId, 'sentinel');
-        if (!hasChannel(channels)) return;
-
-        await deliver(
-            channels,
-            {
-                subject: `[DevEye] Sentinelle ${alert.severity} — ${alert.deviceName}`,
-                body: alert.body,
-                payload: {
-                    event: 'sentinel_finding',
-                    device: alert.deviceName,
-                    severity: alert.severity,
-                    count: alert.count,
-                    at: alert.at
-                },
-                // La même alerte, mise en page pour Discord. Sentinelle n'en
-                // avait pas, faute d'avoir été écrite — c'est pourtant
-                // l'émetteur où la gravité doit se lire avant le texte.
-                embeds: buildNotice({
-                    device: alert.deviceName,
-                    rule: alert.rule,
-                    severity: alert.severity === 'critical' ? 'critical' : alert.severity === 'high' ? 'high' : 'low',
-                    detail: alert.body,
-                    remediation: alert.remediation,
-                    at: alert.at
-                })
+        await this.deps.deveyeFor(workspaceId).notify.send({
+            subject: `[DevEye] Sentinelle ${alert.severity} : ${alert.deviceName}`,
+            body: alert.body,
+            payload: {
+                event: 'sentinel_finding',
+                device: alert.deviceName,
+                severity: alert.severity,
+                count: alert.count,
+                at: alert.at
             },
-            this.deps.logger
-        );
-    }
-}
-
-/** Un rapport illisible vaut « pas de rapport », jamais une exception. */
-function parseReport(raw: string | null): DeviceReport | null {
-    if (!raw) return null;
-    try {
-        return JSON.parse(raw) as DeviceReport;
-    } catch {
-        return null;
+            // La même alerte, mise en page pour Discord. Sentinelle n'en
+            // avait pas, faute d'avoir été écrite ; c'est pourtant
+            // l'émetteur où la gravité doit se lire avant le texte.
+            embeds: buildNotice({
+                device: alert.deviceName,
+                rule: alert.rule,
+                severity: alert.severity === 'critical' ? 'critical' : alert.severity === 'high' ? 'high' : 'low',
+                detail: alert.body,
+                remediation: alert.remediation,
+                at: alert.at
+            })
+        });
     }
 }
 

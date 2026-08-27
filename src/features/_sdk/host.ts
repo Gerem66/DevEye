@@ -1,5 +1,5 @@
 import type { MonitorHub } from '@/agent/hub';
-import { deviceAgentConfig } from '@/agent/mappers';
+import { agentConfigFor } from '@/agent/config';
 import type { Database } from '@/db';
 
 /**
@@ -33,14 +33,19 @@ function sdkDb(): Database {
 
 /**
  * Pousse à l'agent la config de collecte de son appareil, recomposée par l'app
- * depuis la ligne appareil (et ce que les modules y contribuent). Faux quand
- * l'agent est hors ligne : il recevra la config à sa prochaine connexion, le
- * chemin de `agent/ws.ts` la rejoue à chaque poignée de main.
+ * depuis la ligne appareil et ce que les modules y contribuent
+ * (`agentConfigFor`, qui demande à Sentinelle sa part). Faux quand l'agent est
+ * hors ligne : il recevra la config à sa prochaine connexion, le chemin de
+ * `agent/ws.ts` la rejoue à chaque poignée de main.
+ *
+ * `agent/config.ts` importe `_sdk/register`, qui remonte jusqu'ici par la
+ * façade : le cycle est assumé et sans effet, rien n'y est évalué au
+ * chargement (deux fonctions qui s'appellent à l'exécution).
  */
 export async function pushAgentConfig(deviceId: string): Promise<boolean> {
     const hub = sdkHub();
     if (!hub.isOnline(deviceId)) return false;
     const row = await sdkDb().devices.findById(deviceId);
     if (!row) return false;
-    return hub.pushConfig(deviceId, deviceAgentConfig(row));
+    return hub.pushConfig(deviceId, await agentConfigFor(row));
 }

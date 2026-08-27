@@ -157,15 +157,9 @@ const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
      * moindre aller-retour.
      */
     devices: ['device.list'],
-    /*
-     * Sujet distinct de `devices`, et non un alias : les constats bougent à
-     * chaque tour du moteur, la liste d'appareils presque jamais. Les confondre
-     * ferait re-solliciter toute la flotte à chaque évaluation.
-     *
-     * `sentinel.count` en tête : c'est la seule clé que la carte de l'accueil et
-     * la pastille de Monitoring écoutent, et celle qui doit bouger le plus vite.
-     */
-    sentinel: ['sentinel.count', 'sentinel.overview', 'sentinel.findings', 'sentinel.baseline'],
+    // (`sentinel` : sujet distinct de `devices`, ses constats bougent à une
+    // tout autre cadence ; ses clés sont déclarées par le manifest du module
+    // `features/sentinel` et enregistrées par la glue générée.)
     // Deux sujets pour une seule feature : la structure d'un côté, les fils de
     // discussion de l'autre. Un message ne doit pas faire re-solliciter le
     // portefeuille entier — d'où la coupure côté serveur (`domain/live.ts`).

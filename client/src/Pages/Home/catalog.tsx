@@ -2,7 +2,6 @@ import type { ComponentType } from 'react';
 import type { HomeFeatureId, WorkspaceKind } from '@deveye/types';
 
 import { MonitoringWidget } from '@/Features/Monitoring';
-import { SentinelWidget } from '@/Features/Sentinel/SentinelWidget';
 import { MailWidget } from '@/Features/Mail/MailWidget';
 import { ProjectsWidget } from '@/Features/Projects/ProjectsWidget';
 import { GitWidget } from '@/Features/Git/GitWidget';
@@ -12,7 +11,6 @@ import { BackupWidget } from '@/Features/Backup/BackupWidget';
 import { AudienceWidget } from '@/Features/Audience/AudienceWidget';
 
 import Monitoring from '@/Features/Monitoring';
-import Sentinel from '@/Features/Sentinel';
 import Mail from '@/Features/Mail';
 import FeatureProjects from '@/Features/Projects';
 import FeatureGit from '@/Features/Git';
@@ -122,21 +120,6 @@ const NATIVE_CATALOG: FeatureCatalogEntry[] = [
         cacheDurationMinutes: 5,
         preload: true,
         adminOnly: true
-    },
-    {
-        id: 'sentinel',
-        title: 'Sentinelle',
-        icon: 'shield',
-        description: "Détection d'anomalies sur vos appareils : constats, posture, acquittement.",
-        category: 'security',
-        links: [{ to: 'mail', what: 'envoie ses alertes par un compte Mail' }],
-        WidgetContent: SentinelWidget,
-        FullComponent: Sentinel,
-        // Démontée à la fermeture : la vue relit constats et posture à
-        // l'ouverture, et une instance en cache resterait branchée sur le sujet
-        // `sentinel` sans que personne la regarde. La carte de l'accueil reste
-        // vivante par le compteur partagé, comme celle d'Uptime.
-        cacheDurationMinutes: 0
     },
     {
         id: 'projects',

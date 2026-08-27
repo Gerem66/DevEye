@@ -1,9 +1,5 @@
 import { getEnvVar } from 'dotenv-oxy';
-import {
-    DEFAULT_RETENTION_DAYS,
-    DEFAULT_SENTINEL_FINDING_RETENTION_DAYS,
-    DEFAULT_SENTINEL_LEARNING_DAYS
-} from '@deveye/types';
+import { DEFAULT_RETENTION_DAYS } from '@deveye/types';
 
 export const env = {
     ENVIRONMENT: getEnvVar('ENVIRONMENT', 'enum', ['dev', 'test', 'prod']),
@@ -132,18 +128,7 @@ export const env = {
     // séparément ne produisait que des instants à moitié lisibles.
     MONITORING_RETENTION_DAYS: getEnvVar('MONITORING_RETENTION_DAYS', 'number', false) || DEFAULT_RETENTION_DAYS,
 
-    // Sentinelle. La cadence du moteur est celle à laquelle il vide sa file, et
-    // non celle de la collecte : l'ingestion n'évalue rien, elle empile.
-    SENTINEL_TICK_SECONDS: getEnvVar('SENTINEL_TICK_SECONDS', 'number', false) || 60,
-    // Fenêtre d'apprentissage par défaut, en jours. Pendant qu'elle court, les
-    // règles de dérive se taisent — sans quoi le premier jour produirait des
-    // centaines de « nouveau programme ».
-    SENTINEL_LEARNING_DAYS: getEnvVar('SENTINEL_LEARNING_DAYS', 'number', false) || DEFAULT_SENTINEL_LEARNING_DAYS,
-    // Un constat est une **preuve** : il ne suit pas `MONITORING_RETENTION_DAYS`.
-    // Seuls les constats résolus s'effacent, et bien plus tard ; les ouverts ne
-    // s'effacent jamais.
-    SENTINEL_FINDING_RETENTION_DAYS:
-        getEnvVar('SENTINEL_FINDING_RETENTION_DAYS', 'number', false) || DEFAULT_SENTINEL_FINDING_RETENTION_DAYS,
+    // (Les SENTINEL_* sont lues par le module Sentinelle lui-même, features/sentinel.)
 
     // Mail background sync: same shape as the Uptime module's scheduler (whose
     // UPTIME_* variables are read by the module itself), but only ever touches "open"

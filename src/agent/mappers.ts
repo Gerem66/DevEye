@@ -1,10 +1,6 @@
 import {
-    DEFAULT_METRIC_INTERVAL_SECONDS,
-    DEFAULT_PROCESS_CAPTURE,
-    DEFAULT_SENTINEL_INTEGRITY_MINUTES,
     deviceReportSchema,
     isNewerVersion,
-    type AgentConfigPayload,
     type AgentManifest,
     type Device,
     type DeviceReport,
@@ -13,22 +9,6 @@ import {
     type DeviceStatus,
     type ProcessCapture
 } from '@deveye/types';
-
-/** Build the collection config the server pushes to an agent (defaults applied). */
-export function deviceAgentConfig(row: DeviceRow): AgentConfigPayload {
-    const metricSeconds = row.metric_interval_seconds ?? DEFAULT_METRIC_INTERVAL_SECONDS;
-    const capture = (row.process_capture as ProcessCapture | null) ?? DEFAULT_PROCESS_CAPTURE;
-    return {
-        metricIntervalMs: metricSeconds * 1000,
-        processCapture: capture,
-        // Sentinelle éteinte, l'agent ne relève ni persistance ni
-        // authentification. Ces deux sondes ne coûtent rien à qui ne les demande
-        // pas, et une machine non surveillée ne doit pas voir ses journaux lus.
-        sentinelEnabled: row.sentinel_enabled === 1,
-        integrityIntervalMs: (row.sentinel_integrity_minutes ?? DEFAULT_SENTINEL_INTEGRITY_MINUTES) * 60_000,
-        authEventsEnabled: row.sentinel_auth_events === 1
-    };
-}
 
 /** Whether/where a device's agent can self-update, derived from the synced manifest. */
 export interface AgentUpdateInfo {

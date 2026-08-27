@@ -5,7 +5,6 @@ import type { Logger } from 'pino';
 import type { FeatureAgentHooks } from '@deveye/types/sdk/server';
 import type { Database } from '@/db';
 import type { AuditLog } from '@/Services/AuditLog';
-import type { SecurityMonitor } from '@/Services/SecurityMonitor';
 import type { MonitorHub } from '../hub';
 
 /**
@@ -21,15 +20,11 @@ export interface AgentSession {
     hub: MonitorHub;
     /**
      * Les hooks agent des modules installés (agrégat no-op par défaut) : le
-     * remplaçant du moteur CloudSync câblé en dur d'avant le rapatriement.
+     * remplaçant des moteurs câblés en dur d'avant les rapatriements (CloudSync
+     * pour la synchro, Sentinelle pour la télémétrie et ses deux relevés). Les
+     * handlers leur tendent ce qu'ils ont persisté, et n'évaluent rien.
      */
     hooks: Required<FeatureAgentHooks>;
-    /**
-     * Moteur Sentinelle. Les handlers ne lui adressent que des `enqueue*` : ils
-     * empilent, il évalue à son tour de boucle. Optionnel pour que les chemins
-     * qui construisent une session sans moteur (tests) restent possibles.
-     */
-    sentinel?: SecurityMonitor;
     audit: AuditLog;
     logger: Logger;
     /** Owner user id (from the device-token claims); the audit actor. */

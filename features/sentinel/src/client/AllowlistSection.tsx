@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { SENTINEL_RULES, type AllowEntry } from '@deveye/types';
+import { Button } from 'deveye-sdk-client';
 
-import { ws } from '@/api/ws';
-import Button from '@/Components/Button';
+import { SENTINEL_RULES, type AllowEntry } from '../contracts/domain';
 
+import { api } from './api';
 import styles from './style.module.css';
 
 /**
@@ -11,7 +11,7 @@ import styles from './style.module.css';
  *
  * Sans cet écran, acquitter était un aller sans retour. On créait des
  * autorisations en jugeant des constats, et plus rien ne permettait ensuite de
- * savoir lesquelles existaient, qui les avait posées, ni de revenir dessus —
+ * savoir lesquelles existaient, qui les avait posées, ni de revenir dessus,
  * une décision d'un jour devenait un angle mort permanent.
  *
  * Retirer une autorisation ne rouvre pas le constat sur-le-champ : c'est le
@@ -37,7 +37,7 @@ export default function AllowlistSection({ deviceId, onChanged }: Props) {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await ws.send('sentinel.allowlist', { deviceId });
+            const res = await api.send('sentinel.allowlist', { deviceId });
             setEntries(res.entries);
             setError(null);
         } catch {
@@ -62,7 +62,7 @@ export default function AllowlistSection({ deviceId, onChanged }: Props) {
         setBusyId(entry.id);
         setError(null);
         try {
-            await ws.send('sentinel.removeAllow', { allowId: entry.id });
+            await api.send('sentinel.removeAllow', { allowId: entry.id });
             setEntries((prev) => prev.filter((e) => e.id !== entry.id));
             onChanged();
         } catch {

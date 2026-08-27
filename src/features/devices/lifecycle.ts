@@ -14,7 +14,8 @@ import {
     deviceWorkspaceList
 } from '@deveye/types';
 
-import { computeAgentUpdate, deviceAgentConfig, deviceRowToDevice } from '@/agent/mappers';
+import { agentConfigFor } from '@/agent/config';
+import { computeAgentUpdate, deviceRowToDevice } from '@/agent/mappers';
 import { agentDistDir, readServedManifestCached } from '@/agent/sync';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { authorizeDevice, online, toDevice } from './shared';
@@ -217,9 +218,10 @@ export const deviceSetConfigFeature: FeatureDefinition<
             description: `Configuration modifiée : « ${row.name} »`,
             metadata: { deviceId: row.id, ...patch }
         });
-        // If a cadence or the capture mode changed, push it to a live agent.
+        // If a cadence or the capture mode changed, push it to a live agent
+        // (la config entière, part des modules comprise : l'agent la reçoit en bloc).
         if (input.metricIntervalSeconds !== undefined || input.processCapture !== undefined) {
-            ctx.monitor?.pushConfig(row.id, deviceAgentConfig(updated));
+            ctx.monitor?.pushConfig(row.id, await agentConfigFor(updated));
         }
         return { device: await toDevice(ctx, updated) };
     }

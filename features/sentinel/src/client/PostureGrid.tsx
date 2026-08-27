@@ -1,4 +1,4 @@
-import { SENTINEL_RULES, type DevicePosture, type PostureStatus, type RuleProbe } from '@deveye/types';
+import { SENTINEL_RULES, type DevicePosture, type PostureStatus, type RuleProbe } from '../contracts/domain';
 
 import styles from './style.module.css';
 

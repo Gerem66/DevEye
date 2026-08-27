@@ -1,5 +1,4 @@
-import { totalOpen, useSentinelCount, worstSeverity } from '@/stores/sentinel';
-
+import { totalOpen, useSentinelCount, worstSeverity } from './store';
 import styles from './style.module.css';
 
 /**
@@ -11,7 +10,7 @@ import styles from './style.module.css';
  *
  * Un espace où Sentinelle n'est activée nulle part le dit explicitement, plutôt
  * que d'afficher un « 0 constat » rassurant qui ne reposerait sur rien : c'est
- * la même règle que partout dans cette feature — ne pas mesurer n'est pas aller
+ * la même règle que partout dans cette feature, ne pas mesurer n'est pas aller
  * bien.
  */
 export function SentinelWidget() {
@@ -20,7 +19,7 @@ export function SentinelWidget() {
     const worst = worstSeverity(open);
 
     // Rien d'ouvert ne se teinte pas : la couleur de l'accent, celle de toutes
-    // les autres vignettes au repos, *est* l'état calme — seul un constat net
+    // les autres vignettes au repos, *est* l'état calme, seul un constat net
     // (élevé ou critique) la fait basculer vers une nuance active.
     const tone = worst === 'critical' || worst === 'high' ? styles.widgetAlert : worst ? styles.widgetWarn : '';
 

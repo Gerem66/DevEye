@@ -1,49 +1,86 @@
+import type { DeviceReport } from '@deveye/types';
+import { FeatureError, type SdkDevice, type SdkFeatureContext } from '@deveye/types/sdk/server';
+
 import {
     SENTINEL_RULES,
     SEVERITY_BY_RANK,
+    type AllowEntry,
     type DevicePosture,
-    type DeviceReport,
-    type DeviceRow,
+    type DeviceSentinelState,
     type EvidenceItem,
     type Finding,
     type PostureCheck,
     type PostureStatus,
     type RuleProbe,
-    type SentinelRuleId
-} from '@deveye/types';
+    type SentinelRuleId,
+    type SeverityCounts
+} from '../contracts/domain';
+import { DEFAULT_SENTINEL_INTEGRITY_MINUTES } from '@deveye/types/sdk';
 
-import { parseDeviceReport } from '@/agent/mappers';
-import type { FindingRow } from '@/db/repos/sentinel';
-import type { FeatureContext } from '../_define';
+import type { SentinelEngine } from './engine';
+import type { AllowRow, DeviceConfigRow, FindingRow, SentinelRepo } from './repo';
+
+/** Le contexte d'une commande de Sentinelle : le contexte du SDK, sur le dépôt du module. */
+export type Ctx = SdkFeatureContext<SentinelRepo>;
 
 /**
  * Briques partagées par les commandes de Sentinelle : le calcul de posture, la
- * mise en forme des constats, et la résolution du périmètre d'appareils.
+ * mise en forme des constats et des états, et la résolution des noms
+ * d'appareils.
  *
- * L'autorisation, elle, n'est **pas** ici : elle passe par `authorizeDevice` de
- * `devices/shared.ts`, comme toutes les autres features qui touchent un appareil
- * (invariant 9 de Monitoring — aucune feature ne refait la logique d'accès).
+ * L'autorisation, elle, n'est **pas** ici : elle passe par
+ * `ctx.deveye.devices.authorize` (l'ex `authorizeDevice` de `devices/shared.ts`),
+ * comme toutes les autres features qui touchent un appareil (invariant 9 de
+ * Monitoring : aucune feature ne refait la logique d'accès). Le périmètre, lui,
+ * est `ctx.deveye.devices.list()` : la même règle que `device.list`,
+ * l'administrateur dans son espace **personnel** voit la flotte entière.
  */
 
 /**
- * Les appareils que cet espace voit.
- *
- * Même règle que `device.list` : l'administrateur dans son espace **personnel**
- * voit la flotte entière (c'est là qu'il surveille ses machines, et l'obliger à
- * se partager chaque appareil à lui-même n'aurait rien protégé) ; partout
- * ailleurs, on s'en tient au partage explicite.
+ * Le moteur du module, posé par `createService` au démarrage : le remplaçant
+ * du `ctx.sentinel` natif. Un singleton d'étendue module, assumé (patron
+ * `setEngine` de CloudSync) : le moteur est unique par processus, exactement
+ * comme avant le rapatriement. Une seule commande lui parle
+ * (`sentinel.resetBaseline`, pour lui faire oublier sa ligne de base en
+ * mémoire) ; toutes les lectures passent par les dépôts, jamais par lui, de
+ * sorte qu'une réponse ne dépende jamais de l'état d'un tour de boucle.
  */
-export async function scopedDevices(ctx: FeatureContext): Promise<DeviceRow[]> {
-    if (ctx.isAdmin && ctx.workspace.kind === 'personal') return ctx.db.devices.listAll();
-    return ctx.db.devices.listByWorkspace(ctx.workspaceId);
+let engineRef: SentinelEngine | null = null;
+
+export function setEngine(engine: SentinelEngine | null): void {
+    engineRef = engine;
 }
 
-/** Rend le DTO d'un constat depuis sa ligne. */
-export function toFinding(row: FindingRow): Finding {
+/** Le moteur, ou une erreur typée quand le serveur tourne sans lui (tests). */
+export function engine(): SentinelEngine {
+    if (!engineRef) throw new FeatureError('internal', 'Sentinelle indisponible');
+    return engineRef;
+}
+
+/**
+ * Les noms des appareils que cet espace voit, par identifiant.
+ *
+ * Les dépôts du module ne joignent plus `devices` : c'est ici que les constats
+ * et les autorisations retrouvent un nom, en une lecture par requête. Un
+ * appareil disparu, ou hors du périmètre de l'appelant, se nomme par son
+ * identifiant tronqué plutôt que par un blanc : une ligne sans nom se lirait
+ * comme une donnée cassée, alors qu'elle dit seulement que la machine n'est
+ * plus là.
+ */
+export function deviceNames(devices: readonly SdkDevice[]): Map<string, string> {
+    return new Map(devices.map((d) => [d.id, d.name]));
+}
+
+export function nameOf(names: ReadonlyMap<string, string>, deviceId: string): string {
+    return names.get(deviceId) ?? deviceId.slice(0, 8);
+}
+
+/** Rend le DTO d'un constat depuis sa ligne, avec le nom de son appareil. */
+export function toFinding(row: FindingRow, deviceName: string): Finding {
     return {
         id: row.id,
         deviceId: row.device_id,
-        deviceName: row.device_name,
+        deviceName,
         rule: row.rule,
         severity: SEVERITY_BY_RANK[row.severity] ?? 'info',
         state: row.state,
@@ -55,6 +92,42 @@ export function toFinding(row: FindingRow): Finding {
         occurrences: row.occurrences,
         ackedBy: row.acked_by,
         ackedAt: row.acked_at
+    };
+}
+
+/** Rend le DTO d'une autorisation ; `deviceName` est `null` pour une portée flotte. */
+export function toAllow(row: AllowRow, deviceName: string | null): AllowEntry {
+    return {
+        id: row.id,
+        deviceId: row.device_id,
+        deviceName,
+        rule: row.rule,
+        subject: row.subject,
+        reason: row.reason,
+        createdBy: row.created_by,
+        created: row.created
+    };
+}
+
+/**
+ * L'état d'une machine dans la vue de flotte : ce que l'appareil dit de lui
+ * (nom, rapport) et ce que le module en a réglé (`config`, `null` sans ligne :
+ * non surveillée, défauts).
+ */
+export function stateOf(device: SdkDevice, config: DeviceConfigRow | null, open: SeverityCounts): DeviceSentinelState {
+    const learningUntil = config?.learning_until ?? null;
+    return {
+        deviceId: device.id,
+        deviceName: device.name,
+        enabled: config?.enabled === 1,
+        learning: learningUntil !== null && Date.now() < learningUntil,
+        learningUntil,
+        open,
+        postureScore: posturize(device).score,
+        probes: probesOf(device, config),
+        lastIntegrityAt: config?.last_integrity_at ?? null,
+        integrityMinutes: config?.integrity_minutes ?? DEFAULT_SENTINEL_INTEGRITY_MINUTES,
+        authEvents: config === null ? true : config.auth_events === 1
     };
 }
 
@@ -88,9 +161,12 @@ function fromProbe(value: boolean | null | undefined, failWhen: boolean): Postur
  * Le score ne porte que sur les contrôles **concluants**. Diluer les `unknown`
  * dans la moyenne reviendrait à récompenser une machine qui ne mesure rien, ce
  * qui est l'exact opposé de ce qu'un score de posture doit encourager.
+ *
+ * Le rapport arrive déjà analysé : la façade des appareils le décode depuis
+ * `devices.report_json`, un blob illisible valant `null`.
  */
-export function posturize(row: DeviceRow): DevicePosture {
-    const report: DeviceReport | null = parseDeviceReport(row.report_json);
+export function posturize(device: SdkDevice): DevicePosture {
+    const report: DeviceReport | null = device.report;
     const security = report?.security ?? null;
     const isMac = (report?.os.name ?? '').toLowerCase().includes('mac');
     const isWindows = (report?.os.name ?? '').toLowerCase().includes('windows');
@@ -106,7 +182,7 @@ export function posturize(row: DeviceRow): DevicePosture {
                 return { rule, status: fromProbe(security.diskEncryption, false), label, detail: null };
             case 'posture.sip_off':
                 // SIP n'existe que sur macOS : ailleurs, ce n'est pas « inconnu »,
-                // c'est sans objet — et les deux ne se disent pas pareil.
+                // c'est sans objet, et les deux ne se disent pas pareil.
                 return {
                     rule,
                     status: isMac ? fromProbe(security.sip, false) : ('not_applicable' as const),
@@ -156,7 +232,7 @@ export function posturize(row: DeviceRow): DevicePosture {
             ? null
             : Math.round((conclusive.filter((c) => c.status === 'ok').length / conclusive.length) * 100);
 
-    return { deviceId: row.id, deviceName: row.name, score, checks };
+    return { deviceId: device.id, deviceName: device.name, score, checks };
 }
 
 /**
@@ -167,8 +243,8 @@ export function posturize(row: DeviceRow): DevicePosture {
  * chemins d'exécutables doit le **dire**, plutôt que de laisser croire que les
  * règles `exec.*` l'ont blanchie.
  */
-export function probesOf(row: DeviceRow): RuleProbe[] {
-    const report = parseDeviceReport(row.report_json);
+export function probesOf(device: SdkDevice, config: DeviceConfigRow | null): RuleProbe[] {
+    const report = device.report;
     const probes: RuleProbe[] = ['snapshot'];
     if (report) probes.push('report');
 
@@ -183,13 +259,13 @@ export function probesOf(row: DeviceRow): RuleProbe[] {
 
     // `integrity` se confirme à la réception d'un manifeste : un agent peut la
     // déclarer et n'avoir pas encore relevé (premier cycle, 6 h par défaut).
-    if (row.sentinel_last_integrity_at === null) {
+    if (config === null || config.last_integrity_at === null) {
         const i = probes.indexOf('integrity');
         if (i !== -1) probes.splice(i, 1);
     }
     // Idem pour l'authentification : déclarée par l'agent, mais désactivable
     // côté serveur. L'interrupteur du serveur fait foi.
-    if (row.sentinel_auth_events !== 1) {
+    if (config === null || config.auth_events !== 1) {
         const i = probes.indexOf('auth');
         if (i !== -1) probes.splice(i, 1);
     }

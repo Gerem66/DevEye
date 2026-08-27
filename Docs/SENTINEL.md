@@ -2,9 +2,36 @@
 
 Détection d'intrusion sur les hôtes (agent Rust → serveur Fastify → client React).
 Monitoring **collecte**, Sentinelle **interprète** : rien ici n'ouvre une sonde de
-son propre chef sans que ce document l'explique. Contrats partagés dans
-`@deveye/types` (`domain/sentinel.ts`, `domain/report.ts`, `protocol/agent.ts`,
-`features/sentinel.ts`).
+son propre chef sans que ce document l'explique.
+
+Sentinelle est un **module** (`features/sentinel/`, septième native rapatriée
+sur le SDK des features, voir [FEATURE_SDK.md](FEATURE_SDK.md)). Ses contrats
+vivent dans `features/sentinel/src/contracts/` (`domain.ts`, `commands.ts`) ;
+`@deveye/types` ne garde que le protocole agent (`domain/report.ts`,
+`protocol/agent.ts`), l'identité de la feature (id, descripteur, sujet live,
+émetteur de notifications) et le couplage déclaré vers l'app
+(`sdk/providers.ts` : `SENTINEL_AGENT_CONFIG_PROVIDER`,
+`DEFAULT_SENTINEL_INTEGRITY_MINUTES`).
+
+## Où vit le code
+
+| Où | Quoi |
+|---|---|
+| `src/server/engine.ts` | le moteur (l'ex `SecurityMonitor`) : file d'ingestion, évaluation par tour, ligne de base en mémoire, plancher d'évaluation, passe lente, notifications groupées, `live.changed` ; ses hooks agent |
+| `src/server/rules.ts` | le catalogue de règles, fonctions pures ; `rules.test.ts` les vérifie (31 cas) |
+| `src/server/repo.ts` | ligne de base, constats, autorisations, config par appareil (`deviceConfig`) |
+| `src/server/handlers.ts` | les 13 commandes `sentinel.*` ; `_shared.ts` la posture, les DTO, le singleton du moteur |
+| `src/server/notice.ts` | la mise en page Discord d'un constat |
+| `src/server/env.ts` | `SENTINEL_TICK_SECONDS` (60), `SENTINEL_LEARNING_DAYS` (7), `SENTINEL_FINDING_RETENTION_DAYS` (180), lues par le module |
+| `src/server/uninstall.sql` | démonte `ft_sentinel_device_config`, la seule table du module au préfixe |
+| `src/client/` | la vue (`Sentinel.tsx`), la carte (`SentinelWidget`), le panneau Appareils de la coquille (`SentinelDevicesPanel`), le magasin du décompte (`store.ts`) |
+
+Ce que l'app garde : les handlers agent (`src/agent/handlers/telemetry.ts`,
+`security.ts`), qui persistent puis tendent la télémétrie aux hooks des modules
+sans rien garder des réglages de Sentinelle ; `src/agent/config.ts`, qui
+recompose la config poussée à l'agent (`agent.config`) avec la part du module
+(le provider) ; et la façade du SDK (`devices`, `telemetry`, `agents`,
+`notify`), seul chemin du module vers les appareils, les instants et la flotte.
 
 À lire avec [MONITORING.md](MONITORING.md), dont les invariants 1, 2, 6, 8 et 9
 s'appliquent ici tels quels.
@@ -43,8 +70,19 @@ d'agent — la façon la plus sûre de faire abandonner la feature.
 | **Persistance** | 6 h (+ connexion, + `agent.scan`) | empreintes SHA-256 des surfaces d'installation au démarrage | **diffé, jamais stocké brut** |
 | **Authentification** | 1 h | compteurs + ≤50 adresses + ≤50 connexions | **conclusions seules** |
 
-Réglages par appareil : `devices.sentinel_*`, poussés à l'agent par `agent.config`
-et **rejoués à la reconnexion** (invariant 1 de Monitoring).
+Réglages par appareil : `ft_sentinel_device_config` (une ligne par appareil
+surveillé ou l'ayant été, migration 098 du socle ; l'absence de ligne vaut
+« sondes éteintes, défauts » ; `ON DELETE CASCADE` avec l'appareil), poussés à
+l'agent par `agent.config` et **rejoués à la reconnexion** (invariant 1 de
+Monitoring). C'est l'app qui compose cette config (`agentConfigFor`), en
+demandant au module sa part par `SENTINEL_AGENT_CONFIG_PROVIDER` : sans module
+installé, ou sans ligne pour l'appareil, les sondes sont éteintes.
+
+Les colonnes ont vécu dans `devices` (`sentinel_*`, migration 074) jusqu'au
+rapatriement : la 098 du socle crée la table du module et y copie les appareils
+qui ont eu Sentinelle, puis supprime les colonnes. Le socle, et non une
+migration du module, parce que ses migrations tournent avant celles des modules
+et qu'une copie faite par le module trouverait des colonnes déjà supprimées.
 
 ### Le travail de connexion est borné des deux côtés
 
@@ -64,7 +102,7 @@ Deux gardes, délibérément aux deux bouts :
   donc un vrai démarrage ne perd rien. Les tickers **posent** le jalon eux aussi, sinon un tour d'horloge suivi
   d'une reconnexion serait immédiatement rejoué. `agent.collect` et `agent.scan`
   ne sont jamais bornés : ce sont des ordres explicites.
-- **Serveur** (`SecurityMonitor.ts`) : `EVAL_FLOOR_MS` (10 min) plafonne la
+- **Serveur** (`features/sentinel/src/server/engine.ts`) : `EVAL_FLOOR_MS` (10 min) plafonne la
   réévaluation de `report` / `auth` / `integrity` par appareil. Nécessaire *en
   plus* du garde agent, pour deux raisons : la flotte se met à jour à son rythme,
   et un `Instant` est relatif au processus, donc un agent qui **plante** en boucle
@@ -83,13 +121,17 @@ appareil). Les taire sans le dire aurait remplacé un bug voyant par un bug muet
 ## Invariants à préserver
 
 1. **L'ingestion n'évalue pas.** Un lot de métriques peut porter cent instants
-   (agent revenu après une coupure). Les handlers d'agent se contentent
-   d'`enqueue*()` ; `SecurityMonitor` draine au tour de boucle, **ne garde que le
-   dernier instant par appareil**, et évalue. → Ne jamais appeler une règle depuis
-   `src/agent/handlers/`.
+   (agent revenu après une coupure). Les handlers d'agent de l'app
+   (`src/agent/handlers/`) persistent, puis tendent ce qu'ils ont persisté aux
+   hooks des modules (`onReport`, `onMetricsBatch`, `onIntegrity`,
+   `onAuthEvents`) pour tout appareil **actif** ; les hooks du module relisent
+   sa config (surveillé ? sonde d'auth allumée ?) et se contentent
+   d'`enqueue*()` ; le moteur draine au tour de boucle, **ne garde que le
+   dernier instant par appareil**, et évalue. → Ne jamais appeler une règle
+   depuis un hook ni depuis `src/agent/handlers/`.
 
 2. **La fenêtre d'apprentissage n'est pas négociable.** Pendant qu'elle court
-   (`devices.sentinel_learning_until`, 7 j par défaut), tout est absorbé dans la
+   (`ft_sentinel_device_config.learning_until`, 7 j par défaut), tout est absorbé dans la
    ligne de base et les règles de dérive se taisent. Sans elle, le premier jour
    produit trois cents constats « nouveau programme » et la liste devient
    illisible avant d'avoir servi. Les règles qui n'en dépendent pas (`exec.*`,
@@ -157,8 +199,8 @@ appareil). Les taire sans le dire aurait remplacé un bug voyant par un bug muet
    revenait à faire déclarer normal ce qui venait d'être corrigé — et à empoisonner
    l'allowlist, qui est le seul état que rien ne reconstruit.
 
-9. **Un constat ≥ `high` épingle son instant.** Via `metrics.setInstantsPinned`,
-   qui traite les deux tables en une instruction. Sans cela la rétention
+9. **Un constat ≥ `high` épingle son instant.** Via `telemetry.pinInstant` de la
+   façade du SDK, qui traite les deux tables en une instruction. Sans cela la rétention
    effacerait, trente jours plus tard, la seule liste de processus qui explique le
    constat. Les constats eux-mêmes ne suivent pas `retention_days` : ce sont des
    preuves. Seuls les `resolved` sont balayés, après
@@ -187,7 +229,7 @@ appareil). Les taire sans le dire aurait remplacé un bug voyant par un bug muet
     `SECURITY_MODEL.md`). → Ne pas y ranger de secret d'utilisateur.
 
 14. **Le séparateur des clés composées est un ` `,** déclaré une fois
-    (`KEY_SEP` dans `db/repos/sentinel.ts`) et lu par `allowSubject()`. Un NUL
+    (`KEY_SEP` dans `features/sentinel/src/server/repo.ts`) et lu par `allowSubject()`. Un NUL
     plutôt qu'un espace parce qu'un sujet est souvent un chemin ; écrit en
     échappement parce qu'un octet invisible en source disparaît au premier
     copier-coller — et le perdre changerait **toutes** les empreintes de
@@ -219,8 +261,8 @@ appareil). Les taire sans le dire aurait remplacé un bug voyant par un bug muet
     tous les `exec.*` / `net.*` / `process.*`** : les règles rendaient `[]` faute
     de `ctx.snapshot`, et `resolveMissing` prenait ce silence pour une
     disparition. Un détecteur qui s'éteint sans bruit, exactement le mode de
-    panne contre lequel `check-rules.ts` est le seul filet. → Voir la section
-    « Séparation des cadences » de ce script.
+    panne contre lequel `rules.test.ts` est le seul filet. → Voir la section
+    « Séparation des cadences » de ce test.
 
 ## L'interface : deux niveaux, aucun onglet
 
@@ -240,8 +282,16 @@ Trois règles en découlent, à préserver :
   encore surveillée, ce qui donnait l'impression que la feature ne servait qu'à
   se configurer elle-même. Une machine éteinte affiche désormais ce qu'elle est
   et une seule action.
-- **Les réglages sont un dialogue.** Un onglet est un endroit où l'on va lire ;
-  des réglages sont une action qu'on termine.
+- **Les réglages sont ceux de la coquille commune.** Un onglet de la vue est un
+  endroit où l'on va lire ; des réglages sont une action qu'on termine, et il
+  n'y a qu'un dialogue pour ça par feature : le bouton Réglages (en-tête de la
+  flotte, en-tête d'une machine), ouvert sur l'onglet Appareils, qui liste les
+  appareils visibles avec, pour chacun, surveillance, fenêtre d'apprentissage,
+  cadence du manifeste, journal d'authentification et réapprentissage. Le
+  dialogue maison par appareil derrière un second engrenage a disparu au
+  rapatriement (dette de `SETTINGS.md`). Sentinelle n'a pas d'éléments : ses
+  « éléments » sont des appareils, l'échelle élément de la coquille ne
+  s'applique pas.
 - **Ce qui est long est replié** (ligne de base, décisions) et chargé seulement à
   l'ouverture : cinq cents lignes qu'on ne consulte qu'en cas de doute ne doivent
   pas repousser hors de l'écran ce qu'on est venu voir.
@@ -261,17 +311,19 @@ libellé, description, **conduite à tenir**, sonde requise, dépendance à la l
 de base. Un constat sans conduite à tenir ne sert personne, d'où le champ
 obligatoire.
 
-Les règles vivent dans `src/Services/security/rules.ts` et sont **toutes des
-fonctions pures** : aucune ne lit la base, n'écrit nulle part, ni ne regarde
-l'horloge autrement qu'à travers le `now` qu'on lui passe. Ce dépôt n'a pas de
-cadre de test (`npm test` sort en 1) — c'est cette pureté qui les rend
-vérifiables, en leur fabriquant un instant et en regardant ce qu'elles rendent.
+Les règles vivent dans `features/sentinel/src/server/rules.ts` et sont
+**toutes des fonctions pures** : aucune ne lit la base, n'écrit nulle part, ni
+ne regarde l'horloge autrement qu'à travers le `now` qu'on lui passe. C'est
+cette pureté qui les rend vérifiables, en leur fabriquant un instant et en
+regardant ce qu'elles rendent.
 
-`scripts/check-rules.ts` leur oppose des instants fabriqués et vérifie ce
-qu'elles rendent — 29 assertions, lancées par `npm run ci`. Ce filet n'est pas
-décoratif : une règle de détection qui cesse de se déclencher ne casse rien, ne
-lève rien, et ne se voit nulle part. La feature a simplement l'air calme, ce qui
-est le pire mode de panne possible pour un détecteur.
+`rules.test.ts` (à côté) leur oppose des instants fabriqués et vérifie ce
+qu'elles rendent : 31 vérifications, celles de l'ancien
+`scripts/check-rules.ts` de l'app, lancées par `npm run test:features` (donc
+par `npm run ci:features`). Ce filet n'est pas décoratif : une règle de
+détection qui cesse de se déclencher ne casse rien, ne lève rien, et ne se voit
+nulle part. La feature a simplement l'air calme, ce qui est le pire mode de
+panne possible pour un détecteur.
 
 Une règle rend un `FindingDraft`, jamais un effet : c'est le moteur qui décide
 d'ouvrir, d'incrémenter ou de notifier. Une règle qui saurait cela devrait
@@ -297,12 +349,20 @@ connaître l'état précédent, et deviendrait intestable.
   quoi elle passerait ici et échouerait sur une base restaurée ailleurs — au
   démarrage, hors transaction, à moitié appliquée.
 - **`occurrences` n'est plus affiché tel quel.** Le compteur reste incrémenté et
-  en base, mais l'interface montre une **durée** (`persistedFor`, qui réutilise
-  `formatDuration` du Monitoring). Pour une condition vraie en permanence le
+  en base, mais l'interface montre une **durée** (`persistedFor`, sur une copie
+  de `formatDuration` du Monitoring dans `src/client/format.ts` du module : un
+  module n'importe rien de l'app hors du barrel). Pour une condition vraie en permanence le
   nombre n'était que la durée divisée par la cadence de relevé, et « ×300 » se
   lisait comme trois cents problèmes distincts. Le décompte brut survit dans les
   infobulles.
 - **Le cache de ligne de base du moteur est en mémoire** et suppose un seul
   processus, comme `lastProcessSampleTs` dans `agent/handlers/telemetry.ts`.
-  `sentinel.resetBaseline` appelle `monitor.invalidate()` — sans quoi la remise à
+  `sentinel.resetBaseline` appelle `engine().invalidate()` (le singleton posé
+  par `createService`, patron `setEngine` de CloudSync), sans quoi la remise à
   zéro n'aurait d'effet qu'au prochain redémarrage du serveur.
+- **Les dépôts du module ne joignent pas `devices`.** Constats et autorisations
+  rendent `device_id` ; les handlers résolvent les noms par
+  `ctx.deveye.devices.list()` (une Map par requête, un appareil disparu ou hors
+  périmètre se nomme par son id tronqué). Les clés étrangères des tables
+  historiques vers `devices` restent : ce sont des contraintes, pas des
+  lectures.

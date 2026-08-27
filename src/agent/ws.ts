@@ -67,7 +67,7 @@ import {
     handleUpdated,
     type AgentSession
 } from './handlers';
-import { deviceAgentConfig } from './mappers';
+import { agentConfigFor } from './config';
 import { notifyDeviceWorkspaces, recordAgentOffline, recordAgentOnline } from './presence';
 import type { LiveHub } from '@/live/hub';
 import type { MonitorHub } from './hub';
@@ -75,17 +75,18 @@ import type { MonitorHub } from './hub';
 import type { FeatureAgentHooks } from '@deveye/types/sdk/server';
 import type { Database } from '@/db';
 import type { AuditLog } from '@/Services/AuditLog';
-import type { SecurityMonitor } from '@/Services/SecurityMonitor';
 
 interface AgentWSDeps {
     db: Database;
     hub: MonitorHub;
     /** Présence en direct : un agent qui arrive ou part change la liste d'appareils. */
     live: LiveHub;
-    /** Les hooks agent des modules installés (voir moduleAgentHooks). */
+    /**
+     * Les hooks agent des modules installés (voir moduleAgentHooks) : la
+     * télémétrie persistée leur est tendue (Sentinelle), la synchro aussi
+     * (CloudSync).
+     */
     hooks: Required<FeatureAgentHooks>;
-    /** Moteur Sentinelle : les handlers lui empilent leurs relevés. */
-    sentinel?: SecurityMonitor;
     audit: AuditLog;
 }
 
@@ -168,7 +169,7 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
  */
 export async function registerAgentWS(
     app: FastifyInstance,
-    { db, hub, live, hooks, sentinel, audit }: AgentWSDeps
+    { db, hub, live, hooks, audit }: AgentWSDeps
 ): Promise<void> {
     app.get('/agent', { websocket: true }, async (socket, req) => {
         // Stealth: every authentication/authorization failure ends the connection
@@ -213,8 +214,9 @@ export async function registerAgentWS(
             reqLogger.info('Agent connected');
             const wasOnlineInHub = hub.isOnline(deviceId);
             hub.agentOnline(deviceId, socket);
-            // Tell the agent its collection cadences + capture mode straight away.
-            send(socket, { command: AGENT_CONFIG, payload: deviceAgentConfig(device) });
+            // Tell the agent its collection cadences + capture mode straight away
+            // (recomposée avec la part des modules : les sondes de Sentinelle).
+            send(socket, { command: AGENT_CONFIG, payload: await agentConfigFor(device) });
             // Les modules (CloudSync) poussent leurs assignations et rattrapent
             // le retard éventuel ; l'agrégat isole déjà chaque module.
             void Promise.resolve(hooks.onAgentConnect(deviceId)).catch((err: unknown) => {
@@ -252,7 +254,6 @@ export async function registerAgentWS(
             db,
             hub,
             hooks,
-            sentinel,
             audit,
             logger: reqLogger,
             ownerId: claims.oid,

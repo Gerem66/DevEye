@@ -18,6 +18,9 @@
     },
     {
       "package": "deveye-feature-uptime"
+    },
+    {
+      "package": "deveye-feature-sentinel"
     }
   ]
 }

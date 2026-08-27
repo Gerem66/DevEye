@@ -12,20 +12,6 @@ export interface DeviceConfigPatch {
     retentionDays?: number | null;
 }
 
-/**
- * Réglages Sentinelle d'un appareil. Séparé de `DeviceConfigPatch` parce que ce
- * sont deux cadrans distincts : l'un règle ce que l'agent mesure en continu,
- * l'autre décide si on le surveille — et une feature n'a pas à pouvoir modifier
- * les réglages de l'autre en passant.
- */
-export interface DeviceSentinelPatch {
-    enabled?: boolean;
-    /** Unix ms de fin d'apprentissage ; `null` remet à zéro. */
-    learningUntil?: number | null;
-    integrityMinutes?: number;
-    authEvents?: boolean;
-}
-
 export interface CreateDeviceInput {
     ownerId: number;
     workspaceId: number;
@@ -52,17 +38,6 @@ export interface DevicesRepo {
     setAgentTarget(id: string, target: string): Promise<void>;
     setReport(id: string, reportJson: string): Promise<void>;
     setConfig(id: string, patch: DeviceConfigPatch): Promise<void>;
-    setSentinelConfig(id: string, patch: DeviceSentinelPatch): Promise<void>;
-    /** Date le dernier manifeste de persistance reçu (unix ms). */
-    touchIntegrity(id: string, at: number): Promise<void>;
-    /**
-     * Les appareils sur lesquels Sentinelle tourne, tous espaces confondus.
-     *
-     * Le moteur n'a ni session ni espace courant : il balaye la flotte entière,
-     * exactement comme l'ordonnanceur d'Uptime. Les appareils archivés en sont
-     * exclus — leur historique est figé, il n'y a plus rien à y détecter.
-     */
-    listSentinelEnabled(): Promise<DeviceRow[]>;
     /** Mark a device for deletion, remembering its status so it can be restored. */
     requestDeletion(id: string, currentStatus: string): Promise<void>;
     /** Cancel a pending deletion: restore the remembered status, clear the error. */
@@ -207,40 +182,6 @@ export function devicesRepo(pool: Q): DevicesRepo {
             if (sets.length === 0) return;
             params.push(id);
             await pool.query(`UPDATE devices SET ${sets.join(', ')} WHERE id = ?`, params);
-        },
-        async setSentinelConfig(id, patch) {
-            const columns: Record<keyof DeviceSentinelPatch, string> = {
-                enabled: 'sentinel_enabled',
-                learningUntil: 'sentinel_learning_until',
-                integrityMinutes: 'sentinel_integrity_minutes',
-                authEvents: 'sentinel_auth_events'
-            };
-            const sets: string[] = [];
-            const params: unknown[] = [];
-            for (const key of Object.keys(columns) as (keyof DeviceSentinelPatch)[]) {
-                const value = patch[key];
-                if (value === undefined) continue;
-                sets.push(`${columns[key]} = ?`);
-                // Les deux drapeaux sont des TINYINT : les passer en booléens
-                // JS marcherait, mais mysql2 les sérialiserait en 0/1 sans le
-                // dire, et une relecture rendrait un type différent de celui
-                // qu'on croit écrire.
-                params.push(typeof value === 'boolean' ? (value ? 1 : 0) : value);
-            }
-            if (sets.length === 0) return;
-            params.push(id);
-            await pool.query(`UPDATE devices SET ${sets.join(', ')} WHERE id = ?`, params);
-        },
-        async touchIntegrity(id, at) {
-            await pool.query('UPDATE devices SET sentinel_last_integrity_at = ? WHERE id = ?', [at, id]);
-        },
-        async listSentinelEnabled() {
-            const r = await pool.query<DeviceRow>(
-                `SELECT * FROM devices
-                 WHERE sentinel_enabled = 1 AND status = 'active'
-                 ORDER BY id ASC`
-            );
-            return r.rows;
         },
         async requestDeletion(id, currentStatus) {
             await pool.query(

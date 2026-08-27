@@ -1,14 +1,13 @@
-import type { DeviceSentinelState, FindingSeverity } from '@deveye/types';
+import { Checkbox, FeatureSettingsButton } from 'deveye-sdk-client';
 
-import Checkbox from '@/Components/Checkbox';
+import type { DeviceSentinelState, FindingSeverity } from '../contracts/domain';
 
 import styles from './style.module.css';
-import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 
 /**
  * L'en-tête de la vue de flotte : où en est l'espace, et de quoi filtrer.
  *
- * Le score n'y figure pas — il est porté par le bouton de tête, dans la barre
+ * Le score n'y figure pas, il est porté par le bouton de tête, dans la barre
  * latérale, qui sert à la fois de résumé et de retour à l'accueil de la feature.
  * L'afficher aux deux endroits faisait lire deux fois le même chiffre.
  */
@@ -49,7 +48,7 @@ export default function FleetHeader({ devices, minSeverity, onMinSeverity, showS
                         {watched === 0
                             ? `Aucun des ${devices.length} appareils de cet espace n’est surveillé.`
                             : `${watched} appareil${watched > 1 ? 's' : ''} surveillé${watched > 1 ? 's' : ''} sur ${devices.length}` +
-                              (learning > 0 ? ` — ${learning} en apprentissage` : '')}
+                              (learning > 0 ? ` (${learning} en apprentissage)` : '')}
                     </p>
                 </div>
 
@@ -62,7 +61,8 @@ export default function FleetHeader({ devices, minSeverity, onMinSeverity, showS
                 <div className={styles.headerActions}>
                     {/* Même variante que dans les autres features : la
                         silhouette du bouton Réglages ne change pas d'un écran
-                        à l'autre. */}
+                        à l'autre. Ses onglets viennent du manifest (Appareils)
+                        et du descripteur (Notifications). */}
                     <FeatureSettingsButton scope={{ kind: 'feature', feature: 'sentinel' }} />
                 </div>
             </div>

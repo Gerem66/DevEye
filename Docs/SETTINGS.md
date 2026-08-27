@@ -12,8 +12,8 @@ se supprime lui-même quand aucune section n'est lisible : les features ne le
 conditionnent jamais elles-mêmes.
 
 Un dialogue artisanal derrière un engrenage à part est une dette : Mail, Météo,
-OSINT, Finances et Uptime en ont été purgés, les candidats restants sont listés
-en fin de fichier.
+OSINT, Finances, Uptime et Sentinelle en ont été purgés, les candidats restants
+sont listés en fin de fichier.
 
 ## Les sections
 
@@ -71,8 +71,6 @@ Trois mécanismes font qu'aucun réglage n'est un mur :
   coquille de réglages qui s'ignore.
 - **Monitoring** : la configuration de collecte est enfouie dans un menu
   déroulant d'appareil ; `TerminalSettings` à part.
-- **Sentinelle** : `SentinelDialog` par appareil, un second engrenage qui ne
-  ressemble au premier que par l'icône.
 - **Bases de données** : `AlertDialog` (règles d'alerte par base) vit dans le
   corps de la fiche, pas dans ses réglages.
 - **Audience** : origines, plateforme, rétention et clé d'un site vivent dans

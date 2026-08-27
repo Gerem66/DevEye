@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { SENTINEL_RULES, type AllowScope, type Finding } from '@deveye/types';
+import { Button, TextInput } from 'deveye-sdk-client';
 
-import Button from '@/Components/Button';
-import TextInput from '@/Components/TextInput';
+import { SENTINEL_RULES, type AllowScope, type Finding } from '../contracts/domain';
 
 import { ago, persistedFor, severityClass } from './FindingsList';
 import styles from './style.module.css';
@@ -11,7 +10,7 @@ import styles from './style.module.css';
  * Le détail d'un constat : ce qui a été vu, ce que ça veut dire, et quoi faire.
  *
  * Les trois blocs sont délibérément dans cet ordre, et la conduite à tenir n'est
- * pas facultative — un constat qui n'y répond pas ne sert personne.
+ * pas facultative, un constat qui n'y répond pas ne sert personne.
  *
  * L'acquittement propose deux portées parce que les deux situations existent :
  * « ce port ouvert est normal **sur cette machine** » et « notre agent de
@@ -20,7 +19,7 @@ import styles from './style.module.css';
  *
  * « C'est réglé » n'est pas une troisième portée mais l'autre réponse possible :
  * on a corrigé, ce n'est pas devenu normal. Elle existe parce que le moteur ne
- * résout de lui-même que ce qu'il peut rejouer — une authentification suspecte ou
+ * résout de lui-même que ce qu'il peut rejouer, une authentification suspecte ou
  * une entrée de persistance décrivent un fait passé, que plus aucun relevé ne
  * viendra contredire. Sans elle, la seule façon de ranger un constat corrigé
  * était de le déclarer légitime.

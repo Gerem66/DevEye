@@ -1,31 +1,26 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import type { AllowScope, DevicePosture, DeviceSentinelState, Finding, FindingSeverity } from '@deveye/types';
+import { onResourceChange, onSocketOpen, useActiveWorkspace, useLiveSegment } from 'deveye-sdk-client';
+import type { FeatureViewProps } from '@deveye/types/sdk/client';
 
-import { ws } from '@/api/ws';
-import { useLiveSegment } from '@/live/useLiveSegment';
-import { onResourceChange } from '@/stores/invalidation';
-import { refreshSentinel } from '@/stores/sentinel';
+import type { AllowScope, DevicePosture, DeviceSentinelState, Finding, FindingSeverity } from '../contracts/domain';
 
 import AllowlistSection from './AllowlistSection';
+import { api } from './api';
 import BaselineSection from './BaselineSection';
 import DeviceHeader from './DeviceHeader';
 import FindingDetail from './FindingDetail';
 import FindingsList from './FindingsList';
 import FleetHeader from './FleetHeader';
 import PostureGrid from './PostureGrid';
-import SentinelDialog from './SentinelDialog';
+import { refreshSentinel } from './store';
 import styles from './style.module.css';
-
-import type { FeatureProps } from '../types';
-
-export { SentinelWidget } from './SentinelWidget';
 
 /**
  * Sentinelle : la flotte, puis une machine.
  *
  * **Deux niveaux, et aucun onglet.** On entre par « qu'est-ce qui ne va pas, et
- * où » — les constats de tout l'espace, au pire d'abord — et on descend sur une
+ * où », les constats de tout l'espace, au pire d'abord, et on descend sur une
  * machine, qui se lit alors d'une seule traite : ce qu'on lui reproche, sa
  * posture, puis ce qu'on a appris d'elle.
  *
@@ -33,11 +28,16 @@ export { SentinelWidget } from './SentinelWidget';
  * clics, alors qu'elles se lisent ensemble et dans cet ordre : on ne consulte
  * pas la posture d'une machine *ou* ses constats, on regarde les constats et on
  * se demande aussitôt si sa configuration les explique. Les réglages, eux, sont
- * une action et non une lecture — d'où un dialogue.
+ * une action et non une lecture : depuis le rapatriement, ils vivent dans la
+ * coquille commune (bouton Réglages, onglet Appareils), plus dans un dialogue
+ * maison derrière un second engrenage.
  *
  * Aucun sondage : la vue se relit quand le sujet `sentinel` bouge, c'est-à-dire
  * quand le moteur ouvre un constat. Elle est donc muette tant que rien ne se
  * passe, ce qui est l'état normal d'un détecteur.
+ *
+ * Depuis le rapatriement, l'espace vient de `useActiveWorkspace()` et non
+ * d'une prop : la vue d'un module ne reçoit que `closeFeature`.
  */
 
 /**
@@ -47,7 +47,7 @@ export { SentinelWidget } from './SentinelWidget';
  */
 const DETAIL_WIDTH = 360;
 
-export default function Sentinel({ workspace }: FeatureProps) {
+export default function Sentinel(_props: FeatureViewProps) {
     const [devices, setDevices] = useState<DeviceSentinelState[]>([]);
     const [fleetScore, setFleetScore] = useState<number | null>(null);
     const [findings, setFindings] = useState<Finding[]>([]);
@@ -56,15 +56,16 @@ export default function Sentinel({ workspace }: FeatureProps) {
     const [posture, setPosture] = useState<DevicePosture | null>(null);
     const [minSeverity, setMinSeverity] = useState<FindingSeverity | null>(null);
     const [showSettled, setShowSettled] = useState(false);
-    const [settingsFor, setSettingsFor] = useState<DeviceSentinelState | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const workspaceId = workspace.id;
+    const workspaceId = useActiveWorkspace()?.id ?? null;
     const device = devices.find((d) => d.deviceId === deviceId) ?? null;
 
-    // Le niveau profond de Sentinelle : la machine ouverte. La racine
-    // `view:sentinel` vient de l'accueil ; cette feature n'annonce que le sien.
+    // Le niveau profond de Sentinelle : la machine ouverte, par son uuid. La
+    // racine `view:sentinel` vient de l'accueil ; cette feature n'annonce que
+    // le sien. Pas d'`itemSegment` au manifest : Sentinelle n'a pas
+    // d'éléments, ses « éléments » sont des appareils.
     const liveTarget = useLiveSegment('l1', deviceId);
     useEffect(() => {
         if (!liveTarget) return;
@@ -80,8 +81,8 @@ export default function Sentinel({ workspace }: FeatureProps) {
     const reload = useCallback(async () => {
         try {
             const [overview, list] = await Promise.all([
-                ws.send('sentinel.overview', {}),
-                ws.send('sentinel.findings', {
+                api.send('sentinel.overview', {}),
+                api.send('sentinel.findings', {
                     deviceId: null,
                     state: showSettled ? null : 'open',
                     minSeverity,
@@ -105,22 +106,24 @@ export default function Sentinel({ workspace }: FeatureProps) {
         } finally {
             setLoading(false);
         }
+        // Relu quand l'espace change : la liste est celle d'un espace.
     }, [workspaceId, minSeverity, showSettled]);
 
+    // Relecture à chaque (re)connexion (tout de suite si la socket est déjà
+    // ouverte) et quand le sujet `sentinel` bouge : une écriture d'un autre
+    // membre, un réglage fait dans le panneau des appareils, ou un constat que
+    // le moteur vient d'ouvrir.
     useEffect(() => {
-        void reload();
         const offInvalidate = onResourceChange('sentinel.findings', () => void reload());
-        const offState = ws.onStateChange((s) => {
-            if (s === 'open') void reload();
-        });
+        const offOpen = onSocketOpen(() => void reload());
         return () => {
             offInvalidate();
-            offState();
+            offOpen();
         };
     }, [reload]);
 
     // La posture se charge à la demande : c'est une lecture par appareil, et la
-    // vue de flotte n'en a pas besoin pour s'afficher — elle porte déjà le score.
+    // vue de flotte n'en a pas besoin pour s'afficher, elle porte déjà le score.
     useEffect(() => {
         if (!deviceId) {
             setPosture(null);
@@ -129,7 +132,7 @@ export default function Sentinel({ workspace }: FeatureProps) {
         let cancelled = false;
         void (async () => {
             try {
-                const res = await ws.send('sentinel.posture', { deviceId });
+                const res = await api.send('sentinel.posture', { deviceId });
                 if (!cancelled) setPosture(res.posture);
             } catch {
                 if (!cancelled) setPosture(null);
@@ -149,7 +152,7 @@ export default function Sentinel({ workspace }: FeatureProps) {
     const acknowledge = useCallback(
         async (scope: AllowScope, reason: string | null) => {
             if (!selected) return;
-            const res = await ws.send('sentinel.acknowledge', { findingId: selected.id, scope, reason });
+            const res = await api.send('sentinel.acknowledge', { findingId: selected.id, scope, reason });
             setSelected(res.finding);
             await afterWrite();
         },
@@ -158,31 +161,23 @@ export default function Sentinel({ workspace }: FeatureProps) {
 
     const resolve = useCallback(async () => {
         if (!selected) return;
-        await ws.send('sentinel.resolve', { findingId: selected.id });
+        await api.send('sentinel.resolve', { findingId: selected.id });
         // Sans `setSelected` : la relecture s'en charge, et elle seule sait quoi
-        // faire des deux cas. Le constat quitte le filtre par défaut — le détail
-        // se referme ; il reste sous « voir les constats réglés » — le détail se
+        // faire des deux cas. Le constat quitte le filtre par défaut, le détail
+        // se referme ; il reste sous « voir les constats réglés », le détail se
         // met à jour. Le forcer ici aurait tranché à sa place.
         await afterWrite();
     }, [selected, afterWrite]);
 
     const reopen = useCallback(async () => {
         if (!selected) return;
-        const res = await ws.send('sentinel.reopen', { findingId: selected.id });
+        const res = await api.send('sentinel.reopen', { findingId: selected.id });
         setSelected(res.finding);
         await afterWrite();
     }, [selected, afterWrite]);
 
-    const resetBaseline = useCallback(
-        async (id: string) => {
-            await ws.send('sentinel.resetBaseline', { deviceId: id });
-            await afterWrite();
-        },
-        [afterWrite]
-    );
-
     const scanNow = useCallback(async (id: string): Promise<boolean> => {
-        const res = await ws.send('sentinel.scanNow', { deviceId: id });
+        const res = await api.send('sentinel.scanNow', { deviceId: id });
         return res.requested;
     }, []);
 
@@ -271,7 +266,7 @@ export default function Sentinel({ workspace }: FeatureProps) {
                 {error && <p className={styles.error}>{error}</p>}
 
                 {device ? (
-                    <DeviceHeader device={device} onOpenSettings={() => setSettingsFor(device)} onScanNow={scanNow} />
+                    <DeviceHeader device={device} onScanNow={scanNow} />
                 ) : (
                     <FleetHeader
                         devices={devices}
@@ -289,8 +284,8 @@ export default function Sentinel({ workspace }: FeatureProps) {
                             <p className={styles.calloutTitle}>Cette machine n’est pas surveillée</p>
                             <p className={styles.calloutBody}>
                                 Rien n’est relevé sur « {device.deviceName} », et ses journaux ne sont pas lus.
-                                L’activation démarre une fenêtre d’apprentissage pendant laquelle Sentinelle observe
-                                sans rien reprocher.
+                                L’activation, dans les réglages (onglet Appareils), démarre une fenêtre d’apprentissage
+                                pendant laquelle Sentinelle observe sans rien reprocher.
                             </p>
                         </div>
                     </div>
@@ -362,7 +357,7 @@ export default function Sentinel({ workspace }: FeatureProps) {
                                      * panneau perd la sienne : `overflow: hidden`
                                      * le rogne au lieu de le remettre en page.
                                      * Sans ça, la fermeture rejouait à toute
-                                     * vitesse une mise en page de 360 px à 0 —
+                                     * vitesse une mise en page de 360 px à 0 :
                                      * liseré de gravité, séparations et boutons
                                      * écrasés en barres horizontales et
                                      * verticales, l'espace de quelques images.
@@ -382,21 +377,6 @@ export default function Sentinel({ workspace }: FeatureProps) {
                     </div>
                 )}
             </main>
-
-            <SentinelDialog
-                open={settingsFor !== null}
-                device={settingsFor}
-                onClose={() => setSettingsFor(null)}
-                onSaved={(next, keepOpen) => {
-                    setDevices((prev) => prev.map((d) => (d.deviceId === next.deviceId ? next : d)));
-                    // Activer est une action qui se termine : la laisser ouverte
-                    // sur un arrière-plan qui se recharge donne l'impression que
-                    // rien n'a abouti. Seul un enregistrement de cadences reste.
-                    setSettingsFor(keepOpen ? next : null);
-                    void refreshSentinel();
-                }}
-                onReset={resetBaseline}
-            />
         </div>
     );
 }

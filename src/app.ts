@@ -30,7 +30,6 @@ import { MailSyncService } from '@/Services/MailSyncService';
 import { IntegrationSyncService } from '@/Services/IntegrationSyncService';
 import { DatabaseMonitor } from '@/Services/DatabaseMonitor';
 import { AudienceIngest } from '@/Services/AudienceIngest';
-import { SecurityMonitor } from '@/Services/SecurityMonitor';
 import { BackupService } from '@/Services/BackupService';
 import { mailAttachmentRoutes } from '@/mail/attachmentRoutes';
 import { mailOAuthRoutes } from '@/mail/oauthRoutes';
@@ -55,8 +54,6 @@ export interface BuiltApp {
     databases: DatabaseMonitor;
     /** Ingestion d'audience — démarrée/arrêtée par index.ts. */
     audience: AudienceIngest;
-    /** Moteur Sentinelle — démarré/arrêté par index.ts. */
-    sentinel: SecurityMonitor;
     /** Ordonnanceur des sauvegardes — démarré/arrêté par index.ts. */
     backups: BackupService;
     /** Synchro Mail en tâche de fond (comptes « open » uniquement) — démarrée/arrêtée par index.ts. */
@@ -195,11 +192,9 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // trois services ci-dessus, celui-ci ne sonde rien — il **reçoit**, et son
     // seul travail périodique est de vider ce qu'on lui a déposé.
     const audience = new AudienceIngest({ db: deps.db, crypt: deps.crypt, logger, live });
-    // Sentinelle a **ses propres** canaux (`notification_settings`, ligne
-    // `sentinel`). Elle empruntait ceux d'Uptime : une alerte de sécurité
-    // arrivait alors sur un salon désigné pour la disponibilité, sans que rien
-    // ne l'ait annoncé ni ne permette de l'éteindre séparément.
-    const sentinel = new SecurityMonitor({ db: deps.db, crypt: deps.crypt, logger, audit, live });
+    // (Le moteur de Sentinelle est un service du module `features/sentinel`,
+    // démarré avec les autres ci-dessus ; ses relevés lui arrivent par les
+    // hooks agent.)
     // Sauvegardes. Le seul service de fond qui ait besoin des **trois** autres
     // mondes à la fois : le hub d'agents (pour déposer une archive sur une
     // machine), le moteur CloudSync (pour relire les blobs d'un partage) et le
@@ -230,13 +225,13 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         integrations,
         databases,
         audience,
-        sentinel,
         backups,
         audit
     });
-    // Le moteur reçoit ce que les agents envoient — mais il n'évalue rien ici :
-    // les handlers empilent, le tour de boucle évalue (voir `SecurityMonitor`).
-    await registerAgentWS(app, { db: deps.db, hub, live, hooks: moduleAgentHooks(), sentinel, audit });
+    // Les modules reçoivent ce que les agents envoient, une fois persisté, par
+    // l'agrégat des hooks ; aucun n'évalue sur ce chemin (le moteur de
+    // Sentinelle empile, son tour de boucle évalue).
+    await registerAgentWS(app, { db: deps.db, hub, live, hooks: moduleAgentHooks(), audit });
 
     // Serve the built web client from the same origin as the API whenever a
     // build is present (production, or the dockerised dev stack). On the host
@@ -265,5 +260,5 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         app.log.debug({ clientDir }, 'No client build found; static serving disabled (host dev uses Vite)');
     }
 
-    return { app, mailSync, integrations, databases, audience, sentinel, backups, moduleServices };
+    return { app, mailSync, integrations, databases, audience, backups, moduleServices };
 }

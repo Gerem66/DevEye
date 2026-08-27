@@ -17,14 +17,6 @@ import { itemSharingRepo, type ItemSharingRepo } from './repos/itemSharing';
 import { notificationChannelsRepo, type NotificationChannelsRepo } from './repos/notificationChannels';
 import { presenceRepo, type PresenceRepo } from './repos/presence';
 import { processSamplesRepo, type ProcessSamplesRepo } from './repos/processSamples';
-import {
-    allowRepo,
-    baselineRepo,
-    findingsRepo,
-    type AllowRepo,
-    type BaselineRepo,
-    type FindingsRepo
-} from './repos/sentinel';
 import { projectsRepo, type ProjectsRepo } from './repos/projects';
 import { projectRekeyRepo, type ProjectRekeyRepo } from './repos/projectRekey';
 import { projectBoardRepo, type ProjectBoardRepo } from './repos/projectBoard';
@@ -102,10 +94,6 @@ export interface Database {
     metrics: MetricsRepo;
     presence: PresenceRepo;
     processSamples: ProcessSamplesRepo;
-    /** Sentinelle : ce qui a été observé, ce qui en a été jugé, ce qu'un humain a décidé. */
-    baseline: BaselineRepo;
-    findings: FindingsRepo;
-    sentinelAllow: AllowRepo;
     twoFactor: TwoFactorRepo;
     userSecretKeys: UserSecretKeysRepo;
     /** Le magasin clé-valeur des modules de features (SDK). */
@@ -150,9 +138,6 @@ export function createDatabase(q: Queryable): Database {
         metrics: metricsRepo(q),
         presence: presenceRepo(q),
         processSamples: processSamplesRepo(q),
-        baseline: baselineRepo(q),
-        findings: findingsRepo(q),
-        sentinelAllow: allowRepo(q),
         twoFactor: twoFactorRepo(q),
         userSecretKeys: userSecretKeysRepo(q),
         featureKv: featureKvRepo(q),

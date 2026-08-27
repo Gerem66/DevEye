@@ -1,6 +1,6 @@
-import { SENTINEL_RULES, type Finding, type FindingSeverity } from '@deveye/types';
+import { SENTINEL_RULES, type Finding, type FindingSeverity } from '../contracts/domain';
 
-import { formatDuration } from '@/Features/Monitoring/utils';
+import { formatDuration } from './format';
 import styles from './style.module.css';
 
 /**
@@ -9,7 +9,7 @@ import styles from './style.module.css';
  * Le tri vient du serveur (`severity DESC, last_seen DESC`) ; on ne fait que le
  * découper en sections. Regrouper côté client sur une liste déjà triée évite de
  * refaire le tri et garantit que l'ordre affiché est celui que la commande a
- * produit — deux tris qui se croiseraient finiraient par diverger.
+ * produit, deux tris qui se croiseraient finiraient par diverger.
  */
 
 const SEVERITY_ORDER: FindingSeverity[] = ['critical', 'high', 'low', 'info'];
@@ -51,7 +51,7 @@ export function persistedFor(finding: Pick<Finding, 'firstSeen' | 'lastSeen'>): 
     return span < 60_000 ? null : formatDuration(span);
 }
 
-/** « il y a 3 min », « il y a 2 j » — la précision utile, pas la date exacte. */
+/** « il y a 3 min », « il y a 2 j » : la précision utile, pas la date exacte. */
 export function ago(ts: number): string {
     const seconds = Math.max(0, Math.floor((Date.now() - ts) / 1000));
     if (seconds < 60) return "à l'instant";
@@ -78,7 +78,7 @@ export default function FindingsList({ findings, selectedId, onSelect, showDevic
         return (
             <p className={styles.empty}>
                 {learning
-                    ? 'Rien à signaler pour l’instant — et l’apprentissage court encore, donc les écarts de comportement ne sont pas encore jugés.'
+                    ? 'Rien à signaler pour l’instant, et l’apprentissage court encore, donc les écarts de comportement ne sont pas encore jugés.'
                     : 'Rien à signaler.'}
             </p>
         );

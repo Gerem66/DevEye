@@ -1,37 +1,30 @@
-import {
-    SENTINEL_RULES,
-    type AuthWindow,
-    type DeviceReport,
-    type EvidenceItem,
-    type FindingSeverity,
-    type PersistenceEntry,
-    type ReportProcess,
-    type SentinelRuleId
-} from '@deveye/types';
+import type { AuthWindow, DeviceReport, PersistenceEntry, ReportProcess } from '@deveye/types';
 
-import type { BaselineRow } from '@/db/repos/sentinel';
+import { SENTINEL_RULES, type EvidenceItem, type FindingSeverity, type SentinelRuleId } from '../contracts/domain';
+import type { BaselineRow, FindingDraft } from './repo';
 
 /**
  * Le catalogue de règles de Sentinelle.
  *
  * **Tout ici est une fonction pure.** Aucune règle ne lit la base, n'écrit nulle
  * part, ni ne regarde l'horloge autrement qu'à travers le `now` qu'on lui passe.
- * Ce dépôt n'a pas de cadre de test (`npm test` sort en 1), et c'est cette
- * pureté qui rend les règles vérifiables quand même : on leur fabrique un
- * instant, on regarde ce qu'elles rendent (voir `scripts/check-rules.ts`).
+ * C'est cette pureté qui rend les règles vérifiables sans base ni agent : on
+ * leur fabrique un instant, on regarde ce qu'elles rendent (voir
+ * `rules.test.ts`, les trente et une vérifications de l'ancien
+ * `scripts/check-rules.ts`, désormais un test du module).
  *
  * ## Ce que ce module expose
  *
  * `evaluateSnapshot` pour l'instant, `persistenceRules` et `authRules` pour les
  * deux relevés qui ont leur propre cadence, plus les clés d'éléments. Les règles
  * qu'`evaluateSnapshot` compose ne sortent pas : ce sont des détails de
- * composition, et les exposer aurait invité à les appeler dans le désordre — or
+ * composition, et les exposer aurait invité à les appeler dans le désordre, or
  * l'ordre et le regroupement font partie de ce que le moteur attend.
  *
  * ## Ce qu'une règle rend
  *
  * Un `FindingDraft`, jamais un effet. C'est le moteur qui décide s'il faut
- * ouvrir, incrémenter ou notifier — une règle qui saurait cela devrait connaître
+ * ouvrir, incrémenter ou notifier, une règle qui saurait cela devrait connaître
  * l'état précédent, et deviendrait intestable.
  *
  * ## La discipline du silence
@@ -42,14 +35,8 @@ import type { BaselineRow } from '@/db/repos/sentinel';
  * fausse assurance (invariant 6 de Monitoring).
  */
 
-/** Ce qu'une règle produit. Le moteur y ajoute l'appareil et la date. */
-export interface FindingDraft {
-    rule: SentinelRuleId;
-    severity: FindingSeverity;
-    subject: string;
-    evidence: EvidenceItem[];
-    snapshotTs: number | null;
-}
+/** Ce qu'une règle produit (voir `FindingDraft` du dépôt). Le moteur y ajoute l'appareil et la date. */
+export type { FindingDraft };
 
 /** L'instant sur lequel les règles d'instant travaillent. */
 export interface SnapshotView {
@@ -93,7 +80,7 @@ function draft(
 }
 
 function ev(label: string, value: string | number | null | undefined): EvidenceItem {
-    return { label, value: value === null || value === undefined ? '—' : String(value).slice(0, 512) };
+    return { label, value: value === null || value === undefined ? ',' : String(value).slice(0, 512) };
 }
 
 // ─────────────────────────────── clés d'éléments ─────────────────────────────
@@ -102,7 +89,7 @@ function ev(label: string, value: string | number | null | undefined): EvidenceI
  * La clé d'un programme : `nom|chemin`.
  *
  * Le chemin fait partie de la clé, et c'est le point. Agréger sur le seul nom
- * fusionnait deux binaires homonymes rangés à des endroits différents — exactement
+ * fusionnait deux binaires homonymes rangés à des endroits différents, exactement
  * ce derrière quoi un imposteur se cache. Un agent trop ancien ne renvoie pas de
  * chemin : la clé retombe alors sur le nom seul, et les règles qui dépendent du
  * chemin (`exec.*`) restent muettes plutôt que de conclure sur du vide.
@@ -128,7 +115,7 @@ export function listenerKey(proto: string, address: string, port: number): strin
  * Répertoires où rien ne devrait jamais s'exécuter.
  *
  * Ce sont les points de chute d'un dropper : accessibles en écriture à tous,
- * souvent montés sans `noexec`, et vidés au redémarrage — ce qui en fait aussi
+ * souvent montés sans `noexec`, et vidés au redémarrage, ce qui en fait aussi
  * un endroit commode pour ne pas laisser de trace.
  */
 const SUSPICIOUS_EXEC_PREFIXES = [
@@ -148,7 +135,7 @@ const SUSPICIOUS_EXEC_FRAGMENTS = ['/.cache/', '/.local/share/Trash/', '/Downloa
  * Ports de pools de minage.
  *
  * Liste courte et assumée : ce sont les ports par défaut des pools les plus
- * répandus. Un mineur peut évidemment en choisir un autre — cette règle attrape
+ * répandus. Un mineur peut évidemment en choisir un autre, cette règle attrape
  * le cas paresseux, qui est de très loin le plus fréquent, et `process.new`
  * plus `process.resource_anomaly` couvrent le reste.
  */
@@ -160,7 +147,7 @@ const MINING_POOL_PORTS = new Set([3333, 4444, 5555, 7777, 8888, 9000, 14444, 45
  *
  * Un `bash` qui maintient une socket vers l'extérieur est la forme même d'un
  * shell inversé. Les scripts d'administration légitimes existent, d'où
- * l'acquittement — mais le défaut est de le signaler.
+ * l'acquittement, mais le défaut est de le signaler.
  */
 const SHELL_NAMES = new Set([
     'sh',
@@ -310,7 +297,7 @@ function netRules(ctx: EvalContext): FindingDraft[] {
  *
  * Elles vivent dans le rapport et pas dans l'instant : c'est lui qui porte le
  * détail derrière le simple compteur `activeConnections`. La règle est donc
- * rangée avec les autres règles de rapport, à la cadence du rapport — la
+ * rangée avec les autres règles de rapport, à la cadence du rapport, la
  * rejouer à chaque instant la re-constatait toutes les soixante secondes sur
  * une liste de connexions inchangée.
  *
@@ -342,7 +329,7 @@ function connectionRules(ctx: EvalContext): FindingDraft[] {
  *
  * `port.unattributed` est la seule des deux à ne pas dépendre de la ligne de
  * base : une écoute sans propriétaire est anormale en soi. Encore faut-il que
- * l'agent ait eu les droits de chercher — sans privilèges, l'absence de `pid`
+ * l'agent ait eu les droits de chercher, sans privilèges, l'absence de `pid`
  * est la normale et n'apprend rien.
  */
 function listenerRules(ctx: EvalContext): FindingDraft[] {
@@ -395,7 +382,7 @@ function listenerRules(ctx: EvalContext): FindingDraft[] {
  * La dérive des programmes : ce qui est nouveau, ce qui a changé de compte, ce
  * qui s'est mis à écouter, ce qui consomme hors de son habitude.
  *
- * Entièrement muette pendant l'apprentissage — c'est là toute la différence
+ * Entièrement muette pendant l'apprentissage, c'est là toute la différence
  * entre un détecteur utilisable et une liste de trois cents lignes le jour 1.
  */
 function processRules(ctx: EvalContext): FindingDraft[] {
@@ -702,11 +689,11 @@ const SUCCESS_AFTER_FAILURES_THRESHOLD = 5;
  * Les issues d'authentification.
  *
  * Actives sans ligne de base : une création de compte ou une réussite après
- * échecs n'a pas besoin d'habitude pour être anormale. `unavailable` coupe tout —
+ * échecs n'a pas besoin d'habitude pour être anormale. `unavailable` coupe tout ,
  * une machine dont on n'a pas pu lire le journal n'est pas une machine tranquille.
  */
 // `_ctx` : cette règle n'a besoin ni de la ligne de base ni du rapport, mais
-// garde la signature commune du catalogue — toute règle s'appelle de la même
+// garde la signature commune du catalogue, toute règle s'appelle de la même
 // façon, et celle-ci pourra s'en servir sans changer ses appelants.
 export function authRules(_ctx: EvalContext, auth: AuthWindow): FindingDraft[] {
     if (auth.unavailable) return [];
@@ -721,7 +708,7 @@ export function authRules(_ctx: EvalContext, auth: AuthWindow): FindingDraft[] {
                     [
                         ev('Adresse', source.address),
                         ev('Échecs', source.failed),
-                        ev('Comptes visés', source.users.length > 0 ? source.users.join(', ') : '—'),
+                        ev('Comptes visés', source.users.length > 0 ? source.users.join(', ') : ','),
                         ev('Fenêtre', `${new Date(auth.from).toISOString()} → ${new Date(auth.to).toISOString()}`)
                     ],
                     null
@@ -739,7 +726,7 @@ export function authRules(_ctx: EvalContext, auth: AuthWindow): FindingDraft[] {
                         ev('Adresse', source.address),
                         ev('Échecs avant réussite', source.failed),
                         ev('Réussites', source.accepted),
-                        ev('Comptes visés', source.users.length > 0 ? source.users.join(', ') : '—')
+                        ev('Comptes visés', source.users.length > 0 ? source.users.join(', ') : ',')
                     ],
                     null
                 )
@@ -769,7 +756,7 @@ export function authRules(_ctx: EvalContext, auth: AuthWindow): FindingDraft[] {
                 'root',
                 [
                     ev('Sessions root directes', auth.rootLogins),
-                    ev('Origines', rootFrom.length > 0 ? [...new Set(rootFrom)].join(', ') : '—')
+                    ev('Origines', rootFrom.length > 0 ? [...new Set(rootFrom)].join(', ') : ',')
                 ],
                 null
             )
@@ -809,7 +796,7 @@ export function evaluateReport(ctx: EvalContext): FindingDraft[] {
     return [...connectionRules(ctx), ...listenerRules(ctx), ...postureRules(ctx)];
 }
 
-/** Les règles qu'`evaluateSnapshot` couvre — celles que le moteur peut résoudre. */
+/** Les règles qu'`evaluateSnapshot` couvre, celles que le moteur peut résoudre. */
 export const SNAPSHOT_RULES: SentinelRuleId[] = [
     'exec.suspicious_path',
     'exec.masquerade',

@@ -1,17 +1,18 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import type { SeverityCounts } from '@deveye/types';
+import { isSocketOpen, onResourceChange, onSocketOpen, useActiveWorkspace } from 'deveye-sdk-client';
 
-import { ws } from '@/api/ws';
-import { onResourceChange } from './invalidation';
-import { useActiveWorkspace } from './workspace';
+import type { SeverityCounts } from '../contracts/domain';
+
+import { api } from './api';
 
 /**
  * Le décompte de constats ouverts, partagé par la carte de l'accueil et la
- * pastille de Monitoring — une seule requête pour deux affichages.
+ * pastille de Monitoring, une seule requête pour deux affichages.
  *
  * Comme celui d'Uptime, il ne sonde pas : le moteur diffuse `live.changed` sur
  * le sujet `sentinel` à chaque constat ouvert, et c'est ce qui déclenche la
- * relecture. La feature appelle {@link refreshSentinel} après ses propres
+ * relecture (`sentinel.count` est une ressource du manifest, ravivée par le
+ * sujet). La feature appelle {@link refreshSentinel} après ses propres
  * mutations, dont le serveur ne lui renvoie pas l'écho.
  */
 
@@ -38,14 +39,14 @@ function emit(next: Partial<SentinelCountState>): void {
 
 /** Relit le décompte maintenant (après un acquittement, un réglage). */
 export async function refreshSentinel(): Promise<void> {
-    if (workspaceId === null || ws.state !== 'open') return;
+    if (workspaceId === null || !isSocketOpen()) return;
     try {
-        const res = await ws.send('sentinel.count', {});
+        const res = await api.send('sentinel.count', {});
         emit({ open: res.open, watched: res.watched, loading: false });
     } catch {
         // Un envoi qui échoue garde le dernier décompte connu plutôt que de
         // retomber sur un « 0 constat » qui se lirait comme une bonne nouvelle.
-        if (ws.state === 'open') emit({ loading: false });
+        if (isSocketOpen()) emit({ loading: false });
     }
 }
 
@@ -61,9 +62,8 @@ function start(): void {
     if (refCount > 1) return;
     void refreshSentinel();
     unsubInvalidate = onResourceChange('sentinel.count', () => void refreshSentinel());
-    unsubState = ws.onStateChange((s) => {
-        if (s === 'open') void refreshSentinel();
-    });
+    // Reload as soon as the socket (re)connects (fires now if already open).
+    unsubState = onSocketOpen(() => void refreshSentinel());
 }
 
 function stop(): void {

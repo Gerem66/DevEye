@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import type { BaselineEntry, BaselineKind, DeviceSentinelState } from '@deveye/types';
 
-import { ws } from '@/api/ws';
+import type { BaselineEntry, BaselineKind, DeviceSentinelState } from '../contracts/domain';
 
+import { api } from './api';
 import styles from './style.module.css';
 
 /**
@@ -49,7 +49,7 @@ export default function BaselineSection({ device }: { device: DeviceSentinelStat
         setLoading(true);
         void (async () => {
             try {
-                const res = await ws.send('sentinel.baseline', {
+                const res = await api.send('sentinel.baseline', {
                     deviceId: device.deviceId,
                     kind,
                     limit: 500
@@ -113,7 +113,7 @@ export default function BaselineSection({ device }: { device: DeviceSentinelStat
                         <>
                             <p className={styles.baselineCount}>
                                 {total} entrée{total > 1 ? 's' : ''}
-                                {entries.length < total && ` — ${entries.length} affichées`}
+                                {entries.length < total && `, ${entries.length} affichées`}
                             </p>
                             <ul className={styles.baselineRows}>
                                 {entries.map((entry) => (

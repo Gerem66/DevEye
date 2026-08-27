@@ -3,7 +3,7 @@
  *
  * Module à part, comme Git et Bases de données : une feature, une feuille.
  *
- * Aucune couleur en dur — les quatre gravités réutilisent `--danger` et
+ * Aucune couleur en dur, les quatre gravités réutilisent `--danger` et
  * `--warning` plutôt que d'introduire une échelle chromatique de plus. Un rouge
  * qui ne serait pas le rouge du reste de l'application se lirait comme un état
  * différent, alors que c'est le même : « ça ne va pas ».
@@ -117,15 +117,15 @@
  * Le contenu, à largeur figée pendant que le panneau anime la sienne. Sa valeur
  * vient de `index.tsx`, en même temps que celle de l'animation : c'est la même
  * largeur, et elle n'a qu'une seule source. Ici on ne pose que ce qui rend le
- * rognage propre — pas de rétrécissement, pas de saut de ligne.
+ * rognage propre, pas de rétrécissement, pas de saut de ligne.
  */
 .detailInner {
     flex-shrink: 0;
 }
 
 /* Sous 1000 px la colonne de détail passe sous la liste : deux colonnes ne
-   tiennent pas, et rétrécir la liste rendrait les sujets — souvent des
-   chemins — illisibles. */
+   tiennent pas, et rétrécir la liste rendrait les sujets, souvent des
+   chemins, illisibles. */
 @media (max-width: 1000px) {
     .split {
         flex-direction: column;
@@ -401,7 +401,7 @@
     color: var(--text-muted);
 }
 
-/* Décomptes par gravité — la lecture d'un coup d'œil de « à quel point ». */
+/* Décomptes par gravité, la lecture d'un coup d'œil de « à quel point ». */
 .tallies {
     display: flex;
     gap: var(--space-lg);
@@ -565,7 +565,7 @@
     list-style: none;
 }
 
-/* La carte d'un constat : même grammaire que les cartes de Bases de données —
+/* La carte d'un constat : même grammaire que les cartes de Bases de données,
    surface de widget, bordure de verre, léger soulèvement au survol. */
 .findingRow {
     position: relative;
@@ -580,7 +580,7 @@
     border: 1px solid var(--glass-border);
     /*
      * Rayon volontairement court : le liseré de gravité court sur toute la
-     * hauteur du bord gauche, et un grand rayon lui rogne les deux extrémités —
+     * hauteur du bord gauche, et un grand rayon lui rogne les deux extrémités,
      * on ne voyait plus qu'un trait central, qui avait l'air inachevé.
      */
     border-radius: var(--radius-sm);
@@ -844,7 +844,7 @@
  * « C'est réglé » et « Légitime » répondent à deux questions différentes, et se
  * confondraient posés côte à côte dans la même rangée de boutons. Le trait les
  * sépare : au-dessus, ranger un constat corrigé ; en dessous, décider qu'une
- * situation est normale — la seule des deux qui écrive une autorisation.
+ * situation est normale, la seule des deux qui écrive une autorisation.
  */
 .settled {
     display: flex;
@@ -1089,19 +1089,7 @@
     color: var(--text-muted);
 }
 
-/* ── dialogue de réglages ────────────────────────────────────────────────── */
-
-.dialogBody {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-lg);
-}
-
-.dialogFooter {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-sm);
-}
+/* ── détail : le champ « raison » ────────────────────────────────────────── */
 
 .field {
     display: flex;
@@ -1115,10 +1103,41 @@
     color: var(--text-primary);
 }
 
-.fieldHint {
-    font-size: 0.76rem;
-    line-height: 1.5;
-    color: var(--text-muted);
+/* ── panneau des appareils (coquille de réglages, onglet Appareils) ──────── */
+
+/*
+ * Un bloc par appareil, séparé du précédent par un trait : la coquille fournit
+ * les rangées de champs (`settingsStyles`), le module ne pose que ce qui est à
+ * lui, l'en-tête d'une machine et sa zone de réapprentissage.
+ */
+.panelDevice {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--glass-border);
+}
+
+.panelDeviceHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.panelDeviceName {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.panelDeviceSwitch {
+    flex-shrink: 0;
 }
 
 .fieldCheck {

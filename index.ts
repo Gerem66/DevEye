@@ -32,7 +32,7 @@ async function main() {
     const db = createDatabase(getQueryable(pool));
     const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
 
-    const { app, mailSync, integrations, databases, audience, sentinel, backups, moduleServices } = await buildApp({
+    const { app, mailSync, integrations, databases, audience, backups, moduleServices } = await buildApp({
         db,
         crypt
     });
@@ -55,7 +55,6 @@ async function main() {
             integrations.stop();
             databases.stop();
             audience.stop();
-            sentinel.stop();
             backups.stop();
             for (const svc of moduleServices) void svc.stop();
             // Rend le bail CloudSync : sans ça, le processus qui redémarre ne
@@ -110,8 +109,7 @@ async function main() {
     // Audience : la seule qui ne sonde rien. Elle vide ce que l'ingestion
     // publique a déposé, et tient l'agrégat journalier + la rétention par site.
     audience.start();
-    sentinel.start();
-    // Sauvegardes : même forme que les cinq au-dessus, une cadence à part. Le
+    // Sauvegardes : même forme que les quatre au-dessus, une cadence à part. Le
     // démarrage solde d'abord les exécutions restées « en cours » d'un arrêt
     // brutal — sans quoi un travail interrompu resterait éternellement en vol et
     // tous ses passages suivants seraient sautés en silence.
