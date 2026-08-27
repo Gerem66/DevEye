@@ -2,7 +2,6 @@ import { type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { FeatureId, HomeTopbarWidgetId, WorkspaceKind } from '@deveye/types';
 
 import { useDevices } from '@/stores/devices';
-import { useUptimeCount } from '@/stores/uptime';
 import { useHomeLayout } from '@/stores/homeLayout';
 import { useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
 import { clientModules, moduleClient } from '@/sdk/registry';
@@ -28,7 +27,6 @@ export interface TopbarWidgetMeta {
 const NATIVE_TOPBAR_WIDGETS: TopbarWidgetMeta[] = [
     { id: 'devices', title: 'Appareils connectés', icon: 'server', description: "Nombre d'appareils en ligne" },
     { id: 'secrecy', title: 'Chiffrement', icon: 'lock', description: 'Minuteur du chiffrement par mot de passe' },
-    { id: 'uptime', title: 'Uptime', icon: 'uptime', description: 'Services en ligne sur les services surveillés' },
     { id: 'live', title: 'Présence', icon: 'user', description: 'Qui est dans cet espace, et où' }
 ];
 
@@ -109,20 +107,6 @@ export function DevicesStatus() {
     );
 }
 
-/** Uptime mini-widget: services confirmed healthy / total monitored. */
-export function UptimeStatus() {
-    const { total, up, down, loading } = useUptimeCount();
-    // The icon carries both the identity (which widget is this?) and the state,
-    // so the two count widgets can't be mistaken for one another at a glance.
-    const tone = down > 0 ? styles.statusAlert : total > 0 && up === total ? styles.statusOk : '';
-    return (
-        <span className={styles.statusItem} title='Services surveillés en ligne'>
-            <span className={`icon icon-uptime ${tone}`} />
-            {loading ? '—' : `${up}/${total}`}
-        </span>
-    );
-}
-
 /** Render a single topbar widget by id (shared by the live navbar and the editor). */
 export function renderTopbarWidget(id: HomeTopbarWidgetId, onOpenSecurity?: (e: ReactMouseEvent) => void): ReactNode {
     switch (id) {
@@ -130,12 +114,10 @@ export function renderTopbarWidget(id: HomeTopbarWidgetId, onOpenSecurity?: (e: 
             return <DevicesStatus />;
         case 'secrecy':
             return <SecrecyTimer onOpenSecurity={onOpenSecurity} />;
-        case 'uptime':
-            return <UptimeStatus />;
         case 'live':
             return <LivePresence />;
         default: {
-            // Widget d'un module (Météo comprise) : l'hôte fournit le cadre
+            // Widget d'un module (Météo et Uptime compris) : l'hôte fournit le cadre
             // stylé et le titre, le module fournit le contenu, sans props.
             const meta = topbarCatalog().find((w) => w.id === id);
             const Widget = moduleClient(id)?.TopbarWidget;

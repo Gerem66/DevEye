@@ -23,7 +23,7 @@
     line-height: 1;
 }
 
-/* One service down is the whole point of the card — say it in colour. */
+/* One service down is the whole point of the card: say it in colour. */
 .widgetDown {
     color: var(--danger);
 }
@@ -40,7 +40,24 @@
 }
 
 /* ------------------------------------------------------------------ *
- * Feature panel — service list
+ * Mini-widget de topbar
+ * ------------------------------------------------------------------ */
+
+/* L'icône porte l'identité (quel widget ?) et l'état, pour que les deux
+   compteurs de la barre ne se confondent pas d'un coup d'œil. L'hôte la teinte
+   en accent par défaut (`.statusItem .icon`, deux classes) : ces deux teintes
+   pèsent trois classes pour l'emporter quel que soit l'ordre des feuilles, avec
+   les mêmes jetons que les statuts natifs (`--success`, `--danger`). */
+:global(.icon).statusIcon.statusOk {
+    color: var(--success);
+}
+
+:global(.icon).statusIcon.statusAlert {
+    color: var(--danger);
+}
+
+/* ------------------------------------------------------------------ *
+ * Feature panel : service list
  * ------------------------------------------------------------------ */
 
 .feature {
@@ -103,7 +120,7 @@
 
 /*
  * Where a dragged row would land. Spans the list and sits in the gap itself, so
- * the rows are never moved or restyled to show the target — what you see is
+ * the rows are never moved or restyled to show the target: what you see is
  * exactly the position you get. Driven through the DOM (see ServiceList), never
  * by React state.
  */
@@ -137,7 +154,7 @@
 
 /* Drag-to-reorder handle, mirroring a note's block grip: hidden until the row is
    hovered, à la native editors. `touch-action: none` is what makes reordering
-   possible under a finger — it stops the scroller from claiming the gesture — and
+   possible under a finger (it stops the scroller from claiming the gesture), and
    it is scoped to these 18px so the rest of the card still scrolls the list. */
 .grip {
     flex-shrink: 0;
@@ -182,7 +199,7 @@
     opacity: 0.55;
 }
 
-/* The row actually being dragged — dimmed rather than hidden, so its own space
+/* The row actually being dragged: dimmed rather than hidden, so its own space
    in the list stays a visible anchor while the bar shows where it will land. */
 .cardDragging {
     opacity: 0.4;
@@ -197,8 +214,8 @@
 /*
  * La bande d'état, au milieu de la ligne.
  *
- * `flex: 2 1 180px` : elle prend la place restante en priorité — c'est elle qui
- * gagne à être large, un nom et une URL non — mais elle cède avant de rendre le
+ * `flex: 2 1 180px` : elle prend la place restante en priorité (c'est elle qui
+ * gagne à être large, un nom et une URL non), mais elle cède avant de rendre le
  * reste illisible. En dessous de sa base, elle passe au fil des points de rupture
  * plutôt que d'écraser tout le monde.
  */
@@ -420,7 +437,7 @@
     gap: var(--space-sm);
 }
 
-/* The content keeps its exact geometry while reloading — only its opacity
+/* The content keeps its exact geometry while reloading: only its opacity
    moves, so a refresh never shifts anything on the page. */
 .paneDim {
     opacity: 0.4;
@@ -455,7 +472,7 @@
 }
 
 /* Ancre de la bulle : elle se place en pourcentage de la largeur des barres, donc
-   c'est ce bloc-ci — et pas la colonne avec sa légende — qui doit la référencer. */
+   c'est ce bloc-ci, et pas la colonne avec sa légende, qui doit la référencer. */
 .barsPlot {
     position: relative;
 }
@@ -526,7 +543,7 @@
     background: var(--danger);
 }
 
-/* No probe recorded in that slice — before the service existed, while it was
+/* No probe recorded in that slice: before the service existed, while it was
    paused, or while the server was down. */
 .barEmpty {
     background: var(--glass-border-strong);
@@ -562,7 +579,7 @@
 }
 
 /* Les trois disponibilités en note de bas de graphique : mêmes chiffres que la
-   colonne d'une carte de service, mais du poids d'une légende — elles chiffrent
+   colonne d'une carte de service, mais du poids d'une légende : elles chiffrent
    les couleurs, elles ne les remplacent pas. */
 .ratiosCompact {
     display: flex;
@@ -740,7 +757,7 @@
     width: 100%;
 }
 
-/* The browser fills the popup exactly, so the journal — not the page — owns the
+/* The browser fills the popup exactly, so the journal (not the page) owns the
    overflow. `min-height: 0` is what lets a flex child actually shrink to the
    space left, instead of being floored at its content height. */
 .browser {
@@ -805,11 +822,11 @@
 }
 
 /* ------------------------------------------------------------------ *
- * Phones (the client's usual breakpoint — see WidgetPopup, WidgetGrid)
+ * Phones (the client's usual breakpoint, see WidgetPopup, WidgetGrid)
  *
  * The service row is the one that genuinely breaks rather than merely
  * tightens: its ratios and actions refuse to shrink (~386px of them), so
- * on a ~358px viewport `.cardMain` was laid out at zero width — and since
+ * on a ~358px viewport `.cardMain` was laid out at zero width, and since
  * all three of its lines ellipsize, the card rendered with no name, no URL
  * and no last check at all. Everything below is about giving those lines a
  * full row of their own.
@@ -829,7 +846,7 @@
     }
 
     /* Une ligne à elle seule. La partager avec les pourcentages et le bouton ne
-       laisserait à cette largeur de quoi lire à personne — et une bande d'état
+       laisserait à cette largeur de quoi lire à personne, et une bande d'état
        trop courte ne dit plus rien de la forme d'un incident. */
     .cardGraph {
         flex: 1 1 100%;

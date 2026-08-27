@@ -356,7 +356,7 @@ tri précédent — par date d'ajout — n'était pas un ordre mais une conséqu
 Le geste est celui d'Uptime, repris tel quel (`RepoList.tsx`) : Pointer Events
 et non l'API `draggable` du HTML5, poignée dédiée en `touch-action: none`, barre
 d'insertion qui se tient dans l'interstice sans déplacer aucune ligne. Les
-raisons sont détaillées dans `Features/Uptime/ServiceList.tsx` et valent mot pour
+raisons sont détaillées dans `features/uptime/src/client/ServiceList.tsx` et valent mot pour
 mot ici. Un point propre à cette liste : la relecture déclenchée par
 `git.list` est **retenue** pendant un glissé et rejouée au relâchement — une
 liste qui se réordonne sous le pointeur n'est pas un ordre.

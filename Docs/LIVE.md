@@ -129,7 +129,8 @@ Le format de la valeur `l1` est propre à chaque feature, et deux endroits
 doivent le connaître : le `useLiveSegment` de la feature, et le rendez-vous
 `ITEM_SEGMENT` de `Components/FeatureSettings/goToHome.ts`, qui téléporte vers
 la fiche d'un élément projeté pour y rouvrir ses réglages (voir
-`SETTINGS.md`).
+`SETTINGS.md`). Un module porte le sien dans son manifest (`itemSegment`,
+Uptime : `String(id)`) ; la table ne connaît que les natives non migrées.
 
 ---
 
@@ -194,7 +195,8 @@ qui reste figée. À lire à chaque ajout de commande.
 Elles écrivent sans commande, donc sans socket : elles appellent
 `liveHub.changed()` directement.
 
-- `UptimeMonitor` — **uniquement sur une transition d'état**. La boucle tourne
+- le service de fond d'Uptime (`features/uptime/src/server/service.ts`, par
+  `deps.live.changed`) : **uniquement sur une transition d'état**. La boucle tourne
   toutes les dix secondes sur tous les services ; diffuser sans condition ferait
   re-solliciter le serveur en permanence par tous les clients.
 - `MailSyncService` — après une synchro réussie.

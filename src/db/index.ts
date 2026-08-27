@@ -42,7 +42,6 @@ import { backupRepo, type BackupRepo } from './repos/backup';
 import { projectLinksRepo, type ProjectLinksRepo } from './repos/projectLinks';
 import { refreshTokensRepo, type RefreshTokensRepo } from './repos/refreshTokens';
 import { twoFactorRepo, type TwoFactorRepo } from './repos/twoFactor';
-import { uptimeHistoryRepo, uptimeServicesRepo, type UptimeHistoryRepo, type UptimeServicesRepo } from './repos/uptime';
 import { userSecretKeysRepo, type UserSecretKeysRepo } from './repos/userSecretKeys';
 import { usersRepo, type UsersRepo } from './repos/users';
 import {
@@ -111,8 +110,6 @@ export interface Database {
     userSecretKeys: UserSecretKeysRepo;
     /** Le magasin clé-valeur des modules de features (SDK). */
     featureKv: FeatureKvRepo;
-    uptimeServices: UptimeServicesRepo;
-    uptimeHistory: UptimeHistoryRepo;
     /** Canaux d'alerte, par espace **et par feature** (voir `Services/notifications.ts`). */
     itemSharing: ItemSharingRepo;
     notificationChannels: NotificationChannelsRepo;
@@ -159,8 +156,6 @@ export function createDatabase(q: Queryable): Database {
         twoFactor: twoFactorRepo(q),
         userSecretKeys: userSecretKeysRepo(q),
         featureKv: featureKvRepo(q),
-        uptimeServices: uptimeServicesRepo(q),
-        uptimeHistory: uptimeHistoryRepo(q),
         itemSharing: itemSharingRepo(q),
         notificationChannels: notificationChannelsRepo(q),
         mailAccounts: mailAccountsRepo(q),

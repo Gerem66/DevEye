@@ -17,7 +17,6 @@ import { projectFeatures } from './project';
 import { secrecyFeatures } from './secrecy';
 import { twoFactorFeatures } from './twofa';
 import { sentinelFeatures } from './sentinel';
-import { uptimeFeatures } from './uptime';
 import { userSetAvatarFeature } from './user/setAvatar';
 import { userSetColorFeature } from './user/setColor';
 import { userSetSettingFeature } from './user/setSetting';
@@ -79,7 +78,6 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...twoFactorFeatures,
     ...secrecyFeatures,
     ...sentinelFeatures,
-    ...uptimeFeatures,
     ...logsFeatures,
     ...adminFeatures,
     ...homeFeatures,

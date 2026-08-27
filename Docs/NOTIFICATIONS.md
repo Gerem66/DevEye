@@ -247,11 +247,16 @@ canaux liés aux deux routes. `position` porte donc une place déterministe,
 1. une valeur dans `notificationFeatureSchema` (`DevEye-Types/src/domain/notifications.ts`) ;
 2. `notifies: true` dans `FEATURE_REGISTRY` — le contrôle au chargement du
    module refuse le démarrage si les deux divergent ;
-3. un module dans `Services/notices/` s'il mérite une mise en page Discord ;
+3. un module dans `Services/notices/` s'il mérite une mise en page Discord
+   (pour un module de feature : `src/server/notice.ts` chez lui, sur les
+   helpers de `Services/notices/shared.ts`) ;
 4. l'appel à `resolveRoute(db, cipher, workspaceId, feature, itemId?)` puis
-   `deliver(...)` dans son service de fond ;
+   `deliver(...)` dans son service de fond (pour un module :
+   `deps.deveyeFor(ws).notify.send(alert, { itemId })`, capacité `notify`,
+   qui rend `false` sans canal routé) ;
 5. s'il a des éléments : `ctx.db.notificationChannels.clearRoute(...)` dans son
-   handler de suppression, à côté d'`itemSharing.forgetItem`. Rien ne rattache
+   handler de suppression, à côté d'`itemSharing.forgetItem` (pour un module :
+   `ctx.items.forget(id)` fait les deux). Rien ne rattache
    une route à son élément (pas de FK : la cible change de table selon la
    feature), et une route orpheline vaut « réglé à la main » : le prochain
    élément à hériter de l'identifiant adopterait le routage du mort. La 090 a

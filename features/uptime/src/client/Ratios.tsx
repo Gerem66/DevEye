@@ -1,7 +1,7 @@
 import { formatRatio } from './format';
 import styles from './style.module.css';
 
-import type { UptimeService } from '@deveye/types';
+import type { UptimeService } from '../contracts/domain';
 
 /**
  * La disponibilité sur les trois fenêtres usuelles.
@@ -12,19 +12,26 @@ import type { UptimeService } from '@deveye/types';
  *
  * Deux formes, parce que deux endroits les montrent pour deux raisons. Dans la
  * liste des services, c'est une colonne qu'on parcourt du regard d'une ligne à
- * l'autre — elle est alignée et lisible. Sous les barres d'un projet, c'est une
+ * l'autre : elle est alignée et lisible. Sous les barres d'un projet, c'est une
  * note de bas de graphique : elle chiffre ce que les couleurs viennent de dire,
  * et n'a aucune raison de peser autant que la légende qui lui fait face.
  */
 
 const WINDOWS = ['24 h', '7 j', '30 j'] as const;
 
-function valuesOf(service: UptimeService): (number | null)[] {
+/**
+ * Les trois taux, et rien d'autre : c'est ce qui permet à Projets de poser ce
+ * composant sur le service réduit du contrat client (`UptimeLinkedService`),
+ * qui ne porte pas le reste de la fiche.
+ */
+export type RatiosService = Pick<UptimeService, 'ratio24h' | 'ratio7d' | 'ratio30d'>;
+
+function valuesOf(service: RatiosService): (number | null)[] {
     return [service.ratio24h, service.ratio7d, service.ratio30d];
 }
 
 interface RatiosProps {
-    service: UptimeService;
+    service: RatiosService;
     /** Forme discrète, en une ligne, pour un coin de graphique. */
     compact?: boolean;
 }

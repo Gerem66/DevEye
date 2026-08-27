@@ -1,17 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-
-import { ws } from '@/api/ws';
-import Button from '@/Components/Button';
-import { StatusBadge } from '@/Components/StatusBadge';
-
-import { formatAgo, formatDuration, formatMoment, formatMs, formatRatio, rangeWindow, RANGES } from './format';
-import MeasuresBrowser from './MeasuresBrowser';
-import Pane from './Pane';
-import { FeatureSettingsButton } from '@/Components/FeatureSettings';
-import StatusBars from './StatusBars';
-import UptimeChart from './UptimeChart';
-import styles from './style.module.css';
-
+import { Button, FeatureSettingsButton, StatusBadge } from 'deveye-sdk-client';
 import type {
     UptimeCheck,
     UptimeIncident,
@@ -19,7 +7,15 @@ import type {
     UptimeRange,
     UptimeResolution,
     UptimeService
-} from '@deveye/types';
+} from '../contracts/domain';
+
+import { api } from './api';
+import { formatAgo, formatDuration, formatMoment, formatMs, formatRatio, rangeWindow, RANGES } from './format';
+import MeasuresBrowser from './MeasuresBrowser';
+import Pane from './Pane';
+import StatusBars from './StatusBars';
+import UptimeChart from './UptimeChart';
+import styles from './style.module.css';
 
 /**
  * Measures previewed inline. Deliberately short: the full record lives on its own
@@ -41,8 +37,8 @@ interface ServiceDetailProps {
  * One service in full: availability curve over a chosen window, outage log and
  * the raw ping journal.
  *
- * The three panels load independently — a slow journal never holds the chart
- * back — and only the chart re-queries when the range changes.
+ * The three panels load independently (a slow journal never holds the chart
+ * back), and only the chart re-queries when the range changes.
  */
 export function ServiceDetail({ service, onBack, onEdit, onCheckNow }: ServiceDetailProps) {
     const [range, setRange] = useState<UptimeRange>('24h');
@@ -70,7 +66,7 @@ export function ServiceDetail({ service, onBack, onEdit, onCheckNow }: ServiceDe
         setBusyChart(true);
         // Opens the refresh cycle the three blocks share.
         setStaleError(null);
-        ws.send('uptime.history', { id, range })
+        api.send('uptime.history', { id, range })
             .then((res) => {
                 if (cancelled) return;
                 setPoints(res.points);
@@ -90,7 +86,7 @@ export function ServiceDetail({ service, onBack, onEdit, onCheckNow }: ServiceDe
     useEffect(() => {
         let cancelled = false;
         setBusyIncidents(true);
-        ws.send('uptime.incidents', { id, limit: INCIDENTS_MAX })
+        api.send('uptime.incidents', { id, limit: INCIDENTS_MAX })
             .then((res) => {
                 if (!cancelled) setIncidents(res.incidents);
             })
@@ -108,7 +104,7 @@ export function ServiceDetail({ service, onBack, onEdit, onCheckNow }: ServiceDe
     useEffect(() => {
         let cancelled = false;
         setBusyChecks(true);
-        ws.send('uptime.checks', { id, limit: CHECKS_PREVIEW, filter: { since: null, failuresOnly: false } })
+        api.send('uptime.checks', { id, limit: CHECKS_PREVIEW, filter: { since: null, failuresOnly: false } })
             .then((res) => {
                 if (!cancelled) setChecks(res.checks);
             })
@@ -160,8 +156,10 @@ export function ServiceDetail({ service, onBack, onEdit, onCheckNow }: ServiceDe
                     <Button variant='secondary' icon='edit' onClick={onEdit}>
                         Modifier
                     </Button>
-                    {/* Les réglages **de ce service** : ses propres canaux
-                        d'alerte, ou ceux d'Uptime tant qu'il les suit. */}
+                    {/* Les réglages **de ce service** : sa cadence, son délai,
+                        son seuil et sa rétention (Général), ses propres canaux
+                        d'alerte ou ceux d'Uptime tant qu'il les suit
+                        (Notifications), et où il est visible (Partage). */}
                     <FeatureSettingsButton
                         scope={{
                             kind: 'item',
@@ -189,7 +187,7 @@ export function ServiceDetail({ service, onBack, onEdit, onCheckNow }: ServiceDe
             </div>
 
             <Pane busy={busyChart}>
-                {/* State first (where were the outages?), latency second — both
+                {/* State first (where were the outages?), latency second: both
                     laid out on the same window so the columns match. */}
                 <StatusBars points={points} from={axis.from} to={axis.to} resolution={resolution} />
                 <UptimeChart points={points} from={axis.from} to={axis.to} resolution={resolution} />

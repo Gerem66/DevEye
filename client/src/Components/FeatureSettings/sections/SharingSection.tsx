@@ -51,7 +51,6 @@ const BLOCKER_TEXT: Record<ShareBlocker, string> = {
  * toutes, c'est le même geste que son sujet live.
  */
 const LIST_KEYS: Partial<Record<SettingsScope['feature'], ResourceKey[]>> = {
-    uptime: ['uptime.list', 'uptime.count'],
     database: ['database.list', 'database.count'],
     deploy: ['deploy.list', 'deploy.count'],
     git: ['git.list', 'git.count'],

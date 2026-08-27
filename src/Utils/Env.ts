@@ -145,12 +145,8 @@ export const env = {
     SENTINEL_FINDING_RETENTION_DAYS:
         getEnvVar('SENTINEL_FINDING_RETENTION_DAYS', 'number', false) || DEFAULT_SENTINEL_FINDING_RETENTION_DAYS,
 
-    // Uptime scheduler: how often the server looks for services due for a probe,
-    // and how many it may probe at once.
-    UPTIME_TICK_SECONDS: getEnvVar('UPTIME_TICK_SECONDS', 'number', false) || 10,
-    UPTIME_CONCURRENCY: getEnvVar('UPTIME_CONCURRENCY', 'number', false) || 8,
-
-    // Mail background sync: same shape as Uptime, but only ever touches "open"
+    // Mail background sync: same shape as the Uptime module's scheduler (whose
+    // UPTIME_* variables are read by the module itself), but only ever touches "open"
     // tier accounts (guarded accounts sync on demand during a live session).
     MAIL_SYNC_TICK_SECONDS: getEnvVar('MAIL_SYNC_TICK_SECONDS', 'number', false) || 120,
     MAIL_SYNC_CONCURRENCY: getEnvVar('MAIL_SYNC_CONCURRENCY', 'number', false) || 4,

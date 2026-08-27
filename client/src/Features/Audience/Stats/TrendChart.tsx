@@ -24,7 +24,7 @@ interface TrendChartProps {
  * **`viewBox` fixe, sans `ResizeObserver`** : le SVG s'adapte à son conteneur
  * par simple mise à l'échelle, donc le dessin est indépendant de la résolution
  * et ne coûte aucun recalcul au redimensionnement. C'est le parti pris de
- * `Features/Uptime/UptimeChart.tsx`, et il vaut ici pour la même raison.
+ * `features/uptime/src/client/UptimeChart.tsx`, et il vaut ici pour la même raison.
  *
  * **L'axe est la fenêtre demandée, pas l'étendue des données.** Un site qui
  * n'a reçu ses premières visites qu'hier dessine donc sa courbe dans le dernier

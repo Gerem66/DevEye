@@ -3,12 +3,12 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { formatBucket, formatMs, formatRatio } from './format';
 import styles from './style.module.css';
 
-import type { UptimePoint, UptimeResolution } from '@deveye/types';
+import type { UptimePoint, UptimeResolution } from '../contracts/domain';
 
 /**
  * Slots the window is always cut into. Fixed on purpose: a bar stands for a
  * slice of *time*, so the strip must look the same whether the service has ten
- * samples or a hundred thousand — only the colours change.
+ * samples or a hundred thousand ; only the colours change.
  */
 const SLOTS = 90;
 
@@ -55,7 +55,7 @@ function toSlots(points: UptimePoint[], from: number, to: number): Slot[] {
     return slots;
 }
 
-/** Median latency across the filled slots — the baseline "slow" is judged against. */
+/** Median latency across the filled slots : the baseline "slow" is judged against. */
 function medianMs(slots: Slot[]): number | null {
     const values = slots.map((s) => s.avgMs).filter((ms): ms is number => ms !== null);
     if (values.length === 0) return null;
@@ -63,7 +63,7 @@ function medianMs(slots: Slot[]): number | null {
     return values[Math.floor(values.length / 2)];
 }
 
-/** Ce qu'une tranche raconte, en une ligne — le texte de la bulle. */
+/** Ce qu'une tranche raconte, en une ligne : le texte de la bulle. */
 function slotLabel(slot: Slot, daily: boolean): string {
     if (slot.checks === 0) return `${formatBucket(slot.at, daily)} · aucune mesure`;
     return `${formatBucket(slot.at, daily)} · ${formatRatio(slot.upChecks / slot.checks)} · ${formatMs(slot.avgMs)}`;
@@ -91,15 +91,15 @@ interface StatusBarsProps {
     trailing?: ReactNode;
     /**
      * `full` : sous un titre, avec sa légende. `inline` : dans une rangée qu'on
-     * parcourt, donc plus basse et sans légende — répétée à chaque ligne, elle
+     * parcourt, donc plus basse et sans légende (répétée à chaque ligne, elle
      * pèserait plus que les barres elles-mêmes, et la bulle dit déjà tout ce
-     * qu'elle dirait.
+     * qu'elle dirait).
      */
     variant?: 'full' | 'inline';
 }
 
 /**
- * The classic status strip: one thin bar per slice of the selected window —
+ * The classic status strip: one thin bar per slice of the selected window,
  * green when every probe passed, yellow when they passed but slowly, red as soon
  * as one failed, grey when nothing was recorded. Outage periods, and gaps in the
  * monitoring itself, read at a glance.
@@ -110,7 +110,7 @@ interface StatusBarsProps {
  *
  * **La bulle plutôt que `title`.** L'infobulle du navigateur se fait attendre une
  * seconde, ne suit pas le thème, et surtout ne dit jamais *quelle* barre elle
- * décrit — sur des tranches de trois pixels, c'est précisément la question. Celle
+ * décrit ; sur des tranches de trois pixels, c'est précisément la question. Celle
  * d'ici paraît sans délai et désigne sa barre en la relevant.
  */
 export function StatusBars({ points, from, to, resolution, trailing, variant = 'full' }: StatusBarsProps) {

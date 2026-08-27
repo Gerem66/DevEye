@@ -15,6 +15,9 @@
     },
     {
       "package": "deveye-feature-notes"
+    },
+    {
+      "package": "deveye-feature-uptime"
     }
   ]
 }

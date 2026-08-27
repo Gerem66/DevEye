@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { UptimeService } from '@deveye/types';
+import { UPTIME_CLIENT_PROVIDER } from '@deveye/types/sdk';
+import type { UptimeClientProvider, UptimeLinkedService } from '@deveye/types/sdk/client';
 import { Button, Dialog, SelectInput } from '@/Components';
 import { ws } from '@/api/ws';
-import { ServiceDialog } from '@/Features/Uptime/ServiceDialog';
+import { moduleClientProvider } from '@/sdk/registry';
 import { humanizeError } from '../api';
 import styles from '../style.module.css';
 
@@ -19,14 +20,17 @@ interface LinkUptimeDialogProps {
  * Rattacher un service surveillé au projet : en choisir un de l'espace, ou en
  * déclarer un.
  *
- * **La déclaration passe par le vrai dialogue de la feature** (`ServiceDialog`),
- * pas par une copie réduite — même parti pris que `LinkTargetDialog` pour une
- * cible de déploiement. Surveiller une URL suppose des réglages (méthode,
- * seuils, notifications) qu'il faut régler une bonne fois ; en réécrire un
- * résumé ici garantirait qu'il diverge au premier réglage ajouté à Uptime.
+ * **La déclaration passe par le vrai dialogue de la feature** (`ServiceDialog`,
+ * lu par le contrat client du module Uptime), pas par une copie réduite ; même
+ * parti pris que `LinkTargetDialog` pour une cible de déploiement. Surveiller
+ * une URL suppose des réglages (méthode, seuils, notifications) qu'il faut
+ * régler une bonne fois ; en réécrire un résumé ici garantirait qu'il diverge
+ * au premier réglage ajouté à Uptime. Module absent, le dialogue le dit et ne
+ * propose rien.
  */
 export function LinkUptimeDialog({ open, projectId, linkedIds, onClose, onSaved }: LinkUptimeDialogProps) {
-    const [services, setServices] = useState<UptimeService[]>([]);
+    const uptime = moduleClientProvider<UptimeClientProvider>(UPTIME_CLIENT_PROVIDER);
+    const [services, setServices] = useState<readonly UptimeLinkedService[]>([]);
     const [picked, setPicked] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -37,15 +41,15 @@ export function LinkUptimeDialog({ open, projectId, linkedIds, onClose, onSaved 
         if (!open) return;
         setPicked('');
         setError(null);
+        if (!uptime) return;
         void (async () => {
             try {
-                const res = await ws.send('uptime.list', {});
-                setServices(res.services);
+                setServices(await uptime.listServices());
             } catch (e) {
                 setError(humanizeError(e, 'Impossible de charger les services de l’espace.'));
             }
         })();
-    }, [open]);
+    }, [open, uptime]);
 
     const free = services.filter((s) => !linkedIds.includes(s.id));
 
@@ -82,7 +86,9 @@ export function LinkUptimeDialog({ open, projectId, linkedIds, onClose, onSaved 
                 }
             >
                 <div className={styles.form}>
-                    {free.length === 0 ? (
+                    {!uptime ? (
+                        <p className={styles.hint}>Le module Uptime n’est pas installé.</p>
+                    ) : free.length === 0 ? (
                         <p className={styles.hint}>
                             {services.length === 0
                                 ? 'Aucun service n’est encore surveillé dans cet espace.'
@@ -102,9 +108,11 @@ export function LinkUptimeDialog({ open, projectId, linkedIds, onClose, onSaved 
                         </label>
                     )}
 
-                    <Button variant='ghost' icon='add' onClick={() => setCreateOpen(true)}>
-                        Ajouter un nouveau service
-                    </Button>
+                    {uptime && (
+                        <Button variant='ghost' icon='add' onClick={() => setCreateOpen(true)}>
+                            Ajouter un nouveau service
+                        </Button>
+                    )}
 
                     {error && <p className={styles.error}>{error}</p>}
                 </div>
@@ -114,15 +122,17 @@ export function LinkUptimeDialog({ open, projectId, linkedIds, onClose, onSaved 
                 immédiatement : sans cela, « ajouter un service » depuis un
                 projet laisserait l'utilisateur devant une liste où il faut le
                 rechercher, ce qui est exactement le geste qu'on lui épargne. */}
-            <ServiceDialog
-                open={createOpen}
-                service={null}
-                onClose={() => setCreateOpen(false)}
-                onSaved={(service) => {
-                    setCreateOpen(false);
-                    void link(service.id);
-                }}
-            />
+            {uptime && (
+                <uptime.ServiceDialog
+                    open={createOpen}
+                    service={null}
+                    onClose={() => setCreateOpen(false)}
+                    onSaved={(service) => {
+                        setCreateOpen(false);
+                        void link(service.id);
+                    }}
+                />
+            )}
         </>
     );
 }

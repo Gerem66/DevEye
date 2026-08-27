@@ -1,11 +1,10 @@
 import { useRef } from 'react';
 
-import { useDragReorder } from '@/dragReorder';
+import { useDragReorder } from 'deveye-sdk-client';
+import type { UptimeService } from '../contracts/domain';
 
 import ServiceCard from './ServiceCard';
 import styles from './style.module.css';
-
-import type { UptimeService } from '@deveye/types';
 
 interface ServiceListProps {
     /** The workspace's services, already in the user's order. */
@@ -14,18 +13,18 @@ interface ServiceListProps {
     onEdit: (service: UptimeService) => void;
     /** The complete new order after a drop. */
     onReorder: (ids: number[]) => void;
-    /** A drag started or ended — the host pauses its polling meanwhile. */
+    /** A drag started or ended: the host pauses its polling meanwhile. */
     onDragStateChange: (dragging: boolean) => void;
 }
 
 /**
  * The service list, with drag & drop ordering.
  *
- * The gesture itself lives in {@link ../../dragReorder}: it is shared with Git,
- * Monitoring and the databases, and the reasons it is written on pointer events
- * rather than the HTML5 `draggable` API are documented there. What stays here is
- * only what makes this list look like itself — the card, its grip, and the
- * insertion bar.
+ * The gesture itself lives in the app (`useDragReorder`, served by the SDK
+ * barrel): it is shared with Git, Monitoring and the databases, and the reasons
+ * it is written on pointer events rather than the HTML5 `draggable` API are
+ * documented there. What stays here is only what makes this list look like
+ * itself: the card, its grip, and the insertion bar.
  */
 export function ServiceList({ services, onOpen, onEdit, onReorder, onDragStateChange }: ServiceListProps) {
     /** A real drag just ended: the click the browser still fires afterwards

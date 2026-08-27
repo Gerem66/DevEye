@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { UptimeService } from '@deveye/types';
+import { UPTIME_CLIENT_PROVIDER } from '@deveye/types/sdk';
+import type { UptimeClientProvider, UptimeLinkedService } from '@deveye/types/sdk/client';
 import { Button } from '@/Components';
 import { ws, WsError } from '@/api/ws';
 import { useWorkspacePermissions } from '@/stores/workspace';
+import { moduleClientProvider } from '@/sdk/registry';
 import deployStyles from '@/Features/Deploy/style.module.css';
 import { humanizeError } from '../api';
 import { LinkUptimeDialog } from './LinkUptimeDialog';
@@ -21,19 +23,22 @@ interface UptimeLinksProps {
  * l'endroit où l'on se demande si ce qui vient d'être livré tient debout, donc
  * l'endroit où « est-ce en ligne ? » est la question suivante. Un panneau
  * générique posé sur tous les onglets, comme l'ancien « Liens DevEye »,
- * répondait à cette question partout — c'est-à-dire nulle part.
+ * répondait à cette question partout, c'est-à-dire nulle part.
  *
  * **Chaque feature garde ses droits.** Le serveur ne rend que des identifiants ;
- * les noms et les états viennent d'`uptime.list`, appelée au nom de
- * l'utilisateur. Un membre sans accès à Uptime voit donc qu'il y a des services
- * rattachés, sans pouvoir les nommer — plutôt que de les voir disparaître.
+ * les noms et les états viennent de la liste du module Uptime, lue par son
+ * contrat client (`listServices`, au nom de l'utilisateur). Un membre sans
+ * accès à Uptime voit donc qu'il y a des services rattachés, sans pouvoir les
+ * nommer, plutôt que de les voir disparaître. Module absent : même lecture,
+ * des identifiants nus, et une phrase qui le dit.
  */
 export function UptimeLinks({ projectId, canWrite }: UptimeLinksProps) {
     const permissions = useWorkspacePermissions();
+    const uptime = moduleClientProvider<UptimeClientProvider>(UPTIME_CLIENT_PROVIDER);
     const canReadUptime = permissions.canFeature('uptime');
     const canWriteUptime = permissions.canFeature('uptime', 'write');
     const [serviceIds, setServiceIds] = useState<number[]>([]);
-    const [services, setServices] = useState<UptimeService[] | null>(null);
+    const [services, setServices] = useState<readonly UptimeLinkedService[] | null>(null);
     const [linkOpen, setLinkOpen] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
@@ -56,15 +61,15 @@ export function UptimeLinks({ projectId, canWrite }: UptimeLinksProps) {
     // de droit n'est pas une erreur à afficher : il dit « tu ne peux pas choisir
     // ici », et la liste retombe sur des identifiants nus.
     useEffect(() => {
-        if (!canReadUptime) {
+        if (!canReadUptime || !uptime) {
             setServices([]);
             return;
         }
         let alive = true;
         void (async () => {
             try {
-                const res = await ws.send('uptime.list', {});
-                if (alive) setServices(res.services);
+                const listed = await uptime.listServices();
+                if (alive) setServices(listed);
             } catch (e) {
                 if (alive) setServices([]);
                 if (!(e instanceof WsError && e.code === 'forbidden')) {
@@ -75,7 +80,7 @@ export function UptimeLinks({ projectId, canWrite }: UptimeLinksProps) {
         return () => {
             alive = false;
         };
-    }, [canReadUptime]);
+    }, [canReadUptime, uptime]);
 
     const unlink = async (serviceId: number) => {
         setBusy(true);
@@ -97,12 +102,13 @@ export function UptimeLinks({ projectId, canWrite }: UptimeLinksProps) {
             <h3 className={styles.sectionTitle}>Services surveillés</h3>
 
             {error && <p className={styles.error}>{error}</p>}
+            {!uptime && <p className={styles.hint}>Le module Uptime n’est pas installé.</p>}
 
             {serviceIds.map((id) => {
                 const service = byId.get(id);
-                // Sans le droit `uptime: read`, le serveur ne rend qu'un
-                // identifiant nu : le bloc reste là, mais sans nom ni barres —
-                // plutôt que de le faire disparaître.
+                // Sans le droit `uptime: read` (ou sans le module), le serveur
+                // ne rend qu'un identifiant nu : le bloc reste là, mais sans
+                // nom ni barres, plutôt que de le faire disparaître.
                 if (!service) {
                     return (
                         <section key={id} className={deployStyles.block}>
@@ -144,7 +150,7 @@ export function UptimeLinks({ projectId, canWrite }: UptimeLinksProps) {
                 </p>
             )}
 
-            {canWrite && canWriteUptime && (
+            {canWrite && canWriteUptime && uptime && (
                 <div className={styles.addRow}>
                     <Button icon='add' onClick={() => setLinkOpen(true)}>
                         Ajouter un uptime

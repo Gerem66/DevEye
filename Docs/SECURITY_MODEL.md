@@ -179,13 +179,14 @@ choix reste explicite. Détails d'implémentation du format de conteneur :
 
 ## Uptime — l'étage ouvert appliqué à une tâche de fond
 
-La feature Uptime (`src/Services/UptimeMonitor.ts`, `src/features/uptime/`)
+La feature Uptime (module `features/uptime/`, `src/server/service.ts` et
+`src/server/handlers.ts`)
 sonde des services HTTP **en continu, sans session ni mot de passe** : c'est le
 serveur seul qui travaille, souvent alors que personne n'est connecté. Elle
 utilise donc systématiquement l'**étage ouvert** :
 
-- chiffrés (`ctx.secure.open`, ou `createOpenCipher()` côté ordonnanceur, qui
-  n'expose *que* cet étage — l'étage gardé n'a aucun sens sans session) : le nom
+- chiffrés (`ctx.cipher()` côté handlers, `deps.cipherFor()` côté ordonnanceur,
+  qui n'expose *que* cet étage, l'étage gardé n'ayant aucun sens sans session) : le nom
   du service, son URL, le mot-clé attendu, les messages d'erreur (ligne du
   service, ligne de chaque ping, ligne d'incident) et les canaux de notification
   — libellé, adresse mail, URL de webhook, dans `notification_channels`

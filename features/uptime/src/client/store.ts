@@ -1,18 +1,18 @@
 import { useEffect, useSyncExternalStore } from 'react';
+import { isSocketOpen, onResourceChange, onSocketOpen, useActiveWorkspace } from 'deveye-sdk-client';
 
-import { ws } from '@/api/ws';
-import { onResourceChange } from './invalidation';
-import { useActiveWorkspace } from './workspace';
+import { api } from './api';
 
 /**
- * Shared "services up / total" store, read by the home card and the navbar
+ * Shared "services up / total" store, read by the home card and the topbar
  * widget so both show the same number from a single query.
  *
- * Ce compteur change tout seul — le serveur sonde les services en tâche de fond
- * — mais il ne sonde plus lui-même : `UptimeMonitor` diffuse `live.changed` à
- * chaque **transition** d'état, et c'est ce qui déclenche la relecture. La
- * feature Uptime appelle {@link refreshUptime} après ses propres mutations, dont
- * le serveur ne lui renvoie pas l'écho.
+ * Ce compteur change tout seul (le serveur sonde les services en tâche de
+ * fond) mais il ne sonde plus lui-même : le service de fond du module diffuse
+ * `live.changed` à chaque **transition** d'état, et c'est ce qui déclenche la
+ * relecture (`uptime.count` est une ressource du manifest, ravivée par le
+ * sujet). La vue Uptime appelle {@link refreshUptime} après ses propres
+ * mutations, dont le serveur ne lui renvoie pas l'écho.
  */
 
 export interface UptimeCountState {
@@ -36,14 +36,14 @@ function emit(next: Partial<UptimeCountState>): void {
 
 /** Re-read the counts now (after adding, removing or probing a service). */
 export async function refreshUptime(): Promise<void> {
-    if (workspaceId === null || ws.state !== 'open') return;
+    if (workspaceId === null || !isSocketOpen()) return;
     try {
-        const res = await ws.send('uptime.count', {});
+        const res = await api.send('uptime.count', {});
         emit({ ...res, loading: false });
     } catch {
         // A transient send failure keeps the last good counts rather than
         // collapsing into a misleading "0 / 0".
-        if (ws.state === 'open') emit({ loading: false });
+        if (isSocketOpen()) emit({ loading: false });
     }
 }
 
@@ -60,9 +60,8 @@ function start(): void {
     if (refCount > 1) return;
     void refreshUptime();
     unsubInvalidate = onResourceChange('uptime.count', () => void refreshUptime());
-    unsubState = ws.onStateChange((s) => {
-        if (s === 'open') void refreshUptime();
-    });
+    // Reload as soon as the socket (re)connects (fires now if already open).
+    unsubState = onSocketOpen(() => void refreshUptime());
 }
 
 function stop(): void {

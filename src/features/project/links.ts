@@ -6,6 +6,8 @@ import {
     projectUptimeUnlink
 } from '@deveye/types';
 import type { MyTask, ProjectRow } from '@deveye/types';
+import { UPTIME_ITEMS_PROVIDER, type UptimeItemsProvider } from '@deveye/types/sdk';
+import { moduleProvider } from '@/features/_sdk/register';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { cipherFor, decryptCard, loadProject, toCard, tryDecryptProject } from './_shared';
 
@@ -136,8 +138,15 @@ export const projectUptimeLinkFeature: FeatureDefinition<
         // d'un autre espace — dont l'existence même n'a pas à fuiter. On ne
         // vérifie que l'existence : le **droit** de l'ouvrir reste celui
         // d'Uptime, vérifié au moment où on l'ouvre.
-        const service = await ctx.db.uptimeServices.findById(input.serviceId, ctx.workspaceId);
-        if (!service) throw new FeatureError('not_found', 'Ce service n’existe pas dans cet espace.');
+        //
+        // Depuis le rapatriement d'Uptime en module, la question passe par le
+        // contrat qu'il offre (`UPTIME_ITEMS_PROVIDER`) : Projets ne lit plus
+        // sa table, et dégrade proprement quand le module est absent.
+        const uptime = moduleProvider<UptimeItemsProvider>(UPTIME_ITEMS_PROVIDER);
+        if (!uptime) throw new FeatureError('validation', 'Le module Uptime n’est pas installé.');
+        if (!(await uptime.exists(input.serviceId, ctx.workspaceId))) {
+            throw new FeatureError('not_found', 'Ce service n’existe pas dans cet espace.');
+        }
         await ctx.db.projectLinks.link(input.projectId, ctx.workspaceId, input.serviceId);
         return { serviceIds: await ctx.db.projectLinks.listServiceIds(input.projectId, ctx.workspaceId) };
     }

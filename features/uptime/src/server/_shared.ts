@@ -1,5 +1,29 @@
-import type { UptimeIncident, UptimeIncidentRow, UptimeService, UptimeServiceRow } from '@deveye/types';
-import type { Cipher } from '@/Services/SecureStore';
+import type { UptimeIncident, UptimeIncidentRow, UptimeService, UptimeServiceRow } from '../contracts/domain';
+import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
+
+import type { UptimeRepo } from './repo';
+import type { UptimeMonitor } from './service';
+
+/** Le contexte d'une commande d'Uptime : le contexte du SDK, sur le dépôt du module. */
+export type Ctx = SdkFeatureContext<UptimeRepo>;
+
+/**
+ * L'ordonnanceur du module, posé par `createService` au démarrage : le
+ * remplaçant du `ctx.uptime` natif. Un singleton d'étendue module, assumé
+ * (patron `setEngine` de CloudSync) : l'ordonnanceur est unique par processus,
+ * exactement comme avant le rapatriement.
+ */
+let monitorRef: UptimeMonitor | null = null;
+
+export function setMonitor(monitor: UptimeMonitor | null): void {
+    monitorRef = monitor;
+}
+
+/** The scheduler, or a typed error when the server runs without it (tests). */
+export function monitor(): UptimeMonitor {
+    if (!monitorRef) throw new FeatureError('internal', 'Uptime monitor unavailable');
+    return monitorRef;
+}
 
 /**
  * Encrypted part of a service (stored as `uptime_services.content`). Everything
@@ -12,7 +36,7 @@ export interface ServicePayload {
     keyword: string | null;
 }
 
-export async function encryptService(cipher: Cipher, payload: ServicePayload): Promise<string> {
+export async function encryptService(cipher: SdkCipher, payload: ServicePayload): Promise<string> {
     return cipher.encrypt(JSON.stringify(payload));
 }
 
@@ -21,7 +45,7 @@ export async function encryptService(cipher: Cipher, payload: ServicePayload): P
  * whose blob can't be read must still be listable (and deletable) instead of
  * breaking the whole feature.
  */
-export async function decryptService(cipher: Cipher, content: string): Promise<ServicePayload> {
+export async function decryptService(cipher: SdkCipher, content: string): Promise<ServicePayload> {
     const plain = await cipher.tryDecrypt(content);
     if (plain === null) return { name: '', url: '', keyword: null };
     try {
@@ -37,12 +61,12 @@ export async function decryptService(cipher: Cipher, content: string): Promise<S
 }
 
 /** Encrypt an error message, or pass `null` straight through. */
-export async function encryptError(cipher: Cipher, error: string | null): Promise<string | null> {
+export async function encryptError(cipher: SdkCipher, error: string | null): Promise<string | null> {
     return error === null ? null : cipher.encrypt(error);
 }
 
 /** Decrypt an error message; an unreadable blob reads as "no detail". */
-export async function decryptError(cipher: Cipher, blob: string | null): Promise<string | null> {
+export async function decryptError(cipher: SdkCipher, blob: string | null): Promise<string | null> {
     return blob === null ? null : cipher.tryDecrypt(blob);
 }
 
@@ -58,7 +82,7 @@ export const EMPTY_STATS: ServiceStats = { ratio24h: null, ratio7d: null, ratio3
 
 /** Assemble the client DTO from a row, its decrypted target and its stats. */
 export async function toService(
-    cipher: Cipher,
+    cipher: SdkCipher,
     row: UptimeServiceRow,
     stats: ServiceStats,
     downSince: number | null,
@@ -91,7 +115,7 @@ export async function toService(
     };
 }
 
-export async function toIncident(cipher: Cipher, row: UptimeIncidentRow): Promise<UptimeIncident> {
+export async function toIncident(cipher: SdkCipher, row: UptimeIncidentRow): Promise<UptimeIncident> {
     return {
         id: row.id,
         startedAt: row.started_at,

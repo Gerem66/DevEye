@@ -1,21 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    Button,
+    FeatureSettingsButton,
+    onResourceChange,
+    onSocketOpen,
+    useActiveWorkspace,
+    useLiveSegment
+} from 'deveye-sdk-client';
+import type { FeatureViewProps } from '@deveye/types/sdk/client';
+import type { UptimeService } from '../contracts/domain';
 
-import { ws } from '@/api/ws';
-import { FeatureSettingsButton } from '@/Components/FeatureSettings';
-import { onResourceChange } from '@/stores/invalidation';
-import { useLiveSegment } from '@/live/useLiveSegment';
-import Button from '@/Components/Button';
-import { refreshUptime } from '@/stores/uptime';
-
+import { api } from './api';
 import ServiceDetail from './ServiceDetail';
 import { ServiceDialog } from './ServiceDialog';
 import ServiceList from './ServiceList';
+import { refreshUptime } from './store';
 import styles from './style.module.css';
 
-import type { UptimeService } from '@deveye/types';
-import type { FeatureProps } from '../types';
-
-export default function Uptime({ workspace }: FeatureProps) {
+/**
+ * La vue complète : la liste des services, la fiche d'un service, le journal.
+ *
+ * Depuis le rapatriement, l'espace vient de `useActiveWorkspace()` et non
+ * d'une prop : la vue d'un module ne reçoit que `closeFeature`.
+ */
+export default function Uptime(_props: FeatureViewProps) {
     const [services, setServices] = useState<UptimeService[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -23,10 +31,11 @@ export default function Uptime({ workspace }: FeatureProps) {
     /** A row is in flight: the periodic reload must not reshuffle under it. */
     const dragging = useRef(false);
 
-    const workspaceId = workspace.id;
+    const workspaceId = useActiveWorkspace()?.id ?? null;
 
     // Le niveau profond d'Uptime : le service ouvert. La racine `view:uptime`
-    // vient de l'accueil ; cette feature n'annonce que le sien.
+    // vient de l'accueil ; cette feature n'annonce que le sien. Octet pour
+    // octet ce que le manifest déclare (`itemSegment`).
     const liveTarget = useLiveSegment('l1', selectedId === null ? null : String(selectedId));
     useEffect(() => {
         if (!liveTarget) return;
@@ -42,7 +51,7 @@ export default function Uptime({ workspace }: FeatureProps) {
 
     const reload = useCallback(async () => {
         try {
-            const res = await ws.send('uptime.list', {});
+            const res = await api.send('uptime.list', {});
             setServices(res.services);
             setError(null);
         } catch {
@@ -50,22 +59,21 @@ export default function Uptime({ workspace }: FeatureProps) {
         } finally {
             setLoading(false);
         }
+        // Relu quand l'espace change : la liste est celle d'un espace.
     }, [workspaceId]);
 
     // Relecture à l'ouverture, à chaque (re)connexion, et quand le sujet
-    // `uptime` bouge — une écriture d'un autre membre, ou une transition d'état
-    // signalée par le moniteur de fond. Plus de minuteur : la liste ne vieillit
+    // `uptime` bouge (une écriture d'un autre membre, ou une transition d'état
+    // signalée par le service de fond). Plus de minuteur : la liste ne vieillit
     // plus toute seule, elle est prévenue.
     useEffect(() => {
-        void reload();
         const offInvalidate = onResourceChange('uptime.list', () => {
             // Une relecture réordonne la liste sous le pointeur : jamais pendant
             // un glisser-déposer.
             if (!dragging.current) void reload();
         });
-        const off = ws.onStateChange((s) => {
-            if (s === 'open') void reload();
-        });
+        // Tout de suite si la socket est déjà ouverte, puis à chaque reconnexion.
+        const off = onSocketOpen(() => void reload());
         return () => {
             offInvalidate();
             off();
@@ -103,12 +111,12 @@ export default function Uptime({ workspace }: FeatureProps) {
                 const byId = new Map(prev.map((s) => [s.id, s]));
                 return ids.flatMap((id) => byId.get(id) ?? []);
             });
-            ws.send('uptime.reorder', { ids }).catch(() => {
+            api.send('uptime.reorder', { ids }).catch(() => {
                 setError('Réorganisation impossible.');
                 void reload();
             });
         },
-        [workspaceId, reload]
+        [reload]
     );
 
     return (
@@ -120,7 +128,7 @@ export default function Uptime({ workspace }: FeatureProps) {
                     onEdit={() => setDialog({ service: selected })}
                     onCheckNow={() =>
                         void runAction(async () => {
-                            await ws.send('uptime.checkNow', { id: selected.id });
+                            await api.send('uptime.checkNow', { id: selected.id });
                         })
                     }
                 />

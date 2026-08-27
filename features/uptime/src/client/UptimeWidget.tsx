@@ -1,4 +1,4 @@
-import { useUptimeCount } from '@/stores/uptime';
+import { useUptimeCount } from './store';
 
 import styles from './style.module.css';
 

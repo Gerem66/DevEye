@@ -14,7 +14,7 @@
  * that would clear the selection, while the page keeps rendering behind the
  * freeze. Nothing in the page can recover from it — no event arrives to recover
  * with — which is why Uptime and Mail were written on pointer events instead of
- * the native API (see {@link ./Features/Uptime/ServiceList}). Those rewrites
+ * the native API (see `features/uptime/src/client/ServiceList.tsx`). Those rewrites
  * fixed our own drags; this covers the ones the browser provides for free, and
  * every feature written from here on with them.
  *

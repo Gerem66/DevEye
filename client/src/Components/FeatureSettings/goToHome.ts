@@ -27,7 +27,6 @@ import { moduleManifest } from '@/sdk/registry';
  * téléportation la laissera sur sa liste au lieu d'ouvrir la fiche.
  */
 const ITEM_SEGMENT: Partial<Record<WorkspaceFeatureId, (itemId: number) => string>> = {
-    uptime: (id) => String(id),
     database: (id) => `db:${id}`,
     deploy: (id) => `target:${id}`,
     git: (id) => `repo:${id}`,

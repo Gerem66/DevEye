@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * La largeur réelle d'un élément, suivie par `ResizeObserver`.
  *
  * Le reste du dépôt dessine ses graphes dans un `viewBox` fixe étiré par
- * `preserveAspectRatio='none'` (`Features/Uptime/UptimeChart.tsx`,
+ * `preserveAspectRatio='none'` (`features/uptime/src/client/UptimeChart.tsx`,
  * `Features/Monitoring/MiniGraph.tsx`). C'est parfait pour une courbe : un trait
  * étiré reste un trait. Ça ne l'est pas ici, où l'on dessine des **disques** —
  * l'étirement les transforme en ellipses, et l'étiquette d'axe change de corps

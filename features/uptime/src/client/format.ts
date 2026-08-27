@@ -1,4 +1,4 @@
-import type { UptimePoint, UptimeRange } from '@deveye/types';
+import type { UptimePoint, UptimeRange } from '../contracts/domain';
 
 const DAY = 86400;
 
@@ -23,7 +23,7 @@ const RANGE_SECONDS: Record<UptimeRange, number | null> = {
 };
 
 /**
- * The time window a range actually spans — the shared x-axis of the status strip
+ * The time window a range actually spans : the shared x-axis of the status strip
  * and the latency curve.
  *
  * It is the **selected duration**, not the extent of the data: a service added
@@ -38,7 +38,7 @@ export function rangeWindow(range: UptimeRange, points: UptimePoint[]): { from: 
     return { from: points[0]?.at ?? to - DAY, to };
 }
 
-/** "99,95 %" — a ratio in 0→1, or "—" when there is no data yet. */
+/** "99,95 %" : a ratio in 0→1, or "—" when there is no data yet. */
 export function formatRatio(ratio: number | null): string {
     if (ratio === null) return '—';
     // Truncated, never rounded: 99.999 % must not read as a flawless "100 %".
@@ -65,7 +65,7 @@ export function formatMoment(epochSeconds: number): string {
     });
 }
 
-/** "2 h 5 min" — a span of seconds, coarsest useful unit first. */
+/** "2 h 5 min" : a span of seconds, coarsest useful unit first. */
 export function formatDuration(seconds: number): string {
     if (seconds < 60) return `${seconds} s`;
     const minutes = Math.floor(seconds / 60);
@@ -75,7 +75,7 @@ export function formatDuration(seconds: number): string {
     return `${Math.floor(hours / 24)} j ${hours % 24} h`;
 }
 
-/** "il y a 3 min" — how long ago a check happened. */
+/** "il y a 3 min" : how long ago a check happened. */
 export function formatAgo(epochSeconds: number | null): string {
     if (epochSeconds === null) return 'jamais testé';
     const delta = Math.max(0, Math.floor(Date.now() / 1000) - epochSeconds);

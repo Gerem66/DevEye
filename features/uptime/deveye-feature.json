@@ -1,0 +1,6 @@
+{
+  "id": "uptime",
+  "tables": ["uptime_services", "uptime_checks", "uptime_daily", "uptime_incidents", "uptime_settings"],
+  "minTypesVersion": "0.15.2",
+  "$comment": "Tables historiques (migration 037 du socle, complétées par les 038, 040, 049 et 090, jamais déplacées) : l'allowlist les dispense du préfixe ft_uptime_. Toute NOUVELLE table du module prendra le préfixe, via src/server/migrations/."
+}

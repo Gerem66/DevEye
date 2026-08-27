@@ -201,6 +201,38 @@ sceller son cipher `'private'` sous `unlocked: false` (`decrypt` lève
 garde, qui refuse `notes.get` sur une note privée scellée, et un test doit
 pouvoir le voir.
 
+**Uptime** est la sixième native rapatriée (`features/uptime`, 27 août
+2026), et la plus riche de la vague : elle inaugure côté module le **partage
+inter-espaces** (`shareTier: 'open'` étalé du descripteur, tenu par l'entrée
+`items` du serveur, `ctx.sharing.scope()` dans ses listages et le codec choisi
+ligne par ligne), les **restrictions par élément** (`ctx.items.restrictions()`,
+`ctx.items.assert()`, `ctx.items.forget()` au ménage), le **service de fond
+avec `live.changed`** (l'ex `UptimeMonitor` sur `FeatureServiceDeps` : deux
+tickers, les sondes et l'élagage horaire des pings bruts sorti du balayage de
+rétention d'`index.ts`, `deps.deveyeFor(ws).notify.send(alert, { itemId })`
+dont le booléen marque l'incident `notified`, les variables `UPTIME_*` lues
+par le module), le **widget de topbar d'une native** (rendu sans prop dans le
+cadre de l'hôte, teintes du module en trois classes pour peser plus que
+l'accent de l'hôte) et la **composition client inter-modules** : Projets lit
+`moduleClientProvider(UPTIME_CLIENT_PROVIDER)` (bande d'état, taux,
+historique, dialogue de déclaration) et le serveur
+`moduleProvider(UPTIME_ITEMS_PROVIDER)` avant de relier un service, l'un et
+l'autre dégradant proprement quand le module est absent. Le singleton de
+l'ordonnanceur est posé par `createService` pour les handlers (patron
+`setEngine` de CloudSync). Ce que sa migration a réglé : la dette de la
+coquille (cadence, délai, seuil et rétention d'un service sont un panneau
+Général à l'échelle de l'élément, le dialogue ne garde que l'identité), la
+commande morte `uptime.testNotification` et l'avis « test » de sa mise en
+page (l'essai passe par `notify.channelTest`), l'entrée native du widget de
+topbar et celles de `SHARE_WIRED_FEATURES`, `ITEM_SEGMENT`, `LIST_KEYS` et
+`TOPIC_KEYS`. Ce que le contrat client a demandé côté module : `Ratios` ne
+lit plus qu'un `Pick` des trois taux (ce que `UptimeLinkedService` porte), et
+le dialogue offert à l'hôte est un adaptateur qui recharge la fiche complète
+avant d'ouvrir le vrai formulaire. Le projet serveur des modules
+(`features/tsconfig.server.json`) inclut désormais les déclarations
+ambiantes de l'app (`src/types`) : un import de privilège
+(`@/Services/notifications`) atteint des fichiers qui en dépendent.
+
 L'outillage de migration, à rejouer pour CHAQUE native :
 
 - **Tests de modules** : `npm run test:features` couvre
@@ -281,15 +313,10 @@ Pairs admis d'un module : `@deveye/types`, `react`, `zod`, `framer-motion`
 
 ## Dettes connues
 
-- **Partage inter-espaces** : `shareTier` externe figé à `'never'`. Brancher
-  un module exigerait, dans l'ordre : un point d'entrée « domicile d'un
-  élément » côté serveur du module, une façade de portée de partage dans le
-  contexte (`foreignIds` pour le listage, `cipherFor` par ligne), et
-  l'élargissement des contrats `share.*` à `featureIdSchema`. (La largeur des
-  colonnes `feature` n'est plus un obstacle : 32 partout depuis la 096.)
-- **Restrictions par élément** : `assertItem` / `itemRestrictions` existent au
-  dispatcheur (`ws/handler.ts`, `_access.ts`) mais ne sont pas exposés au
-  contexte SDK, et les contrats `share.grant*` sont typés natifs. Un module
-  `hasItems` avec `settings.item` ne peut donc pas honorer une restriction de
-  rôle. Même chantier que le partage, à traiter avec la première native à
-  éléments partagés (uptime).
+- **Partage inter-espaces et restrictions par élément** : au SDK depuis
+  Uptime (`ctx.sharing.scope()`, `ctx.items.*`, `FeatureServer.items`, les
+  harnais de test qui les simulent par `shares` et `itemRestrictions`). Ce qui
+  reste : les modules **externes** déclarent `shareTier: 'never'` tant
+  qu'aucun module tiers n'a exercé le contrat (une ligne de `validateManifest`
+  à lever le jour venu), et les `'perItem'` natifs (Notes, Mail, Projets)
+  restent à brancher, chacun étant un chantier en soi (SHARING.md §9).

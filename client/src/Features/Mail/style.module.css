@@ -407,7 +407,7 @@
 }
 
 /* ------------------------------------------------------------------ *
- * Account list (drag & drop, same technique as Features/Uptime/ServiceList)
+ * Account list (drag & drop, same technique as features/uptime/src/client/ServiceList)
  * ------------------------------------------------------------------ */
 
 /* A grid, not a flex column, for one reason: `grid-auto-rows: 1fr` makes every

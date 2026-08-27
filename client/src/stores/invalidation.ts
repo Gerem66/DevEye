@@ -142,7 +142,6 @@ const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
     // deux dernières clés, seule la date « il y a X min » se rafraîchissait, et
     // une boîte laissée ouverte mentait jusqu'au prochain clic.
     mail: ['mail.accountCount', 'mail.accountList', 'mail.folderList', 'mail.messageList', 'mail.getSettings'],
-    uptime: ['uptime.count', 'uptime.list'],
     /*
      * `cloudSync.listShares` en second : la liste des partages embarque les
      * appareils ATTACHÉS, dont le statut d'attache et le dossier local. Ces

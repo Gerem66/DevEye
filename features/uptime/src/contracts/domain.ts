@@ -1,0 +1,216 @@
+import { z } from 'zod';
+
+/**
+ * Uptime monitoring: user-defined HTTP services the server pings on a schedule,
+ * with long-term history, incidents and notifications.
+ *
+ * Storage split (see `Docs/SECURITY_MODEL.md`): everything the scheduler needs
+ * to *plan* a check (cadence, timeout, enabled…) and everything a chart
+ * aggregates (status, latency, timestamps) lives in clear columns; what
+ * identifies the target (name, URL, expected keyword) and the error strings
+ * are encrypted with the **open** tier, since the checker runs in the
+ * background, with no session and no password.
+ */
+
+export const UPTIME_NAME_MAX_LENGTH = 80;
+export const UPTIME_URL_MAX_LENGTH = 2048;
+export const UPTIME_KEYWORD_MAX_LENGTH = 200;
+/** Bounds of a service's cadence, in seconds (30 s → 24 h). */
+export const UPTIME_INTERVAL_MIN = 30;
+export const UPTIME_INTERVAL_MAX = 86400;
+/** Bounds of a single request's timeout, in seconds. */
+export const UPTIME_TIMEOUT_MIN = 1;
+export const UPTIME_TIMEOUT_MAX = 120;
+/** Consecutive failures required before a service is declared down. */
+export const UPTIME_THRESHOLD_MAX = 10;
+
+/** HTTP verb used for the probe. `POST` sends no body : it only pokes the route. */
+export const uptimeMethodSchema = z.enum(['GET', 'HEAD', 'POST']);
+export type UptimeMethod = z.infer<typeof uptimeMethodSchema>;
+
+/** `unknown` = never probed yet (just created, or paused before its first check). */
+export const uptimeStatusSchema = z.enum(['up', 'down', 'unknown']);
+export type UptimeStatus = z.infer<typeof uptimeStatusSchema>;
+
+/**
+ * How long a service keeps its **raw** per-ping rows. The daily rollup is never
+ * pruned, so uptime ratios stay readable years back whatever this is set to.
+ * `null` = keep every ping forever (the default).
+ */
+export const uptimeRetentionSchema = z.number().int().positive().max(3650).nullable();
+
+/** Window a chart or a ratio is computed over. */
+export const uptimeRangeSchema = z.enum(['24h', '7d', '30d', '90d', '1y', 'all']);
+export type UptimeRange = z.infer<typeof uptimeRangeSchema>;
+
+/**
+ * Bucket size the server picked for a history query: one point per ping (`raw`),
+ * per hour, or per day. Chosen from the range so a year-long chart never carries
+ * hundreds of thousands of points.
+ */
+export const uptimeResolutionSchema = z.enum(['raw', 'hour', 'day']);
+export type UptimeResolution = z.infer<typeof uptimeResolutionSchema>;
+
+/** One monitored service: its configuration, its live state and its ratios. */
+export const uptimeServiceSchema = z.object({
+    id: z.number().int().positive(),
+    name: z.string(),
+    url: z.string(),
+    method: uptimeMethodSchema,
+    /** Exact status code required, or `null` to accept any 2xx/3xx. */
+    expectedStatus: z.number().int().min(100).max(599).nullable(),
+    /** Substring the response body must contain, or `null` to skip the check. */
+    keyword: z.string().nullable(),
+    intervalSeconds: z.number().int().positive(),
+    timeoutSeconds: z.number().int().positive(),
+    failureThreshold: z.number().int().positive(),
+    retentionDays: uptimeRetentionSchema,
+    /** Paused services keep their history but are never probed. */
+    enabled: z.boolean(),
+    /** Rank in the list; only the user's drag & drop changes it. */
+    sortOrder: z.number().int().nonnegative(),
+    /**
+     * Ce service vient d'un **autre espace**, qui le projette ici.
+     *
+     * Il se lit et se modifie normalement (c'est tout l'objet de la projection),
+     * mais l'écran le signale : sans ça, le supprimer depuis l'espace où on le
+     * voit donnerait l'impression de retirer une ligne locale, alors qu'on
+     * toucherait la donnée d'ailleurs.
+     */
+    foreign: z.boolean(),
+
+    status: uptimeStatusSchema,
+    lastCheckedAt: z.number().int().nonnegative().nullable(),
+    lastResponseMs: z.number().int().nonnegative().nullable(),
+    lastHttpStatus: z.number().int().nullable(),
+    /** Why the last probe failed, or `null` when it succeeded. */
+    lastError: z.string().nullable(),
+    /** Start of the ongoing outage, or `null` while the service is healthy. */
+    downSince: z.number().int().nonnegative().nullable(),
+
+    /** Share of successful pings over the window (0 → 1), `null` without data. */
+    ratio24h: z.number().min(0).max(1).nullable(),
+    ratio7d: z.number().min(0).max(1).nullable(),
+    ratio30d: z.number().min(0).max(1).nullable(),
+    /** Mean response time over the last 24 h, in ms. */
+    avgMs24h: z.number().int().nonnegative().nullable(),
+
+    created: z.number().int().nonnegative()
+});
+export type UptimeService = z.infer<typeof uptimeServiceSchema>;
+
+/** A single recorded probe : the "journal des pings". */
+export const uptimeCheckSchema = z.object({
+    at: z.number().int().nonnegative(),
+    up: z.boolean(),
+    httpStatus: z.number().int().nullable(),
+    responseMs: z.number().int().nonnegative().nullable(),
+    error: z.string().nullable()
+});
+export type UptimeCheck = z.infer<typeof uptimeCheckSchema>;
+
+/**
+ * Aggregates over a filtered slice of a service's raw pings : what the measures
+ * browser shows above its list, computed over the **whole** selection rather
+ * than the loaded page.
+ */
+export const uptimeCheckStatsSchema = z.object({
+    count: z.number().int().nonnegative(),
+    failures: z.number().int().nonnegative(),
+    avgMs: z.number().int().nonnegative().nullable(),
+    minMs: z.number().int().nonnegative().nullable(),
+    maxMs: z.number().int().nonnegative().nullable(),
+    /** Bounds of the selection; `null` when it holds nothing. */
+    firstAt: z.number().int().nonnegative().nullable(),
+    lastAt: z.number().int().nonnegative().nullable()
+});
+export type UptimeCheckStats = z.infer<typeof uptimeCheckStatsSchema>;
+
+/**
+ * One chart point. A `raw` point is a single ping (`checks === 1`); an `hour` or
+ * `day` point aggregates every ping of its bucket, which is what keeps a
+ * multi-year chart cheap.
+ */
+export const uptimePointSchema = z.object({
+    /** Bucket start, epoch seconds. */
+    at: z.number().int().nonnegative(),
+    checks: z.number().int().positive(),
+    upChecks: z.number().int().nonnegative(),
+    avgMs: z.number().int().nonnegative().nullable(),
+    minMs: z.number().int().nonnegative().nullable(),
+    maxMs: z.number().int().nonnegative().nullable()
+});
+export type UptimePoint = z.infer<typeof uptimePointSchema>;
+
+/**
+ * A continuous outage. Opened when a service crosses its failure threshold,
+ * closed on the first successful probe : so the list reads as a plain incident
+ * history, and it survives raw-history pruning.
+ */
+export const uptimeIncidentSchema = z.object({
+    id: z.number().int().positive(),
+    startedAt: z.number().int().nonnegative(),
+    /** `null` while the outage is still ongoing. */
+    endedAt: z.number().int().nonnegative().nullable(),
+    httpStatus: z.number().int().nullable(),
+    error: z.string().nullable()
+});
+export type UptimeIncident = z.infer<typeof uptimeIncidentSchema>;
+
+/** Database row shapes (server-only). Mirror the columns exactly. */
+export interface UptimeServiceRow {
+    id: number;
+    user_id: number;
+    workspace_id: number;
+    /** Encrypted `{ name, url, keyword }` (open tier). */
+    content: string;
+    method: UptimeMethod;
+    expected_status: number | null;
+    interval_seconds: number;
+    timeout_seconds: number;
+    failure_threshold: number;
+    retention_days: number | null;
+    enabled: number;
+    sort_order: number;
+    status: UptimeStatus;
+    consecutive_failures: number;
+    last_checked_at: number | null;
+    last_response_ms: number | null;
+    last_http_status: number | null;
+    /** Encrypted error string (open tier), or null after a success. */
+    last_error: string | null;
+    created: number;
+}
+
+export interface UptimeCheckRow {
+    id: number;
+    service_id: number;
+    checked_at: number;
+    up: number;
+    http_status: number | null;
+    response_ms: number | null;
+    /** Encrypted error string (open tier). */
+    error: string | null;
+}
+
+export interface UptimeDayRow {
+    service_id: number;
+    day: number;
+    checks: number;
+    up_checks: number;
+    total_ms: number;
+    ms_samples: number;
+    min_ms: number | null;
+    max_ms: number | null;
+}
+
+export interface UptimeIncidentRow {
+    id: number;
+    service_id: number;
+    started_at: number;
+    ended_at: number | null;
+    http_status: number | null;
+    /** Encrypted error string (open tier). */
+    error: string | null;
+    notified: number;
+}

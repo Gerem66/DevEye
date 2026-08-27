@@ -60,9 +60,18 @@ cocherait et rien n'apparaîtrait de l'autre côté.
 Aujourd'hui : **tout l'étage `'open'`** — Uptime, Bases de données,
 Déploiement, Git, Audience, Sauvegardes. Les `'perItem'` (Notes, Mail, Projets)
 sont refusés franchement, avec la vraie raison affichée. Brancher une
-fonctionnalité de plus tient en trois gestes : `listVisible` / `findVisible`
-dans son dépôt, le codec par ligne dans son listage, une entrée dans
-`SHARE_WIRED`.
+fonctionnalité **native** de plus tient en trois gestes : `listVisible` /
+`findVisible` dans son dépôt, le codec par ligne dans son listage, une entrée
+dans `SHARE_WIRED`.
+
+Brancher un **module** (Uptime, rapatrié, est le premier) : `shareTier` autre
+que `'never'` dans son manifest (étalé du descripteur pour une native), l'entrée
+`items` de son serveur (`homeOf` : le domicile d'un élément visible d'ici,
+`labelOf` : son intitulé sous le codec ouvert de l'espace appelant),
+`ctx.sharing.scope()` dans ses listages (`foreignIds`, `homeOf`, `cipherFor`
+ligne par ligne) et `ctx.items.restrictions()` sur ce qu'ils rendent. Pas
+d'entrée dans `SHARE_WIRED` : `isShareWired` lit le manifest, et le boot
+refuse un module qui déclare sans offrir `items`.
 
 ### Ce qu'une fenêtre permet, par fonctionnalité
 
@@ -218,15 +227,18 @@ Ni `item_shares` ni `item_role_grants` n'ont de clé étrangère vers l'élémen
 il vit dans une table différente selon la feature. Le nettoyage est **applicatif,
 à la suppression** (`itemSharing.forgetItem`) — même choix que
 `notification_routes` (087). Sans lui, une ligne orpheline s'appliquerait au
-prochain élément à hériter de l'identifiant.
+prochain élément à hériter de l'identifiant. Un module appelle
+`ctx.items.forget(id)` dans son handler de suppression : projections,
+restrictions et route de notification en un geste.
 
 ## 8. La diffusion traverse la projection
 
 `LiveHub.changed` rejoue chaque sujet de feature branchée au partage dans les
 espaces **reliés** par `item_shares`, dans les deux sens (résolveur posé par
 `app.ts`). C'est fait dans le hub et pas chez les appelants, exprès : le
-dispatcheur, les services de fond et le moteur de sauvegardes appellent tous
-`changed`, et aucun n'a à connaître la règle. Une sonde qui écrit chez elle
+dispatcheur, les services de fond, le moteur de sauvegardes et les services
+des modules (`deps.live.changed`) appellent tous `changed`, et aucun n'a à
+connaître la règle. Une sonde qui écrit chez elle
 rafraîchit ses fenêtres ; un déclenchement fait depuis une fenêtre rafraîchit
 le domicile.
 

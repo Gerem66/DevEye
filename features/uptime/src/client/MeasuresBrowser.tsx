@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { ws } from '@/api/ws';
-import Button from '@/Components/Button';
+import { Button } from 'deveye-sdk-client';
+import type { UptimeCheck, UptimeCheckStats, UptimeService } from '../contracts/domain';
 
+import { api } from './api';
 import { formatMoment, formatMs } from './format';
 import Pane from './Pane';
 import styles from './style.module.css';
-
-import type { UptimeCheck, UptimeCheckStats, UptimeService } from '@deveye/types';
 
 /** Measures loaded per page. */
 const PAGE = 100;
@@ -43,7 +42,7 @@ interface MeasuresBrowserProps {
  * It lives here rather than in the detail view because a year of probes is tens
  * of thousands of rows: inline, it would bury the charts and turn the panel into
  * one endless scroll. The detail keeps a short preview and sends you here when
- * you actually want the record — filtered, counted, and scrolling in its own box
+ * you actually want the record: filtered, counted, and scrolling in its own box
  * so the surrounding page never grows.
  */
 export function MeasuresBrowser({ service, onBack }: MeasuresBrowserProps) {
@@ -74,8 +73,8 @@ export function MeasuresBrowser({ service, onBack }: MeasuresBrowserProps) {
         setBusy(true);
         setError(null);
         Promise.all([
-            ws.send('uptime.checks', { id, limit: PAGE, filter }),
-            ws.send('uptime.checkStats', { id, filter })
+            api.send('uptime.checks', { id, limit: PAGE, filter }),
+            api.send('uptime.checkStats', { id, filter })
         ])
             .then(([page, aggregate]) => {
                 if (cancelled) return;
@@ -101,7 +100,7 @@ export function MeasuresBrowser({ service, onBack }: MeasuresBrowserProps) {
         setBusy(true);
         setError(null);
         try {
-            const page = await ws.send('uptime.checks', { id, limit: PAGE, before, filter: buildFilter() });
+            const page = await api.send('uptime.checks', { id, limit: PAGE, before, filter: buildFilter() });
             setChecks((prev) => [...prev, ...page.checks]);
             setMore(page.checks.length === PAGE);
         } catch {

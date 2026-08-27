@@ -38,7 +38,7 @@ function formatAgo(epochSeconds: number | null): string {
  *
  * The drag grab surface is the small top-left handle only, not the whole
  * card (a full-card grab cursor over something you mostly just click to open
- * felt wrong) — same pointer-events technique as `Features/Uptime/ServiceCard`
+ * felt wrong) — same pointer-events technique as `features/uptime/src/client/ServiceCard`
  * otherwise (see `AccountList` for why). Both corners fade in on hover/focus
  * so the tile stays calm at rest.
  */

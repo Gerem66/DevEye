@@ -79,7 +79,7 @@ function assertRouteAccess(ctx: FeatureContext, feature: NotificationFeature, le
  * L'intitulé d'un élément, relu au moment de l'affichage.
  *
  * Sert à une seule chose : que la confirmation de suppression d'un canal nomme
- * ce qui va cesser de prévenir. Les quatre émetteurs à éléments rangent tous un
+ * ce qui va cesser de prévenir. Les émetteurs natifs à éléments rangent tous un
  * blob JSON chiffré à l'étage ouvert dont le nom est la première clé — la forme
  * est assez régulière pour une seule lecture générique, et assez peu pour
  * mériter le `switch` qui suit plutôt qu'un accès dynamique aux dépôts.
@@ -94,8 +94,6 @@ async function itemLabelOf(ctx: FeatureContext, feature: NotificationFeature, it
     if (items) return items.labelOf(ctx.secure.open, itemId, ctx.workspaceId);
     const content = await (async (): Promise<string | null> => {
         switch (feature) {
-            case 'uptime':
-                return (await ctx.db.uptimeServices.findById(itemId, ctx.workspaceId))?.content ?? null;
             case 'database':
                 return (await ctx.db.databases.find(itemId, ctx.workspaceId))?.content ?? null;
             case 'deploy':

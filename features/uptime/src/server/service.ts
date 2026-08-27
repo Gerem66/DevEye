@@ -1,16 +1,15 @@
-import type { UptimeServiceRow, UptimeStatus } from '@deveye/types';
-import type { Logger } from 'pino';
+import type { UptimeServiceRow, UptimeStatus } from '../contracts/domain';
+import type { FeatureService, FeatureServiceDeps, SdkCipher } from '@deveye/types/sdk/server';
 
-import { decryptError, decryptService, encryptError, type ServicePayload } from '@/features/uptime/_shared';
-import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
-import { buildNotice, type UptimeNotice } from '@/Services/notices/uptime';
-import { deliver, formatDuration, formatMoment, resolveRoute, type ResolvedChannel } from '@/Services/notifications';
-import { env } from '@/Utils/Env';
+// Privilège de native rapatriée, commenté à chaque usage : l'horodatage et la
+// durée des corps d'alerte sont ceux de `Services/notifications`, partagés par
+// les cinq émetteurs de l'app (une alerte de base horodatée autrement qu'une
+// alerte de disponibilité donnerait l'impression de venir d'un autre produit).
+import { formatDuration, formatMoment } from '@/Services/notifications';
 
-import type { LiveHub } from '@/live/hub';
-import type { Database } from '@/db';
-import type Encryption from './Encryption';
-import type { AuditLog } from './AuditLog';
+import { decryptError, decryptService, encryptError, type ServicePayload } from './_shared';
+import { buildNotice, type UptimeNotice } from './notice';
+import type { UptimeRepo } from './repo';
 
 /**
  * Uptime scheduler (process singleton).
@@ -18,30 +17,33 @@ import type { AuditLog } from './AuditLog';
  * Every tick it claims the services whose next probe is due, runs them with a
  * bounded concurrency, and writes back three things at once: the raw ping, its
  * daily rollup, and the service's live state. Outages are materialised as
- * incidents — opened when a service crosses its `failure_threshold`, closed on
- * the first success — which is also what makes notifications exactly-once: an
+ * incidents (opened when a service crosses its `failure_threshold`, closed on
+ * the first success), which is also what makes notifications exactly-once: an
  * alert belongs to an incident, not to a probe.
  *
  * It runs with **no session and no password**, so every encrypted field it
  * touches (target, error messages, notification channels) goes through the
- * user's *open* cipher — see `Docs/SECURITY_MODEL.md`.
+ * workspace's *open* cipher (`deps.cipherFor`, mémoïsé par le SDK) ; voir
+ * `Docs/SECURITY_MODEL.md`.
+ *
+ * Depuis le rapatriement, la boucle est un ticker du SDK (`deps.createTicker`,
+ * le patron des services natifs : setInterval + garde de réentrance + unref),
+ * et l'élagage horaire des pings bruts, qui vivait dans le balayage de
+ * rétention d'`index.ts`, est un second ticker du module.
  */
 
-interface MonitorDeps {
-    db: Database;
-    crypt: Encryption;
-    audit: AuditLog;
-    logger: Logger;
-    /**
-     * Présence en direct. Cette boucle écrit sans commande utilisateur, donc
-     * sans socket pour diffuser : c'est le hub qu'elle avertit directement.
-     * Optionnel — les tests instancient le moniteur sans lui.
-     */
-    live?: LiveHub;
-}
+/**
+ * Les variables d'environnement propres à la feature se lisent ici, pas dans
+ * `Utils/Env` : la cadence de réveil (recherche des services à sonder) et le
+ * nombre de sondes menées en parallèle.
+ */
+const TICK_SECONDS = Number(process.env.UPTIME_TICK_SECONDS) || 10;
+const CONCURRENCY = Number(process.env.UPTIME_CONCURRENCY) || 8;
+/** L'élagage des pings bruts : une fois par heure, comme le balayage de rétention de l'app. */
+const PRUNE_INTERVAL_MS = 60 * 60 * 1000;
 
 /** Outcome of a single HTTP probe. */
-interface ProbeOutcome {
+export interface ProbeOutcome {
     up: boolean;
     httpStatus: number | null;
     responseMs: number | null;
@@ -49,11 +51,14 @@ interface ProbeOutcome {
     error: string | null;
 }
 
+/** La sonde elle-même, injectable : les tests en simulent une, sans réseau. */
+export type ProbeFn = (target: ServicePayload, row: UptimeServiceRow) => Promise<ProbeOutcome>;
+
 /** How long a probe body is read before giving up on the keyword match. */
 const KEYWORD_BODY_MAX_BYTES = 512 * 1024;
 
 /** Run one HTTP probe. Never throws: a failure *is* the result. */
-async function probeService(target: ServicePayload, row: UptimeServiceRow): Promise<ProbeOutcome> {
+export async function probeService(target: ServicePayload, row: UptimeServiceRow): Promise<ProbeOutcome> {
     const started = Date.now();
     try {
         const response = await fetch(target.url, {
@@ -64,7 +69,7 @@ async function probeService(target: ServicePayload, row: UptimeServiceRow): Prom
         });
         const httpStatus = response.status;
 
-        // The body is only read when a keyword is expected — otherwise the probe
+        // The body is only read when a keyword is expected; otherwise the probe
         // stays as cheap as possible and the connection is released right away.
         let body: string | null = null;
         if (target.keyword && row.method !== 'HEAD') {
@@ -89,7 +94,7 @@ async function probeService(target: ServicePayload, row: UptimeServiceRow): Prom
         const responseMs = Date.now() - started;
         const name = e instanceof Error ? e.name : '';
         // AbortSignal.timeout rejects with a TimeoutError; everything else is a
-        // connection-level failure (DNS, refused, TLS…), whose `cause` carries
+        // connection-level failure (DNS, refused, TLS...), whose `cause` carries
         // the useful detail Node hides behind a generic "fetch failed".
         if (name === 'TimeoutError') {
             return {
@@ -109,27 +114,26 @@ async function probeService(target: ServicePayload, row: UptimeServiceRow): Prom
  * Les champs structurés d'une alerte, pour un point d'entrée maison qui veut
  * filtrer sans analyser du texte.
  *
- * Le message lui-même n'est plus construit ici : `deliver` porte le texte
+ * Le message lui-même n'est pas construit ici : `deliver` porte le texte
  * (`content` pour Discord, `text` pour Slack) et `UptimeNotice` la mise en page
- * Discord. Ce qui reste est ce que ni l'un ni l'autre ne dit — de quel service
+ * Discord. Ce qui reste est ce que ni l'un ni l'autre ne dit : de quel service
  * il s'agit, et quand.
  */
 function webhookPayload(alert: {
-    event: 'down' | 'recovered' | 'test';
-    /** Null on a test alert, which is about no service in particular. */
-    service: string | null;
-    url: string | null;
+    event: 'down' | 'recovered';
+    service: string;
+    url: string;
     at: number;
 }): Record<string, unknown> {
     return { event: alert.event, service: alert.service, url: alert.url, at: alert.at };
 }
 
 export class UptimeMonitor {
-    private timer: ReturnType<typeof setInterval> | null = null;
+    /** La boucle des sondes, et l'élagage horaire : deux tickers du SDK. */
+    private readonly ticker: FeatureService;
+    private readonly pruner: FeatureService;
     /** Guards against a slow tick overlapping the next one. */
     private ticking = false;
-    /** Open ciphers, one per user, reused across ticks (each holds its DEK). */
-    private readonly ciphers = new Map<number, Cipher>();
     /**
      * Probes currently running, by service id. A second request for the same
      * service joins the running one instead of starting its own: two concurrent
@@ -138,30 +142,28 @@ export class UptimeMonitor {
      */
     private readonly inFlight = new Map<number, Promise<void>>();
 
-    constructor(private readonly deps: MonitorDeps) {}
+    constructor(
+        private readonly deps: FeatureServiceDeps<UptimeRepo>,
+        private readonly probe: ProbeFn = probeService
+    ) {
+        this.ticker = deps.createTicker({ intervalMs: TICK_SECONDS * 1000, tick: () => this.tick() });
+        this.pruner = deps.createTicker({ intervalMs: PRUNE_INTERVAL_MS, tick: () => this.prune() });
+    }
 
     start(): void {
-        if (this.timer) return;
-        this.timer = setInterval(() => void this.tick(), env.UPTIME_TICK_SECONDS * 1000);
-        this.timer.unref();
+        this.ticker.start();
+        this.pruner.start();
+        // Un tour tout de suite, comme avant : un serveur qui redémarre ne
+        // laisse pas ses services attendre le premier réveil. L'élagage aussi,
+        // au boot puis toutes les heures, comme le balayage de rétention.
         void this.tick();
-        this.deps.logger.info({ tickSeconds: env.UPTIME_TICK_SECONDS }, 'Uptime monitor started');
+        void this.prune();
+        this.deps.logger.info({ tickSeconds: TICK_SECONDS }, 'Uptime monitor started');
     }
 
     stop(): void {
-        if (!this.timer) return;
-        clearInterval(this.timer);
-        this.timer = null;
-    }
-
-    /** Codec de l'étage ouvert d'un espace, mémoïsé pour la durée du process. */
-    private cipherFor(workspaceId: number): Cipher {
-        let cipher = this.ciphers.get(workspaceId);
-        if (!cipher) {
-            cipher = createOpenCipher(this.deps.db, this.deps.crypt, workspaceId);
-            this.ciphers.set(workspaceId, cipher);
-        }
-        return cipher;
+        this.ticker.stop();
+        this.pruner.stop();
     }
 
     /** Claim every due service and probe them, `UPTIME_CONCURRENCY` at a time. */
@@ -170,14 +172,30 @@ export class UptimeMonitor {
         this.ticking = true;
         try {
             const now = Math.floor(Date.now() / 1000);
-            const due = await this.deps.db.uptimeServices.listDue(now, env.UPTIME_CONCURRENCY * 4);
-            for (let i = 0; i < due.length; i += env.UPTIME_CONCURRENCY) {
-                await Promise.all(due.slice(i, i + env.UPTIME_CONCURRENCY).map((row) => this.runOne(row)));
+            const due = await this.deps.repo.services.listDue(now, CONCURRENCY * 4);
+            for (let i = 0; i < due.length; i += CONCURRENCY) {
+                await Promise.all(due.slice(i, i + CONCURRENCY).map((row) => this.runOne(row)));
             }
         } catch (e) {
             this.deps.logger.error({ err: e instanceof Error ? e.message : String(e) }, 'Uptime tick failed');
         } finally {
             this.ticking = false;
+        }
+    }
+
+    /**
+     * Uptime : élagage des pings bruts selon la rétention de chaque service
+     * (l'agrégat journalier, lui, n'est jamais purgé).
+     */
+    private async prune(): Promise<void> {
+        try {
+            const uptimeChecks = await this.deps.repo.history.pruneByRetention(Math.floor(Date.now() / 1000));
+            if (uptimeChecks > 0) this.deps.logger.info({ uptimeChecks }, 'Pruned old uptime checks');
+        } catch (e) {
+            this.deps.logger.error(
+                { err: e instanceof Error ? e.message : String(e) },
+                'Uptime retention sweep failed'
+            );
         }
     }
 
@@ -196,10 +214,10 @@ export class UptimeMonitor {
 
     private async probeAndRecord(row: UptimeServiceRow): Promise<void> {
         try {
-            const cipher = this.cipherFor(row.workspace_id);
+            const cipher = this.deps.cipherFor(row.workspace_id);
             const target = await decryptService(cipher, row.content);
             const outcome = target.url
-                ? await probeService(target, row)
+                ? await this.probe(target, row)
                 : { up: false, httpStatus: null, responseMs: null, error: 'Cible illisible (blob corrompu)' };
             await this.record(row, target, outcome, cipher);
         } catch (e) {
@@ -215,13 +233,13 @@ export class UptimeMonitor {
         row: UptimeServiceRow,
         target: ServicePayload,
         outcome: ProbeOutcome,
-        cipher: Cipher
+        cipher: SdkCipher
     ): Promise<void> {
-        const { db } = this.deps;
+        const { repo } = this.deps;
         const at = Math.floor(Date.now() / 1000);
         const encryptedError = await encryptError(cipher, outcome.error);
 
-        await db.uptimeHistory.addCheck({
+        await repo.history.addCheck({
             serviceId: row.id,
             checkedAt: at,
             up: outcome.up,
@@ -236,7 +254,7 @@ export class UptimeMonitor {
         const failures = outcome.up ? 0 : row.consecutive_failures + 1;
         const status: UptimeStatus = outcome.up ? 'up' : failures >= row.failure_threshold ? 'down' : row.status;
 
-        await db.uptimeServices.recordProbe(row.id, {
+        await repo.services.recordProbe(row.id, {
             status,
             consecutiveFailures: failures,
             checkedAt: at,
@@ -252,7 +270,7 @@ export class UptimeMonitor {
         // clients de tous les espaces, en permanence. Ce qui intéresse une
         // interface, c'est le moment où un service tombe ou revient.
         if (status !== row.status) {
-            this.deps.live?.changed(row.workspace_id, ['uptime'], null);
+            this.deps.live.changed(row.workspace_id);
         }
 
         await this.reconcileIncident(row, target, { ...outcome, at, status, encryptedError }, cipher);
@@ -267,30 +285,27 @@ export class UptimeMonitor {
         row: UptimeServiceRow,
         target: ServicePayload,
         probe: ProbeOutcome & { at: number; status: UptimeStatus; encryptedError: string | null },
-        cipher: Cipher
+        cipher: SdkCipher
     ): Promise<void> {
-        const { db } = this.deps;
-        const open = await db.uptimeHistory.openIncident(row.id);
+        const { repo } = this.deps;
+        const open = await repo.history.openIncident(row.id);
 
         if (probe.status === 'down' && !open) {
-            const incident = await db.uptimeHistory.openIncidentAt({
+            const incident = await repo.history.openIncidentAt({
                 serviceId: row.id,
                 startedAt: probe.at,
                 httpStatus: probe.httpStatus,
                 error: probe.encryptedError
             });
-            this.deps.audit.record({
+            this.deps.audit({
                 level: 'error',
-                source: 'system',
-                category: 'uptime',
                 action: 'uptime.down',
-                uid: row.user_id,
-                ip: '',
+                userId: row.user_id,
                 description: `Service « ${target.name} » injoignable`,
                 metadata: { serviceId: row.id, httpStatus: probe.httpStatus }
             });
             // Toujours tenté : c'est la route qui décide. Un service réglé
-            // « silencieux » a une route sans canal, `deliver` ne fait alors
+            // « silencieux » a une route sans canal, la façade ne fait alors
             // rien et l'incident reste non-notifié, donc pas de « c'est
             // revenu » orphelin. (L'interrupteur `notify` par service a été
             // retiré : deux endroits décidaient d'une même alerte, migration 090.)
@@ -315,19 +330,16 @@ export class UptimeMonitor {
                     httpStatus: probe.httpStatus
                 }
             });
-            if (sent) await db.uptimeHistory.markIncidentNotified(incident.id);
+            if (sent) await repo.history.markIncidentNotified(incident.id);
             return;
         }
 
         if (probe.up && open) {
-            await db.uptimeHistory.closeIncident(open.id, probe.at);
+            await repo.history.closeIncident(open.id, probe.at);
             const duration = Math.max(0, probe.at - open.started_at);
-            this.deps.audit.record({
-                source: 'system',
-                category: 'uptime',
+            this.deps.audit({
                 action: 'uptime.recovered',
-                uid: row.user_id,
-                ip: '',
+                userId: row.user_id,
                 description: `Service « ${target.name} » de nouveau en ligne`,
                 metadata: { serviceId: row.id, downtimeSeconds: duration }
             });
@@ -364,19 +376,22 @@ export class UptimeMonitor {
     /**
      * Livre une alerte sur chaque canal réglé, et dit si l'un d'eux l'a acceptée.
      *
-     * Le corps de l'envoi vit dans `Services/notifications.ts` : il était
-     * recopié ici, mot pour mot, alors que ce module existait déjà pour l'éviter
-     * — il ne servait qu'à Sentinelle. Le booléen rendu est ce qui marque
-     * l'incident `notified`, et donc ce qui interdit d'envoyer un « c'est
-     * revenu » sans avoir envoyé le « c'est tombé ».
+     * Le corps de l'envoi vit dans `Services/notifications.ts`, derrière la
+     * façade `notify` du SDK : `send` rend `false` sans canal routé, et c'est
+     * ce booléen qui marque l'incident `notified`, donc ce qui interdit
+     * d'envoyer un « c'est revenu » sans avoir envoyé le « c'est tombé ».
+     *
+     * `itemId` est passé, et c'est ce qui active la surcharge par élément :
+     * un service qui a sa propre route écrit là où elle dit, les autres suivent
+     * celle d'Uptime. Sans cet argument la fonctionnalité entière partagerait
+     * un seul jeu de destinations, ce qui était précisément la limite d'avant.
      */
     private async notify(
         row: UptimeServiceRow,
         target: ServicePayload,
-        alert: { subject: string; body: string; notice: Extract<UptimeNotice, { event: 'down' | 'recovered' }> }
+        alert: { subject: string; body: string; notice: UptimeNotice }
     ): Promise<boolean> {
-        return deliver(
-            await this.resolveChannels(row.workspace_id, row.id),
+        return this.deps.deveyeFor(row.workspace_id).notify.send(
             {
                 subject: alert.subject,
                 body: alert.body,
@@ -391,19 +406,7 @@ export class UptimeMonitor {
                 // webhooks : rien n'est remplacé, une forme est ajoutée.
                 embeds: buildNotice(alert.notice)
             },
-            this.deps.logger.child({ serviceId: row.id })
+            { itemId: row.id }
         );
-    }
-
-    /**
-     * Les canaux d'un service surveillé.
-     *
-     * `serviceId` est passé, et c'est ce qui active la surcharge par élément :
-     * un service qui a sa propre route écrit là où elle dit, les autres suivent
-     * celle d'Uptime. Sans cet argument la fonctionnalité entière partagerait
-     * un seul jeu de destinations, ce qui était précisément la limite d'avant.
-     */
-    private async resolveChannels(workspaceId: number, serviceId?: number): Promise<ResolvedChannel[]> {
-        return resolveRoute(this.deps.db, this.cipherFor(workspaceId), workspaceId, 'uptime', serviceId);
     }
 }

@@ -4,12 +4,44 @@ Surveillance de services HTTP : sondes périodiques côté serveur, historique
 long terme, incidents et notifications. Feature de grille (carte d'accueil +
 panneau) plus un mini-widget de topbar.
 
+## Le module
+
+Uptime est un **module in-repo** depuis son rapatriement sur le SDK des
+features (`features/uptime/`, voir [FEATURE_SDK.md](./FEATURE_SDK.md)) :
+
+- `src/contracts/{domain,commands}.ts` : les schémas zod, sortis de
+  `@deveye/types`, qui ne garde que l'identité (id, descripteur, sujet live,
+  émetteur de notifications) et les deux contrats de couplage que Projets
+  consomme ;
+- `src/server/repo.ts` (les deux anciens dépôts, composés en `services` et
+  `history`), `handlers.ts` (les douze commandes), `service.ts` (l'ordonnanceur,
+  ex `Services/UptimeMonitor.ts`), `notice.ts` (la mise en page Discord, ex
+  `Services/notices/uptime.ts`), `index.ts` (l'entrée : `createService`, le
+  singleton posé pour les handlers, l'entrée `items` du partage, le provider
+  `UPTIME_ITEMS_PROVIDER`) ;
+- `src/client/` : la vue (`Uptime.tsx`), la carte, le widget de topbar
+  (`TopbarWidget.tsx`, rendu sans prop dans le cadre de l'hôte), le magasin du
+  compte (`store.ts`, ex `stores/uptime.ts`), le panneau Général d'un service
+  (`ServiceGeneralPanel.tsx`) et le contrat client offert à Projets
+  (`provider.tsx`, `UPTIME_CLIENT_PROVIDER`) ;
+- `deveye-feature.json` : l'allowlist des cinq tables historiques, jamais
+  déplacées.
+
+C'est la première native à éléments partagés migrée : le manifest dit
+`shareTier: 'open'` (étalé du descripteur), et le module tient l'engagement
+par son entrée `items` (domicile et intitulé d'un service), par
+`ctx.sharing.scope()` dans ses listages (le codec choisi ligne par ligne) et
+par `ctx.items.restrictions()` / `ctx.items.assert()` (les restrictions par
+élément), `ctx.items.forget()` faisant le ménage à la suppression.
+
 ## Le principe
 
 Chaque service est une URL et une cadence. Un ordonnanceur unique
-(`src/Services/UptimeMonitor.ts`) se réveille toutes les `UPTIME_TICK_SECONDS`,
-réclame les services dont la prochaine sonde est due et les exécute
-`UPTIME_CONCURRENCY` à la fois. Il tourne **sans session ni mot de passe** : voir
+(`features/uptime/src/server/service.ts`, le service de fond du module) se
+réveille toutes les `UPTIME_TICK_SECONDS`, réclame les services dont la
+prochaine sonde est due et les exécute `UPTIME_CONCURRENCY` à la fois (deux
+variables d'environnement lues par le module lui-même, pas par `Utils/Env`).
+Il tourne **sans session ni mot de passe** : voir
 la section « Uptime » de [SECURITY_MODEL.md](./SECURITY_MODEL.md) pour ce qui est
 chiffré et ce qui reste en clair.
 
@@ -37,8 +69,13 @@ l'agrégat journalier est écrit dans le même souffle que le ping brut
 à orchestrer), et il survit à l'élagage du brut. Réduire la rétention ne coûte
 que le détail ping par ping — la courbe de disponibilité, elle, reste complète.
 
-L'élagage tourne dans le balayage horaire de `index.ts`, aux côtés de celui des
-métriques et de CloudSync.
+L'élagage est un ticker horaire du service du module (l'ancien bloc du balayage
+de rétention d'`index.ts`), lancé au démarrage puis toutes les heures.
+
+`uptime_settings` (037, 040, 049) existe encore mais n'est plus lue par aucun
+code depuis que les canaux vivent dans `notification_channels` (087) : elle
+reste dans l'allowlist du module, et sa suppression est une migration du socle,
+pas un geste du module.
 
 `uptime.history` choisit le pas depuis la fenêtre demandée : brut jusqu'à 24 h,
 horaire jusqu'à 30 j (`GROUP BY` sur le brut), journalier au-delà (lecture
@@ -73,14 +110,16 @@ porte le modèle complet ; ce qui compte ici :
 - **e-mail** — destinataire libre, vide = l'adresse du compte expéditeur, qui
   doit être un compte Mail « open » de l'espace ;
 - **webhook** — POST JSON `{ content, text, event, service, url, at }`, où
-  `event` vaut `down`, `recovered` ou `test`. Le message lisible est porté
+  `event` vaut `down` ou `recovered` (l'essai d'un canal passe par
+  `notify.channelTest`, avec son propre corps, commun à tous les émetteurs). Le
+  message lisible est porté
   **deux fois**, et c'est voulu : Discord rejette tout corps sans `content` /
   `embeds` / `file` (400, « Cannot send an empty message ») et Slack lit `text`.
   Chacun ignore les clés qu'il ne connaît pas, donc un seul corps convient à
   Slack et à un point d'entrée maison. Le texte est tronqué à 1900 caractères,
   sous la limite stricte de 2000 de Discord ;
 - **discord** — un type de canal à part entière depuis la `087` : il reçoit
-  l'embed de `Services/notices/uptime.ts` au lieu du texte. Ce n'est plus deviné
+  l'embed de `features/uptime/src/server/notice.ts` au lieu du texte. Ce n'est plus deviné
   d'après l'URL, mais **déclaré** — le reniflage décidait à la place de
   l'utilisateur, et interdisait d'envoyer du texte brut à une URL Discord.
 
@@ -100,7 +139,7 @@ Chaque bascule est aussi journalisée dans les logs d'audit (`uptime.down`,
 ## Les deux graphiques
 
 Le panneau de détail superpose deux lectures de la **même** fenêtre, sur le même
-axe des x (`rangeWindow()` dans `Features/Uptime/format.ts`) :
+axe des x (`rangeWindow()` dans `features/uptime/src/client/format.ts`) :
 
 - la **bande d'état** (`StatusBars`) — un nombre *fixe* de créneaux découpant la
   période choisie, vert / jaune / rouge / gris (aucune mesure). Une barre
@@ -137,6 +176,14 @@ des gestes rares, et vivent là où l'on se rend pour les faire — la fiche du
 service porte « Tester », son formulaire porte la pause. Toute la ligne mène à la
 fiche, barres comprises : repérer un creux rouge et vouloir l'ouvrir est le même
 geste.
+
+« Modifier » ne règle que l'**identité** du service (nom, URL, méthode, statut
+attendu, mot-clé, surveillance active). Sa cadence de relève, son délai, son
+seuil de défaillance et sa rétention vivent dans ses **réglages** (le bouton
+commun de sa fiche, onglet Général : `ServiceGeneralPanel`, déclaré par
+`settings.item` du manifest), à côté de ses canaux, de son partage et de ses
+permissions. Le dialogue conserve ces quatre réglages tels quels quand il
+enregistre : le contrat d'`uptime.update` prend le service entier.
 
 Le journal complet a son propre étage parce qu'un an de sondes fait des dizaines
 de milliers de lignes : en ligne dans le détail, il enterrait les graphiques.
@@ -196,9 +243,10 @@ au passage. Une pression Echap pendant un drag l'annule aussi, par sécurité.
 
 `uptime.list` · `uptime.count` · `uptime.add` · `uptime.update` ·
 `uptime.setEnabled` · `uptime.remove` · `uptime.reorder` · `uptime.checkNow` ·
-`uptime.history` ·
-`uptime.checks` · `uptime.checkStats` · `uptime.incidents` ·
-`uptime.getSettings` · `uptime.setSettings` · `uptime.testNotification`
+`uptime.history` · `uptime.checks` · `uptime.checkStats` · `uptime.incidents`
+
+Déclarées par le manifest du module (`features/uptime/src/contracts/commands.ts`),
+enregistrées au runtime comme celles de tout module.
 
 Aucune n'est verrouillée par le chiffrement par mot de passe : la feature s'ouvre
 et se lit sans prompt.

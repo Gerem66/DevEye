@@ -38,7 +38,7 @@ function reordered(accounts: MailAccount[], draggedId: number, gap: number): num
 
 /**
  * The account list, with drag & drop ordering — same pointer-events technique
- * as `Features/Uptime/ServiceList` (see that file for why HTML5 `draggable`
+ * as `features/uptime/src/client/ServiceList` (see that file for why HTML5 `draggable`
  * is deliberately avoided).
  */
 export function AccountList({

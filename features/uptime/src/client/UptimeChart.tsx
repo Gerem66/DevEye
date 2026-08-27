@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import { formatBucket, formatMs, formatRatio } from './format';
 import styles from './style.module.css';
 
-import type { UptimePoint, UptimeResolution } from '@deveye/types';
+import type { UptimePoint, UptimeResolution } from '../contracts/domain';
 
 const W = 600;
 const H = 140;
@@ -18,7 +18,7 @@ interface UptimeChartProps {
 
 /**
  * Response-time curve over the queried window, with the failing buckets shaded
- * in red behind it — one glance answers both "was it up?" and "was it slow?".
+ * in red behind it: one glance answers both "was it up?" and "was it slow?".
  *
  * The x-axis is the **selected window**, not the extent of the data, so it lines
  * up column for column with the status strip above: a service monitored for ten

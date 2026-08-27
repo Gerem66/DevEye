@@ -10,7 +10,8 @@ import { useActiveWorkspace } from '@/stores/workspace';
  *  matching data changes. Only the `.count`-shaped resources qualify.
  *
  *  `uptime.count` porte le même suffixe mais rend `{ total, up, down }`, et a
- *  son propre store partagé (`stores/uptime`) : l'exclure ici est ce qui garde
+ *  son propre magasin partagé (`features/uptime/src/client/store.ts`, chez le
+ *  module) : l'exclure ici est ce qui garde
  *  ce composant sur une seule forme de réponse. `sentinel.count` est dans le
  *  même cas — il rend un décompte **par gravité**, parce que « trois constats »
  *  ne veut rien dire tant qu'on ne sait pas si l'un d'eux est critique. */

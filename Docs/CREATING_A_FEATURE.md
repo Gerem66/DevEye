@@ -5,8 +5,8 @@
 > [DevEye-Feature-Template](https://github.com/Gerem66/DevEye-Feature-Template)
 > (doc anglaise complète) côté développeur, [FEATURE_SDK.md](./FEATURE_SDK.md)
 > côté mainteneur. La checklist ci-dessous reste celle du chemin **natif
-> historique**, encore suivi par dix features sur seize (Météo, OSINT,
-> Finances, le Coffre et les Notes sont passés au format module dans
+> historique**, encore suivi par neuf features sur seize (Météo, OSINT,
+> Finances, le Coffre, les Notes et Uptime sont passés au format module dans
 > `features/*`, CloudSync en module privé).
 
 Ce document liste **tout** ce qu'implique l'ajout d'une fonctionnalité dans DevEye,

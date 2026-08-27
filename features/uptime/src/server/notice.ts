@@ -1,12 +1,16 @@
-import type { DiscordMessage } from '@/Services/discord';
-import { COLOR_DANGER, COLOR_INFO, COLOR_SUCCESS, block, duration, moment, trim } from './shared';
+// Privilège de native rapatriée, commenté à chaque usage : les helpers Discord
+// (`moment`, `duration`, `block`, `trim`, la charte des couleurs) sont
+// réellement partagés par les cinq émetteurs de l'app, et deux copies avaient
+// déjà divergé une fois (voir l'en-tête de `Services/notices/shared.ts`). Ils
+// restent donc à l'app, et le module les importe plutôt que de les recopier.
+import { COLOR_DANGER, COLOR_SUCCESS, block, duration, moment, trim } from '@/Services/notices/shared';
 
 /**
  * L'avis de disponibilité tel que Discord doit le montrer.
  *
  * Séparé du moniteur pour la même raison que `DeployNotice` l'est du service qui
- * l'envoie : ce module ne connaît ni la base, ni le réseau, ni le chiffrement —
- * il transforme un état en un objet Discord, et toute la mise en forme tient
+ * l'envoie : ce module ne connaît ni la base, ni le réseau, ni le chiffrement.
+ * Il transforme un état en un objet Discord, et toute la mise en forme tient
  * donc à un seul endroit.
  *
  * ## Pourquoi un embed plutôt que le texte qui partait jusqu'ici
@@ -18,8 +22,8 @@ import { COLOR_DANGER, COLOR_INFO, COLOR_SUCCESS, block, duration, moment, trim 
  * côté des avis de déploiement, qui viennent souvent du même salon, la
  * différence se voyait à un mètre.
  *
- * L'embed reprend donc les repères de `DeployNotice` — bordure colorée, titre
- * d'état, trois cases en ligne, pied signé, horodatage — pour qu'un lecteur
+ * L'embed reprend donc les repères de `DeployNotice` (bordure colorée, titre
+ * d'état, trois cases en ligne, pied signé, horodatage) pour qu'un lecteur
  * n'ait pas à réapprendre à lire selon la feature qui parle.
  *
  * ## Ce qui reste du texte
@@ -29,6 +33,10 @@ import { COLOR_DANGER, COLOR_INFO, COLOR_SUCCESS, block, duration, moment, trim 
  * si le webhook est bien celui de Discord (voir `Services/notifications.ts`).
  * Aucun canal ne perd d'information, et l'avis reste lisible là où les embeds
  * n'existent pas.
+ *
+ * L'avis « test de notification » qui vivait ici est parti avec la commande
+ * `uptime.testNotification` : l'essai d'un canal passe par `notify.channelTest`,
+ * qui a son propre corps, commun à tous les émetteurs.
  */
 
 /** Ce qu'un avis de disponibilité peut annoncer. */
@@ -54,8 +62,7 @@ export type UptimeNotice =
           cause: string | null;
           /** Le temps de réponse de la sonde qui a conclu. */
           responseMs: number | null;
-      }
-    | { event: 'test'; at: number };
+      };
 
 /**
  * L'adresse surveillée, en lien cliquable quand elle s'y prête.
@@ -75,7 +82,7 @@ function address(url: string): string {
         label = new URL(url).host || url;
     } catch {
         // Adresse illisible : elle sera montrée brute, ce qui est aussi une
-        // information — c'est peut-être elle, la panne.
+        // information (c'est peut-être elle, la panne).
     }
     if (/[()\s]/.test(url)) return `\`${trim(url)}\``;
     return `[${trim(label)}](${url})`;
@@ -89,11 +96,12 @@ function response(httpStatus: number | null): string {
 /**
  * L'avis, prêt à partir.
  *
- * Rend le tableau d'embeds plutôt qu'un {@link DiscordMessage} entier : Uptime
- * ne publie pas lui-même, il confie l'envoi à `deliver`, qui garde la main sur
- * `content` pour les canaux qui ne connaissent pas les embeds.
+ * Rend le tableau d'embeds plutôt qu'un message Discord entier : Uptime ne
+ * publie pas lui-même, il confie l'envoi à la façade `notify` du SDK
+ * (`SdkAlert.embeds`), derrière laquelle `deliver` garde la main sur `content`
+ * pour les canaux qui ne connaissent pas les embeds.
  */
-export function buildNotice(notice: UptimeNotice): NonNullable<DiscordMessage['embeds']> {
+export function buildNotice(notice: UptimeNotice): Record<string, unknown>[] {
     return [
         {
             ...headline(notice),
@@ -107,7 +115,7 @@ export function buildNotice(notice: UptimeNotice): NonNullable<DiscordMessage['e
     ];
 }
 
-/** Titre, couleur et première lecture — ce qui se voit sans dérouler. */
+/** Titre, couleur et première lecture : ce qui se voit sans dérouler. */
 function headline(notice: UptimeNotice): { title: string; description: string; color: number } {
     if (notice.event === 'down') {
         return {
@@ -116,41 +124,30 @@ function headline(notice: UptimeNotice): { title: string; description: string; c
             color: COLOR_DANGER
         };
     }
-    if (notice.event === 'recovered') {
-        return {
-            title: '🟢 Service rétabli',
-            description: `**${trim(notice.service)}** répond de nouveau.`,
-            color: COLOR_SUCCESS
-        };
-    }
     return {
-        title: '🔔 Test de notification',
-        description: 'Si vous lisez ce message, les alertes de disponibilité vous parviendront bien.',
-        color: COLOR_INFO
+        title: '🟢 Service rétabli',
+        description: `**${trim(notice.service)}** répond de nouveau.`,
+        color: COLOR_SUCCESS
     };
 }
 
 /**
  * Les cases, dans l'ordre où on les lit.
  *
- * Trois en ligne d'abord — c'est ce que Discord place côte à côte —, puis ce qui
+ * Trois en ligne d'abord (c'est ce que Discord place côte à côte), puis ce qui
  * ne tient pas dans une case. Le détail de l'erreur vient **en dernier** parce
  * qu'il est le seul élément de longueur inconnue : le mettre plus haut
  * repousserait l'identité du service sous un pavé, exactement le défaut qu'on
  * corrige.
  */
 function fieldsOf(notice: UptimeNotice): Record<string, unknown>[] {
-    if (notice.event === 'test') {
-        return [{ name: '📅 Envoyé', value: moment(notice.at), inline: true }];
-    }
-
     if (notice.event === 'down') {
         return [
             { name: '🌐 Adresse', value: address(notice.url), inline: true },
             { name: '🚦 Réponse', value: response(notice.httpStatus), inline: true },
             // En relatif, et pas par coquetterie : le pied du message porte déjà
             // l'heure exacte de l'émission. « il y a 40 minutes » dit ce que
-            // celle-ci ne dit pas — depuis combien de temps ça dure — et
+            // celle-ci ne dit pas (depuis combien de temps ça dure) et
             // continue de compter tant que le message reste dans le fil.
             { name: '📅 Depuis', value: moment(notice.at, 'R'), inline: true },
             { name: '⚠️ Erreur', value: block(notice.error ?? 'inconnue'), inline: false }

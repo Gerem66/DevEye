@@ -27,7 +27,6 @@ import { setSdkHost } from '@/features/_sdk/host';
 import type { FeatureService } from '@deveye/types/sdk/server';
 import { createAuditLog } from '@/Services/AuditLog';
 import { MailSyncService } from '@/Services/MailSyncService';
-import { UptimeMonitor } from '@/Services/UptimeMonitor';
 import { IntegrationSyncService } from '@/Services/IntegrationSyncService';
 import { DatabaseMonitor } from '@/Services/DatabaseMonitor';
 import { AudienceIngest } from '@/Services/AudienceIngest';
@@ -52,8 +51,6 @@ export interface BuiltApp {
     app: FastifyInstance;
     /** Services des modules installés — démarrés ici, arrêtés par index.ts. */
     moduleServices: readonly FeatureService[];
-    /** Ordonnanceur Uptime — démarré/arrêté par index.ts. */
-    uptime: UptimeMonitor;
     integrations: IntegrationSyncService;
     databases: DatabaseMonitor;
     /** Ingestion d'audience — démarrée/arrêtée par index.ts. */
@@ -186,7 +183,6 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     const moduleServices = createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger, live });
     for (const svc of moduleServices) await svc.start();
 
-    const uptime = new UptimeMonitor({ db: deps.db, crypt: deps.crypt, audit, logger, live });
     const mailSync = new MailSyncService({ db: deps.db, crypt: deps.crypt, logger, live });
     const integrations = new IntegrationSyncService({ db: deps.db, crypt: deps.crypt, logger, live });
     // Bases de données a **ses propres** canaux (`notification_settings`, ligne
@@ -196,7 +192,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // même façon, reprise de la ligne existante comprise.
     const databases = new DatabaseMonitor({ db: deps.db, crypt: deps.crypt, logger, live });
     // L'ingestion d'audience. Rien à joindre au-dehors : contrairement aux
-    // quatre services ci-dessus, celui-ci ne sonde rien — il **reçoit**, et son
+    // trois services ci-dessus, celui-ci ne sonde rien — il **reçoit**, et son
     // seul travail périodique est de vider ce qu'on lui a déposé.
     const audience = new AudienceIngest({ db: deps.db, crypt: deps.crypt, logger, live });
     // Sentinelle a **ses propres** canaux (`notification_settings`, ligne
@@ -231,7 +227,6 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         crypt: deps.crypt,
         hub,
         live,
-        uptime,
         integrations,
         databases,
         audience,
@@ -270,5 +265,5 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         app.log.debug({ clientDir }, 'No client build found; static serving disabled (host dev uses Vite)');
     }
 
-    return { app, uptime, mailSync, integrations, databases, audience, sentinel, backups, moduleServices };
+    return { app, mailSync, integrations, databases, audience, sentinel, backups, moduleServices };
 }

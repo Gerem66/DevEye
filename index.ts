@@ -32,11 +32,10 @@ async function main() {
     const db = createDatabase(getQueryable(pool));
     const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
 
-    const { app, uptime, mailSync, integrations, databases, audience, sentinel, backups, moduleServices } =
-        await buildApp({
-            db,
-            crypt
-        });
+    const { app, mailSync, integrations, databases, audience, sentinel, backups, moduleServices } = await buildApp({
+        db,
+        crypt
+    });
     const audit = createAuditLog(db);
 
     /**
@@ -52,7 +51,6 @@ async function main() {
     const shutdown = async (signal: string) => {
         logger.info({ signal }, 'Shutting down');
         try {
-            uptime.stop();
             mailSync.stop();
             integrations.stop();
             databases.stop();
@@ -89,10 +87,6 @@ async function main() {
             if (metrics + presence + processes > 0) {
                 logger.info({ metrics, presence, processes }, 'Pruned old monitoring history');
             }
-            // Uptime : élagage des pings bruts selon la rétention de chaque
-            // service (l'agrégat journalier, lui, n'est jamais purgé).
-            const uptimeChecks = await db.uptimeHistory.pruneByRetention(Math.floor(Date.now() / 1000));
-            if (uptimeChecks > 0) logger.info({ uptimeChecks }, 'Pruned old uptime checks');
             // CloudSync : purge des versions par budget + sessions abandonnées.
         } catch (e) {
             logger.error({ err: (e as Error).message }, 'Retention sweep failed');
@@ -107,9 +101,9 @@ async function main() {
     // registered synchronously so /api/status reports "not ready" right away.
     startAgentReconcile(agentDistDir());
 
-    // Sonde de disponibilité : boucle indépendante, sans session ni mot de passe.
-    uptime.start();
-    // Synchro Mail en tâche de fond : même principe, comptes « open » uniquement.
+    // Synchro Mail en tâche de fond : boucle indépendante, sans session ni mot
+    // de passe, comptes « open » uniquement. (La sonde de disponibilité est un
+    // service du module Uptime, démarré avec les autres dans buildApp.)
     mailSync.start();
     integrations.start();
     databases.start();

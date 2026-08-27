@@ -250,7 +250,7 @@ db/migrations/064_git_repos.sql              sort le git du projet (voir GIT.md)
 db/repos/project*.ts                         un repo par agrégat
 features/project/_shared.ts                  ciphers, codecs, recordEvent, rekey
 features/project/{index,board,chat,timeline,history,repoLink,deployLink,links}.ts
-Services/IntegrationSyncService.ts           ordonnanceur (calqué sur UptimeMonitor)
+Services/IntegrationSyncService.ts           ordonnanceur (calqué sur l'ex UptimeMonitor, devenu le service du module Uptime)
 Services/integrations/{github,dokploy}.ts
 ```
 

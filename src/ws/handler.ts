@@ -27,7 +27,6 @@ import { topicsOf } from '@/features/_topics';
 import { enterSessionCommand, exitSessionCommand, forgetSessionDek } from '@/Services/SecureStore';
 import { logger } from '@/logger';
 
-import type { UptimeMonitor } from '@/Services/UptimeMonitor';
 import type { IntegrationSyncService } from '@/Services/IntegrationSyncService';
 import type { DatabaseMonitor } from '@/Services/DatabaseMonitor';
 import type { AudienceIngest } from '@/Services/AudienceIngest';
@@ -43,7 +42,6 @@ interface WSDeps {
     crypt: Encryption;
     hub: MonitorHub;
     live: LiveHub;
-    uptime: UptimeMonitor;
     integrations: IntegrationSyncService;
     databases: DatabaseMonitor;
     audience: AudienceIngest;
@@ -82,7 +80,7 @@ function unionWorkspaces(a: readonly number[], b: readonly number[]): number[] {
 
 export async function registerWS(
     app: FastifyInstance,
-    { db, crypt, hub, live: liveHub, uptime, integrations, databases, audience, sentinel, backups, audit }: WSDeps
+    { db, crypt, hub, live: liveHub, integrations, databases, audience, sentinel, backups, audit }: WSDeps
 ): Promise<void> {
     app.get('/ws', { websocket: true }, async (socket, req) => {
         const accessToken = req.cookies[ACCESS_COOKIE];
@@ -331,7 +329,6 @@ export async function registerWS(
                         audit: recordAudit,
                         monitor,
                         live,
-                        uptime,
                         integrations,
                         databases,
                         audience,

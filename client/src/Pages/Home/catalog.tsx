@@ -2,7 +2,6 @@ import type { ComponentType } from 'react';
 import type { HomeFeatureId, WorkspaceKind } from '@deveye/types';
 
 import { MonitoringWidget } from '@/Features/Monitoring';
-import { UptimeWidget } from '@/Features/Uptime/UptimeWidget';
 import { SentinelWidget } from '@/Features/Sentinel/SentinelWidget';
 import { MailWidget } from '@/Features/Mail/MailWidget';
 import { ProjectsWidget } from '@/Features/Projects/ProjectsWidget';
@@ -13,7 +12,6 @@ import { BackupWidget } from '@/Features/Backup/BackupWidget';
 import { AudienceWidget } from '@/Features/Audience/AudienceWidget';
 
 import Monitoring from '@/Features/Monitoring';
-import Uptime from '@/Features/Uptime';
 import Sentinel from '@/Features/Sentinel';
 import Mail from '@/Features/Mail';
 import FeatureProjects from '@/Features/Projects';
@@ -124,20 +122,6 @@ const NATIVE_CATALOG: FeatureCatalogEntry[] = [
         cacheDurationMinutes: 5,
         preload: true,
         adminOnly: true
-    },
-    {
-        id: 'uptime',
-        title: 'Uptime',
-        icon: 'uptime',
-        description: 'Disponibilité de vos services : sondes, incidents, historique.',
-        category: 'supervision',
-        links: [{ to: 'mail', what: 'envoie ses alertes par un compte Mail' }],
-        WidgetContent: UptimeWidget,
-        FullComponent: Uptime,
-        // Unmounted as soon as it closes: the panel polls while it lives, and a
-        // cached (or preloaded) instance would keep querying unseen. The home
-        // card and navbar widget stay live through the shared count store.
-        cacheDurationMinutes: 0
     },
     {
         id: 'sentinel',
@@ -310,6 +294,9 @@ export function featureCatalog(): readonly FeatureCatalogEntry[] {
                 icon: manifest.icon,
                 description: manifest.description,
                 category: manifest.category,
+                // Les liaisons déclarées par le manifest : la fiche « À propos »
+                // les lit dans les deux sens, comme celles des natives.
+                links: manifest.links?.map((link) => ({ to: link.to as HomeFeatureId, what: link.what })),
                 WidgetContent: client.Widget,
                 FullComponent: moduleFull(client.Full),
                 cacheDurationMinutes: client.cacheDurationMinutes,

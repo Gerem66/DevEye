@@ -127,7 +127,6 @@ const NON_MUTATING = new Set([
     'mail.accountTestConnection',
     'mail.attachmentScan',
     'mail.attachmentDownload',
-    'uptime.testNotification',
     // Contrôle d'accessibilité et déclenchement : le premier écrit bien le
     // verdict sur la ligne (il déclare donc `mutates`), le second ouvre une
     // exécution. Aucun des deux n'a de verbe mutant dans son nom — ils sont ici

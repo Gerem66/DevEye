@@ -4,7 +4,6 @@ import type { SecureStore } from '@/Services/SecureStore';
 import type { SecretKeyService } from '@/Services/SecretKeyService';
 import type { MonitorTransport } from '@/agent/hub';
 import type { LiveTransport } from '@/live/hub';
-import type { UptimeMonitor } from '@/Services/UptimeMonitor';
 import type { IntegrationSyncService } from '@/Services/IntegrationSyncService';
 import type { DatabaseMonitor } from '@/Services/DatabaseMonitor';
 import type { AudienceIngest } from '@/Services/AudienceIngest';
@@ -129,8 +128,6 @@ export interface FeatureContext {
      * dispatcheur depuis `mutates`, jamais par un handler.
      */
     live?: LiveTransport;
-    /** Uptime scheduler — backs the "check now" and "test notification" commands. */
-    uptime?: UptimeMonitor;
     /**
      * Ordonnanceur des intégrations externes : synchronisation des dépôts git de
      * l'espace, et suivi des déploiements en vol.

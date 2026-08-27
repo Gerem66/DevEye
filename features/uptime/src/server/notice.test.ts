@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { webhookBody, type Alert } from '../notifications';
-import { buildNotice } from './uptime';
+// Privilège de native rapatriée, commenté à chaque usage : `webhookBody` est la
+// fonction de l'app qui décide, pour chaque type de canal, si l'embed remplace
+// le texte. Elle est partagée par les cinq émetteurs, et c'est précisément ce
+// partage qui se vérifie ici depuis le point de vue d'Uptime.
+import { webhookBody, type Alert } from '@/Services/notifications';
+
+import { buildNotice } from './notice';
 
 /**
  * L'avis de disponibilité tel que Discord le reçoit.
@@ -24,7 +29,7 @@ type Embed = Record<string, unknown> & { fields: { name: string; value: string; 
 const embed = (notice: Parameters<typeof buildNotice>[0]): Embed => buildNotice(notice)[0] as Embed;
 const valueOf = (e: Embed, name: string): string => e.fields.find((f) => f.name.includes(name))?.value ?? '';
 
-describe('buildNotice — la panne', () => {
+describe('buildNotice : la panne', () => {
     const down = embed({
         event: 'down',
         service: 'API OxyFoo',
@@ -59,10 +64,10 @@ describe('buildNotice — la panne', () => {
     });
 });
 
-describe('buildNotice — les limites de Discord', () => {
+describe('buildNotice : les limites de Discord', () => {
     it('tient sous les 1024 caractères d’un champ', () => {
         // Une erreur vient d'un point d'entrée quelconque : rien n'en borne la
-        // longueur. Au-delà de la limite, Discord refuse **tout le message** —
+        // longueur. Au-delà de la limite, Discord refuse **tout le message** :
         // l'alerte ne serait donc pas seulement laide, elle serait absente.
         const long = embed({
             event: 'down',
@@ -120,7 +125,7 @@ describe('buildNotice — les limites de Discord', () => {
     });
 });
 
-describe('buildNotice — le rétablissement', () => {
+describe('buildNotice : le rétablissement', () => {
     const up = embed({
         event: 'recovered',
         service: 'API OxyFoo',
@@ -155,7 +160,7 @@ describe('buildNotice — le rétablissement', () => {
     });
 });
 
-describe('webhookBody — quel canal reçoit quoi', () => {
+describe('webhookBody : quel canal reçoit quoi', () => {
     const alert: Alert = {
         subject: 'sujet',
         body: 'le corps en clair',
