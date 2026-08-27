@@ -28,8 +28,8 @@ export type ResourceKey =
      */
     | 'notify.channelList'
     | 'notify.routeGet'
-    | 'note.count'
-    | 'note.list'
+    | 'notes.count'
+    | 'notes.list'
     | 'password.count'
     | 'password.list'
     | 'cloudSync.listShares'
@@ -130,14 +130,13 @@ export type ExternalResourceKey = `x-${string}.${string}`;
  * Ce qu'un sujet du serveur invalide chez nous.
  *
  * La correspondance est explicite parce que les deux vocabulaires ne coïncident
- * pas : le serveur raisonne par feature (`notes`), le client par commande
- * (`note.count`, `note.list`). Un sujet sans entrée ici n'invalide rien — ce qui
+ * pas : le serveur raisonne par feature (`projects`), le client par commande
+ * (`project.count`, `project.list`). Un sujet sans entrée ici n'invalide rien — ce qui
  * est le bon défaut, mais explique pourquoi une nouvelle vue en cache doit
  * penser à s'y inscrire.
  */
 const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
     notify: ['notify.channelList', 'notify.routeGet'],
-    notes: ['note.count', 'note.list'],
     // La relève de fond ne bouge pas que les cartes de comptes : elle fait entrer
     // des messages, corrige des drapeaux et retire des lignes disparues. Sans les
     // deux dernières clés, seule la date « il y a X min » se rafraîchissait, et

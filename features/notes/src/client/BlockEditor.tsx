@@ -46,7 +46,7 @@ import type {
     NoteColor,
     NoteDividerBlock,
     NoteNumberBlock
-} from '@deveye/types';
+} from '../contracts/domain';
 
 /** A block whose marker (dot / ordinal / box / rule) can be tinted. */
 type MarkerBlock = NoteBulletBlock | NoteNumberBlock | NoteCheckBlock | NoteDividerBlock;
@@ -111,7 +111,7 @@ interface DragState {
     /** Insertion position among the *remaining* rows (0..length-1): where the
      *  dragged row would land if dropped now. */
     to: number;
-    /** Add to `clientY` to get the dragged row's vertical centre — so the switch
+    /** Add to `clientY` to get the dragged row's vertical centre, so the switch
      *  is driven by the element's middle, not wherever the grip was grabbed. */
     centerOffset: number;
     /** Ascending Y boundaries (viewport px) *between* consecutive rows in the
@@ -134,8 +134,8 @@ interface Snapshot {
  * checklist / list item, divider), rendered inside **one** contentEditable host.
  *
  * That single host is the whole design. The caret and a selection move over the
- * list exactly as they would over a plain document — within a wrapped line, from
- * one block to the next, across several of them — so navigation, selection and
+ * list exactly as they would over a plain document, within a wrapped line, from
+ * one block to the next, across several of them, so navigation, selection and
  * copy are the browser's, not ours. What the browser cannot be trusted with is
  * *structure*: an edit reaching across blocks would merge the elements
  * themselves and desynchronise the model. Those are intercepted and replayed on
@@ -183,7 +183,7 @@ export default function BlockEditor({
     /** The last list this editor produced; anything else came from the outside
      *  (another note opened), which makes the history moot. */
     const owned = useRef(blocks);
-    /** The block the format menu targets — where the caret is, or a divider the
+    /** The block the format menu targets, where the caret is, or a divider the
      *  user clicked. Drives the contextual colour picker. */
     const [active, setActive] = useState<number | null>(null);
     const [drag, setDrag] = useState<DragState | null>(null);
@@ -215,7 +215,7 @@ export default function BlockEditor({
         setActive(target.start.index);
     });
 
-    // Follow the caret wherever it goes — keeping it out of the rows' chrome —
+    // Follow the caret wherever it goes, keeping it out of the rows' chrome,
     // so the format menu stays contextual.
     useEffect(() => {
         const onSelectionChange = () => {
@@ -306,8 +306,8 @@ export default function BlockEditor({
 
     /**
      * Pull the model back in line with the DOM after an edit the browser was
-     * left to make. Only text can have changed — everything structural was
-     * intercepted before it happened — so the blocks' surfaces are read back and
+     * left to make. Only text can have changed, everything structural was
+     * intercepted before it happened, so the blocks' surfaces are read back and
      * the ones that moved are committed. Reading them all rather than the one
      * under the caret costs a handful of microseconds and cannot drift.
      */
@@ -329,7 +329,7 @@ export default function BlockEditor({
 
     /**
      * The browser may only edit *inside* a block. Anything reaching across two
-     * of them — typing or deleting over a multi-block selection — is replayed on
+     * of them, typing or deleting over a multi-block selection, is replayed on
      * the model, as is its own undo (whose stack our re-rendering has wiped) and
      * its own styling commands (which would inject tags into the source text).
      *
@@ -404,8 +404,8 @@ export default function BlockEditor({
         [blocks, commit]
     );
 
-    /** Clear text colour: strip colour markers within the selection, or — with a
-     *  collapsed caret — from the coloured run under it. */
+    /** Clear text colour: strip colour markers within the selection, or, with a
+     *  collapsed caret, from the coloured run under it. */
     const clearColor = useCallback(() => {
         setFormatMenuOpen(false);
         const selection = selectionRef.current;
@@ -429,7 +429,7 @@ export default function BlockEditor({
     }, [blocks, commit]);
 
     /** Set (or clear, with `undefined`) the marker colour of the active marker
-     *  block — the bullet dot, ordinal, checkbox or divider rule. */
+     *  block, the bullet dot, ordinal, checkbox or divider rule. */
     const setBlockColor = useCallback(
         (color: NoteColor | undefined) => {
             setFormatMenuOpen(false);
@@ -538,7 +538,7 @@ export default function BlockEditor({
         [blocks, commitEdit]
     );
 
-    /** Cutting across blocks is a copy plus a model-level delete — the browser's
+    /** Cutting across blocks is a copy plus a model-level delete, the browser's
      *  own would take the block elements with it. */
     const onCut = useCallback(
         (e: React.ClipboardEvent<HTMLDivElement>) => {
@@ -637,7 +637,7 @@ export default function BlockEditor({
     const placeholderBefore = drag === null ? null : drag.to < remaining.length ? remaining[drag.to] : -1;
 
     // Display index of each numbered item, restarting at 1 after any non-number
-    // block — so consecutive numbered rows read 1, 2, 3… and stay coherent.
+    // block, so consecutive numbered rows read 1, 2, 3… and stay coherent.
     const numbering: number[] = [];
     let run = 0;
     for (let i = 0; i < blocks.length; i++) {
@@ -786,8 +786,8 @@ export default function BlockEditor({
             );
         })();
 
-    // The block currently targeted by the format menu, and — when it carries a
-    // colourable marker — that block, so the menu can offer its marker picker.
+    // The block currently targeted by the format menu, and, when it carries a
+    // colourable marker, that block, so the menu can offer its marker picker.
     const activeBlock = active !== null ? (blocks[active] ?? null) : null;
     const activeMarkerBlock = activeBlock && isMarkerBlock(activeBlock) ? activeBlock : null;
 
@@ -820,7 +820,7 @@ export default function BlockEditor({
         </div>
     );
 
-    // The "+" (add block) and "Aa" (format) tools — placed in the footer when the
+    // The "+" (add block) and "Aa" (format) tools, placed in the footer when the
     // editor is large, or on their own row above it when compact.
     const tools = (
         <div className={styles.addTools}>

@@ -2,7 +2,6 @@ import type { ComponentType } from 'react';
 import type { HomeFeatureId, WorkspaceKind } from '@deveye/types';
 
 import { MonitoringWidget } from '@/Features/Monitoring';
-import { NotesWidget } from '@/Features/Notes/NotesWidget';
 import { UptimeWidget } from '@/Features/Uptime/UptimeWidget';
 import { SentinelWidget } from '@/Features/Sentinel/SentinelWidget';
 import { MailWidget } from '@/Features/Mail/MailWidget';
@@ -14,7 +13,6 @@ import { BackupWidget } from '@/Features/Backup/BackupWidget';
 import { AudienceWidget } from '@/Features/Audience/AudienceWidget';
 
 import Monitoring from '@/Features/Monitoring';
-import FeatureNotes from '@/Features/Notes';
 import Uptime from '@/Features/Uptime';
 import Sentinel from '@/Features/Sentinel';
 import Mail from '@/Features/Mail';
@@ -126,17 +124,6 @@ const NATIVE_CATALOG: FeatureCatalogEntry[] = [
         cacheDurationMinutes: 5,
         preload: true,
         adminOnly: true
-    },
-    {
-        id: 'notes',
-        title: 'Notes',
-        icon: 'notes',
-        description: 'Notes et documents chiffrés, rangés en dossiers.',
-        category: 'daily',
-        WidgetContent: NotesWidget,
-        FullComponent: FeatureNotes,
-        cacheDurationMinutes: 0,
-        holdSecrecy: true
     },
     {
         id: 'uptime',

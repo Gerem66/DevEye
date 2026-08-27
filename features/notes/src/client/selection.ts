@@ -2,7 +2,7 @@
  * Bridge between the DOM selection and the block model.
  *
  * The whole block list is a *single* contentEditable host (see BlockEditor), so
- * the browser hands us selections that may span several blocks — which is what
+ * the browser hands us selections that may span several blocks, which is what
  * makes free navigation, multi-block selection and copy work natively. Every row
  * carries `data-block="<index>"` and, when it holds text, a `[data-text]`
  * surface whose rendered content equals the block's source character-for-
@@ -45,7 +45,7 @@ function rowOf(node: Node | null): HTMLElement | null {
     return asElement(node)?.closest<HTMLElement>('[data-block]') ?? null;
 }
 
-/** The text surface `node` lives in — null when it sits in a row's chrome. */
+/** The text surface `node` lives in, null when it sits in a row's chrome. */
 function textSurfaceOf(node: Node | null): HTMLElement | null {
     return asElement(node)?.closest<HTMLElement>('[data-text]') ?? null;
 }
@@ -125,7 +125,7 @@ export function readSelection(root: HTMLElement): BlockRange | null {
     return start && end ? { start, end } : null;
 }
 
-/** Whether the whole DOM selection sits in blocks' text — the only place the
+/** Whether the whole DOM selection sits in blocks' text, the only place the
  *  browser may be left to edit on its own (see {@link snapCaret}). */
 export function selectionInText(root: HTMLElement): boolean {
     const selection = window.getSelection();
@@ -139,7 +139,7 @@ export function selectionInText(root: HTMLElement): boolean {
 }
 
 /** The caret position at the start (walking forward) or the end (backward) of
- *  the first row from `index` that holds text — dividers hold none. */
+ *  the first row from `index` that holds text, dividers hold none. */
 function nearestCaret(root: HTMLElement, index: number, dir: 1 | -1): BlockPoint | null {
     for (let i = index; i >= 0 && blockRow(root, i); i += dir) {
         const text = blockTextElement(root, i);
@@ -153,7 +153,7 @@ function nearestCaret(root: HTMLElement, index: number, dir: 1 | -1): BlockPoint
  * chrome. They belong to no block: typing there writes outside the model, and
  * a backspace eats the grip or the marker itself. Pressing Left at the start of
  * a block walks straight into one, so the caret is nudged on the way it was
- * heading — before a row's text it belongs at the end of the block above, after
+ * heading, before a row's text it belongs at the end of the block above, after
  * it at the start of the one below. Returns where it was moved, or null when
  * there was nothing to correct.
  */

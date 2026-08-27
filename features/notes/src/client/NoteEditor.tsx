@@ -2,16 +2,20 @@ import { useRef, useState } from 'react';
 
 import styles from './style.module.css';
 
-import Popup, { ClosePopup, OpenPopup } from '@/Components/Popup';
-import { DialogCancelButton } from '@/Components/Dialog';
-import { openInfo } from '@/Components/InfoPopup';
-import Button from '@/Components/Button';
+import {
+    Button,
+    ClosePopup,
+    DialogCancelButton,
+    openInfo,
+    OpenPopup,
+    Popup,
+    useActiveWorkspace
+} from 'deveye-sdk-client';
 import BlockEditor from './BlockEditor';
 import { exportNotePdf } from './exportPdf';
 import { NOTE_CONFIRM_POPUP, type ConfirmInput } from './ConfirmPopup';
 
-import { NOTE_TITLE_MAX_LENGTH, type Note, type NoteBlock } from '@deveye/types';
-import { useActiveWorkspace } from '@/stores/workspace';
+import { NOTE_TITLE_MAX_LENGTH, type Note, type NoteBlock } from '../contracts/domain';
 
 export const NOTE_EDITOR_POPUP = 'popup-note-editor';
 
@@ -52,7 +56,7 @@ function formatStamp(time: number): string {
     });
 }
 
-/** Date only (no time) — used for the PDF's neutral metadata line. */
+/** Date only (no time), used for the PDF's neutral metadata line. */
 function formatDate(time: number): string {
     return new Date(time * 1000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
 }
@@ -71,7 +75,7 @@ function showPrivateInfo() {
                 <p>
                     Une note ordinaire est chiffrée avec une clé que le serveur sait déballer seul : elle s’ouvre sans
                     aucune saisie. Une note <strong>privée</strong> est chiffrée avec la clé dérivée de votre mot de
-                    passe — tant que la session n’est pas déverrouillée, son titre comme son contenu restent illisibles,
+                    passe : tant que la session n’est pas déverrouillée, son titre comme son contenu restent illisibles,
                     y compris pour le serveur.
                 </p>
                 <p>
@@ -167,7 +171,7 @@ export default function NoteEditor() {
     }
 
     // Past ~10 lines of content the compact dialog gets cramped, so the editor
-    // switches — in one step — to a large, feature-sized surface: a fixed tall
+    // switches, in one step, to a large, feature-sized surface: a fixed tall
     // popup whose title and footer stay pinned while only the block list scrolls.
     // It snaps back to the compact size once the content drops below again.
     const lineCount = blocks.reduce(
@@ -241,7 +245,7 @@ export default function NoteEditor() {
                             {/* Une note privée est protégée par le chiffrement, pas par un
                                 contrôle d'accès : son corps passe par la clé emballée par
                                 mot de passe. Dans un espace partagé, cette clé est celle du
-                                propriétaire — la note serait donc illisible pour les autres
+                                propriétaire ; la note serait donc illisible pour les autres
                                 membres, et trompeuse pour son auteur. Le serveur refuse ce
                                 cas ; on n'affiche simplement pas le bouton. */}
                             {isPersonalWorkspace && (

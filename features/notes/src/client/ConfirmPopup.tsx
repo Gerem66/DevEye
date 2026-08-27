@@ -2,8 +2,7 @@ import { useState } from 'react';
 
 import styles from './style.module.css';
 
-import Popup, { ClosePopup } from '@/Components/Popup';
-import Button from '@/Components/Button';
+import { Button, ClosePopup, Popup } from 'deveye-sdk-client';
 
 export const NOTE_CONFIRM_POPUP = 'popup-note-confirm';
 

@@ -198,8 +198,8 @@ export async function registerWS(
             }
 
             // Per-request audit binding: actor, IP and channel are fixed here;
-            // category defaults to the command's prefix (e.g. `note` for
-            // `note.add`) so handlers usually only describe the event.
+            // category defaults to the command's prefix (e.g. `notes` for
+            // `notes.add`) so handlers usually only describe the event.
             //
             // L'espace est estampillé ici plutôt que par chaque handler : toute
             // ligne d'audit devient attribuable à un espace sans qu'aucune

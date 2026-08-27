@@ -27,7 +27,7 @@ export interface FeatureAuditEntry {
     /** Stable dotted event key, e.g. `note.create`. */
     action: string;
     description: string;
-    /** Defaults to the command's prefix (e.g. `note` for `note.add`). */
+    /** Defaults to the command's prefix (e.g. `notes` for `notes.add`). */
     category?: string;
     metadata?: Record<string, unknown> | null;
 }
@@ -254,8 +254,9 @@ export interface FeatureDefinition<Cmd extends string, I extends z.ZodTypeAny, O
      * (`_topics.ts`) est là pour l'attraper avant.
      *
      * `true` déduit le sujet du préfixe de la commande via `COMMAND_PREFIX_TOPIC`
-     * (`note.add` → `notes`, `folder.add` → `notes` aussi, ce sont les dossiers
-     * de notes). Une liste explicite sert aux commandes à double effet.
+     * (`notes.add` → `notes`, et `metrics.*` comme `device.*` → `devices`, la
+     * table corrigeant le préfixe quand il ne dit pas la feature). Une liste
+     * explicite sert aux commandes à double effet.
      *
      * Absent = lecture, ou action sans écriture (`metrics.subscribe`,
      * `secrecy.unlock`, un appel RPC vers un agent).

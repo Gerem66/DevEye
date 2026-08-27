@@ -1,48 +1,58 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    Button,
+    ensureSecrecyUnlocked,
+    humanizeError,
+    invalidate,
+    OpenPopup,
+    TextInput,
+    useActiveWorkspace,
+    useLiveSegment,
+    useResourceVersion,
+    useSecrecy,
+    withSecrecy
+} from 'deveye-sdk-client';
+import type { Note, NoteFolder, NoteSummary } from '../contracts/domain';
 
-import styles from './style.module.css';
-
-import NoteGrid from './NoteGrid';
+import { api } from './api';
+import ArchivePopup, { NOTE_ARCHIVE_POPUP } from './ArchivePopup';
+import ConfirmPopup, { NOTE_CONFIRM_POPUP, type ConfirmInput } from './ConfirmPopup';
+import FolderNamePopup, { FOLDER_NAME_POPUP, type FolderNameInput, type FolderNameResult } from './FolderNamePopup';
 import NoteEditor, {
     NOTE_EDITOR_POPUP,
     type NoteDraft,
     type NoteEditorInput,
     type NoteEditorResult
 } from './NoteEditor';
-import FolderNamePopup, { FOLDER_NAME_POPUP, type FolderNameInput, type FolderNameResult } from './FolderNamePopup';
-import ConfirmPopup, { NOTE_CONFIRM_POPUP, type ConfirmInput } from './ConfirmPopup';
-import ArchivePopup, { NOTE_ARCHIVE_POPUP } from './ArchivePopup';
-import { humanizeError, withSecrecy } from './api';
-
-import { OpenPopup } from '@/Components/Popup';
-import { ws } from '@/api/ws';
-import TextInput from '@/Components/TextInput';
-import Button from '@/Components/Button';
-import { ensureUnlocked as ensureSecrecyUnlocked, useSecrecy } from '@/stores/secrecy';
-import { invalidate, useResourceVersion } from '@/stores/invalidation';
-
-import type { FeatureProps } from '@/Features/types';
-import type { Note, NoteFolder, NoteSummary } from '@deveye/types';
-import { useLiveSegment } from '@/live/useLiveSegment';
+import NoteGrid from './NoteGrid';
+import styles from './style.module.css';
 
 /** The user's manual order; the id only breaks ties. */
 function byOrder(a: NoteSummary, b: NoteSummary): number {
     return a.sortOrder - b.sortOrder || a.id - b.id;
 }
 
-function FeatureNotes({ workspace }: FeatureProps) {
+/**
+ * La vue complète. Aucune prop de l'hôte (`FeatureViewProps` n'en offre
+ * qu'une, `closeFeature`, dont les notes n'ont pas l'usage : la liste
+ * n'est jamais verrouillée, il y a toujours quelque chose à montrer).
+ * L'espace vient du SDK, plus des props : c'est lui qui borne les notes,
+ * et son changement recharge la liste.
+ */
+function Notes() {
+    const workspaceId = useActiveWorkspace()?.id ?? null;
     const [loaded, setLoaded] = useState(false);
     const [search, setSearch] = useState('');
     const [notes, setNotes] = useState<NoteSummary[]>([]);
     const [folders, setFolders] = useState<NoteFolder[]>([]);
     const [actionError, setActionError] = useState<string | null>(null);
-    /** La note ouverte dans l'éditeur — c'est le niveau profond des Notes. */
+    /** La note ouverte dans l'éditeur : c'est le niveau profond des Notes. */
     const [openNoteId, setOpenNoteId] = useState<number | null>(null);
     useLiveSegment('l1', openNoteId === null ? null : String(openNoteId));
     const reloadRef = useRef<Promise<void> | null>(null);
     const draggingRef = useRef<NoteSummary | null>(null);
     // Session lock state, from the store the topbar widget and the unlock prompt
-    // both drive — the single source of truth for "can private notes be read".
+    // both drive: the single source of truth for "can private notes be read".
     const { unlocked } = useSecrecy();
     const wasUnlocked = useRef(unlocked);
 
@@ -51,8 +61,8 @@ function FeatureNotes({ workspace }: FeatureProps) {
         const task = (async () => {
             try {
                 const [notesRes, foldersRes] = await Promise.all([
-                    withSecrecy(() => ws.send('note.list', {})),
-                    ws.send('folder.list', {})
+                    withSecrecy(() => api.send('notes.list', {})),
+                    api.send('notes.folderList', {})
                 ]);
                 setNotes(notesRes.notes);
                 setFolders(foldersRes.folders);
@@ -69,7 +79,7 @@ function FeatureNotes({ workspace }: FeatureProps) {
         } finally {
             reloadRef.current = null;
         }
-    }, [workspace.id]);
+    }, [workspaceId]);
 
     useEffect(() => {
         setLoaded(false);
@@ -80,9 +90,9 @@ function FeatureNotes({ workspace }: FeatureProps) {
     }, [reload]);
 
     /**
-     * Re-list whenever the session flips lock state, wherever that came from —
-     * the topbar padlock, another feature's prompt, or the grace window running
-     * out. Unlocking swaps the padlock placeholders for real titles; re-locking
+     * Re-list whenever the session flips lock state, wherever that came from
+     * (the topbar padlock, another feature's prompt, or the grace window running
+     * out). Unlocking swaps the padlock placeholders for real titles; re-locking
      * masks them again. Only the *transition* triggers a fetch, and `reload`
      * de-duplicates, so the explicit refresh in {@link revealPrivate} costs
      * nothing extra.
@@ -97,11 +107,12 @@ function FeatureNotes({ workspace }: FeatureProps) {
      * Une note écrite par quelqu'un d'autre apparaît sans recharger.
      *
      * Le serveur diffusait déjà le sujet `notes` après chaque écriture, et la
-     * clé était bien invalidée — personne ne l'écoutait. Sans danger pour le
-     * verrou : `note.list` ne lit que la clé ouverte (voir `withSecrecy`), donc
-     * cette relecture ne peut pas faire surgir une demande de mot de passe.
+     * clé était bien invalidée ; personne ne l'écoutait. Sans danger pour le
+     * verrou : `notes.list` ne lit que la clé ouverte (les notes privées y
+     * reviennent masquées), donc cette relecture ne peut pas faire surgir une
+     * demande de mot de passe.
      */
-    const listVersion = useResourceVersion('note.list');
+    const listVersion = useResourceVersion('notes.list');
     useEffect(() => {
         if (listVersion === 0) return;
         void reload();
@@ -119,18 +130,18 @@ function FeatureNotes({ workspace }: FeatureProps) {
         async (existing: Note | null, draft: NoteDraft) => {
             try {
                 if (existing) {
-                    const res = await withSecrecy(() => ws.send('note.edit', { noteId: existing.id, note: draft }));
+                    const res = await withSecrecy(() => api.send('notes.edit', { noteId: existing.id, note: draft }));
                     upsert(res.note);
                 } else {
-                    const res = await withSecrecy(() => ws.send('note.add', { note: draft }));
+                    const res = await withSecrecy(() => api.send('notes.add', { note: draft }));
                     upsert(res.note);
-                    invalidate('note.count');
+                    invalidate('notes.count');
                 }
             } catch (e) {
                 setActionError(humanizeError(e, 'Enregistrement impossible.'));
             }
         },
-        [workspace.id, upsert]
+        [workspaceId, upsert]
     );
 
     /** Open the editor to create a note (optionally pre-filed) or edit one. */
@@ -141,7 +152,7 @@ function FeatureNotes({ workspace }: FeatureProps) {
             let existing: Note | null = null;
             if (summary) {
                 try {
-                    const res = await withSecrecy(() => ws.send('note.get', { noteId: summary.id }));
+                    const res = await withSecrecy(() => api.send('notes.get', { noteId: summary.id }));
                     existing = res.note;
                 } catch (e) {
                     setActionError(humanizeError(e, 'Impossible d’ouvrir la note.'));
@@ -158,13 +169,13 @@ function FeatureNotes({ workspace }: FeatureProps) {
             if (result === null) return;
 
             // Deletion is already confirmed inside the editor (popup over it), so
-            // 'delete' here means "go ahead" — and it archives rather than
+            // 'delete' here means "go ahead", and it archives rather than
             // destroys; the archive popup owns the irreversible step.
             if (result === 'delete' && existing) {
                 try {
-                    await withSecrecy(() => ws.send('note.archive', { noteId: existing!.id }));
+                    await withSecrecy(() => api.send('notes.archive', { noteId: existing!.id }));
                     setNotes((prev) => prev.filter((n) => n.id !== existing!.id));
-                    invalidate('note.count');
+                    invalidate('notes.count');
                 } catch (e) {
                     setActionError(humanizeError(e, 'Archivage impossible.'));
                 }
@@ -173,7 +184,7 @@ function FeatureNotes({ workspace }: FeatureProps) {
 
             if (typeof result === 'object') await saveDraft(existing, result);
         },
-        [workspace.id, saveDraft]
+        [workspaceId, saveDraft]
     );
 
     /**
@@ -183,7 +194,7 @@ function FeatureNotes({ workspace }: FeatureProps) {
      *
      * The refresh stays explicit rather than leaning on the lock-state effect
      * above: in "validate on every action" mode the session is never held
-     * unlocked, so there is no transition to react to — the DEK only lives long
+     * unlocked, so there is no transition to react to; the DEK only lives long
      * enough to serve the request this reload issues.
      */
     const revealPrivate = useCallback(async (): Promise<void> => {
@@ -191,7 +202,7 @@ function FeatureNotes({ workspace }: FeatureProps) {
         try {
             await ensureSecrecyUnlocked();
         } catch {
-            return; // prompt dismissed — leave the masked cards as they are
+            return; // prompt dismissed: leave the masked cards as they are
         }
         await reload();
     }, [reload]);
@@ -217,13 +228,13 @@ function FeatureNotes({ workspace }: FeatureProps) {
         setActionError(null);
         const changed = await OpenPopup<boolean>(NOTE_ARCHIVE_POPUP);
         if (changed === true) {
-            invalidate('note.count');
+            invalidate('notes.count');
             await reload();
         }
-    }, [workspace.id, reload]);
+    }, [workspaceId, reload]);
 
     /**
-     * Drop `dragged` into `folderId` at `index` — the single primitive behind
+     * Drop `dragged` into `folderId` at `index`: the single primitive behind
      * both drag & drop and the card's "Déplacer vers" menu (which appends).
      * Positions are entirely manual, so this is the only thing that reorders.
      *
@@ -252,13 +263,13 @@ function FeatureNotes({ workspace }: FeatureProps) {
                 })
             );
             try {
-                await ws.send('note.reorder', { folderId, noteIds });
+                await api.send('notes.reorder', { folderId, noteIds });
             } catch (e) {
                 setNotes(previous);
                 setActionError(humanizeError(e, 'Déplacement impossible.'));
             }
         },
-        [notes, workspace.id]
+        [notes, workspaceId]
     );
 
     /** Menu shortcut: send a note to the end of another folder. */
@@ -275,12 +286,12 @@ function FeatureNotes({ workspace }: FeatureProps) {
         const name = await OpenPopup<FolderNameResult>(FOLDER_NAME_POPUP, { name: '', mode: 'add' } as FolderNameInput);
         if (!name) return;
         try {
-            const res = await ws.send('folder.add', { name });
+            const res = await api.send('notes.folderAdd', { name });
             setFolders((prev) => [...prev, res.folder]);
         } catch (e) {
             setActionError(humanizeError(e, 'Création du dossier impossible.'));
         }
-    }, [workspace.id]);
+    }, [workspaceId]);
 
     const renameFolder = useCallback(
         async (folder: NoteFolder) => {
@@ -291,13 +302,13 @@ function FeatureNotes({ workspace }: FeatureProps) {
             } as FolderNameInput);
             if (!name || name === folder.name) return;
             try {
-                const res = await ws.send('folder.rename', { folderId: folder.id, name });
+                const res = await api.send('notes.folderRename', { folderId: folder.id, name });
                 setFolders((prev) => prev.map((f) => (f.id === folder.id ? res.folder : f)));
             } catch (e) {
                 setActionError(humanizeError(e, 'Renommage impossible.'));
             }
         },
-        [workspace.id]
+        [workspaceId]
     );
 
     const deleteFolder = useCallback(
@@ -310,14 +321,14 @@ function FeatureNotes({ workspace }: FeatureProps) {
             } as ConfirmInput);
             if (ok !== true) return;
             try {
-                await ws.send('folder.delete', { folderId: folder.id });
+                await api.send('notes.folderDelete', { folderId: folder.id });
                 setFolders((prev) => prev.filter((f) => f.id !== folder.id));
                 setNotes((prev) => prev.map((n) => (n.folderId === folder.id ? { ...n, folderId: null } : n)));
             } catch (e) {
                 setActionError(humanizeError(e, 'Suppression du dossier impossible.'));
             }
         },
-        [workspace.id]
+        [workspaceId]
     );
 
     /**
@@ -376,14 +387,14 @@ function FeatureNotes({ workspace }: FeatureProps) {
             const renumbered = ordered.map((f, idx) => ({ ...f, sortOrder: idx }));
             setFolders(renumbered);
             try {
-                const res = await ws.send('folder.reorder', { folderIds: ordered.map((f) => f.id) });
+                const res = await api.send('notes.folderReorder', { folderIds: ordered.map((f) => f.id) });
                 setFolders(res.folders);
             } catch (e) {
                 setFolders(previous);
                 setActionError(humanizeError(e, 'Réorganisation impossible.'));
             }
         },
-        [folders, workspace.id]
+        [folders, workspaceId]
     );
 
     /** A card was released over a gap: the grid tells us which, we know what. */
@@ -584,4 +595,4 @@ function toSummary(note: Note): NoteSummary {
     };
 }
 
-export default FeatureNotes;
+export default Notes;

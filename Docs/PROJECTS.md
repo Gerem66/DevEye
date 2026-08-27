@@ -290,7 +290,7 @@ marchent jamais dessus : le menu ne propose que ce qui est absent de la barre.
 ### Le filet de démarrage ne couvre pas ce module
 
 `MUTATION_VERB` (`src/features/_topics.ts`) cherche un verbe **juste après le
-point** (`note.add`). Les commandes d'ici sont en camelCase sous un préfixe
+point** (`notes.add`). Les commandes d'ici sont en camelCase sous un préfixe
 unique (`project.cardAdd`) : **il n'en verra aucune**. Un `mutates` oublié ne
 produira donc aucun avertissement au démarrage, et la donnée restera figée chez
 les autres membres jusqu'au rechargement.

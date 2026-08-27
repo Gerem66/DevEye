@@ -178,7 +178,7 @@ correction. Le rafraîchissement périodique est suspendu pendant un drag, sinon
 la liste se réordonnerait sous le curseur.
 
 **Contrairement aux notes, le glisser-déposer n'utilise pas l'API HTML5
-`draggable`** (`Features/Notes/NoteGrid`) mais les **Pointer Events**
+`draggable`** (`features/notes/src/client/NoteGrid`) mais les **Pointer Events**
 (`pointerdown`/`pointermove`/`pointerup` sur `window`, avec un seuil de 6 px
 avant qu'une pression ne devienne un drag plutôt qu'un clic). L'API native
 confie la géométrie du geste au navigateur, et sur Chromium/Linux une session

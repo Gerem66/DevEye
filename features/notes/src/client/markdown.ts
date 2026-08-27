@@ -1,4 +1,4 @@
-import { noteColorSchema, type NoteColor } from '@deveye/types';
+import { noteColorSchema, type NoteColor } from '../contracts/domain';
 
 /**
  * Tiny inline-markdown engine shared by the note editor (live rendering), the
@@ -10,7 +10,7 @@ import { noteColorSchema, type NoteColor } from '@deveye/types';
  *  - `__underline__`   → underline
  *  - `~~strike~~`      → strikethrough
  *  - `{c:red}…{/c}`    → coloured text (name ∈ noteColorSchema); rendered with
- *    the `--note-<name>` theme token. Unlike the emphasis marks it carries a
+ *    the `--note-<name>` palette token. Unlike the emphasis marks it carries a
  *    parameter (the colour) and nests properly (recolouring a sub-range works),
  *    so it is matched with an explicit open/close + depth count.
  *
@@ -33,7 +33,7 @@ const DELIMITERS: { delim: string; mark: InlineMark }[] = [
     { delim: '*', mark: 'italic' }
 ];
 
-/** The markdown markers, longest first — used to wrap a selection from the toolbar. */
+/** The markdown markers, longest first, used to wrap a selection from the toolbar. */
 export const MARK_DELIMITERS: Record<InlineMark, string> = {
     bold: '**',
     underline: '__',
@@ -58,7 +58,7 @@ export function stripColorMarkers(input: string): string {
 /**
  * Strip the (innermost) colour pair whose content encloses caret `pos`, if any,
  * returning the new text and the caret shifted for the removed opening marker.
- * Null when the caret isn't inside a coloured run — lets "Défaut" clear the
+ * Null when the caret isn't inside a coloured run, lets "Défaut" clear the
  * colour of the run under a collapsed caret without touching anything else.
  */
 export function removeEnclosingColor(input: string, pos: number): { text: string; caret: number } | null {
@@ -216,7 +216,7 @@ function nodesToHtml(nodes: InlineNode[]): string {
         .join('');
 }
 
-/** Render markdown to clean semantic HTML (markers removed) — used by the PDF. */
+/** Render markdown to clean semantic HTML (markers removed), used by the PDF. */
 export function inlineToHtml(input: string): string {
     return nodesToHtml(parseInline(input));
 }
@@ -225,7 +225,7 @@ function nodesToPlain(nodes: InlineNode[]): string {
     return nodes.map((n) => (n.type === 'text' ? n.text : nodesToPlain(n.children))).join('');
 }
 
-/** Strip all inline markers, leaving plain text — used by previews. */
+/** Strip all inline markers, leaving plain text, used by previews. */
 export function stripInline(input: string): string {
     return nodesToPlain(parseInline(input));
 }

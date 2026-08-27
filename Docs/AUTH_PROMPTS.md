@@ -36,7 +36,7 @@ l'ouvrait et il ne protégeait rien : la protection réelle est le chiffrement.
 Les notes n'ont plus de mot de passe par note : une note marquée « privée » est
 simplement chiffrée avec la DEK gardée au lieu de la DEK ouverte
 (cf. `SECURITY_MODEL.md`). Elle réutilise donc **le prompt n°1** —
-via `withSecrecy()` sur `note.get`/`add`/`edit`/`delete`, ou explicitement via le
+via `withSecrecy()` sur `notes.get`/`add`/`edit`/`delete`, ou explicitement via le
 bouton « Déchiffrer » de la liste (`ensureUnlocked()` puis re-listage).
 
 Les popups `popup-note-lock` / `-lock-set` / `-lock-manage` et l'ancien système

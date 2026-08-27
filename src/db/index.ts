@@ -25,8 +25,6 @@ import {
     type BaselineRepo,
     type FindingsRepo
 } from './repos/sentinel';
-import { noteFoldersRepo, type NoteFoldersRepo } from './repos/noteFolders';
-import { notesRepo, type NotesRepo } from './repos/notes';
 import { projectsRepo, type ProjectsRepo } from './repos/projects';
 import { projectRekeyRepo, type ProjectRekeyRepo } from './repos/projectRekey';
 import { projectBoardRepo, type ProjectBoardRepo } from './repos/projectBoard';
@@ -72,7 +70,6 @@ export interface Database {
     userInvites: UserInvitesRepo;
     refreshTokens: RefreshTokensRepo;
     logs: LogsRepo;
-    notes: NotesRepo;
     projects: ProjectsRepo;
     projectRekey: ProjectRekeyRepo;
     projectBoard: ProjectBoardRepo;
@@ -101,7 +98,6 @@ export interface Database {
     /** Les entonnoirs : des lectures des événements, jamais une collecte à part. */
     audienceFunnels: AudienceFunnelsRepo;
     projectLinks: ProjectLinksRepo;
-    noteFolders: NoteFoldersRepo;
     devices: DevicesRepo;
     linkCodes: LinkCodesRepo;
     metrics: MetricsRepo;
@@ -137,7 +133,6 @@ export function createDatabase(q: Queryable): Database {
         userInvites: userInvitesRepo(q),
         refreshTokens: refreshTokensRepo(q),
         logs: logsRepo(q),
-        notes: notesRepo(q),
         projects: projectsRepo(q),
         projectRekey: projectRekeyRepo(q),
         projectBoard: projectBoardRepo(q),
@@ -153,7 +148,6 @@ export function createDatabase(q: Queryable): Database {
         audienceIngest: audienceIngestRepo(q),
         audienceFunnels: audienceFunnelsRepo(q),
         projectLinks: projectLinksRepo(q),
-        noteFolders: noteFoldersRepo(q),
         devices: devicesRepo(q),
         linkCodes: linkCodesRepo(q),
         metrics: metricsRepo(q),

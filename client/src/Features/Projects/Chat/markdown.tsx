@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
  * Le peu de markdown qu'un message de discussion mérite.
  *
  * Quatre marques en ligne et trois sortes de blocs, pas davantage : on écrit ici
- * des phrases et des listes de points, pas des documents. `Features/Notes` a son
+ * des phrases et des listes de points, pas des documents. `features/notes` a son
  * propre moteur, plus riche (couleurs, barré) — il n'est pas réutilisé pour deux
  * raisons : il rend des **chaînes HTML**, et il lit `_` en paire double.
  *

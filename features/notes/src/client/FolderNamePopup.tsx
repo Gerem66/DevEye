@@ -2,11 +2,9 @@ import { useState } from 'react';
 
 import styles from './style.module.css';
 
-import Popup, { ClosePopup } from '@/Components/Popup';
-import Button from '@/Components/Button';
-import TextInput from '@/Components/TextInput';
+import { Button, ClosePopup, Popup, TextInput } from 'deveye-sdk-client';
 
-import { NOTE_FOLDER_MAX_LENGTH } from '@deveye/types';
+import { NOTE_FOLDER_MAX_LENGTH } from '../contracts/domain';
 
 export const FOLDER_NAME_POPUP = 'popup-folder-name';
 

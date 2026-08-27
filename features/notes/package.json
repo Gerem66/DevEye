@@ -1,0 +1,20 @@
+{
+  "name": "deveye-feature-notes",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Notes et dossiers, au format module : la cinquième native rapatriée sur le SDK des features, à cheval sur les deux étages du chiffrement.",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server/index.ts",
+    "./client": "./src/client/index.tsx",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@deveye/types": ">=0.15.2",
+    "react": "^19.0.0",
+    "zod": "^4.0.0"
+  }
+}

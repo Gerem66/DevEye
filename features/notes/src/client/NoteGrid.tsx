@@ -4,7 +4,7 @@ import styles from './style.module.css';
 
 import NoteCard from './NoteCard';
 
-import type { NoteFolder, NoteSummary } from '@deveye/types';
+import type { NoteFolder, NoteSummary } from '../contracts/domain';
 
 interface NoteGridProps {
     /** One folder's notes, already in the user's order. */
@@ -32,7 +32,7 @@ function halfGap(grid: HTMLElement): number {
  * positions notes.
  *
  * The whole grid is the drop target (events bubble up from the cards), and the
- * landing spot is shown as a bar standing in the gap the note would fall into —
+ * landing spot is shown as a bar standing in the gap the note would fall into,
  * the cards themselves are never restyled or moved, so what you see is exactly
  * where it lands.
  *
@@ -79,7 +79,7 @@ export default function NoteGrid({
 
             // Every gap is "just ahead of" something: the card the note would land
             // before, or the add card when it lands at the end. Anchoring on a
-            // single, always-leading edge is what keeps the bar centred — measuring
+            // single, always-leading edge is what keeps the bar centred, measuring
             // the last card's *trailing* edge instead would offset it by a gap.
             const anchor = cardEls()[index] ?? grid.querySelector<HTMLElement>('[data-add-card]');
             if (!anchor) return;
@@ -103,7 +103,7 @@ export default function NoteGrid({
 
     /**
      * Gap nearest to the pointer. Both vertical edges of every card are candidate
-     * gaps, picked by plain distance — which handles a wrapping grid without
+     * gaps, picked by plain distance, which handles a wrapping grid without
      * having to reason about rows.
      */
     const gapAt = useCallback(

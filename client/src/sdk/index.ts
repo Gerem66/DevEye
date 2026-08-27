@@ -71,7 +71,12 @@ export { useFeatureLifecycle } from '@/Features/useFeatureLifecycle';
 // une fois après déverrouillage ». C'est la surface qu'exige toute feature
 // dont une commande peut répondre `locked` (contrats en `'private'` côté
 // serveur) ; OSINT est la première migrée à s'en servir.
-export { ensureUnlocked as ensureSecrecyUnlocked, UnlockCancelledError, useSecrecy, withSecrecy } from '@/stores/secrecy';
+export {
+    ensureUnlocked as ensureSecrecyUnlocked,
+    UnlockCancelledError,
+    useSecrecy,
+    withSecrecy
+} from '@/stores/secrecy';
 export type { SecrecyState } from '@/stores/secrecy';
 
 /**

@@ -5,9 +5,9 @@
 > [DevEye-Feature-Template](https://github.com/Gerem66/DevEye-Feature-Template)
 > (doc anglaise complète) côté développeur, [FEATURE_SDK.md](./FEATURE_SDK.md)
 > côté mainteneur. La checklist ci-dessous reste celle du chemin **natif
-> historique**, encore suivi par onze features sur seize (Météo, OSINT,
-> Finances et le Coffre sont passés au format module dans `features/*`,
-> CloudSync en module privé).
+> historique**, encore suivi par dix features sur seize (Météo, OSINT,
+> Finances, le Coffre et les Notes sont passés au format module dans
+> `features/*`, CloudSync en module privé).
 
 Ce document liste **tout** ce qu'implique l'ajout d'une fonctionnalité dans DevEye,
 dans l'ordre, à travers les trois bases de code. Suis-le de haut en bas pour ne
@@ -16,7 +16,7 @@ rien oublier.
 > **Deux types de « feature » à ne pas confondre :**
 >
 > - **Feature-commande** (la plupart) : une ou plusieurs commandes WebSocket
->   (`note.add`, `password.list`, `logs.list`…) dispatchées par le serveur, avec
+>   (`uptime.add`, `device.list`, `logs.list`…) dispatchées par le serveur, avec
 >   éventuellement une UI (widget de la grille d'accueil ou page de la topbar).
 > - **Page structurelle** : un écran qui fait partie de DevEye lui-même (Profil,
 >   Sécurité, Logs), atteint depuis le menu de la topbar, **sans** carte sur la
@@ -103,7 +103,7 @@ handler })` par commande. Le handler reçoit un `FeatureContext` (`ctx.db`,
    couleurs en dur). UI en **français**.
     - Pattern déverrouillage : envelopper les appels chiffrés dans un helper qui
       intercepte l'erreur `locked` et relance après `ensureSecrecyUnlocked()`
-      (voir `Features/Notes/index.tsx → withSecrecy`).
+      (`withSecrecy` du barrel `deveye-sdk-client`, porté par `stores/secrecy.ts`).
 2. **Popups & dialogues** — toujours `Dialog` (statique) ou `Popup` +
    `OpenPopup`/`ClosePopup` (impératif, request→response). Jamais de modale
    maison. Comportements **unifiés, fournis par `Dialog`** — ne pas les
@@ -145,9 +145,9 @@ handler })` par commande. Le handler reçoit un `FeatureContext` (`ctx.db`,
    action de la feature change cette donnée (ajout/suppression), appeler
    `invalidate('<clé>')` (`@/stores/invalidation`) **juste après l'appel WS
    réussi** ; tout widget lisant cette clé via `useResourceVersion` re-fetch
-   aussitôt. La clé est par convention la commande de comptage (`note.count`,
-   `password.count`) et doit figurer dans `ResourceKey`. Invalider **à la source
-   de la mutation**, pas au cycle de vie du popup. Exemple : `Features/Notes/index.tsx`.
+   aussitôt. La clé est par convention la commande de comptage (`audience.count`,
+   `git.count`) et doit figurer dans `ResourceKey`. Invalider **à la source
+   de la mutation**, pas au cycle de vie du popup. Exemple : `Features/Audience/SiteDialog.tsx`.
 
 ---
 

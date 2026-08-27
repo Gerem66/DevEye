@@ -187,7 +187,7 @@ CommitGraph.tsx  CommitDialog.tsx  PullRequestDialog.tsx  GitWidget.tsx
 ### Le filet de démarrage ne couvre pas ce module
 
 `MUTATION_VERB` (`src/features/_topics.ts`) cherche un verbe **juste après le
-point** (`note.add`). Les commandes d'ici sont en camelCase sous un préfixe
+point** (`notes.add`). Les commandes d'ici sont en camelCase sous un préfixe
 unique (`git.repoAdd`) : **il n'en verra aucune**, exactement comme pour les
 projets. Un `mutates` oublié ne produira donc aucun avertissement.
 

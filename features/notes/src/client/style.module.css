@@ -1,3 +1,37 @@
+/*
+ * La palette des notes : les couleurs qu'un utilisateur choisit pour un texte
+ * (`{c:red}…{/c}` dans un bloc) ou un marqueur (`color` d'une puce, d'un
+ * ordinal, d'une case, d'un filet). Ce n'est pas le thème (l'accent, les
+ * surfaces) : c'est une donnée de la feature, dont les noms sont ceux de
+ * `noteColorSchema` (contracts/domain.ts). Elle vit donc ici, avec la
+ * feature, et non dans Styles/theme.css.
+ *
+ * Sur `:root` (un module CSS ne hache que les classes), parce que l'éditeur
+ * s'ouvre dans un Popup porté hors de `.container`, et que l'export PDF relit
+ * ces jetons sur `document.documentElement` pour les recopier dans son
+ * document isolé. Réglée pour rester lisible sur les surfaces de verre
+ * sombres ; l'app n'a pas de thème clair, donc pas de variante.
+ *
+ * Les jetons `--note-print-*` sont l'encre du document imprimé : du papier
+ * blanc, donc PAS les jetons du thème sombre. Seule source des couleurs de
+ * `exportPdf.ts`, qui les relit de la même façon que la palette.
+ */
+:root {
+    --note-red: #ff6b81;
+    --note-orange: #ffa64d;
+    --note-yellow: #ffd54a;
+    --note-green: #38d9a9;
+    --note-blue: #4da8ff;
+    --note-purple: #b088ff;
+
+    --note-print-ink: #1d1d1f;
+    --note-print-muted: #6a6a70;
+    --note-print-faint: #a0a0a6;
+    --note-print-meta: #9a9a9f;
+    --note-print-rule: #e4e4e8;
+    --note-print-rule-soft: #ededf1;
+}
+
 .container {
     display: flex;
     flex-direction: column;
@@ -233,7 +267,7 @@
     height: 30px;
 }
 
-/* Masked (private + locked) note: centered column — a large padlock with a
+/* Masked (private + locked) note: centered column, a large padlock with a
    small label beneath, and nothing else to give the content away. */
 .cardMasked {
     cursor: pointer;
@@ -619,8 +653,8 @@
 }
 
 /* Row chrome (grip, checkbox, markers, delete) lives inside the editable host
-   but is none of the note's text: `user-select: none` — with the elements'
-   `contentEditable={false}` — keeps it out of any selection, so dragging across
+   but is none of the note's text: `user-select: none`, with the elements'
+   `contentEditable={false}`, keeps it out of any selection, so dragging across
    rows selects the text alone and copying it never picks up an affordance. */
 .blockGrip,
 .checkButton,
@@ -838,7 +872,7 @@
 
 /* Divider block. The visible rule is slim, but it sits inside a taller,
    pointer-cursor hit area (`.dividerHit`) so it is easy to click-select for
-   colouring — a bare 1px line is nearly impossible to hit. */
+   colouring, a bare 1px line is nearly impossible to hit. */
 .dividerHit {
     flex: 1 1 auto;
     align-self: stretch;
@@ -880,7 +914,7 @@
 /* Coloured run: the tint itself is applied inline (via the --note-<name> token);
    this class only marks the span. */
 .mdColor {
-    /* intentionally empty — colour comes from the inline style */
+    /* intentionally empty, colour comes from the inline style */
 }
 
 /* Divider selected for colouring (it has no caret to show it's targeted): a

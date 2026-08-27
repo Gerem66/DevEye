@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import styles from './style.module.css';
 import { stripInline } from './markdown';
 
-import type { NoteFolder, NoteSummary } from '@deveye/types';
-import { useLiveOutline } from '@/live/useLiveOutline';
+import type { NoteFolder, NoteSummary } from '../contracts/domain';
+import { useLiveOutline } from 'deveye-sdk-client';
 
 /**
  * Compact "last modified" label for a card corner: a short numeric date, or the
@@ -32,10 +32,10 @@ interface NoteCardProps {
 
 /**
  * A single note preview. A `masked` note (private, session still locked) shows
- * only a large padlock — no title or body ever reached the client; clicking it
+ * only a large padlock (no title or body ever reached the client); clicking it
  * opens the master-password prompt.
  *
- * Cards are drag sources only — the surrounding {@link NoteGrid} owns the drop
+ * Cards are drag sources only: the surrounding {@link NoteGrid} owns the drop
  * side, so a card is never restyled or displaced while a drag is in flight.
  * Masked cards drag too: positioning never touches the body. The discreet folder
  * menu stays for long-distance moves (it appends to the target folder); at rest
@@ -78,7 +78,7 @@ export default function NoteCard({ note, folders, draggable, onOpen, onMove, onD
                 type='button'
                 className={`${styles.card} ${styles.cardMasked}`}
                 onClick={() => onOpen(note)}
-                aria-label='Note privée — déchiffrer'
+                aria-label='Note privée, déchiffrer'
                 {...dnd}
             >
                 <span className={`icon ${styles.maskedIcon} icon-lock`} />

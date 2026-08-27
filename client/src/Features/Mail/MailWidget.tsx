@@ -7,7 +7,7 @@ import styles from './style.module.css';
 /**
  * Compact dashboard card: number of configured mail accounts. Backed by
  * `mail.accountCount`, clear metadata with no unlock gate — same "always
- * renders a number" discipline as `password.count`/`note.count`, just not
+ * renders a number" discipline as `password.count`/`notes.count`, just not
  * workspace-scoped (Mail accounts are personal-only in V1).
  */
 export function MailWidget() {

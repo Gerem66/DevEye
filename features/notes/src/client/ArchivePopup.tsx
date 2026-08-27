@@ -2,14 +2,12 @@ import { useCallback, useRef, useState } from 'react';
 
 import styles from './style.module.css';
 
-import Popup, { ClosePopup, OpenPopup } from '@/Components/Popup';
-import Button from '@/Components/Button';
-import { ws } from '@/api/ws';
-import { humanizeError, withSecrecy } from './api';
+import { Button, ClosePopup, humanizeError, OpenPopup, Popup, withSecrecy } from 'deveye-sdk-client';
+import { api } from './api';
 import { stripInline } from './markdown';
 import { NOTE_CONFIRM_POPUP, type ConfirmInput } from './ConfirmPopup';
 
-import type { NoteSummary } from '@deveye/types';
+import type { NoteSummary } from '../contracts/domain';
 
 export const NOTE_ARCHIVE_POPUP = 'popup-note-archives';
 
@@ -26,8 +24,8 @@ function formatArchivedAt(time: number): string {
 
 /**
  * The archive: notes removed from the main list but not destroyed. Each row can
- * be restored or, only from here, deleted for good — the two-step the server
- * enforces (`note.delete` refuses an active note).
+ * be restored or, only from here, deleted for good: the two-step the server
+ * enforces (`notes.delete` refuses an active note).
  *
  * Owns its own fetch rather than receiving the list, so the archive stays a
  * self-contained view. Resolves OpenPopup with `true` when anything changed, so
@@ -43,7 +41,7 @@ export default function ArchivePopup() {
     const load = useCallback(async () => {
         setLoaded(false);
         try {
-            const res = await withSecrecy(() => ws.send('note.list', { archived: true }));
+            const res = await withSecrecy(() => api.send('notes.list', { archived: true }));
             setNotes(res.notes);
         } catch (e) {
             setNotes([]);
@@ -73,7 +71,7 @@ export default function ArchivePopup() {
     async function restore(note: NoteSummary) {
         setError(null);
         try {
-            await withSecrecy(() => ws.send('note.restore', { noteId: note.id }));
+            await withSecrecy(() => api.send('notes.restore', { noteId: note.id }));
             forget(note.id);
         } catch (e) {
             setError(humanizeError(e, 'Restauration impossible.'));
@@ -89,7 +87,7 @@ export default function ArchivePopup() {
         } as ConfirmInput);
         if (ok !== true) return;
         try {
-            await withSecrecy(() => ws.send('note.delete', { noteId: note.id }));
+            await withSecrecy(() => api.send('notes.delete', { noteId: note.id }));
             forget(note.id);
         } catch (e) {
             setError(humanizeError(e, 'Suppression impossible.'));

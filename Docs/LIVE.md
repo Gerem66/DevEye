@@ -177,9 +177,8 @@ defineFeature({ ...uptimeAdd, mutates: true, handler: … })
 ```
 
 219 commandes sur 394 (au 21 août 2026). Le sujet est déduit du préfixe **via une table explicite**
-(`src/features/_topics.ts`), jamais du préfixe brut : `folder.*` désigne les
-dossiers de *notes*, `metrics.*` et `device.*` désignent tous deux les appareils,
-et six préfixes ne correspondent à aucune feature d'espace. Un préfixe absent de
+(`src/features/_topics.ts`), jamais du préfixe brut : `metrics.*` et `device.*`
+désignent tous deux les appareils, et six préfixes ne correspondent à aucune feature d'espace. Un préfixe absent de
 la table **fait échouer le démarrage**.
 
 ### Le filet, et pourquoi il est porteur

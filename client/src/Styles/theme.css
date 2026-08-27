@@ -50,16 +50,6 @@
   --danger: #ff5370;
   --danger-bg: rgba(255, 83, 112, 0.13);
 
-  /* Note colours — the named palette for text/marker colouring in the Notes
-     feature (`--note-<name>`, mirrored by noteColorSchema in @deveye/types).
-     Tuned to read well on the dark glass surfaces. */
-  --note-red: #ff6b81;
-  --note-orange: #ffa64d;
-  --note-yellow: #ffd54a;
-  --note-green: #38d9a9;
-  --note-blue: #4da8ff;
-  --note-purple: #b088ff;
-
   /* Finance colours : la palette nommée des comptes et des catégories
      (`--finance-<nom>`, miroir de financeColorSchema dans @deveye/types). Huit
      teintes séparées, parce qu'un camembert de catégories en demande plus que
@@ -78,7 +68,8 @@
   /* User colours — l'identité visuelle d'un compte dans la présence en direct
      (`--user-<nom>`, miroir de userColorSchema dans @deveye/types) : son curseur
      chez les autres, sa bulle, la bordure du nœud où il se trouve.
-     Palette distincte de --note-* : huit teintes bien séparées, et surtout
+     Palette distincte de celle des Notes (--note-*, déclarée par le module
+     features/notes, avec sa feature) : huit teintes bien séparées, et surtout
      PAS de cyan — c'est celui de --accent, un curseur de cette couleur se
      lirait comme un élément de l'interface plutôt que comme quelqu'un. */
   --user-red: #ff6b81;

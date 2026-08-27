@@ -7,10 +7,10 @@ import { featureHandlers } from './registry';
  * De quel sujet relève chaque commande, pour que le dispatcheur sache qui
  * avertir après une écriture.
  *
- * **Table explicite, jamais le préfixe brut.** Cinq préfixes au moins seraient
- * faux : `folder.*` désigne les dossiers de *notes*, `metrics.*` et `device.*`
- * désignent tous deux les appareils, et `home`, `workspace`, `user`, `secrecy`,
- * `twofa`, `admin` ne correspondent à aucune feature d'espace. Un préfixe absent
+ * **Table explicite, jamais le préfixe brut.** Plusieurs préfixes seraient
+ * faux : `metrics.*` et `device.*` désignent tous deux les appareils, et
+ * `home`, `workspace`, `user`, `secrecy`, `twofa`, `admin` ne correspondent à
+ * aucune feature d'espace. Un préfixe absent
  * de cette table **fait échouer le démarrage** plutôt que de diffuser un sujet
  * inventé — c'est un contrat, pas une heuristique.
  */
@@ -42,7 +42,6 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     // camelCase derrière le point. Le filet `MUTATION_VERB` n'en voit donc
     // **aucune** ; les `mutates` de cette feature se relisent à la main.
     finance: 'finance',
-    folder: 'notes',
     // Même forme que `project` : préfixe unique, verbes en camelCase derrière le
     // point. Le filet `MUTATION_VERB` plus bas n'en verra donc **aucune** — les
     // `mutates` de cette feature se relisent à la main.
@@ -52,7 +51,12 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     logs: null,
     mail: 'mail',
     metrics: 'devices',
-    note: 'notes',
+    // Préfixe unique depuis le rapatriement en module : les dossiers, qui
+    // avaient le leur (`folder.*`), sont passés en verbes camelCase derrière
+    // le point (`notes.folderAdd`). Le filet `MUTATION_VERB` voit les verbes
+    // simples des notes (`add`, `edit`, `delete`...) mais aucun des dossiers :
+    // leurs `mutates` se relisent à la main.
+    notes: 'notes',
     // Même forme que `git` et `database` : préfixe unique, verbes en camelCase
     // derrière le point. Le filet `MUTATION_VERB` n'en voit donc **aucune** —
     // les `mutates` de cette feature se relisent à la main.

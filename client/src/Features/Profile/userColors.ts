@@ -7,7 +7,8 @@ import type { UserColor } from '@deveye/types';
  * `--user-<nom>` (voir Styles/theme.css) — jamais un hexadécimal ici, pour que
  * la palette reste une source de vérité unique.
  *
- * Même contrat que `Features/Notes/noteColors.ts`, dont ceci est le pendant.
+ * Même contrat que `features/notes/src/client/noteColors.ts`, dont ceci est le
+ * pendant (la palette des notes, elle, vit avec son module).
  */
 export interface UserColorOption {
     value: UserColor;

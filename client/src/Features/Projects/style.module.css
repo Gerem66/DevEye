@@ -3,7 +3,7 @@
 
 /* La popup fournit une boîte défilante en `flex: 1` ; la racine d'une feature
    doit l'occuper entièrement, sinon son contenu se tasse en haut à gauche.
-   Même contrat que `Features/Notes` (`.container`). */
+   Même contrat que `features/notes/src/client` (`.container`). */
 .root {
     display: flex;
     flex-direction: column;

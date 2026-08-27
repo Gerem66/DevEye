@@ -173,6 +173,34 @@ chiffrement), et `popup-unlock`, le dialogue orphelin de l'accueil qui
 l'appelait. Ses copies locales de `withSecrecy` / `humanizeError` ont rejoint
 celles du barrel, comme annoncé plus haut.
 
+**Les Notes** sont la cinquième native rapatriée (`features/notes`, 27 août
+2026), et la première à cheval sur les deux étages : `ctx.cipher('private')`
+pour le corps d'une note privée, `ctx.cipher()` pour tout le reste (notes
+ordinaires, noms de dossiers), le choix du cipher tenant lieu de contrôle
+d'accès ; `ctx.secrecy.isUnlocked()` ne sert qu'aux écritures sur une note
+privée (édition, archivage, destruction), qui n'ont pas besoin de lire le
+corps mais ne doivent pas écraser ce qu'une session scellée ne voit pas, et à
+masquer la liste (jamais bloquée). Deux tables historiques en allowlist (014
+et 015, complétées jusqu'à la 036), pas de service, pas de réglages ;
+`hasItems` au descripteur, donc `itemSegment` au manifest (la note ouverte,
+par son id nu). Ce que sa migration a décidé : le **renommage franc** de ses
+quatorze commandes sous le seul préfixe `notes.` (le contrat du manifest ;
+`commandPrefix` ne sert qu'à une casse différente du même id), les dossiers
+passant de `folder.*` à des verbes camelCase (`notes.folderAdd`...), et les
+clés de ressources avec elles (`notes.count`, `notes.list`) ; le **`shareTier:
+'never'` déclaré par-dessus le descripteur**, qui dit `'perItem'` (ce que le
+chiffrement autorise) alors que le listage n'est pas branché sur le partage
+(SHARING.md §9 : un graphe dossiers/notes, pas des lignes) et qu'un module qui
+déclare autre chose s'engage à l'être, sous peine de refus au boot ; et la
+**palette des notes en jetons du module** (`--note-<nom>` sur `:root` de son
+`style.module.css`, avec l'encre `--note-print-*` de l'export PDF), retirée de
+`Styles/theme.css` : ce sont les couleurs qu'un utilisateur choisit, une donnée
+de la feature, pas le thème. Sa migration a appris au harnais de test à
+sceller son cipher `'private'` sous `unlocked: false` (`decrypt` lève
+`locked`, `tryDecrypt` rend null, comme le vrai) : c'est le cipher, et non une
+garde, qui refuse `notes.get` sur une note privée scellée, et un test doit
+pouvoir le voir.
+
 L'outillage de migration, à rejouer pour CHAQUE native :
 
 - **Tests de modules** : `npm run test:features` couvre

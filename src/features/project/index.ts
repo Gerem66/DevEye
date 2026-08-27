@@ -48,7 +48,7 @@ import {
  * traduction d'id.
  *
  * ⚠️ Le contrôle de démarrage de `_topics.ts` qui attrape un `mutates` oublié
- * cherche un verbe **juste après le point** (`note.add`). Les commandes d'ici
+ * cherche un verbe **juste après le point** (`notes.add`). Les commandes d'ici
  * sont en camelCase sous un préfixe unique (`project.setStatus`) : il n'en verra
  * aucune. `mutates` est donc à relire à la main sur toute écriture ajoutée ici.
  */

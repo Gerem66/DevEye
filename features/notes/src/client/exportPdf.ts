@@ -1,14 +1,14 @@
+import type { NoteBlock, NoteColor } from '../contracts/domain';
+
 import { inlineToHtml } from './markdown';
 import { NOTE_COLOR_OPTIONS } from './noteColors';
-
-import type { NoteBlock, NoteColor } from '@deveye/types';
 
 /**
  * Export a note to PDF, client-side, with its inline markdown fully rendered.
  *
  * The note is laid out as a clean, typographic document (elegant serif, roomy
  * margins, harmonious spacing) into a hidden iframe, then sent to the browser's
- * print dialog — which offers "Save as PDF". No dependency, real selectable
+ * print dialog, which offers "Save as PDF". No dependency, real selectable
  * text, and the decrypted content never leaves the page (zero-knowledge intact).
  */
 
@@ -27,16 +27,27 @@ function markerStyle(color?: NoteColor): string {
 }
 
 /**
- * `:root` block re-declaring the note colour tokens with their live computed
- * values, so `var(--note-<name>)` resolves inside the isolated print document
- * (which doesn't inherit the app's theme). Keeps theme.css the single source.
+ * The ink of the printed page: white paper, so its own tokens rather than the
+ * dark theme's. Declared next to the note palette in `style.module.css`
+ * (`--note-print-<name>`), the single source of every colour this file uses.
+ */
+const PRINT_TOKENS = ['ink', 'muted', 'faint', 'meta', 'rule', 'rule-soft'] as const;
+
+/**
+ * `:root` block re-declaring the note colour tokens and the print ink tokens
+ * with their live computed values, so `var(--note-<name>)` resolves inside the
+ * isolated print document (which inherits none of the app's stylesheets).
+ * Keeps `style.module.css` the single source.
  */
 function noteColorVarsCss(): string {
     const root = getComputedStyle(document.documentElement);
-    const vars = NOTE_COLOR_OPTIONS.map((o) => {
-        const value = root.getPropertyValue(`--note-${o.value}`).trim() || 'inherit';
-        return `--note-${o.value}: ${value};`;
-    }).join('');
+    const names = [...NOTE_COLOR_OPTIONS.map((o) => o.value), ...PRINT_TOKENS.map((t) => `print-${t}`)];
+    const vars = names
+        .map((name) => {
+            const value = root.getPropertyValue(`--note-${name}`).trim() || 'inherit';
+            return `--note-${name}: ${value};`;
+        })
+        .join('');
     return `:root{${vars}}`;
 }
 
@@ -98,13 +109,13 @@ function blocksToHtml(blocks: NoteBlock[]): string {
     return html;
 }
 
-/* A clean, modern sans-serif stack — system UI fonts, no web download needed. */
+/* A clean, modern sans-serif stack: system UI fonts, no web download needed. */
 const SANS =
     "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif";
 
 /**
  * The print-only stylesheet: a modern sans-serif, generous margins and a sober
- * vertical rhythm. A discreet page number sits bottom-centre — the most neutral,
+ * vertical rhythm. A discreet page number sits bottom-centre, the most neutral,
  * widely accepted convention (supported via CSS page margin boxes in Chrome 131+
  * / Safari 18.2+). The document carries no URL/site chrome, only its own title.
  */
@@ -115,14 +126,14 @@ const STYLE = `
             content: counter(page);
             font-family: ${SANS};
             font-size: 9pt;
-            color: #a0a0a6;
+            color: var(--note-print-faint);
         }
     }
     * { box-sizing: border-box; }
     body {
         margin: 0;
         font-family: ${SANS};
-        color: #1d1d1f;
+        color: var(--note-print-ink);
         font-size: 11pt;
         line-height: 1.6;
         -webkit-font-smoothing: antialiased;
@@ -130,14 +141,14 @@ const STYLE = `
         print-color-adjust: exact;
     }
     .title { font-size: 22pt; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; margin: 0 0 6pt; }
-    .meta { color: #9a9a9f; font-size: 9.5pt; margin: 0; padding-bottom: 16pt; border-bottom: 1px solid #ededf1; }
+    .meta { color: var(--note-print-meta); font-size: 9.5pt; margin: 0; padding-bottom: 16pt; border-bottom: 1px solid var(--note-print-rule-soft); }
     .body { margin-top: 22pt; }
     h1, h2, h3, h4, h5 { font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; margin: 18pt 0 6pt; }
     h1 { font-size: 17pt; }
     h2 { font-size: 14.5pt; }
     h3 { font-size: 12.5pt; }
     h4 { font-size: 11.5pt; }
-    h5 { font-size: 10pt; text-transform: uppercase; letter-spacing: 0.06em; color: #6a6a70; }
+    h5 { font-size: 10pt; text-transform: uppercase; letter-spacing: 0.06em; color: var(--note-print-muted); }
     .body > :first-child { margin-top: 0; }
     p { margin: 0 0 9pt; }
     ul, ol { margin: 0 0 9pt; padding-left: 1.4em; }
@@ -145,9 +156,9 @@ const STYLE = `
     li::marker { color: var(--li-marker, currentColor); }
     ul.checks { list-style: none; padding-left: 0; }
     ul.checks li { display: flex; gap: 9px; align-items: baseline; }
-    ul.checks .box { font-size: 12pt; line-height: 1; color: #6a6a70; }
-    ul.checks li.done span:last-child { color: #a0a0a6; text-decoration: line-through; }
-    hr { border: none; border-top: 1px solid #e4e4e8; margin: 18pt 0; }
+    ul.checks .box { font-size: 12pt; line-height: 1; color: var(--note-print-muted); }
+    ul.checks li.done span:last-child { color: var(--note-print-faint); text-decoration: line-through; }
+    hr { border: none; border-top: 1px solid var(--note-print-rule); margin: 18pt 0; }
     strong { font-weight: 700; }
     em { font-style: italic; }
     u { text-decoration: underline; }

@@ -1,4 +1,4 @@
-import type { NoteBlock } from '@deveye/types';
+import type { NoteBlock } from '../contracts/domain';
 
 import type { BlockPoint, BlockRange } from './selection';
 
@@ -6,7 +6,7 @@ import type { BlockPoint, BlockRange } from './selection';
  * The note body's editing primitives: pure functions from a block list (plus a
  * caret or a selection) to the next block list and where the caret lands.
  *
- * Keeping them here — free of DOM and of React — is what lets the editor stay a
+ * Keeping them here, free of DOM and of React, is what lets the editor stay a
  * thin layer: read the selection, call one of these, commit the result. It is
  * also what makes undo trivial, since every edit produces a fresh list.
  */
@@ -27,7 +27,7 @@ export function textOf(block: NoteBlock): string {
 }
 
 /** A block's text replaced, its kind and attributes (done, colour…) preserved.
- *  Only meaningful for editable blocks — a divider carries no text. */
+ *  Only meaningful for editable blocks, a divider carries no text. */
 function withText(block: NoteBlock, text: string): NoteBlock {
     return { ...block, text } as NoteBlock;
 }
@@ -57,7 +57,7 @@ function siblingBlock(b: NoteBlock, text: string): NoteBlock {
  * Replace everything the selection covers with `insert`.
  *
  * Blocks entirely inside the range vanish; the partial ends are stitched into a
- * single block that keeps the *first* one's kind — select from mid-A through
+ * single block that keeps the *first* one's kind, select from mid-A through
  * mid-D and what remains is A's head followed by D's tail, still an A. A divider
  * touched by such a range is atomic, so it goes with it.
  *
@@ -112,7 +112,7 @@ export function mergeBackward(blocks: NoteBlock[], index: number): Edit | null {
     };
 }
 
-/** Pull the next block into this one (Delete at its very end) — the same merge,
+/** Pull the next block into this one (Delete at its very end), the same merge,
  *  seen from the block above. */
 export function mergeForward(blocks: NoteBlock[], index: number): Edit | null {
     return index < blocks.length - 1 ? mergeBackward(blocks, index + 1) : null;
@@ -138,7 +138,7 @@ export function demote(blocks: NoteBlock[], index: number): Edit {
 /**
  * Markdown-ish prefix that turns a paragraph into a checklist item as soon as
  * it is typed at the very start of a line: `[]`, `[ ]`, `- []`, `- [ ]`
- * (optionally followed by a space). Only the prefix is stripped — any text
+ * (optionally followed by a space). Only the prefix is stripped, any text
  * already on the line is preserved as the item's content.
  */
 const CHECK_TRIGGER = /^(?:- )?\[ ?\] ?/;

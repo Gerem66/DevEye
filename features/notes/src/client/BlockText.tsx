@@ -25,7 +25,7 @@ const MARK_CLASSES: MarkClasses = {
  * content's text equals the source character-for-character, the caret maps to a
  * plain offset (see {@link readSelection}).
  *
- * It is *not* an editing host of its own — the whole block list is (see
+ * It is *not* an editing host of its own, the whole block list is (see
  * BlockEditor), which is what lets the caret and a selection move freely from
  * one block to the next. It only owns its own HTML: React never renders children
  * here, so a keystroke landing in this element cannot desynchronise React's

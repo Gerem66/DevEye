@@ -73,8 +73,8 @@ Handlers dans `src/features/secrecy/index.ts`. Quand elle est **ON** :
   (`singleUse`, non glissante) le temps de servir cette/ces commande(s), puis
   effacée dès que la rafale se vide. Le dispatcher compte les commandes en vol
   (`enterSessionCommand`/`exitSessionCommand`) : la DEK part quand le dernier
-  consommateur termine — ce qui couvre les rafales concurrentes (ex. `note.list`
-    - `folder.list`). Un court pont (`SINGLE_USE_BRIDGE_MS` = 30 s) borne un unlock
+  consommateur termine — ce qui couvre les rafales concurrentes (ex. `notes.list`
+    - `notes.folderList`). Un court pont (`SINGLE_USE_BRIDGE_MS` = 30 s) borne un unlock
       jamais consommé. **Côté client**, le store secrecy passe en mode `singleUse` :
       la session n'est jamais tenue pour « déverrouillée », chaque action chiffrée
       redemande le mot de passe.
@@ -106,7 +106,7 @@ mot de passe est disponible en clair) et cachée sous la `sessionId` émise, via
 
 ## Notes privées
 
-Application directe des deux étages ci-dessus (`src/features/note/index.ts`) :
+Application directe des deux étages ci-dessus (`features/notes/src/server/handlers.ts`) :
 
 - la feature Notes **s'ouvre sans mot de passe**. Corps des notes ordinaires et
   noms de dossiers vivent dans l'étage **ouvert** ;
@@ -114,17 +114,17 @@ Application directe des deux étages ci-dessus (`src/features/note/index.ts`) :
   DEK **gardée**. Il n'y a aucun contrôle d'accès par-dessus : c'est le
   chiffrement lui-même qui protège, et le serveur ne peut pas la déchiffrer sans
   mot de passe vivant ;
-- `note.list` n'est jamais bloquée : une note privée sortie session verrouillée
+- `notes.list` n'est jamais bloquée : une note privée sortie session verrouillée
   est renvoyée en **summary masqué** (`masked: true`) — métadonnées claires
   seules (id, dossier, rang, dates), jamais de titre ni de corps. Le client
   affiche un cadenas et propose « Déchiffrer », qui n'est que le prompt de
   déverrouillage global suivi d'un re-listage ;
 - basculer le drapeau depuis l'éditeur **re-chiffre** la note dans l'autre étage
   à l'enregistrement ;
-- `note.edit` / `note.archive` / `note.restore` / `note.delete` sur une note
+- `notes.edit` / `notes.archive` / `notes.restore` / `notes.delete` sur une note
   privée exigent en plus une session déverrouillée : ces chemins n'ont pas besoin
   de *lire* le corps, sans ce garde une session verrouillée pourrait écraser,
-  escamoter ou détruire ce qu'elle ne voit pas. `note.reorder` (positionnement
+  escamoter ou détruire ce qu'elle ne voit pas. `notes.reorder` (positionnement
   pur, n'expose ni ne réécrit le corps) reste libre, même sur une note masquée.
 
 Remplace l'ancien système de verrou par note (mot de passe dédié par note,
