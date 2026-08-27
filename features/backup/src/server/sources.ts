@@ -1,11 +1,9 @@
 import { spawn } from 'child_process';
 import { createGzip } from 'zlib';
-import type { Logger } from 'pino';
 
-import { env } from '@/Utils/Env';
-import { openTunnel, type Tunnel } from '@/Services/databases/tunnel';
-import type { EngineTarget } from '@/Services/databases/engine';
-import type { CloudSyncBackupProvider } from '@deveye/types/sdk';
+import type { CloudSyncBackupProvider, DatabaseBackupAccess } from '@deveye/types/sdk';
+import type { SdkLogger } from '@deveye/types/sdk/server';
+import { env } from './env';
 import { tarEnd, tarHeader, tarPadding } from './tar';
 
 /**
@@ -226,27 +224,28 @@ export async function deveyeSource(): Promise<BackupArtifact> {
 
 /**
  * Une base supervisée de l'espace, à travers le **même accès** que la
- * supervision — tunnel SSH ou proxy SOCKS compris.
+ * supervision, tunnel SSH ou proxy SOCKS compris : l'accès est OUVERT par la
+ * feature Bases de données (`DATABASE_BACKUP_PROVIDER`), seule à savoir
+ * déchiffrer une connexion, et ce module ne voit qu'un hôte et un port
+ * joignables d'ici.
  *
- * Le tunnel est fermé quand le flux s'achève, quelle qu'en soit la raison : un
+ * L'accès est refermé quand le flux s'achève, quelle qu'en soit la raison : un
  * tunnel oublié laisse une session SSH et un écouteur ouverts, et quelques
  * sauvegardes ratées suffiraient à épuiser les descripteurs du processus.
  */
-export async function databaseSource(target: EngineTarget, label: string): Promise<BackupArtifact> {
-    const maria = target.engine === 'mysql' ? await isMariaDump() : false;
+export async function databaseSource(access: DatabaseBackupAccess, label: string): Promise<BackupArtifact> {
+    const maria = access.engine === 'mysql' ? await isMariaDump() : false;
 
     async function* stream(): AsyncGenerator<Buffer> {
-        let tunnel: Tunnel | null = null;
         try {
-            tunnel = await openTunnel(target.access, { host: target.host, port: target.port });
             const inner =
-                target.engine === 'postgres'
+                access.engine === 'postgres'
                     ? spawnStream(
                           'pg_dump',
                           [
-                              `--host=${tunnel.host}`,
-                              `--port=${tunnel.port}`,
-                              `--username=${target.username}`,
+                              `--host=${access.host}`,
+                              `--port=${access.port}`,
+                              `--username=${access.username}`,
                               '--no-password',
                               // Format texte : restaurable par `psql <`, sans
                               // `pg_restore` ni version compatible de celui-ci.
@@ -255,20 +254,20 @@ export async function databaseSource(target: EngineTarget, label: string): Promi
                               // ses propriétaires et ses droits.
                               '--no-owner',
                               '--no-privileges',
-                              target.database
+                              access.database
                           ],
-                          target.password ? { PGPASSWORD: target.password } : {},
+                          access.password ? { PGPASSWORD: access.password } : {},
                           `la base « ${label} »`
                       )
                     : spawnStream(
                           'mysqldump',
-                          mysqlDumpArgs(tunnel.host, tunnel.port, target.username, target.database, maria),
-                          target.password ? { MYSQL_PWD: target.password } : {},
+                          mysqlDumpArgs(access.host, access.port, access.username, access.database, maria),
+                          access.password ? { MYSQL_PWD: access.password } : {},
                           `la base « ${label} »`
                       );
             for await (const chunk of inner) yield chunk;
         } finally {
-            await tunnel?.close().catch(() => {});
+            await access.close().catch(() => {});
         }
     }
 
@@ -290,7 +289,7 @@ export async function databaseSource(target: EngineTarget, label: string): Promi
 export async function cloudSyncSource(
     provider: CloudSyncBackupProvider,
     share: { id: number; name: string },
-    logger: Logger
+    logger: SdkLogger
 ): Promise<BackupArtifact> {
     async function* stream(): AsyncGenerator<Buffer> {
         // Le module fournit l'index et les blobs déchiffrés ; le flux tar

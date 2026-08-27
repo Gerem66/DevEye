@@ -30,7 +30,6 @@ import { audienceFunnelsRepo, type AudienceFunnelsRepo } from './repos/audienceF
 import { gitRepo, type GitRepo } from './repos/git';
 import { credentialsRepo, type CredentialsRepo } from './repos/credentials';
 import { deployRepo, type DeployRepo } from './repos/deploy';
-import { backupRepo, type BackupRepo } from './repos/backup';
 import { projectLinksRepo, type ProjectLinksRepo } from './repos/projectLinks';
 import { refreshTokensRepo, type RefreshTokensRepo } from './repos/refreshTokens';
 import { twoFactorRepo, type TwoFactorRepo } from './repos/twoFactor';
@@ -76,7 +75,6 @@ export interface Database {
      * trois tables — elles ne se lisent jamais séparément, et la rétention les
      * traverse toutes les trois.
      */
-    backup: BackupRepo;
     databases: DatabaseRepo;
     /** Les sites suivis de l'espace, et leurs statistiques — le chemin froid. */
     audience: AudienceRepo;
@@ -127,7 +125,6 @@ export function createDatabase(q: Queryable): Database {
         git: gitRepo(q),
         credentials: credentialsRepo(q),
         deploy: deployRepo(q),
-        backup: backupRepo(q),
         databases: databaseRepo(q),
         audience: audienceRepo(q),
         audienceIngest: audienceIngestRepo(q),

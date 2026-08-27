@@ -98,8 +98,6 @@ async function itemLabelOf(ctx: FeatureContext, feature: NotificationFeature, it
                 return (await ctx.db.databases.find(itemId, ctx.workspaceId))?.content ?? null;
             case 'deploy':
                 return (await ctx.db.deploy.findTarget(itemId, ctx.workspaceId))?.content ?? null;
-            case 'backup':
-                return (await ctx.db.backup.findJob(itemId, ctx.workspaceId))?.content ?? null;
             case 'sentinel':
                 // Sentinelle n'a pas d'éléments réglables : aucune route ne peut
                 // porter un `item_id`, donc ce cas ne se produit pas.

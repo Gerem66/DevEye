@@ -195,6 +195,14 @@ export function agentsFacade(gate: () => void): AgentsFacade {
         requestSyncMove: (deviceId, payload) => (gate(), sdkHub().requestSyncMove(deviceId, payload)),
         requestSyncDelete: (deviceId, payload) => (gate(), sdkHub().requestSyncDelete(deviceId, payload)),
         publishSyncProgress: (payload) => (gate(), sdkHub().publishSyncProgress(payload)),
-        publishSyncState: (payload) => (gate(), sdkHub().publishSyncState(payload))
+        publishSyncState: (payload) => (gate(), sdkHub().publishSyncState(payload)),
+        // Les ordres de fichiers de l'explorateur, offerts tels quels : c'est
+        // ce qui fait d'une machine enrôlée une destination de sauvegarde
+        // sans rien changer à l'agent.
+        requestFilesMutate: (deviceId, payload) => (gate(), sdkHub().requestFilesMutate(deviceId, payload)),
+        requestFilesUpload: (deviceId, payload) => (gate(), sdkHub().requestFilesUpload(deviceId, payload)),
+        awaitFilesOp: (opId, timeoutMs) => (gate(), sdkHub().awaitFilesOp(opId, timeoutMs)),
+        cancelFilesOp: (opId) => (gate(), sdkHub().cancelFilesOp(opId)),
+        buffered: (deviceId) => (gate(), sdkHub().agentBuffered(deviceId))
     };
 }

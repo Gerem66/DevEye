@@ -292,6 +292,30 @@ L'outillage de migration, à rejouer pour CHAQUE native :
   faut la base — le tunnel en local) et par le job `smoke` du workflow GitHub
   (service MySQL neuf, migré de zéro au boot, Chrome du runner).
 
+**Les Sauvegardes** sont la huitième native rapatriée (`features/backup`, 28
+août 2026), et la première à consommer une native encore dans l'app : elle
+inaugure côté module les **providers dans les deux sens** (`ctx.providers.get`
+et `deps.providers.get` ; `registerNativeProvider` côté app pour ce que Bases
+de données offre tant qu'elle est native, `DATABASE_BACKUP_PROVIDER` : bases
+nommées et accès ouvert, tunnel compris, le module ne déchiffrant aucune
+connexion), la **façade agents « fichiers »** (`requestFilesMutate`,
+`requestFilesUpload`, `awaitFilesOp`, `cancelFilesOp`, `buffered` : les ordres
+de l'explorateur, ce qui fait d'une machine enrôlée une destination sans
+changer l'agent), la **clé dérivée** (`keys.derive`, HKDF sur la clé serveur,
+la dérivation que `scripts/restore-backup.mjs` refait sans DevEye), l'**onglet
+Chiffrement d'un module** (`settings.item: ['encryption']` + `settingsPanels.encryption`),
+le **format DEVB dans le SDK** (`@deveye/types/sdk/server`, partagé avec
+CloudSync, dont le dernier alias vers l'app disparaît), et la **migration d'un
+module sur ses tables historiques** (`backup/001` : la clé étrangère des
+travaux cascade, `workspace.delete` ne bute plus dessus). Ce que sa migration a
+réglé : le dialogue des destinations et l'onglet Chiffrement sont des panneaux
+du manifest, le « + » du dialogue de travail est le bouton commun
+(`onOpenChange` pour l'adoption), `useResource` remplace les chargeurs maison,
+`humanizeError` et `formatBytesFr` les copies locales, les variables
+`BACKUP_*` sont lues par le module, la commande fantôme
+`backup.testNotification` sort de `NON_MUTATING`, et le genre d'une
+destination se choisit en segments.
+
 ## La désinstallation d'un module (22 août 2026)
 
 Le geste inverse de l'installation, conçu pour emporter TOUTES les traces :

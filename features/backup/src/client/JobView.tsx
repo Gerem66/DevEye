@@ -1,15 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { BackupJob, BackupRun } from '@deveye/types';
+import type { ReactNode } from 'react';
+import type { BackupJob } from '../contracts/domain';
 
-import { Button, StatusBadge } from '@/Components';
-import { ws } from '@/api/ws';
-import { useResourceVersion } from '@/stores/invalidation';
+import { Button, FeatureSettingsButton, formatBytesFr, StatusBadge, useResource } from 'deveye-sdk-client';
+import { api } from './api';
 import {
-    backupError,
     describeSchedule,
     DESTINATION_LABELS,
     formatAgo,
-    formatBytes,
     formatIn,
     formatMoment,
     RUN_LABELS,
@@ -17,7 +14,6 @@ import {
     SOURCE_LABELS
 } from './format';
 import styles from './style.module.css';
-import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 
 interface JobViewProps {
     job: BackupJob;
@@ -36,31 +32,19 @@ interface JobViewProps {
  * cadence quotidienne dont la dernière archive date de trois semaines est un
  * travail cassé, quoi que dise son formulaire.
  */
-export function JobView({ job, canWrite, onBack, onEdit, onRun, running }: JobViewProps) {
-    const [runs, setRuns] = useState<BackupRun[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const version = useResourceVersion('backup.detail');
-
-    const reload = useCallback(async () => {
-        try {
-            const res = await ws.send('backup.jobGet', { jobId: job.id, limit: 50 });
-            setRuns(res.runs);
-            setError(null);
-        } catch (e) {
-            setError(backupError(e, 'Impossible de charger l’historique.'));
-        }
-    }, [job.id]);
-
-    useEffect(() => {
-        void reload();
-    }, [reload, version]);
+export default function JobView({ job, canWrite, onBack, onEdit, onRun, running }: JobViewProps) {
+    const { data: runs, error } = useResource(
+        'backup.detail',
+        () => api.send('backup.jobGet', { jobId: job.id, limit: 50 }).then((res) => res.runs),
+        'Impossible de charger l’historique.',
+        [job.id]
+    );
 
     return (
         <div className={styles.detail}>
             {/* Retour, titre, actions : une seule rangée, la même que dans les
-                fiches des autres features. Le titre vivait dessous, et la
-                suppression avait son bouton ici — elle vit désormais dans le
-                dialogue de modification, comme pour une cible ou un dépôt. */}
+                fiches des autres features. La suppression vit dans le dialogue
+                de modification, comme pour une cible ou un dépôt. */}
             <div className={styles.detailHead}>
                 <Button variant='ghost' icon='arrow-left' onClick={onBack}>
                     Travaux
@@ -88,7 +72,7 @@ export function JobView({ job, canWrite, onBack, onEdit, onRun, running }: JobVi
                         </Button>
                     )}
                     {/* `!job.foreign` : la destination et la source d'un travail
-                        se choisissent parmi les objets de SON espace — le
+                        se choisissent parmi les objets de SON espace ; le
                         serveur le refuse, l'écran ne le propose donc pas.
                         Sauvegarder, lui, reste permis : c'est tout l'objet de
                         la projection. */}
@@ -97,8 +81,9 @@ export function JobView({ job, canWrite, onBack, onEdit, onRun, running }: JobVi
                             Modifier
                         </Button>
                     )}
-                    {/* Les réglages **de ce travail** : ses propres canaux, ou
-                        ceux des Sauvegardes tant qu'il les suit. */}
+                    {/* Les réglages **de ce travail** : la forme de ses archives,
+                        ses propres canaux ou ceux des Sauvegardes tant qu'il les
+                        suit, son partage. */}
                     <FeatureSettingsButton
                         scope={{ kind: 'item', feature: 'backup', itemId: job.id, itemLabel: job.name }}
                     />
@@ -108,9 +93,9 @@ export function JobView({ job, canWrite, onBack, onEdit, onRun, running }: JobVi
             <div className={styles.facts}>
                 <Fact label='Source'>
                     {SOURCE_LABELS[job.source]}
-                    {job.sourceName && job.source !== 'deveye' ? ` — ${job.sourceName}` : ''}
+                    {job.sourceName && job.source !== 'deveye' ? ` : ${job.sourceName}` : ''}
                     {job.source !== 'deveye' && job.sourceName === null && (
-                        <span className={styles.factWarn}> — supprimée</span>
+                        <span className={styles.factWarn}> (supprimée)</span>
                     )}
                 </Fact>
                 <Fact label='Destination'>
@@ -119,14 +104,14 @@ export function JobView({ job, canWrite, onBack, onEdit, onRun, running }: JobVi
                 <Fact label='Cadence'>{describeSchedule(job)}</Fact>
                 <Fact label='Prochain passage'>{job.enabled ? formatIn(job.nextRunAt) : 'travail désactivé'}</Fact>
                 <Fact label='Copies conservées'>{job.keepLast}</Fact>
-                <Fact label='Occupation'>{formatBytes(job.totalBytes)}</Fact>
+                <Fact label='Occupation'>{formatBytesFr(job.totalBytes)}</Fact>
             </div>
 
             {job.lastError && <p className={styles.error}>Dernier échec : {job.lastError}</p>}
             {error && <p className={styles.error}>{error}</p>}
 
             <h3 className={styles.sectionTitle}>Historique</h3>
-            {runs === null && <p className={styles.empty}>Chargement…</p>}
+            {runs === null && !error && <p className={styles.empty}>Chargement…</p>}
             {runs?.length === 0 && <p className={styles.empty}>Ce travail n’a encore jamais tourné.</p>}
             {runs && runs.length > 0 && (
                 <ul className={styles.runs}>
@@ -141,7 +126,7 @@ export function JobView({ job, canWrite, onBack, onEdit, onRun, running }: JobVi
                                     {run.status === 'success' && (
                                         <>
                                             {' · '}
-                                            {formatBytes(run.sizeBytes)}
+                                            {formatBytesFr(run.sizeBytes)}
                                             {run.encrypted ? ' · chiffrée' : ''}
                                             {run.pruned ? ' · effacée par rétention' : ''}
                                         </>
@@ -164,7 +149,7 @@ export function JobView({ job, canWrite, onBack, onEdit, onRun, running }: JobVi
     );
 }
 
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+function Fact({ label, children }: { label: string; children: ReactNode }) {
     return (
         <div className={styles.fact}>
             <span className={styles.factLabel}>{label}</span>
@@ -172,5 +157,3 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
         </div>
     );
 }
-
-export default JobView;

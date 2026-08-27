@@ -12,32 +12,32 @@ import {
     backupJobRun,
     backupJobUpdate,
     backupRuns,
-    backupSources,
-    type BackupSourceCandidate
-} from '@deveye/types';
+    backupSources
+} from '../contracts/commands';
+import type { BackupSourceCandidate } from '../contracts/domain';
 
-import { BackupService, type StoredDestination, type StoredJob } from '@/Services/BackupService';
-import { safeRelPath } from '@/backup/sinks';
-import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
-import { shareScope } from '../_sharing';
-import { CLOUDSYNC_BACKUP_PROVIDER, type CloudSyncBackupProvider } from '@deveye/types/sdk';
-import { moduleProvider } from '@/features/_sdk/register';
+import { defineSdkFeature, FeatureError, type SdkFeatureDefinition } from '@deveye/types/sdk/server';
+import type { BackupRepo } from './repo';
+import { nextRunAt } from './schedule';
+import { safeRelPath } from './sinks';
 import {
-    backupService,
+    cloudSyncProvider,
+    databaseProvider,
     loadDestination,
     loadHomeJob,
     loadJob,
-    readJson,
     readJsonWith,
-    READ,
+    requireEngine,
     toDestination,
     toJob,
     toRun,
-    WRITE
+    type Ctx,
+    type StoredDestination,
+    type StoredJob
 } from './_shared';
 
 /**
- * Sauvegardes — les destinations de l'espace et les travaux qui y écrivent.
+ * Sauvegardes : les destinations de l'espace et les travaux qui y écrivent.
  *
  * Feature d'espace de premier rang, comme Git, Bases de données, Déploiement et
  * Audience. Une destination appartient à l'espace, pas à ce qu'elle sauvegarde :
@@ -50,11 +50,11 @@ import {
 
 // ---------------------------------------------------------- destinations
 
-const destinationListFeature = defineFeature({
+const destinationListFeature = defineSdkFeature({
     ...backupDestinationList,
-    access: READ,
-    handler: async (ctx) => {
-        const rows = await ctx.db.backup.listDestinations(ctx.workspaceId);
+    access: { level: 'read' },
+    handler: async (ctx: Ctx) => {
+        const rows = await ctx.repo.listDestinations(ctx.workspaceId);
         return { destinations: await Promise.all(rows.map((row) => toDestination(ctx, row))) };
     }
 });
@@ -113,11 +113,11 @@ function assertDestinationShape(input: {
     }
 }
 
-const destinationAddFeature = defineFeature({
+const destinationAddFeature = defineSdkFeature({
     ...backupDestinationAdd,
-    access: WRITE,
+    access: { level: 'write' },
     mutates: true,
-    handler: async (ctx, input) => {
+    handler: async (ctx: Ctx, input) => {
         assertDestinationShape(input);
         if (input.kind === 's3' && !input.secret) {
             throw new FeatureError('validation', 'Une destination S3 exige sa clé secrète.');
@@ -126,8 +126,8 @@ const destinationAddFeature = defineFeature({
             // L'appartenance de l'appareil à l'espace est vérifiée ici et pas
             // ailleurs : sans ce contrôle, on pourrait écrire des archives sur
             // la machine d'un autre espace en devinant un identifiant.
-            const shared = await ctx.db.devices.listByWorkspace(ctx.workspaceId);
-            if (!shared.some((d) => d.id === input.deviceId)) {
+            const devices = await ctx.deveye.devices.list();
+            if (!devices.some((d) => d.id === input.deviceId)) {
                 throw new FeatureError('not_found', "Cet appareil n'appartient pas à cet espace.");
             }
         }
@@ -141,13 +141,14 @@ const destinationAddFeature = defineFeature({
             accessKeyId: input.accessKeyId,
             lastError: null
         };
-        const row = await ctx.db.backup.createDestination({
+        const cipher = ctx.cipher();
+        const row = await ctx.repo.createDestination({
             workspaceId: ctx.workspaceId,
             kind: input.kind,
             deviceId: input.kind === 'device' ? input.deviceId : null,
             pathStyle: input.pathStyle,
-            content: await ctx.secure.open.encrypt(JSON.stringify(stored)),
-            secretEnc: input.secret ? await ctx.secure.open.encrypt(input.secret) : ''
+            content: await cipher.encrypt(JSON.stringify(stored)),
+            secretEnc: input.secret ? await cipher.encrypt(input.secret) : ''
         });
 
         ctx.audit({
@@ -156,18 +157,18 @@ const destinationAddFeature = defineFeature({
             metadata: { destinationId: row.id, kind: input.kind }
         });
 
-        const full = await ctx.db.backup.listDestinations(ctx.workspaceId);
+        const full = await ctx.repo.listDestinations(ctx.workspaceId);
         const created = full.find((d) => d.id === row.id);
         if (!created) throw new FeatureError('internal', 'Destination créée mais introuvable');
         return { destination: await toDestination(ctx, created) };
     }
 });
 
-const destinationUpdateFeature = defineFeature({
+const destinationUpdateFeature = defineSdkFeature({
     ...backupDestinationUpdate,
-    access: WRITE,
+    access: { level: 'write' },
     mutates: true,
-    handler: async (ctx, input) => {
+    handler: async (ctx: Ctx, input) => {
         const row = await loadDestination(ctx, input.destinationId);
         assertDestinationShape({ ...input, kind: row.kind });
 
@@ -182,11 +183,12 @@ const destinationUpdateFeature = defineFeature({
             // il portait sur une configuration qui n'existe plus.
             lastError: null
         };
-        const updated = await ctx.db.backup.updateDestination(input.destinationId, ctx.workspaceId, {
+        const cipher = ctx.cipher();
+        const updated = await ctx.repo.updateDestination(input.destinationId, ctx.workspaceId, {
             deviceId: row.kind === 'device' ? input.deviceId : null,
             pathStyle: input.pathStyle,
-            content: await ctx.secure.open.encrypt(JSON.stringify(stored)),
-            secretEnc: input.secret ? await ctx.secure.open.encrypt(input.secret) : undefined
+            content: await cipher.encrypt(JSON.stringify(stored)),
+            secretEnc: input.secret ? await cipher.encrypt(input.secret) : undefined
         });
         if (!updated) throw new FeatureError('not_found', 'Destination introuvable');
 
@@ -196,30 +198,31 @@ const destinationUpdateFeature = defineFeature({
             metadata: { destinationId: updated.id }
         });
 
-        const full = await ctx.db.backup.listDestinations(ctx.workspaceId);
+        const full = await ctx.repo.listDestinations(ctx.workspaceId);
         const after = full.find((d) => d.id === updated.id);
         if (!after) throw new FeatureError('internal', 'Destination modifiée mais introuvable');
         return { destination: await toDestination(ctx, after) };
     }
 });
 
-const destinationRemoveFeature = defineFeature({
+const destinationRemoveFeature = defineSdkFeature({
     ...backupDestinationRemove,
-    access: WRITE,
+    access: { level: 'write' },
     mutates: true,
-    handler: async (ctx, input) => {
+    handler: async (ctx: Ctx, input) => {
         await loadDestination(ctx, input.destinationId);
-        // La clé étrangère est en RESTRICT, mais la refuser ici permet de dire
-        // *combien* de travaux bloquent plutôt que de laisser remonter une
-        // erreur SQL que personne ne peut corriger à l'écran.
-        const uses = await ctx.db.backup.countJobsUsing(input.destinationId);
+        // La clé étrangère des travaux cascade (elle cascadait par l'espace de
+        // toute façon) : c'est ICI que le refus se décide, en disant *combien*
+        // de travaux bloquent, plutôt que d'effacer en silence la configuration
+        // de quelqu'un ou de laisser remonter une erreur SQL.
+        const uses = await ctx.repo.countJobsUsing(input.destinationId);
         if (uses > 0) {
             throw new FeatureError(
                 'conflict',
                 `${uses} travail(aux) écrivent encore ici. Supprimez-les ou changez leur destination d’abord.`
             );
         }
-        const ok = await ctx.db.backup.deleteDestination(input.destinationId, ctx.workspaceId);
+        const ok = await ctx.repo.deleteDestination(input.destinationId, ctx.workspaceId);
         if (!ok) throw new FeatureError('not_found', 'Destination introuvable');
 
         ctx.audit({
@@ -235,41 +238,42 @@ const destinationRemoveFeature = defineFeature({
     }
 });
 
-const destinationTestFeature = defineFeature({
+const destinationTestFeature = defineSdkFeature({
     ...backupDestinationTest,
-    access: WRITE,
+    access: { level: 'write' },
     // Écrit le verdict du contrôle sur la ligne : les autres écrans doivent le
     // voir sans recharger.
     mutates: true,
-    handler: async (ctx, input) => backupService(ctx).probeDestination(await loadDestination(ctx, input.destinationId))
+    handler: async (ctx: Ctx, input) =>
+        requireEngine().probeDestination(await loadDestination(ctx, input.destinationId))
 });
 
 // ---------------------------------------------------------------- travaux
 
-const jobListFeature = defineFeature({
+const jobListFeature = defineSdkFeature({
     ...backupJobList,
-    access: READ,
-    handler: async (ctx) => {
-        const rows = await ctx.db.backup.listVisibleJobs(ctx.workspaceId);
+    access: { level: 'read' },
+    handler: async (ctx: Ctx) => {
+        const rows = await ctx.repo.listVisibleJobs(ctx.workspaceId);
         // Les travaux qu'une restriction masque pour ce rôle disparaissent de
         // la liste plutôt que d'y figurer grisés.
-        const hidden = await ctx.itemRestrictions('backup');
+        const hidden = await ctx.items.restrictions();
         const visible = rows.filter((r) => hidden.get(r.id) !== 'none');
-        const shares = await shareScope(ctx, 'backup');
+        const shares = await ctx.sharing.scope();
         return { jobs: await Promise.all(visible.map((row) => toJob(ctx, row, shares))) };
     }
 });
 
-const countFeature = defineFeature({
+const countFeature = defineSdkFeature({
     ...backupCount,
-    access: READ,
-    handler: async (ctx) => {
-        // Les mêmes lignes que la liste — projetées comprises, restrictions
+    access: { level: 'read' },
+    handler: async (ctx: Ctx) => {
+        // Les mêmes lignes que la liste, projetées comprises, restrictions
         // déduites : la carte doit compter ce que la liste montre, et un échec
         // survenu chez le voisin sur un travail qu'on regarde d'ici mérite
         // autant le rouge qu'un échec local.
-        const rows = await ctx.db.backup.listVisibleJobs(ctx.workspaceId);
-        const hidden = await ctx.itemRestrictions('backup');
+        const rows = await ctx.repo.listVisibleJobs(ctx.workspaceId);
+        const hidden = await ctx.items.restrictions();
         const visible = rows.filter((r) => hidden.get(r.id) !== 'none' && r.enabled === 1);
         return {
             count: visible.length,
@@ -278,18 +282,18 @@ const countFeature = defineFeature({
     }
 });
 
-const jobGetFeature = defineFeature({
+const jobGetFeature = defineSdkFeature({
     ...backupJobGet,
-    access: READ,
-    handler: async (ctx, input) => {
-        const row = await ctx.db.backup.findVisibleJobWithState(input.jobId, ctx.workspaceId);
+    access: { level: 'read' },
+    handler: async (ctx: Ctx, input) => {
+        const row = await ctx.repo.findVisibleJobWithState(input.jobId, ctx.workspaceId);
         if (!row) throw new FeatureError('not_found', 'Travail de sauvegarde introuvable');
-        await ctx.assertItem('backup', input.jobId);
-        const shares = await shareScope(ctx, 'backup');
+        await ctx.items.assert(input.jobId);
+        const shares = await ctx.sharing.scope();
         const cipher = await shares.cipherFor(row.id);
         // L'historique vit chez le travail : pour un projeté, le chercher ici
         // rendrait une fiche vide qu'on croirait jamais exécutée.
-        const runs = await ctx.db.backup.listRuns(input.jobId, row.workspace_id, input.limit ?? 20);
+        const runs = await ctx.repo.listRuns(input.jobId, row.workspace_id, input.limit ?? 20);
         return {
             job: await toJob(ctx, row, shares),
             runs: await Promise.all(runs.map((r) => toRun(ctx, r, cipher)))
@@ -298,33 +302,35 @@ const jobGetFeature = defineFeature({
 });
 
 /** Vérifie que la source désignée existe **dans cet espace**. */
-async function assertSource(ctx: FeatureContext, source: string, sourceId: number | null): Promise<void> {
+async function assertSource(ctx: Ctx, source: string, sourceId: number | null): Promise<void> {
     if (source === 'deveye') return;
     if (sourceId === null) throw new FeatureError('validation', 'Choisissez ce que ce travail doit sauvegarder.');
 
     if (source === 'database') {
-        if (!(await ctx.db.databases.find(sourceId, ctx.workspaceId))) {
+        const databases = databaseProvider(ctx);
+        if (!databases) throw new FeatureError('not_found', 'Les bases de données sont indisponibles.');
+        if (!(await databases.findDatabase(sourceId, ctx.workspaceId))) {
             throw new FeatureError('not_found', 'Cette base de données est introuvable dans cet espace.');
         }
         return;
     }
-    const provider = moduleProvider<CloudSyncBackupProvider>(CLOUDSYNC_BACKUP_PROVIDER);
-    if (!provider) throw new FeatureError('not_found', 'CloudSync est indisponible : module non installé.');
-    const share = await provider.findShare(sourceId);
+    const cloudSync = cloudSyncProvider(ctx);
+    if (!cloudSync) throw new FeatureError('not_found', 'CloudSync est indisponible : module non installé.');
+    const share = await cloudSync.findShare(sourceId);
     if (!share || share.workspaceId !== ctx.workspaceId) {
         throw new FeatureError('not_found', 'Ce partage CloudSync est introuvable dans cet espace.');
     }
 }
 
-const jobAddFeature = defineFeature({
+const jobAddFeature = defineSdkFeature({
     ...backupJobAdd,
-    access: WRITE,
+    access: { level: 'write' },
     mutates: true,
-    handler: async (ctx, input) => {
+    handler: async (ctx: Ctx, input) => {
         await loadDestination(ctx, input.destinationId);
         await assertSource(ctx, input.source, input.sourceId);
 
-        const row = await ctx.db.backup.createJob({
+        const row = await ctx.repo.createJob({
             workspaceId: ctx.workspaceId,
             destinationId: input.destinationId,
             sourceKind: input.source,
@@ -336,14 +342,14 @@ const jobAddFeature = defineFeature({
             scheduleDay: input.scheduleDay,
             keepLast: input.keepLast,
             encryption: input.encryption,
-            nextRunAt: BackupService.nextRunAt(
+            nextRunAt: nextRunAt(
                 input.schedule,
                 input.enabled,
                 input.scheduleHour,
                 input.scheduleWeekday,
                 input.scheduleDay
             ),
-            content: await ctx.secure.open.encrypt(JSON.stringify({ name: input.name } satisfies StoredJob))
+            content: await ctx.cipher().encrypt(JSON.stringify({ name: input.name } satisfies StoredJob))
         });
 
         ctx.audit({
@@ -352,24 +358,24 @@ const jobAddFeature = defineFeature({
             metadata: { jobId: row.id, source: input.source, destinationId: input.destinationId }
         });
 
-        const after = await ctx.db.backup.findJobWithState(row.id, ctx.workspaceId);
+        const after = await ctx.repo.findJobWithState(row.id, ctx.workspaceId);
         if (!after) throw new FeatureError('internal', 'Travail créé mais introuvable');
         return { job: await toJob(ctx, after) };
     }
 });
 
-const jobUpdateFeature = defineFeature({
+const jobUpdateFeature = defineSdkFeature({
     ...backupJobUpdate,
-    access: WRITE,
+    access: { level: 'write' },
     mutates: true,
-    handler: async (ctx, input) => {
+    handler: async (ctx: Ctx, input) => {
         // Domicile seulement : sa destination et sa source se choisissent parmi
         // les objets de SON espace, que la fenêtre ne voit pas.
         await loadHomeJob(ctx, input.jobId);
         await loadDestination(ctx, input.destinationId);
         await assertSource(ctx, input.source, input.sourceId);
 
-        const row = await ctx.db.backup.updateJob(input.jobId, ctx.workspaceId, {
+        const row = await ctx.repo.updateJob(input.jobId, ctx.workspaceId, {
             destinationId: input.destinationId,
             sourceKind: input.source,
             sourceId: input.source === 'deveye' ? null : input.sourceId,
@@ -383,14 +389,14 @@ const jobUpdateFeature = defineFeature({
             // Recalculée à chaque modification : changer l'heure sans déplacer
             // l'échéance laisserait le travail partir à l'ancienne jusqu'au
             // lendemain, ce que personne n'attend.
-            nextRunAt: BackupService.nextRunAt(
+            nextRunAt: nextRunAt(
                 input.schedule,
                 input.enabled,
                 input.scheduleHour,
                 input.scheduleWeekday,
                 input.scheduleDay
             ),
-            content: await ctx.secure.open.encrypt(JSON.stringify({ name: input.name } satisfies StoredJob))
+            content: await ctx.cipher().encrypt(JSON.stringify({ name: input.name } satisfies StoredJob))
         });
         if (!row) throw new FeatureError('not_found', 'Travail de sauvegarde introuvable');
 
@@ -400,28 +406,27 @@ const jobUpdateFeature = defineFeature({
             metadata: { jobId: row.id }
         });
 
-        const after = await ctx.db.backup.findJobWithState(row.id, ctx.workspaceId);
+        const after = await ctx.repo.findJobWithState(row.id, ctx.workspaceId);
         if (!after) throw new FeatureError('internal', 'Travail modifié mais introuvable');
         return { job: await toJob(ctx, after) };
     }
 });
 
-const jobRemoveFeature = defineFeature({
+const jobRemoveFeature = defineSdkFeature({
     ...backupJobRemove,
-    access: WRITE,
+    access: { level: 'write' },
     mutates: true,
-    handler: async (ctx, input) => {
+    handler: async (ctx: Ctx, input) => {
         const job = await loadHomeJob(ctx, input.jobId);
-        if (backupService(ctx).isRunning(job.id)) {
+        if (requireEngine().isRunning(job.id)) {
             throw new FeatureError('conflict', 'Une sauvegarde de ce travail est en cours. Réessayez ensuite.');
         }
-        const ok = await ctx.db.backup.deleteJob(input.jobId, ctx.workspaceId);
+        const ok = await ctx.repo.deleteJob(input.jobId, ctx.workspaceId);
         if (!ok) throw new FeatureError('not_found', 'Travail de sauvegarde introuvable');
         // Projections, restrictions et route de notification ne tiennent à
         // aucune clé étrangère : sans ce ménage, elles s'appliqueraient au
         // prochain travail à hériter de l'identifiant.
-        await ctx.db.itemSharing.forgetItem('backup', input.jobId, ctx.workspaceId);
-        await ctx.db.notificationChannels.clearRoute(ctx.workspaceId, 'backup', input.jobId);
+        await ctx.items.forget(input.jobId);
 
         ctx.audit({
             action: 'backup.jobRemove',
@@ -433,22 +438,23 @@ const jobRemoveFeature = defineFeature({
     }
 });
 
-const jobRunFeature = defineFeature({
+const jobRunFeature = defineSdkFeature({
     ...backupJobRun,
     // Écrit une exécution en base : les autres écrans doivent voir le travail
     // passer en « en cours » sans recharger.
     mutates: true,
-    access: WRITE,
-    handler: async (ctx, input) => {
-        // Déclencher depuis une fenêtre est permis : le moteur lit tout — clé,
-        // destination, historique — depuis l'espace du travail (`job.workspace_id`),
-        // jamais depuis l'espace de l'appelant.
+    access: { level: 'write' },
+    handler: async (ctx: Ctx, input) => {
+        // Déclencher depuis une fenêtre est permis : le moteur lit tout (clé,
+        // destination, historique) depuis l'espace du travail
+        // (`job.workspace_id`), jamais depuis l'espace de l'appelant.
+        const engine = requireEngine();
         const job = await loadJob(ctx, input.jobId, 'write');
-        const cipher = await (await shareScope(ctx, 'backup')).cipherFor(job.id);
+        const cipher = await (await ctx.sharing.scope()).cipherFor(job.id);
         const name = (await readJsonWith<StoredJob>(cipher, job.content)).name ?? 'Sauvegarde';
         let run;
         try {
-            run = await backupService(ctx).trigger(job, ctx.userId);
+            run = await engine.trigger(job, ctx.userId);
         } catch (e) {
             throw new FeatureError('conflict', (e as Error).message);
         }
@@ -461,10 +467,10 @@ const jobRunFeature = defineFeature({
     }
 });
 
-const sourcesFeature = defineFeature({
+const sourcesFeature = defineSdkFeature({
     ...backupSources,
-    access: READ,
-    handler: async (ctx) => {
+    access: { level: 'read' },
+    handler: async (ctx: Ctx) => {
         const candidates: BackupSourceCandidate[] = [
             {
                 kind: 'deveye',
@@ -476,31 +482,33 @@ const sourcesFeature = defineFeature({
             }
         ];
 
-        const databases = await ctx.db.databases.list(ctx.workspaceId);
-        for (const row of databases) {
-            const stored = await readJson<{ name: string; host: string; database: string }>(ctx, row.content);
+        // Les bases viennent de leur feature par son contrat : elle seule sait
+        // les nommer (le nom vit chiffré sous son codec). Sans le contrat, la
+        // source disparaît simplement du sélecteur.
+        const databases = databaseProvider(ctx);
+        for (const row of databases ? await databases.listDatabases(ctx.workspaceId) : []) {
             candidates.push({
                 kind: 'database',
                 id: row.id,
-                name: stored.name ?? `Base ${row.id}`,
-                detail: `${row.engine} — ${stored.host ?? '?'} / ${stored.database ?? '?'}`,
+                name: row.name,
+                detail: `${row.engine} : ${row.host} / ${row.database}`,
                 available: true,
                 reason: null
             });
         }
 
-        // CloudSync est un module : sans lui, la source disparaît simplement
-        // de la liste (les travaux persistés qui la visent échoueront avec un
-        // message clair au run).
-        const provider = moduleProvider<CloudSyncBackupProvider>(CLOUDSYNC_BACKUP_PROVIDER);
-        const shares = provider ? await provider.listShares(ctx.workspaceId) : [];
+        // CloudSync est un module : sans lui, la source disparaît de la liste
+        // (les travaux persistés qui la visent échoueront avec un message clair
+        // au run).
+        const cloudSync = cloudSyncProvider(ctx);
+        const shares = cloudSync ? await cloudSync.listShares(ctx.workspaceId) : [];
         for (const share of shares) {
-            const stats = await provider!.statsByShare(share.id);
+            const stats = await cloudSync!.statsByShare(share.id);
             candidates.push({
                 kind: 'cloudsync',
                 id: share.id,
                 name: share.name,
-                detail: `${stats.fileCount} fichier(s) — les fichiers, pas leur index (celui-ci est dans la base de DevEye).`,
+                detail: `${stats.fileCount} fichier(s) : les fichiers, pas leur index (celui-ci est dans la base de DevEye).`,
                 available: stats.fileCount > 0,
                 reason: stats.fileCount > 0 ? null : 'Ce partage est vide.'
             });
@@ -510,17 +518,16 @@ const sourcesFeature = defineFeature({
     }
 });
 
-const runsFeature = defineFeature({
+const runsFeature = defineSdkFeature({
     ...backupRuns,
-    access: READ,
-    handler: async (ctx, input) => {
-        const rows = await ctx.db.backup.listWorkspaceRuns(ctx.workspaceId, input.limit ?? 50);
+    access: { level: 'read' },
+    handler: async (ctx: Ctx, input) => {
+        const rows = await ctx.repo.listWorkspaceRuns(ctx.workspaceId, input.limit ?? 50);
         return { runs: await Promise.all(rows.map((row) => toRun(ctx, row))) };
     }
 });
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const backupFeatures: FeatureDefinition<string, any, any>[] = [
+export const backupHandlers: ReadonlyArray<SdkFeatureDefinition<BackupRepo>> = [
     destinationListFeature,
     destinationAddFeature,
     destinationUpdateFeature,

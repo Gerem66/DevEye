@@ -9,6 +9,10 @@ import type { Database } from '@/db';
 import type { AuditEvent } from '@/Services/AuditLog';
 import { setSdkHost } from './host';
 import { createServiceDeps, type ModuleServiceHost } from './service';
+import type { SdkProviders } from '@deveye/types/sdk/server';
+
+/** Aucun contrat offert : ce que ces tests n'exercent pas. */
+const NO_PROVIDERS: SdkProviders = { get: () => undefined };
 
 /**
  * Les dépendances d'un service d'arrière-plan : tout y est résolu SANS
@@ -99,7 +103,7 @@ describe('createServiceDeps : createTicker', () => {
     function ticker(t: TestContext, tick: () => Promise<void>, intervalMs = 1000) {
         t.mock.timers.enable({ apis: ['setInterval'] });
         const { host, errors } = fakeHost();
-        const service = createServiceDeps(host, manifest(ID), null).createTicker({ intervalMs, tick });
+        const service = createServiceDeps(host, manifest(ID), null, NO_PROVIDERS).createTicker({ intervalMs, tick });
         return { service, errors };
     }
 
@@ -183,7 +187,7 @@ describe('createServiceDeps : createTicker', () => {
 describe('createServiceDeps : devicesFor', () => {
     it("sans 'devices.read' : forbidden sur list et isOnline, sans toucher à la base", async () => {
         const { host, listByWorkspaceCalls } = fakeHost();
-        const devices = createServiceDeps(host, manifest(ID), null).devicesFor(1);
+        const devices = createServiceDeps(host, manifest(ID), null, NO_PROVIDERS).devicesFor(1);
         await assert.rejects(devices.list(), forbidden);
         assert.throws(() => devices.isOnline('dev-1'), forbidden);
         assert.deepEqual(listByWorkspaceCalls, []);
@@ -191,7 +195,7 @@ describe('createServiceDeps : devicesFor', () => {
 
     it("avec la capacité : les appareils de l'espace demandé, présence comprise", async () => {
         const { host, listByWorkspaceCalls } = fakeHost();
-        const devices = createServiceDeps(host, manifest(ID, ['devices.read']), null).devicesFor(4);
+        const devices = createServiceDeps(host, manifest(ID, ['devices.read']), null, NO_PROVIDERS).devicesFor(4);
         const revealed = (id: string, name: string, online: boolean) => ({
             id,
             name,
@@ -213,7 +217,7 @@ describe('createServiceDeps : devicesFor', () => {
 
     it("n'expose que list et isOnline : authorize reste à la requête", () => {
         const { host } = fakeHost();
-        const devices = createServiceDeps(host, manifest(ID, ['devices.read']), null).devicesFor(1);
+        const devices = createServiceDeps(host, manifest(ID, ['devices.read']), null, NO_PROVIDERS).devicesFor(1);
         assert.deepEqual(Object.keys(devices).sort(), ['isOnline', 'list']);
     });
 });
@@ -221,7 +225,7 @@ describe('createServiceDeps : devicesFor', () => {
 describe('createServiceDeps : audit', () => {
     it('signe système : uid 0, ip vide, info par défaut, la feature pour catégorie', () => {
         const { host, records } = fakeHost();
-        createServiceDeps(host, manifest(ID), null).audit({ action: 'x.tick', description: 'tour' });
+        createServiceDeps(host, manifest(ID), null, NO_PROVIDERS).audit({ action: 'x.tick', description: 'tour' });
         assert.deepEqual(records, [
             {
                 action: 'x.tick',
@@ -238,7 +242,7 @@ describe('createServiceDeps : audit', () => {
 
     it("attribue la ligne à l'utilisateur donné, avec son niveau et ses métadonnées", () => {
         const { host, records } = fakeHost();
-        createServiceDeps(host, manifest(ID), null).audit({
+        createServiceDeps(host, manifest(ID), null, NO_PROVIDERS).audit({
             action: 'x.warn',
             description: 'alerte',
             level: 'warning',
@@ -254,8 +258,14 @@ describe('createServiceDeps : audit', () => {
 
     it("cloudsync porte l'alias historique cloudSync, les autres leur id", () => {
         const { host, records } = fakeHost();
-        createServiceDeps(host, manifest('cloudsync'), null).audit({ action: 'sync.run', description: 'run' });
-        createServiceDeps(host, manifest('weather'), null).audit({ action: 'weather.refresh', description: 'r' });
+        createServiceDeps(host, manifest('cloudsync'), null, NO_PROVIDERS).audit({
+            action: 'sync.run',
+            description: 'run'
+        });
+        createServiceDeps(host, manifest('weather'), null, NO_PROVIDERS).audit({
+            action: 'weather.refresh',
+            description: 'r'
+        });
         assert.deepEqual(
             records.map((r) => r.category),
             ['cloudSync', 'weather']
@@ -265,17 +275,17 @@ describe('createServiceDeps : audit', () => {
 
 describe('createServiceDeps : le reste, sans session', () => {
     it('deveyeFor ne tend que notify', () => {
-        const deps = createServiceDeps(fakeHost().host, manifest(ID, ['notify']), null);
+        const deps = createServiceDeps(fakeHost().host, manifest(ID, ['notify']), null, NO_PROVIDERS);
         assert.deepEqual(Object.keys(deps.deveyeFor(1)), ['notify']);
     });
 
     it("storeFor est sessionless : lire une ligne 'private' lève locked", async () => {
-        const deps = createServiceDeps(fakeHost().host, manifest(ID), null);
+        const deps = createServiceDeps(fakeHost().host, manifest(ID), null, NO_PROVIDERS);
         await assert.rejects(deps.storeFor(1).get('secret'), { name: 'FeatureError', code: 'locked' });
     });
 
     it('cipherFor est mémoïsé par espace, sans lire la base à la construction', () => {
-        const deps = createServiceDeps(fakeHost().host, manifest(ID), null);
+        const deps = createServiceDeps(fakeHost().host, manifest(ID), null, NO_PROVIDERS);
         assert.equal(deps.cipherFor(1), deps.cipherFor(1));
         assert.notEqual(deps.cipherFor(1), deps.cipherFor(2));
     });
@@ -283,19 +293,19 @@ describe('createServiceDeps : le reste, sans session', () => {
     it('agents sans la capacité : lève avant de toucher au hub', () => {
         // À noter : ici une Error nue, là où la façade de requête (facade.ts)
         // lève un FeatureError `forbidden` pour la même faute.
-        const deps = createServiceDeps(fakeHost().host, manifest(ID), null);
+        const deps = createServiceDeps(fakeHost().host, manifest(ID), null, NO_PROVIDERS);
         assert.throws(() => deps.agents.isOnline('dev-1'), /declare 'agents'/);
         assert.throws(() => deps.agents.publishSyncState({} as never), /declare 'agents'/);
     });
 
     it('agents avec la capacité : le hub', () => {
-        const deps = createServiceDeps(fakeHost().host, manifest('cloudsync', ['agents']), null);
+        const deps = createServiceDeps(fakeHost().host, manifest('cloudsync', ['agents']), null, NO_PROVIDERS);
         assert.equal(deps.agents.isOnline('dev-1'), true);
         assert.equal(deps.agents.isOnline('dev-2'), false);
     });
 
     it('keys scelle et rouvre sous la clé serveur, null pour un blob étranger', () => {
-        const deps = createServiceDeps(fakeHost().host, manifest(ID), null);
+        const deps = createServiceDeps(fakeHost().host, manifest(ID), null, NO_PROVIDERS);
         const sealed = deps.keys.sealBytes(new Uint8Array([1, 2, 3]));
         assert.equal(sealed, 'sealed:010203');
         assert.deepEqual(deps.keys.openBytes(sealed), Buffer.from([1, 2, 3]));
@@ -303,7 +313,7 @@ describe('createServiceDeps : le reste, sans session', () => {
     });
 
     it('listWorkspaceIds lit les ids de tous les espaces', async () => {
-        const deps = createServiceDeps(fakeHost().host, manifest(ID), null);
+        const deps = createServiceDeps(fakeHost().host, manifest(ID), null, NO_PROVIDERS);
         assert.deepEqual(await deps.listWorkspaceIds(), [1, 4]);
     });
 });

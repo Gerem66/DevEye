@@ -1,7 +1,6 @@
 import { featureDescriptor } from '@deveye/types';
 
 import CredentialsPanel, { DEPLOY_CREDENTIALS, GIT_CREDENTIALS } from './CredentialsPanel';
-import DestinationsSection from '@/Features/Backup/DestinationsSection';
 
 import type { SettingsScope } from '../scope';
 import styles from '../FeatureSettings.module.css';
@@ -30,10 +29,12 @@ import styles from '../FeatureSettings.module.css';
  * Une entrée `sources` dans `FEATURE_REGISTRY` (elle crée l'onglet et sa phrase
  * de tête), un panneau autonome (il se charge et se rafraîchit tout seul, la
  * coquille ne lui passe rien) et son cas dans l'aiguillage ci-dessous. Le
- * panneau vit chez sa feature (`Features/Backup/DestinationsSection`) ou dans
- * `Components` quand deux features le partagent (`CredentialsPanel`) ; dans les
- * deux cas il importe ses composants par chemins directs, jamais par le baril
- * `@/Components` : il réexporte cette coquille, ce serait un cycle.
+ * panneau vit dans `Components` quand deux features le partagent
+ * (`CredentialsPanel`), et importe ses composants par chemins directs, jamais
+ * par le baril `@/Components` : il réexporte cette coquille, ce serait un
+ * cycle. Un module n'a rien à inscrire ici : il déclare l'onglet dans son
+ * manifest (`settings.feature: ['sources']`) et fournit
+ * `settingsPanels.sources` (les destinations de Sauvegardes, par exemple).
  */
 export default function SourcesSection({ scope }: { scope: SettingsScope }) {
     const descriptor = featureDescriptor(scope.feature);
@@ -43,7 +44,6 @@ export default function SourcesSection({ scope }: { scope: SettingsScope }) {
             {descriptor.sources && <p className={styles.sectionHint}>{descriptor.sources.hint}</p>}
             {scope.feature === 'deploy' && <CredentialsPanel kind={DEPLOY_CREDENTIALS} />}
             {scope.feature === 'git' && <CredentialsPanel kind={GIT_CREDENTIALS} />}
-            {scope.feature === 'backup' && <DestinationsSection />}
         </div>
     );
 }

@@ -1,5 +1,3 @@
-import crypto from 'crypto';
-
 import {
     BLOB_CHUNK_BYTES,
     BLOB_CHUNK_SEALED,
@@ -8,9 +6,9 @@ import {
     createBlobHeader,
     openChunk,
     parseBlobHeader,
-    sealChunk
-} from './devb';
-import type Encryption from '@/Services/Encryption';
+    sealChunk,
+    type SdkServerKeys
+} from '@deveye/types/sdk/server';
 
 /**
  * Chiffrement des archives de sauvegarde.
@@ -21,8 +19,10 @@ import type Encryption from '@/Services/Encryption';
  * 1 Mio scellés en AES-256-GCM, nonce dérivé du compteur, AAD portant le rang et
  * le marqueur de fin. Réécrire un second format aurait produit un second
  * outil de restauration à tenir à jour, et c'est exactement le genre de dette
- * qu'on découvre le jour où on doit s'en servir. Voir `backup/devb.ts`
- * pour la description complète du format et la raison de chacun de ses champs.
+ * qu'on découvre le jour où on doit s'en servir. Le format vit dans le SDK
+ * (`@deveye/types/sdk/server`, `devb.ts`), seul endroit que deux modules
+ * partagent ; voir sa description complète et la raison de chacun de ses
+ * champs là-bas.
  *
  * ## La clé, en revanche, n'est PAS celle de CloudSync
  *
@@ -47,12 +47,16 @@ import type Encryption from '@/Services/Encryption';
  *    clé, pas à côté des archives.
  */
 
-const BACKUP_KEY_SALT = Buffer.from('deveye-backup');
-const BACKUP_KEY_INFO = Buffer.from('v1');
+const BACKUP_KEY_SALT = 'deveye-backup';
+const BACKUP_KEY_INFO = 'v1';
 
-/** La clé de scellement des archives. Purement dérivée : rien à stocker. */
-export function backupKey(crypt: Encryption): Buffer {
-    return Buffer.from(crypto.hkdfSync('sha256', crypt.serverKey(), BACKUP_KEY_SALT, BACKUP_KEY_INFO, 32));
+/**
+ * La clé de scellement des archives. Purement dérivée : rien à stocker. La
+ * dérivation est celle du SDK (`keys.derive`, HKDF-SHA256 sur la clé serveur),
+ * et `scripts/restore-backup.mjs` la refait à l'identique sans DevEye.
+ */
+export function backupKey(keys: SdkServerKeys): Buffer {
+    return Buffer.from(keys.derive(BACKUP_KEY_SALT, BACKUP_KEY_INFO, 32));
 }
 
 /**

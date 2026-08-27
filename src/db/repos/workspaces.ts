@@ -70,7 +70,16 @@ export function workspacesRepo(pool: Q): WorkspacesRepo {
             await pool.query('UPDATE workspaces SET name = ? WHERE id = ?', [name, id]);
         },
         async delete(id) {
-            // Les FK ON DELETE CASCADE emportent les membres et tout le contenu.
+            // Les FK ON DELETE CASCADE emportent les membres et tout le contenu,
+            // à deux exceptions près, retirées à la main AVANT : `deploy_targets`
+            // et `git_repos` portent un `credential_id ... ON DELETE SET NULL`
+            // vers une table que la même cascade détruit. InnoDB traite alors ce
+            // SET NULL comme une mise à jour de la ligne enfant, la revalide
+            // contre son espace en cours de suppression, et refuse (errno 1452
+            // sur `fk_deploy_target_workspace`) : la suppression d'un espace
+            // échouait dès qu'il avait une cible de déploiement ou un dépôt.
+            await pool.query('DELETE FROM deploy_targets WHERE workspace_id = ?', [id]);
+            await pool.query('DELETE FROM git_repos WHERE workspace_id = ?', [id]);
             await pool.query('DELETE FROM workspaces WHERE id = ?', [id]);
         },
         async updateFeatures(id, features) {

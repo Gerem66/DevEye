@@ -32,7 +32,7 @@ async function main() {
     const db = createDatabase(getQueryable(pool));
     const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
 
-    const { app, mailSync, integrations, databases, audience, backups, moduleServices } = await buildApp({
+    const { app, mailSync, integrations, databases, audience, moduleServices } = await buildApp({
         db,
         crypt
     });
@@ -55,7 +55,6 @@ async function main() {
             integrations.stop();
             databases.stop();
             audience.stop();
-            backups.stop();
             // Attendus, et AVANT la fermeture du pool : un module rend son état
             // par une écriture en base (CloudSync libère son bail d'instance).
             // Lancés en `void`, ces arrêts étaient coupés par `pool.end()` puis
@@ -116,11 +115,8 @@ async function main() {
     // Audience : la seule qui ne sonde rien. Elle vide ce que l'ingestion
     // publique a déposé, et tient l'agrégat journalier + la rétention par site.
     audience.start();
-    // Sauvegardes : même forme que les quatre au-dessus, une cadence à part. Le
-    // démarrage solde d'abord les exécutions restées « en cours » d'un arrêt
-    // brutal — sans quoi un travail interrompu resterait éternellement en vol et
-    // tous ses passages suivants seraient sautés en silence.
-    backups.start();
+    // (Les sauvegardes sont un service du module `features/backup`, démarré
+    // avec les autres dans buildApp.)
 
     await app.listen({ port: env.LISTEN_PORT, host: '0.0.0.0' });
     logger.info({ port: env.LISTEN_PORT }, 'DevEye server ready');

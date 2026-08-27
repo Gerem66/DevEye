@@ -4,10 +4,10 @@ import type {
     BackupJobRow,
     BackupJobWithStateRow,
     BackupRunRow
-} from '@deveye/types';
-import type { Queryable } from '../pool';
+} from '../contracts/domain';
+import type { SdkQueryable } from '@deveye/types/sdk/server';
 
-type Q = Queryable;
+type Q = SdkQueryable;
 
 /**
  * Sauvegardes : les destinations de l'espace, les travaux qui y écrivent, et
@@ -19,7 +19,7 @@ type Q = Queryable;
  *
  * Tout est chiffré à l'étage **ouvert** : l'ordonnanceur lit ces lignes sans
  * session, à l'heure où personne n'est devant l'écran. Ne restent en clair que
- * `kind`, `source_kind`, `device_id`, le calendrier et les drapeaux — assez pour
+ * `kind`, `source_kind`, `device_id`, le calendrier et les drapeaux, assez pour
  * choisir une branche de code et trouver les travaux dus sans déchiffrer.
  */
 export interface BackupRepo {
@@ -171,46 +171,44 @@ const JOB_SELECT = `
       LEFT JOIN backup_runs r
              ON r.id = (SELECT y.id FROM backup_runs y WHERE y.job_id = j.id ORDER BY y.started_at DESC, y.id DESC LIMIT 1)`;
 
-export function backupRepo(q: Q): BackupRepo {
+export function createRepo(q: Q): BackupRepo {
     const destById = async (id: number): Promise<BackupDestinationRow> => {
-        const res = await q.query<BackupDestinationRow>('SELECT * FROM backup_destinations WHERE id = ?', [id]);
-        return res.rows[0];
+        const rows = await q.query<BackupDestinationRow>('SELECT * FROM backup_destinations WHERE id = ?', [id]);
+        return rows[0];
     };
     const jobById = async (id: number): Promise<BackupJobRow> => {
-        const res = await q.query<BackupJobRow>('SELECT * FROM backup_jobs WHERE id = ?', [id]);
-        return res.rows[0];
+        const rows = await q.query<BackupJobRow>('SELECT * FROM backup_jobs WHERE id = ?', [id]);
+        return rows[0];
     };
 
     return {
         // -- destinations ---------------------------------------------------
-        async listDestinations(workspaceId) {
-            const res = await q.query<BackupDestinationWithUsageRow>(
+        listDestinations: (workspaceId) =>
+            q.query<BackupDestinationWithUsageRow>(
                 `${DEST_SELECT} WHERE d.workspace_id = ? ORDER BY d.created ASC, d.id ASC`,
                 [workspaceId]
-            );
-            return res.rows;
-        },
+            ),
 
         async findDestination(id, workspaceId) {
-            const res = await q.query<BackupDestinationRow>(
+            const rows = await q.query<BackupDestinationRow>(
                 'SELECT * FROM backup_destinations WHERE id = ? AND workspace_id = ?',
                 [id, workspaceId]
             );
-            return res.rows[0] ?? null;
+            return rows[0] ?? null;
         },
 
         async findDestinationForJob(jobId) {
-            const res = await q.query<BackupDestinationRow>(
+            const rows = await q.query<BackupDestinationRow>(
                 `SELECT d.* FROM backup_destinations d
                    JOIN backup_jobs j ON j.destination_id = d.id
                   WHERE j.id = ?`,
                 [jobId]
             );
-            return res.rows[0] ?? null;
+            return rows[0] ?? null;
         },
 
         async createDestination(input) {
-            const res = await q.query(
+            const res = await q.execute(
                 `INSERT INTO backup_destinations
                     (workspace_id, kind, device_id, path_style, content, secret_enc)
                  VALUES (?, ?, ?, ?, ?, ?)`,
@@ -227,15 +225,15 @@ export function backupRepo(q: Q): BackupRepo {
                 params.push(input.secretEnc);
             }
             params.push(id, workspaceId);
-            const res = await q.query(
+            const res = await q.execute(
                 `UPDATE backup_destinations SET ${sets.join(', ')} WHERE id = ? AND workspace_id = ?`,
                 params
             );
-            return res.rowCount === 0 ? null : destById(id);
+            return res.affectedRows === 0 ? null : destById(id);
         },
 
         async recordDestinationProbe(id, at, status, content) {
-            await q.query('UPDATE backup_destinations SET status = ?, checked_at = ?, content = ? WHERE id = ?', [
+            await q.execute('UPDATE backup_destinations SET status = ?, checked_at = ?, content = ? WHERE id = ?', [
                 status,
                 at,
                 content,
@@ -244,31 +242,29 @@ export function backupRepo(q: Q): BackupRepo {
         },
 
         async deleteDestination(id, workspaceId) {
-            const res = await q.query('DELETE FROM backup_destinations WHERE id = ? AND workspace_id = ?', [
+            const res = await q.execute('DELETE FROM backup_destinations WHERE id = ? AND workspace_id = ?', [
                 id,
                 workspaceId
             ]);
-            return res.rowCount > 0;
+            return res.affectedRows > 0;
         },
 
         async countJobsUsing(destinationId) {
-            const res = await q.query<{ n: number }>('SELECT COUNT(*) AS n FROM backup_jobs WHERE destination_id = ?', [
-                destinationId
-            ]);
-            return Number(res.rows[0]?.n ?? 0);
+            const rows = await q.query<{ n: number }>(
+                'SELECT COUNT(*) AS n FROM backup_jobs WHERE destination_id = ?',
+                [destinationId]
+            );
+            return Number(rows[0]?.n ?? 0);
         },
 
         // -- travaux --------------------------------------------------------
-        async listJobs(workspaceId) {
-            const res = await q.query<BackupJobWithStateRow>(
-                `${JOB_SELECT} WHERE j.workspace_id = ? ORDER BY j.created ASC, j.id ASC`,
-                [workspaceId]
-            );
-            return res.rows;
-        },
+        listJobs: (workspaceId) =>
+            q.query<BackupJobWithStateRow>(`${JOB_SELECT} WHERE j.workspace_id = ? ORDER BY j.created ASC, j.id ASC`, [
+                workspaceId
+            ]),
 
-        async listVisibleJobs(workspaceId) {
-            const res = await q.query<BackupJobWithStateRow>(
+        listVisibleJobs: (workspaceId) =>
+            q.query<BackupJobWithStateRow>(
                 `${JOB_SELECT} WHERE j.workspace_id = ?
                  UNION
                  ${JOB_SELECT}
@@ -277,20 +273,18 @@ export function backupRepo(q: Q): BackupRepo {
                  WHERE sh.workspace_id = ?
                  ORDER BY created ASC, id ASC`,
                 [workspaceId, workspaceId]
-            );
-            return res.rows;
-        },
+            ),
 
         async findJob(id, workspaceId) {
-            const res = await q.query<BackupJobRow>('SELECT * FROM backup_jobs WHERE id = ? AND workspace_id = ?', [
+            const rows = await q.query<BackupJobRow>('SELECT * FROM backup_jobs WHERE id = ? AND workspace_id = ?', [
                 id,
                 workspaceId
             ]);
-            return res.rows[0] ?? null;
+            return rows[0] ?? null;
         },
 
         async findVisibleJob(id, workspaceId) {
-            const res = await q.query<BackupJobRow>(
+            const rows = await q.query<BackupJobRow>(
                 `SELECT j.* FROM backup_jobs j
                   WHERE j.id = ?
                     AND (j.workspace_id = ?
@@ -300,11 +294,11 @@ export function backupRepo(q: Q): BackupRepo {
                                        AND sh.workspace_id = ?))`,
                 [id, workspaceId, workspaceId]
             );
-            return res.rows[0] ?? null;
+            return rows[0] ?? null;
         },
 
         async findVisibleJobWithState(id, workspaceId) {
-            const res = await q.query<BackupJobWithStateRow>(
+            const rows = await q.query<BackupJobWithStateRow>(
                 `${JOB_SELECT}
                   WHERE j.id = ?
                     AND (j.workspace_id = ?
@@ -314,24 +308,24 @@ export function backupRepo(q: Q): BackupRepo {
                                        AND sh.workspace_id = ?))`,
                 [id, workspaceId, workspaceId]
             );
-            return res.rows[0] ?? null;
+            return rows[0] ?? null;
         },
 
         async findJobWithState(id, workspaceId) {
-            const res = await q.query<BackupJobWithStateRow>(`${JOB_SELECT} WHERE j.id = ? AND j.workspace_id = ?`, [
+            const rows = await q.query<BackupJobWithStateRow>(`${JOB_SELECT} WHERE j.id = ? AND j.workspace_id = ?`, [
                 id,
                 workspaceId
             ]);
-            return res.rows[0] ?? null;
+            return rows[0] ?? null;
         },
 
         async findJobById(id) {
-            const res = await q.query<BackupJobRow>('SELECT * FROM backup_jobs WHERE id = ?', [id]);
-            return res.rows[0] ?? null;
+            const rows = await q.query<BackupJobRow>('SELECT * FROM backup_jobs WHERE id = ?', [id]);
+            return rows[0] ?? null;
         },
 
         async countJobs(workspaceId) {
-            const res = await q.query<{ n: number; failing: number }>(
+            const rows = await q.query<{ n: number; failing: number }>(
                 `SELECT COUNT(*) AS n,
                         SUM(
                             CASE WHEN (SELECT y.status FROM backup_runs y
@@ -343,11 +337,11 @@ export function backupRepo(q: Q): BackupRepo {
                   WHERE j.workspace_id = ? AND j.enabled = 1`,
                 [workspaceId]
             );
-            return { count: Number(res.rows[0]?.n ?? 0), failing: Number(res.rows[0]?.failing ?? 0) };
+            return { count: Number(rows[0]?.n ?? 0), failing: Number(rows[0]?.failing ?? 0) };
         },
 
         async createJob(input) {
-            const res = await q.query(
+            const res = await q.execute(
                 `INSERT INTO backup_jobs
                     (workspace_id, destination_id, source_kind, source_id, enabled,
                      schedule_kind, schedule_hour, schedule_weekday, schedule_day,
@@ -373,7 +367,7 @@ export function backupRepo(q: Q): BackupRepo {
         },
 
         async updateJob(id, workspaceId, input) {
-            const res = await q.query(
+            const res = await q.execute(
                 `UPDATE backup_jobs
                     SET destination_id = ?, source_kind = ?, source_id = ?, enabled = ?,
                         schedule_kind = ?, schedule_hour = ?, schedule_weekday = ?, schedule_day = ?,
@@ -396,69 +390,63 @@ export function backupRepo(q: Q): BackupRepo {
                     workspaceId
                 ]
             );
-            return res.rowCount === 0 ? null : jobById(id);
+            return res.affectedRows === 0 ? null : jobById(id);
         },
 
         async deleteJob(id, workspaceId) {
-            const res = await q.query('DELETE FROM backup_jobs WHERE id = ? AND workspace_id = ?', [id, workspaceId]);
-            return res.rowCount > 0;
+            const res = await q.execute('DELETE FROM backup_jobs WHERE id = ? AND workspace_id = ?', [id, workspaceId]);
+            return res.affectedRows > 0;
         },
 
-        async listJobsDue(now, limit) {
-            const res = await q.query<BackupJobRow>(
+        listJobsDue: (now, limit) =>
+            q.query<BackupJobRow>(
                 `SELECT * FROM backup_jobs
                   WHERE next_run_at IS NOT NULL AND next_run_at <= ?
                   ORDER BY next_run_at ASC
                   LIMIT ${Math.max(1, Math.trunc(limit))}`,
                 [now]
-            );
-            return res.rows;
-        },
+            ),
 
         async setNextRun(id, nextRunAt) {
-            await q.query('UPDATE backup_jobs SET next_run_at = ? WHERE id = ?', [nextRunAt, id]);
+            await q.execute('UPDATE backup_jobs SET next_run_at = ? WHERE id = ?', [nextRunAt, id]);
         },
 
         // -- exécutions -----------------------------------------------------
-        async listRuns(jobId, workspaceId, limit) {
-            const res = await q.query<BackupRunRow>(
+        listRuns: (jobId, workspaceId, limit) =>
+            q.query<BackupRunRow>(
                 `SELECT * FROM backup_runs
                   WHERE job_id = ? AND workspace_id = ?
                   ORDER BY started_at DESC, id DESC
                   LIMIT ${Math.max(1, Math.trunc(limit))}`,
                 [jobId, workspaceId]
-            );
-            return res.rows;
-        },
+            ),
 
-        async listWorkspaceRuns(workspaceId, limit) {
-            const res = await q.query<BackupRunRow>(
+        listWorkspaceRuns: (workspaceId, limit) =>
+            q.query<BackupRunRow>(
                 `SELECT * FROM backup_runs
                   WHERE workspace_id = ?
                   ORDER BY started_at DESC, id DESC
                   LIMIT ${Math.max(1, Math.trunc(limit))}`,
                 [workspaceId]
-            );
-            return res.rows;
-        },
+            ),
 
         async findRun(id) {
-            const res = await q.query<BackupRunRow>('SELECT * FROM backup_runs WHERE id = ?', [id]);
-            return res.rows[0] ?? null;
+            const rows = await q.query<BackupRunRow>('SELECT * FROM backup_runs WHERE id = ?', [id]);
+            return rows[0] ?? null;
         },
 
         async startRun(input) {
-            const res = await q.query(
+            const res = await q.execute(
                 `INSERT INTO backup_runs (job_id, workspace_id, encrypted, triggered_by_user_id, content)
                  VALUES (?, ?, ?, ?, ?)`,
                 [input.jobId, input.workspaceId, input.encrypted ? 1 : 0, input.triggeredByUserId, input.content]
             );
-            const row = await q.query<BackupRunRow>('SELECT * FROM backup_runs WHERE id = ?', [res.insertId]);
-            return row.rows[0];
+            const rows = await q.query<BackupRunRow>('SELECT * FROM backup_runs WHERE id = ?', [res.insertId]);
+            return rows[0];
         },
 
         async finishRun(id, input) {
-            await q.query(
+            await q.execute(
                 `UPDATE backup_runs
                     SET status = ?, finished_at = ?, size_bytes = ?, checksum = ?, content = ?
                   WHERE id = ?`,
@@ -466,30 +454,27 @@ export function backupRepo(q: Q): BackupRepo {
             );
         },
 
-        async listRunsToPrune(jobId, keepLast) {
-            const keep = Math.max(1, Math.trunc(keepLast));
-            const res = await q.query<BackupRunRow>(
+        listRunsToPrune: (jobId, keepLast) =>
+            q.query<BackupRunRow>(
                 `SELECT * FROM backup_runs
                   WHERE job_id = ? AND status = 'success' AND pruned = 0
                   ORDER BY started_at DESC, id DESC
-                  LIMIT 1000 OFFSET ${keep}`,
+                  LIMIT 1000 OFFSET ${Math.max(1, Math.trunc(keepLast))}`,
                 [jobId]
-            );
-            return res.rows;
-        },
+            ),
 
         async markPruned(id) {
-            await q.query('UPDATE backup_runs SET pruned = 1 WHERE id = ?', [id]);
+            await q.execute('UPDATE backup_runs SET pruned = 1 WHERE id = ?', [id]);
         },
 
         async failStaleRuns(before) {
-            const res = await q.query(
+            const res = await q.execute(
                 `UPDATE backup_runs
                     SET status = 'failed', finished_at = ?
                   WHERE status = 'running' AND started_at < ?`,
                 [Math.floor(Date.now() / 1000), before]
             );
-            return res.rowCount;
+            return res.affectedRows;
         }
     };
 }

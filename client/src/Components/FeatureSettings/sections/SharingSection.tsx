@@ -54,8 +54,7 @@ const LIST_KEYS: Partial<Record<SettingsScope['feature'], ResourceKey[]>> = {
     database: ['database.list', 'database.count'],
     deploy: ['deploy.list', 'deploy.count'],
     git: ['git.list', 'git.count'],
-    audience: ['audience.list', 'audience.count'],
-    backup: ['backup.jobList', 'backup.count']
+    audience: ['audience.list', 'audience.count']
 };
 
 function listKeysOf(feature: SettingsScope['feature']): readonly ResourceKey[] {

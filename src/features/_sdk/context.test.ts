@@ -6,6 +6,10 @@ import type { FeatureManifest, NativeCapability } from '@deveye/types/sdk';
 
 import type { FeatureAuditEntry, FeatureContext } from '@/features/_define';
 import { createSdkContext } from './context';
+import type { SdkProviders } from '@deveye/types/sdk/server';
+
+/** Aucun contrat offert : ce que ces tests n'exercent pas. */
+const NO_PROVIDERS: SdkProviders = { get: () => undefined };
 
 /**
  * L'adaptateur du contexte natif en contexte SDK : la frontière exacte de ce
@@ -98,7 +102,7 @@ describe('createSdkContext : la projection', () => {
     it('ne laisse passer que le contrat : identité, espace sans propriétaire, droits résolus', () => {
         const repo = { name: 'repo' };
         const f = fakeCtx({ canWrite: true });
-        const sdk = createSdkContext(f.ctx, manifest(), repo);
+        const sdk = createSdkContext(f.ctx, manifest(), repo, NO_PROVIDERS);
         assert.equal(sdk.userId, 7);
         assert.equal(sdk.workspaceId, 3);
         assert.deepEqual(sdk.workspace, { id: 3, kind: 'shared', name: 'Équipe' });
@@ -113,7 +117,7 @@ describe('createSdkContext : la projection', () => {
 
     it("cipher() est l'étage ouvert, cipher('private') l'étage gardé", () => {
         const f = fakeCtx();
-        const sdk = createSdkContext(f.ctx, manifest(), null);
+        const sdk = createSdkContext(f.ctx, manifest(), null, NO_PROVIDERS);
         assert.equal(sdk.cipher(), f.open);
         assert.equal(sdk.cipher('server'), f.open);
         assert.equal(sdk.cipher('private'), f.secure);
@@ -121,7 +125,7 @@ describe('createSdkContext : la projection', () => {
 
     it("audit transmet l'entrée telle quelle, metadata rabattu sur null", () => {
         const f = fakeCtx();
-        const sdk = createSdkContext(f.ctx, manifest(), null);
+        const sdk = createSdkContext(f.ctx, manifest(), null, NO_PROVIDERS);
         sdk.audit({ action: 'x.do', description: 'fait' });
         sdk.audit({ action: 'x.warn', description: 'alerte', level: 'warning', metadata: { n: 1 } });
         assert.deepEqual(f.audits, [
@@ -133,7 +137,7 @@ describe('createSdkContext : la projection', () => {
 
 describe('createSdkContext : canExtra (toggle)', () => {
     const can = (over: Fake, key: string): boolean =>
-        createSdkContext(fakeCtx(over).ctx, manifest(), null).canExtra(key);
+        createSdkContext(fakeCtx(over).ctx, manifest(), null, NO_PROVIDERS).canExtra(key);
 
     it('une clé inconnue du manifest : faux, même accordée', () => {
         assert.equal(can({ extras: { ghost: true } }, 'ghost'), false);
@@ -163,7 +167,7 @@ describe('createSdkContext : canExtra (toggle)', () => {
 
 describe('createSdkContext : extraValue (choice)', () => {
     const value = (over: Fake, key: string): string =>
-        createSdkContext(fakeCtx(over).ctx, manifest(), null).extraValue(key);
+        createSdkContext(fakeCtx(over).ctx, manifest(), null, NO_PROVIDERS).extraValue(key);
 
     it('une clé inconnue du manifest : chaîne vide', () => {
         assert.equal(value({ extras: { ghost: 'all' } }, 'ghost'), '');
@@ -218,7 +222,7 @@ describe('createSdkContext : transport', () => {
 
     it("sans la capacité 'agents' : forbidden sur chaque méthode, socket présent ou non", () => {
         const m = fakeMonitor();
-        const sdk = createSdkContext(fakeCtx({ monitor: m.monitor }).ctx, manifest(), null);
+        const sdk = createSdkContext(fakeCtx({ monitor: m.monitor }).ctx, manifest(), null, NO_PROVIDERS);
         assert.throws(() => sdk.transport.subscribeSync([1]), forbidden);
         assert.throws(() => sdk.transport.unsubscribeSync([1]), forbidden);
         assert.throws(() => sdk.transport.sendSyncChunk({} as never), forbidden);
@@ -227,14 +231,14 @@ describe('createSdkContext : transport', () => {
     });
 
     it('avec la capacité mais hors socket : internal', () => {
-        const sdk = createSdkContext(fakeCtx().ctx, withAgents, null);
+        const sdk = createSdkContext(fakeCtx().ctx, withAgents, null, NO_PROVIDERS);
         assert.throws(() => sdk.transport.subscribeSync([1]), { name: 'FeatureError', code: 'internal' });
         assert.throws(() => sdk.transport.syncChunkBuffered(), { name: 'FeatureError', code: 'internal' });
     });
 
     it('avec la capacité et le socket : délègue à la part sync du monitor', () => {
         const m = fakeMonitor();
-        const sdk = createSdkContext(fakeCtx({ monitor: m.monitor }).ctx, withAgents, null);
+        const sdk = createSdkContext(fakeCtx({ monitor: m.monitor }).ctx, withAgents, null, NO_PROVIDERS);
         sdk.transport.subscribeSync([1, 2]);
         sdk.transport.unsubscribeSync([2]);
         const chunk = { shareId: 1, seq: 0 };

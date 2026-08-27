@@ -1,18 +1,19 @@
 import { useEffect, useState } from 'react';
-import type { BackupDestination, BackupDestinationKind } from '@deveye/types';
+import type { BackupDestination, BackupDestinationKind } from '../contracts/domain';
 
-/* Chemins directs et non le baril `@/Components` : ce dialogue est monté par le
-   panneau Sources de la coquille de réglages, que le baril réexporte ; passer
-   par lui fermerait un cycle de modules. */
-import Button from '@/Components/Button';
-import { DeviceFolderPicker } from '@/Components/DeviceFolderPicker';
-import { Dialog } from '@/Components/Dialog';
-import SelectInput from '@/Components/SelectInput';
-import Switch from '@/Components/Switch';
-import TextInput from '@/Components/TextInput';
-import { ws } from '@/api/ws';
-import { useDevices } from '@/stores/devices';
-import { backupError, DESTINATION_LABELS } from './format';
+import {
+    Button,
+    DeviceFolderPicker,
+    Dialog,
+    humanizeError,
+    SegmentedControl,
+    SelectInput,
+    Switch,
+    TextInput,
+    useDevices
+} from 'deveye-sdk-client';
+import { api } from './api';
+import { DESTINATION_LABELS } from './format';
 import styles from './style.module.css';
 
 interface DestinationDialogProps {
@@ -23,19 +24,27 @@ interface DestinationDialogProps {
     onSaved: () => void;
 }
 
+/** Ce que chaque genre veut dire, sous le sélecteur. */
+const KIND_HINTS: Record<BackupDestinationKind, string> = {
+    local: 'Sur le disque du serveur DevEye. Simple, mais la copie meurt avec la machine qu’elle sauvegarde.',
+    device: 'Sur une machine où tourne un agent (un Raspberry Pi, un NAS). Rien à installer de plus.',
+    s3: 'Garage, MinIO, Scaleway, Backblaze, AWS. Le seul type qui sorte les archives du réseau local.'
+};
+
 /**
  * Déclarer ou modifier une destination.
  *
  * **Un seul formulaire pour les trois genres**, dont les champs apparaissent
  * selon le genre choisi. Trois dialogues auraient obligé à choisir avant de
  * savoir ce que chacun demande, et un formulaire de plus par genre à venir.
+ * Trois choix fixes : des segments, tous visibles, plutôt qu'un déroulant.
  *
  * Le genre n'est pas modifiable après coup : changer un dossier local en bucket
  * S3 ne conserve rien de ce qui précède, et les archives déjà écrites resteraient
  * pointées par des exécutions devenues introuvables. Créer une seconde
  * destination est plus honnête, et laisse l'ancienne se vider par rétention.
  */
-export function DestinationDialog({ open, destination, onClose, onSaved }: DestinationDialogProps) {
+export default function DestinationDialog({ open, destination, onClose, onSaved }: DestinationDialogProps) {
     const { devices } = useDevices();
 
     const [kind, setKind] = useState<BackupDestinationKind>('local');
@@ -98,7 +107,7 @@ export function DestinationDialog({ open, destination, onClose, onSaved }: Desti
                 pathStyle
             };
             if (destination) {
-                await ws.send('backup.destinationUpdate', {
+                await api.send('backup.destinationUpdate', {
                     destinationId: destination.id,
                     ...body,
                     // Champ vide = secret inchangé. Le serveur ne l'a jamais
@@ -106,12 +115,12 @@ export function DestinationDialog({ open, destination, onClose, onSaved }: Desti
                     ...(secret.trim() ? { secret: secret.trim() } : {})
                 });
             } else {
-                await ws.send('backup.destinationAdd', { kind, ...body, secret: secret.trim() || null });
+                await api.send('backup.destinationAdd', { kind, ...body, secret: secret.trim() || null });
             }
             onSaved();
             onClose();
         } catch (e) {
-            setError(backupError(e, 'Impossible d’enregistrer cette destination.'));
+            setError(humanizeError(e, 'Impossible d’enregistrer cette destination.'));
         } finally {
             setBusy(false);
         }
@@ -138,23 +147,19 @@ export function DestinationDialog({ open, destination, onClose, onSaved }: Desti
         >
             <div className={styles.form}>
                 {!destination && (
-                    <label className={styles.field}>
+                    <div className={styles.field}>
                         <span className={styles.fieldLabel}>Type</span>
-                        <SelectInput value={kind} onChange={(e) => setKind(e.target.value as BackupDestinationKind)}>
-                            {(Object.keys(DESTINATION_LABELS) as BackupDestinationKind[]).map((k) => (
-                                <option key={k} value={k}>
-                                    {DESTINATION_LABELS[k]}
-                                </option>
-                            ))}
-                        </SelectInput>
-                        <span className={styles.fieldHint}>
-                            {kind === 'local'
-                                ? 'Sur le disque du serveur DevEye. Simple, mais la copie meurt avec la machine qu’elle sauvegarde.'
-                                : kind === 'device'
-                                  ? 'Sur une machine où tourne un agent — un Raspberry Pi, un NAS. Rien à installer de plus.'
-                                  : 'Garage, MinIO, Scaleway, Backblaze, AWS. Le seul type qui sorte les archives du réseau local.'}
-                        </span>
-                    </label>
+                        <SegmentedControl
+                            aria-label='Type de destination'
+                            value={kind}
+                            onChange={setKind}
+                            options={(Object.keys(DESTINATION_LABELS) as BackupDestinationKind[]).map((k) => ({
+                                value: k,
+                                label: DESTINATION_LABELS[k]
+                            }))}
+                        />
+                        <span className={styles.fieldHint}>{KIND_HINTS[kind]}</span>
+                    </div>
                 )}
 
                 <label className={styles.field}>
@@ -292,7 +297,7 @@ export function DestinationDialog({ open, destination, onClose, onSaved }: Desti
                     </>
                 )}
 
-                {/* Le chiffrement n'est plus ici : c'est chaque TRAVAIL qui
+                {/* Le chiffrement n'est pas ici : c'est chaque TRAVAIL qui
                     choisit la forme de ses archives, dans l'onglet Chiffrement
                     de ses réglages (094). Une destination dit où écrire. */}
 
@@ -301,7 +306,7 @@ export function DestinationDialog({ open, destination, onClose, onSaved }: Desti
 
             {/* Empilé au-dessus du formulaire : il possède alors la couche de
                 fermeture, donc Échap referme le sélecteur sans perdre la saisie
-                derrière. Monté seulement quand une machine est choisie — il
+                derrière. Monté seulement quand une machine est choisie : il
                 s'abonne aux métriques de l'appareil dès l'ouverture. */}
             {kind === 'device' && selectedDevice && (
                 <DeviceFolderPicker
@@ -319,5 +324,3 @@ export function DestinationDialog({ open, destination, onClose, onSaved }: Desti
         </Dialog>
     );
 }
-
-export default DestinationDialog;

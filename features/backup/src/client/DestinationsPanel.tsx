@@ -1,22 +1,20 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { BackupDestination, BackupDestinationProbe } from '@deveye/types';
+import { useState } from 'react';
+import type { SettingsPanelProps } from '@deveye/types/sdk/client';
+import type { BackupDestination, BackupDestinationProbe } from '../contracts/domain';
 
-import Button from '@/Components/Button';
-import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
-import { ws } from '@/api/ws';
-import { invalidate, useResourceVersion } from '@/stores/invalidation';
-import { useWorkspacePermissions } from '@/stores/workspace';
-import DestinationDialog from './DestinationDialog';
 import {
-    backupError,
-    BACKUP_PROBE_TIMEOUT_MS,
-    DESTINATION_ICONS,
-    DESTINATION_LABELS,
-    destinationTone,
-    formatAgo,
-    formatBytes
-} from './format';
-import shell from '@/Components/FeatureSettings/FeatureSettings.module.css';
+    Button,
+    ConfirmDialog,
+    formatBytesFr,
+    humanizeError,
+    invalidate,
+    settingsStyles as shell,
+    useResource,
+    type ConfirmRequest
+} from 'deveye-sdk-client';
+import { api } from './api';
+import DestinationDialog from './DestinationDialog';
+import { BACKUP_PROBE_TIMEOUT_MS, DESTINATION_ICONS, DESTINATION_LABELS, destinationTone, formatAgo } from './format';
 import styles from './style.module.css';
 
 /**
@@ -25,25 +23,25 @@ import styles from './style.module.css';
  *
  * C'était un dialogue à part, derrière son propre bouton « Destinations » en
  * tête de la feature : un endroit de plus à connaître, à côté des réglages. Les
- * sources d'une fonctionnalité vivent désormais toutes au même endroit,
- * Réglages → Sources, et le « + » du dialogue de travail mène ici.
+ * sources d'une fonctionnalité vivent toutes au même endroit, Réglages →
+ * Sources, et le bouton du dialogue de travail mène ici.
  *
  * Rangées, dialogue d'ajout empilé et confirmation : les mêmes formes que la
  * liste des canaux de la section Notifications, exprès. C'est la rangée
- * canonique des réglages, d'où l'emprunt de sa feuille (`shell`) ; seule la
- * pastille d'état reste celle de la feature, qui la partage avec ses cartes.
+ * canonique des réglages, d'où l'emprunt de sa feuille (`settingsStyles`) ;
+ * seule la pastille d'état reste celle de la feature, qui la partage avec ses
+ * cartes.
  *
- * Autonome exprès : il se charge (`backup.destinationList`), s'invalide et se
- * rafraîchit tout seul, condition pour que la coquille de réglages n'ait rien à
- * savoir de lui. Importe ses composants par chemins directs, jamais par le
- * baril `@/Components` : il réexporte la coquille, ce serait un cycle.
+ * Autonome, comme tous les panneaux de la coquille : il se charge
+ * (`backup.destinationList`), s'invalide et se rafraîchit tout seul.
  */
-export function DestinationsSection() {
-    const permissions = useWorkspacePermissions();
-    const canWrite = permissions.canFeature('backup', 'write');
-    const listVersion = useResourceVersion('backup.destinationList');
+export default function DestinationsPanel({ canWrite }: SettingsPanelProps) {
+    const { data: destinations, error: loadError } = useResource(
+        'backup.destinationList',
+        () => api.send('backup.destinationList', {}).then((res) => res.destinations),
+        'Impossible de charger les destinations.'
+    );
 
-    const [destinations, setDestinations] = useState<BackupDestination[] | null>(null);
     const [dialog, setDialog] = useState<{ destination: BackupDestination | null } | null>(null);
     const [testing, setTesting] = useState<number | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -59,20 +57,6 @@ export function DestinationsSection() {
      */
     const [probes, setProbes] = useState<Record<number, BackupDestinationProbe>>({});
 
-    const reload = useCallback(async () => {
-        try {
-            const res = await ws.send('backup.destinationList', {});
-            setDestinations(res.destinations);
-        } catch (e) {
-            setDestinations([]);
-            setError(backupError(e, 'Impossible de charger les destinations.'));
-        }
-    }, []);
-
-    useEffect(() => {
-        void reload();
-    }, [reload, listVersion]);
-
     /**
      * Une destination qui change touche aussi les travaux (nom affiché sur
      * chaque carte, verdict de contrôle) et la tuile de l'accueil : les mêmes
@@ -84,7 +68,7 @@ export function DestinationsSection() {
         setTesting(destination.id);
         setError(null);
         try {
-            const probe = await ws.send(
+            const probe = await api.send(
                 'backup.destinationTest',
                 { destinationId: destination.id },
                 { timeoutMs: BACKUP_PROBE_TIMEOUT_MS }
@@ -93,7 +77,7 @@ export function DestinationsSection() {
             if (!probe.ok) setError(probe.error ?? 'Le contrôle a échoué.');
             changed();
         } catch (e) {
-            setError(backupError(e, 'Le contrôle n’a pas abouti.'));
+            setError(humanizeError(e, 'Le contrôle n’a pas abouti.'));
         } finally {
             setTesting(null);
         }
@@ -113,10 +97,10 @@ export function DestinationsSection() {
                 void (async () => {
                     setError(null);
                     try {
-                        await ws.send('backup.destinationRemove', { destinationId: destination.id });
+                        await api.send('backup.destinationRemove', { destinationId: destination.id });
                         changed();
                     } catch (e) {
-                        setError(backupError(e, 'Impossible de retirer cette destination.'));
+                        setError(humanizeError(e, 'Impossible de retirer cette destination.'));
                     }
                 })()
         });
@@ -124,7 +108,7 @@ export function DestinationsSection() {
 
     return (
         <div className={shell.section}>
-            {destinations === null && <p className={shell.empty}>Chargement…</p>}
+            {destinations === null && !loadError && <p className={shell.empty}>Chargement…</p>}
             {destinations?.length === 0 && (
                 <p className={shell.empty}>
                     {canWrite
@@ -165,10 +149,10 @@ export function DestinationsSection() {
                                         ? 'Jamais contrôlée'
                                         : `Contrôlée ${formatAgo(destination.checkedAt)}`}
                                     {probe?.ok && probe.usedBytes !== null
-                                        ? ` · ${formatBytes(probe.usedBytes ?? 0)} occupés`
+                                        ? ` · ${formatBytesFr(probe.usedBytes ?? 0)} occupés`
                                         : ''}
                                     {probe?.ok && probe.freeBytes !== null
-                                        ? ` · ${formatBytes(probe.freeBytes ?? 0)} libres`
+                                        ? ` · ${formatBytesFr(probe.freeBytes ?? 0)} libres`
                                         : ''}
                                 </span>
                                 {destination.lastError && (
@@ -228,7 +212,7 @@ export function DestinationsSection() {
                 })}
             </div>
 
-            {error && <p className={shell.notice}>{error}</p>}
+            {(error ?? loadError) && <p className={shell.notice}>{error ?? loadError}</p>}
 
             {canWrite && (
                 <div className={shell.sectionActions}>
@@ -249,5 +233,3 @@ export function DestinationsSection() {
         </div>
     );
 }
-
-export default DestinationsSection;

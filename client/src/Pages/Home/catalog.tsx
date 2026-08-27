@@ -7,7 +7,6 @@ import { ProjectsWidget } from '@/Features/Projects/ProjectsWidget';
 import { GitWidget } from '@/Features/Git/GitWidget';
 import { DeployWidget } from '@/Features/Deploy/DeployWidget';
 import { DatabaseWidget } from '@/Features/Database/DatabaseWidget';
-import { BackupWidget } from '@/Features/Backup/BackupWidget';
 import { AudienceWidget } from '@/Features/Audience/AudienceWidget';
 
 import Monitoring from '@/Features/Monitoring';
@@ -16,7 +15,6 @@ import FeatureProjects from '@/Features/Projects';
 import FeatureGit from '@/Features/Git';
 import FeatureDeploy from '@/Features/Deploy';
 import FeatureDatabase from '@/Features/Database';
-import FeatureBackup from '@/Features/Backup';
 import FeatureAudience from '@/Features/Audience';
 
 import type { FeatureProps } from '@/Features/types';
@@ -184,26 +182,6 @@ const NATIVE_CATALOG: FeatureCatalogEntry[] = [
         // des résultats lus chez un serveur tiers, qui n'ont aucune raison de
         // survivre à la fermeture de l'écran. Pas de `holdSecrecy` : rien n'y
         // est chiffré à l'étage gardé.
-        cacheDurationMinutes: 0
-    },
-    {
-        id: 'backup',
-        title: 'Sauvegardes',
-        icon: 'archive',
-        description:
-            'Copies programmées de vos bases et de vos fichiers, vers un serveur, une machine ou un bucket S3.',
-        category: 'dev',
-        links: [
-            { to: 'database', what: 'sauvegarde les bases supervisées' },
-            { to: 'cloudsync', what: 'archive les fichiers d’un partage' },
-            { to: 'mail', what: 'envoie ses alertes par un compte Mail' }
-        ],
-        WidgetContent: BackupWidget,
-        FullComponent: FeatureBackup,
-        // Démonté dès la fermeture, comme Déploiement : la fiche d'un travail
-        // suit une exécution en vol, et une instance en cache continuerait de la
-        // suivre sans être vue. Pas de `holdSecrecy` : rien n'y est chiffré à
-        // l'étage gardé, donc rien ne peut déclencher l'invite de mot de passe.
         cacheDurationMinutes: 0
     },
     {

@@ -21,6 +21,9 @@
     },
     {
       "package": "deveye-feature-sentinel"
+    },
+    {
+      "package": "deveye-feature-backup"
     }
   ]
 }

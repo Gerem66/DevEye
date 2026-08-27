@@ -1,6 +1,5 @@
 import type { FeatureId } from '@deveye/types';
 
-import BackupEncryptionPanel from '@/Features/Backup/BackupEncryptionPanel';
 import MailEncryptionPanel from '@/Features/Mail/MailEncryptionPanel';
 
 import type { SettingsScope } from '../scope';
@@ -13,11 +12,12 @@ import styles from '../FeatureSettings.module.css';
  * fonctionnalité.
  *
  * Même patron que `SourcesSection` : la table dit qui est branché, le panneau
- * est autonome, chemins d'import directs (jamais le baril, cycle).
+ * est autonome, chemins d'import directs (jamais le baril, cycle). Un module
+ * n'a rien à inscrire ici : il déclare l'onglet dans son manifest
+ * (`settings.item: ['encryption']`) et fournit `settingsPanels.encryption`.
  */
 export const ENCRYPTION_WIRED: Partial<Record<FeatureId, true>> = {
-    mail: true,
-    backup: true
+    mail: true
 };
 
 export default function EncryptionSection({ scope }: { scope: SettingsScope }) {
@@ -25,7 +25,6 @@ export default function EncryptionSection({ scope }: { scope: SettingsScope }) {
     return (
         <div className={styles.section}>
             {scope.feature === 'mail' && <MailEncryptionPanel accountId={scope.itemId} />}
-            {scope.feature === 'backup' && <BackupEncryptionPanel jobId={scope.itemId} />}
         </div>
     );
 }

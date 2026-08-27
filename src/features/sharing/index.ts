@@ -118,8 +118,6 @@ async function itemHomeWorkspace(ctx: FeatureContext, feature: FeatureId, itemId
             return (await ctx.db.git.findRepo(itemId, ctx.workspaceId))?.workspace_id ?? null;
         case 'audience':
             return (await ctx.db.audience.find(itemId, ctx.workspaceId))?.workspace_id ?? null;
-        case 'backup':
-            return (await ctx.db.backup.findJob(itemId, ctx.workspaceId))?.workspace_id ?? null;
         default:
             // Les fonctionnalités qu'on ne sait pas encore projeter tombent ici.
             // `shareBlockerFor` les a déjà refusées sur `shareTier`, donc ce cas

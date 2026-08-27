@@ -19,6 +19,8 @@ import { manifest as manifest5 } from 'deveye-feature-uptime';
 import { serverEntry as server5 } from 'deveye-feature-uptime/server';
 import { manifest as manifest6 } from 'deveye-feature-sentinel';
 import { serverEntry as server6 } from 'deveye-feature-sentinel/server';
+import { manifest as manifest7 } from 'deveye-feature-backup';
+import { serverEntry as server7 } from 'deveye-feature-backup/server';
 
 export const INSTALLED_MODULES: readonly InstalledFeatureModule[] = [
     { manifest: { ...manifest0, icon: 'cloud' }, server: server0 },
@@ -28,5 +30,6 @@ export const INSTALLED_MODULES: readonly InstalledFeatureModule[] = [
     { manifest: { ...manifest4, icon: 'notes' }, server: server4 },
     { manifest: { ...manifest5, icon: 'uptime' }, server: server5 },
     { manifest: { ...manifest6, icon: 'shield' }, server: server6 },
+    { manifest: { ...manifest7, icon: 'archive' }, server: server7 },
     ...LOCAL_MODULES
 ];

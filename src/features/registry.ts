@@ -12,7 +12,6 @@ import { databaseFeatures } from './database';
 import { audienceFeatures } from './audience';
 import { gitFeatures } from './git';
 import { deployFeatures } from './deploy';
-import { backupFeatures } from './backup';
 import { projectFeatures } from './project';
 import { secrecyFeatures } from './secrecy';
 import { twoFactorFeatures } from './twofa';
@@ -69,7 +68,6 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...projectFeatures,
     ...gitFeatures,
     ...deployFeatures,
-    ...backupFeatures,
     ...databaseFeatures,
     ...audienceFeatures,
     ...deviceFeatures,

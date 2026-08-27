@@ -5,12 +5,19 @@ import type {
     BackupScheduleKind,
     BackupSourceCandidate,
     BackupSourceKind
-} from '@deveye/types';
+} from '../contracts/domain';
 
-import { Button, Dialog, SelectInput, Switch, TextInput } from '@/Components';
-import { FeatureSettingsDialog } from '@/Components/FeatureSettings';
-import { ws } from '@/api/ws';
-import { backupError, DESTINATION_LABELS, SCHEDULE_LABELS, WEEKDAYS } from './format';
+import {
+    Button,
+    Dialog,
+    FeatureSettingsButton,
+    humanizeError,
+    SelectInput,
+    Switch,
+    TextInput
+} from 'deveye-sdk-client';
+import { api } from './api';
+import { DESTINATION_LABELS, SCHEDULE_LABELS, WEEKDAYS } from './format';
 import styles from './style.module.css';
 
 interface JobDialogProps {
@@ -37,8 +44,11 @@ const keyOf = (kind: BackupSourceKind, id: number | null): string => `${kind}:${
  * côté écran : elles vivent dans trois features différentes, chacune derrière
  * son propre droit, et les recomposer ici aurait demandé trois appels et trois
  * gardes à tenir en phase avec le serveur.
+ *
+ * La cadence reste un déroulant : cinq choix, un de plus que ce qu'une rangée
+ * de segments sait montrer sans s'étirer.
  */
-export function JobDialog({ open, job, destinations, onClose, onSaved, onRemoved }: JobDialogProps) {
+export default function JobDialog({ open, job, destinations, onClose, onSaved, onRemoved }: JobDialogProps) {
     const [candidates, setCandidates] = useState<BackupSourceCandidate[]>([]);
     const [name, setName] = useState('');
     const [sourceKey, setSourceKey] = useState('');
@@ -53,8 +63,6 @@ export function JobDialog({ open, job, destinations, onClose, onSaved, onRemoved
     const [error, setError] = useState<string | null>(null);
     /** La suppression emporte l'historique : elle se confirme sur place. */
     const [confirmRemove, setConfirmRemove] = useState(false);
-    /** Les réglages de la feature, ouverts sur l'onglet Sources par le « + ». */
-    const [manageOpen, setManageOpen] = useState(false);
     /**
      * Les destinations connues au moment d'ouvrir les réglages : celle qui
      * apparaît ensuite vient d'y être créée, et c'est pour ce travail-ci qu'on
@@ -71,9 +79,8 @@ export function JobDialog({ open, job, destinations, onClose, onSaved, onRemoved
         if (!open) return;
         setError(null);
         setConfirmRemove(false);
-        setManageOpen(false);
         knownIds.current = null;
-        void ws
+        void api
             .send('backup.sources', {})
             .then((res) => setCandidates(res.candidates))
             .catch(() => setCandidates([]));
@@ -153,12 +160,12 @@ export function JobDialog({ open, job, destinations, onClose, onSaved, onRemoved
                 // un travail naît scellé (le défaut sûr).
                 encryption: job?.encryption ?? ('server' as const)
             };
-            if (job) await ws.send('backup.jobUpdate', { jobId: job.id, ...body });
-            else await ws.send('backup.jobAdd', body);
+            if (job) await api.send('backup.jobUpdate', { jobId: job.id, ...body });
+            else await api.send('backup.jobAdd', body);
             onSaved();
             onClose();
         } catch (e) {
-            setError(backupError(e, 'Impossible d’enregistrer ce travail.'));
+            setError(humanizeError(e, 'Impossible d’enregistrer ce travail.'));
         } finally {
             setBusy(false);
         }
@@ -169,10 +176,10 @@ export function JobDialog({ open, job, destinations, onClose, onSaved, onRemoved
         setBusy(true);
         setError(null);
         try {
-            await ws.send('backup.jobRemove', { jobId: job.id });
+            await api.send('backup.jobRemove', { jobId: job.id });
             onRemoved?.();
         } catch (e) {
-            setError(backupError(e, 'Impossible de supprimer ce travail.'));
+            setError(humanizeError(e, 'Impossible de supprimer ce travail.'));
         } finally {
             setBusy(false);
         }
@@ -207,7 +214,7 @@ export function JobDialog({ open, job, destinations, onClose, onSaved, onRemoved
                         {candidates.map((c) => (
                             <option key={keyOf(c.kind, c.id)} value={keyOf(c.kind, c.id)} disabled={!c.available}>
                                 {c.name}
-                                {c.available ? '' : ` — ${c.reason ?? 'indisponible'}`}
+                                {c.available ? '' : ` (${c.reason ?? 'indisponible'})`}
                             </option>
                         ))}
                     </SelectInput>
@@ -219,42 +226,43 @@ export function JobDialog({ open, job, destinations, onClose, onSaved, onRemoved
                     <TextInput
                         value={name}
                         maxLength={120}
-                        placeholder='Base de production — nuit'
+                        placeholder='Base de production, la nuit'
                         onChange={(e) => setName(e.target.value)}
                     />
                 </label>
 
-                <label className={styles.field}>
+                <div className={styles.field}>
                     <span className={styles.fieldLabel}>Où l’écrire</span>
                     <div className={styles.fieldWithAction}>
                         <SelectInput value={destinationId} onChange={(e) => setDestinationId(Number(e.target.value))}>
                             {destinations.length === 0 && <option value={0}>Aucune destination déclarée</option>}
                             {destinations.map((d) => (
                                 <option key={d.id} value={d.id}>
-                                    {d.name} — {DESTINATION_LABELS[d.kind]}
+                                    {d.name} ({DESTINATION_LABELS[d.kind]})
                                 </option>
                             ))}
                         </SelectInput>
-                        {/* Le « + » : les destinations se gèrent dans Réglages →
-                            Sources, jamais ici. On ouvre donc ces réglages
-                            par-dessus, et la destination créée est adoptée. */}
-                        <Button
+                        {/* La fiche choisit, les réglages gèrent : les
+                            destinations se déclarent dans Réglages → Sources,
+                            jamais ici. Le bouton commun y mène, par-dessus, et
+                            la destination créée pendant ce temps est adoptée
+                            (`onOpenChange` fige la liste connue à l'ouverture). */}
+                        <FeatureSettingsButton
+                            scope={{ kind: 'feature', feature: 'backup' }}
+                            initialSection='sources'
                             variant='ghost'
-                            icon='plus'
-                            aria-label='Gérer les destinations'
-                            title='Gérer les destinations (Réglages → Sources)'
-                            onClick={() => {
-                                knownIds.current = new Set(destinations.map((d) => d.id));
-                                setManageOpen(true);
+                            label='Destinations'
+                            onOpenChange={(opened) => {
+                                if (opened) knownIds.current = new Set(destinations.map((d) => d.id));
                             }}
                         />
                     </div>
                     {destinations.length === 0 && (
                         <span className={styles.fieldHint}>
-                            Aucune destination dans cet espace : le « + » ouvre les réglages pour en déclarer une.
+                            Aucune destination dans cet espace : le bouton ouvre les réglages pour en déclarer une.
                         </span>
                     )}
-                </label>
+                </div>
 
                 <div className={styles.fieldRow}>
                     <label className={styles.field}>
@@ -370,17 +378,6 @@ export function JobDialog({ open, job, destinations, onClose, onSaved, onRemoved
 
                 {error && <p className={styles.error}>{error}</p>}
             </div>
-
-            {/* Les Dialog passent par un portail : celui-ci s'empile simplement
-                au-dessus, et la pile de couches route Échap vers lui seul. */}
-            <FeatureSettingsDialog
-                open={manageOpen}
-                onClose={() => setManageOpen(false)}
-                scope={{ kind: 'feature', feature: 'backup' }}
-                initialSection='sources'
-            />
         </Dialog>
     );
 }
-
-export default JobDialog;

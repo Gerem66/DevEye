@@ -127,11 +127,6 @@ const NON_MUTATING = new Set([
     'mail.accountTestConnection',
     'mail.attachmentScan',
     'mail.attachmentDownload',
-    // Contrôle d'accessibilité et déclenchement : le premier écrit bien le
-    // verdict sur la ligne (il déclare donc `mutates`), le second ouvre une
-    // exécution. Aucun des deux n'a de verbe mutant dans son nom — ils sont ici
-    // pour que la liste reste le reflet exact de ce que le filet ne voit pas.
-    'backup.testNotification',
     'workspace.activate',
     'device.updateAgent',
     'device.upgradePackages',

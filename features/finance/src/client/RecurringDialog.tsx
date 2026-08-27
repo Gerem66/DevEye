@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Checkbox, Dialog, DialogCancelButton, humanizeError, SelectInput, TextInput } from 'deveye-sdk-client';
+import {
+    Button,
+    Checkbox,
+    Dialog,
+    DialogCancelButton,
+    humanizeError,
+    SegmentedControl,
+    SelectInput,
+    TextInput
+} from 'deveye-sdk-client';
 import type { FinanceFrequency, FinanceRecurring, FinanceTransactionKind } from '../contracts/domain';
 import {
     FINANCE_COUNTERPARTY_MAX_LENGTH,
@@ -213,19 +222,15 @@ export function RecurringDialog({ base, open, recurring, onClose, onSaved }: Rec
                 </label>
 
                 <div className={styles.formRow}>
-                    <label className={styles.field}>
+                    <div className={styles.field}>
                         <span className={styles.fieldLabel}>Cadence</span>
-                        <SelectInput
+                        <SegmentedControl
+                            aria-label='Cadence'
                             value={draft.frequency}
-                            onChange={(e) => set('frequency', e.target.value as FinanceFrequency)}
-                        >
-                            {FREQUENCIES.map((entry) => (
-                                <option key={entry.id} value={entry.id}>
-                                    {entry.label}
-                                </option>
-                            ))}
-                        </SelectInput>
-                    </label>
+                            onChange={(v: FinanceFrequency) => set('frequency', v)}
+                            options={FREQUENCIES.map((entry) => ({ value: entry.id, label: entry.label }))}
+                        />
+                    </div>
                     <label className={styles.field}>
                         <span className={styles.fieldLabel}>Tous les</span>
                         <TextInput

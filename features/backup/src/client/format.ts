@@ -4,9 +4,7 @@ import type {
     BackupRunStatus,
     BackupScheduleKind,
     BackupSourceKind
-} from '@deveye/types';
-
-import { WsError } from '@/api/ws';
+} from '../contracts/domain';
 
 /** Le vocabulaire de la feature, un seul jeu pour tous ses écrans. */
 export const DESTINATION_LABELS: Record<BackupDestinationKind, string> = {
@@ -60,20 +58,6 @@ export function destinationTone(status: BackupDestinationStatus): 'neutral' | 'o
     if (status === 'ok') return 'online';
     if (status === 'error') return 'danger';
     return 'neutral';
-}
-
-/** Une taille lisible. Base 1024, comme le reste de DevEye. */
-export function formatBytes(bytes: number): string {
-    if (bytes <= 0) return '0 o';
-    if (bytes < 1024) return `${bytes} o`;
-    const units = ['Kio', 'Mio', 'Gio', 'Tio'];
-    let value = bytes / 1024;
-    let unit = 0;
-    while (value >= 1024 && unit < units.length - 1) {
-        value /= 1024;
-        unit += 1;
-    }
-    return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`;
 }
 
 /** « il y a 3 min » — la même échelle que les autres features. */
@@ -131,18 +115,6 @@ export function describeSchedule(job: {
         case 'monthly':
             return `Le ${job.scheduleDay} de chaque mois à ${hour}`;
     }
-}
-
-/**
- * Le message du serveur, tel quel.
- *
- * Comme pour Déploiement : presque tous les échecs viennent d'un tiers (un
- * bucket refusé, un agent hors ligne, un `mysqldump` absent), et les cacher
- * derrière un intitulé générique retirerait justement ce qui dit quoi corriger.
- */
-export function backupError(e: unknown, fallback: string): string {
-    if (e instanceof WsError && e.message) return e.message;
-    return fallback;
 }
 
 /**

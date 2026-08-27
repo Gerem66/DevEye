@@ -20,6 +20,8 @@ import { manifest as manifest5 } from 'deveye-feature-uptime';
 import { clientEntry as client5 } from 'deveye-feature-uptime/client';
 import { manifest as manifest6 } from 'deveye-feature-sentinel';
 import { clientEntry as client6 } from 'deveye-feature-sentinel/client';
+import { manifest as manifest7 } from 'deveye-feature-backup';
+import { clientEntry as client7 } from 'deveye-feature-backup/client';
 
 export const INSTALLED_CLIENT_FEATURES: readonly InstalledClientFeature[] = [
     { manifest: { ...manifest0, icon: 'cloud' }, client: client0 },
@@ -29,5 +31,6 @@ export const INSTALLED_CLIENT_FEATURES: readonly InstalledClientFeature[] = [
     { manifest: { ...manifest4, icon: 'notes' }, client: client4 },
     { manifest: { ...manifest5, icon: 'uptime' }, client: client5 },
     { manifest: { ...manifest6, icon: 'shield' }, client: client6 },
+    { manifest: { ...manifest7, icon: 'archive' }, client: client7 },
     ...LOCAL_CLIENT_FEATURES
 ];

@@ -3,6 +3,12 @@
 Copies programmées de ce que DevEye détient, vers un endroit qui n'est pas le
 serveur qui les produit.
 
+Module in-repo (`features/backup`, huitième native rapatriée sur le SDK des
+features, 28 août 2026) : contrats dans `src/contracts/`, moteur et handlers
+dans `src/server/`, écrans dans `src/client/`. L'app ne garde que l'identité
+(`backup` dans le registre publié) et, tant que Bases de données est native,
+le contrat qu'elle offre au module (`src/features/database/backupProvider.ts`).
+
 Trois notions, et la séparation est la feature elle-même :
 
 | Notion            | Ce que c'est                                        | Fréquence de changement |
@@ -61,7 +67,7 @@ qu'une archive absente, parce qu'on croit être couvert.
 Garage, MinIO, Scaleway, Backblaze, AWS. Le seul des trois qui sorte les octets
 du réseau local.
 
-Le client S3 est écrit dans `src/backup/s3.ts` — signature SigV4, `PUT` simple
+Le client S3 est écrit dans `features/backup/src/server/s3.ts` : signature SigV4, `PUT` simple
 en dessous de 16 Mio, envoi multiple au-delà, avec abandon explicite en cas
 d'échec (S3 facture les parties d'un envoi jamais terminé, et elles sont
 invisibles au listage).
@@ -116,9 +122,13 @@ là-dedans. Les sauvegarder séparément reviendrait à les copier deux fois.
 ### `database` — une base supervisée de l'espace
 
 Passe par le **même accès** que la supervision, tunnel SSH ou proxy SOCKS
-compris : le moteur réutilise `DatabaseMonitor.targetOf`, seul endroit qui
-déchiffre les secrets d'une connexion. Une base joignable par la feature Bases de
-données est donc sauvegardable sans configuration supplémentaire.
+compris : le module ne déchiffre aucune connexion, il demande à Bases de
+données un accès ouvert (`DATABASE_BACKUP_PROVIDER`, `openAccess`, lu par
+`deps.providers.get`), que la feature construit avec `DatabaseMonitor.targetOf`
+et son tunnel, et referme quand le flux s'achève. Une base joignable par la
+feature Bases de données est donc sauvegardable sans configuration
+supplémentaire, et le jour où cette feature devient un module, son service
+publie la même clé sans que Sauvegardes change d'une ligne.
 
 ### `cloudsync` — les blobs d'un partage
 
@@ -152,7 +162,8 @@ Le mot de passe passe par l'environnement (`MYSQL_PWD`, `PGPASSWORD`), jamais pa
 
 Les archives sont scellées au **même format que les blobs CloudSync** (`DEVB`
 v2 : AES-256-GCM par blocs de 1 Mio, nonce dérivé du rang, AAD portant le rang et
-un marqueur de fin — voir `src/cloudSync/blobCrypto.ts`).
+un marqueur de fin). Le format vit dans le SDK (`@deveye/types/sdk/server`,
+`devb.ts`), seul endroit que deux modules partagent.
 
 La **clé**, en revanche, n'est pas celle de CloudSync, et la différence est
 vitale :
@@ -162,7 +173,8 @@ BAK = HKDF-SHA256(serverKey, salt='deveye-backup', info='v1', 32)
 serverKey = SHA-256("CRYPT_KEY_A:CRYPT_KEY_B")
 ```
 
-Elle est **dérivée, jamais stockée**. La BMK de CloudSync est rangée wrappée dans
+Elle est **dérivée, jamais stockée** (`deps.keys.derive`, la dérivation du
+SDK). La BMK de CloudSync est rangée wrappée dans
 la table `sync_meta` : l'utiliser ici aurait mis la clé qui déchiffre l'archive
 *à l'intérieur* de l'archive. Le jour où on restaure — c'est-à-dire le jour où la
 base a disparu — on n'aurait eu aucun moyen de l'ouvrir.
@@ -214,9 +226,9 @@ tar -xzf archive.tar.gz                             # source cloudsync
 
 ## L'ordonnanceur
 
-Même forme que `UptimeMonitor`, `DatabaseMonitor` et les autres : une boucle
-`setInterval` démarrée par `index.ts`. Trois différences structurelles, qui
-tiennent toutes au fait qu'une sauvegarde **dure** :
+Même forme que les autres services de fond : un ticker du SDK
+(`deps.createTicker`), démarré par le service du module. Trois différences
+structurelles, qui tiennent toutes au fait qu'une sauvegarde **dure** :
 
 1. **Un travail à la fois** — la réservation est prise *avant* le premier `await`
    (deux clics rapprochés passeraient un contrôle placé après, et lanceraient deux
@@ -244,9 +256,16 @@ la panne qu'on découvre quand le disque est plein.
 
 ### Notifications
 
-Ses propres canaux (`notification_settings`, ligne `backup`), comme les quatre
-émetteurs qui précèdent. **Seuls les échecs sont notifiés** : sinon le canal se
-remplirait de succès et l'échec s'y perdrait.
+Ses propres canaux, comme les autres émetteurs, par la façade du SDK
+(`deps.deveyeFor(ws).notify.send(alert, { itemId })` : la route du travail
+l'emporte sur celle de la fonctionnalité). **Seuls les échecs sont notifiés** :
+sinon le canal se remplirait de succès et l'échec s'y perdrait.
+
+### Une machine comme destination
+
+L'agent écrit par la façade agents du SDK (`deps.agents.requestFilesMutate`,
+`requestFilesUpload`, `awaitFilesOp`, `buffered` pour la contre-pression) :
+les ordres de l'explorateur de fichiers, sans rien changer à l'agent.
 
 ---
 
@@ -255,6 +274,11 @@ remplirait de succès et l'échec s'y perdrait.
 Tout vit à l'étage **ouvert** du chiffrement (voir `SECURITY_MODEL.md`), sans
 exception : l'ordonnanceur passe à 3 h du matin, sans session ni mot de passe. Un
 secret S3 qu'il ne pourrait pas lire serait un travail qui ne part jamais.
+
+La clé étrangère des travaux vers leur destination cascade depuis la migration
+`backup/001` du module : le refus de retirer une destination encore visée vit
+dans le handler (qui dit combien de travaux bloquent), et la suppression d'un
+espace ne bute plus dessus.
 
 Le droit d'espace est `backup`, distinct de `database` exprès. Sa **lecture** est
 déjà lourde : la liste des destinations dit *où sont les copies de tout*. Qui la

@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Dialog, DialogCancelButton, humanizeError, SelectInput, TextInput } from 'deveye-sdk-client';
+import {
+    Button,
+    Dialog,
+    DialogCancelButton,
+    humanizeError,
+    SegmentedControl,
+    SelectInput,
+    TextInput
+} from 'deveye-sdk-client';
 import type { FinanceBudget, FinanceBudgetPeriod, FinanceCategory } from '../contracts/domain';
 
 import { api, refreshFinance } from './api';
@@ -121,19 +129,15 @@ export function BudgetDialog({ base, open, budget, available, onClose, onSaved }
                             onChange={(e) => setDraft((d) => ({ ...d, amount: e.target.value }))}
                         />
                     </label>
-                    <label className={styles.field}>
+                    <div className={styles.field}>
                         <span className={styles.fieldLabel}>Période</span>
-                        <SelectInput
+                        <SegmentedControl
+                            aria-label='Période'
                             value={draft.period}
-                            onChange={(e) => setDraft((d) => ({ ...d, period: e.target.value as FinanceBudgetPeriod }))}
-                        >
-                            {BUDGET_PERIODS.map((entry) => (
-                                <option key={entry.id} value={entry.id}>
-                                    {entry.label}
-                                </option>
-                            ))}
-                        </SelectInput>
-                    </label>
+                            onChange={(v: FinanceBudgetPeriod) => setDraft((d) => ({ ...d, period: v }))}
+                            options={BUDGET_PERIODS.map((entry) => ({ value: entry.id, label: entry.label }))}
+                        />
+                    </div>
                 </div>
 
                 <p className={styles.fieldHint}>

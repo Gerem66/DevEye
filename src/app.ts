@@ -22,7 +22,7 @@ import { authRoutes } from '@/auth/routes';
 import { logger } from '@/logger';
 import { env, isDev } from '@/Utils/Env';
 import { registerWS } from '@/ws/handler';
-import { createModuleServices, moduleAgentHooks } from '@/features/_sdk/register';
+import { createModuleServices, moduleAgentHooks, registerNativeProvider } from '@/features/_sdk/register';
 import { setSdkHost } from '@/features/_sdk/host';
 import type { FeatureService } from '@deveye/types/sdk/server';
 import { createAuditLog } from '@/Services/AuditLog';
@@ -30,7 +30,7 @@ import { MailSyncService } from '@/Services/MailSyncService';
 import { IntegrationSyncService } from '@/Services/IntegrationSyncService';
 import { DatabaseMonitor } from '@/Services/DatabaseMonitor';
 import { AudienceIngest } from '@/Services/AudienceIngest';
-import { BackupService } from '@/Services/BackupService';
+import { createDatabaseBackupProvider, DATABASE_BACKUP_PROVIDER } from '@/features/database/backupProvider';
 import { mailAttachmentRoutes } from '@/mail/attachmentRoutes';
 import { mailOAuthRoutes } from '@/mail/oauthRoutes';
 import { status } from '@/status';
@@ -55,7 +55,6 @@ export interface BuiltApp {
     /** Ingestion d'audience — démarrée/arrêtée par index.ts. */
     audience: AudienceIngest;
     /** Ordonnanceur des sauvegardes — démarré/arrêté par index.ts. */
-    backups: BackupService;
     /** Synchro Mail en tâche de fond (comptes « open » uniquement) — démarrée/arrêtée par index.ts. */
     mailSync: MailSyncService;
 }
@@ -188,6 +187,13 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // disponibilité — la même erreur que Sentinelle avant la 075, corrigée de la
     // même façon, reprise de la ligne existante comprise.
     const databases = new DatabaseMonitor({ db: deps.db, crypt: deps.crypt, logger, live });
+    // Ce que le module Sauvegardes demande aux bases (noms, accès ouvert,
+    // tunnel compris), offert par l'app tant que la feature est native. Le
+    // module le lit par `providers.get` sans savoir qui l'offre.
+    registerNativeProvider(
+        DATABASE_BACKUP_PROVIDER,
+        createDatabaseBackupProvider({ db: deps.db, crypt: deps.crypt, databases })
+    );
     // L'ingestion d'audience. Rien à joindre au-dehors : contrairement aux
     // trois services ci-dessus, celui-ci ne sonde rien — il **reçoit**, et son
     // seul travail périodique est de vider ce qu'on lui a déposé.
@@ -195,22 +201,8 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // (Le moteur de Sentinelle est un service du module `features/sentinel`,
     // démarré avec les autres ci-dessus ; ses relevés lui arrivent par les
     // hooks agent.)
-    // Sauvegardes. Le seul service de fond qui ait besoin des **trois** autres
-    // mondes à la fois : le hub d'agents (pour déposer une archive sur une
-    // machine), le moteur CloudSync (pour relire les blobs d'un partage) et le
-    // relevé des bases (pour déchiffrer la cible d'une connexion, seule à voir
-    // les secrets). Les lui passer plutôt que de recopier leur logique est ce
-    // qui garantit qu'une sauvegarde emprunte exactement le même chemin d'accès
-    // que la supervision — jusqu'au tunnel SSH.
-    const backups = new BackupService({
-        db: deps.db,
-        crypt: deps.crypt,
-        hub,
-        databases,
-        audit,
-        logger,
-        live
-    });
+    // (Les sauvegardes sont un service du module `features/backup` : la flotte
+    // d'agents par sa façade, CloudSync et les bases par leurs contrats.)
 
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await agentRoutes(app, { db: deps.db, hub, live, audit });
@@ -225,7 +217,6 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         integrations,
         databases,
         audience,
-        backups,
         audit
     });
     // Les modules reçoivent ce que les agents envoient, une fois persisté, par
@@ -260,5 +251,5 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         app.log.debug({ clientDir }, 'No client build found; static serving disabled (host dev uses Vite)');
     }
 
-    return { app, mailSync, integrations, databases, audience, backups, moduleServices };
+    return { app, mailSync, integrations, databases, audience, moduleServices };
 }

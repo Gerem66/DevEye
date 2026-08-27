@@ -5,10 +5,10 @@ import { createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import { Readable } from 'stream';
 
-import type { BackupDestinationProbe } from '@deveye/types';
+import type { BackupDestinationProbe } from '../contracts/domain';
 
-import type { MonitorHub } from '@/agent/hub';
-import { env } from '@/Utils/Env';
+import type { AgentsFacade } from '@deveye/types/sdk/server';
+import { env } from './env';
 import { S3Client, type S3Config } from './s3';
 
 /**
@@ -209,7 +209,8 @@ export class DeviceSink implements BackupSink {
     private readonly dir: string;
 
     constructor(
-        private readonly hub: MonitorHub,
+        /** La façade agents du SDK : les mêmes ordres que l'explorateur de fichiers. */
+        private readonly hub: AgentsFacade,
         private readonly deviceId: string,
         private readonly deviceName: string,
         absolutePath: string
@@ -347,7 +348,7 @@ export class DeviceSink implements BackupSink {
      */
     private async waitForDrain(): Promise<void> {
         let waited = 0;
-        while (this.hub.agentBuffered(this.deviceId) > DeviceSink.BACKPRESSURE_BYTES) {
+        while (this.hub.buffered(this.deviceId) > DeviceSink.BACKPRESSURE_BYTES) {
             if (waited > DeviceSink.OP_TIMEOUT_MS) {
                 throw new Error(`L'appareil « ${this.deviceName} » ne consomme plus les données envoyées.`);
             }

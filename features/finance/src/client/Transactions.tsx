@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Button, humanizeError, SelectInput, TextInput, useResource } from 'deveye-sdk-client';
+import { Button, humanizeError, SegmentedControl, SelectInput, TextInput, useResource } from 'deveye-sdk-client';
 import type { FinanceTransaction, FinanceTransactionKind } from '../contracts/domain';
 
 import { api, refreshFinance } from './api';
@@ -212,21 +212,18 @@ export function Transactions({ base, onEdit }: TransactionsProps) {
                     ))}
                 </SelectInput>
 
-                <SelectInput
-                    value={kind ?? ''}
+                <SegmentedControl
                     aria-label='Nature'
-                    onChange={(e) => {
-                        setKind(e.target.value === '' ? null : (e.target.value as FinanceTransactionKind));
+                    value={kind ?? ''}
+                    onChange={(v: FinanceTransactionKind | '') => {
+                        setKind(v === '' ? null : v);
                         setPage(0);
                     }}
-                >
-                    <option value=''>Toutes natures</option>
-                    {TRANSACTION_KINDS.map((entry) => (
-                        <option key={entry.id} value={entry.id}>
-                            {entry.label}
-                        </option>
-                    ))}
-                </SelectInput>
+                    options={[
+                        { value: '' as const, label: 'Toutes' },
+                        ...TRANSACTION_KINDS.map((entry) => ({ value: entry.id, label: entry.label }))
+                    ]}
+                />
 
                 <TextInput
                     type='search'

@@ -117,6 +117,8 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
                 if (tab === 'general') sections.push({ id: 'general', label: 'Général', icon: 'settings' });
                 else if (tab === 'sources' && scope.kind === 'feature') {
                     sections.push({ id: 'sources', label: 'Sources', icon: 'key' });
+                } else if (tab === 'encryption' && scope.kind === 'item') {
+                    sections.push({ id: 'encryption', label: 'Chiffrement', icon: 'lock' });
                 } else if (typeof tab === 'object') {
                     sections.push({ id: tab.id, label: tab.label, icon: tab.icon ?? 'settings' });
                 }

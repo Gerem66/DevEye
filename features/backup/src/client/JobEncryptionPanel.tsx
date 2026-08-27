@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { BackupEncryption, BackupJob } from '@deveye/types';
+import { useEffect, useState } from 'react';
+import type { SettingsPanelProps } from '@deveye/types/sdk/client';
+import type { BackupEncryption } from '../contracts/domain';
 
-import Button from '@/Components/Button';
-import SegmentedControl from '@/Components/SegmentedControl';
-import { invalidate, useResourceVersion } from '@/stores/invalidation';
-import { ws } from '@/api/ws';
-
-import shell from '@/Components/FeatureSettings/FeatureSettings.module.css';
-import { backupError } from './format';
+import {
+    Button,
+    humanizeError,
+    invalidate,
+    SegmentedControl,
+    settingsStyles as shell,
+    useResource
+} from 'deveye-sdk-client';
+import { api } from './api';
 
 /**
  * La forme des archives d'un travail : l'onglet Chiffrement de ses réglages.
@@ -31,34 +34,32 @@ import { backupError } from './format';
  * Le choix vaut pour les archives **à venir** : chaque exécution fige la forme
  * qu'elle a réellement écrite, et l'historique l'affiche par passage.
  */
-export default function BackupEncryptionPanel({ jobId }: { jobId: number }) {
-    const version = useResourceVersion('backup.detail');
-    const [job, setJob] = useState<BackupJob | null>(null);
+export default function JobEncryptionPanel({ scope, canWrite }: SettingsPanelProps) {
+    const jobId = scope.kind === 'item' ? scope.itemId : null;
+    const { data: job, error: loadError } = useResource(
+        'backup.detail',
+        () => api.send('backup.jobGet', { jobId: jobId ?? 0, limit: 1 }).then((res) => res.job),
+        'Chargement impossible.',
+        [jobId]
+    );
     const [mode, setMode] = useState<BackupEncryption>('server');
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState<string | null>(null);
 
-    const load = useCallback(async () => {
-        try {
-            const res = await ws.send('backup.jobGet', { jobId, limit: 1 });
-            setJob(res.job);
-            setMode(res.job.encryption);
-        } catch (e) {
-            setStatus(backupError(e, 'Chargement impossible.'));
-        }
-    }, [jobId]);
-
+    // Le choix affiché suit le travail chargé, et lui seul : une relecture
+    // (le sujet live bat à chaque exécution) ne doit pas effacer un choix en
+    // cours tant qu'il n'a pas changé côté serveur.
     useEffect(() => {
-        void load();
-    }, [load, version]);
+        if (job) setMode(job.encryption);
+    }, [job?.encryption, job]);
 
-    if (!job) return <p className={shell.sectionHint}>{status ?? 'Chargement…'}</p>;
+    if (!job) return <p className={loadError ? shell.notice : shell.empty}>{loadError ?? 'Chargement…'}</p>;
 
     const save = async () => {
         setBusy(true);
         setStatus(null);
         try {
-            await ws.send('backup.jobUpdate', {
+            await api.send('backup.jobUpdate', {
                 jobId: job.id,
                 name: job.name,
                 destinationId: job.destinationId,
@@ -75,7 +76,7 @@ export default function BackupEncryptionPanel({ jobId }: { jobId: number }) {
             invalidate('backup.detail', 'backup.jobList');
             setStatus('Forme enregistrée : elle vaut pour les prochaines archives.');
         } catch (e) {
-            setStatus(backupError(e, 'Enregistrement impossible.'));
+            setStatus(humanizeError(e, 'Enregistrement impossible.'));
         } finally {
             setBusy(false);
         }
@@ -90,13 +91,13 @@ export default function BackupEncryptionPanel({ jobId }: { jobId: number }) {
     }
 
     return (
-        <>
+        <div className={shell.section}>
             <div className={shell.field}>
                 <span className={shell.fieldLabel}>Forme des archives</span>
                 <SegmentedControl
                     aria-label='Forme des archives'
                     value={mode}
-                    disabled={busy}
+                    disabled={busy || !canWrite}
                     onChange={setMode}
                     options={[
                         {
@@ -126,13 +127,20 @@ export default function BackupEncryptionPanel({ jobId }: { jobId: number }) {
                 leur exécution.
             </p>
 
-            <div className={shell.sectionActions}>
-                <Button onClick={() => void save()} disabled={busy || mode === job.encryption}>
-                    {busy ? 'Enregistrement…' : 'Enregistrer'}
-                </Button>
-            </div>
+            {canWrite ? (
+                <div className={shell.sectionActions}>
+                    <Button onClick={() => void save()} disabled={busy || mode === job.encryption}>
+                        {busy ? 'Enregistrement…' : 'Enregistrer'}
+                    </Button>
+                </div>
+            ) : (
+                <p className={shell.sectionHint}>
+                    Votre rôle ne permet pas de modifier la forme des archives : elle relève de l’écriture sur les
+                    Sauvegardes.
+                </p>
+            )}
 
             {status && <p className={shell.notice}>{status}</p>}
-        </>
+        </div>
     );
 }

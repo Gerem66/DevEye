@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 
 import styles from './style.module.css';
 
-import { Button, ClosePopup, DialogCancelButton, Popup, SelectInput, TextInput } from 'deveye-sdk-client';
+import { Button, ClosePopup, DialogCancelButton, Popup, SegmentedControl, TextInput } from 'deveye-sdk-client';
 import type { PasswordEntry, PasswordStatus } from '../contracts/domain';
 
 import PasswordGeneratorMenu from './PasswordGeneratorMenu';
@@ -94,10 +94,6 @@ function PasswordPopupAdd({ passwordCategories }: PasswordPopupAddProps) {
         handleBack('delete');
     }
 
-    function handleStatusPassword(e: React.ChangeEvent<HTMLSelectElement>) {
-        setStatus(e.target.value as PasswordStatus);
-    }
-
     return (
         <Popup
             id='popup-add-password'
@@ -155,11 +151,16 @@ function PasswordPopupAdd({ passwordCategories }: PasswordPopupAddProps) {
                     <PasswordGeneratorMenu onGenerate={setPassword} />
                 </div>
 
-                <SelectInput value={status} onChange={handleStatusPassword}>
-                    <option value='active'>Actif</option>
-                    <option value='inactive'>Inactif</option>
-                    <option value='none'>Indéterminé</option>
-                </SelectInput>
+                <SegmentedControl
+                    aria-label='Statut du mot de passe'
+                    value={status}
+                    onChange={(v: PasswordStatus) => setStatus(v)}
+                    options={[
+                        { value: 'active', label: 'Actif' },
+                        { value: 'inactive', label: 'Inactif' },
+                        { value: 'none', label: 'Indéterminé' }
+                    ]}
+                />
             </div>
 
             <div className={styles.popupActions}>

@@ -11,36 +11,78 @@ import type {
     BackupRunStatus,
     BackupScheduleKind,
     BackupSourceKind
-} from '@deveye/types';
+} from '../contracts/domain';
 
-import type { Cipher } from '@/Services/SecureStore';
-import type { FeatureAccessSpec, FeatureContext } from '../_define';
-import { FeatureError } from '../_define';
-import type { ShareScope } from '../_sharing';
-import type { StoredDestination, StoredJob, StoredRun } from '@/Services/BackupService';
-import { CLOUDSYNC_BACKUP_PROVIDER, type CloudSyncBackupProvider } from '@deveye/types/sdk';
-import { moduleProvider } from '@/features/_sdk/register';
+import {
+    CLOUDSYNC_BACKUP_PROVIDER,
+    DATABASE_BACKUP_PROVIDER,
+    type CloudSyncBackupProvider,
+    type DatabaseBackupProvider
+} from '@deveye/types/sdk';
+import { FeatureError, type SdkCipher, type SdkFeatureContext, type SdkShareScope } from '@deveye/types/sdk/server';
+
+import type { BackupEngine } from './service';
+import type { BackupRepo } from './repo';
 
 /**
  * Ce que les handlers de sauvegarde partagent : les gardes d'accès, la lecture
  * du chiffré, et la projection des lignes SQL vers les DTO.
  *
- * **Aucun `assertSecureUnlocked` nulle part**, et c'est la propriété qui fonde
- * le module : tout vit à l'étage ouvert, parce qu'une sauvegarde doit partir à
+ * **Aucun verrou de session nulle part**, et c'est la propriété qui fonde le
+ * module : tout vit à l'étage ouvert, parce qu'une sauvegarde doit partir à
  * 3 h du matin. Une commande qui exigerait une session déverrouillée serait un
  * travail qui ne s'exécute que quand quelqu'un regarde.
  */
 
-export const READ: FeatureAccessSpec = { feature: 'backup', level: 'read' };
-export const WRITE: FeatureAccessSpec = { feature: 'backup', level: 'write' };
+export type Ctx = SdkFeatureContext<BackupRepo>;
 
-/** Lit un blob JSON chiffré, en tolérant l'illisible (liste dégradée, pas vide). */
-export async function readJson<T>(ctx: FeatureContext, blob: string): Promise<Partial<T>> {
-    return readJsonWith<T>(ctx.secure.open, blob);
+/** Ce que `content` porte, chiffré, sur une destination. */
+export interface StoredDestination {
+    name: string;
+    path: string;
+    endpoint: string | null;
+    region: string | null;
+    bucket: string | null;
+    accessKeyId: string | null;
+    lastError: string | null;
 }
 
-/** La même lecture, sous un codec explicite — celui du domicile d'une ligne projetée. */
-export async function readJsonWith<T>(cipher: Cipher, blob: string): Promise<Partial<T>> {
+/** Ce que `content` porte, chiffré, sur un travail. */
+export interface StoredJob {
+    name: string;
+}
+
+/** Ce que `content` porte, chiffré, sur une exécution. */
+export interface StoredRun {
+    artifact: string | null;
+    error: string | null;
+}
+
+/**
+ * Le moteur du module, posé par `createService` au démarrage : le remplaçant
+ * du `ctx.backups` natif. Un singleton d'étendue module, assumé : le moteur
+ * est unique par processus, exactement comme avant le rapatriement (patron
+ * `setEngine` de CloudSync).
+ */
+let engineRef: BackupEngine | null = null;
+
+export function setEngine(engine: BackupEngine | null): void {
+    engineRef = engine;
+}
+
+/** Le moteur est absent uniquement avant le start du service : toute commande qui exécute l'exige. */
+export function requireEngine(): BackupEngine {
+    if (!engineRef) throw new FeatureError('internal', 'Le moteur de sauvegardes est indisponible.');
+    return engineRef;
+}
+
+/** Lit un blob JSON chiffré, en tolérant l'illisible (liste dégradée, pas vide). */
+export async function readJson<T>(ctx: Ctx, blob: string): Promise<Partial<T>> {
+    return readJsonWith<T>(ctx.cipher(), blob);
+}
+
+/** La même lecture, sous un codec explicite : celui du domicile d'une ligne projetée. */
+export async function readJsonWith<T>(cipher: SdkCipher, blob: string): Promise<Partial<T>> {
     if (!blob) return {};
     try {
         const raw = await cipher.tryDecrypt(blob);
@@ -50,26 +92,35 @@ export async function readJsonWith<T>(cipher: Cipher, blob: string): Promise<Par
     }
 }
 
-export function backupService(ctx: FeatureContext) {
-    if (!ctx.backups) throw new FeatureError('internal', 'Le moteur de sauvegardes est indisponible.');
-    return ctx.backups;
+/**
+ * Les deux contrats que ce module consomme, relus à l'appel : CloudSync (un
+ * module, absent tant qu'il n'est pas installé) et Bases de données (offert
+ * par l'app tant que la feature est native, par son module ensuite ; d'ici,
+ * aucune différence).
+ */
+export function cloudSyncProvider(ctx: Pick<Ctx, 'providers'>): CloudSyncBackupProvider | undefined {
+    return ctx.providers.get<CloudSyncBackupProvider>(CLOUDSYNC_BACKUP_PROVIDER);
 }
 
-export async function loadDestination(ctx: FeatureContext, destinationId: number): Promise<BackupDestinationRow> {
-    const row = await ctx.db.backup.findDestination(destinationId, ctx.workspaceId);
+export function databaseProvider(ctx: Pick<Ctx, 'providers'>): DatabaseBackupProvider | undefined {
+    return ctx.providers.get<DatabaseBackupProvider>(DATABASE_BACKUP_PROVIDER);
+}
+
+export async function loadDestination(ctx: Ctx, destinationId: number): Promise<BackupDestinationRow> {
+    const row = await ctx.repo.findDestination(destinationId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Destination introuvable');
     return row;
 }
 
 /**
- * Un travail visible depuis cet espace — le sien, ou un que l'on y projette.
- * `level` décide de la garde : `assertItem` refuse en plus les travaux qu'une
- * restriction de rôle masque ou passe en lecture seule.
+ * Un travail visible depuis cet espace, le sien ou un que l'on y projette.
+ * `level` décide de la garde : `items.assert` refuse en plus les travaux
+ * qu'une restriction de rôle masque ou passe en lecture seule.
  */
-export async function loadJob(ctx: FeatureContext, jobId: number, level: 'read' | 'write' = 'read') {
-    const row = await ctx.db.backup.findVisibleJob(jobId, ctx.workspaceId);
+export async function loadJob(ctx: Ctx, jobId: number, level: 'read' | 'write' = 'read') {
+    const row = await ctx.repo.findVisibleJob(jobId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Travail de sauvegarde introuvable');
-    await ctx.assertItem('backup', jobId, level);
+    await ctx.items.assert(jobId, level);
     return row;
 }
 
@@ -80,7 +131,7 @@ export async function loadJob(ctx: FeatureContext, jobId: number, level: 'read' 
  * source se choisissent parmi les objets de SON espace, que la fenêtre ne voit
  * pas) et le supprimer. Une fenêtre lit, déclenche et suit.
  */
-export async function loadHomeJob(ctx: FeatureContext, jobId: number) {
+export async function loadHomeJob(ctx: Ctx, jobId: number) {
     const row = await loadJob(ctx, jobId, 'write');
     if (row.workspace_id !== ctx.workspaceId) {
         throw new FeatureError(
@@ -91,10 +142,7 @@ export async function loadHomeJob(ctx: FeatureContext, jobId: number) {
     return row;
 }
 
-export async function toDestination(
-    ctx: FeatureContext,
-    row: BackupDestinationWithUsageRow
-): Promise<BackupDestination> {
+export async function toDestination(ctx: Ctx, row: BackupDestinationWithUsageRow): Promise<BackupDestination> {
     const stored = await readJson<StoredDestination>(ctx, row.content);
     return {
         id: row.id,
@@ -119,11 +167,11 @@ export async function toDestination(
     };
 }
 
-export async function toJob(ctx: FeatureContext, row: BackupJobWithStateRow, shares?: ShareScope): Promise<BackupJob> {
-    // Le codec du **domicile** de la ligne : un travail projeté — et tout ce qui
-    // pend à lui, sa destination, sa dernière erreur — reste chiffré sous la clé
+export async function toJob(ctx: Ctx, row: BackupJobWithStateRow, shares?: SdkShareScope): Promise<BackupJob> {
+    // Le codec du **domicile** de la ligne : un travail projeté, et tout ce qui
+    // pend à lui, sa destination, sa dernière erreur, reste chiffré sous la clé
     // de son espace d'origine.
-    const cipher = shares ? await shares.cipherFor(row.id) : ctx.secure.open;
+    const cipher = shares ? await shares.cipherFor(row.id) : ctx.cipher();
     const [job, destination] = await Promise.all([
         readJsonWith<StoredJob>(cipher, row.content),
         readJsonWith<StoredDestination>(cipher, row.destination_content)
@@ -141,13 +189,7 @@ export async function toJob(ctx: FeatureContext, row: BackupJobWithStateRow, sha
         destinationKind: row.destination_kind as BackupDestinationKind,
         source: row.source_kind as BackupSourceKind,
         sourceId: row.source_id,
-        sourceName: await sourceNameOf(
-            ctx,
-            row.source_kind as BackupSourceKind,
-            row.source_id,
-            row.workspace_id,
-            cipher
-        ),
+        sourceName: await sourceNameOf(ctx, row.source_kind as BackupSourceKind, row.source_id, row.workspace_id),
         schedule: row.schedule_kind as BackupScheduleKind,
         scheduleHour: row.schedule_hour,
         scheduleWeekday: row.schedule_weekday,
@@ -168,34 +210,31 @@ export async function toJob(ctx: FeatureContext, row: BackupJobWithStateRow, sha
  *
  * Recopié nulle part exprès : un partage renommé doit apparaître sous son
  * nouveau nom, et une base supprimée doit se voir comme telle plutôt que de
- * laisser croire que le travail tourne toujours.
+ * laisser croire que le travail tourne toujours. Les deux viennent de leur
+ * feature par son contrat, la base sous le nom que Bases de données lui donne
+ * (c'est elle qui tient le codec de son espace, pas ce module).
  */
 export async function sourceNameOf(
-    ctx: FeatureContext,
+    ctx: Ctx,
     kind: BackupSourceKind,
     sourceId: number | null,
-    /** L'espace du travail — sa source vit chez lui, pas forcément ici. */
-    homeWorkspaceId: number = ctx.workspaceId,
-    cipher?: Cipher
+    /** L'espace du travail : sa source vit chez lui, pas forcément ici. */
+    homeWorkspaceId: number = ctx.workspaceId
 ): Promise<string | null> {
     if (kind === 'deveye') return 'Base de DevEye';
     if (sourceId === null) return null;
 
     if (kind === 'database') {
-        const row = await ctx.db.databases.find(sourceId, homeWorkspaceId);
-        if (!row) return null;
-        const stored = await readJsonWith<{ name: string }>(cipher ?? ctx.secure.open, row.content);
-        return stored.name ?? null;
+        const row = await databaseProvider(ctx)?.findDatabase(sourceId, homeWorkspaceId);
+        return row?.name ?? null;
     }
 
-    const provider = moduleProvider<CloudSyncBackupProvider>(CLOUDSYNC_BACKUP_PROVIDER);
-    if (!provider) return null;
-    const share = await provider.findShare(sourceId);
+    const share = await cloudSyncProvider(ctx)?.findShare(sourceId);
     return share && share.workspaceId === homeWorkspaceId ? share.name : null;
 }
 
-export async function toRun(ctx: FeatureContext, row: BackupRunRow, cipher?: Cipher): Promise<BackupRun> {
-    const stored = await readJsonWith<StoredRun>(cipher ?? ctx.secure.open, row.content);
+export async function toRun(ctx: Ctx, row: BackupRunRow, cipher?: SdkCipher): Promise<BackupRun> {
+    const stored = await readJsonWith<StoredRun>(cipher ?? ctx.cipher(), row.content);
     return {
         id: row.id,
         jobId: row.job_id,

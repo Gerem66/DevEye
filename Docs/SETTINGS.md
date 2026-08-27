@@ -26,7 +26,7 @@ ordre :
 | Sources | feature | registre `sources: { hint }` | jetons, destinations, clés d'API (voir `SOURCES.md`) |
 | Notifications | feature + élément | registre `notifies` | canaux et sélection (voir `NOTIFICATIONS.md`) |
 | Synchronisation | élément | table `SYNC_WIRED` | cadence de relève, maintenance |
-| Chiffrement | élément | table `ENCRYPTION_WIRED` | sous quelle clé la donnée vit |
+| Chiffrement | élément | table `ENCRYPTION_WIRED`, ou `settings.item` du manifest d'un module | sous quelle clé (ou sous quelle forme) la donnée de l'élément vit |
 | Partage | élément | `SHARE_WIRED_FEATURES` + écriture | où l'élément est visible (voir `SHARING.md`) |
 | Permissions | élément | `SHARE_WIRED_FEATURES` + `workspace.roles` | ce que chaque rôle voit de la ligne |
 

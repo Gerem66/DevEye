@@ -1,21 +1,24 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { BackupDestination, BackupJob } from '@deveye/types';
+import type { FeatureViewProps } from '@deveye/types/sdk/client';
+import type { BackupJob } from '../contracts/domain';
 
-import { Button } from '@/Components';
-import { ws } from '@/api/ws';
-import { FeatureSettingsButton } from '@/Components/FeatureSettings';
-import { invalidate, useResourceVersion } from '@/stores/invalidation';
-import { useWorkspacePermissions } from '@/stores/workspace';
-import { useLiveSegment } from '@/live/useLiveSegment';
-import type { FeatureProps } from '@/Features/types';
+import {
+    Button,
+    FeatureSettingsButton,
+    formatBytesFr,
+    humanizeError,
+    invalidate,
+    useLiveSegment,
+    useResource,
+    useWorkspacePermissions
+} from 'deveye-sdk-client';
+import { api } from './api';
 import JobDialog from './JobDialog';
 import JobView from './JobView';
 import {
-    backupError,
     describeSchedule,
     DESTINATION_LABELS,
     formatAgo,
-    formatBytes,
     formatIn,
     RUN_LABELS,
     runTone,
@@ -24,7 +27,7 @@ import {
 import styles from './style.module.css';
 
 /**
- * Sauvegardes — ce qui part, où, et si c'est bien parti.
+ * Sauvegardes : ce qui part, où, et si c'est bien parti.
  *
  * Feature d'espace de premier rang, comme Git, Bases de données et Déploiement.
  * Deux moitiés qui ne se recouvrent pas : les **destinations** (rarement
@@ -33,88 +36,65 @@ import styles from './style.module.css';
  *
  * L'écran est construit autour d'une seule question : « est-ce que mes
  * sauvegardes tournent ? ». Le dernier état de chaque travail est donc en
- * évidence sur la liste, et non caché derrière un clic — un travail cassé qui
+ * évidence sur la liste, et non caché derrière un clic : un travail cassé qui
  * ne se voit qu'en ouvrant sa fiche est un travail cassé qu'on ne voit pas.
  *
  * Ne demande jamais de mot de passe : tout vit à l'étage ouvert, condition pour
  * que l'ordonnanceur puisse écrire la nuit.
  */
-export function FeatureBackup(_props: FeatureProps) {
+export default function Backup(_props: FeatureViewProps) {
     const permissions = useWorkspacePermissions();
     const canWrite = permissions.canFeature('backup', 'write');
 
-    const [jobs, setJobs] = useState<BackupJob[] | null>(null);
-    const [destinations, setDestinations] = useState<BackupDestination[]>([]);
+    const jobsResource = useResource(
+        'backup.jobList',
+        () => api.send('backup.jobList', {}).then((res) => res.jobs),
+        'Impossible de charger les travaux de sauvegarde.'
+    );
+    // La liste des destinations n'est qu'un appoint de l'écran : son absence
+    // ne doit pas masquer les travaux, qui sont l'essentiel. Son erreur n'est
+    // donc jamais montrée ici.
+    const { data: destinations } = useResource(
+        'backup.destinationList',
+        () => api.send('backup.destinationList', {}).then((res) => res.destinations),
+        'Impossible de charger les destinations.'
+    );
+    const jobs = jobsResource.data;
     const [error, setError] = useState<string | null>(null);
 
     const [openedId, setOpenedId] = useState<number | null>(null);
     const [jobDialog, setJobDialog] = useState<{ job: BackupJob | null } | null>(null);
 
-    const jobsVersion = useResourceVersion('backup.jobList');
-    const destinationsVersion = useResourceVersion('backup.destinationList');
-
-    const loadJobs = useCallback(async () => {
-        try {
-            const res = await ws.send('backup.jobList', {});
-            setJobs(res.jobs);
-            setError(null);
-        } catch (e) {
-            setError(backupError(e, 'Impossible de charger les travaux de sauvegarde.'));
-        }
-    }, []);
-
-    const loadDestinations = useCallback(async () => {
-        try {
-            const res = await ws.send('backup.destinationList', {});
-            setDestinations(res.destinations);
-        } catch {
-            // La liste des destinations n'est qu'un appoint de l'écran : son
-            // absence ne doit pas masquer les travaux, qui sont l'essentiel.
-        }
-    }, []);
-
-    useEffect(() => {
-        void loadJobs();
-    }, [loadJobs, jobsVersion]);
-
-    useEffect(() => {
-        void loadDestinations();
-    }, [loadDestinations, destinationsVersion]);
-
-    const refresh = useCallback(() => {
-        invalidate('backup.jobList');
-        invalidate('backup.destinationList');
-        invalidate('backup.count');
-    }, []);
+    const refresh = useCallback(() => invalidate('backup.jobList', 'backup.destinationList', 'backup.count'), []);
 
     const runNow = async (job: BackupJob) => {
         try {
-            await ws.send('backup.jobRun', { jobId: job.id });
-            invalidate('backup.jobList');
-            invalidate('backup.detail');
-            invalidate('backup.count');
+            await api.send('backup.jobRun', { jobId: job.id });
+            invalidate('backup.jobList', 'backup.detail', 'backup.count');
         } catch (e) {
-            setError(backupError(e, 'Impossible de lancer cette sauvegarde.'));
+            setError(humanizeError(e, 'Impossible de lancer cette sauvegarde.'));
         }
     };
 
     const opened = jobs?.find((j) => j.id === openedId) ?? null;
 
-    // La fiche ouverte est un lieu : déclarée à la présence (même format que
-    // Deploy « target:x »), donc rejoignable, et atteignable par la
-    // téléportation de « Régler dans <espace> » d'un élément projeté.
+    // La fiche ouverte est un lieu : déclarée à la présence par son identifiant
+    // nu, donc rejoignable, et atteignable par la téléportation de « Régler
+    // dans <espace> » d'un élément projeté.
     const liveTarget = useLiveSegment('l1', openedId === null ? null : String(openedId));
     useEffect(() => {
-        if (!liveTarget || jobs === null) return;
+        if (!liveTarget || !jobs) return;
         if (liveTarget.value === null) {
             setOpenedId(null);
             return;
         }
-        const id = Number(liveTarget.value.replace(/^job:/, ''));
+        const id = Number(liveTarget.value);
         // Pas encore chargé : la cible reste posée, le rendu suivant la relit.
         if (!Number.isInteger(id) || !jobs.some((j) => j.id === id)) return;
         setOpenedId(id);
     }, [liveTarget, jobs]);
+
+    const destinationCount = destinations?.length ?? 0;
 
     return (
         <div className={styles.root}>
@@ -124,15 +104,15 @@ export function FeatureBackup(_props: FeatureProps) {
                         <div className={styles.toolbarInfo}>
                             <h2 className={styles.title}>Sauvegardes</h2>
                             <p className={styles.subtitle}>
-                                {destinations.length === 0
+                                {destinationCount === 0
                                     ? 'Aucune destination pour l’instant : le premier travail vous proposera d’en déclarer une, ou passez par Réglages → Sources.'
-                                    : `${destinations.length} destination${destinations.length > 1 ? 's' : ''} déclarée${destinations.length > 1 ? 's' : ''}`}
+                                    : `${destinationCount} destination${destinationCount > 1 ? 's' : ''} déclarée${destinationCount > 1 ? 's' : ''}`}
                             </p>
                         </div>
                         <div className={styles.toolbarActions}>
                             {/* Les destinations vivaient derrière leur propre
-                                bouton : elles sont désormais dans Réglages →
-                                Sources, comme les sources de toute feature. */}
+                                bouton : elles sont dans Réglages → Sources,
+                                comme les sources de toute feature. */}
                             <FeatureSettingsButton scope={{ kind: 'feature', feature: 'backup' }} />
                             {canWrite && (
                                 <Button icon='plus' onClick={() => setJobDialog({ job: null })}>
@@ -142,8 +122,8 @@ export function FeatureBackup(_props: FeatureProps) {
                         </div>
                     </div>
 
-                    {error && <p className={styles.error}>{error}</p>}
-                    {jobs === null && <p className={styles.empty}>Chargement…</p>}
+                    {(error ?? jobsResource.error) && <p className={styles.error}>{error ?? jobsResource.error}</p>}
+                    {jobs === null && !jobsResource.error && <p className={styles.empty}>Chargement…</p>}
                     {jobs?.length === 0 && (
                         <p className={styles.empty}>
                             Aucune sauvegarde programmée. Le plus utile pour commencer : la base de DevEye, chaque nuit,
@@ -197,7 +177,7 @@ export function FeatureBackup(_props: FeatureProps) {
                                                 {job.lastStatus ? RUN_LABELS[job.lastStatus] : 'jamais'}
                                             </span>
                                             <span>{formatAgo(job.lastRunAt)}</span>
-                                            {job.totalBytes > 0 && <span>{formatBytes(job.totalBytes)}</span>}
+                                            {job.totalBytes > 0 && <span>{formatBytesFr(job.totalBytes)}</span>}
                                             <span>
                                                 {job.runCount} passage{job.runCount > 1 ? 's' : ''}
                                             </span>
@@ -223,7 +203,7 @@ export function FeatureBackup(_props: FeatureProps) {
             <JobDialog
                 open={jobDialog !== null}
                 job={jobDialog?.job ?? null}
-                destinations={destinations}
+                destinations={destinations ?? []}
                 onClose={() => setJobDialog(null)}
                 onSaved={refresh}
                 onRemoved={() => {
@@ -235,5 +215,3 @@ export function FeatureBackup(_props: FeatureProps) {
         </div>
     );
 }
-
-export default FeatureBackup;

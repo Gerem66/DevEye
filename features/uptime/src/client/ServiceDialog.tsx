@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, Checkbox, Dialog, DialogCancelButton, SelectInput, TextInput } from 'deveye-sdk-client';
+import { Button, Checkbox, Dialog, DialogCancelButton, SegmentedControl, TextInput } from 'deveye-sdk-client';
 import type { UptimeMethod, UptimeService } from '../contracts/domain';
 
 import { api } from './api';
@@ -185,17 +185,19 @@ export function ServiceDialog({ open, service, onClose, onSaved, onRemoved }: Se
                 />
 
                 <div className={styles.formRow}>
-                    <label className={styles.field}>
+                    <div className={styles.field}>
                         <span className={styles.fieldLabel}>Méthode</span>
-                        <SelectInput
+                        <SegmentedControl
+                            aria-label='Méthode HTTP'
                             value={draft.method}
-                            onChange={(e) => set('method', e.target.value as UptimeMethod)}
-                        >
-                            <option value='GET'>GET</option>
-                            <option value='HEAD'>HEAD</option>
-                            <option value='POST'>POST</option>
-                        </SelectInput>
-                    </label>
+                            onChange={(v: UptimeMethod) => set('method', v)}
+                            options={[
+                                { value: 'GET', label: 'GET' },
+                                { value: 'HEAD', label: 'HEAD' },
+                                { value: 'POST', label: 'POST' }
+                            ]}
+                        />
+                    </div>
                     <label className={styles.field}>
                         <span className={styles.fieldLabel}>Statut attendu</span>
                         <TextInput

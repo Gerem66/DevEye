@@ -1,8 +1,10 @@
+import crypto from 'crypto';
 import type {
     DevEyeFacade,
     FeatureService,
     FeatureServiceDeps,
     SdkCipher,
+    SdkProviders,
     SdkServerKeys
 } from '@deveye/types/sdk/server';
 import type { FeatureManifest } from '@deveye/types/sdk';
@@ -47,13 +49,14 @@ const AUDIT_CATEGORY: Record<string, string> = { cloudsync: 'cloudSync' };
 export function createServiceDeps(
     host: ModuleServiceHost,
     manifest: FeatureManifest,
-    repo: unknown
+    repo: unknown,
+    providers: SdkProviders
 ): FeatureServiceDeps {
     const ciphers = new Map<number, SdkCipher>();
     const cipherFor = (workspaceId: number): SdkCipher => {
         const hit = ciphers.get(workspaceId);
         if (hit) return hit;
-        // Même mémoïsation par espace que BackupService : la résolution de la
+        // Même mémoïsation par espace que les services de fond : la résolution de la
         // clé ouverte coûte une lecture, pas plus, mais un tick n'a pas à la
         // repayer à chaque ligne.
         const cipher = createOpenCipher(host.db, host.crypt, workspaceId);
@@ -94,7 +97,14 @@ export function createServiceDeps(
     const gateDevices = gate('devices.read');
     const keys: SdkServerKeys = {
         sealBytes: (plain) => host.crypt.seal(Buffer.from(plain)),
-        openBytes: (sealed) => host.crypt.openRaw(sealed)
+        openBytes: (sealed) => host.crypt.openRaw(sealed),
+        // HKDF sur la clé serveur : la dérivation même que
+        // `scripts/restore-backup.mjs` refait sans DevEye, à partir des deux
+        // seules variables CRYPT_KEY_A / CRYPT_KEY_B.
+        derive: (salt, info, length) =>
+            new Uint8Array(
+                crypto.hkdfSync('sha256', host.crypt.serverKey(), Buffer.from(salt), Buffer.from(info), length)
+            )
     };
 
     return {
@@ -149,6 +159,7 @@ export function createServiceDeps(
         },
         agents: agentsFacade(gateAgents),
         keys,
+        providers,
         createTicker: ({ intervalMs, tick }): FeatureService => {
             // Le patron des sept services natifs : setInterval + garde de
             // réentrance + unref, et rien d'autre. Pas de cron, pas de file.

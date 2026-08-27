@@ -1,6 +1,9 @@
-import type { DiscordMessage } from '@/Services/discord';
-
-import { COLOR_DANGER, block, footer, moment, trim } from './shared';
+// Privilège de native rapatriée, commenté à chaque usage : les helpers Discord
+// (`moment`, `block`, `trim`, `footer`, la charte des couleurs) sont réellement
+// partagés par les émetteurs de l'app, et deux copies avaient déjà divergé une
+// fois (voir l'en-tête de `Services/notices/shared.ts`). Ils restent donc à
+// l'app, et le module les importe plutôt que de les recopier.
+import { COLOR_DANGER, block, footer, moment, trim } from '@/Services/notices/shared';
 
 /**
  * L'avis d'échec de sauvegarde tel que Discord doit le montrer.
@@ -24,7 +27,7 @@ export interface BackupNotice {
     at: number;
 }
 
-export function buildNotice(notice: BackupNotice): NonNullable<DiscordMessage['embeds']> {
+export function buildNotice(notice: BackupNotice): Record<string, unknown>[] {
     const fields: Record<string, unknown>[] = [
         { name: '💾 Travail', value: trim(notice.job), inline: true },
         { name: '📅 Échoué', value: moment(notice.at), inline: true }

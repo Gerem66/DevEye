@@ -12,6 +12,7 @@ import { FeatureError } from '@deveye/types/sdk/server';
 import type { Database } from '@/db';
 import type { Queryable } from '@/db/pool';
 import { defineFeature, type FeatureDefinition } from '@/features/_define';
+import type { SdkProviders } from '@deveye/types/sdk/server';
 import { createSdkContext } from './context';
 import { createServiceDeps, type ModuleServiceHost } from './service';
 
@@ -117,7 +118,7 @@ export function moduleFeatureHandlers(): FeatureDefinition<string, never, never>
                 access: { feature: mod.manifest.id, level: def.access?.level ?? 'read' },
                 mutates: def.mutates ? true : undefined,
                 handler: async (ctx, input) => {
-                    const sdkCtx = createSdkContext(ctx, mod.manifest, mod.repoFor(ctx.db));
+                    const sdkCtx = createSdkContext(ctx, mod.manifest, mod.repoFor(ctx.db), PROVIDERS);
                     for (const key of def.access?.extras ?? []) {
                         if (!sdkCtx.canExtra(key)) {
                             throw new FeatureError('forbidden', `Permission « ${key} » requise`);
@@ -184,6 +185,26 @@ const SERVICES: { manifest: FeatureManifest; service: FeatureService; logger: Mo
  */
 let servicesCreated = false;
 
+/**
+ * Les contrats qu'une feature ENCORE NATIVE offre aux modules, sous la même
+ * clé publiée que son futur module (`sdk/providers.ts`). C'est l'inversion
+ * dans l'autre sens : un module rapatrié avant la native dont il dépend
+ * (Backup avant Bases de données) lit le contrat par `providers.get`, sans
+ * savoir qui l'offre ; le jour où la native migre, son service publie la
+ * même clé et cette entrée disparaît.
+ */
+const NATIVE_PROVIDERS = new Map<string, unknown>();
+
+export function registerNativeProvider(key: string, value: unknown): void {
+    if (NATIVE_PROVIDERS.has(key)) throw new Error(`Provider natif « ${key} » enregistré deux fois`);
+    const module = SERVICES.find((s) => s.service.providers?.[key] !== undefined);
+    if (module) throw new Error(`Provider « ${key} » offert par le module « ${module.manifest.id} » et par l'app`);
+    NATIVE_PROVIDERS.set(key, value);
+}
+
+/** Ce que les modules reçoivent : la recherche à l'appel, modules puis natives. */
+const PROVIDERS: SdkProviders = { get: <T>(key: string) => moduleProvider<T>(key) };
+
 export function createModuleServices(host: ModuleServiceHost): FeatureService[] {
     // Une seule fois par processus : un second appel doublerait les hooks et
     // laisserait `moduleProvider` sur les premiers services.
@@ -192,9 +213,9 @@ export function createModuleServices(host: ModuleServiceHost): FeatureService[] 
     const providers = new Map<string, string>();
     return MODULES.flatMap((m) => {
         if (!m.server.createService) return [];
-        const service = m.server.createService(createServiceDeps(host, m.manifest, m.repoFor(host.db)));
+        const service = m.server.createService(createServiceDeps(host, m.manifest, m.repoFor(host.db), PROVIDERS));
         for (const key of Object.keys(service.providers ?? {})) {
-            const other = providers.get(key);
+            const other = providers.get(key) ?? (NATIVE_PROVIDERS.has(key) ? "l'app" : undefined);
             if (other) throw new Error(`Provider « ${key} » offert par « ${other} » et « ${m.manifest.id} »`);
             providers.set(key, m.manifest.id);
         }
@@ -240,17 +261,18 @@ export function moduleAgentHooks(): Required<FeatureAgentHooks> {
 }
 
 /**
- * Le contrat nommé qu'un module offre à l'app (voir @deveye/types/sdk/providers) :
- * recherche à l'appel, `undefined` quand le module est absent, et c'est à
- * l'appelant de dégrader proprement. Une clé n'a qu'un offreur possible
- * (sentinelle de `createModuleServices`).
+ * Le contrat nommé qu'un module offre à l'app, ou qu'une native encore dans
+ * l'app offre aux modules (voir @deveye/types/sdk/providers) : recherche à
+ * l'appel, `undefined` quand personne n'offre la clé, et c'est à l'appelant de
+ * dégrader proprement. Une clé n'a qu'un offreur possible (sentinelles de
+ * `createModuleServices` et `registerNativeProvider`).
  */
 export function moduleProvider<T>(key: string): T | undefined {
     for (const s of SERVICES) {
         const value = s.service.providers?.[key];
         if (value !== undefined) return value as T;
     }
-    return undefined;
+    return NATIVE_PROVIDERS.get(key) as T | undefined;
 }
 
 /**

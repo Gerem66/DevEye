@@ -1,4 +1,4 @@
-import type { SdkFeatureContext, SdkSocketTransport } from '@deveye/types/sdk/server';
+import type { SdkFeatureContext, SdkProviders, SdkSocketTransport } from '@deveye/types/sdk/server';
 import { FeatureError } from '@deveye/types/sdk/server';
 import { resolveExtras, type FeatureManifest } from '@deveye/types/sdk';
 import type { NotificationFeature } from '@deveye/types';
@@ -16,7 +16,12 @@ import { createFeatureStore } from './store';
  * par processus (voir `register.ts`) et injecté ; le store et la façade se
  * construisent par requête, liés à l'espace de l'enveloppe.
  */
-export function createSdkContext(ctx: FeatureContext, manifest: FeatureManifest, repo: unknown): SdkFeatureContext {
+export function createSdkContext(
+    ctx: FeatureContext,
+    manifest: FeatureManifest,
+    repo: unknown,
+    providers: SdkProviders
+): SdkFeatureContext {
     return {
         userId: ctx.userId,
         workspaceId: ctx.workspaceId,
@@ -80,6 +85,7 @@ export function createSdkContext(ctx: FeatureContext, manifest: FeatureManifest,
                 };
             }
         },
+        providers,
         audit: (entry) =>
             ctx.audit({
                 action: entry.action,

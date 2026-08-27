@@ -61,18 +61,21 @@ affaire de **surface** : une seule porte au lieu de cinq.
   liste locale de plus.
 - `Components/FeatureSettings/sections/SourcesSection.tsx` aiguille vers le
   panneau de la feature. Un panneau est **autonome** : il se charge
-  (`useResourceVersion` sur la ressource de la feature), s'invalide et se
-  rafraîchit tout seul ; la coquille ne lui passe rien. Il vit chez sa feature
-  (`Features/Backup/DestinationsSection`) ou dans la coquille quand deux
-  features le partagent (`sections/CredentialsPanel`, un `CredentialsKind` par
-  porte). Tous partagent la même silhouette que la liste des canaux de la
+  (`useResource` sur la ressource de la feature), s'invalide et se
+  rafraîchit tout seul ; la coquille ne lui passe rien. Une native l'inscrit
+  dans l'aiguillage, ou dans la coquille quand deux features le partagent
+  (`sections/CredentialsPanel`, un `CredentialsKind` par porte) ; un module le
+  déclare (`settings.feature: ['sources']`) et le fournit
+  (`settingsPanels.sources`, par exemple `features/backup/src/client/DestinationsPanel`).
+  Tous partagent la même silhouette que la liste des canaux de la
   section Notifications : rangée (icône, libellé, méta, badge d'usage, actions
   en icônes), ajout et correction par un dialogue empilé, retrait par la
   confirmation commune (`ConfirmDialog`) qui nomme ce qui va être coupé.
-- Dans le dialogue d'élément : le sélecteur sous `.fieldWithAction`, le « + »
-  qui ouvre `FeatureSettingsDialog` avec `initialSection='sources'`, et
-  l'adoption : l'ensemble des identifiants connus est photographié à
-  l'ouverture des réglages, l'identifiant apparu ensuite est sélectionné.
+- Dans le dialogue d'élément : le sélecteur sous `.fieldWithAction`, le bouton
+  commun (`FeatureSettingsButton`, `initialSection='sources'`) qui ouvre les
+  réglages par-dessus, et l'adoption : l'ensemble des identifiants connus est
+  photographié à l'ouverture des réglages (`onOpenChange`), l'identifiant
+  apparu ensuite est sélectionné.
   L'arrivée de la liste fraîche passe par l'invalidation ordinaire
   (`deploy.list`, `git.list`, `backup.destinationList`) : aucune voie de retour
   spéciale entre les deux dialogues.

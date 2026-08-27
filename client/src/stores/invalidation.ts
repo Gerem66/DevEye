@@ -192,7 +192,6 @@ const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
      * navigateur n'ait rien demandé : c'est ce qui fait passer un travail de
      * « en cours » à « réussi » sous les yeux, à 3 h du matin comme à midi.
      */
-    backup: ['backup.count', 'backup.destinationList', 'backup.jobList', 'backup.detail', 'backup.runs'],
     /*
      * **Les quatre clés ensemble, et c'est le sujet.**
      *
