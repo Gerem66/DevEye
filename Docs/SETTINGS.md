@@ -12,7 +12,7 @@ se supprime lui-même quand aucune section n'est lisible : les features ne le
 conditionnent jamais elles-mêmes.
 
 Un dialogue artisanal derrière un engrenage à part est une dette : Mail, Météo,
-OSINT, Finances, Uptime et Sentinelle en ont été purgés, les candidats restants
+OSINT, Finances, Uptime, Sentinelle et CloudSync en ont été purgés, les candidats restants
 sont listés en fin de fichier.
 
 ## Les sections
@@ -22,7 +22,7 @@ ordre :
 
 | Onglet | Échelle | Qui l'a | Contenu |
 |---|---|---|---|
-| Général | feature (et élément pour Mail, Uptime) | table `GENERAL_WIRED`, ou `settings` du manifest d'un module | les réglages qui ne sont ni sources ni notifications |
+| Général | feature (et élément pour Mail, Uptime, CloudSync) | table `GENERAL_WIRED`, ou `settings` du manifest d'un module | les réglages qui ne sont ni sources ni notifications |
 | Sources | feature | registre `sources: { hint }` | jetons, destinations, clés d'API (voir `SOURCES.md`) |
 | Notifications | feature + élément | registre `notifies` | canaux et sélection (voir `NOTIFICATIONS.md`) |
 | Synchronisation | élément | table `SYNC_WIRED` | cadence de relève, maintenance |
@@ -67,8 +67,6 @@ Trois mécanismes font qu'aucun réglage n'est un mur :
 
 ## Candidats restants (dettes connues)
 
-- **CloudSync** : la bande de six boutons par partage (`ShareCard`) est une
-  coquille de réglages qui s'ignore.
 - **Monitoring** : la configuration de collecte est enfouie dans un menu
   déroulant d'appareil ; `TerminalSettings` à part.
 - **Bases de données** : `AlertDialog` (règles d'alerte par base) vit dans le
